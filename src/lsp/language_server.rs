@@ -8,7 +8,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, FullName};
+use crate::{to_absolute_path, FullName, SubCommand};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
@@ -1233,7 +1233,7 @@ pub fn run_diagnostics() -> Result<DiagnosticsResult, Errors> {
     let proj_file = ProjectFile::read_root_file()?;
 
     // Create the configuration.
-    let mut config = Configuration::diagnostics_mode()?;
+    let mut config = Configuration::new(SubCommand::Diagnostics)?;
 
     // Set up the configuration by the project file and the lock file.
     proj_file.set_config(&mut config, false)?;

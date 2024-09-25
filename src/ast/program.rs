@@ -1069,12 +1069,17 @@ impl Program {
         errors.to_result()
     }
 
-    // Instantiate main function.
+    // Instantiate `Main::main` (or `Test::test` if `fix test` is running).
     pub fn instantiate_main_function(
         &mut self,
         tc: &TypeCheckContext,
+        test_mode: bool,
     ) -> Result<Arc<ExprNode>, Errors> {
-        let main_func_name = FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME);
+        let main_func_name = if test_mode {
+            FullName::from_strs(&[TEST_MODULE_NAME], TEST_FUNCTION_NAME)
+        } else {
+            FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME)
+        };
         let main_ty = make_io_unit_ty();
         let (expr, _ty) =
             self.instantiate_exported_value(&main_func_name, Some(main_ty), &None, tc)?;

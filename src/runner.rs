@@ -100,8 +100,8 @@ fn build_object_files<'c>(
             .add_global(name.name.clone(), &name.namespace, &defn.scm)?;
     }
 
-    // When working as a language server, perform type checking of all values and return here.
-    if config.diagnostics {
+    // When running diagnostics, perform type checking of all values and return here.
+    if config.subcommand == SubCommand::Diagnostics {
         program.resolve_namespace_and_check_type_all(&typechecker)?;
         return Ok(BuildObjFilesResult {
             obj_paths: vec![],
@@ -109,8 +109,11 @@ fn build_object_files<'c>(
         });
     }
 
-    // Instantiate all exported values (including `Main::main`) and values called from them.
-    let main_expr = program.instantiate_main_function(&typechecker)?;
+    // Instantiate Main::main (or Test::test).
+    let main_expr =
+        program.instantiate_main_function(&typechecker, config.subcommand == SubCommand::Test)?;
+
+    // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
 
     // Perform uncurrying optimization.
@@ -589,7 +592,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let exec_path = config.get_output_executable_file_path();
 
     // Run extra commands.
-    if !config.diagnostics {
+    if config.subcommand != SubCommand::Diagnostics {
         config.run_extra_commands()?;
     }
 
@@ -605,7 +608,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let build_res = build_object_files(program, config.clone())?;
 
     // If the program is for language server, we don't need to build binary file.
-    if config.diagnostics {
+    if config.subcommand == SubCommand::Diagnostics {
         let program = build_res.program.unwrap();
         return Ok(BuildFileResult {
             program: Some(program),

@@ -173,6 +173,21 @@ fn main() {
             NOTE: Separate compilation is disabled under the default optimization level.\n",
         );
 
+    // "fix build" subcommand
+    let build_subc = App::new("build")
+        .about("Builds an executable binary from source files.")
+        .arg(source_file.clone())
+        .arg(output_file.clone())
+        .arg(static_link_library.clone())
+        .arg(dynamic_link_library.clone())
+        .arg(library_paths.clone())
+        .arg(debug_info.clone())
+        .arg(opt_level.clone())
+        .arg(emit_llvm.clone())
+        .arg(threaded.clone())
+        .arg(verbose.clone())
+        .arg(max_cu_size.clone());
+
     // "fix run" subcommand
     let run_subc = App::new("run")
         .about("Executes a Fix program.")
@@ -188,16 +203,16 @@ fn main() {
         .arg(verbose.clone())
         .arg(max_cu_size.clone());
 
-    // "fix build" subcommand
-    let build_subc = App::new("build")
-        .about("Builds an executable binary from source files.")
+    // "fix test" subcommand
+    let test_subc = App::new("test")
+        .about("Tests a Fix program.")
         .arg(source_file.clone())
         .arg(output_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
         .arg(library_paths.clone())
         .arg(debug_info.clone())
-        .arg(opt_level)
+        .arg(opt_level.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
         .arg(verbose.clone())
@@ -238,8 +253,9 @@ fn main() {
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
-        .subcommand(run_subc)
         .subcommand(build_subc)
+        .subcommand(run_subc)
+        .subcommand(test_subc)
         .subcommand(clean_subc)
         .subcommand(lsp_subc)
         .subcommand(deps)
@@ -366,8 +382,8 @@ fn main() {
     }
 
     // Create configuration from the command line arguments and the project file.
-    fn create_config(args: &ArgMatches) -> Configuration {
-        let mut config = Configuration::release_mode();
+    fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
+        let mut config = Configuration::release_mode(subcommand);
 
         // First, set up configuration from the project file if it exists.
         if Path::new(PROJECT_FILE_PATH).exists() {
@@ -382,11 +398,14 @@ fn main() {
     }
 
     match app.get_matches().subcommand() {
-        Some(("run", args)) => {
-            run_file(create_config(args));
-        }
         Some(("build", args)) => {
-            exit_if_err(build_file(&mut create_config(args)));
+            exit_if_err(build_file(&mut create_config(SubCommand::Build, args)));
+        }
+        Some(("run", args)) => {
+            run_file(create_config(SubCommand::Run, args));
+        }
+        Some(("test", args)) => {
+            run_file(create_config(SubCommand::Test, args));
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", _args)) => {

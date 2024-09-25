@@ -13,6 +13,7 @@
 - Add experimental support for language server protocol.
 - Add experimental support for project file ("fixproj.toml").
 - Add experimental support for document generation (`fix docs` command).
+- Add `fix test` subcommand, which runs `Test::test`.
 
 ### Changed
 

@@ -32,6 +32,15 @@ pub enum ValgrindTool {
     // DataRaceDetection,
 }
 
+// Subcommands of the `fix` command.
+#[derive(Clone, PartialEq, Eq)]
+pub enum SubCommand {
+    Build,
+    Run,
+    Test,
+    Diagnostics,
+}
+
 #[derive(Clone)]
 pub struct Configuration {
     // Source files.
@@ -68,8 +77,8 @@ pub struct Configuration {
     pub valgrind_tool: ValgrindTool,
     // Sizes of C types.
     pub c_type_sizes: CTypeSizes,
-    // Is this configuration for diagnostics?
-    pub diagnostics: bool,
+    // Subcommand of the `fix` command.
+    pub subcommand: SubCommand,
     // Extra build commands.
     pub extra_commands: Vec<ExtraCommand>,
 }
@@ -124,9 +133,22 @@ impl std::fmt::Display for FixOptimizationLevel {
     }
 }
 
+impl FixOptimizationLevel {
+    pub fn from_str(opt_level: &str) -> Option<Self> {
+        match opt_level {
+            OPTIMIZATION_LEVEL_NONE => Some(FixOptimizationLevel::None),
+            OPTIMIZATION_LEVEL_MINIMUM => Some(FixOptimizationLevel::Minimum),
+            OPTIMIZATION_LEVEL_SEPARATED => Some(FixOptimizationLevel::Separated),
+            OPTIMIZATION_LEVEL_DEFAULT => Some(FixOptimizationLevel::Default),
+            _ => None,
+        }
+    }
+}
+
 impl Configuration {
-    fn new() -> Result<Self, Errors> {
+    pub fn new(subcommand: SubCommand) -> Result<Self, Errors> {
         Ok(Configuration {
+            subcommand,
             source_files: vec![],
             sanitize_memory: false,
             fix_opt_level: FixOptimizationLevel::Default, // Fix's optimization level.
@@ -143,7 +165,6 @@ impl Configuration {
             valgrind_tool: ValgrindTool::None,
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
-            diagnostics: false,
             extra_commands: vec![],
         })
     }
@@ -151,28 +172,21 @@ impl Configuration {
 
 impl Configuration {
     // Configuration for release build.
-    pub fn release_mode() -> Configuration {
-        exit_if_err(Self::new())
+    pub fn release_mode(subcommand: SubCommand) -> Configuration {
+        exit_if_err(Self::new(subcommand))
     }
 
     // Usual configuration for compiler development
     #[allow(dead_code)]
     pub fn develop_compiler_mode() -> Configuration {
         #[allow(unused_mut)]
-        let mut config = exit_if_err(Self::new());
+        let mut config = exit_if_err(Self::new(SubCommand::Run));
         config.set_valgrind(ValgrindTool::MemCheck);
         // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;
         config
-    }
-
-    // Create configuration for diagnostics.
-    pub fn diagnostics_mode() -> Result<Configuration, Errors> {
-        let mut config = Self::new()?;
-        config.diagnostics = true;
-        Ok(config)
     }
 
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {

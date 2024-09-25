@@ -380,7 +380,10 @@ pub fn test22() {
         n,
         (n * (n + 1)) / 2
     );
-    test_source(source.as_str(), Configuration::release_mode());
+    test_source(
+        source.as_str(),
+        Configuration::release_mode(SubCommand::Run),
+    );
 }
 
 #[test]
@@ -858,7 +861,10 @@ pub fn test43() {
         n,
         (n * (n + 1)) / 2
     );
-    test_source(source.as_str(), Configuration::release_mode());
+    test_source(
+        source.as_str(),
+        Configuration::release_mode(SubCommand::Run),
+    );
 }
 
 #[test]

@@ -1,12 +1,8 @@
 use crate::{
-    constants::{
-        OPTIMIZATION_LEVEL_DEFAULT, OPTIMIZATION_LEVEL_MINIMUM, OPTIMIZATION_LEVEL_NONE,
-        OPTIMIZATION_LEVEL_SEPARATED,
-    },
     dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, SourceFile, Span, LOCK_FILE_PATH,
-    PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, SourceFile, Span, SubCommand,
+    LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
 use semver::{Version, VersionReq};
 use serde::Deserialize;
@@ -58,6 +54,22 @@ pub struct ProjectFileBuild {
     debug: Option<bool>,
     opt_level: Option<String>,
     output: Option<PathBuf>,
+    #[serde(default)]
+    preliminary_commands: Vec<Vec<String>>,
+    test: Option<ProjectFileBuildTest>,
+}
+
+// The `build.test` section of the project file.
+#[derive(Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectFileBuildTest {
+    files: Vec<PathBuf>,
+    static_links: Option<Vec<String>>,
+    dynamic_links: Option<Vec<String>>,
+    library_paths: Option<Vec<PathBuf>>,
+    threaded: Option<bool>,
+    debug: Option<bool>,
+    opt_level: Option<String>,
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
 }
@@ -175,7 +187,7 @@ impl ProjectFile {
         Ok(proj_file)
     }
 
-    fn valida_project_name(name: &ProjectName, span: &Span) -> Result<(), Errors> {
+    fn validate_project_name(name: &ProjectName, span: &Span) -> Result<(), Errors> {
         // The project name should be non-empty, and can only contain alphanumeric characters, hyphens.
         if name.is_empty() {
             return Err(Errors::from_msg_srcs(
@@ -196,7 +208,7 @@ impl ProjectFile {
         // Validate the general section.
 
         // Validate the project name.
-        Self::valida_project_name(&self.general.name, &self.project_file_span(0, 0))?;
+        Self::validate_project_name(&self.general.name, &self.project_file_span(0, 0))?;
 
         // Validate the version.
         Version::parse(&self.general.version).map_err(|e| {
@@ -219,7 +231,7 @@ impl ProjectFile {
             dep_names.push(dep.name.clone());
 
             // Validate the project name.
-            Self::valida_project_name(&dep.name, &self.project_file_span(0, 0))?;
+            Self::validate_project_name(&dep.name, &self.project_file_span(0, 0))?;
 
             // Either of `path` or `git` should be specified.
             if (dep.path.is_none() && dep.git.is_none())
@@ -253,12 +265,24 @@ impl ProjectFile {
         dependent_proj: bool,
     ) -> Result<(), Errors> {
         // Append source files.
-        let mut files = vec![];
-        for path in &self.build.files {
-            let path = self.join_to_project_dir(path);
-            files.push(path);
+        config.source_files.append(
+            &mut self
+                .build
+                .files
+                .iter()
+                .map(|p| self.join_to_project_dir(p))
+                .collect(),
+        );
+        if config.subcommand == SubCommand::Test {
+            config
+                .source_files
+                .append(&mut self.build.test.as_ref().map_or(vec![], |test| {
+                    test.files
+                        .iter()
+                        .map(|p| self.join_to_project_dir(p))
+                        .collect()
+                }));
         }
-        config.source_files.append(&mut files);
 
         // Append static libraries.
         if let Some(static_libs) = self.build.static_links.as_ref() {
@@ -268,6 +292,21 @@ impl ProjectFile {
                     .map(|lib_name| (lib_name.clone(), LinkType::Static))
                     .collect(),
             );
+        }
+        if config.subcommand == SubCommand::Test {
+            if let Some(static_libs) = self
+                .build
+                .test
+                .as_ref()
+                .and_then(|test| test.static_links.as_ref())
+            {
+                config.linked_libraries.append(
+                    &mut static_libs
+                        .iter()
+                        .map(|lib_name| (lib_name.clone(), LinkType::Static))
+                        .collect(),
+                );
+            }
         }
 
         // Append dynamic libraries.
@@ -279,6 +318,21 @@ impl ProjectFile {
                     .collect(),
             );
         }
+        if config.subcommand == SubCommand::Test {
+            if let Some(dynamic_libs) = self
+                .build
+                .test
+                .as_ref()
+                .and_then(|test| test.dynamic_links.as_ref())
+            {
+                config.linked_libraries.append(
+                    &mut dynamic_libs
+                        .iter()
+                        .map(|lib_name| (lib_name.clone(), LinkType::Dynamic))
+                        .collect(),
+                );
+            }
+        }
 
         // Append library search paths.
         if let Some(lib_paths) = self.build.library_paths.as_ref() {
@@ -289,10 +343,34 @@ impl ProjectFile {
                     .collect(),
             );
         }
+        if config.subcommand == SubCommand::Test {
+            if let Some(lib_paths) = self
+                .build
+                .test
+                .as_ref()
+                .and_then(|test| test.library_paths.as_ref())
+            {
+                config.library_search_paths.append(
+                    &mut lib_paths
+                        .iter()
+                        .map(|p| self.join_to_project_dir(p))
+                        .collect(),
+                );
+            }
+        }
 
-        // Set is threaded.
+        // Set threaded-mode.
         if let Some(threaded) = self.build.threaded {
-            config.threaded = config.threaded || threaded;
+            if threaded {
+                config.set_threaded();
+            }
+        }
+        if config.subcommand == SubCommand::Test {
+            if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
+                if threaded {
+                    config.set_threaded();
+                }
+            }
         }
 
         // Set extra commands.
@@ -302,6 +380,19 @@ impl ProjectFile {
                 command: command.clone(),
             });
         }
+        if config.subcommand == SubCommand::Test {
+            for command in &self
+                .build
+                .test
+                .as_ref()
+                .map_or(vec![], |test| test.preliminary_commands.clone())
+            {
+                config.extra_commands.push(ExtraCommand {
+                    work_dir: self.path.parent().unwrap().to_path_buf(),
+                    command: command.clone(),
+                });
+            }
+        }
 
         if dependent_proj {
             return Ok(());
@@ -309,25 +400,39 @@ impl ProjectFile {
 
         // Set debug mode.
         if let Some(debug) = self.build.debug {
-            config.debug_info = debug;
+            if debug {
+                config.set_debug_info();
+            }
+        }
+        if config.subcommand == SubCommand::Test {
+            if let Some(debug) = self.build.test.as_ref().and_then(|test| test.debug) {
+                if debug {
+                    config.set_debug_info();
+                }
+            }
         }
 
         // Set optimization level.
         if let Some(opt_level) = self.build.opt_level.as_ref() {
-            match opt_level.as_str() {
-                OPTIMIZATION_LEVEL_NONE => {
-                    config.fix_opt_level = FixOptimizationLevel::None;
-                }
-                OPTIMIZATION_LEVEL_MINIMUM => {
-                    config.fix_opt_level = FixOptimizationLevel::Minimum;
-                }
-                OPTIMIZATION_LEVEL_SEPARATED => {
-                    config.fix_opt_level = FixOptimizationLevel::Separated;
-                }
-                OPTIMIZATION_LEVEL_DEFAULT => {
-                    config.fix_opt_level = FixOptimizationLevel::Default;
-                }
-                _ => {
+            if let Some(opt_level) = FixOptimizationLevel::from_str(opt_level) {
+                config.fix_opt_level = opt_level;
+            } else {
+                return Err(Errors::from_msg_srcs(
+                    format!("Unknown optimization level: \"{}\"", opt_level),
+                    &[&Some(self.project_file_span(0, 0))],
+                ));
+            }
+        }
+        if config.subcommand == SubCommand::Test {
+            if let Some(opt_level) = self
+                .build
+                .test
+                .as_ref()
+                .and_then(|test| test.opt_level.as_ref())
+            {
+                if let Some(opt_level) = FixOptimizationLevel::from_str(opt_level) {
+                    config.fix_opt_level = opt_level;
+                } else {
                     return Err(Errors::from_msg_srcs(
                         format!("Unknown optimization level: \"{}\"", opt_level),
                         &[&Some(self.project_file_span(0, 0))],
