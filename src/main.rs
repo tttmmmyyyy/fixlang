@@ -222,7 +222,8 @@ fn main() {
     let docs_subc = App::new("docs")
         .about(
             "Generate documentation for a Fix module.\n\
-            This command requires the project file to be present in the current directory, and the project should be in the state that it can be built successfully.",
+            This command requires the project file to be present in the current directory, and the project should be in the state that it can be built successfully.\n\
+            Consecutive line comments above declarations are recognized as documentations.",
         )
         .arg(
             Arg::new("modules")
