@@ -362,6 +362,10 @@ fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Errors>
     repo.tag_foreach(|oid, name| {
         let name = String::from_utf8_lossy(name).to_string();
 
+        // `name` is in the format "refs/tags/v0.1.0".
+        // Split the name by "/" and get the last part.
+        let name = name.split('/').last().unwrap_or(&name);
+
         // Remove `v` prefix if exists.
         let name = if name.starts_with("v") {
             &name[1..]
