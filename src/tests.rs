@@ -7078,3 +7078,59 @@ pub fn test_unsafe_get_retain_function_of_boxed_value_error() {
     "##;
     test_source_fail(&source, Configuration::develop_compiler_mode(), "");
 }
+
+#[test]
+pub fn test_external_projects() {
+    test_external_project("https://github.com/tttmmmyyyy/fixlang_gmp.git");
+}
+
+pub fn test_external_project(url: &str) {
+    // Run `cargo install --locked --path .`.
+    let _ = Command::new("cargo")
+        .arg("install")
+        .arg("--locked")
+        .arg("--path")
+        .arg(".")
+        .output()
+        .expect("Failed to run cargo install.");
+
+    // Recreate working directory for this test.
+    let work_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::remove_dir_all(&work_dir);
+    let _ = fs::create_dir_all(&work_dir);
+
+    // Run `git clone {url}`.
+    let _ = Command::new("git")
+        .arg("clone")
+        .arg(url)
+        .current_dir(&work_dir)
+        .output()
+        .expect("Failed to run git clone.");
+
+    // Get the created directory name.
+    let dir_name = url
+        .split("/")
+        .last()
+        .unwrap()
+        .to_string()
+        .replace(".git", "");
+
+    // Run `fix test`.
+    let output = Command::new("fix")
+        .arg("test")
+        .current_dir(work_dir.join(dir_name))
+        .output()
+        .expect("Failed to run fix test.");
+
+    // Check the result.
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "Failed to run fix test of \"{}\"",
+        url
+    );
+}
