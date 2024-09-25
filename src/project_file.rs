@@ -264,6 +264,10 @@ impl ProjectFile {
         config: &mut Configuration,
         dependent_proj: bool,
     ) -> Result<(), Errors> {
+        // Should we consider `[build.test]` section?
+        let use_build_test =
+            config.subcommand == SubCommand::Test || config.subcommand == SubCommand::Diagnostics;
+
         // Append source files.
         config.source_files.append(
             &mut self
@@ -273,7 +277,7 @@ impl ProjectFile {
                 .map(|p| self.join_to_project_dir(p))
                 .collect(),
         );
-        if config.subcommand == SubCommand::Test {
+        if use_build_test {
             config
                 .source_files
                 .append(&mut self.build.test.as_ref().map_or(vec![], |test| {
@@ -293,7 +297,7 @@ impl ProjectFile {
                     .collect(),
             );
         }
-        if config.subcommand == SubCommand::Test {
+        if use_build_test {
             if let Some(static_libs) = self
                 .build
                 .test
@@ -318,7 +322,7 @@ impl ProjectFile {
                     .collect(),
             );
         }
-        if config.subcommand == SubCommand::Test {
+        if use_build_test {
             if let Some(dynamic_libs) = self
                 .build
                 .test
@@ -343,7 +347,7 @@ impl ProjectFile {
                     .collect(),
             );
         }
-        if config.subcommand == SubCommand::Test {
+        if use_build_test {
             if let Some(lib_paths) = self
                 .build
                 .test
@@ -365,7 +369,7 @@ impl ProjectFile {
                 config.set_threaded();
             }
         }
-        if config.subcommand == SubCommand::Test {
+        if use_build_test {
             if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
                 if threaded {
                     config.set_threaded();
@@ -380,7 +384,7 @@ impl ProjectFile {
                 command: command.clone(),
             });
         }
-        if config.subcommand == SubCommand::Test {
+        if use_build_test {
             for command in &self
                 .build
                 .test
@@ -423,7 +427,7 @@ impl ProjectFile {
                 ));
             }
         }
-        if config.subcommand == SubCommand::Test {
+        if use_build_test {
             if let Some(opt_level) = self
                 .build
                 .test
