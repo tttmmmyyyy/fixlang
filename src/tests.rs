@@ -6659,7 +6659,7 @@ pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashset.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-random.git");
-    // test_external_project("https://github.com/tttmmmyyyy/fixlang-time.git"); // Cannot compiled on my computer (cannot find -lgcc_s)
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-time.git"); // Cannot compiled on my computer (cannot find -lgcc_s)
     test_external_project("https://github.com/tttmmmyyyy/fixlang-character.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-subprocess.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang_gmp.git");
