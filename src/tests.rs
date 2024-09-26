@@ -4623,32 +4623,6 @@ pub fn test_hex_oct_bin_lit() {
 }
 
 #[test]
-pub fn test_regexp() {
-    let source = r##"
-    module Main;
-        import RegExp;
-    
-    main : IO ();
-    main = (
-        let regexp = RegExp::compile("[a-z]+([0-9]+)", "").as_ok;
-        let groups = regexp.match("abc012 def345").as_ok;
-        eval assert_eq(|_|"", groups, ["abc012", "012"]);
-
-        let regexp = RegExp::compile("[a-z]+([0-9]+)", "g").as_ok;
-        let groups = regexp.match("abc012 def345").as_ok;
-        eval assert_eq(|_|"", groups, ["abc012", "def345"]);
-
-        let regexp = RegExp::compile("(\\w\\w)(\\w)", "").as_ok;
-        let result = regexp.replace_all("abc def ijk", "$2$1");
-        eval assert_eq(|_|"", result, "cab fde kij");
-
-        pure()
-    );
-    "##;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
 pub fn test_array_to_string() {
     let source = r##"
     module Main;
@@ -6659,9 +6633,10 @@ pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashset.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-random.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-time.git"); // Cannot compiled on my computer (cannot find -lgcc_s)
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-time.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-character.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-subprocess.git");
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-regexp.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang_gmp.git");
 }
 

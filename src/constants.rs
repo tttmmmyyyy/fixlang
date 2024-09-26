@@ -148,50 +148,13 @@ pub const STANDARD_LIBRARIES: &[(
     &str,                           /* file_name */
     Option<fn(&mut Configuration)>, /* config_modifier */
     Option<fn(&mut Program)>,       /* module_modifier */
-)] = &[
-    (
-        "AsyncTask",
-        include_str!("./fix/asynctask.fix"),
-        "asynctask",
-        Some(Configuration::set_async_task),
-        None,
-    ),
-    (
-        "RegExp",
-        include_str!("./fix/regexp/regexp.fix"),
-        "regexp__regexp",
-        None,
-        None,
-    ),
-    (
-        "RegExp.RegExpNFA",
-        include_str!("./fix/regexp/regexp_nfa.fix"),
-        "regexp__regexp_nfa",
-        None,
-        None,
-    ),
-    (
-        "RegExp.RegExpPattern",
-        include_str!("./fix/regexp/regexp_pattern.fix"),
-        "regexp__regexp_pattern",
-        None,
-        None,
-    ),
-    (
-        "RegExp.SimpleParser",
-        include_str!("./fix/regexp/simple_parser.fix"),
-        "regexp__simple_parser",
-        None,
-        None,
-    ),
-    (
-        "RegExp.StringEx",
-        include_str!("./fix/regexp/stringex.fix"),
-        "regexp__stringex",
-        None,
-        None,
-    ),
-];
+)] = &[(
+    "AsyncTask",
+    include_str!("./fix/asynctask.fix"),
+    "asynctask",
+    Some(Configuration::set_async_task),
+    None,
+)];
 
 #[allow(unused)]
 pub const DW_ATE_ADDRESS: u32 = 1;
