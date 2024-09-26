@@ -202,11 +202,6 @@ impl Configuration {
             .push((name.to_string(), LinkType::Dynamic));
     }
 
-    // Add `libm.so` to dynamically linked libraries.
-    pub fn add_libm(&mut self) {
-        self.add_dyanmic_library("m");
-    }
-
     pub fn get_output_llvm_ir_path(&self, optimized: bool, unit_name: &str) -> PathBuf {
         match &self.out_file_path {
             None => {

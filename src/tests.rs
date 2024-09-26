@@ -3087,85 +3087,6 @@ pub fn test_undefined() {
 }
 
 #[test]
-pub fn test121() {
-    // Test Math module
-    let source = r#"
-        module Main; 
-
-                import Math;
-
-        main : IO ();
-        main = (
-            // gcd
-            eval assert_eq(|_|"case gcd-0", gcd(16, 6), 2);
-            eval assert_eq(|_|"case gcd-1", gcd(544, 119), 17);
-            eval assert_eq(|_|"case gcd-2", gcd(2089, 3571), 1);
-            eval assert_eq(|_|"case gcd-3", gcd(-16, 6), 2);
-            eval assert_eq(|_|"case gcd-4", gcd(544, -119), 17);
-            eval assert_eq(|_|"case gcd-5", gcd(-2089, 3571), 1);
-            eval assert_eq(|_|"case gcd-6", gcd(0, 0), 0);
-            eval assert_eq(|_|"case gcd-7", gcd(0, 1), 1);
-            eval assert_eq(|_|"case gcd-8", gcd(-1, 0), 1);
-
-            // binomial_coefficients
-            let binom = [
-                [1],
-                [1, 1],
-                [1, 2, 1],
-                [1, 3, 3, 1],
-                [1, 4, 6, 4, 1],
-                [1, 5, 10, 10, 5, 1],
-                [1, 6, 15, 20, 15, 6, 1],
-                [1, 7, 21, 35, 35, 21, 7, 1],
-                [1, 8, 28, 56, 70, 56, 28, 8, 1],
-                [1, 9, 36, 84, 126, 126, 84, 36, 9, 1],
-                [1, 10, 45, 120, 210, 252, 210, 120, 45, 10, 1]
-            ];
-            eval assert_eq(|_|"case binomial_coefficients-0", binomial_coefficients(10), binom);
-
-            let binom = [
-                [1]
-            ];
-            eval assert_eq(|_|"case binomial_coefficients-1", binomial_coefficients(0), binom);
-
-            let binom = [
-                [1],
-                [1, 1]
-            ];
-            eval assert_eq(|_|"case binomial_coefficients-2", binomial_coefficients(1), binom);
-
-            // libm functions
-            eval assert(|_|"case acos", (acos(0.2) - 1.369438406004566).abs < 1.0e-8);
-            eval assert(|_|"case asin", (asin(0.2) - 0.2013579207903308).abs < 1.0e-8);
-            eval assert(|_|"case atan", (atan(0.2) - 0.19739555984988078).abs < 1.0e-8);            
-            eval assert(|_|"case atan2", (atan2(0.2, 0.5) - 0.3805063771123649).abs < 1.0e-8);
-            eval assert(|_|"case ceil", (ceil(1.9) - 2.0).abs < 1.0e-8);
-            eval assert(|_|"case cos", (cos(0.2) - 0.9800665778412416).abs < 1.0e-8);
-            eval assert(|_|"case cosh", (cosh(0.2) - 1.020066755619076).abs < 1.0e-8);
-            eval assert(|_|"case exp", (exp(0.2) - 1.2214027581601699).abs < 1.0e-8);
-            eval assert(|_|"case floor", (floor(1.2) - 1.0).abs < 1.0e-8);
-            eval assert(|_|"case fmod", (2.0.fmod(1.2) - 0.8).abs < 1.0e-8);
-            eval assert(|_|"case frexp 1", (frexp(2560.0).@0 - 0.625).abs < 1.0e-8);
-            eval assert(|_|"case frexp 2", (frexp(2560.0).@1 - 12_I32).abs == 0_I32);
-            eval assert(|_|"case ldexp", (3.14.ldexp(2_I32) - 12.56).abs < 1.0e-8);
-            eval assert(|_|"case log", (log(0.2) - -1.6094379124341003).abs < 1.0e-8);
-            eval assert(|_|"case log10", (log10(0.2) - -0.6989700043360187).abs < 1.0e-8);
-            eval assert(|_|"case modf 1", (modf(3.14).@0 - 0.14).abs < 1.0e-8);
-            eval assert(|_|"case modf 2", (modf(3.14).@1 - 3.0).abs < 1.0e-8);
-            eval assert(|_|"case pow", (3.14.pow(2.72) - 22.472357891492628).abs < 1.0e-8);
-            eval assert(|_|"case sin", (sin(0.2) - 0.19866933079506122).abs < 1.0e-8);
-            eval assert(|_|"case sinh", (sinh(0.2) - 0.20133600254109402).abs < 1.0e-8);
-            eval assert(|_|"case sqrt", (sqrt(0.2) - 0.4472135954999579).abs < 1.0e-8);
-            eval assert(|_|"case tan", (tan(0.2) - 0.2027100355086725).abs < 1.0e-8);
-            eval assert(|_|"case tanh", (tanh(0.2) - 0.197375320224904).abs < 1.0e-8);
-
-            pure()
-        );
-    "#;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
 pub fn test_punched_array() {
     // Test PunchedArray.
     let source = r#"
@@ -3820,148 +3741,6 @@ pub fn test129() {
 }
 
 #[test]
-pub fn test130() {
-    // Test Time module
-    let source = r#"
-        module Main; 
-                import Time;
-
-        weeks : Array String;
-        weeks = ["Sun", "Mon", "Tue", "Wed", "Thr", "Fri", "Sat"];
-
-        dt_to_string : DateTime -> String;
-        dt_to_string = |dt| (
-            dt.@year.to_string + "/" + dt.@month.to_string + "/" + dt.@day_in_month.to_string + " (" + weeks.@(dt.@day_in_week.to_I64) + ") " + 
-            dt.@hour.to_string + ":" + dt.@min.to_string + ":" + 
-            (dt.@sec.to_F64 + 1.0e-9 * dt.@nanosec.to_F64).to_string + 
-            ", dst = " + 
-            if dt.@is_dst.is_none { "none" } else { dt.@is_dst.as_some.to_string }
-        );
-
-        main : IO ();
-        main = (
-            let now = *get_now;
-            eval *(println $ "now.sec = " + now.@sec.to_string + ", now.nanosec = " + now.@nanosec.to_string);
-            let utc = now.to_utc.as_ok;
-            eval *(println $ "UTC: " + dt_to_string(utc));
-            let loc = *now.to_local.try(exit_with_msg(1));
-            eval *(println $ "Loc: " + dt_to_string(loc));
-            let now_from_utc = Time::from_utc(utc).as_ok;
-            let now_from_loc = *Time::from_local(loc).try(exit_with_msg(1));
-            eval assert(|_|"diff utc", (now.to_F64 - now_from_utc.to_F64).abs < 0.1);
-            eval assert(|_|"diff loc", (now.to_F64 - now_from_loc.to_F64).abs < 0.1);
-
-            pure()
-        );
-    "#;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
-pub fn test131() {
-    // Test Character module
-    let source = r#"
-        module Main; 
-                import Character;
-
-        main : IO ();
-        main = (
-            // is_alnum
-            eval assert_eq(|_|"is_alnum", is_alnum('A'), true);
-            eval assert_eq(|_|"is_alnum", is_alnum('0'), true);
-            eval assert_eq(|_|"is_alnum", is_alnum('+'), false);
-        
-            // is_alpha
-            eval assert_eq(|_|"is_alpha", is_alpha('A'), true);
-            eval assert_eq(|_|"is_alpha", is_alpha('0'), false);
-            eval assert_eq(|_|"is_alpha", is_alpha('+'), false);
-        
-            // is_blank
-            eval assert_eq(|_|"is_blank 1", is_blank('A'), false);
-            eval assert_eq(|_|"is_blank 2", is_blank('0'), false);
-            eval assert_eq(|_|"is_blank 3", is_blank(' '), true);
-            eval assert_eq(|_|"is_blank 4", is_blank('\t'), true);
-            eval assert_eq(|_|"is_blank 5", is_blank('\n'), false);
-            eval assert_eq(|_|"is_blank 6", is_blank('\r'), false);
-        
-            // is_cntrl
-            eval assert_eq(|_|"is_cntrl", is_cntrl('A'), false);
-            eval assert_eq(|_|"is_cntrl", is_cntrl('0'), false);
-            eval assert_eq(|_|"is_cntrl", is_cntrl('\0'), true);
-            eval assert_eq(|_|"is_cntrl", is_cntrl('\t'), true);
-            eval assert_eq(|_|"is_cntrl", is_cntrl('\n'), true);
-            eval assert_eq(|_|"is_cntrl", is_cntrl('\r'), true);
-        
-            // is_digit
-            eval assert_eq(|_|"is_digit", is_digit('0'), true);
-            eval assert_eq(|_|"is_digit", is_digit('9'), true);
-            eval assert_eq(|_|"is_digit", is_digit('+'), false);
-        
-            // is_graph
-            eval assert_eq(|_|"is_graph", is_graph('A'), true);
-            eval assert_eq(|_|"is_graph", is_graph('0'), true);
-            eval assert_eq(|_|"is_graph", is_graph(' '), false);
-            eval assert_eq(|_|"is_graph", is_graph('\n'), false);
-            eval assert_eq(|_|"is_graph", is_graph('\t'), false);
-            eval assert_eq(|_|"is_graph", is_graph('\0'), false);
-        
-            // is_lower
-            eval assert_eq(|_|"is_lower", is_lower('a'), true);
-            eval assert_eq(|_|"is_lower", is_lower('A'), false);
-            eval assert_eq(|_|"is_lower", is_lower('+'), false);
-        
-            // is_print
-            eval assert_eq(|_|"is_print", is_print('A'), true);
-            eval assert_eq(|_|"is_print", is_print('0'), true);
-            eval assert_eq(|_|"is_print", is_print(' '), true);
-            eval assert_eq(|_|"is_print", is_print('\n'), false);
-            eval assert_eq(|_|"is_print", is_print('\t'), false);
-            eval assert_eq(|_|"is_print", is_print('\0'), false);
-        
-            // is_punct
-            eval assert_eq(|_|"is_punct 1", is_punct('.'), true);
-            eval assert_eq(|_|"is_punct 2", is_punct(','), true);
-            eval assert_eq(|_|"is_punct 3", is_punct('+'), true);
-            eval assert_eq(|_|"is_punct 4", is_punct('A'), false);
-            eval assert_eq(|_|"is_punct 5", is_punct('0'), false);
-        
-            // is_space
-            eval assert_eq(|_|"is_space", is_space(' '), true);
-            eval assert_eq(|_|"is_space", is_space('\t'), true);
-            eval assert_eq(|_|"is_space", is_space('\n'), true);
-            eval assert_eq(|_|"is_space", is_space('\r'), true);
-            eval assert_eq(|_|"is_space", is_space('A'), false);
-            eval assert_eq(|_|"is_space", is_space('0'), false);
-        
-            // is_upper
-            eval assert_eq(|_|"is_upper", is_upper('A'), true);
-            eval assert_eq(|_|"is_upper", is_upper('a'), false);
-            eval assert_eq(|_|"is_upper", is_upper('+'), false);
-        
-            // is_xdigit
-            eval assert_eq(|_|"is_xdigit 1", is_xdigit('A'), true);
-            eval assert_eq(|_|"is_xdigit 2", is_xdigit('a'), true);
-            eval assert_eq(|_|"is_xdigit 3", is_xdigit('0'), true);
-            eval assert_eq(|_|"is_xdigit 4", is_xdigit('x'), false);
-            eval assert_eq(|_|"is_xdigit 5", is_xdigit('+'), false);
-
-            // to_lower
-            eval assert_eq(|_|"to_lower 1", to_lower('A'), 'a');
-            eval assert_eq(|_|"to_lower 2", to_lower('a'), 'a');
-            eval assert_eq(|_|"to_lower 3", to_lower('+'), '+');
-
-            // to_upper
-            eval assert_eq(|_|"to_upper 1", to_upper('A'), 'A');
-            eval assert_eq(|_|"to_upper 2", to_upper('a'), 'A');
-            eval assert_eq(|_|"to_upper 3", to_upper('+'), '+');
-
-            pure()
-        );
-    "#;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
 pub fn test_consumed_time() {
     // Test Debug module
     let source = r#"
@@ -4083,36 +3862,6 @@ pub fn test_string_unsafe_from_c_str_ptr() {
             eval assert_eq(|_|"", src, cpy);
             pure()
         );
-    "#;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
-pub fn test_subprocess_run_stream() {
-    let source = r#"
-    module Main;
-        import Subprocess;
-    
-    main : IO ();
-    main = (
-        eval *println("Run \"ls -l -r\".");
-        let (_, exit_status) = *run_with_stream("ls", ["ls", "-l", "-r"], |(stdin, stdout, stderr)| (
-            let output = *read_string(stdout); // Read standard output of the command.
-            println(output).lift
-        )).try(exit_with_msg(1));
-        eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
-    
-        eval *println("Run \"sed s/w/W/\" and write \"Hello world!\" to the standard input.");
-        let (_, exit_status) = *run_with_stream("sed", ["/usr/bin/sed", "s/w/W/"], |(stdin, stdout, stderr)| (
-            eval *write_string(stdin, "Hello world!");
-            eval *close_file(stdin).lift; // Send EOF.
-            let output = *read_string(stdout); // Read standard output of the command.
-            println(output).lift
-        )).try(exit_with_msg(1));
-        eval assert_eq(|_|"", exit_status.as_exit, 0_U8);
-     
-        pure()
-    );
     "#;
     test_source(&source, Configuration::develop_compiler_mode());
 }
@@ -4655,47 +4404,6 @@ pub fn test_regression_issue_14() {
     );
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
-pub fn test_random() {
-    let source = r##"
-    module Main;
-    import Random;
-    
-    main : IO ();
-    main = (
-        let init = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
-        let random = init_by_array(init);
-        let n = 100;
-        eval *println(n.to_string + " outputs of generate_U64()");
-        let random : Random = *loop_m (
-            (random, 0), |(random, i)|
-            if i >= n {
-                break_m $ random
-            };
-            let (random, x) = generate_U64(random);
-            eval *print(x.to_string + " ");
-            eval *(if (i%5==4) { println("") } else { pure() });
-            continue_m $ (random, i + 1)
-        );
-        eval *println("");
-        eval *println(n.to_string + " outputs of generate_F64_2()");
-        let random : Random = *loop_m (
-            (random, 0), |(random, i)|
-            if i >= n {
-                break_m $ random
-            };
-            let (random, x) = generate_F64_2(random);
-            eval *print (x.to_string + " ");
-            eval *(if (i%5==4) { println("") } else { pure() });
-            continue_m $ (random, i + 1)
-        );
-        pure()
-    );
-    "##;
-    let config = Configuration::develop_compiler_mode();
-    test_source(&source, config);
 }
 
 #[test]
@@ -6947,9 +6655,14 @@ pub fn test_unsafe_get_retain_function_of_boxed_value_error() {
 
 #[test]
 pub fn test_external_projects() {
-    test_external_project("https://github.com/tttmmmyyyy/fixlang_gmp.git");
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-math.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashset.git");
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-random.git");
+    // test_external_project("https://github.com/tttmmmyyyy/fixlang-time.git"); // Cannot compiled on my computer (cannot find -lgcc_s)
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-character.git");
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-subprocess.git");
+    test_external_project("https://github.com/tttmmmyyyy/fixlang_gmp.git");
 }
 
 pub fn test_external_project(url: &str) {

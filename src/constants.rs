@@ -150,41 +150,6 @@ pub const STANDARD_LIBRARIES: &[(
     Option<fn(&mut Program)>,       /* module_modifier */
 )] = &[
     (
-        "Math",
-        include_str!("./fix/math.fix"),
-        "math",
-        Some(Configuration::add_libm),
-        None,
-    ),
-    (
-        "Random",
-        include_str!("./fix/random.fix"),
-        "random",
-        None,
-        None,
-    ),
-    (
-        "Time",
-        include_str!("./fix/time.fix"),
-        "time.fix",
-        None,
-        None,
-    ),
-    (
-        "Character",
-        include_str!("./fix/character.fix"),
-        "character",
-        None,
-        None,
-    ),
-    (
-        "Subprocess",
-        include_str!("./fix/subprocess.fix"),
-        "subprocess",
-        None,
-        None,
-    ),
-    (
         "AsyncTask",
         include_str!("./fix/asynctask.fix"),
         "asynctask",
