@@ -47,6 +47,7 @@ impl ProjectFileGeneral {
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuild {
     files: Vec<PathBuf>,
+    #[serde(default)]
     objects: Vec<PathBuf>,
     static_links: Option<Vec<String>>,
     dynamic_links: Option<Vec<String>>,
@@ -65,6 +66,7 @@ pub struct ProjectFileBuild {
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuildTest {
     files: Vec<PathBuf>,
+    #[serde(default)]
     objects: Vec<PathBuf>,
     static_links: Option<Vec<String>>,
     dynamic_links: Option<Vec<String>>,
