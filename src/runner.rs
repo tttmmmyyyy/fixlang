@@ -614,7 +614,6 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
             program: Some(program),
         });
     }
-    let obj_paths = build_res.obj_paths;
 
     let mut library_search_path_opts: Vec<String> = vec![];
     for path in &config.library_search_paths {
@@ -703,6 +702,9 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
         com.arg("-Wl,--gc-sections");
     }
     com.arg("-o").arg(exec_path.to_str().unwrap());
+
+    let mut obj_paths = build_res.obj_paths;
+    obj_paths.append(&mut config.object_files.clone());
     for obj_path in obj_paths {
         com.arg(obj_path.to_str().unwrap());
     }

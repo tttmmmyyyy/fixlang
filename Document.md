@@ -1744,6 +1744,10 @@ license = "MIT"
 # Merged with files specified in the command line argument.
 files = ["main.fix", "lib.fix"]
 
+# Object files to be linked.
+# Merged with object files specified in the command line argument.
+objects = ["lib.o"]
+
 # Static link libraries.
 # Merged with libraries specified in the command line argument.
 static_links = ["xyz"]
@@ -1774,10 +1778,15 @@ output = "myprogram.out"
 threaded = false
 
 # Preliminary commands to be executed before the Fix program is compiled.
-# This is useful when you need to compile a C library before compiling the Fix program.
+# This is useful when you need to compile a object files / library before compiling the Fix program.
 preliminary_commands = [
     ["make", "libxyz.a", "--quiet"] # Since this command runs always when you run "fix build", "--quiet" is useful.
 ]
+
+# Additional build options when running `fix test`.
+# Fields are almost the same as ones in "[build]".
+[build.test]
+files = ["test.fix"]
 
 # By "[[dependencies]]" array, you can specify a Fix project as a dependency.
 # The dependent project should have "fixproj.toml" file, which at least defines name and version of the project.
@@ -1797,12 +1806,6 @@ name = "certain-project"
 version = "1.2.0"
 git = { url = "https://github.com/tttmmmyyyy/certain-project.git" }
 ```
-
-Even if you specify source files in the project file, you can specify additional source files in the command line argument by "-f".
-
-For example, consider that you are making a library and having `Main::main` function which runs tests in "test.fix".
-In this case, you should not include "test.fix" in the "build.files" of the project file, because otherwise the test codes will be compiled into the application that uses your library.
-Instead, you should add "test.fix" by the command line argument "-f" when you run the test.
 
 ## Generating documentation
 

@@ -14,6 +14,7 @@
 - Add experimental support for project file ("fixproj.toml").
 - Add experimental support for document generation (`fix docs` command).
 - Add `fix test` subcommand, which runs `Test::test`.
+- Add `-O (--object)` option to specify object files to be linked.
 
 ### Changed
 

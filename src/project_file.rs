@@ -47,6 +47,7 @@ impl ProjectFileGeneral {
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuild {
     files: Vec<PathBuf>,
+    objects: Vec<PathBuf>,
     static_links: Option<Vec<String>>,
     dynamic_links: Option<Vec<String>>,
     library_paths: Option<Vec<PathBuf>>,
@@ -64,6 +65,7 @@ pub struct ProjectFileBuild {
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuildTest {
     files: Vec<PathBuf>,
+    objects: Vec<PathBuf>,
     static_links: Option<Vec<String>>,
     dynamic_links: Option<Vec<String>>,
     library_paths: Option<Vec<PathBuf>>,
@@ -283,6 +285,26 @@ impl ProjectFile {
                 .source_files
                 .append(&mut self.build.test.as_ref().map_or(vec![], |test| {
                     test.files
+                        .iter()
+                        .map(|p| self.join_to_project_dir(p))
+                        .collect()
+                }));
+        }
+
+        // Append object files.
+        config.object_files.append(
+            &mut self
+                .build
+                .objects
+                .iter()
+                .map(|p| self.join_to_project_dir(p))
+                .collect(),
+        );
+        if use_build_test {
+            config
+                .object_files
+                .append(&mut self.build.test.as_ref().map_or(vec![], |test| {
+                    test.objects
                         .iter()
                         .map(|p| self.join_to_project_dir(p))
                         .collect()

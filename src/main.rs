@@ -107,6 +107,13 @@ fn main() {
         .multiple_values(true)
         .takes_value(true)
         .help("Source files to be compiled and linked.");
+    let object_file = Arg::new("object-files")
+        .long("object")
+        .short('O')
+        .action(clap::ArgAction::Append)
+        .multiple_values(true)
+        .takes_value(true)
+        .help("Object files to be linked.");
     let static_link_library = Arg::new("static-link-library")
         .long("static-link")
         .short('s')
@@ -177,6 +184,7 @@ fn main() {
     let build_subc = App::new("build")
         .about("Builds an executable binary from source files.")
         .arg(source_file.clone())
+        .arg(object_file.clone())
         .arg(output_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
@@ -192,6 +200,7 @@ fn main() {
     let run_subc = App::new("run")
         .about("Executes a Fix program.")
         .arg(source_file.clone())
+        .arg(object_file.clone())
         .arg(output_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
@@ -207,6 +216,7 @@ fn main() {
     let test_subc = App::new("test")
         .about("Tests a Fix program.")
         .arg(source_file.clone())
+        .arg(object_file.clone())
         .arg(output_file.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
@@ -274,6 +284,19 @@ fn main() {
         Ok(pathbufs)
     }
 
+    fn read_object_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
+        let files = m.get_many::<String>("object-files");
+        if files.is_none() {
+            return Ok(vec![]);
+        }
+        let files = files.unwrap();
+        let mut pathbufs = vec![];
+        for file in files {
+            pathbufs.push(PathBuf::from(file));
+        }
+        Ok(pathbufs)
+    }
+
     fn read_modules_options(m: &ArgMatches) -> Result<Vec<Name>, Errors> {
         let modules = m.get_many::<String>("modules");
         if modules.is_none() {
@@ -322,6 +345,11 @@ fn main() {
         config
             .source_files
             .append(&mut read_source_files_options(args)?);
+
+        // Set `object_files`.
+        config
+            .object_files
+            .append(&mut read_object_files_options(args)?);
 
         // Set `output_file_path`.
         config.out_file_path = read_output_file_option(args);
