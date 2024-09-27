@@ -693,6 +693,11 @@ impl ProjectFile {
                     .iter()
                     .find(|prj_info| &prj_info.name == proj_name)
                 {
+                    println!(
+                        "Adding dependency on \"{}@{}\" (found at \"{}\")",
+                        proj_name, version, reg_url
+                    );
+
                     added += "\n\n[[dependencies]]";
                     added += &format!("\nname = \"{}\"", proj_name);
                     added += &format!("\nversion = \"{}\"", version);
