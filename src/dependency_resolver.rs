@@ -156,7 +156,11 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     }
 
     // Find the latest version which can be used.
-    let mut vers = versions_retriever(&dependency.name)?;
+    let vers = versions_retriever(&dependency.name)?;
+    let mut vers = vers
+        .iter()
+        .filter(|v| dependency.requirement.matches(v))
+        .collect::<Vec<_>>();
     vers.sort();
     for version in vers.iter().rev() {
         logger(&format!(

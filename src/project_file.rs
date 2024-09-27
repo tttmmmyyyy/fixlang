@@ -694,8 +694,8 @@ impl ProjectFile {
                     .find(|prj_info| &prj_info.name == proj_name)
                 {
                     println!(
-                        "Adding dependency on \"{}@{}\" (found at \"{}\")",
-                        proj_name, version, reg_url
+                        "Adding dependency on \"{}\" to the project file. (It was found in \"{}\".)",
+                        proj_name, reg_url
                     );
 
                     added += "\n\n[[dependencies]]";
