@@ -76,6 +76,7 @@ pub struct ProjectFileBuildTest {
     opt_level: Option<String>,
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
+    memcheck: Option<bool>,
 }
 
 // The entry of `dependencies` section of the project file.
@@ -420,6 +421,15 @@ impl ProjectFile {
                     work_dir: self.path.parent().unwrap().to_path_buf(),
                     command: command.clone(),
                 });
+            }
+        }
+
+        // Set the memory check mode.
+        if use_build_test {
+            if let Some(memcheck) = self.build.test.as_ref().and_then(|test| test.memcheck) {
+                if memcheck {
+                    config.set_valgrind(crate::ValgrindTool::MemCheck);
+                }
             }
         }
 

@@ -1,8 +1,8 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 
 use crate::{
-    ast::program::Program, configuration::Configuration, RUNTIME_MARK_GLOBAL_BOXED_OBJECT,
-    RUNTIME_MARK_THREADED_BOXED_OBJECT, RUNTIME_RELEASE_BOXED_OBJECT,
+    RUNTIME_MARK_GLOBAL_BOXED_OBJECT, RUNTIME_MARK_THREADED_BOXED_OBJECT,
+    RUNTIME_RELEASE_BOXED_OBJECT,
 };
 
 pub const NAMESPACE_SEPARATOR: &str = "::";
@@ -141,20 +141,6 @@ impl TraverserWorkType {
 pub const TRAVERSER_WORK_RELEASE: u32 = 0;
 pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;
 pub const TRAVERSER_WORK_MARK_THREADED: u32 = 2;
-
-pub const STANDARD_LIBRARIES: &[(
-    &str,                           /* mod_name */
-    &str,                           /* source_content */
-    &str,                           /* file_name */
-    Option<fn(&mut Configuration)>, /* config_modifier */
-    Option<fn(&mut Program)>,       /* module_modifier */
-)] = &[(
-    "AsyncTask",
-    include_str!("./fix/asynctask.fix"),
-    "asynctask",
-    Some(Configuration::set_async_task),
-    None,
-)];
 
 #[allow(unused)]
 pub const DW_ATE_ADDRESS: u32 = 1;

@@ -17,8 +17,6 @@ pub const RUNTIME_MARK_THREADED_BOXED_OBJECT: &str = "fixruntime_mark_threaded_o
 pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
 pub const RUNTIME_PTR_ADD_OFFSET: &str = "fixruntime_ptr_add_offset";
 pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
-pub const RUNTIME_THREAD_PREPARE_TERMINATION: &str = "fixruntime_thread_prepare_termination";
-pub const RUNTIME_THREAD_TERMINATE: &str = "fixruntime_thread_terminate";
 // pub const RUNTIME_RUN_FUNCTION: &str = "fixruntime_run_function_llvm";
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
 pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
@@ -42,10 +40,6 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: Build
     if gc.config.threaded {
         build_pthread_once_function(gc, mode);
         build_mark_threaded_boxed_object_function(gc, mode);
-    }
-    if gc.config.should_terminate_tasks() {
-        build_thread_prepare_termination_function(gc, mode);
-        build_thread_terminate_function(gc, mode);
     }
     // build_run_function(gc, mode); // This should be built after `build_mark_threaded_boxed_object_function`.
     build_get_argc_function(gc, mode);
@@ -755,37 +749,6 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(
 
 //     return;
 // }
-
-fn build_thread_prepare_termination_function<'c, 'm, 'b>(
-    gc: &GenerationContext<'c, 'm>,
-    mode: BuildMode,
-) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_THREAD_PREPARE_TERMINATION) {
-        return;
-    }
-
-    let fn_ty = gc.context.void_type().fn_type(&[], false);
-    gc.module
-        .add_function(RUNTIME_THREAD_PREPARE_TERMINATION, fn_ty, None);
-    return;
-}
-
-fn build_thread_terminate_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_THREAD_TERMINATE) {
-        return;
-    }
-
-    let fn_ty = gc.context.void_type().fn_type(&[], false);
-    gc.module
-        .add_function(RUNTIME_THREAD_TERMINATE, fn_ty, None);
-    return;
-}
 
 fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
     let argc_gv_ty = gc.context.i32_type();

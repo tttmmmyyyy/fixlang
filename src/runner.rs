@@ -241,7 +241,7 @@ fn build_object_files<'c>(
                 build_exported_c_functions(&mut gc, &export_statements);
 
                 // Implement the `main()` function.
-                build_main_function(&mut gc, main_expr.clone(), &config);
+                build_main_function(&mut gc, main_expr.clone());
             }
 
             // If debug info is generated, finalize it.
@@ -359,11 +359,7 @@ fn build_exported_c_functions<'c, 'm>(
     }
 }
 
-fn build_main_function<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
-    main_expr: Arc<ExprNode>,
-    config: &Configuration,
-) {
+fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_fn_type = gc.context.i32_type().fn_type(
         &[
             gc.context.i32_type().into(), // argc
@@ -394,11 +390,6 @@ fn build_main_function<'c, 'm>(
         gc.builder().build_store(gv_ptr, arg_val);
     }
 
-    // If both of `AsyncTask` and sanitizer are used, prepare for terminating threads.
-    if config.async_task && config.sanitize_memory {
-        gc.call_runtime(RUNTIME_THREAD_PREPARE_TERMINATION, &[]);
-    }
-
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
     let main_lambda_val = main_obj.load_field_nocap(gc, 0);
@@ -415,9 +406,6 @@ fn build_main_function<'c, 'm>(
     gc.release(ret);
 
     // Perform leak check
-    if config.should_terminate_tasks() {
-        gc.call_runtime(RUNTIME_THREAD_TERMINATE, &[]);
-    }
     gc.check_leak();
 
     // Return main function.
@@ -512,7 +500,7 @@ pub fn load_source_files(config: &mut Configuration) -> Result<Program, Errors> 
     }
 
     // Resolve imports.
-    target_mod.resolve_imports(config)?;
+    target_mod.resolve_imports()?;
 
     Ok(target_mod)
 }

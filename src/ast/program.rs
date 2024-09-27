@@ -1779,9 +1779,8 @@ impl Program {
         errors.to_result()
     }
 
-    // Link built-in modules following unsolved import statements.
-    // This function may mutate config to add dynamically linked libraries.
-    pub fn resolve_imports(&mut self, config: &mut Configuration) -> Result<(), Errors> {
+    // Check that all imported modules are linked.
+    pub fn resolve_imports(&mut self) -> Result<(), Errors> {
         let mut unresolved_imports = self.import_statements();
 
         loop {
@@ -1793,30 +1792,6 @@ impl Program {
 
             // If import is already resolved, do nothing.
             if self.is_linked(&module) {
-                continue;
-            }
-
-            let mut imported = false;
-            // Search for bulit-in modules.
-            for (mod_name, source_content, file_name, config_modifier, mod_modifier) in
-                STANDARD_LIBRARIES
-            {
-                if module == *mod_name {
-                    let mut fixmod =
-                        parse_and_save_to_temporary_file(source_content, file_name, config)?;
-                    if let Some(mod_modifier) = mod_modifier {
-                        mod_modifier(&mut fixmod);
-                    }
-                    unresolved_imports.append(&mut fixmod.import_statements());
-                    self.link(fixmod, false)?;
-                    if let Some(config_modifier) = config_modifier {
-                        config_modifier(config);
-                    }
-                    imported = true;
-                    break;
-                }
-            }
-            if imported {
                 continue;
             }
 

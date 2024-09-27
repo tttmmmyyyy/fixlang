@@ -65,8 +65,6 @@ pub struct Configuration {
     // Use threads.
     // To turn on this true and link pthread library, use `set_threaded` function.
     pub threaded: bool,
-    // Use AsyncTask module.
-    pub async_task: bool,
     // Macros defined in runtime.c.
     pub runtime_c_macro: Vec<String>,
     // Show times for each build steps.
@@ -161,7 +159,6 @@ impl Configuration {
             emit_llvm: false,
             out_file_path: None,
             threaded: false,
-            async_task: false,
             runtime_c_macro: vec![],
             show_build_times: false,
             verbose: false,
@@ -252,17 +249,9 @@ impl Configuration {
         self.add_dyanmic_library("pthread");
     }
 
-    pub fn set_async_task(&mut self) {
-        self.async_task = true;
-        self.set_threaded();
-        self.runtime_c_macro.push("THREAD".to_string());
-        self.add_terminate_tasks_macro_if_needed();
-    }
-
     #[allow(dead_code)]
     pub fn set_sanitize_memory(&mut self) {
         self.sanitize_memory = true;
-        self.add_terminate_tasks_macro_if_needed();
     }
 
     pub fn set_debug_info(&mut self) {
@@ -301,22 +290,6 @@ impl Configuration {
         }
     }
 
-    pub fn should_terminate_tasks(&self) -> bool {
-        // Sanitizer and valgrind may detect detached thread as a memory leak.
-        // To avoid this, wait for termination of detached threads before the program exits.
-        self.async_task && self.sanitize_memory
-
-        // Leak checking by valgrind has a similar problem that it may detect detached thread as a memory leak.
-        // This is not resolved by waiting for the termination of detached threads.
-        // We handle this problem just by ignoring `possibly lost` leaks.
-    }
-
-    fn add_terminate_tasks_macro_if_needed(&mut self) {
-        if self.should_terminate_tasks() {
-            self.runtime_c_macro.push("TERMINATE_TASKS".to_string());
-        }
-    }
-
     // Get hash value of the configurations that affect the object file generation.
     pub fn object_generation_hash(&self) -> String {
         let mut data = String::new();
@@ -324,7 +297,6 @@ impl Configuration {
         data.push_str(&self.fix_opt_level.to_string());
         data.push_str(&self.debug_info.to_string());
         data.push_str(&self.threaded.to_string());
-        data.push_str(&self.async_task.to_string());
         data.push_str(&self.c_type_sizes.to_string());
         data.push_str(build_time_utc!()); // Also add build time of the compiler.
         format!("{:x}", md5::compute(data))
@@ -352,9 +324,6 @@ impl Configuration {
                 // Check memory leaks.
                 com.arg("--tool=memcheck");
                 com.arg("--leak-check=yes"); // This option turns memory leak into error.
-                if self.async_task {
-                    com.arg("--errors-for-leak-kinds=definite"); // Ignore `possibly lost` leaks, which are caused by detached threads.
-                }
             }
         }
         com
