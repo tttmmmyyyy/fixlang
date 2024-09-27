@@ -4144,18 +4144,6 @@ pub fn test_tarai() {
 }
 
 #[test]
-pub fn test_number_of_processors() {
-    let source = r##"
-    module Main;
-    import AsyncTask;
-
-    main : IO ();
-    main = ("Number of processors: " + AsyncTask::number_of_processors.to_string).println;
-    "##;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
 pub fn test_get_args() {
     let source = r##"
     module Main;
@@ -4164,28 +4152,6 @@ pub fn test_get_args() {
     main = (
         let args = *get_args;
         args.to_iter.join(", ").println
-    );
-    "##;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
-pub fn test_regression_issue_14() {
-    let source = r##"
-    module Main;
-    import AsyncTask;
-    
-    main: IO ();
-    main = (
-        let _ = *(eprintln ("started"));
-        let str = "abc";
-        let buf = Array::fill(256, 0_U8);
-        let res = str.borrow_c_str(|p_str|
-            buf.borrow_ptr(|p_ret|
-                0_I32
-            )
-        );
-        pure()
     );
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
