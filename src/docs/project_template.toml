@@ -61,6 +61,13 @@ files = ["main.fix"]
 [build.test]
 files = ["test.fix"]
 
+## Registry URLs to search for dependent Fix projects.
+## "fix deps add {project-name}@{version-req}" command searches the required Fix project from the registries and adds it to the `[[dependencies]]` array if found.
+## The former registry is searched earlier.
+registries = [
+    "https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml",
+]
+
 ## By "[[dependencies]]" array, you can specify a Fix project as a dependency.
 ## Each dependent project must have "fixproj.toml" file at the project root directory.
 ## If a dependent project also has dependencies, "fix" will consider them recursively.

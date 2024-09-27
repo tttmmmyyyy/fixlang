@@ -12,6 +12,7 @@ extern crate lsp_types;
 extern crate num_bigint;
 extern crate rand;
 extern crate regex;
+extern crate reqwest;
 extern crate semver;
 extern crate serde;
 extern crate serde_json;
@@ -25,22 +26,22 @@ mod builtin;
 mod compile_unit;
 mod configuration;
 mod constants;
+mod cpu_features;
 mod dependency_lockfile;
 mod dependency_resolver;
 mod docgen;
+mod error;
 mod generator;
 mod graph;
 mod llvm_passes;
+mod lsp;
 mod misc;
 mod object;
 mod parser;
+mod project_file;
+mod registry_file;
 mod runner;
 mod runtime;
-// mod segcache;
-mod cpu_features;
-mod error;
-mod lsp;
-mod project_file;
 mod sourcefile;
 mod stdlib;
 mod stopwatch;
@@ -66,6 +67,7 @@ use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
 use configuration::*;
 use constants::*;
+use dependency_lockfile::DependecyLockFile;
 use error::exit_if_err;
 use generator::*;
 use graph::*;
@@ -235,7 +237,15 @@ fn main() {
     let deps_update = App::new("update").about(
         "Update the lock file and install dependencies so that it satisfies the dependencies specified in the project file.",
     );
-    let deps = deps.subcommand(deps_install).subcommand(deps_update);
+    let deps_add = App::new("add").about("Add dependency to the specified project. Fix projects are searched in the registry files. This command requires \"fixproj.toml\" to be present in the current directory.").arg(Arg::new("projects")
+    .multiple_values(true).takes_value(true).help("Projects to be added. \n\
+    Each entry be in the form \"proj-name\" or \"proj-name@ver_req\". \n\
+    Example: \"hashmap@0.1.0\""));
+
+    let deps = deps
+        .subcommand(deps_install)
+        .subcommand(deps_update)
+        .subcommand(deps_add);
 
     // "fix clean" subcommand
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
@@ -345,6 +355,14 @@ fn main() {
             .collect::<Vec<_>>()
     }
 
+    fn read_projects_option(m: &ArgMatches) -> Vec<String> {
+        m.try_get_many::<String>("projects")
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .cloned()
+            .collect::<Vec<_>>()
+    }
+
     fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
         // Set `source_files`.
         config
@@ -446,13 +464,13 @@ fn main() {
                 exit_if_err(proj_file.open_lock_file().and_then(|lf| lf.install()));
             }
             Some(("update", _args)) => {
-                // Remove lock file.
-                let lock_file_path = Path::new(LOCK_FILE_PATH);
-                if lock_file_path.exists() {
-                    std::fs::remove_file(lock_file_path).expect("Failed to remove the lock file.");
-                }
+                exit_if_err(DependecyLockFile::update_and_install());
+            }
+            Some(("add", args)) => {
+                let projects = read_projects_option(args);
                 let proj_file = exit_if_err(ProjectFile::read_root_file());
-                exit_if_err(proj_file.update_lock_file().and_then(|lf| lf.install()));
+                exit_if_err(proj_file.add_dependencies(&projects));
+                exit_if_err(DependecyLockFile::update_and_install());
             }
             _ => eprintln!("Unknown command!"),
         },

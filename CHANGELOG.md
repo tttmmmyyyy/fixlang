@@ -11,8 +11,9 @@
 - Implement `Functor` for tuple types. `map` function acts the last component of tuples.
 - Add `FFI_EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `FFI_EXPORT`.
 - Add experimental support for language server protocol.
-- Add experimental support for project file ("fixproj.toml").
-- Add experimental support for document generation (`fix docs` command).
+- Add support for project file ("fixproj.toml").
+- Add `fix deps` subccommand, which manages dependencies of a Fix project.
+- Add `fix docs` subcommand, which generates the document for a Fix project.
 - Add `fix test` subcommand, which runs `Test::test`.
 - Add `-O (--object)` option to specify object files to be linked.
 - Add `fix init` subcommand, which generates a template project file.

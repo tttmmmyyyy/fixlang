@@ -1,6 +1,6 @@
 use core::panic;
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -197,6 +197,16 @@ impl DependecyLockFile {
             }
         }
         Ok(())
+    }
+
+    // Update the lock file and install the dependencies.
+    pub fn update_and_install() -> Result<(), Errors> {
+        // Remove lock file.
+        let lock_file_path = Path::new(LOCK_FILE_PATH);
+        if lock_file_path.exists() {
+            std::fs::remove_file(lock_file_path).expect("Failed to remove the lock file.");
+        }
+        ProjectFile::read_root_file()?.open_or_create_lock_file_and_isntall()
     }
 }
 

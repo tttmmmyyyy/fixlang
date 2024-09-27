@@ -1,6 +1,7 @@
 use crate::{
     dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
+    registry_file::RegistryFile,
     Configuration, ExtraCommand, FixOptimizationLevel, LinkType, SourceFile, Span, SubCommand,
     LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
@@ -8,7 +9,7 @@ use semver::{Version, VersionReq};
 use serde::Deserialize;
 use std::{
     fs::File,
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -123,6 +124,9 @@ pub struct ProjectFile {
     // `dependencies` section
     #[serde(default)]
     pub dependencies: Vec<ProjectFileDependency>,
+    // `registries` section
+    #[serde(default)]
+    pub registries: Vec<String>,
     // The hash value of the project file.
     #[serde(skip)]
     pub hash: String,
@@ -192,18 +196,18 @@ impl ProjectFile {
         Ok(proj_file)
     }
 
-    fn validate_project_name(name: &ProjectName, span: &Span) -> Result<(), Errors> {
+    fn validate_project_name(name: &ProjectName, span: Option<Span>) -> Result<(), Errors> {
         // The project name should be non-empty, and can only contain alphanumeric characters, hyphens.
         if name.is_empty() {
             return Err(Errors::from_msg_srcs(
                 "Project name should not be empty.".to_string(),
-                &[&Some(span.clone())],
+                &[&span],
             ));
         }
         if !name.chars().all(|c| c.is_alphanumeric() || c == '-') {
             return Err(Errors::from_msg_srcs(
                 "Project name should only contain alphanumeric characters and hyphens.".to_string(),
-                &[&Some(span.clone())],
+                &[&span],
             ));
         }
         Ok(())
@@ -213,7 +217,7 @@ impl ProjectFile {
         // Validate the general section.
 
         // Validate the project name.
-        Self::validate_project_name(&self.general.name, &self.project_file_span(0, 0))?;
+        Self::validate_project_name(&self.general.name, Some(self.project_file_span(0, 0)))?;
 
         // Validate the version.
         Version::parse(&self.general.version).map_err(|e| {
@@ -236,7 +240,7 @@ impl ProjectFile {
             dep_names.push(dep.name.clone());
 
             // Validate the project name.
-            Self::validate_project_name(&dep.name, &self.project_file_span(0, 0))?;
+            Self::validate_project_name(&dep.name, Some(self.project_file_span(0, 0)))?;
 
             // Either of `path` or `git` should be specified.
             if (dep.path.is_none() && dep.git.is_none())
@@ -519,8 +523,8 @@ impl ProjectFile {
         Ok(lock_file)
     }
 
-    // Update the lock file.
-    pub fn update_lock_file(&self) -> Result<DependecyLockFile, Errors> {
+    // Open the lock file or create a new one if it does not exist.
+    pub fn open_or_create_lock_file(&self) -> Result<DependecyLockFile, Errors> {
         Ok(match self.open_lock_file() {
             Ok(lock_file) => lock_file,
             Err(_) => {
@@ -536,13 +540,18 @@ impl ProjectFile {
         })
     }
 
+    // Open the lock file, create a new one if it does not exist, and install the dependencies.
+    pub fn open_or_create_lock_file_and_isntall(&self) -> Result<(), Errors> {
+        self.open_or_create_lock_file().and_then(|lf| lf.install())
+    }
+
     // Update configuration by adding source files, linking libraries, ... as required by dependencies.
     pub fn install_dependencies(
         self: &ProjectFile,
         config: &mut Configuration,
     ) -> Result<(), Errors> {
         // Update the lock file if necessary.
-        let lock_file = self.update_lock_file()?;
+        let lock_file = self.open_or_create_lock_file()?;
 
         // Install the dependencies.
         lock_file.install()?;
@@ -592,6 +601,139 @@ impl ProjectFile {
             Errors::from_msg(format!(
                 "Failed to create file \"{}\": {:?}.",
                 PROJECT_FILE_PATH, e
+            ))
+        })?;
+        Ok(())
+    }
+
+    // Add dependencies to Fix projects to the project file.
+    pub fn add_dependencies(&self, proj_vers: &Vec<String>) -> Result<(), Errors> {
+        let mut added = "".to_string();
+
+        // Parse each element of `proj_vars` as the form `proj-name@ver_req`.
+        let mut projs: Vec<Option<(String, String)>> = vec![]; // (proj_name, version string)
+        for proj_ver in proj_vers {
+            let proj_ver_split = proj_ver.split('@').collect::<Vec<&str>>();
+            if proj_ver_split.len() == 0 || proj_ver_split.len() > 2 {
+                return Err(Errors::from_msg(format!(
+                    "Invalid project specification: \"{}\". It should be in the form \"proj-name\" or \"proj-name@ver_req\"",
+                    proj_ver
+                )));
+            }
+            let proj_name = proj_ver_split[0];
+            ProjectFile::validate_project_name(&proj_name.to_string(), None)?;
+            let version = if proj_ver_split.len() == 2 {
+                let _ = VersionReq::parse(proj_ver_split[1]).map_err(|e| {
+                    Errors::from_msg(format!(
+                        "Failed to parse version requirement in \"{}\": {:?}",
+                        proj_ver, e
+                    ))
+                })?;
+                proj_ver_split[1].to_string()
+            } else {
+                "*".to_string()
+            };
+            projs.push(Some((proj_name.to_string(), version)));
+        }
+
+        // Check if dependencies to the same project are specified multiple times.
+        for i in 0..projs.len() {
+            for j in i + 1..projs.len() {
+                if projs[i].as_ref().unwrap().0 == projs[j].as_ref().unwrap().0 {
+                    return Err(Errors::from_msg(format!(
+                        "The project \"{}\" is specified multiple times.",
+                        projs[i].as_ref().unwrap().0
+                    )));
+                }
+            }
+        }
+
+        // Check if the project file already contains the dependencies.
+        for prj_ver in &projs {
+            let proj_name = &prj_ver.as_ref().unwrap().0;
+            if self.dependencies.iter().any(|dep| &dep.name == proj_name) {
+                return Err(Errors::from_msg(format!(
+                    "The project file already contains a dependency on \"{}\".",
+                    proj_name
+                )));
+            }
+        }
+
+        // Fetch the registry files.
+        for reg_url in &self.registries {
+            let reg_res = reqwest::blocking::get(reg_url).map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to fetch registry file \"{}\": {:?}",
+                    reg_url, e
+                ))
+            })?;
+            let reg_file = reg_res.text().map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to fetch registry file \"{}\": {:?}",
+                    reg_url, e
+                ))
+            })?;
+            let reg_file = toml::from_str::<RegistryFile>(&reg_file).map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to parse registry file \"{}\": {:?}",
+                    reg_url, e
+                ))
+            })?;
+
+            // For each project to be added, search it in the registry file.
+            let mut remove_index = vec![]; // The indices of the projects to be removed from `projs`.
+            for (i, proj_var) in projs.iter().enumerate() {
+                if proj_var.is_none() {
+                    // This project has already been removed.
+                    continue;
+                }
+                let (proj_name, version) = proj_var.as_ref().unwrap();
+                if let Some(proj_info) = reg_file
+                    .projects
+                    .iter()
+                    .find(|prj_info| &prj_info.name == proj_name)
+                {
+                    added += "\n\n[[dependencies]]";
+                    added += &format!("\nname = \"{}\"", proj_name);
+                    added += &format!("\nversion = \"{}\"", version);
+                    added += &format!("\ngit = {{ url = \"{}\" }}", proj_info.git);
+
+                    remove_index.push(i);
+                }
+            }
+
+            // Remove the projects that have been added.
+            for i in remove_index.iter().rev() {
+                projs[*i] = None;
+            }
+        }
+
+        // Check if all the projects have been added.
+        for proj_var in projs {
+            if let Some(proj_var) = proj_var {
+                return Err(Errors::from_msg(format!(
+                    "The project \"{}\" is not found in the registries.",
+                    proj_var.0
+                )));
+            }
+        }
+
+        // Write the added dependencies to the project file.
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&self.path)
+            .map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to open file \"{}\": {:?}",
+                    self.path.to_string_lossy().to_string(),
+                    e
+                ))
+            })?;
+        file.write_all(added.as_bytes()).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to write to file \"{}\": {:?}",
+                self.path.to_string_lossy().to_string(),
+                e
             ))
         })?;
         Ok(())

@@ -125,7 +125,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     indent: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
     logger(&format!(
-        "{}Resolving version requirement: \"{} = {}\".",
+        "{}Resolving version requirement: \"{}@{}\".",
         " ".repeat(indent),
         dependency.name,
         dependency.requirement
@@ -138,7 +138,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     if let Some(package) = fixed.iter().find(|p| p.name == dependency.name) {
         if dependency.requirement.matches(&package.version) {
             logger(&format!(
-                "{}Already using \"{} = {}\", which satisfies the requirement `{}`. OK.",
+                "{}Already using \"{}@{}\", which satisfies the requirement `{}`. OK.",
                 " ".repeat(indent),
                 dependency.name,
                 package.version,
@@ -147,7 +147,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
             return Ok(Some(fixed.to_vec()));
         } else {
             logger(&format!(
-                "{}Already using \"{} = {}\", which does not satisfy the requirement `{}`. Backtracking.",
+                "{}Already using \"{}@{}\", which does not satisfy the requirement `{}`. Backtracking.",
                 " ".repeat(indent),
                 dependency.name, package.version, dependency.requirement
             ));
@@ -160,7 +160,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     vers.sort();
     for version in vers.iter().rev() {
         logger(&format!(
-            "{}Trying \"{} = {}\".",
+            "{}Trying \"{}@{}\".",
             " ".repeat(indent),
             dependency.name,
             version,
@@ -182,7 +182,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
 
         // Otherwise, try the next version.
         logger(&format!(
-            "{}Reject version `{}` of package `{}`.",
+            "{}Reject version `{}` of `{}`.",
             " ".repeat(indent),
             version,
             dependency.name,
@@ -190,7 +190,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     }
     // We have tried all versions, but none of them worked.
     logger(&format!(
-        "{}No version of package `{}` was accepted. Backtracking.",
+        "{}No version of project `{}` was accepted. Backtracking.",
         " ".repeat(indent),
         dependency.name,
     ));
