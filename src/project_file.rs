@@ -28,6 +28,9 @@ pub struct ProjectFileGeneral {
     // The description of the project.
     #[allow(unused)]
     pub description: Option<String>,
+    // `registries` section
+    #[serde(default)]
+    pub registries: Vec<String>,
     // The authors of the project.
     #[allow(unused)]
     pub authors: Option<Vec<String>>,
@@ -124,9 +127,6 @@ pub struct ProjectFile {
     // `dependencies` section
     #[serde(default)]
     pub dependencies: Vec<ProjectFileDependency>,
-    // `registries` section
-    #[serde(default)]
-    pub registries: Vec<String>,
     // The hash value of the project file.
     #[serde(skip)]
     pub hash: String,
@@ -660,7 +660,7 @@ impl ProjectFile {
         }
 
         // Fetch the registry files.
-        for reg_url in &self.registries {
+        for reg_url in &self.general.registries {
             let reg_res = reqwest::blocking::get(reg_url).map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to fetch registry file \"{}\": {:?}",
