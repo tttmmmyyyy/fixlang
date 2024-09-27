@@ -1,6 +1,11 @@
 module Main;
 
-import Math; // for Math::gcd
+// Calculates greatest common divisor of two integers.
+gcd : I64 -> I64 -> I64;
+gcd = |n, m| (
+    if n > m { gcd(m, n) };
+    if n == 0 { m } else { gcd(m % n, n) }
+);
 
 // Iterator, a.k.a. lazy list, is defined as follows.
 // `type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };`
