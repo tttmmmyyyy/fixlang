@@ -182,7 +182,7 @@ fn main() {
 
     // "fix build" subcommand
     let build_subc = App::new("build")
-        .about("Builds an executable binary from source files.")
+        .about("Builds the binary of a Fix program.")
         .arg(source_file.clone())
         .arg(object_file.clone())
         .arg(output_file.clone())
@@ -198,7 +198,7 @@ fn main() {
 
     // "fix run" subcommand
     let run_subc = App::new("run")
-        .about("Executes a Fix program.")
+        .about("Runs a Fix program. Executes \"Main::main\" of type `IO ()`.")
         .arg(source_file.clone())
         .arg(object_file.clone())
         .arg(output_file.clone())
@@ -214,7 +214,7 @@ fn main() {
 
     // "fix test" subcommand
     let test_subc = App::new("test")
-        .about("Tests a Fix program.")
+        .about("Tests a Fix program. Executes \"Test::test\" of type `IO ()`.")
         .arg(source_file.clone())
         .arg(object_file.clone())
         .arg(output_file.clone())
@@ -260,6 +260,10 @@ fn main() {
                 .help("Modules for which documents should be generated."),
         );
 
+    // "fix init" subcommand
+    let init_subc = App::new("init")
+        .about("Generates a project file \"fixproj.toml\" in the current directory.");
+
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -269,7 +273,8 @@ fn main() {
         .subcommand(clean_subc)
         .subcommand(lsp_subc)
         .subcommand(deps)
-        .subcommand(docs_subc);
+        .subcommand(docs_subc)
+        .subcommand(init_subc);
 
     fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
         let files = m.get_many::<String>("source-files");
@@ -460,6 +465,9 @@ fn main() {
         Some(("docs", args)) => {
             let modules = exit_if_err(read_modules_options(args));
             exit_if_err(docgen::generate_docs_for_files(&modules));
+        }
+        Some(("init", _args)) => {
+            exit_if_err(ProjectFile::create_example_file());
         }
         _ => eprintln!("Unknown command!"),
     }

@@ -67,7 +67,7 @@
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
 - [Operators](#operators)
 - [Compiler feature](#compiler-feature)
-  - [Fix projects and dependencies](#fix-projects-and-dependencies)
+  - [Fix projects](#fix-projects)
   - [Generating documentation](#generating-documentation)
   - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
@@ -1708,9 +1708,9 @@ The following is the table of operators sorted by its precedence (operator of hi
 
 # Compiler feature
 
-## Fix projects and dependencies
+## Fix projects
 
-If you are working on a not so small Fix program, you may want to
+If you are working on a non-trivial Fix program, you may want to
 - compile many Fix source files,
 - compile C source files into a native library, and link it to the Fix program,
 - install other Fix projects as dependencies, 
@@ -1718,94 +1718,9 @@ If you are working on a not so small Fix program, you may want to
 In such cases, it is useful to have a project file which contains information about your Fix project.
 
 The project file should have a name "fixproj.toml".
-"fix build" and "fix run" commands loads the project file in the current directory if it exists.
+If a project file exists in the current directory, sucommands of "fix" will read and consider it.
 
-The following is an example of "fixproj.toml" file. 
-
-```
-[general]
-# Project name. This is a required field.
-name = "myproject"
-
-# Project version (in semver). This is a required field.
-version = "0.1.0"
-
-# Project authors.
-authors = ["Alice", "Bob"]
-
-# Project description.
-description = "This is a Fix project."
-
-# Project license.
-license = "MIT"
-
-[build]
-# Fix source files to be compiled.
-# Merged with files specified in the command line argument.
-files = ["main.fix", "lib.fix"]
-
-# Object files to be linked.
-# Merged with object files specified in the command line argument.
-objects = ["lib.o"]
-
-# Static link libraries.
-# Merged with libraries specified in the command line argument.
-static_links = ["xyz"]
-
-# Dynamic link libraries.
-# Merged with libraries specified in the command line argument.
-dynamic_links = ["pthread"]
-
-# Library search paths for "static_links" and "dynamic_links".
-# Merged with paths specified in the command line argument.
-library_paths = ["."] // The current directory.
-
-# Whether to generate debug information.
-# Overwritten by the command line argument.
-debug = true
-
-# Optimization level.
-# One of "none", "minimum", "separated", "default".
-# Overwritten by the command line argument.
-opt_level = "separated"
-
-# Output file name.
-# Overwritten by the command line argument.
-output = "myprogram.out"
-
-# Whether to use the thread-safe reference counting.
-# Overwritten by the command line argument.
-threaded = false
-
-# Preliminary commands to be executed before the Fix program is compiled.
-# This is useful when you need to compile a object files / library before compiling the Fix program.
-preliminary_commands = [
-    ["make", "libxyz.a", "--quiet"] # Since this command runs always when you run "fix build", "--quiet" is useful.
-]
-
-# Additional build options when running `fix test`.
-# Fields are almost the same as ones in "[build]".
-[build.test]
-files = ["test.fix"]
-
-# By "[[dependencies]]" array, you can specify a Fix project as a dependency.
-# The dependent project should have "fixproj.toml" file, which at least defines name and version of the project.
-# If a dependent project has more dependencies, "fix" will consider them recursively.
-
-# The following is an example of a dependency to a project in the local file system.
-[[dependencies]]
-name = "another-project"
-version = "*" # The syntax for version requirement is the same as in Cargo. See: https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html
-path = "/path/to/project"
-
-# The following is an example of a dependency to a project in a remote git repository.
-# In this case, "fix" searches the tags (each name should be a semver, or semver with "v" prefix) of the repository to find the version that satisfies the requirement.
-# If the repository has no tags, "fix" will use the latest commit of the default branch.
-[[dependencies]]
-name = "certain-project"
-version = "1.2.0"
-git = { url = "https://github.com/tttmmmyyyy/certain-project.git" }
-```
+"fix init" command generates a template project file. To learn more about the project file, read the comments in it.
 
 ## Generating documentation
 

@@ -584,4 +584,16 @@ impl ProjectFile {
         }
         panic!("Project `{}` not found in dependencies.", name);
     }
+
+    // Creates an example project file in the current directory.
+    pub fn create_example_file() -> Result<(), Errors> {
+        let content = include_str!("docs/project_template.toml");
+        std::fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to create file \"{}\": {:?}.",
+                PROJECT_FILE_PATH, e
+            ))
+        })?;
+        Ok(())
+    }
 }

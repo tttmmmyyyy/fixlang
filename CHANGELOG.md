@@ -15,6 +15,7 @@
 - Add experimental support for document generation (`fix docs` command).
 - Add `fix test` subcommand, which runs `Test::test`.
 - Add `-O (--object)` option to specify object files to be linked.
+- Add `fix init` subcommand, which generates a template project file.
 
 ### Changed
 
