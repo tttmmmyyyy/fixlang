@@ -242,7 +242,7 @@ fn main() {
         .arg(Arg::new("projects")
             .multiple_values(true)
             .takes_value(true)
-            .help("Projects to be added. \nEach entry be in the form \"proj-name\" or \"proj-name@ver_req\" e.g.,\"hashmap@0.1.0\".")
+            .help("Projects to be added. \nEach entry be in the form \"proj-name\" or \"proj-name@ver_req\" (e.g.,\"hashmap@0.1.0\").")
         );
 
     let deps = deps
