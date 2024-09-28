@@ -13,6 +13,122 @@ pub struct PatternNode {
 }
 
 impl PatternNode {
+    // Returns the type of whole pattern and each variable.
+    pub fn get_type(
+        self: &Arc<PatternNode>,
+        typechcker: &mut TypeCheckContext,
+    ) -> Result<(Arc<PatternNode>, HashMap<FullName, Arc<TypeNode>>), Errors> {
+        match &self.pattern {
+            Pattern::Var(v, ty) => {
+                let var_name = v.name.clone();
+                let ty = if ty.is_none() {
+                    type_tyvar_star(&typechcker.new_tyvar())
+                } else {
+                    let ty = ty.as_ref().unwrap();
+                    if !ty.free_vars().is_empty() {
+                        return Err(Errors::from_msg_srcs(
+                            "Currently, cannot use type variable in type annotation.".to_string(),
+                            &[ty.get_source()],
+                        ));
+                    }
+                    ty.clone()
+                };
+                let mut var_to_ty = HashMap::default();
+                var_to_ty.insert(var_name, ty.clone());
+                Ok((self.set_inferred_type(ty), var_to_ty))
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                let ty = tc.get_struct_union_value_type(typechcker);
+                let mut var_to_ty = HashMap::default();
+                let field_tys = ty.field_types(&typechcker.type_env);
+                let fields = &typechcker.type_env.tycons.get(&tc).unwrap().fields;
+                assert_eq!(fields.len(), field_tys.len());
+                let field_name_to_ty = fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, field)| {
+                        let ty = field_tys[i].clone();
+                        (field.name.clone(), ty)
+                    })
+                    .collect::<HashMap<_, _>>();
+                for (field_name, pat) in field_to_pat {
+                    let (pat, var_ty) = pat.get_type(typechcker)?;
+                    var_to_ty.extend(var_ty);
+                    let unify_res = UnifOrOtherErr::extract_others(typechcker.unify(
+                        &pat.info.inferred_ty.as_ref().unwrap(),
+                        field_name_to_ty.get(field_name).unwrap(),
+                    ))?;
+                    if let Err(_) = unify_res {
+                        error_exit_with_src(
+                            &format!(
+                                "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
+                                pat.pattern.to_string(),
+                                field_name,
+                                tc.to_string(),
+                            ),
+                            &pat.info.source,
+                        );
+                    }
+                }
+                Ok((self.set_inferred_type(ty), var_to_ty))
+            }
+            Pattern::Union(tc, field_name, pat) => {
+                let ty = tc.get_struct_union_value_type(typechcker);
+                let mut var_to_ty = HashMap::default();
+                let fields = &typechcker.type_env.tycons.get(&tc).unwrap().fields;
+                let field_tys = ty.field_types(&typechcker.type_env);
+                assert_eq!(fields.len(), field_tys.len());
+                let field_idx = fields
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
+                    .unwrap();
+                let field_ty = field_tys[field_idx].clone();
+                let (pat, var_ty) = pat.get_type(typechcker)?;
+                var_to_ty.extend(var_ty);
+                let unify_res = UnifOrOtherErr::extract_others(
+                    typechcker.unify(&pat.info.inferred_ty.as_ref().unwrap(), &field_ty),
+                )?;
+                if let Err(_) = unify_res {
+                    error_exit_with_src(
+                        &format!(
+                            "Inappropriate pattern `{}` for a value of field `{}` of union `{}`.",
+                            pat.pattern.to_string(),
+                            field_name,
+                            tc.to_string(),
+                        ),
+                        &pat.info.source,
+                    );
+                }
+                Ok((self.set_inferred_type(ty), var_to_ty))
+            }
+        }
+    }
+
+    // Find the node at the specified position.
+    pub fn find_node_at_pos(self: &Arc<PatternNode>, pos: usize) -> Option<AnyNode> {
+        if self.info.source.is_none() {
+            return None;
+        }
+        let span = self.info.source.as_ref().unwrap();
+        if !span.includes_pos(pos) {
+            return None;
+        }
+        match &self.pattern {
+            Pattern::Var(_, _) => Some(AnyNode::Pattern(self.clone())),
+            Pattern::Struct(_, field_to_pat) => {
+                for (_, pat) in field_to_pat {
+                    let res = pat.find_node_at_pos(pos);
+                    if res.is_some() {
+                        return res;
+                    }
+                }
+                None
+            }
+            Pattern::Union(_, _, pat) => pat.find_node_at_pos(pos),
+        }
+    }
+
     // Validate pattern and raise error if invalid,
     pub fn validate(&self, te: &TypeEnv) -> Result<(), Errors> {
         match &self.pattern {
@@ -209,10 +325,16 @@ impl PatternNode {
         Arc::new(node)
     }
 
+    pub fn set_inferred_type(self: &PatternNode, ty: Arc<TypeNode>) -> Arc<PatternNode> {
+        let mut node = self.clone();
+        node.info.inferred_ty = Some(ty);
+        Arc::new(node)
+    }
+
     pub fn make_var(var: Arc<Var>, ty: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
         Arc::new(PatternNode {
             pattern: Pattern::Var(var, ty),
-            info: PatternInfo { source: None },
+            info: PatternInfo::default(),
         })
     }
 
@@ -222,7 +344,7 @@ impl PatternNode {
     ) -> Arc<PatternNode> {
         Arc::new(PatternNode {
             pattern: Pattern::Struct(tycon, fields),
-            info: PatternInfo { source: None },
+            info: PatternInfo::default(),
         })
     }
 
@@ -233,13 +355,14 @@ impl PatternNode {
     ) -> Arc<PatternNode> {
         Arc::new(PatternNode {
             pattern: Pattern::Union(tycon, field, subpat),
-            info: PatternInfo { source: None },
+            info: PatternInfo::default(),
         })
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct PatternInfo {
+    pub inferred_ty: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
 
@@ -275,96 +398,6 @@ impl Pattern {
                 ret
             }
             Pattern::Union(_, _, pat) => pat.pattern.count_vars(),
-        }
-    }
-
-    // Returns the type of whole pattern and each variable.
-    pub fn get_type(
-        &self,
-        typechcker: &mut TypeCheckContext,
-    ) -> Result<(Arc<TypeNode>, HashMap<FullName, Arc<TypeNode>>), Errors> {
-        match self {
-            Pattern::Var(v, ty) => {
-                let var_name = v.name.clone();
-                let ty = if ty.is_none() {
-                    type_tyvar_star(&typechcker.new_tyvar())
-                } else {
-                    let ty = ty.as_ref().unwrap();
-                    if !ty.free_vars().is_empty() {
-                        return Err(Errors::from_msg_srcs(
-                            "Currently, cannot use type variable in type annotation.".to_string(),
-                            &[ty.get_source()],
-                        ));
-                    }
-                    ty.clone()
-                };
-                let mut var_to_ty = HashMap::default();
-                var_to_ty.insert(var_name, ty.clone());
-                Ok((ty, var_to_ty))
-            }
-            Pattern::Struct(tc, field_to_pat) => {
-                let ty = tc.get_struct_union_value_type(typechcker);
-                let mut var_to_ty = HashMap::default();
-                let field_tys = ty.field_types(&typechcker.type_env);
-                let fields = &typechcker.type_env.tycons.get(tc).unwrap().fields;
-                assert_eq!(fields.len(), field_tys.len());
-                let field_name_to_ty = fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, field)| {
-                        let ty = field_tys[i].clone();
-                        (field.name.clone(), ty)
-                    })
-                    .collect::<HashMap<_, _>>();
-                for (field_name, pat) in field_to_pat {
-                    let (pat_ty, var_ty) = pat.pattern.get_type(typechcker)?;
-                    var_to_ty.extend(var_ty);
-                    let unify_res = UnifOrOtherErr::extract_others(
-                        typechcker.unify(&pat_ty, field_name_to_ty.get(field_name).unwrap()),
-                    )?;
-                    if let Err(_) = unify_res {
-                        error_exit_with_src(
-                            &format!(
-                                "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
-                                pat.pattern.to_string(),
-                                field_name,
-                                tc.to_string(),
-                            ),
-                            &pat.info.source,
-                        );
-                    }
-                }
-                Ok((ty, var_to_ty))
-            }
-            Pattern::Union(tc, field_name, pat) => {
-                let ty = tc.get_struct_union_value_type(typechcker);
-                let mut var_to_ty = HashMap::default();
-                let fields = &typechcker.type_env.tycons.get(tc).unwrap().fields;
-                let field_tys = ty.field_types(&typechcker.type_env);
-                assert_eq!(fields.len(), field_tys.len());
-                let field_idx = fields
-                    .iter()
-                    .enumerate()
-                    .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
-                    .unwrap();
-                let field_ty = field_tys[field_idx].clone();
-                let (pat_ty, var_ty) = pat.pattern.get_type(typechcker)?;
-                var_to_ty.extend(var_ty);
-                let unify_res =
-                    UnifOrOtherErr::extract_others(typechcker.unify(&pat_ty, &field_ty))?;
-                if let Err(_) = unify_res {
-                    error_exit_with_src(
-                        &format!(
-                            "Inappropriate pattern `{}` for a value of field `{}` of union `{}`.",
-                            pat.pattern.to_string(),
-                            field_name,
-                            tc.to_string(),
-                        ),
-                        &pat.info.source,
-                    );
-                }
-                Ok((ty, var_to_ty))
-            }
         }
     }
 

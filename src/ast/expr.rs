@@ -221,7 +221,6 @@ impl ExprNode {
         }
     }
 
-    #[allow(dead_code)]
     pub fn set_let_pat(&self, pat: Arc<PatternNode>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
@@ -699,7 +698,7 @@ impl ExprNode {
     }
 
     // Find the minimum AST node which includes the specified source code position.
-    pub fn find_node_at(self: &Arc<ExprNode>, file: &Path, pos: usize) -> Option<Arc<ExprNode>> {
+    pub fn find_node_at(self: &Arc<ExprNode>, file: &Path, pos: usize) -> Option<AnyNode> {
         if self.source.is_none() {
             return None;
         }
@@ -711,7 +710,7 @@ impl ExprNode {
     }
 
     // Find the minimum AST node which includes the specified source code position.
-    fn find_node_at_pos(self: &Arc<ExprNode>, pos: usize) -> Option<Arc<ExprNode>> {
+    fn find_node_at_pos(self: &Arc<ExprNode>, pos: usize) -> Option<AnyNode> {
         if self.source.is_none() {
             return None;
         }
@@ -720,8 +719,8 @@ impl ExprNode {
             return None;
         }
         match &*self.expr {
-            Expr::Var(_) => Some(self.clone()),
-            Expr::LLVM(_) => Some(self.clone()),
+            Expr::Var(_) => Some(AnyNode::Expr(self.clone())),
+            Expr::LLVM(_) => Some(AnyNode::Expr(self.clone())),
             Expr::App(func, args) => {
                 let node = func.find_node_at_pos(pos);
                 if node.is_some() {
@@ -736,7 +735,11 @@ impl ExprNode {
                 None
             }
             Expr::Lam(_, body) => body.find_node_at_pos(pos),
-            Expr::Let(_, bound, val) => {
+            Expr::Let(pat, bound, val) => {
+                let node = pat.find_node_at_pos(pos);
+                if node.is_some() {
+                    return node;
+                }
                 let node = bound.find_node_at_pos(pos);
                 if node.is_some() {
                     return node;

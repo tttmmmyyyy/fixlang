@@ -698,8 +698,8 @@ impl TypeCheckContext {
             }
             Expr::Let(pat, val, body) => {
                 pat.validate(&self.type_env)?;
-                let (pat_ty, var_ty) = pat.pattern.get_type(self)?;
-                let val = self.unify_type_of_expr(val, pat_ty.clone())?;
+                let (pat, var_ty) = pat.get_type(self)?;
+                let val = self.unify_type_of_expr(val, pat.info.inferred_ty.as_ref().unwrap().clone())?;
                 let var_scm = var_ty.iter().map(|(name, ty)| {
                     (
                         name.clone(),
@@ -714,7 +714,7 @@ impl TypeCheckContext {
                 for (name, _) in var_scm {
                     self.scope.pop(&name.name);
                 }
-                Ok(ei.set_let_bound(val).set_let_value(body))
+                Ok(ei.set_let_pat(pat).set_let_bound(val).set_let_value(body))
             }
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.unify_type_of_expr(cond, make_bool_ty())?;

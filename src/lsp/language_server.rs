@@ -1,4 +1,3 @@
-use crate::ast::expr::ExprNode;
 use crate::ast::program::Program;
 use crate::constants::INSTANCIATED_NAME_SEPARATOR;
 use crate::{
@@ -8,7 +7,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, DiagnosticsConfig, FullName, SubCommand};
+use crate::{to_absolute_path, AnyNode, DiagnosticsConfig, FullName, Pattern, SubCommand};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
@@ -772,7 +771,7 @@ fn get_node_at(
     program: &Program,
     uri_to_content: &HashMap<lsp_types::Uri, String>,
     log_file: Arc<Mutex<File>>,
-) -> Option<Arc<ExprNode>> {
+) -> Option<AnyNode> {
     // Get the latest file content.
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
@@ -832,6 +831,14 @@ fn handle_goto_definition(
         return;
     }
     let node = node.unwrap();
+
+    // If the node is not an expression, nothing to do.
+    let node = if let AnyNode::Expr(node) = node {
+        node
+    } else {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    };
 
     // if the node is not a variable, nothing to do.
     if !node.is_var() {
@@ -904,45 +911,67 @@ fn handle_hover(
     }
     let node = node.unwrap();
 
-    // if the node is not a variable, nothing to do.
-    if !node.is_var() {
-        send_response(id, Ok::<_, ()>(None::<()>));
-        return;
-    }
-
-    // Get informations of the variable which are needed to show in the hover.
-    let full_name = &node.get_var().name;
-    let ty = &node.ty;
-
     // Create a hover message.
     let mut docs = String::new();
-    if full_name.is_local() {
-        // In case the variable is local
-        if let Some(ty) = ty.as_ref() {
-            docs += &format!("`{} : {}`", full_name.to_string(), ty.to_string_normalize());
-        } else {
-            docs += &format!("`{}`", full_name.to_string());
+    match node {
+        AnyNode::Expr(node) => {
+            // if the node is not a variable, nothing to do.
+            if !node.is_var() {
+                send_response(id, Ok::<_, ()>(None::<()>));
+                return;
+            }
+
+            // Get informations of the variable which are needed to show in the hover.
+            let full_name = &node.get_var().name;
+            let ty = &node.ty;
+
+            if full_name.is_local() {
+                // In case the variable is local, show the name and type of the variable.
+                if let Some(ty) = ty.as_ref() {
+                    docs += &format!("`{} : {}`", full_name.to_string(), ty.to_string_normalize());
+                } else {
+                    docs += &format!("`{}`", full_name.to_string());
+                }
+            } else {
+                // In case the variable is global, show the documentation of the global value.
+                docs += &format!("`{}`", full_name.to_string());
+                let mut scm_string = String::new();
+                if let Some(gv) = program.global_values.get(full_name) {
+                    scm_string = gv.scm.to_string_normalize();
+                    docs += &format!("\n- Defined as `{}`", scm_string);
+                }
+                if let Some(ty) = ty.as_ref() {
+                    let ty_string = ty.to_string_normalize();
+                    if scm_string != ty_string {
+                        docs += &format!("\n- Used as `{}`", ty_string);
+                    }
+                }
+                if let Some(gv) = program.global_values.get(full_name) {
+                    if let Some(document) = gv.get_document() {
+                        docs += &format!("\n\n{}", document);
+                    }
+                }
+            };
         }
-    } else {
-        // In case the variable is global, show the documentation of the global value.
-        docs += &format!("`{}`", full_name.to_string());
-        let mut scm_string = String::new();
-        if let Some(gv) = program.global_values.get(full_name) {
-            scm_string = gv.scm.to_string_normalize();
-            docs += &format!("\n- Defined as `{}`", scm_string);
-        }
-        if let Some(ty) = ty.as_ref() {
-            let ty_string = ty.to_string_normalize();
-            if scm_string != ty_string {
-                docs += &format!("\n- Used as `{}`", ty_string);
+        AnyNode::Pattern(node) => {
+            // If the node is not a variable, nothing to do.
+            let var = if let Pattern::Var(var, _) = &node.pattern {
+                var
+            } else {
+                send_response(id, Ok::<_, ()>(None::<()>));
+                return;
+            };
+
+            // In case the node is a variable, show the name and type of the variable.
+            let ty = &node.info.inferred_ty.clone();
+            let mut docs = String::new();
+            if let Some(ty) = ty.as_ref() {
+                docs += &format!("`{} : {}`", var.name.to_string(), ty.to_string_normalize());
+            } else {
+                docs += &format!("`{}`", var.name.to_string());
             }
         }
-        if let Some(gv) = program.global_values.get(full_name) {
-            if let Some(document) = gv.get_document() {
-                docs += &format!("\n\n{}", document);
-            }
-        }
-    };
+    }
     let content = MarkupContent {
         kind: lsp_types::MarkupKind::Markdown,
         value: docs,
