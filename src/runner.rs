@@ -103,7 +103,7 @@ fn build_object_files<'c>(
     // When running diagnostics, perform type checking of target modules and return here.
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
         let modules = program.modules_from_files(&diag_config.files);
-        program.resolve_namespace_and_check_type_in_files(&typechecker, &modules)?;
+        program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules)?;
         return Ok(BuildObjFilesResult {
             obj_paths: vec![],
             program: Some(program),

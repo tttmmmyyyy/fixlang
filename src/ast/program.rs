@@ -944,7 +944,7 @@ impl Program {
         )
     }
 
-    pub fn resolve_namespace_and_check_type_in_files(
+    pub fn resolve_namespace_and_check_type_in_modules(
         &mut self,
         tc: &TypeCheckContext,
         modules: &[Name],
