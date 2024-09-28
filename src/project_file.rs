@@ -596,6 +596,14 @@ impl ProjectFile {
 
     // Creates an example project file in the current directory.
     pub fn create_example_file() -> Result<(), Errors> {
+        // If the project file already exists, do not overwrite it.
+        if Path::new(PROJECT_FILE_PATH).exists() {
+            return Err(Errors::from_msg(format!(
+                "The file \"{}\" already exists.",
+                PROJECT_FILE_PATH
+            )));
+        }
+
         let content = include_str!("docs/project_template.toml");
         std::fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
             Errors::from_msg(format!(
