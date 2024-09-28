@@ -1827,7 +1827,7 @@ impl Program {
     }
 
     // Check that all imported modules are linked.
-    pub fn resolve_imports(&mut self) -> Result<(), Errors> {
+    pub fn check_imports(&mut self) -> Result<(), Errors> {
         let mut unresolved_imports = self.import_statements();
 
         loop {

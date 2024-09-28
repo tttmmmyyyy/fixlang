@@ -698,7 +698,7 @@ impl TypeCheckContext {
             }
             Expr::Let(pat, val, body) => {
                 pat.validate(&self.type_env)?;
-                let (pat, var_ty) = pat.get_type(self)?;
+                let (pat, var_ty) = pat.get_typed(self)?;
                 let val = self.unify_type_of_expr(val, pat.info.inferred_ty.as_ref().unwrap().clone())?;
                 let var_scm = var_ty.iter().map(|(name, ty)| {
                     (

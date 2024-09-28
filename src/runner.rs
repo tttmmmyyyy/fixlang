@@ -501,7 +501,7 @@ pub fn load_source_files(config: &mut Configuration) -> Result<Program, Errors> 
     }
 
     // Resolve imports.
-    target_mod.resolve_imports()?;
+    target_mod.check_imports()?;
 
     Ok(target_mod)
 }

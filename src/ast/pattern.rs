@@ -12,8 +12,9 @@ pub struct PatternNode {
 }
 
 impl PatternNode {
-    // Returns the type of whole pattern and each variable.
-    pub fn get_type(
+    // Returns the typed pattern node.
+    // Also returns the map from variable name to its type.
+    pub fn get_typed(
         self: &Arc<PatternNode>,
         typechcker: &mut TypeCheckContext,
     ) -> Result<(Arc<PatternNode>, HashMap<FullName, Arc<TypeNode>>), Errors> {
@@ -52,7 +53,7 @@ impl PatternNode {
                     .collect::<HashMap<_, _>>();
                 let mut field_to_pat = field_to_pat.clone();
                 for (field_name, pat) in &mut field_to_pat {
-                    let (typed_pat, var_ty) = pat.get_type(typechcker)?;
+                    let (typed_pat, var_ty) = pat.get_typed(typechcker)?;
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
                     let unify_res = UnifOrOtherErr::extract_others(typechcker.unify(
@@ -89,7 +90,7 @@ impl PatternNode {
                     .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
                     .unwrap();
                 let field_ty = field_tys[field_idx].clone();
-                let (pat, var_ty) = pat.get_type(typechcker)?;
+                let (pat, var_ty) = pat.get_typed(typechcker)?;
                 var_to_ty.extend(var_ty);
                 let unify_res = UnifOrOtherErr::extract_others(
                     typechcker.unify(&pat.info.inferred_ty.as_ref().unwrap(), &field_ty),
