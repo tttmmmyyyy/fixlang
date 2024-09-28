@@ -421,6 +421,20 @@ pub struct Program {
 }
 
 impl Program {
+    // Get the list of module names from a list of files.
+    pub fn modules_from_files(&self, files: &[PathBuf]) -> Vec<Name> {
+        let mut mod_names = vec![];
+        for mod_info in &self.modules {
+            if files
+                .iter()
+                .any(|f| to_absolute_path(f) == to_absolute_path(&mod_info.source.input.file_path))
+            {
+                mod_names.push(mod_info.name.clone());
+            }
+        }
+        mod_names
+    }
+
     // Create a program consists of single module.
     pub fn single_module(mod_info: ModuleInfo) -> Program {
         let mut fix_mod = Program {
@@ -907,14 +921,35 @@ impl Program {
         Ok(())
     }
 
-    pub fn resolve_namespace_and_check_type_all(
+    pub fn resolve_namespace_and_check_type_in_files(
         &mut self,
         tc: &TypeCheckContext,
+        modules: &[Name],
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        let method_impl_filter = |_method: &MethodImpl| Ok(true);
-        let names = self.global_values.keys().cloned().collect::<Vec<_>>();
-        for name in &names {
+
+        // Names of global values to be checked.
+        let mut check_names: Vec<FullName> = vec![];
+        for (name, gv) in self.global_values.iter() {
+            match gv.expr {
+                SymbolExpr::Simple(_) => {
+                    // Check simple values only if they are in `modules`.
+                    if modules.contains(&name.module()) {
+                        check_names.push(name.clone());
+                    }
+                }
+                SymbolExpr::Method(_) => {
+                    // We filter methods by `method_impl_filter`.
+                    check_names.push(name.clone());
+                }
+            }
+        }
+
+        // Method implementations to be checked.
+        let modules = modules.to_vec();
+        let method_impl_filter = |method: &MethodImpl| Ok(modules.contains(&method.define_module));
+
+        for name in &check_names {
             errors.eat_err(self.resolve_namespace_and_check_type(tc, name, method_impl_filter));
         }
         errors.to_result()

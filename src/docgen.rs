@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
-    println!("Running diagnostics for this fix project.");
+    println!("Running diagnostics for this Fix project.");
     let program = run_diagnostics()?.prgoram;
     println!("Diagnostics completed.");
     for mod_name in mod_names {

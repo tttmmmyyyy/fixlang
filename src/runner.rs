@@ -100,9 +100,10 @@ fn build_object_files<'c>(
             .add_global(name.name.clone(), &name.namespace, &defn.scm)?;
     }
 
-    // When running diagnostics, perform type checking of all values and return here.
-    if config.subcommand == SubCommand::Diagnostics {
-        program.resolve_namespace_and_check_type_all(&typechecker)?;
+    // When running diagnostics, perform type checking of target modules and return here.
+    if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
+        let modules = program.modules_from_files(&diag_config.files);
+        program.resolve_namespace_and_check_type_in_files(&typechecker, &modules)?;
         return Ok(BuildObjFilesResult {
             obj_paths: vec![],
             program: Some(program),
@@ -110,8 +111,8 @@ fn build_object_files<'c>(
     }
 
     // Instantiate Main::main (or Test::test).
-    let main_expr =
-        program.instantiate_main_function(&typechecker, config.subcommand == SubCommand::Test)?;
+    let main_expr = program
+        .instantiate_main_function(&typechecker, matches!(config.subcommand, SubCommand::Test))?;
 
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
@@ -580,7 +581,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let exec_path = config.get_output_executable_file_path();
 
     // Run extra commands.
-    if config.subcommand != SubCommand::Diagnostics {
+    if !matches!(config.subcommand, SubCommand::Diagnostics(_)) {
         config.run_extra_commands()?;
     }
 
@@ -596,7 +597,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let build_res = build_object_files(program, config.clone())?;
 
     // If the program is for language server, we don't need to build binary file.
-    if config.subcommand == SubCommand::Diagnostics {
+    if matches!(config.subcommand, SubCommand::Diagnostics(_)) {
         let program = build_res.program.unwrap();
         return Ok(BuildFileResult {
             program: Some(program),

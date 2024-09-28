@@ -33,12 +33,19 @@ pub enum ValgrindTool {
 }
 
 // Subcommands of the `fix` command.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub enum SubCommand {
     Build,
     Run,
     Test,
-    Diagnostics,
+    Diagnostics(DiagnosticsConfig),
+}
+
+// Configuration for diagnostics subcommand.
+#[derive(Clone, Default)]
+pub struct DiagnosticsConfig {
+    // Target source files.
+    pub files: Vec<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -168,6 +175,12 @@ impl Configuration {
             c_type_sizes: CTypeSizes::load_or_check()?,
             extra_commands: vec![],
         })
+    }
+
+    // Set diagnostics configuration.
+    pub fn set_diagnostics_config(&mut self, config: DiagnosticsConfig) {
+        assert!(matches!(self.subcommand, SubCommand::Diagnostics(_)));
+        self.subcommand = SubCommand::Diagnostics(config);
     }
 }
 
