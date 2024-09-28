@@ -65,8 +65,8 @@ files = ["main.fix"]
 
 ## Additional build options when running `fix test`.
 ## Available fields are almost the same as ones in "[build]".
-[build.test]
-files = ["test.fix"]
+# [build.test]
+# files = ["test.fix"]
 
 ## By "[[dependencies]]" array, you can specify a Fix project as a dependency.
 ## Each dependent project must have "fixproj.toml" file at the project root directory.
