@@ -76,7 +76,7 @@ enum DiagnosticsMessage {
     // Started the diagnostics thread.
     Start,
     // A file is saved.
-    OnSaveFile,
+    OnSaveFile(PathBuf),
     // Stop the diagnostics thread.
     Stop,
 }
@@ -610,8 +610,11 @@ fn handle_textdocument_did_save(
         write_log(log_file.clone(), msg.as_str());
     }
 
+    // Get the path of the saved file.
+    let path = PathBuf::from(params.text_document.uri.path().to_string());
+
     // Send a message to the diagnostics thread.
-    if let Err(e) = diag_send.send(DiagnosticsMessage::OnSaveFile) {
+    if let Err(e) = diag_send.send(DiagnosticsMessage::OnSaveFile(path)) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
         msg.push_str(&format!("{:?}\n", e));
         write_log(log_file.clone(), msg.as_str());
@@ -1028,8 +1031,8 @@ fn diagnostics_thread(
                 // Stop the diagnostics thread.
                 break;
             }
-            DiagnosticsMessage::OnSaveFile => run_diagnostics(),
-            DiagnosticsMessage::Start => run_diagnostics(),
+            DiagnosticsMessage::OnSaveFile(path) => run_diagnostics(Some(path)),
+            DiagnosticsMessage::Start => run_diagnostics(None),
         };
 
         // End work done progress.
@@ -1263,7 +1266,7 @@ fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
     Ok(uri.unwrap())
 }
 
-pub fn run_diagnostics() -> Result<DiagnosticsResult, Errors> {
+pub fn run_diagnostics(file: Option<PathBuf>) -> Result<DiagnosticsResult, Errors> {
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
     // Read the project file.
@@ -1274,9 +1277,13 @@ pub fn run_diagnostics() -> Result<DiagnosticsResult, Errors> {
 
     // Set up the configuration by the project file.
     proj_file.set_config(&mut config, false)?;
-    let main_proj_files = config.source_files.clone();
+    let target_files = if let Some(file) = file {
+        vec![file]
+    } else {
+        config.source_files.clone()
+    };
     config.set_diagnostics_config(DiagnosticsConfig {
-        files: main_proj_files,
+        files: target_files,
     });
 
     // Set up the configuration by the lock file.
