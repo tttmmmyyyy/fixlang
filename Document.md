@@ -1628,7 +1628,7 @@ This is a boxed wrapper type of a specified type associated with a deallocation 
 When a value of `Destructor` type is dropped, the deallocation function is called automatically.
 So you can use `Destructor` to wrap a "handle" to a foreign resource and to call the deallocation function automatically when the `Destructor` value is no longer used in Fix code.
 
-For details, see [the document for `Destructor`](./BuiltinLibraries.md#type-destructor).
+For details, see [the document for `Destructor`](/std_doc/Std.md#type-destructor-a--box-struct--fields-).
 
 ### Managing ownership of Fix's boxed value in a foreign language
 
@@ -1762,7 +1762,7 @@ The language server requires [the project file](#project-file) to recognize the 
 Each time you save a file, the language server will attempt to diagnose the Fix program.
 The information obtained in the latest successful diagnostics is used to comletion, hover or go-to-definition, etc.
 So to update the information, you need to write correct Fix code and save the file. 
-[`Std::undefined`](./BuiltinLibraries.md#undefined--lazy-a) will be useful to do so.
+[`Std::undefined`](/std_doc/Std.md#undefined-----a) will be useful to do so.
 
 ## Debugging
 
