@@ -19,7 +19,7 @@
   - [Structs](#structs)
   - [Iterators](#iterators)
   - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
-- [Other topics on syntax](#other-topics-on-syntax)
+- [Details on language](#details-on-language)
   - [Boolean values and literals](#boolean-values-and-literals)
   - [Numbers and literals](#numbers-and-literals)
   - [Strings and literals](#strings-and-literals)
@@ -65,13 +65,12 @@
     - [Managing a foreign resource in Fix](#managing-a-foreign-resource-in-fix)
     - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
-- [Operators](#operators)
+  - [Operators](#operators)
 - [Compiler feature](#compiler-feature)
   - [Fix projects](#fix-projects)
   - [Generating documentation](#generating-documentation)
   - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
-
 
 # Tutorial
 
@@ -116,7 +115,7 @@ If you save the above program to a file "main.fix" and run `fix run -f main.fix`
 
 to the standard output.
 
-In the followings, I explain language specifications which are necessary to understand the above program.
+In the followings, I explain the syntax and semantics of the program.
 
 ## Modules
 
@@ -126,7 +125,8 @@ The first line is the module definition:
 module Main;
 ```
 
-In Fix, values, functions, types and traits defined in a source file is collected to a module. Each source file has to declare the name of the module it defines by `module {module_name};`. 
+In Fix, values, functions, types and traits defined in a source file is collected to a "module". 
+Each source file has to declare the name of the module it defines by `module {module_name};`. 
 
 When Fix program runs, it calls `main` function defined in the `Main` module.
 
@@ -150,8 +150,8 @@ main = ...{expression B}...;
 
 These lines means that:
 
-- `calc_fib` global value has type `I64 -> Array I64` and its value is defined by expression A.
-- `main` global value has type `IO ()` and its value is defined by expression B.
+- `calc_fib` global value has type `I64 -> Array I64` and its value is defined by `{expression A}`.
+- `main` global value has type `IO ()` and its value is defined by `{expression B}`.
 
 In Fix, you have to specify the type of a global value explicitly. 
 
@@ -656,7 +656,7 @@ since the updated array has the same name which was given to the old array, the 
 
 (*): This statement is true only when the array is referenced by a single thread.
 
-# Other topics on syntax
+# Details on language
 
 ## Boolean values and literals
 
@@ -1678,7 +1678,7 @@ NOTE:
 At least in the current version of Fix, the memory layout of Fix's struct is determined by the default behaviour of LLVM, and as long as I know it is equivalent to C's struct memory layout. 
 In a future version, the situation may be changed. I may introduce a specifier (suppose it is written as `expr_c`) for a programmer to assure that the layout is equivalent to C, and the struct layout with no `expr_c` specifier may be optimized (e.g., reorder field ordering).
 
-# Operators
+## Operators
 
 The following is the table of operators sorted by its precedence (operator of higher precedence appears earlier).
 
