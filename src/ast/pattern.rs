@@ -60,15 +60,6 @@ impl PatternNode {
                         field_name_to_ty.get(field_name).unwrap(),
                     ))?;
                     if let Err(_) = unify_res {
-                        // error_exit_with_src(
-                        //     &format!(
-                        //         "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
-                        //         pat.pattern.to_string(),
-                        //         field_name,
-                        //         tc.to_string(),
-                        //     ),
-                        //     &pat.info.source,
-                        // );
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
