@@ -941,18 +941,18 @@ impl Program {
         let mut errors = Errors::empty();
 
         // Names of global values to be checked.
-        let mut check_names: Vec<FullName> = vec![];
+        let mut checked_names: Vec<FullName> = vec![];
         for (name, gv) in self.global_values.iter() {
             match gv.expr {
                 SymbolExpr::Simple(_) => {
                     // Check simple values only if they are in `modules`.
                     if modules.contains(&name.module()) {
-                        check_names.push(name.clone());
+                        checked_names.push(name.clone());
                     }
                 }
                 SymbolExpr::Method(_) => {
                     // We filter methods by `method_impl_filter`.
-                    check_names.push(name.clone());
+                    checked_names.push(name.clone());
                 }
             }
         }
@@ -961,9 +961,11 @@ impl Program {
         let modules = modules.to_vec();
         let method_impl_filter = |method: &MethodImpl| Ok(modules.contains(&method.define_module));
 
-        for name in &check_names {
-            errors.eat_err(self.resolve_namespace_and_check_type(tc, name, method_impl_filter));
-        }
+        errors.eat_err(self.resolve_namespace_and_check_type(
+            tc,
+            &checked_names,
+            method_impl_filter,
+        ));
         errors.to_result()
     }
 
@@ -972,70 +974,82 @@ impl Program {
     pub fn resolve_namespace_and_check_type(
         &mut self,
         tc: &TypeCheckContext,
-        name: &FullName,
+        value_names: &[FullName],
         method_impl_filter: impl Fn(&MethodImpl) -> Result<bool, Errors>,
     ) -> Result<(), Errors> {
-        // To avoid mutably borrowing `self` twice, do the task immutably first.
-        let gv = self.global_values.get(&name).unwrap();
-        let tes = match &gv.expr {
-            SymbolExpr::Simple(e) => {
-                // Perform type-checking.
-                let define_module = name.module();
-                let mut te = e.clone();
-                self.resolve_namespace_and_check_type_sub(
-                    &mut te,
-                    &gv.scm,
-                    &name,
-                    &define_module,
-                    tc,
-                )?;
+        let mut errors = Errors::empty();
 
-                // Calculate free vars.
-                te.calculate_free_vars();
-                vec![(0, te)]
-            }
-            SymbolExpr::Method(impls) => {
-                let mut tes = vec![];
-                for (i, method) in impls.iter().enumerate() {
-                    // Select method implementation.
-                    if !method_impl_filter(method)? {
+        for value_name in value_names {
+            // To avoid mutably borrowing `self` twice, do the task immutably first.
+            let gv = self.global_values.get(&value_name).unwrap();
+            let tes = match &gv.expr {
+                SymbolExpr::Simple(e) => {
+                    // Perform type-checking.
+                    let define_module = value_name.module();
+                    let mut te = e.clone();
+                    let res = self.resolve_namespace_and_check_type_sub(
+                        &mut te,
+                        &gv.scm,
+                        &value_name,
+                        &define_module,
+                        tc,
+                    );
+                    if res.is_err() {
+                        errors.eat_err(res);
                         continue;
                     }
 
-                    // Perform type-checking.
-                    let define_module = method.define_module.clone();
-                    let mut e = method.expr.clone();
-                    self.resolve_namespace_and_check_type_sub(
-                        &mut e,
-                        &method.ty,
-                        &name,
-                        &define_module,
-                        tc,
-                    )?;
-
                     // Calculate free vars.
-                    e.calculate_free_vars();
+                    te.calculate_free_vars();
+                    vec![(0, te)]
+                }
+                SymbolExpr::Method(impls) => {
+                    let mut tes = vec![];
+                    for (i, method) in impls.iter().enumerate() {
+                        // Select method implementation.
+                        if !method_impl_filter(method)? {
+                            continue;
+                        }
 
-                    tes.push((i, e));
-                }
-                tes
-            }
-        };
+                        // Perform type-checking.
+                        let define_module = method.define_module.clone();
+                        let mut e = method.expr.clone();
+                        let res = self.resolve_namespace_and_check_type_sub(
+                            &mut e,
+                            &method.ty,
+                            &value_name,
+                            &define_module,
+                            tc,
+                        );
+                        if res.is_err() {
+                            errors.eat_err(res);
+                            continue;
+                        }
 
-        // Then update `TypedExpr` in `self.global_values` mutably.
-        let gv = self.global_values.get_mut(&name).unwrap();
-        match &mut gv.expr {
-            SymbolExpr::Simple(e) => {
-                for (_, te) in tes {
-                    *e = te;
+                        // Calculate free vars.
+                        e.calculate_free_vars();
+
+                        tes.push((i, e));
+                    }
+                    tes
                 }
-            }
-            SymbolExpr::Method(impls) => {
-                for (i, te) in tes {
-                    impls[i].expr = te;
+            };
+
+            // Then update `TypedExpr` in `self.global_values` mutably.
+            let gv = self.global_values.get_mut(&value_name).unwrap();
+            match &mut gv.expr {
+                SymbolExpr::Simple(e) => {
+                    for (_, te) in tes {
+                        *e = te;
+                    }
                 }
-            }
-        };
+                SymbolExpr::Method(impls) => {
+                    for (i, te) in tes {
+                        impls[i].expr = te;
+                    }
+                }
+            };
+        }
         Ok(())
     }
 
@@ -1066,7 +1080,7 @@ impl Program {
             let mut tc0 = tc.clone();
             Ok(UnifOrOtherErr::extract_others(tc0.unify(&method.ty.ty, &sym.ty))?.is_ok())
         };
-        self.resolve_namespace_and_check_type(tc, &sym.generic_name, method_selector)?;
+        self.resolve_namespace_and_check_type(tc, &[sym.generic_name.clone()], method_selector)?;
 
         // Then perform instantiation.
         let global_sym = self.global_values.get(&sym.generic_name).unwrap();
