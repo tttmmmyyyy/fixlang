@@ -1082,37 +1082,48 @@ impl Program {
             };
         }
 
-        // Run all tasks in parallel.
+        // Run all tasks.
         struct CheckResult {
             val_name: FullName,
             te: Result<TypedExpr, Errors>,
             method_impl_idx: Option<usize>,
         }
-        let tasks = Arc::new(Mutex::new(tasks));
-        let results = Arc::new(Mutex::new(Vec::<CheckResult>::new()));
-        let mut threads = vec![];
-        for _ in 0..num_cpus::get() {
-            let tasks = tasks.clone();
-            let results = results.clone();
-            let thread = std::thread::spawn(move || {
-                while let Some(task) = tasks.lock().unwrap().pop() {
-                    let te = (task.task)();
-                    results.lock().unwrap().push(CheckResult {
-                        val_name: task.val_name,
-                        te,
-                        method_impl_idx: task.method_impl_idx,
-                    });
-                }
-            });
-            threads.push(thread);
-        }
-        for thread in threads {
-            thread.join().unwrap();
-        }
+        let results = if tasks.len() == 1 {
+            let task = tasks.pop().unwrap();
+            let te = (task.task)();
+            vec![CheckResult {
+                val_name: task.val_name,
+                te,
+                method_impl_idx: task.method_impl_idx,
+            }]
+        } else {
+            let tasks = Arc::new(Mutex::new(tasks));
+            let results = Arc::new(Mutex::new(Vec::<CheckResult>::new()));
+            let mut threads = vec![];
+            for _ in 0..num_cpus::get() {
+                let tasks = tasks.clone();
+                let results = results.clone();
+                let thread = std::thread::spawn(move || {
+                    while let Some(task) = tasks.lock().unwrap().pop() {
+                        let te = (task.task)();
+                        results.lock().unwrap().push(CheckResult {
+                            val_name: task.val_name,
+                            te,
+                            method_impl_idx: task.method_impl_idx,
+                        });
+                    }
+                });
+                threads.push(thread);
+            }
+            for thread in threads {
+                thread.join().unwrap();
+            }
+            let results = std::mem::replace(results.lock().unwrap().as_mut(), vec![]);
+            results
+        };
 
         // Store results to `self.global_values`.
         let mut errors = Errors::empty();
-        let results: Vec<CheckResult> = std::mem::replace(results.lock().unwrap().as_mut(), vec![]);
         for result in results {
             if result.te.is_err() {
                 errors.append(result.te.err().unwrap());
