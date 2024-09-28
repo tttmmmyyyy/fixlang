@@ -1023,7 +1023,6 @@ fn diagnostics_thread(
         // Create and begin work done progress.
         const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
         send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
-        send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
 
         // Run diagnostics.
         let res = match msg.unwrap() {
@@ -1031,8 +1030,20 @@ fn diagnostics_thread(
                 // Stop the diagnostics thread.
                 break;
             }
-            DiagnosticsMessage::OnSaveFile(path) => run_diagnostics(Some(path)),
-            DiagnosticsMessage::Start => run_diagnostics(None),
+            DiagnosticsMessage::OnSaveFile(path) => {
+                send_work_done_progress_begin(
+                    WORK_DONE_PROGRESS_TOKEN,
+                    format!("Running diagnostics ({})", path.to_string_lossy()).as_str(),
+                );
+                run_diagnostics(Some(path))
+            }
+            DiagnosticsMessage::Start => {
+                send_work_done_progress_begin(
+                    WORK_DONE_PROGRESS_TOKEN,
+                    "Running diagnostics (all files)",
+                );
+                run_diagnostics(None)
+            }
         };
 
         // End work done progress.
