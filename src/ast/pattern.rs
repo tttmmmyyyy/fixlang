@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::error::error_exit_with_src;
 use crate::error::Errors;
 use serde::{Deserialize, Serialize};
 
@@ -61,15 +60,24 @@ impl PatternNode {
                         field_name_to_ty.get(field_name).unwrap(),
                     ))?;
                     if let Err(_) = unify_res {
-                        error_exit_with_src(
-                            &format!(
+                        // error_exit_with_src(
+                        //     &format!(
+                        //         "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
+                        //         pat.pattern.to_string(),
+                        //         field_name,
+                        //         tc.to_string(),
+                        //     ),
+                        //     &pat.info.source,
+                        // );
+                        return Err(Errors::from_msg_srcs(
+                            format!(
                                 "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
                                 pat.pattern.to_string(),
                                 field_name,
                                 tc.to_string(),
                             ),
-                            &pat.info.source,
-                        );
+                            &[&pat.info.source],
+                        ));
                     }
                 }
                 Ok((
@@ -96,15 +104,15 @@ impl PatternNode {
                     typechcker.unify(&pat.info.inferred_ty.as_ref().unwrap(), &field_ty),
                 )?;
                 if let Err(_) = unify_res {
-                    error_exit_with_src(
-                        &format!(
+                    return Err(Errors::from_msg_srcs(
+                        format!(
                             "Inappropriate pattern `{}` for a value of field `{}` of union `{}`.",
                             pat.pattern.to_string(),
                             field_name,
                             tc.to_string(),
                         ),
-                        &pat.info.source,
-                    );
+                        &[&pat.info.source],
+                    ));
                 }
                 Ok((self.set_inferred_type(ty).set_union_pat(pat), var_to_ty))
             }
