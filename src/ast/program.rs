@@ -1,6 +1,7 @@
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType};
 use crate::error::Errors;
 use build_time::build_time_utc;
+use import::{ImportItem, ImportStatement};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, sync::Arc, vec};
 

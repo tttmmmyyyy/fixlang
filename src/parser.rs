@@ -3,7 +3,10 @@
 struct FixParser;
 
 use super::*;
-use ast::export_statement::ExportStatement;
+use ast::{
+    export_statement::ExportStatement,
+    import::{ImportStatement, ImportTreeNode},
+};
 use either::Either;
 use error::Errors;
 use num_bigint::BigInt;
