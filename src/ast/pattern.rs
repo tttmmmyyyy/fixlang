@@ -51,8 +51,10 @@ impl PatternNode {
                         (field.name.clone(), ty)
                     })
                     .collect::<HashMap<_, _>>();
-                for (field_name, pat) in field_to_pat {
-                    let (pat, var_ty) = pat.get_type(typechcker)?;
+                let mut field_to_pat = field_to_pat.clone();
+                for (field_name, pat) in &mut field_to_pat {
+                    let (typed_pat, var_ty) = pat.get_type(typechcker)?;
+                    *pat = typed_pat;
                     var_to_ty.extend(var_ty);
                     let unify_res = UnifOrOtherErr::extract_others(typechcker.unify(
                         &pat.info.inferred_ty.as_ref().unwrap(),
@@ -70,7 +72,11 @@ impl PatternNode {
                         );
                     }
                 }
-                Ok((self.set_inferred_type(ty), var_to_ty))
+                Ok((
+                    self.set_inferred_type(ty)
+                        .set_struct_field_to_pat(field_to_pat),
+                    var_to_ty,
+                ))
             }
             Pattern::Union(tc, field_name, pat) => {
                 let ty = tc.get_struct_union_value_type(typechcker);
@@ -100,7 +106,7 @@ impl PatternNode {
                         &pat.info.source,
                     );
                 }
-                Ok((self.set_inferred_type(ty), var_to_ty))
+                Ok((self.set_inferred_type(ty).set_union_pat(pat), var_to_ty))
             }
         }
     }

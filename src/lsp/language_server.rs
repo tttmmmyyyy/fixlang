@@ -903,7 +903,7 @@ fn handle_hover(
         &params.text_document_position_params,
         program,
         uri_to_content,
-        log_file,
+        log_file.clone(),
     );
     if node.is_none() {
         send_response(id, Ok::<_, ()>(None::<()>));
@@ -964,7 +964,6 @@ fn handle_hover(
 
             // In case the node is a variable, show the name and type of the variable.
             let ty = &node.info.inferred_ty.clone();
-            let mut docs = String::new();
             if let Some(ty) = ty.as_ref() {
                 docs += &format!("`{} : {}`", var.name.to_string(), ty.to_string_normalize());
             } else {
