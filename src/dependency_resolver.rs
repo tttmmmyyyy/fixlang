@@ -102,7 +102,7 @@ fn try_use_package<'a, 'b, 'c>(
     // If all dependecies are resolved, use this version.
     if ok {
         logger(&format!(
-            "{}Accept \"{} = {}\".",
+            "{}Accept \"{}@{}\".",
             " ".repeat(indent),
             pkg_name,
             pkg_version,
