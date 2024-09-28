@@ -1088,15 +1088,21 @@ impl Program {
             te: Result<TypedExpr, Errors>,
             method_impl_idx: Option<usize>,
         }
-        let results = if tasks.len() == 1 {
-            let task = tasks.pop().unwrap();
-            let te = (task.task)();
-            vec![CheckResult {
-                val_name: task.val_name,
-                te,
-                method_impl_idx: task.method_impl_idx,
-            }]
+        let results = if true {
+            // Run tasks in the main thread.
+            let mut results = vec![];
+            for task in tasks {
+                let te = (task.task)();
+                results.push(CheckResult {
+                    val_name: task.val_name,
+                    te,
+                    method_impl_idx: task.method_impl_idx,
+                });
+            }
+            results
         } else {
+            // Run tasks in parallel.
+            // This is not so useful. Type-checking is cached and main bound may be IO-bound.
             let tasks = Arc::new(Mutex::new(tasks));
             let results = Arc::new(Mutex::new(Vec::<CheckResult>::new()));
             let mut threads = vec![];
