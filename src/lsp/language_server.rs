@@ -10,14 +10,16 @@ use crate::{
 };
 use crate::{to_absolute_path, FullName, SubCommand};
 use difference::diff;
+use lsp_types::request::WorkDoneProgressCreate;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
     CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
     DidSaveTextDocumentParams, Documentation, GotoDefinitionParams, HoverParams,
     HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MarkupContent,
-    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, TextDocumentPositionParams,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    TextDocumentSyncSaveOptions, WorkDoneProgressOptions,
+    ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, SaveOptions, ServerCapabilities,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, WorkDoneProgressBegin,
+    WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -988,6 +990,11 @@ fn diagnostics_thread(
             break;
         }
 
+        // Create and begin work done progress.
+        const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
+        send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
+        send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
+
         // Run diagnostics.
         let res = match msg.unwrap() {
             DiagnosticsMessage::Stop => {
@@ -997,6 +1004,9 @@ fn diagnostics_thread(
             DiagnosticsMessage::OnSaveFile => run_diagnostics(),
             DiagnosticsMessage::Start => run_diagnostics(),
         };
+
+        // End work done progress.
+        send_work_done_progress_end(WORK_DONE_PROGRESS_TOKEN);
 
         // Send the result to the main thread and language clinent.
         let errs = match res {
@@ -1243,4 +1253,41 @@ pub fn run_diagnostics() -> Result<DiagnosticsResult, Errors> {
     let program = build_file(&mut config)?.program.unwrap();
 
     Ok(DiagnosticsResult { prgoram: program })
+}
+
+// Create work done progress.
+pub fn send_work_done_progress_create(token: &str, id: u32) {
+    let progress = WorkDoneProgressCreateParams {
+        token: lsp_types::ProgressToken::String(token.to_string()),
+    };
+    send_request(
+        id,
+        "window/workDoneProgress/create".to_string(),
+        Some(progress),
+    );
+}
+
+// Begin work done progress.
+pub fn send_work_done_progress_begin(token: &str, title: &str) {
+    let begin = WorkDoneProgressBegin {
+        title: title.to_string(),
+        cancellable: Some(false),
+        message: None,
+        percentage: None,
+    };
+    let params = ProgressParams {
+        token: lsp_types::ProgressToken::String(token.to_string()),
+        value: ProgressParamsValue::WorkDone(lsp_types::WorkDoneProgress::Begin(begin)),
+    };
+    send_notification("$/progress".to_string(), Some(params));
+}
+
+// End work done progress.
+pub fn send_work_done_progress_end(token: &str) {
+    let end = WorkDoneProgressEnd { message: None };
+    let params = ProgressParams {
+        token: lsp_types::ProgressToken::String(token.to_string()),
+        value: ProgressParamsValue::WorkDone(lsp_types::WorkDoneProgress::End(end)),
+    };
+    send_notification("$/progress".to_string(), Some(params));
 }
