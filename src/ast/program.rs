@@ -975,7 +975,7 @@ impl Program {
         name: &FullName,
         method_impl_filter: impl Fn(&MethodImpl) -> Result<bool, Errors>,
     ) -> Result<(), Errors> {
-        // To avoid borrowing `self` mutably twice, do the task immutably first.
+        // To avoid mutably borrowing `self` twice, do the task immutably first.
         let gv = self.global_values.get(&name).unwrap();
         let tes = match &gv.expr {
             SymbolExpr::Simple(e) => {
