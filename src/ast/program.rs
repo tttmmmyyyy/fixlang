@@ -3,6 +3,7 @@ use crate::error::Errors;
 use build_time::build_time_utc;
 use import::{ImportItem, ImportStatement};
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use std::{io::Write, sync::Arc, vec};
 
 use super::*;
@@ -803,15 +804,23 @@ impl Program {
     // - Resolve namespace of type and traits in the expression.
     // - Resolve type aliases in the expression.
     // - Perform typechecking.
-    // This function updates `te` in-place.
+    //
+    // Parameters:
+    // - `te` : The expression to be namespace-resolved and type-checked.
+    // - `req_scm` : The type scheme that the expression should have.
+    // - `val_name` : The name of the expression, e.g., `Std::ToString::to_string`.
+    // - `def_mod` : The module where the expression is defined. Note that if `te` is a trait method implementation, this may differ from `name.module()`.
+    // - `nrctx` : The name resolution context. Pass one created by `program.create_name_resolution_context(define_module)`.
+    // - `ver_hash` : A hash value of source codes `te` depends on. This is used to detect or invalidate the cache file. Pass one created by `program.module_dependency_hash(define_module)`.
     fn resolve_namespace_and_check_type_sub(
-        &self,
-        te: &mut TypedExpr,
-        required_scheme: &Arc<Scheme>,
-        name: &FullName,
-        define_module: &Name,
-        tc: &TypeCheckContext,
-    ) -> Result<(), Errors> {
+        mut te: TypedExpr,
+        req_scm: &Arc<Scheme>,
+        val_name: &FullName,
+        def_mod: &Name,
+        nrctx: &NameResolutionContext,
+        ver_hash: &str,
+        mut tc: TypeCheckContext,
+    ) -> Result<TypedExpr, Errors> {
         fn cache_file_name(
             name: &FullName,
             hash_of_dependent_codes: &str,
@@ -828,10 +837,10 @@ impl Program {
         }
         fn load_cache(
             name: &FullName,
-            hash_of_dependent_codes: &str,
+            ver_hash: &str,
             required_scheme: &Arc<Scheme>,
         ) -> Option<TypedExpr> {
-            let cache_file_name = cache_file_name(name, hash_of_dependent_codes, required_scheme);
+            let cache_file_name = cache_file_name(name, ver_hash, required_scheme);
             let cache_dir: PathBuf = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_str = cache_file.to_string_lossy().to_string();
@@ -872,9 +881,9 @@ impl Program {
             te: &TypedExpr,
             required_scheme: &Arc<Scheme>,
             name: &FullName,
-            hash_of_dependent_codes: &str,
+            ver_hash: &str,
         ) {
-            let cache_file_name = cache_file_name(name, hash_of_dependent_codes, required_scheme);
+            let cache_file_name = cache_file_name(name, ver_hash, required_scheme);
             let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
             let cache_file = cache_dir.join(cache_file_name);
             let cache_file_str = cache_file.to_string_lossy().to_string();
@@ -901,36 +910,38 @@ impl Program {
         }
 
         // Load type-checking cache file.
-        let hash_of_dependent_codes = self.module_dependency_hash(define_module);
-        let cache = load_cache(name, &hash_of_dependent_codes, required_scheme);
+        let cache = load_cache(val_name, ver_hash, req_scm);
         if cache.is_some() {
             // If cache is available,
-            *te = cache.unwrap();
-            return Ok(());
+            te = cache.unwrap();
+            return Ok(te);
         }
 
         // Perform namespace inference.
-        let nrctx = NameResolutionContext::new(
-            &self.tycon_names_with_aliases(),
-            &self.trait_names_with_aliases(),
-            self.assoc_ty_to_arity(),
-            self.mod_to_import_stmts[define_module].clone(),
-        );
         te.expr = te.expr.resolve_namespace(&nrctx)?;
 
         // Resolve type aliases in expression.
         te.expr = te.expr.resolve_type_aliases(&tc.type_env)?;
 
         // Perform type-checking.
-        let mut tc = tc.clone();
-        tc.current_module = Some(define_module.clone());
-        te.expr = tc.check_type(te.expr.clone(), required_scheme.clone())?;
+        tc.current_module = Some(def_mod.clone());
+        te.expr = tc.check_type(te.expr.clone(), req_scm.clone())?;
         te.substitution = tc.substitution;
 
         // Save the result to cache file.
-        save_cache(te, required_scheme, name, &hash_of_dependent_codes);
+        save_cache(&te, req_scm, val_name, ver_hash);
 
-        Ok(())
+        Ok(te)
+    }
+
+    // Create NameResolutionContext used for symbols defined in the specified module.
+    pub fn create_name_resolution_context(&self, mod_name: &Name) -> NameResolutionContext {
+        NameResolutionContext::new(
+            &self.tycon_names_with_aliases(),
+            &self.trait_names_with_aliases(),
+            self.assoc_ty_to_arity(),
+            self.mod_to_import_stmts[mod_name].clone(),
+        )
     }
 
     pub fn resolve_namespace_and_check_type_in_files(
@@ -974,83 +985,153 @@ impl Program {
     pub fn resolve_namespace_and_check_type(
         &mut self,
         tc: &TypeCheckContext,
-        value_names: &[FullName],
+        val_names: &[FullName],
         method_impl_filter: impl Fn(&MethodImpl) -> Result<bool, Errors>,
     ) -> Result<(), Errors> {
-        let mut errors = Errors::empty();
+        struct CheckTask {
+            val_name: FullName,
+            task: Box<dyn FnOnce() -> Result<TypedExpr, Errors> + Send>,
+            method_impl_idx: Option<usize>,
+        }
+        let mut tasks: Vec<CheckTask> = vec![];
 
-        for value_name in value_names {
-            // To avoid mutably borrowing `self` twice, do the task immutably first.
-            let gv = self.global_values.get(&value_name).unwrap();
-            let tes = match &gv.expr {
+        let mut mod_to_nrctx: HashMap<Name, Arc<NameResolutionContext>> = HashMap::new();
+        let mut get_nrctx = |mod_name: &Name| -> Arc<NameResolutionContext> {
+            if !mod_to_nrctx.contains_key(mod_name) {
+                mod_to_nrctx.insert(
+                    mod_name.clone(),
+                    Arc::new(self.create_name_resolution_context(mod_name)),
+                );
+            }
+            mod_to_nrctx.get(mod_name).unwrap().clone()
+        };
+
+        // Create tasks.
+        for val_name in val_names {
+            let gv = self.global_values.get(&val_name).unwrap();
+            match &gv.expr {
                 SymbolExpr::Simple(e) => {
-                    // Perform type-checking.
-                    let define_module = value_name.module();
-                    let mut te = e.clone();
-                    let res = self.resolve_namespace_and_check_type_sub(
-                        &mut te,
-                        &gv.scm,
-                        &value_name,
-                        &define_module,
-                        tc,
-                    );
-                    if res.is_err() {
-                        errors.eat_err(res);
-                        continue;
-                    }
+                    // Create a task for simple value.
+                    let te = e.clone();
+                    let scm = gv.scm.clone();
+                    let val_name_clone = val_name.clone();
+                    let def_mod = val_name_clone.module();
+                    let nrctx = get_nrctx(&def_mod);
+                    let ver_hash = self.module_dependency_hash(&def_mod);
+                    let tc = tc.clone();
+                    let task = Box::new(move || -> Result<TypedExpr, Errors> {
+                        // Perform type-checking.
+                        let mut te = Program::resolve_namespace_and_check_type_sub(
+                            te,
+                            &scm,
+                            &val_name_clone,
+                            &def_mod,
+                            &nrctx,
+                            &ver_hash,
+                            tc,
+                        )?;
+                        // Calculate free vars.
+                        te.calculate_free_vars();
+                        Ok(te)
+                    });
 
-                    // Calculate free vars.
-                    te.calculate_free_vars();
-                    vec![(0, te)]
+                    tasks.push(CheckTask {
+                        val_name: val_name.clone(),
+                        task,
+                        method_impl_idx: None,
+                    });
                 }
                 SymbolExpr::Method(impls) => {
-                    let mut tes = vec![];
                     for (i, method) in impls.iter().enumerate() {
                         // Select method implementation.
                         if !method_impl_filter(method)? {
                             continue;
                         }
 
-                        // Perform type-checking.
-                        let define_module = method.define_module.clone();
-                        let mut e = method.expr.clone();
-                        let res = self.resolve_namespace_and_check_type_sub(
-                            &mut e,
-                            &method.ty,
-                            &value_name,
-                            &define_module,
-                            tc,
-                        );
-                        if res.is_err() {
-                            errors.eat_err(res);
-                            continue;
-                        }
+                        // Create a task for method implementation.
+                        let te = method.expr.clone();
+                        let method_ty = method.ty.clone();
+                        let val_name_clone = val_name.clone();
+                        let def_mod = method.define_module.clone();
+                        let nrctx = get_nrctx(&def_mod);
+                        let ver_hash = self.module_dependency_hash(&def_mod);
+                        let tc = tc.clone();
+                        let task = Box::new(move || -> Result<TypedExpr, Errors> {
+                            // Perform type-checking.
+                            let mut te = Program::resolve_namespace_and_check_type_sub(
+                                te,
+                                &method_ty,
+                                &val_name_clone,
+                                &def_mod,
+                                &nrctx,
+                                &ver_hash,
+                                tc,
+                            )?;
+                            // Calculate free vars.
+                            te.calculate_free_vars();
+                            Ok(te)
+                        });
 
-                        // Calculate free vars.
-                        e.calculate_free_vars();
-
-                        tes.push((i, e));
-                    }
-                    tes
-                }
-            };
-
-            // Then update `TypedExpr` in `self.global_values` mutably.
-            let gv = self.global_values.get_mut(&value_name).unwrap();
-            match &mut gv.expr {
-                SymbolExpr::Simple(e) => {
-                    for (_, te) in tes {
-                        *e = te;
-                    }
-                }
-                SymbolExpr::Method(impls) => {
-                    for (i, te) in tes {
-                        impls[i].expr = te;
+                        tasks.push(CheckTask {
+                            val_name: val_name.clone(),
+                            task,
+                            method_impl_idx: Some(i),
+                        });
                     }
                 }
             };
         }
-        Ok(())
+
+        // Run all tasks in parallel.
+        struct CheckResult {
+            val_name: FullName,
+            te: Result<TypedExpr, Errors>,
+            method_impl_idx: Option<usize>,
+        }
+        let tasks = Arc::new(Mutex::new(tasks));
+        let results = Arc::new(Mutex::new(Vec::<CheckResult>::new()));
+        let mut threads = vec![];
+        for _ in 0..num_cpus::get() {
+            let tasks = tasks.clone();
+            let results = results.clone();
+            let thread = std::thread::spawn(move || {
+                while let Some(task) = tasks.lock().unwrap().pop() {
+                    let te = (task.task)();
+                    results.lock().unwrap().push(CheckResult {
+                        val_name: task.val_name,
+                        te,
+                        method_impl_idx: task.method_impl_idx,
+                    });
+                }
+            });
+            threads.push(thread);
+        }
+        for thread in threads {
+            thread.join().unwrap();
+        }
+
+        // Store results to `self.global_values`.
+        let mut errors = Errors::empty();
+        let results: Vec<CheckResult> = std::mem::replace(results.lock().unwrap().as_mut(), vec![]);
+        for result in results {
+            if result.te.is_err() {
+                errors.append(result.te.err().unwrap());
+                continue;
+            }
+            let te = result.te.ok().unwrap();
+            let gv = self.global_values.get_mut(&result.val_name).unwrap();
+            match &mut gv.expr {
+                SymbolExpr::Simple(e) => {
+                    *e = te;
+                }
+                SymbolExpr::Method(impls) => {
+                    let i = result.method_impl_idx.unwrap();
+                    impls[i].expr = te;
+                }
+            };
+        }
+
+        errors.to_result()
     }
 
     // Instantiate symbol.

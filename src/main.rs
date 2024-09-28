@@ -10,6 +10,7 @@ extern crate difference;
 extern crate git2;
 extern crate lsp_types;
 extern crate num_bigint;
+extern crate num_cpus;
 extern crate rand;
 extern crate regex;
 extern crate reqwest;
