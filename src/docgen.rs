@@ -21,6 +21,14 @@ pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
 
 // Generate documentation for a Program consists of single module.
 fn generate_doc(program: &Program, mod_name: &Name) -> Result<(), Errors> {
+    // Check if the module exists in the program.
+    if !program.modules.iter().any(|mi| mi.name == *mod_name) {
+        return Err(Errors::from_msg(format!(
+            "Module `{}` does not exist in the program.",
+            mod_name
+        )));
+    }
+
     let mut doc = String::new();
 
     // The module name section.
