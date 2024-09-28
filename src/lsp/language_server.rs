@@ -10,7 +10,6 @@ use crate::{
 };
 use crate::{to_absolute_path, FullName, SubCommand};
 use difference::diff;
-use lsp_types::request::WorkDoneProgressCreate;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
     CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
