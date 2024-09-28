@@ -237,10 +237,13 @@ fn main() {
     let deps_update = App::new("update").about(
         "Update the lock file and install dependencies so that it satisfies the dependencies specified in the project file.",
     );
-    let deps_add = App::new("add").about("Add dependency to the specified project. Fix projects are searched in the registry files. This command requires \"fixproj.toml\" to be present in the current directory.").arg(Arg::new("projects")
-    .multiple_values(true).takes_value(true).help("Projects to be added. \n\
-    Each entry be in the form \"proj-name\" or \"proj-name@ver_req\". \n\
-    Example: \"hashmap@0.1.0\""));
+    let deps_add = App::new("add")
+        .about("Add dependency to the specified project. Fix projects are searched in the registry files. This command requires \"fixproj.toml\" to be present in the current directory.")
+        .arg(Arg::new("projects")
+            .multiple_values(true)
+            .takes_value(true)
+            .help("Projects to be added. \nEach entry be in the form \"proj-name\" or \"proj-name@ver_req\" e.g.,\"hashmap@0.1.0\".")
+        );
 
     let deps = deps
         .subcommand(deps_install)
