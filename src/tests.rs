@@ -6392,10 +6392,8 @@ pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-gmp.git");
 }
 
-pub fn test_external_project(url: &str) {
-    println!("Testing external project: {}", url);
-
-    // Run `cargo install --locked --path .`.
+// Run `cargo install --locked --path .`.
+pub fn install_fix() {
     let _ = Command::new("cargo")
         .arg("install")
         .arg("--locked")
@@ -6403,6 +6401,11 @@ pub fn test_external_project(url: &str) {
         .arg(".")
         .output()
         .expect("Failed to run cargo install.");
+}
+
+pub fn test_external_project(url: &str) {
+    println!("Testing external project: {}", url);
+    install_fix();
 
     // Recreate working directory for this test.
     let work_dir = PathBuf::from(format!(
@@ -6443,4 +6446,18 @@ pub fn test_external_project(url: &str) {
         "Failed to run fix test of \"{}\"",
         url
     );
+}
+
+#[test]
+pub fn test_generate_docs() {
+    install_fix();
+
+    // Run `fix doc -m Std` in `std_doc` directory.
+    let _ = Command::new("fix")
+        .arg("doc")
+        .arg("-m")
+        .arg("Std")
+        .current_dir("std_doc")
+        .output()
+        .expect("Failed to run fix doc.");
 }

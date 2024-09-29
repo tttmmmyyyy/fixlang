@@ -39,6 +39,53 @@ pub enum SubCommand {
     Run,
     Test,
     Diagnostics(DiagnosticsConfig),
+    Docs,
+}
+
+impl SubCommand {
+    // Should we run preliminary commands before building the program?
+    pub fn run_preliminary_commands(&self) -> bool {
+        match self {
+            SubCommand::Build => true,
+            SubCommand::Run => true,
+            SubCommand::Test => true,
+            SubCommand::Diagnostics(_) => false,
+            SubCommand::Docs => false,
+        }
+    }
+
+    // Should we build program binary?
+    pub fn build_binary(&self) -> bool {
+        match self {
+            SubCommand::Build => true,
+            SubCommand::Run => true,
+            SubCommand::Test => true,
+            SubCommand::Diagnostics(_) => false,
+            SubCommand::Docs => false,
+        }
+    }
+
+    // Should we use test files?
+    pub fn use_test_files(&self) -> bool {
+        match self {
+            SubCommand::Build => false,
+            SubCommand::Run => false,
+            SubCommand::Test => true,
+            SubCommand::Diagnostics(_) => true,
+            SubCommand::Docs => true,
+        }
+    }
+
+    // Should we typecheck the program?
+    pub fn typecheck(&self) -> bool {
+        match self {
+            SubCommand::Build => true,
+            SubCommand::Run => true,
+            SubCommand::Test => true,
+            SubCommand::Diagnostics(_) => true,
+            SubCommand::Docs => false,
+        }
+    }
 }
 
 // Configuration for diagnostics subcommand.
@@ -175,12 +222,6 @@ impl Configuration {
             c_type_sizes: CTypeSizes::load_or_check()?,
             extra_commands: vec![],
         })
-    }
-
-    // Set diagnostics configuration.
-    pub fn set_diagnostics_config(&mut self, config: DiagnosticsConfig) {
-        assert!(matches!(self.subcommand, SubCommand::Diagnostics(_)));
-        self.subcommand = SubCommand::Diagnostics(config);
     }
 }
 

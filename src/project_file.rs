@@ -2,8 +2,8 @@ use crate::{
     dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
     registry_file::RegistryFile,
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, SourceFile, Span, SubCommand,
-    LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, SourceFile, Span, LOCK_FILE_PATH,
+    PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
 use semver::{Version, VersionReq};
 use serde::Deserialize;
@@ -266,37 +266,43 @@ impl ProjectFile {
         Ok(())
     }
 
+    // Get source files of this project. Does not include files of dependent projects.
+    // - `use_build_test`: If true, include files in the `[build.test]` section.
+    pub fn get_files(&self, use_build_test: bool) -> Vec<PathBuf> {
+        let mut files: Vec<PathBuf> = self
+            .build
+            .files
+            .iter()
+            .map(|p| self.join_to_project_dir(p))
+            .collect();
+        if use_build_test {
+            files.append(&mut self.build.test.as_ref().map_or(vec![], |test| {
+                test.files
+                    .iter()
+                    .map(|p| self.join_to_project_dir(p))
+                    .collect()
+            }));
+        }
+        files
+    }
+
     // Update a configuration from a project file.
-    // - `dependent_proj`: If true, self is the project file of a dependent project. In this case, append the source files, libraries, library search paths, threaded mode to the configuration but ignore other fields such as debug mode, optimization level, output file, etc.
+    // - `is_dependent_proj`: If true, self is the project file of a dependent project.
+    //   In this case, append the source files, libraries, library search paths, threaded mode to the configuration,
+    //   but ignore other fields such as debug mode, optimization level, output file, etc.
     pub fn set_config(
-        self: &ProjectFile,
+        &self,
         config: &mut Configuration,
-        dependent_proj: bool,
+        is_dependent_proj: bool,
     ) -> Result<(), Errors> {
         // Should we consider `[build.test]` section?
-        let use_build_test = !dependent_proj
-            && (matches!(config.subcommand, SubCommand::Test)
-                || matches!(config.subcommand, SubCommand::Diagnostics(_)));
+        // If the project is a dependent project, we do not consider the `[build.test]` section.
+        let use_build_test = !is_dependent_proj && config.subcommand.use_test_files();
 
         // Append source files.
-        config.source_files.append(
-            &mut self
-                .build
-                .files
-                .iter()
-                .map(|p| self.join_to_project_dir(p))
-                .collect(),
-        );
-        if use_build_test {
-            config
-                .source_files
-                .append(&mut self.build.test.as_ref().map_or(vec![], |test| {
-                    test.files
-                        .iter()
-                        .map(|p| self.join_to_project_dir(p))
-                        .collect()
-                }));
-        }
+        config
+            .source_files
+            .append(&mut self.get_files(use_build_test));
 
         // Append object files.
         config.object_files.append(
@@ -437,7 +443,7 @@ impl ProjectFile {
             }
         }
 
-        if dependent_proj {
+        if is_dependent_proj {
             return Ok(());
         }
 

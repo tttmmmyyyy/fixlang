@@ -270,7 +270,7 @@ fn main() {
                 .action(clap::ArgAction::Append)
                 .multiple_values(true)
                 .takes_value(true)
-                .help("Modules for which documents should be generated."),
+                .help("Modules for which documents should be generated. If not specified, documents for all modules are generated."),
         );
 
     // "fix init" subcommand

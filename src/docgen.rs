@@ -1,20 +1,54 @@
 use std::sync::Arc;
 
 use crate::{
-    error::Errors, kind_star, lsp::language_server::run_diagnostics, FullName, Kind, KindSignature,
-    Name, NameSpace, Program, TyConVariant, TyVar,
+    build_file, error::Errors, kind_star, project_file::ProjectFile, to_absolute_path,
+    Configuration, FullName, Kind, KindSignature, Name, NameSpace, Program, SubCommand,
+    TyConVariant, TyVar,
 };
 
 pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
-    println!("Running diagnostics for this Fix project.");
-    let program = run_diagnostics(None)?.prgoram;
-    println!("Diagnostics completed.");
+    println!("Loading source files...");
+    // Create the configuration.
+    let mut config = Configuration::new(SubCommand::Docs)?;
+
+    // Set up the configuration by the project file.
+    let proj_file = ProjectFile::read_root_file()?;
+    proj_file.set_config(&mut config, false)?;
+
+    // Set up the configuration by the lock file.
+    proj_file.open_lock_file()?.set_config(&mut config)?;
+
+    // Build the file and get the errors.
+    let program = build_file(&mut config)?.program.unwrap();
+    println!("Generating documentation...");
+
+    // Determine modules to generate documentation.
+    let mod_names = if mod_names.len() > 0 {
+        // In case modules are given in the command line arguments, use them.
+        mod_names.to_vec()
+    } else {
+        let mut mod_names = vec![];
+        // Use all modules defined in the root project file.
+        let src_files = proj_file.get_files(true);
+        let abs_src_paths = src_files
+            .iter()
+            .map(|f| to_absolute_path(f))
+            .collect::<Vec<_>>();
+        for mi in program.modules.iter() {
+            let src_file = to_absolute_path(&mi.source.input.file_path);
+            if abs_src_paths.iter().any(|f| f == &src_file) {
+                mod_names.push(mi.name.clone());
+            }
+        }
+        mod_names
+    };
+
     for mod_name in mod_names {
         println!(
             "Generating documentation for module `{}`",
             mod_name.to_string()
         );
-        generate_doc(&program, mod_name)?;
+        generate_doc(&program, &mod_name)?;
     }
     Ok(())
 }

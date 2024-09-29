@@ -1283,19 +1283,18 @@ pub fn run_diagnostics(file: Option<PathBuf>) -> Result<DiagnosticsResult, Error
     // Read the project file.
     let proj_file = ProjectFile::read_root_file()?;
 
+    // Determine the source files for which diagnostics are run.
+    let files = if let Some(file) = file {
+        vec![file]
+    } else {
+        proj_file.get_files(true)
+    };
+
     // Create the configuration.
-    let mut config = Configuration::new(SubCommand::Diagnostics(DiagnosticsConfig::default()))?;
+    let mut config = Configuration::new(SubCommand::Diagnostics(DiagnosticsConfig { files }))?;
 
     // Set up the configuration by the project file.
     proj_file.set_config(&mut config, false)?;
-    let target_files = if let Some(file) = file {
-        vec![file]
-    } else {
-        config.source_files.clone()
-    };
-    config.set_diagnostics_config(DiagnosticsConfig {
-        files: target_files,
-    });
 
     // Set up the configuration by the lock file.
     proj_file.open_lock_file()?.set_config(&mut config)?;

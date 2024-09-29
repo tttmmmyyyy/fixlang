@@ -85,6 +85,15 @@ fn build_object_files<'c>(
     // Set and check kinds that appear in the module.
     program.set_kinds()?;
 
+    // If typechecking is not needed, return here.
+    if !config.subcommand.typecheck() {
+        assert!(!config.subcommand.build_binary());
+        return Ok(BuildObjFilesResult {
+            obj_paths: vec![],
+            program: Some(program),
+        });
+    }
+
     // Create typeckecker.
     let mut typechecker = TypeCheckContext::new(
         program.trait_env.clone(),
@@ -581,7 +590,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let exec_path = config.get_output_executable_file_path();
 
     // Run extra commands.
-    if !matches!(config.subcommand, SubCommand::Diagnostics(_)) {
+    if config.subcommand.run_preliminary_commands() {
         config.run_extra_commands()?;
     }
 
@@ -596,8 +605,8 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let program = load_source_files(config)?;
     let build_res = build_object_files(program, config.clone())?;
 
-    // If the program is for language server, we don't need to build binary file.
-    if matches!(config.subcommand, SubCommand::Diagnostics(_)) {
+    // In case we don't need to build binary file, return here.
+    if !config.subcommand.build_binary() {
         let program = build_res.program.unwrap();
         return Ok(BuildFileResult {
             program: Some(program),
