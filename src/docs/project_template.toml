@@ -83,6 +83,6 @@ files = ["main.fix"]
 ## In this case, "fix" searches the tags (each name should be a semver, or semver with "v" prefix) of the repository to find the version that satisfies the requirement.
 ## If the repository has no tags, "fix" will use the latest commit of the default branch.
 # [[dependencies]]
-# name = "certain-project"
+# name = "your-project"
 # version = "1.2.0"
-# git = { url = "https://github.com/tttmmmyyyy/certain-project.git" }
+# git = { url = "https://github.com/tttmmmyyyy/your-project.git" }
