@@ -94,9 +94,6 @@ static LSP_LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 pub fn launch_language_server() {
     let mut stdin = std::io::stdin();
 
-    // Prepare the log file.
-    write_lsp_log("Language server started.");
-
     // Prepare a channel to send requests to the diagnostics thread.
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
     let mut diag_req_recv = Some(diag_req_recv);
