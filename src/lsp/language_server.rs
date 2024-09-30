@@ -423,6 +423,7 @@ fn open_log_file() -> Mutex<File> {
 pub fn write_lsp_log(message: &str) {
     let mut file = LSP_LOG_FILE.lock().expect("Failed to lock the log file.");
     if WRITE_LOG {
+        let message = message.to_string() + "\n";
         file.write_all(message.as_bytes())
             .expect("Failed to write a message to the log file.");
         file.flush().expect("Failed to flush the log file.");
