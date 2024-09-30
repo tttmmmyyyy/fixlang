@@ -1013,11 +1013,11 @@ impl Program {
             results
         } else {
             // Run tasks in parallel.
-            // This is not so useful. Type-checking is cached and main bound may be IO-bound.
+            // This is not so useful. Is main bound for type-checking in IO?
             let tasks = Arc::new(Mutex::new(tasks));
             let results = Arc::new(Mutex::new(Vec::<CheckResult>::new()));
             let mut threads = vec![];
-            for _ in 0..num_cpus::get() {
+            for _ in 0..(num_cpus::get() / 2) {
                 let tasks = tasks.clone();
                 let results = results.clone();
                 let thread = std::thread::spawn(move || {
