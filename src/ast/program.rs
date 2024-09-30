@@ -1,10 +1,9 @@
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType};
 use crate::error::Errors;
-use build_time::build_time_utc;
 use import::{ImportItem, ImportStatement};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use std::{io::Write, sync::Arc, vec};
+use std::{sync::Arc, vec};
 
 use super::*;
 
@@ -821,96 +820,8 @@ impl Program {
         ver_hash: &str,
         mut tc: TypeCheckContext,
     ) -> Result<TypedExpr, Errors> {
-        fn cache_file_name(
-            name: &FullName,
-            hash_of_dependent_codes: &str,
-            scheme: &Arc<Scheme>,
-        ) -> String {
-            let data = format!(
-                "{}_{}_{}_{}",
-                name.to_string(),
-                hash_of_dependent_codes,
-                scheme.to_string_normalize(),
-                build_time_utc!()
-            );
-            format!("{:x}", md5::compute(data))
-        }
-        fn load_cache(
-            name: &FullName,
-            ver_hash: &str,
-            required_scheme: &Arc<Scheme>,
-        ) -> Option<TypedExpr> {
-            let cache_file_name = cache_file_name(name, ver_hash, required_scheme);
-            let cache_dir: PathBuf = touch_directory(TYPE_CHECK_CACHE_PATH);
-            let cache_file = cache_dir.join(cache_file_name);
-            let cache_file_str = cache_file.to_string_lossy().to_string();
-            if !cache_file.exists() {
-                return None;
-            }
-            let mut cache_file = match File::open(&cache_file) {
-                Err(_) => {
-                    return None;
-                }
-                Ok(file) => file,
-            };
-            let mut cache_bytes = vec![];
-            match cache_file.read_to_end(&mut cache_bytes) {
-                Ok(_) => {}
-                Err(why) => {
-                    eprintln!(
-                        "warning: Failed to read cache file \"{}\": {}.",
-                        cache_file_str, why
-                    );
-                    return None;
-                }
-            }
-            let expr: TypedExpr = match serde_pickle::from_slice(&cache_bytes, Default::default()) {
-                Ok(res) => res,
-                Err(why) => {
-                    eprintln!(
-                        "warning: Failed to parse content of cache file \"{}\": {}.",
-                        cache_file_str, why
-                    );
-                    return None;
-                }
-            };
-            Some(expr)
-        }
-
-        fn save_cache(
-            te: &TypedExpr,
-            required_scheme: &Arc<Scheme>,
-            name: &FullName,
-            ver_hash: &str,
-        ) {
-            let cache_file_name = cache_file_name(name, ver_hash, required_scheme);
-            let cache_dir = touch_directory(TYPE_CHECK_CACHE_PATH);
-            let cache_file = cache_dir.join(cache_file_name);
-            let cache_file_str = cache_file.to_string_lossy().to_string();
-            let mut cache_file = match File::create(&cache_file) {
-                Err(_) => {
-                    eprintln!(
-                        "warning: Failed to create cache file \"{}\".",
-                        cache_file_str
-                    );
-                    return;
-                }
-                Ok(file) => file,
-            };
-            let serialized = serde_pickle::to_vec(&te, Default::default()).unwrap();
-            match cache_file.write_all(&serialized) {
-                Ok(_) => {}
-                Err(_) => {
-                    eprintln!(
-                        "warning: Failed to write cache file \"{}\".",
-                        cache_file_str
-                    );
-                }
-            }
-        }
-
         // Load type-checking cache file.
-        let cache = load_cache(val_name, ver_hash, req_scm);
+        let cache = tc.cache.load_cache(val_name, req_scm, ver_hash);
         if cache.is_some() {
             // If cache is available,
             te = cache.unwrap();
@@ -929,7 +840,7 @@ impl Program {
         te.substitution = tc.substitution;
 
         // Save the result to cache file.
-        save_cache(&te, req_scm, val_name, ver_hash);
+        tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
 
         Ok(te)
     }

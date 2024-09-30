@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::error::Errors;
 use ast::import::ImportStatement;
 use serde::{Deserialize, Serialize};
+use typecheckcache::TypeCheckCache;
 
 use self::ast::import;
 
@@ -401,7 +402,7 @@ pub enum ConstraintInstantiationMode {
 
 // Context under type-checking.
 // Reference: https://uhideyuki.sakura.ne.jp/studs/index.cgi/ja/HindleyMilnerInHaskell#fn6
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct TypeCheckContext {
     // The identifier of type variables.
     tyvar_id: u32,
@@ -432,6 +433,8 @@ pub struct TypeCheckContext {
     // Fixed type variables.
     // In unification, these type variables are not allowed to be replaced to another type.
     pub fixed_tyvars: HashSet<Name>,
+    // Type check cache.
+    pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
 }
 
 impl TypeCheckContext {
@@ -441,6 +444,7 @@ impl TypeCheckContext {
         type_env: TypeEnv,
         kind_env: KindEnv,
         import_statements: HashMap<Name, Vec<ImportStatement>>,
+        cache: Arc<dyn TypeCheckCache + Sync + Send>,
     ) -> Self {
         let assumed_preds = trait_env.qualified_predicates();
         let assumed_eqs = trait_env.type_equalities();
@@ -458,6 +462,7 @@ impl TypeCheckContext {
             assumed_preds,
             assumed_eqs,
             fixed_tyvars: HashSet::default(),
+            cache,
         }
     }
 

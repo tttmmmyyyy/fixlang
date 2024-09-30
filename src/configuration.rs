@@ -1,6 +1,7 @@
 use crate::constants::{CHECK_C_TYPES_EXEC_PATH, CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::cpu_features::CpuFeatures;
 use crate::error::{exit_if_err, Errors};
+use crate::typecheckcache::{self, TypeCheckCache};
 use crate::{error::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
     to_absolute_path, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
@@ -14,6 +15,7 @@ use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use std::sync::Arc;
 use std::{env, path::PathBuf};
 
 #[derive(Clone, Copy)]
@@ -135,6 +137,8 @@ pub struct Configuration {
     pub subcommand: SubCommand,
     // Extra build commands.
     pub extra_commands: Vec<ExtraCommand>,
+    // Type chech cache.
+    pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
 }
 
 #[derive(Clone)]
@@ -221,6 +225,7 @@ impl Configuration {
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
             extra_commands: vec![],
+            type_check_cache: Arc::new(typecheckcache::FileCache::new()),
         })
     }
 }

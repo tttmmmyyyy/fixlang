@@ -100,6 +100,7 @@ fn build_object_files<'c>(
         program.type_env(),
         program.kind_env(),
         program.mod_to_import_stmts.clone(),
+        config.type_check_cache.clone(),
     );
 
     // Register type declarations of global symbols to typechecker.

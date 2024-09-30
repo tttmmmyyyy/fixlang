@@ -49,6 +49,7 @@ mod stopwatch;
 #[cfg(test)]
 mod tests;
 mod typecheck;
+mod typecheckcache;
 mod uncurry_optimization;
 
 use crate::error::Errors;

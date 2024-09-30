@@ -1,5 +1,6 @@
 use crate::ast::program::Program;
 use crate::constants::INSTANCIATED_NAME_SEPARATOR;
+use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::{
     constants::LSP_LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
@@ -1011,6 +1012,7 @@ fn diagnostics_thread(
     log_file: Arc<Mutex<File>>,
 ) {
     let mut prev_err_paths = HashSet::new();
+    let typecheck_cache = Arc::new(typecheckcache::MemoryCache::new());
 
     loop {
         // Wait for a message.
@@ -1035,14 +1037,14 @@ fn diagnostics_thread(
                     WORK_DONE_PROGRESS_TOKEN,
                     format!("Running diagnostics ({})", path.to_string_lossy()).as_str(),
                 );
-                run_diagnostics(Some(path))
+                run_diagnostics(Some(path), typecheck_cache.clone())
             }
             DiagnosticsMessage::Start => {
                 send_work_done_progress_begin(
                     WORK_DONE_PROGRESS_TOKEN,
                     "Running diagnostics (all files)",
                 );
-                run_diagnostics(None)
+                run_diagnostics(None, typecheck_cache.clone())
             }
         };
 
@@ -1277,7 +1279,10 @@ fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
     Ok(uri.unwrap())
 }
 
-pub fn run_diagnostics(file: Option<PathBuf>) -> Result<DiagnosticsResult, Errors> {
+pub fn run_diagnostics(
+    file: Option<PathBuf>,
+    typecheck_cache: SharedTypeCheckCache,
+) -> Result<DiagnosticsResult, Errors> {
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
     // Read the project file.
@@ -1292,6 +1297,7 @@ pub fn run_diagnostics(file: Option<PathBuf>) -> Result<DiagnosticsResult, Error
 
     // Create the configuration.
     let mut config = Configuration::new(SubCommand::Diagnostics(DiagnosticsConfig { files }))?;
+    config.type_check_cache = typecheck_cache;
 
     // Set up the configuration by the project file.
     proj_file.set_config(&mut config, false)?;
