@@ -2,14 +2,13 @@ use std::sync::Arc;
 
 use crate::{
     build_file, error::Errors, kind_star, project_file::ProjectFile, to_absolute_path,
-    Configuration, FullName, Kind, KindSignature, Name, NameSpace, Program, SubCommand,
-    TyConVariant, TyVar,
+    Configuration, FullName, Kind, KindSignature, Name, NameSpace, Program, TyConVariant, TyVar,
 };
 
 pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
     println!("Loading source files...");
     // Create the configuration.
-    let mut config = Configuration::new(SubCommand::Docs)?;
+    let mut config = Configuration::docs_mode()?;
 
     // Set up the configuration by the project file.
     let proj_file = ProjectFile::read_root_file()?;

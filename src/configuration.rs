@@ -139,6 +139,8 @@ pub struct Configuration {
     pub extra_commands: Vec<ExtraCommand>,
     // Type chech cache.
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
+    // Number of worker threads.
+    pub num_worker_thread: usize,
 }
 
 #[derive(Clone)]
@@ -205,7 +207,7 @@ impl FixOptimizationLevel {
 }
 
 impl Configuration {
-    pub fn new(subcommand: SubCommand) -> Result<Self, Errors> {
+    fn new(subcommand: SubCommand) -> Result<Self, Errors> {
         Ok(Configuration {
             subcommand,
             source_files: vec![],
@@ -226,6 +228,7 @@ impl Configuration {
             c_type_sizes: CTypeSizes::load_or_check()?,
             extra_commands: vec![],
             type_check_cache: Arc::new(typecheckcache::FileCache::new()),
+            num_worker_thread: 0,
         })
     }
 }
@@ -233,7 +236,9 @@ impl Configuration {
 impl Configuration {
     // Configuration for release build.
     pub fn release_mode(subcommand: SubCommand) -> Configuration {
-        exit_if_err(Self::new(subcommand))
+        let mut config = exit_if_err(Self::new(subcommand));
+        config.num_worker_thread = num_cpus::get();
+        config
     }
 
     // Usual configuration for compiler development
@@ -241,12 +246,27 @@ impl Configuration {
     pub fn develop_compiler_mode() -> Configuration {
         #[allow(unused_mut)]
         let mut config = exit_if_err(Self::new(SubCommand::Run));
+        config.num_worker_thread = 0;
         config.set_valgrind(ValgrindTool::MemCheck);
         // config.fix_opt_level = FixOptimizationLevel::Separated;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;
         config
+    }
+
+    // Create configuration for documentation generation.
+    pub fn docs_mode() -> Result<Configuration, Errors> {
+        let mut config = Self::new(SubCommand::Docs)?;
+        config.num_worker_thread = num_cpus::get();
+        Ok(config)
+    }
+
+    // Create configuration for diagnostics subcommand.
+    pub fn diagnostics_mode(config: DiagnosticsConfig) -> Result<Configuration, Errors> {
+        let mut config = Self::new(SubCommand::Diagnostics(config))?;
+        config.num_worker_thread = num_cpus::get();
+        Ok(config)
     }
 
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {

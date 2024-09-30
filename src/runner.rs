@@ -101,6 +101,7 @@ fn build_object_files<'c>(
         program.kind_env(),
         program.mod_to_import_stmts.clone(),
         config.type_check_cache.clone(),
+        config.num_worker_thread,
     );
 
     // Register type declarations of global symbols to typechecker.
@@ -112,6 +113,7 @@ fn build_object_files<'c>(
 
     // When running diagnostics, perform type checking of target modules and return here.
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
+        let _sw = StopWatch::new("typecheck", config.show_build_times);
         let modules = program.modules_from_files(&diag_config.files);
         program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules)?;
         return Ok(BuildObjFilesResult {

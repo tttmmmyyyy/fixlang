@@ -2,7 +2,6 @@ use crate::ast::export_statement::{ExportStatement, ExportedFunctionType};
 use crate::error::Errors;
 use import::{ImportItem, ImportStatement};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
 use std::{sync::Arc, vec};
 
 use super::*;
@@ -999,7 +998,7 @@ impl Program {
             te: Result<TypedExpr, Errors>,
             method_impl_idx: Option<usize>,
         }
-        let results = if true {
+        let results = if tc.num_worker_threads <= 1 {
             // Run tasks in the main thread.
             let mut results = vec![];
             for task in tasks {
@@ -1013,29 +1012,32 @@ impl Program {
             results
         } else {
             // Run tasks in parallel.
-            // This is not so useful. Is main bound for type-checking in IO?
-            let tasks = Arc::new(Mutex::new(tasks));
-            let results = Arc::new(Mutex::new(Vec::<CheckResult>::new()));
             let mut threads = vec![];
-            for _ in 0..(num_cpus::get() / 2) {
-                let tasks = tasks.clone();
-                let results = results.clone();
+            let tasks_per_thread = tasks.len() / tc.num_worker_threads;
+            for i in (0..tc.num_worker_threads).rev() {
+                let mut tasks = if i == 0 {
+                    std::mem::take(&mut tasks)
+                } else {
+                    tasks.split_off(tasks.len() - tasks_per_thread)
+                };
                 let thread = std::thread::spawn(move || {
-                    while let Some(task) = tasks.lock().unwrap().pop() {
+                    let mut results = vec![];
+                    while let Some(task) = tasks.pop() {
                         let te = (task.task)();
-                        results.lock().unwrap().push(CheckResult {
+                        results.push(CheckResult {
                             val_name: task.val_name,
                             te,
                             method_impl_idx: task.method_impl_idx,
                         });
                     }
+                    results
                 });
                 threads.push(thread);
             }
+            let mut results = vec![];
             for thread in threads {
-                thread.join().unwrap();
+                results.append(&mut thread.join().unwrap());
             }
-            let results = std::mem::replace(results.lock().unwrap().as_mut(), vec![]);
             results
         };
 

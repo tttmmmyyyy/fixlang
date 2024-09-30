@@ -435,6 +435,8 @@ pub struct TypeCheckContext {
     pub fixed_tyvars: HashSet<Name>,
     // Type check cache.
     pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
+    // Number of worker threads.
+    pub num_worker_threads: usize,
 }
 
 impl TypeCheckContext {
@@ -445,6 +447,7 @@ impl TypeCheckContext {
         kind_env: KindEnv,
         import_statements: HashMap<Name, Vec<ImportStatement>>,
         cache: Arc<dyn TypeCheckCache + Sync + Send>,
+        num_worker_threads: usize,
     ) -> Self {
         let assumed_preds = trait_env.qualified_predicates();
         let assumed_eqs = trait_env.type_equalities();
@@ -463,6 +466,7 @@ impl TypeCheckContext {
             assumed_eqs,
             fixed_tyvars: HashSet::default(),
             cache,
+            num_worker_threads,
         }
     }
 

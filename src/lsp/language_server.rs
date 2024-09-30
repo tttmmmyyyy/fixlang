@@ -8,7 +8,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, AnyNode, DiagnosticsConfig, FullName, Pattern, SubCommand};
+use crate::{to_absolute_path, AnyNode, DiagnosticsConfig, FullName, Pattern};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
@@ -1235,7 +1235,7 @@ pub fn run_diagnostics(
     };
 
     // Create the configuration.
-    let mut config = Configuration::new(SubCommand::Diagnostics(DiagnosticsConfig { files }))?;
+    let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
     config.type_check_cache = typecheck_cache;
 
     // Set up the configuration by the project file.

@@ -941,6 +941,7 @@ impl TraitEnv {
             kind_env,
             HashMap::new(),
             Arc::new(typecheckcache::FileCache::new()),
+            0,
         );
         // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {

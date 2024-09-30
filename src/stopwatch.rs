@@ -24,6 +24,7 @@ impl StopWatch {
         let time_str = format!("{}.{:03} sec", elapsed.as_secs(), elapsed.subsec_millis());
         let log = format!("{}: {}", self.name, time_str);
         eprintln!("{}", log);
+        // write_lsp_log(&log);
         self.running.set(false);
     }
 }
