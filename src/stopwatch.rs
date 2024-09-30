@@ -22,7 +22,8 @@ impl StopWatch {
         }
         let elapsed = self.now.elapsed();
         let time_str = format!("{}.{:03} sec", elapsed.as_secs(), elapsed.subsec_millis());
-        eprintln!("{}: {}", self.name, time_str);
+        let log = format!("{}: {}", self.name, time_str);
+        eprintln!("{}", log);
         self.running.set(false);
     }
 }

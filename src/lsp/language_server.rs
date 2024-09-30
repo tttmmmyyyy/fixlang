@@ -20,6 +20,7 @@ use lsp_types::{
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions, WorkDoneProgressBegin,
     WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
 };
+use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -87,13 +88,14 @@ pub struct DiagnosticsResult {
     pub prgoram: Program,
 }
 
+static LSP_LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
+
 // Launch the language server
 pub fn launch_language_server() {
     let mut stdin = std::io::stdin();
 
     // Prepare the log file.
-    let log_file = open_log_file();
-    write_log(log_file.clone(), "Language server started.\n");
+    write_lsp_log("Language server started.");
 
     // Prepare a channel to send requests to the diagnostics thread.
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
@@ -120,8 +122,8 @@ pub fn launch_language_server() {
         let res = stdin.read_line(&mut content_length);
         if res.is_err() {
             let mut msg = "Failed to read a line: \n".to_string();
-            msg.push_str(&format!("{:?}\n", res.unwrap_err()));
-            write_log(log_file.clone(), msg.as_str());
+            msg.push_str(&format!("{:?}", res.unwrap_err()));
+            write_lsp_log(msg.as_str());
             continue;
         }
         if content_length.trim().is_empty() {
@@ -131,8 +133,8 @@ pub fn launch_language_server() {
         // Check if the line starts with "Content-Length:".
         if !content_length.starts_with("Content-Length:") {
             let mut msg = "Expected `Content-Length:`. The line is: \n".to_string();
-            msg.push_str(&format!("{:?}\n", content_length));
-            write_log(log_file.clone(), msg.as_str());
+            msg.push_str(&format!("{:?}", content_length));
+            write_lsp_log(msg.as_str());
             continue;
         }
 
@@ -143,8 +145,8 @@ pub fn launch_language_server() {
             .parse();
         if content_length.is_err() {
             let mut msg = "Failed to parse the content length: \n".to_string();
-            msg.push_str(&format!("{:?}\n", content_length.err().unwrap()));
-            write_log(log_file.clone(), msg.as_str());
+            msg.push_str(&format!("{:?}", content_length.err().unwrap()));
+            write_lsp_log(msg.as_str());
             continue;
         }
         let content_length = content_length.unwrap();
@@ -156,8 +158,8 @@ pub fn launch_language_server() {
             if res.is_err() {
                 let e = res.unwrap_err();
                 let mut msg = "Failed to read a line: \n".to_string();
-                msg.push_str(&format!("{:?}\n", e));
-                write_log(log_file.clone(), msg.as_str());
+                msg.push_str(&format!("{:?}", e));
+                write_lsp_log(msg.as_str());
                 continue;
             }
             if line.trim().is_empty() {
@@ -170,17 +172,14 @@ pub fn launch_language_server() {
         let res = stdin.read_exact(&mut message);
         if res.is_err() {
             let mut msg = "Failed to read the message: \n".to_string();
-            msg.push_str(&format!("{:?}\n", res.unwrap_err()));
-            write_log(log_file.clone(), msg.as_str());
+            msg.push_str(&format!("{:?}", res.unwrap_err()));
+            write_lsp_log(msg.as_str());
             continue;
         }
         let message = String::from_utf8(message);
         if message.is_err() {
-            write_log(
-                log_file.clone(),
-                "Failed to parse the message as utf-8 string: \n",
-            );
-            write_log(log_file.clone(), &format!("{:?}\n", message.unwrap_err()));
+            write_lsp_log("Failed to parse the message as utf-8 string: ");
+            write_lsp_log(&format!("{:?}", message.unwrap_err()));
             continue;
         }
         let message = message.unwrap();
@@ -188,11 +187,8 @@ pub fn launch_language_server() {
         // Parse the message as JSONRPCMessage.
         let message: Result<JSONRPCMessage, _> = serde_json::from_str(&message);
         if message.is_err() {
-            write_log(
-                log_file.clone(),
-                "Failed to parse the message as JSONRPCMessage: \n",
-            );
-            write_log(log_file.clone(), &format!("{:?}\n", message.err().unwrap()));
+            write_lsp_log("Failed to parse the message as JSONRPCMessage: ");
+            write_lsp_log(&format!("{:?}", message.err().unwrap()));
             continue;
         }
         let message = message.unwrap();
@@ -200,25 +196,23 @@ pub fn launch_language_server() {
         // Depending on the method, handle the message.
         if let Some(method) = message.method.as_ref() {
             if method == "initialize" {
-                let id = parse_id(&message, method, log_file.clone());
+                let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
                 }
-                let params: Option<InitializeParams> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                let params: Option<InitializeParams> = parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
-                handle_initialize(id.unwrap(), &params.unwrap(), log_file.clone());
+                handle_initialize(id.unwrap(), &params.unwrap());
             } else if method == "initialized" {
-                let params: Option<InitializedParams> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                let params: Option<InitializedParams> = parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
                 if diag_req_recv.is_none() {
-                    let msg = "\"initialized\" method is sent twice.\n".to_string();
-                    write_log(log_file.clone(), msg.as_str());
+                    let msg = "\"initialized\" method is sent twice.".to_string();
+                    write_lsp_log(msg.as_str());
                     continue;
                 }
                 handle_initialized(
@@ -226,42 +220,33 @@ pub fn launch_language_server() {
                     diag_req_send.clone(),
                     diag_req_recv.take().unwrap(),
                     diag_res_send.clone(),
-                    log_file.clone(),
                 );
             } else if method == "shutdown" {
-                let id = parse_id(&message, method, log_file.clone());
+                let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
                 }
-                handle_shutdown(id.unwrap(), diag_req_send.clone(), log_file.clone());
+                handle_shutdown(id.unwrap(), diag_req_send.clone());
             } else if method == "exit" {
-                write_log(log_file.clone(), "Exiting the language server.\n");
+                write_lsp_log("Exiting the language server.");
                 break;
             } else if method == "textDocument/didOpen" {
                 let params: Option<DidOpenTextDocumentParams> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                    parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
-                handle_textdocument_did_open(
-                    &params.unwrap(),
-                    &mut uri_to_latest_content,
-                    log_file.clone(),
-                );
+                handle_textdocument_did_open(&params.unwrap(), &mut uri_to_latest_content);
             } else if method == "textDocument/didChange" {
                 let params: Option<DidChangeTextDocumentParams> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                    parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
-                handle_textdocument_did_change(
-                    &params.unwrap(),
-                    &mut uri_to_latest_content,
-                    log_file.clone(),
-                );
+                handle_textdocument_did_change(&params.unwrap(), &mut uri_to_latest_content);
             } else if method == "textDocument/didSave" {
                 let params: Option<DidSaveTextDocumentParams> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                    parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -269,54 +254,45 @@ pub fn launch_language_server() {
                     diag_req_send.clone(),
                     &params.unwrap(),
                     &mut uri_to_latest_content,
-                    log_file.clone(),
                 );
             } else if method == "textDocument/completion" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().prgoram;
-                let id = parse_id(&message, method, log_file.clone());
+                let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
                 }
-                let params: Option<CompletionParams> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                let params: Option<CompletionParams> = parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
-                handle_completion(id.unwrap(), &params.unwrap(), program, log_file.clone());
+                handle_completion(id.unwrap(), &params.unwrap(), program);
             } else if method == "completionItem/resolve" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().prgoram;
-                let id = parse_id(&message, method, log_file.clone());
+                let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
                 }
-                let params: Option<CompletionItem> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                let params: Option<CompletionItem> = parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
-                handle_completion_resolve_document(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    program,
-                    log_file.clone(),
-                );
+                handle_completion_resolve_document(id.unwrap(), &params.unwrap(), program);
             } else if method == "textDocument/hover" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().prgoram;
-                let id = parse_id(&message, method, log_file.clone());
+                let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
                 }
-                let params: Option<HoverParams> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                let params: Option<HoverParams> = parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -325,19 +301,17 @@ pub fn launch_language_server() {
                     &params.unwrap(),
                     program,
                     &uri_to_latest_content,
-                    log_file.clone(),
                 );
             } else if method == "textDocument/definition" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().prgoram;
-                let id = parse_id(&message, method, log_file.clone());
+                let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
                 }
-                let params: Option<GotoDefinitionParams> =
-                    parase_params(message.params.unwrap(), log_file.clone());
+                let params: Option<GotoDefinitionParams> = parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -346,28 +320,26 @@ pub fn launch_language_server() {
                     &params.unwrap(),
                     program,
                     &uri_to_latest_content,
-                    log_file.clone(),
                 );
             }
         }
     }
 }
 
-fn parase_params<T: DeserializeOwned>(params: Value, log_file: Arc<Mutex<File>>) -> Option<T> {
+fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
     let params: Result<T, _> = serde_json::from_value(params);
     if params.is_err() {
         let mut msg = "Failed to parse the params: \n".to_string();
-        msg.push_str(&format!("{:?}\n", params.err().unwrap()));
-        write_log(log_file.clone(), msg.as_str());
+        msg.push_str(&format!("{:?}", params.err().unwrap()));
+        write_lsp_log(msg.as_str());
         return None;
     }
     params.ok()
 }
 
-fn parse_id(message: &JSONRPCMessage, method: &str, log_file: Arc<Mutex<File>>) -> Option<u32> {
+fn parse_id(message: &JSONRPCMessage, method: &str) -> Option<u32> {
     if message.id.is_none() {
-        write_log(
-            log_file,
+        write_lsp_log(
             format!(
                 "Failed to get \"id\" from the message for method \"{}\".\n",
                 method
@@ -426,7 +398,7 @@ fn send_message(msg: &JSONRPCMessage) {
         .expect("Failed to flush the stdout.");
 }
 
-fn open_log_file() -> Arc<Mutex<File>> {
+fn open_log_file() -> Mutex<File> {
     // Get parent directory of path `LSP_LOG_FILE_PATH`.
     let parent_dir = std::path::Path::new(LSP_LOG_FILE_PATH)
         .parent()
@@ -445,11 +417,11 @@ fn open_log_file() -> Arc<Mutex<File>> {
         .expect(format!("Failed to open `{}` file.", LSP_LOG_FILE_PATH).as_str());
 
     // Wrap it into a mutex.
-    Arc::new(Mutex::new(file))
+    Mutex::new(file)
 }
 
-fn write_log(file: Arc<Mutex<File>>, message: &str) {
-    let mut file = file.lock().expect("Failed to lock the log file.");
+pub fn write_lsp_log(message: &str) {
+    let mut file = LSP_LOG_FILE.lock().expect("Failed to lock the log file.");
     if WRITE_LOG {
         file.write_all(message.as_bytes())
             .expect("Failed to write a message to the log file.");
@@ -458,7 +430,7 @@ fn write_log(file: Arc<Mutex<File>>, message: &str) {
 }
 
 // Handle "initialize" method.
-fn handle_initialize(id: u32, _params: &InitializeParams, _log_file: Arc<Mutex<File>>) {
+fn handle_initialize(id: u32, _params: &InitializeParams) {
     // Return server capabilities.
     let result = InitializeResult {
         capabilities: ServerCapabilities {
@@ -529,41 +501,38 @@ fn handle_initialized(
     diag_req_send: Sender<DiagnosticsMessage>,
     diag_req_recv: Receiver<DiagnosticsMessage>,
     diag_res_send: Sender<DiagnosticsResult>,
-    log_file: Arc<Mutex<File>>,
 ) {
     // Launch the diagnostics thread.
-    let log_file_cloned = log_file.clone();
     std::thread::spawn(|| {
         let res = std::panic::catch_unwind(|| {
-            diagnostics_thread(diag_req_recv, diag_res_send, log_file_cloned.clone());
+            diagnostics_thread(diag_req_recv, diag_res_send);
         });
         if res.is_err() {
             // If a panic occurs in the diagnostics thread,
             send_diagnostics_error_message(
                 "Diagnostics stopped. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this! Repo: https://github.com/tttmmmyyyy/fixlang".to_string(),
-                log_file_cloned.clone(),
             );
             let mut msg = "Panic occurred in the diagnostics thread: \n".to_string();
-            msg.push_str(&format!("{}\n", any_to_string(res.err().as_ref().unwrap())));
-            write_log(log_file_cloned, msg.as_str());
+            msg.push_str(&format!("{}", any_to_string(res.err().as_ref().unwrap())));
+            write_lsp_log(msg.as_str());
         }
     });
 
     // Send `Start` message to the diagnostics thread.
     if let Err(e) = diag_req_send.send(DiagnosticsMessage::Start) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
-        msg.push_str(&format!("{:?}\n", e));
-        write_log(log_file.clone(), msg.as_str());
+        msg.push_str(&format!("{:?}", e));
+        write_lsp_log(msg.as_str());
     }
 }
 
 // Handle "shutdown" method.
-fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>, _log_file: Arc<Mutex<File>>) {
+fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>) {
     // Shutdown the diagnostics thread.
     if let Err(e) = diag_send.send(DiagnosticsMessage::Stop) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
-        msg.push_str(&format!("{:?}\n", e));
-        write_log(_log_file.clone(), msg.as_str());
+        msg.push_str(&format!("{:?}", e));
+        write_lsp_log(msg.as_str());
     }
 
     // Respond to the client.
@@ -575,7 +544,6 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>, _log_file: Ar
 fn handle_textdocument_did_open(
     params: &DidOpenTextDocumentParams,
     uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
-    _log_file: Arc<Mutex<File>>,
 ) {
     // Store the content of the file into the maps.
     uri_to_latest_content.insert(
@@ -588,7 +556,6 @@ fn handle_textdocument_did_open(
 fn handle_textdocument_did_change(
     params: &DidChangeTextDocumentParams,
     uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
-    _log_file: Arc<Mutex<File>>,
 ) {
     // Store the content of the file into `uri_to_content`.
     if let Some(change) = params.content_changes.last() {
@@ -601,14 +568,13 @@ fn handle_textdocument_did_save(
     diag_send: Sender<DiagnosticsMessage>,
     params: &DidSaveTextDocumentParams,
     uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
-    log_file: Arc<Mutex<File>>,
 ) {
     // Store the content of the file into maps.
     if let Some(text) = &params.text {
         uri_to_latest_content.insert(params.text_document.uri.clone(), text.clone());
     } else {
         let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
-        write_log(log_file.clone(), msg.as_str());
+        write_lsp_log(msg.as_str());
     }
 
     // Get the path of the saved file.
@@ -617,18 +583,13 @@ fn handle_textdocument_did_save(
     // Send a message to the diagnostics thread.
     if let Err(e) = diag_send.send(DiagnosticsMessage::OnSaveFile(path)) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
-        msg.push_str(&format!("{:?}\n", e));
-        write_log(log_file.clone(), msg.as_str());
+        msg.push_str(&format!("{:?}", e));
+        write_lsp_log(msg.as_str());
     }
 }
 
 // Handle "textDocument/completion" method.
-fn handle_completion(
-    id: u32,
-    _params: &CompletionParams,
-    program: &Program,
-    _log_file: Arc<Mutex<File>>,
-) {
+fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
     let mut items = vec![];
     for (full_name, gv) in &program.global_values {
         let name = full_name.name.clone();
@@ -668,16 +629,11 @@ fn handle_completion(
 
 // Handle "textDocument/completion" method.
 // Add documentation to the completion item.
-fn handle_completion_resolve_document(
-    id: u32,
-    params: &CompletionItem,
-    program: &Program,
-    log_file: Arc<Mutex<File>>,
-) {
+fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program: &Program) {
     // Extract the full name of the global value for which completion is requested from the params.
     if params.data.is_none() {
         let msg = "Failed to get the data from the params.".to_string();
-        write_log(log_file.clone(), msg.as_str());
+        write_lsp_log(msg.as_str());
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
@@ -685,7 +641,7 @@ fn handle_completion_resolve_document(
     let full_name = FullName::parse(full_name_str);
     if full_name.is_none() {
         let msg = format!("Failed to parse the full name `{}`.", full_name_str);
-        write_log(log_file.clone(), msg.as_str());
+        write_lsp_log(msg.as_str());
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
@@ -695,7 +651,7 @@ fn handle_completion_resolve_document(
     let gv = program.global_values.get(&full_name);
     if gv.is_none() {
         let msg = format!("No value named `{}` is found.", full_name_str);
-        write_log(log_file.clone(), msg.as_str());
+        write_lsp_log(msg.as_str());
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
@@ -774,15 +730,14 @@ fn get_node_at(
     text_position: &TextDocumentPositionParams,
     program: &Program,
     uri_to_content: &HashMap<lsp_types::Uri, String>,
-    log_file: Arc<Mutex<File>>,
 ) -> Option<AnyNode> {
     // Get the latest file content.
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
         let msg = format!("No stored content for the uri \"{}\".", uri.to_string());
-        write_log(log_file.clone(), msg.as_str());
+        write_lsp_log(msg.as_str());
         let msg = format!("{:?}", uri_to_content);
-        write_log(log_file.clone(), msg.as_str());
+        write_lsp_log(msg.as_str());
         return None;
     }
     let latest_content = uri_to_content.get(uri).unwrap();
@@ -793,7 +748,7 @@ fn get_node_at(
     // Get the file content at the time of the last successful diagnostics.
     let saved_content = get_file_content_at_previous_diagnostics(program, &path);
     if let Err(e) = saved_content {
-        write_log(log_file.clone(), &e);
+        write_lsp_log(&e);
         return None;
     }
     let saved_content = saved_content.ok().unwrap();
@@ -821,14 +776,12 @@ fn handle_goto_definition(
     params: &GotoDefinitionParams,
     program: &Program,
     uri_to_content: &HashMap<lsp_types::Uri, String>,
-    log_file: Arc<Mutex<File>>,
 ) {
     // Get the node at the cursor position.
     let node = get_node_at(
         &params.text_document_position_params,
         program,
         uri_to_content,
-        log_file.clone(),
     );
     if node.is_none() {
         send_response(id, Ok::<_, ()>(None::<()>));
@@ -876,8 +829,8 @@ fn handle_goto_definition(
     let cdir = std::env::current_dir();
     if cdir.is_err() {
         let mut msg = "Failed to get the current directory: \n".to_string();
-        msg.push_str(&format!("{:?}\n", cdir.err().unwrap()));
-        write_log(log_file.clone(), msg.as_str());
+        msg.push_str(&format!("{:?}", cdir.err().unwrap()));
+        write_lsp_log(msg.as_str());
         return;
     }
     let cdir = cdir.unwrap();
@@ -900,14 +853,12 @@ fn handle_hover(
     params: &HoverParams,
     program: &Program,
     uri_to_content: &HashMap<lsp_types::Uri, String>,
-    log_file: Arc<Mutex<File>>,
 ) {
     // Get the node at the cursor position.
     let node = get_node_at(
         &params.text_document_position_params,
         program,
         uri_to_content,
-        log_file.clone(),
     );
     if node.is_none() {
         send_response(id, Ok::<_, ()>(None::<()>));
@@ -1006,11 +957,7 @@ fn position_to_bytes(string: &str, position: lsp_types::Position) -> usize {
 }
 
 // The entry point of the diagnostics thread.
-fn diagnostics_thread(
-    req_recv: Receiver<DiagnosticsMessage>,
-    res_send: Sender<DiagnosticsResult>,
-    log_file: Arc<Mutex<File>>,
-) {
+fn diagnostics_thread(req_recv: Receiver<DiagnosticsMessage>, res_send: Sender<DiagnosticsResult>) {
     let mut prev_err_paths = HashSet::new();
     let typecheck_cache = Arc::new(typecheckcache::MemoryCache::new());
 
@@ -1062,7 +1009,6 @@ fn diagnostics_thread(
         prev_err_paths = send_diagnostics_notification(
             errs,
             std::mem::replace(&mut prev_err_paths, HashSet::new()),
-            log_file.clone(),
         );
     }
 }
@@ -1093,7 +1039,6 @@ fn span_to_range(span: &Span) -> lsp_types::Range {
 fn send_diagnostics_notification(
     errs: Errors,
     mut prev_err_paths: HashSet<PathBuf>,
-    log_file: Arc<Mutex<File>>,
 ) -> HashSet<PathBuf> {
     let mut err_paths = HashSet::new();
 
@@ -1101,8 +1046,8 @@ fn send_diagnostics_notification(
     let cdir = std::env::current_dir();
     if cdir.is_err() {
         let mut msg = "Failed to get the current directory: \n".to_string();
-        msg.push_str(&format!("{:?}\n", cdir.err().unwrap()));
-        write_log(log_file.clone(), msg.as_str());
+        msg.push_str(&format!("{:?}", cdir.err().unwrap()));
+        write_lsp_log(msg.as_str());
         return err_paths;
     }
     let cdir = cdir.unwrap();
@@ -1115,10 +1060,10 @@ fn send_diagnostics_notification(
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(path));
         if uri.is_err() {
-            write_log(
-                log_file.clone(),
-                &format!("Failed to convert path to uri: {:?}\n", uri.unwrap_err()),
-            );
+            write_lsp_log(&format!(
+                "Failed to convert path to uri: {:?}",
+                uri.unwrap_err()
+            ));
             continue;
         }
         let uri = uri.unwrap();
@@ -1128,7 +1073,7 @@ fn send_diagnostics_notification(
             uri,
             diagnostics: errs
                 .iter()
-                .map(|err| error_to_diagnostics(err, &cdir, log_file.clone()))
+                .map(|err| error_to_diagnostics(err, &cdir))
                 .collect(),
             version: None,
         };
@@ -1140,7 +1085,7 @@ fn send_diagnostics_notification(
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(path));
         if uri.is_err() {
-            write_log(log_file.clone(), &(uri.unwrap_err() + "\n"));
+            write_lsp_log(&(uri.unwrap_err()));
             continue;
         }
         let uri = uri.unwrap();
@@ -1158,26 +1103,23 @@ fn send_diagnostics_notification(
 }
 
 // Send the diagnostics notification to the client which informs that an error occurred.
-fn send_diagnostics_error_message(msg: String, log_file: Arc<Mutex<File>>) {
+fn send_diagnostics_error_message(msg: String) {
     // Get the current directory.
     let cdir = std::env::current_dir();
     if cdir.is_err() {
         let mut msg = "Failed to get the current directory: \n".to_string();
-        msg.push_str(&format!("{:?}\n", cdir.err().unwrap()));
-        write_log(log_file.clone(), msg.as_str());
+        msg.push_str(&format!("{:?}", cdir.err().unwrap()));
+        write_lsp_log(msg.as_str());
         return;
     }
     let cdir = cdir.unwrap();
     // Convert path to uri.
     let cdir_uri = path_to_uri(&cdir);
     if cdir_uri.is_err() {
-        write_log(
-            log_file.clone(),
-            &format!(
-                "Failed to convert path to uri: {:?}\n",
-                cdir_uri.unwrap_err()
-            ),
-        );
+        write_lsp_log(&format!(
+            "Failed to convert path to uri: {:?}",
+            cdir_uri.unwrap_err()
+        ));
         return;
     }
     let cdir_uri = cdir_uri.unwrap();
@@ -1211,11 +1153,7 @@ fn send_diagnostics_error_message(msg: String, log_file: Arc<Mutex<File>>) {
 }
 
 // Convert an `Error` into a diagnostic message.
-fn error_to_diagnostics(
-    err: &Error,
-    cdir: &PathBuf,
-    log_file: Arc<Mutex<File>>,
-) -> lsp_types::Diagnostic {
+fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
     // Show error at the first span in `err`.
     let range = err
         .srcs
@@ -1229,10 +1167,10 @@ fn error_to_diagnostics(
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(&span.input.file_path));
         if uri.is_err() {
-            write_log(
-                log_file.clone(),
-                &format!("Failed to convert path to uri: {:?}\n", uri.unwrap_err()),
-            );
+            write_lsp_log(&format!(
+                "Failed to convert path to uri: {:?}",
+                uri.unwrap_err()
+            ));
             continue;
         }
         let uri = uri.unwrap();
