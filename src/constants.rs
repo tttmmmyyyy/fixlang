@@ -107,6 +107,11 @@ pub const LSP_LOG_FILE_PATH: &str = ".fixlang/lsp.log";
 pub const PROJECT_FILE_PATH: &str = "fixproj.toml";
 pub const LOCK_FILE_PATH: &str = "fixdeps.lock";
 pub const EXTERNAL_PROJ_INSTALL_PATH: &str = ".fixlang/deps";
+pub const FIX_CONFIG_FILE_NAME: &str = ".fixconfig.toml";
+
+// Urls
+pub const DEFAULT_REGISTRY: &str =
+    "https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml";
 
 // Optimization levels
 pub const OPTIMIZATION_LEVEL_NONE: &str = "none";

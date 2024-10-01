@@ -1,4 +1,5 @@
 use crate::{
+    config_file::ConfigFile,
     dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
     registry_file::RegistryFile,
@@ -28,9 +29,6 @@ pub struct ProjectFileGeneral {
     // The description of the project.
     #[allow(unused)]
     pub description: Option<String>,
-    // `registries` section
-    #[serde(default)]
-    pub registries: Vec<String>,
     // The authors of the project.
     #[allow(unused)]
     pub authors: Option<Vec<String>>,
@@ -621,7 +619,11 @@ impl ProjectFile {
     }
 
     // Add dependencies to Fix projects to the project file.
-    pub fn add_dependencies(&self, proj_vers: &Vec<String>) -> Result<(), Errors> {
+    pub fn add_dependencies(
+        &self,
+        proj_vers: &Vec<String>,
+        fix_config: &ConfigFile,
+    ) -> Result<(), Errors> {
         let mut added = "".to_string();
 
         // Parse each element of `proj_vars` as the form `proj-name@ver_req`.
@@ -674,7 +676,7 @@ impl ProjectFile {
         }
 
         // Fetch the registry files.
-        for reg_url in &self.general.registries {
+        for reg_url in &fix_config.registries {
             let reg_res = reqwest::blocking::get(reg_url).map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to fetch registry file \"{}\": {:?}",

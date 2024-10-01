@@ -12,6 +12,7 @@
 - Add `FFI_EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `FFI_EXPORT`.
 - Add experimental support for language server protocol.
 - Add support for project file ("fixproj.toml").
+- Add support for configuration file ("~/.fixconfig.toml").
 - Add `fix deps` subccommand, which manages dependencies of a Fix project.
 - Add `fix docs` subcommand, which generates the document for a Fix project.
 - Add `fix test` subcommand, which runs `Test::test`.

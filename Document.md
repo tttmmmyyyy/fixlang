@@ -67,7 +67,8 @@
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
   - [Operators](#operators)
 - [Compiler feature](#compiler-feature)
-  - [Fix projects](#fix-projects)
+  - [Project file](#project-file)
+  - [Configuration file](#configuration-file)
   - [Generating documentation](#generating-documentation)
   - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
@@ -1708,7 +1709,7 @@ The following is the table of operators sorted by its precedence (operator of hi
 
 # Compiler feature
 
-## Fix projects
+## Project file
 
 If you are working on a non-trivial Fix program, you may want to
 - compile many Fix source files,
@@ -1721,6 +1722,22 @@ The project file should have a name "fixproj.toml".
 If a project file exists in the current directory, sucommands of "fix" will read and consider it.
 
 "fix init" command generates a template project file. To learn more about the project file, read the comments in it.
+
+## Configuration file
+
+You can specify the bahavior of "fix" command by a configuration file named ".fixproj.toml" in the home directory.
+
+The fields allowed in the configuration file are as follows:
+
+```
+# URLs to the registry files.
+# "fix deps add {proj-name}@{ver-req}" command will search the project in the registry files from the first to the last, and if found, adds "[[dependencies]]" section to the project file at the current directory.
+# The default registry "https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml" is implicitly added to the end of the list.
+registries = [
+    "https://first-searched-registry.com/registry.toml"
+    "https://second-searched-registry.com/registry.toml"
+]
+```
 
 ## Generating documentation
 

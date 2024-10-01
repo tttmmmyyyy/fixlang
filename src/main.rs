@@ -25,6 +25,7 @@ mod ast;
 mod borrowing_optimization;
 mod builtin;
 mod compile_unit;
+mod config_file;
 mod configuration;
 mod constants;
 mod cpu_features;
@@ -66,6 +67,7 @@ use builtin::*;
 use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
+use config_file::ConfigFile;
 use configuration::*;
 use constants::*;
 use dependency_lockfile::DependecyLockFile;
@@ -238,8 +240,13 @@ fn main() {
     let deps_update = App::new("update").about(
         "Update the lock file and install dependencies so that it satisfies the dependencies specified in the project file.",
     );
+    let add_about_str = format!("Add dependency to Fix projects.\n\
+        Repositories of Fix projects are searched in the registry files listed in \"~/.fixconfig.toml\" and the built-in registry \"{}\".\n\
+        If a repository which hosts the specified project is found, `[[dependencies]]` table is added to \"fixproj.toml\".", DEFAULT_REGISTRY);
+    let add_about_str: &'static str = add_about_str.leak();
     let deps_add = App::new("add")
-        .about("Add dependency to the specified project. Fix projects are searched in the registry files. This command requires \"fixproj.toml\" to be present in the current directory.")
+        .about("Add dependency to Fix projects.")
+        .long_about(Some(add_about_str))
         .arg(Arg::new("projects")
             .multiple_values(true)
             .takes_value(true)
@@ -440,17 +447,19 @@ fn main() {
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
         let mut config = Configuration::release_mode(subcommand);
 
-        // First, set up configuration from the project file if it exists.
+        // Set up configuration from the project file if it exists.
         if Path::new(PROJECT_FILE_PATH).exists() {
             let proj_file = exit_if_err(ProjectFile::read_root_file());
             exit_if_err(proj_file.set_config(&mut config, false));
             exit_if_err(proj_file.install_dependencies(&mut config));
         }
 
-        // Secondly, set up configuration from the command line arguments, to overwrite the configuration described in the project file.
+        // Set up configuration from the command line arguments, to overwrite the configuration described in the project file.
         exit_if_err(set_config_from_args(&mut config, args));
         config
     }
+
+    let fix_config = exit_if_err(ConfigFile::load());
 
     match app.get_matches().subcommand() {
         Some(("build", args)) => {
@@ -473,7 +482,7 @@ fn main() {
             Some(("add", args)) => {
                 let projects = read_projects_option(args);
                 let proj_file = exit_if_err(ProjectFile::read_root_file());
-                exit_if_err(proj_file.add_dependencies(&projects));
+                exit_if_err(proj_file.add_dependencies(&projects, &fix_config));
                 exit_if_err(DependecyLockFile::update_and_install());
             }
             _ => eprintln!("Unknown command!"),

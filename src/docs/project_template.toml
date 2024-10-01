@@ -14,13 +14,6 @@ version = "0.1.0"
 ## Project license.
 # license = "MIT"
 
-## Registry URLs to search for dependent Fix projects.
-## "fix deps add {project-name}@{version-req}" command searches the required Fix project from the registries and adds it to the `[[dependencies]]` array if found.
-## The former registry is searched earlier.
-registries = [
-    "https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml",
-]
-
 [build]
 ## Fix source files to be compiled.
 ## Merged with files specified in the command line argument.
