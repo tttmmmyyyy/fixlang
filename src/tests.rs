@@ -6390,6 +6390,7 @@ pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-regexp.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-asynctask.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-gmp.git");
+    test_external_project("https://github.com/tttmmmyyyy/fixlang-misc-algos.git");
 }
 
 // Run `cargo install --locked --path .`.
