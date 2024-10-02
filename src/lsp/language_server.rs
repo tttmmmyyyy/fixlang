@@ -978,6 +978,8 @@ fn diagnostics_thread(req_recv: Receiver<DiagnosticsMessage>, res_send: Sender<D
                 break;
             }
             DiagnosticsMessage::OnSaveFile(_path) => {
+                // TODO: we should run diagnostics only for the saved file and its dependents.
+                // To achieve it, we need to write a mechanism to update diagnostics result (i.e. the Program and the Errors) incrementally.
                 send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
                 run_diagnostics(typecheck_cache.clone())
             }
