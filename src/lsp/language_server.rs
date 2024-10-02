@@ -977,19 +977,13 @@ fn diagnostics_thread(req_recv: Receiver<DiagnosticsMessage>, res_send: Sender<D
                 // Stop the diagnostics thread.
                 break;
             }
-            DiagnosticsMessage::OnSaveFile(path) => {
-                send_work_done_progress_begin(
-                    WORK_DONE_PROGRESS_TOKEN,
-                    format!("Running diagnostics ({})", path.to_string_lossy()).as_str(),
-                );
-                run_diagnostics(Some(path), typecheck_cache.clone())
+            DiagnosticsMessage::OnSaveFile(_path) => {
+                send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
+                run_diagnostics(typecheck_cache.clone())
             }
             DiagnosticsMessage::Start => {
-                send_work_done_progress_begin(
-                    WORK_DONE_PROGRESS_TOKEN,
-                    "Running diagnostics (all files)",
-                );
-                run_diagnostics(None, typecheck_cache.clone())
+                send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
+                run_diagnostics(typecheck_cache.clone())
             }
         };
 
@@ -1215,21 +1209,14 @@ fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
     Ok(uri.unwrap())
 }
 
-pub fn run_diagnostics(
-    file: Option<PathBuf>,
-    typecheck_cache: SharedTypeCheckCache,
-) -> Result<DiagnosticsResult, Errors> {
+pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<DiagnosticsResult, Errors> {
     // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
 
     // Read the project file.
     let proj_file = ProjectFile::read_root_file()?;
 
     // Determine the source files for which diagnostics are run.
-    let files = if let Some(file) = file {
-        vec![file]
-    } else {
-        proj_file.get_files(true)
-    };
+    let files = proj_file.get_files(true);
 
     // Create the configuration.
     let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
