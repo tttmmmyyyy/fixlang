@@ -14,6 +14,18 @@ pub struct TypeDefn {
 }
 
 impl TypeDefn {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        if self.source.is_none() {
+            return None;
+        }
+        let span = self.source.as_ref().unwrap();
+        if !span.includes_pos(pos) {
+            return None;
+        }
+        self.value.find_node_at(pos)
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         assert!(
             self.name
@@ -168,6 +180,15 @@ pub enum TypeDeclValue {
 }
 
 impl TypeDeclValue {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        match self {
+            TypeDeclValue::Struct(s) => s.find_node_at(pos),
+            TypeDeclValue::Union(u) => u.find_node_at(pos),
+            TypeDeclValue::Alias(a) => a.find_node_at(pos),
+        }
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         match self {
             TypeDeclValue::Struct(s) => s.resolve_namespace(ctx),
@@ -207,6 +228,16 @@ pub struct Struct {
 }
 
 impl Struct {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        for f in &self.fields {
+            if let Some(node) = f.find_node_at(pos) {
+                return Some(node);
+            }
+        }
+        None
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         for f in &mut self.fields {
             f.resolve_namespace(ctx)?;
@@ -235,6 +266,16 @@ pub struct Union {
 }
 
 impl Union {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        for f in &self.fields {
+            if let Some(node) = f.find_node_at(pos) {
+                return Some(node);
+            }
+        }
+        None
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         for f in &mut self.fields {
             f.resolve_namespace(ctx)?;
@@ -262,6 +303,11 @@ pub struct TypeAlias {
 }
 
 impl TypeAlias {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        self.value.find_node_at(pos)
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         self.value = self.value.resolve_namespace(ctx)?;
         Ok(())
@@ -280,6 +326,11 @@ pub struct Field {
 }
 
 impl Field {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        self.ty.find_node_at(pos)
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())

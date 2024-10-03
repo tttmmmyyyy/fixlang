@@ -6,15 +6,15 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
-// Identifier to spacify trait.
+// A trait.
 #[derive(Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct TraitId {
+pub struct Trait {
     pub name: FullName,
 }
 
-impl TraitId {
-    pub fn from_fullname(name: FullName) -> TraitId {
-        TraitId { name }
+impl Trait {
+    pub fn from_fullname(name: FullName) -> Trait {
+        Trait { name }
     }
 
     pub fn to_string(&self) -> String {
@@ -166,7 +166,7 @@ impl MethodInfo {
 #[derive(Clone)]
 pub struct TraitInfo {
     // Identifier of this trait (i.e. the name).
-    pub id: TraitId,
+    pub trait_: Trait,
     // Type variable used in trait definition.
     pub type_var: Arc<TyVar>,
     // Methods of this trait.
@@ -238,7 +238,7 @@ impl TraitInfo {
         let mut vars = vec![];
         method_info.qual_ty.free_vars_vec(&mut vars);
         let mut preds = vec![Predicate::make(
-            self.id.clone(),
+            self.trait_.clone(),
             type_from_tyvar(self.type_var.clone()),
         )];
         preds.append(&mut method_info.qual_ty.preds);
@@ -277,7 +277,7 @@ impl TraitInfo {
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "The type variable used in the assumption of trait `{}` has to be `{}`.",
-                        self.id.to_string(),
+                        self.trait_.to_string(),
                         self.type_var.name,
                     ),
                     &[&self.kind_signs[0].source],
@@ -350,12 +350,12 @@ impl TraitInstance {
     }
 
     // Get trait id.
-    fn trait_id(&self) -> TraitId {
+    fn trait_id(&self) -> Trait {
         self.qual_pred.predicate.trait_id.clone()
     }
 
     // Get mutable trait id.
-    fn trait_id_mut(&mut self) -> &mut TraitId {
+    fn trait_id_mut(&mut self) -> &mut Trait {
         &mut self.qual_pred.predicate.trait_id
     }
 
@@ -405,9 +405,9 @@ impl TraitInstance {
 #[derive(Clone)]
 pub struct TraitAlias {
     // Identifier of this trait (i.e., the name).
-    pub id: TraitId,
+    pub id: Trait,
     // Aliased traits.
-    pub value: Vec<TraitId>,
+    pub value: Vec<Trait>,
     // Source location of alias definition.
     pub source: Option<Span>,
     // Kind of this trait alias.
@@ -664,7 +664,7 @@ impl QualType {
 // Statement such as "String : Show" or "a : Eq".
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Predicate {
-    pub trait_id: TraitId,
+    pub trait_id: Trait,
     pub ty: Arc<TypeNode>,
     pub source: Option<Span>,
 }
@@ -678,7 +678,7 @@ impl Predicate {
         self.source = Some(source);
     }
 
-    pub fn make(trait_id: TraitId, ty: Arc<TypeNode>) -> Self {
+    pub fn make(trait_id: Trait, ty: Arc<TypeNode>) -> Self {
         Predicate {
             trait_id,
             ty,
@@ -913,9 +913,9 @@ pub struct EqualityScheme {
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
-    pub traits: HashMap<TraitId, TraitInfo>,
-    pub instances: HashMap<TraitId, Vec<TraitInstance>>,
-    pub aliases: HashMap<TraitId, TraitAlias>,
+    pub traits: HashMap<Trait, TraitInfo>,
+    pub instances: HashMap<Trait, Vec<TraitInstance>>,
+    pub aliases: HashMap<Trait, TraitAlias>,
 }
 
 impl TraitEnv {
@@ -935,7 +935,7 @@ impl TraitEnv {
         let mut errors = Errors::empty();
 
         // Check name confliction of traits and aliases.
-        fn create_conflicting_error(env: &TraitEnv, trait_id: &TraitId) -> Errors {
+        fn create_conflicting_error(env: &TraitEnv, trait_id: &Trait) -> Errors {
             let this_src = &env.traits.get(trait_id).unwrap().source;
             let other_src = &env.aliases.get(trait_id).unwrap().source;
             Errors::from_msg_srcs(
@@ -1189,7 +1189,7 @@ impl TraitEnv {
 
         // Resolve names in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
-        let mut instances_resolved: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
+        let mut instances_resolved: HashMap<Trait, Vec<TraitInstance>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Set up NameResolutionContext.
@@ -1227,7 +1227,7 @@ impl TraitEnv {
 
         // Resolve aliases in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
-        let mut instances_resolved: HashMap<TraitId, Vec<TraitInstance>> = Default::default();
+        let mut instances_resolved: HashMap<Trait, Vec<TraitInstance>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Resolve names in TrantInstance.
@@ -1268,14 +1268,17 @@ impl TraitEnv {
     // Add a trait to TraitEnv.
     pub fn add_trait(&mut self, info: TraitInfo) -> Result<(), Errors> {
         // Check Duplicate definition.
-        if self.traits.contains_key(&info.id) {
-            let info1 = self.traits.get(&info.id).unwrap();
+        if self.traits.contains_key(&info.trait_) {
+            let info1 = self.traits.get(&info.trait_).unwrap();
             return Err(Errors::from_msg_srcs(
-                format!("Duplicate definition for trait {}.", info.id.to_string()),
+                format!(
+                    "Duplicate definition for trait {}.",
+                    info.trait_.to_string()
+                ),
                 &[&info1.source, &info.source],
             ));
         }
-        self.traits.insert(info.id.clone(), info);
+        self.traits.insert(info.trait_.clone(), info);
         Ok(())
     }
 
@@ -1305,7 +1308,7 @@ impl TraitEnv {
         Ok(())
     }
 
-    pub fn qualified_predicates(&self) -> HashMap<TraitId, Vec<QualPredScheme>> {
+    pub fn qualified_predicates(&self) -> HashMap<Trait, Vec<QualPredScheme>> {
         let mut qps = HashMap::default();
         for (trait_id, insts) in &self.instances {
             for inst in insts {
@@ -1403,12 +1406,12 @@ impl TraitEnv {
     }
 
     // Resolve trait aliases.
-    fn resolve_aliases(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
+    fn resolve_aliases(&self, trait_id: &Trait) -> Result<Vec<Trait>, Errors> {
         fn resolve_aliases_inner(
             env: &TraitEnv,
-            trait_id: &TraitId,
-            res: &mut Vec<TraitId>,
-            visited: &mut HashSet<TraitId>,
+            trait_id: &Trait,
+            res: &mut Vec<Trait>,
+            visited: &mut HashSet<Trait>,
         ) -> Result<(), Errors> {
             if visited.contains(trait_id) {
                 return Err(Errors::from_msg_srcs(
@@ -1441,7 +1444,7 @@ impl TraitEnv {
     }
 
     // Check if a trait name is an alias.
-    pub fn is_alias(&self, trait_id: &TraitId) -> bool {
+    pub fn is_alias(&self, trait_id: &Trait) -> bool {
         self.aliases.contains_key(trait_id)
     }
 
@@ -1458,7 +1461,7 @@ impl TraitEnv {
         errors.to_result()?;
 
         // Set kinds in trait aliases definitions.
-        let mut resolved_aliases: HashMap<TraitId, Vec<TraitId>> = HashMap::new();
+        let mut resolved_aliases: HashMap<Trait, Vec<Trait>> = HashMap::new();
         for (id, _) in &self.aliases {
             resolved_aliases.insert(id.clone(), self.resolve_aliases(id)?); // If circular aliasing is detected, throw it immediately.
         }
@@ -1500,8 +1503,8 @@ impl TraitEnv {
         errors.to_result()
     }
 
-    pub fn trait_kind_map_with_aliases(&self) -> HashMap<TraitId, Arc<Kind>> {
-        let mut res: HashMap<TraitId, Arc<Kind>> = HashMap::default();
+    pub fn trait_kind_map_with_aliases(&self) -> HashMap<Trait, Arc<Kind>> {
+        let mut res: HashMap<Trait, Arc<Kind>> = HashMap::default();
         for (id, ti) in &self.traits {
             res.insert(id.clone(), ti.type_var.kind.clone());
         }

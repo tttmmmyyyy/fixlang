@@ -298,7 +298,7 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
-    let id = TraitId::from_fullname(FullName::new(
+    let id = Trait::from_fullname(FullName::new(
         &ctx.namespace,
         &pairs.next().unwrap().as_str().to_string(),
     ));
@@ -371,7 +371,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInf
         }
     }
     Ok(TraitInfo {
-        id: TraitId::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
+        trait_: Trait::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
         type_var: tyvar_from_name(&trait_tyvar, &kind_star()),
         methods,
         assoc_types: type_syns,
@@ -716,11 +716,11 @@ fn parse_predicate(pair: Pair<Rule>, ctx: &mut ParseContext) -> Predicate {
     pred
 }
 
-fn parse_trait_fullname(pair: Pair<Rule>, _ctx: &mut ParseContext) -> TraitId {
+fn parse_trait_fullname(pair: Pair<Rule>, _ctx: &mut ParseContext) -> Trait {
     assert_eq!(pair.as_rule(), Rule::trait_fullname);
     let mut pairs = pair.into_inner();
     let fullname = parse_capital_fullname(pairs.next().unwrap());
-    TraitId { name: fullname }
+    Trait { name: fullname }
 }
 
 fn parse_capital_fullname(pair: Pair<Rule>) -> FullName {

@@ -164,7 +164,7 @@ impl GlobalValue {
         }
     }
 
-    // Find the minimum expression node which includes the specified source code position.
+    // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let node = self.expr.find_node_at(pos);
         if node.is_some() {
@@ -2006,9 +2006,16 @@ impl Program {
         errors.to_result()
     }
 
+    // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for (_, gv) in &self.global_values {
             let node = gv.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        for td in &self.type_defns {
+            let node = td.find_node_at(pos);
             if node.is_some() {
                 return node;
             }
@@ -2021,5 +2028,5 @@ pub enum EndNode {
     Expr(Var, Option<Arc<TypeNode>>),
     Pattern(Var, Option<Arc<TypeNode>>),
     Type(TyCon),
-    Trait(TraitId),
+    Trait(Trait),
 }

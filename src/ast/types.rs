@@ -44,10 +44,10 @@ impl TyAssoc {
         Ok(())
     }
 
-    pub fn trait_id(&self) -> TraitId {
+    pub fn trait_id(&self) -> Trait {
         let mut namespace = self.name.namespace.names.clone();
         let name = namespace.pop().unwrap();
-        TraitId {
+        Trait {
             name: FullName::new(&NameSpace::new(namespace), &name),
         }
     }
@@ -321,7 +321,7 @@ impl std::fmt::Debug for TypeNode {
 }
 
 impl TypeNode {
-    // Find the minimum expression node which includes the specified source code position.
+    // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         if self.info.source.is_none() {
             return None;
@@ -1901,5 +1901,5 @@ impl Scheme {
 pub struct KindEnv {
     pub tycons: HashMap<TyCon, Arc<Kind>>,
     pub assoc_tys: HashMap<TyAssoc, AssocTypeKindInfo>,
-    pub traits_and_aliases: HashMap<TraitId, Arc<Kind>>,
+    pub traits_and_aliases: HashMap<Trait, Arc<Kind>>,
 }
