@@ -8,7 +8,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, AnyNode, DiagnosticsConfig, FullName, Pattern};
+use crate::{to_absolute_path, DiagnosticsConfig, EndNode, FullName, SourceFile, SourcePos};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
@@ -728,7 +728,7 @@ fn get_node_at(
     text_position: &TextDocumentPositionParams,
     program: &Program,
     uri_to_content: &HashMap<lsp_types::Uri, String>,
-) -> Option<AnyNode> {
+) -> Option<EndNode> {
     // Get the latest file content.
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
@@ -764,8 +764,11 @@ fn get_node_at(
     };
 
     // Get the node at the position.
-    let pos = position_to_bytes(&saved_content, pos_in_saved);
-    program.find_node_at(&path, pos)
+    let pos = SourcePos {
+        input: SourceFile::from_file_path(path),
+        pos: position_to_bytes(&saved_content, pos_in_saved),
+    };
+    program.find_node_at(&pos)
 }
 
 // Handle "textDocument/definition" method.
@@ -787,40 +790,59 @@ fn handle_goto_definition(
     }
     let node = node.unwrap();
 
-    // If the node is not an expression, nothing to do.
-    let node = if let AnyNode::Expr(node) = node {
-        node
-    } else {
-        send_response(id, Ok::<_, ()>(None::<()>));
-        return;
+    // The source location where the item is defined.
+    let def_src;
+
+    // First check if the node is an expression or a pattern.
+    let var_name = match &node {
+        EndNode::Expr(var, _) => Some(var.name.clone()),
+        EndNode::Pattern(var, _) => Some(var.name.clone()),
+        EndNode::Type(_) => None,
+        EndNode::Trait(_) => None,
     };
-
-    // if the node is not a variable, nothing to do.
-    if !node.is_var() {
-        send_response(id, Ok::<_, ()>(None::<()>));
-        return;
+    if let Some(var_name) = var_name {
+        // If the variable is local, do nothing.
+        let full_name = &var_name;
+        if full_name.is_local() {
+            def_src = None;
+        } else {
+            def_src = program
+                .global_values
+                .get(full_name)
+                .and_then(|gv| gv.def_src.clone());
+        }
+    } else {
+        // Then handle the case of a type or a trait.
+        match node {
+            EndNode::Expr(_, _) => {
+                unreachable!()
+            }
+            EndNode::Pattern(_, _) => {
+                unimplemented!()
+            }
+            EndNode::Type(tycon) => {
+                def_src = program
+                    .type_env
+                    .tycons
+                    .get(&tycon)
+                    .and_then(|ti| ti.source.clone())
+            }
+            EndNode::Trait(trait_id) => {
+                def_src = program
+                    .trait_env
+                    .traits
+                    .get(&trait_id)
+                    .and_then(|ti| ti.source.clone())
+            }
+        }
     }
 
-    // If the variable is local, do nothing.
-    let full_name = &node.get_var().name;
-    if full_name.is_local() {
-        send_response(id, Ok::<_, ()>(None::<()>));
-        return;
-    }
-
-    // Find the definition of the global value.
-    let gv = program.global_values.get(full_name);
-    if gv.is_none() {
-        send_response(id, Ok::<_, ()>(None::<()>));
-        return;
-    }
-    let gv = gv.unwrap();
-    let def_src = &gv.def_src;
+    // If the source is not found, respond with None.
     if def_src.is_none() {
         send_response(id, Ok::<_, ()>(None::<()>));
         return;
     }
-    let def_src = def_src.as_ref().unwrap();
+    let def_src = def_src.unwrap();
 
     // Create response value.
     // Get the current directory.
@@ -867,16 +889,9 @@ fn handle_hover(
     // Create a hover message.
     let mut docs = String::new();
     match node {
-        AnyNode::Expr(node) => {
-            // if the node is not a variable, nothing to do.
-            if !node.is_var() {
-                send_response(id, Ok::<_, ()>(None::<()>));
-                return;
-            }
-
+        EndNode::Expr(var, ty) => {
             // Get informations of the variable which are needed to show in the hover.
-            let full_name = &node.get_var().name;
-            let ty = &node.ty;
+            let full_name = &var.name;
 
             if full_name.is_local() {
                 // In case the variable is local, show the name and type of the variable.
@@ -906,21 +921,28 @@ fn handle_hover(
                 }
             };
         }
-        AnyNode::Pattern(node) => {
-            // If the node is not a variable, nothing to do.
-            let var = if let Pattern::Var(var, _) = &node.pattern {
-                var
-            } else {
-                send_response(id, Ok::<_, ()>(None::<()>));
-                return;
-            };
-
+        EndNode::Pattern(var, ty) => {
             // In case the node is a variable, show the name and type of the variable.
-            let ty = &node.info.inferred_ty.clone();
             if let Some(ty) = ty.as_ref() {
                 docs += &format!("`{} : {}`", var.name.to_string(), ty.to_string_normalize());
             } else {
                 docs += &format!("`{}`", var.name.to_string());
+            }
+        }
+        EndNode::Type(tycon) => {
+            docs += &format!("`{}`", tycon.to_string());
+            if let Some(ti) = program.type_env.tycons.get(&tycon) {
+                if let Some(document) = ti.get_document() {
+                    docs += &format!("\n\n{}", document);
+                }
+            }
+        }
+        EndNode::Trait(trait_id) => {
+            docs += &format!("`{}`", trait_id.to_string());
+            if let Some(ti) = program.trait_env.traits.get(&trait_id) {
+                if let Some(document) = ti.get_document() {
+                    docs += &format!("\n\n{}", document);
+                }
             }
         }
     }

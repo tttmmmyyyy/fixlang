@@ -377,6 +377,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInf
         assoc_types: type_syns,
         kind_signs: kinds,
         source: Some(span),
+        document: None,
     })
 }
 

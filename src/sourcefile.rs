@@ -6,7 +6,7 @@ use std::{
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Errors, parser::Rule, runner::read_file};
+use crate::{error::Errors, parser::Rule, runner::read_file, to_absolute_path};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
@@ -74,6 +74,11 @@ impl SourceFile {
             .unwrap()
             .to_string()
     }
+}
+
+pub struct SourcePos {
+    pub input: SourceFile,
+    pub pos: usize,
 }
 
 // lifetime-free version of pest::Span
@@ -268,7 +273,10 @@ impl Span {
     }
 
     // Check if the position is included in the span.
-    pub fn includes_pos(&self, pos: usize) -> bool {
-        self.start <= pos && pos < self.end
+    pub fn includes_pos(&self, pos: &SourcePos) -> bool {
+        if to_absolute_path(&self.input.file_path) != to_absolute_path(&pos.input.file_path) {
+            return false;
+        }
+        self.start <= pos.pos && pos.pos < self.end
     }
 }

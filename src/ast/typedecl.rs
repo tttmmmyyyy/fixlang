@@ -58,6 +58,7 @@ impl TypeDefn {
             tyvars: self.tyvars.clone(),
             fields,
             source: self.source.clone(),
+            document: None,
         }
     }
 

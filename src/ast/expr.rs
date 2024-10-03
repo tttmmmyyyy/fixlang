@@ -698,19 +698,7 @@ impl ExprNode {
     }
 
     // Find the minimum AST node which includes the specified source code position.
-    pub fn find_node_at(self: &Arc<ExprNode>, file: &Path, pos: usize) -> Option<AnyNode> {
-        if self.source.is_none() {
-            return None;
-        }
-        let span = self.source.as_ref().unwrap();
-        if to_absolute_path(&span.input.file_path) != to_absolute_path(file) {
-            return None;
-        }
-        self.find_node_at_pos(pos)
-    }
-
-    // Find the minimum AST node which includes the specified source code position.
-    fn find_node_at_pos(self: &Arc<ExprNode>, pos: usize) -> Option<AnyNode> {
+    pub fn find_node_at(self: &Arc<ExprNode>, pos: &SourcePos) -> Option<EndNode> {
         if self.source.is_none() {
             return None;
         }
@@ -719,57 +707,63 @@ impl ExprNode {
             return None;
         }
         match &*self.expr {
-            Expr::Var(_) => Some(AnyNode::Expr(self.clone())),
-            Expr::LLVM(_) => Some(AnyNode::Expr(self.clone())),
+            Expr::Var(v) => Some(EndNode::Expr(v.as_ref().clone(), self.ty.clone())),
+            Expr::LLVM(_) => None,
             Expr::App(func, args) => {
-                let node = func.find_node_at_pos(pos);
+                let node = func.find_node_at(pos);
                 if node.is_some() {
                     return node;
                 }
                 for arg in args {
-                    let node = arg.find_node_at_pos(pos);
+                    let node = arg.find_node_at(pos);
                     if node.is_some() {
                         return node;
                     }
                 }
                 None
             }
-            Expr::Lam(_, body) => body.find_node_at_pos(pos),
+            Expr::Lam(_, body) => body.find_node_at(pos),
             Expr::Let(pat, bound, val) => {
                 let node = pat.find_node_at_pos(pos);
                 if node.is_some() {
                     return node;
                 }
-                let node = bound.find_node_at_pos(pos);
+                let node = bound.find_node_at(pos);
                 if node.is_some() {
                     return node;
                 }
-                val.find_node_at_pos(pos)
+                val.find_node_at(pos)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let node = cond.find_node_at_pos(pos);
+                let node = cond.find_node_at(pos);
                 if node.is_some() {
                     return node;
                 }
-                let node = then_expr.find_node_at_pos(pos);
+                let node = then_expr.find_node_at(pos);
                 if node.is_some() {
                     return node;
                 }
-                else_expr.find_node_at_pos(pos)
+                else_expr.find_node_at(pos)
             }
-            Expr::TyAnno(e, _) => e.find_node_at_pos(pos),
-            Expr::MakeStruct(_, fields) => {
+            Expr::TyAnno(e, ty) => {
+                let node = e.find_node_at(pos);
+                if node.is_some() {
+                    return node;
+                }
+                ty.find_node_at(pos)
+            }
+            Expr::MakeStruct(tc, fields) => {
                 for (_, field_expr) in fields {
-                    let node = field_expr.find_node_at_pos(pos);
+                    let node = field_expr.find_node_at(pos);
                     if node.is_some() {
                         return node;
                     }
                 }
-                None
+                Some(EndNode::Type(tc.as_ref().clone()))
             }
             Expr::ArrayLit(elems) => {
                 for elem in elems {
-                    let node = elem.find_node_at_pos(pos);
+                    let node = elem.find_node_at(pos);
                     if node.is_some() {
                         return node;
                     }
@@ -778,7 +772,7 @@ impl ExprNode {
             }
             Expr::FFICall(_, _, _, args) => {
                 for (_, e) in args.iter().enumerate() {
-                    let node = e.find_node_at_pos(pos);
+                    let node = e.find_node_at(pos);
                     if node.is_some() {
                         return node;
                     }

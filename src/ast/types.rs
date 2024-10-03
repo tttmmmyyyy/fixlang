@@ -236,6 +236,10 @@ pub struct TyConInfo {
     pub tyvars: Vec<Arc<TyVar>>,
     pub fields: Vec<Field>, // For an array type, this is `vec![{element_type}]`.
     pub source: Option<Span>,
+    // The document of this type.
+    // If `def_src` is available, we can also get document from the source code.
+    // We use this field only when document is not available in the source code.
+    pub document: Option<String>,
 }
 
 impl TyConInfo {
@@ -253,6 +257,30 @@ impl TyConInfo {
             errors.eat_err(field.resolve_type_aliases(type_env));
         }
         errors.to_result()
+    }
+
+    // Get the document of this type.
+    pub fn get_document(&self) -> Option<String> {
+        // Try to get document from the source code.
+        let docs = self.source.as_ref().and_then(|src| src.get_document().ok());
+
+        // If the documentation is empty, treat it as None.
+        let docs = match docs {
+            Some(docs) if docs.is_empty() => None,
+            _ => docs,
+        };
+
+        // If the document is not available in the source code, use the document field.
+        let docs = match docs {
+            Some(_) => docs,
+            None => self.document.clone(),
+        };
+
+        // Again, if the documentation is empty, treat it as None.
+        match docs {
+            Some(docs) if docs.is_empty() => None,
+            _ => docs,
+        }
     }
 }
 
@@ -293,6 +321,44 @@ impl std::fmt::Debug for TypeNode {
 }
 
 impl TypeNode {
+    // Find the minimum expression node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        if self.info.source.is_none() {
+            return None;
+        }
+        let src: &Span = self.info.source.as_ref().unwrap();
+        if !src.includes_pos(pos) {
+            return None;
+        }
+        match &self.ty {
+            Type::TyVar(_arc) => None,
+            Type::TyCon(arc) => Some(EndNode::Type(arc.as_ref().clone())),
+            Type::TyApp(arc, arc1) => {
+                let node = arc.find_node_at(pos);
+                if node.is_some() {
+                    return node;
+                }
+                arc1.find_node_at(pos)
+            }
+            Type::FunTy(arc, arc1) => {
+                let node = arc.find_node_at(pos);
+                if node.is_some() {
+                    return node;
+                }
+                arc1.find_node_at(pos)
+            }
+            Type::AssocTy(_ty_assoc, vec) => {
+                for ty in vec {
+                    let node = ty.find_node_at(pos);
+                    if node.is_some() {
+                        return node;
+                    }
+                }
+                None
+            }
+        }
+    }
+
     // The set of defining modules of type constructors that appear in this type.
     pub fn define_modules_of_tycons(&self, out_set: &mut HashSet<Name>) {
         match &self.ty {
@@ -1811,6 +1877,23 @@ impl Scheme {
         }
         res.ty = res.ty.resolve_type_aliases(type_env)?;
         Ok(Arc::new(res))
+    }
+
+    // Find the minimum expression node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        for p in &self.predicates {
+            let node = p.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        for eq in &self.equalities {
+            let node = eq.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        self.ty.find_node_at(pos)
     }
 }
 

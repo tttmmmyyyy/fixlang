@@ -19,6 +19,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of pointers.".to_string()),
         },
     );
     ret.insert(
@@ -30,6 +31,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 8-bit unsinged integers.".to_string()),
         },
     );
     ret.insert(
@@ -41,6 +43,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 8-bit signed integers.".to_string()),
         },
     );
     ret.insert(
@@ -52,6 +55,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 16-bit unsigned integers.".to_string()),
         },
     );
     ret.insert(
@@ -63,6 +67,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 16-bit signed integers.".to_string()),
         },
     );
     ret.insert(
@@ -74,6 +79,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 32-bit signed integers.".to_string()),
         },
     );
     ret.insert(
@@ -85,6 +91,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 32-bit unsigned integers.".to_string()),
         },
     );
     ret.insert(
@@ -96,6 +103,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 64-bit signed integers.".to_string()),
         },
     );
     ret.insert(
@@ -107,6 +115,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 64-bit unsigned integers.".to_string()),
         },
     );
     ret.insert(
@@ -118,6 +127,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of boolean values.".to_string()),
         },
     );
     ret.insert(
@@ -129,6 +139,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 32-bit floating point values.".to_string()),
         },
     );
     ret.insert(
@@ -140,6 +151,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: Some("The type of 64-bit floating point values.".to_string()),
         },
     );
     // IO is defined in the source code of Std.
@@ -157,6 +169,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                 is_punched: false,
             }],
             source: None,
+            document: Some("The type of variable length (boxed) arrays.".to_string()),
         },
     );
     // String is defined in the source code of Std.
@@ -174,6 +187,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                     .collect(),
                 fields: vec![],
                 source: None,
+                document: None,
             },
         );
     }
@@ -187,6 +201,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
+            document: None,
         },
     );
 

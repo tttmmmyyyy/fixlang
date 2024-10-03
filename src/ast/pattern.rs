@@ -112,7 +112,7 @@ impl PatternNode {
     }
 
     // Find the node at the specified position.
-    pub fn find_node_at_pos(self: &Arc<PatternNode>, pos: usize) -> Option<AnyNode> {
+    pub fn find_node_at_pos(self: &Arc<PatternNode>, pos: &SourcePos) -> Option<EndNode> {
         if self.info.source.is_none() {
             return None;
         }
@@ -121,17 +121,35 @@ impl PatternNode {
             return None;
         }
         match &self.pattern {
-            Pattern::Var(_, _) => Some(AnyNode::Pattern(self.clone())),
-            Pattern::Struct(_, field_to_pat) => {
+            Pattern::Var(v, ty) => {
+                if ty.is_some() {
+                    let ty = ty.as_ref().unwrap();
+                    let node = ty.find_node_at(pos);
+                    if node.is_some() {
+                        return node;
+                    }
+                }
+                Some(EndNode::Pattern(
+                    v.as_ref().clone(),
+                    self.info.inferred_ty.clone(),
+                ))
+            }
+            Pattern::Struct(tc, field_to_pat) => {
                 for (_, pat) in field_to_pat {
                     let res = pat.find_node_at_pos(pos);
                     if res.is_some() {
                         return res;
                     }
                 }
-                None
+                Some(EndNode::Type(tc.as_ref().clone()))
             }
-            Pattern::Union(_, _, pat) => pat.find_node_at_pos(pos),
+            Pattern::Union(tc, _, pat) => {
+                let node = pat.find_node_at_pos(pos);
+                if node.is_some() {
+                    return node;
+                }
+                Some(EndNode::Type(tc.as_ref().clone()))
+            }
         }
     }
 

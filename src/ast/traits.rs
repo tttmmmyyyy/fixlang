@@ -177,9 +177,36 @@ pub struct TraitInfo {
     pub kind_signs: Vec<KindSignature>,
     // Source location of trait definition.
     pub source: Option<Span>,
+    // Document of this trait.
+    // This field is used only If document from `source` is not available.
+    pub document: Option<String>,
 }
 
 impl TraitInfo {
+    // Get the document of this type.
+    pub fn get_document(&self) -> Option<String> {
+        // Try to get document from the source code.
+        let docs = self.source.as_ref().and_then(|src| src.get_document().ok());
+
+        // If the documentation is empty, treat it as None.
+        let docs = match docs {
+            Some(docs) if docs.is_empty() => None,
+            _ => docs,
+        };
+
+        // If the document is not available in the source code, use the document field.
+        let docs = match docs {
+            Some(_) => docs,
+            None => self.document.clone(),
+        };
+
+        // Again, if the documentation is empty, treat it as None.
+        match docs {
+            Some(docs) if docs.is_empty() => None,
+            _ => docs,
+        }
+    }
+
     // Resolve namespace.
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
@@ -717,6 +744,22 @@ impl Predicate {
         }
         Ok(res)
     }
+
+    // Find the minimum expression node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        if self.source.is_none() {
+            return None;
+        }
+        let src = self.source.as_ref().unwrap();
+        if !src.includes_pos(pos) {
+            return None;
+        }
+        let node = self.ty.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        Some(EndNode::Trait(self.trait_id.clone()))
+    }
 }
 
 // Statement such as "f: * -> *".
@@ -743,6 +786,22 @@ pub struct Equality {
 }
 
 impl Equality {
+    // Find the minimum expression node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        if self.source.is_none() {
+            return None;
+        }
+        let src = self.source.as_ref().unwrap();
+        if !src.includes_pos(pos) {
+            return None;
+        }
+        let node = self.args.iter().find_map(|arg| arg.find_node_at(pos));
+        if node.is_some() {
+            return node;
+        }
+        self.value.find_node_at(pos)
+    }
+
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         for arg in &self.args {
             arg.free_vars_to_vec(buf);

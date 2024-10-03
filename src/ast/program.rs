@@ -143,8 +143,7 @@ impl GlobalValue {
         let docs = self
             .def_src
             .as_ref()
-            .map(|src| src.get_document().ok())
-            .flatten();
+            .and_then(|src| src.get_document().ok());
 
         // If the documentation is empty, treat it as None.
         let docs = match docs {
@@ -166,8 +165,12 @@ impl GlobalValue {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, path: &Path, pos: usize) -> Option<AnyNode> {
-        self.expr.find_node_at(path, pos)
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        let node = self.expr.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        self.scm.find_node_at(pos)
     }
 }
 
@@ -201,10 +204,10 @@ impl SymbolExpr {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, file: &Path, pos: usize) -> Option<AnyNode> {
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         match self {
-            SymbolExpr::Simple(e) => e.find_node_at(file, pos),
-            SymbolExpr::Method(ms) => ms.iter().filter_map(|m| m.find_node_at(file, pos)).next(),
+            SymbolExpr::Simple(e) => e.find_node_at(pos),
+            SymbolExpr::Method(ms) => ms.iter().filter_map(|m| m.find_node_at(pos)).next(),
         }
     }
 }
@@ -229,25 +232,27 @@ impl TypedExpr {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, file: &Path, pos: usize) -> Option<AnyNode> {
-        self.expr.find_node_at(file, pos).map(|node| {
-            // Substitute the types in the found node.
-            match &node {
-                AnyNode::Expr(e) => {
-                    if let Some(ty) = &e.ty {
-                        let ty = self.substitution.substitute_type(ty);
-                        return AnyNode::Expr(e.set_inferred_type(ty));
-                    }
-                }
-                AnyNode::Pattern(p) => {
-                    if let Some(ty) = &p.info.inferred_ty {
-                        let ty = self.substitution.substitute_type(ty);
-                        return AnyNode::Pattern(p.set_inferred_type(ty));
-                    }
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        let node = self.expr.find_node_at(pos);
+        if node.is_none() {
+            return None;
+        }
+        let mut node = node.unwrap();
+        match &mut node {
+            EndNode::Expr(_, ty) => {
+                if let Some(ty) = ty {
+                    *ty = self.substitution.substitute_type(ty);
                 }
             }
-            node
-        })
+            EndNode::Pattern(_, ty) => {
+                if let Some(ty) = ty {
+                    *ty = self.substitution.substitute_type(ty);
+                }
+            }
+            EndNode::Type(_) => {}
+            EndNode::Trait(_) => {}
+        }
+        Some(node)
     }
 }
 
@@ -275,8 +280,8 @@ impl MethodImpl {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, file: &Path, pos: usize) -> Option<AnyNode> {
-        self.expr.find_node_at(file, pos)
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        self.expr.find_node_at(pos)
     }
 }
 
@@ -2001,9 +2006,9 @@ impl Program {
         errors.to_result()
     }
 
-    pub fn find_node_at(&self, file: &Path, pos: usize) -> Option<AnyNode> {
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for (_, gv) in &self.global_values {
-            let node = gv.find_node_at(file, pos);
+            let node = gv.find_node_at(pos);
             if node.is_some() {
                 return node;
             }
@@ -2012,7 +2017,9 @@ impl Program {
     }
 }
 
-pub enum AnyNode {
-    Expr(Arc<ExprNode>),
-    Pattern(Arc<PatternNode>),
+pub enum EndNode {
+    Expr(Var, Option<Arc<TypeNode>>),
+    Pattern(Var, Option<Arc<TypeNode>>),
+    Type(TyCon),
+    Trait(TraitId),
 }
