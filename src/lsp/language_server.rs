@@ -2,7 +2,7 @@ use crate::ast::program::Program;
 use crate::constants::INSTANCIATED_NAME_SEPARATOR;
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::{
-    constants::LSP_LOG_FILE_PATH,
+    constants::LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
     project_file::ProjectFile,
     runner::build_file,
@@ -397,7 +397,7 @@ fn send_message(msg: &JSONRPCMessage) {
 
 fn open_log_file() -> Mutex<File> {
     // Get parent directory of path `LSP_LOG_FILE_PATH`.
-    let parent_dir = std::path::Path::new(LSP_LOG_FILE_PATH)
+    let parent_dir = std::path::Path::new(LOG_FILE_PATH)
         .parent()
         .expect("Failed to get parent directory of LSP_LOG_FILE_PATH.");
 
@@ -410,8 +410,8 @@ fn open_log_file() -> Mutex<File> {
         .write(true)
         .create(true)
         .truncate(true)
-        .open(LSP_LOG_FILE_PATH)
-        .expect(format!("Failed to open `{}` file.", LSP_LOG_FILE_PATH).as_str());
+        .open(LOG_FILE_PATH)
+        .expect(format!("Failed to open `{}` file.", LOG_FILE_PATH).as_str());
 
     // Wrap it into a mutex.
     Mutex::new(file)

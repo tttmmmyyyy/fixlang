@@ -76,7 +76,7 @@ impl DependecyLockFile {
             let prj_info = &prjs_info
                 .iter()
                 .find(|info| &info.name == &prj.name)
-                .unwrap();
+                .expect(format!("Project \"{}\" not found in `projs_info`", prj.name).as_str());
             let ver_info = prj_info
                 .versions
                 .as_ref()
@@ -513,6 +513,25 @@ fn create_package_retriever(
 
         // Get the project file of the package at the given version.
         let proj_file = prj.get_project_file(ver)?;
+
+        // Check that the project name is correct.
+        if &proj_file.general.name != prj_name {
+            return Err(Errors::from_msg(format!(
+                "The project \"{}\" found, but a different project name \"{}\" is specified in its project file.",
+                prj_name,
+                proj_file.general.name
+            )));
+        }
+
+        // Check that the project version is correct.
+        if proj_file.general.version() != *ver {
+            return Err(Errors::from_msg(format!(
+                "The project \"{}@{}\" is found, but a different version \"{}\" is specified in its project file.",
+                prj_name,
+                ver,
+                proj_file.general.version()
+            )));
+        }
 
         // Register new dependent projects to the packages cache.
         for dep in &proj_file.dependencies {

@@ -103,7 +103,7 @@ pub const CHECK_C_TYPES_EXEC_PATH: &str = ".fixlang/check_c_types.out";
 pub const C_TYPES_JSON_PATH: &str = ".fixlang/c_types.json";
 #[allow(unused)]
 pub const COMPILER_TEST_WORKING_PATH: &str = ".fixlang/compiler_test";
-pub const LSP_LOG_FILE_PATH: &str = ".fixlang/lsp.log";
+pub const LOG_FILE_PATH: &str = ".fixlang/fix.log";
 pub const PROJECT_FILE_PATH: &str = "fixproj.toml";
 pub const LOCK_FILE_PATH: &str = "fixdeps.lock";
 pub const EXTERNAL_PROJ_INSTALL_PATH: &str = ".fixlang/deps";

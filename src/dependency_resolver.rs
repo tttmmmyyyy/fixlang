@@ -48,7 +48,7 @@ pub fn resolve_dependency<'a, 'b, 'c>(
 }
 
 // Try to use a package.
-// It takes a NEW package `pkg` and other packages which are already version-fixed, and update `fixed` to satisfy the dependency, includeing the given `pkg`.
+// It takes a NEW package `pkg` and other packages which are already version-fixed, and update `fixed` to satisfy the dependency, including the given `pkg`.
 // If the dependency cannot be resolved, returns None.
 // If retriever functions rise an error, returns the error.
 fn try_use_package<'a, 'b, 'c>(
