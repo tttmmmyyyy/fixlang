@@ -23,15 +23,15 @@ files = ["main.fix"]
 ## Merged with object files specified in the command line argument.
 # objects = ["lib.o"]
 
-## Static link libraries.
+## Libraries to be linked statically.
 ## Merged with libraries specified in the command line argument.
-# static_links = ["abc"] # libabc.a
+# static_links = ["abc"] # link "libabc.a" statically.
 
-## Dynamic link libraries.
+## Libraries to be linked dynamically.
 ## Merged with libraries specified in the command line argument.
-# dynamic_links = ["xyz"] # libxyz.so
+# dynamic_links = ["xyz"] # link "libxyz.so" dynamically.
 
-## Library search paths for "static_links" and "dynamic_links".
+## Library search paths passed to the linker.
 ## Merged with paths specified in the command line argument.
 # library_paths = ["."]
 
