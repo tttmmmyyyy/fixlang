@@ -47,11 +47,13 @@ A type (alias) for error message.
 
 ### `type IO a = unbox struct { ...fields... }`
 
+`IO a` is a type representing an I/O action which returns a value of type `a`.
+
 #### field `_data : () -> a`
 
 ### `type Iterator a = unbox struct { ...fields... }`
 
-Iterator (a.k.a lazy list)
+The type of iterators (a.k.a lazy list).
 
 #### field `next : () -> Std::Option (a, Std::Iterator a)`
 
@@ -59,8 +61,8 @@ Iterator (a.k.a lazy list)
 
 The type of lazily generated values.
 
-You can create a lazy value by `|_| (...an expression to generate the value...)`, and
-you can evaluate a lazy value `v` by `v()`.
+You can create a lazy value by `|_| (...an expression to generate the value...)`,
+and you can evaluate a lazy value `v` by `v()`.
 
 ### `type LoopResult s b = unbox union { ...variants... }`
 
@@ -1957,6 +1959,7 @@ Creates an IO action from a function.
 ### `get_arg : Std::I64 -> Std::IO (Std::Option Std::String)`
 
 `get_arg(n)` returns the n-th (0-indexed) command line argument.
+
 If n is greater than or equal to the number of command line arguments, this function returns none.
 
 ### `get_arg_count : Std::IO Std::I64`
@@ -1970,6 +1973,7 @@ Gets command line arguments.
 ### `input_line : Std::IO Std::String`
 
 Reads a line from stdin. If some error occurr, this function aborts the program.
+
 If you want to handle errors, use `read_line(stdin)` instead.
 
 ### `is_eof : Std::IO::IOHandle -> Std::IO Std::Bool`
@@ -2172,16 +2176,17 @@ Gets next value and next iterator.
 ### `append : Std::Iterator a -> Std::Iterator a -> Std::Iterator a`
 
 Appends an iterator to a iterator.
+
 Note: Since `iter1.append(iter2)` puts `iter2` after `iter1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 
 ### `bang : Std::Iterator a -> Std::Iterator a`
 
 Evaluates all elements of iterator.
-TODO: add test
 
 ### `count_up : Std::I64 -> Std::Iterator Std::I64`
 
 Creates an iterator that counts up from a number.
+
 count_up(n) = [n, n+1, n+2, ...]
 
 ### `empty : Std::Iterator a`
@@ -2199,6 +2204,7 @@ Finds the last element of an iterator.
 ### `fold : b -> (b -> a -> b) -> Std::Iterator a -> b`
 
 Folds iterator from left to right.
+
 Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
 
 ### `fold_m : [m : Std::Monad] b -> (b -> a -> m b) -> Std::Iterator a -> m b`
@@ -2212,6 +2218,7 @@ Creates iterator from an array.
 ### `from_map : (Std::I64 -> a) -> Std::Iterator a`
 
 Creates iterator from mapping function.
+
 from_map(f) = [f(0), f(1), f(2), ...]
 
 ### `generate : s -> (s -> Std::Option (a, s)) -> Std::Iterator a`
@@ -2223,6 +2230,7 @@ Generates an iterator from a state transition function.
 ### `get_first : Std::Iterator a -> Std::Option a`
 
 Gets the first element of an iterator. If the iterator is empty, this function returns `none`.
+
 TODO: add test
 
 ### `get_size : Std::Iterator a -> Std::I64`
@@ -2232,6 +2240,7 @@ Counts the number of elements of an iterator.
 ### `get_tail : Std::Iterator a -> Std::Option (Std::Iterator a)`
 
 Removes the first element from an iterator. If the iterator is empty, this function returns `none`.
+
 TODO: add test
 
 ### `intersperse : a -> Std::Iterator a -> Std::Iterator a`
@@ -2297,16 +2306,16 @@ Takes at most n elements from an iterator.
 
 ### `take_while : (a -> Std::Bool) -> Std::Iterator a -> Std::Iterator a`
 
-Take elements of an iterator while a condition is satisfied.
+Takes elements of an iterator while a condition is satisfied.
 TODO: add test
 
 ### `to_array : Std::Iterator a -> Std::Array a`
 
-Convert an iterator to an array.
+Converts an iterator to an array.
 
 ### `zip : Std::Iterator b -> Std::Iterator a -> Std::Iterator (a, b)`
 
-Zip two iterators.
+Zips two iterators.
 
 ## `namespace Std::LessThan`
 

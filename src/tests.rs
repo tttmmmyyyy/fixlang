@@ -6455,7 +6455,7 @@ pub fn test_generate_docs() {
 
     // Run `fix doc -m Std` in `std_doc` directory.
     let _ = Command::new("fix")
-        .arg("doc")
+        .arg("docs")
         .arg("-m")
         .arg("Std")
         .current_dir("std_doc")
