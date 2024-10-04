@@ -1,4 +1,5 @@
 use crate::error::Errors;
+use name::{FullName, Name, NameSpace};
 use serde::{Deserialize, Serialize};
 
 use super::*;

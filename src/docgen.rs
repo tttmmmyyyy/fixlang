@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
 use crate::{
-    build_file, error::Errors, kind_star, project_file::ProjectFile, to_absolute_path,
-    Configuration, FullName, Kind, KindSignature, Name, NameSpace, Program, TyConVariant, TyVar,
+    ast::name::{FullName, Name, NameSpace},
+    build_file,
+    error::Errors,
+    kind_star,
+    project_file::ProjectFile,
+    to_absolute_path, Configuration, Kind, KindSignature, Program, TyConVariant, TyVar,
 };
 
 pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::error::Errors;
 use import::ImportStatement;
+use name::{FullName, Name};
 use serde::{Deserialize, Serialize};
 
 use super::*;

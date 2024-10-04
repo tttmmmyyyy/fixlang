@@ -1,6 +1,7 @@
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType};
 use crate::error::Errors;
 use import::{ImportItem, ImportStatement};
+use name::{FullName, Name};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, vec};
 

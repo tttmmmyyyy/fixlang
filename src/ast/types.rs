@@ -4,6 +4,9 @@ use std::sync::Arc;
 use crate::error::error_exit_with_src;
 use crate::error::Errors;
 use inkwell::types::BasicType;
+use name::FullName;
+use name::Name;
+use name::NameSpace;
 use serde::{Deserialize, Serialize};
 
 use super::*;

@@ -6,6 +6,7 @@ use super::*;
 use ast::{
     export_statement::ExportStatement,
     import::{ImportStatement, ImportTreeNode},
+    name::{FullName, NameSpace},
 };
 use either::Either;
 use error::Errors;

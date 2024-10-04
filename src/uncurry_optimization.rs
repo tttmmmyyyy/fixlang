@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use ast::name::FullName;
+
 use crate::typecheck::Scope;
 
 use super::*;

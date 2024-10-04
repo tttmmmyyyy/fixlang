@@ -6,6 +6,8 @@ use std::{cell::RefCell, env, sync::Arc};
 
 use crate::error::error_exit;
 use crate::error::error_exit_with_src;
+use ast::name::FullName;
+use ast::name::Name;
 use either::Either;
 use inkwell::{
     basic_block::BasicBlock,

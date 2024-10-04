@@ -1,3 +1,5 @@
+use name::{FullName, Name, NameSpace};
+
 use super::*;
 
 pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {

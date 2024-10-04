@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{touch_directory, FullName, Scheme, TypedExpr, TYPE_CHECK_CACHE_PATH};
+use crate::{ast::name::FullName, touch_directory, Scheme, TypedExpr, TYPE_CHECK_CACHE_PATH};
 
 pub type SharedTypeCheckCache = Arc<dyn TypeCheckCache + Send + Sync>;
 

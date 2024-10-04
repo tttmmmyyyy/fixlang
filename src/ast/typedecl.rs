@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use name::{FullName, Name};
+
 use crate::error::{error_exit_with_src, Errors};
 
 use super::*;

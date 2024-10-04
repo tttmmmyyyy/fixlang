@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::error::error_exit;
+use ast::name::{FullName, Name, NameSpace};
 use inkwell::module::Linkage;
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};

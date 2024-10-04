@@ -1,3 +1,5 @@
+use ast::name::FullName;
+
 use crate::error::Errors;
 
 use super::*;

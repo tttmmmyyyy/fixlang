@@ -1,3 +1,4 @@
+use crate::ast::name::FullName;
 use crate::ast::program::Program;
 use crate::constants::INSTANCIATED_NAME_SEPARATOR;
 use crate::typecheckcache::{self, SharedTypeCheckCache};
@@ -8,7 +9,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, DiagnosticsConfig, EndNode, FullName, SourceFile, SourcePos};
+use crate::{to_absolute_path, DiagnosticsConfig, EndNode, SourceFile, SourcePos};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,

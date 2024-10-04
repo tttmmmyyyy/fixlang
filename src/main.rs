@@ -56,7 +56,7 @@ mod uncurry_optimization;
 use crate::error::Errors;
 use ast::expr::*;
 use ast::inline_llvm::*;
-use ast::name::*;
+use ast::name::Name;
 use ast::pattern::*;
 use ast::program::*;
 use ast::traits::*;

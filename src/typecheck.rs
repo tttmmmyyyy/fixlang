@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::error::Errors;
-use ast::import::ImportStatement;
+use ast::{import::ImportStatement, name::{FullName, NameSpace}};
 use serde::{Deserialize, Serialize};
 use typecheckcache::TypeCheckCache;
 

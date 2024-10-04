@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use name::FullName;
 use serde::{Deserialize, Serialize};
 
 use super::*;
