@@ -47,7 +47,7 @@ A type (alias) for error message.
 
 ### `type IO a = unbox struct { ...fields... }`
 
-`IO a` is a type representing an I/O action which returns a value of type `a`.
+`IO a` is a type representing I/O actions which return values of type `a`.
 
 #### field `_data : () -> a`
 
@@ -65,6 +65,10 @@ You can create a lazy value by `|_| (...an expression to generate the value...)`
 and you can evaluate a lazy value `v` by `v()`.
 
 ### `type LoopResult s b = unbox union { ...variants... }`
+
+A union type with variants `continue` and `break`.
+
+This type is used to represent the result of a loop body function passed to `Std::loop` or other similar functions.
 
 #### variant `continue : s`
 
