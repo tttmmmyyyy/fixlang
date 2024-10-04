@@ -903,22 +903,27 @@ fn handle_hover(
             if full_name.is_local() {
                 // In case the variable is local, show the name and type of the variable.
                 if let Some(ty) = ty.as_ref() {
-                    docs += &format!("`{} : {}`", full_name.to_string(), ty.to_string_normalize());
+                    docs += &format!(
+                        "```\n{} : {}\n```",
+                        full_name.to_string(),
+                        ty.to_string_normalize()
+                    );
                 } else {
-                    docs += &format!("`{}`", full_name.to_string());
+                    docs += &format!("```\n{}\n```", full_name.to_string());
                 }
             } else {
                 // In case the variable is global, show the documentation of the global value.
-                docs += &format!("`{}`", full_name.to_string());
                 let mut scm_string = String::new();
                 if let Some(gv) = program.global_values.get(full_name) {
                     scm_string = gv.scm.to_string_normalize();
-                    docs += &format!("\n- Defined as `{}`", scm_string);
+                    docs += &format!("```\n{} : {}\n```", full_name.to_string(), scm_string);
+                } else {
+                    docs += &format!("```\n{}\n```", full_name.to_string());
                 }
                 if let Some(ty) = ty.as_ref() {
                     let ty_string = ty.to_string_normalize();
                     if scm_string != ty_string {
-                        docs += &format!("\n- Used as `{}`", ty_string);
+                        docs += &format!("\nInstantiated as:\n```\n{}\n```", ty_string);
                     }
                 }
                 if let Some(gv) = program.global_values.get(full_name) {
@@ -931,13 +936,17 @@ fn handle_hover(
         EndNode::Pattern(var, ty) => {
             // In case the node is a variable, show the name and type of the variable.
             if let Some(ty) = ty.as_ref() {
-                docs += &format!("`{} : {}`", var.name.to_string(), ty.to_string_normalize());
+                docs += &format!(
+                    "```\n{} : {}\n```",
+                    var.name.to_string(),
+                    ty.to_string_normalize()
+                );
             } else {
-                docs += &format!("`{}`", var.name.to_string());
+                docs += &format!("```\n{}\n```", var.name.to_string());
             }
         }
         EndNode::Type(tycon) => {
-            docs += &format!("`{}`", tycon.to_string());
+            docs += &format!("```\n{}\n```", tycon.to_string());
             if let Some(ti) = program.type_env.tycons.get(&tycon) {
                 if let Some(document) = ti.get_document() {
                     docs += &format!("\n\n{}", document);
@@ -945,7 +954,7 @@ fn handle_hover(
             }
         }
         EndNode::Trait(trait_id) => {
-            docs += &format!("`{}`", trait_id.to_string());
+            docs += &format!("```\n{}\n```", trait_id.to_string());
             if let Some(ti) = program.trait_env.traits.get(&trait_id) {
                 if let Some(document) = ti.get_document() {
                     docs += &format!("\n\n{}", document);

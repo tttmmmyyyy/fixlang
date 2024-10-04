@@ -10,6 +10,11 @@
 // The document for `Std` module describes about them up to N=3, but you can use larger tuples in the same way.
 module Std;
 
+// A union type with variants `continue` and `break`.
+// 
+// This type is used to represent the result of a loop body function passed to `Std::loop` or other similar functions.
+type LoopResult s b = unbox union { continue : s, break : b };
+
 namespace Array {
 
     // A function like `get_sub`, but behaves as if the size of the array is the specified value, 
@@ -425,7 +430,7 @@ namespace FFI {
     }
 }
 
-// `IO a` is a type representing an I/O action which returns a value of type `a`.
+// `IO a` is a type representing I/O actions which return values of type `a`.
 type IO a = unbox struct { _data : () -> a };
 
 namespace IO {

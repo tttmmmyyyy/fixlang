@@ -271,10 +271,6 @@ pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
     res
 }
 
-// Following types are coustructed using primitive types.
-pub const LOOP_RESULT_NAME: &str = "LoopResult";
-pub const TUPLE_NAME: &str = "Tuple";
-
 // Get Ptr type.
 pub fn make_ptr_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], PTR_NAME)))
@@ -3494,32 +3490,6 @@ pub fn union_mod_function(
     ty.free_vars_to_vec(&mut tvs);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
-}
-
-pub fn loop_result_defn() -> TypeDefn {
-    TypeDefn {
-        name: FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME),
-        tyvars: vec![
-            tyvar_from_name("s", &kind_star()),
-            tyvar_from_name("b", &kind_star()),
-        ],
-        value: TypeDeclValue::Union(Union {
-            fields: vec![
-                Field {
-                    name: "continue".to_string(),
-                    ty: type_tyvar("s", &kind_star()),
-                    is_punched: false,
-                },
-                Field {
-                    name: "break".to_string(),
-                    ty: type_tyvar("b", &kind_star()),
-                    is_punched: false,
-                },
-            ],
-            is_unbox: true,
-        }),
-        source: None,
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

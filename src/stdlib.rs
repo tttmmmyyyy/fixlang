@@ -28,9 +28,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         }]);
     }
 
-    // `LoopResult` type.
-    fix_module.type_defns.push(loop_result_defn());
-
     // Trait instances
     let integral_types = &[
         make_i8_ty(),
