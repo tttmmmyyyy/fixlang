@@ -112,7 +112,7 @@ fn main() {
         .help("Source files to be compiled and linked.");
     let object_file = Arg::new("object-files")
         .long("object")
-        .short('O')
+        .short('b')
         .action(clap::ArgAction::Append)
         .multiple_values(true)
         .takes_value(true)
