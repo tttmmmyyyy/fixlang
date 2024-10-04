@@ -307,7 +307,8 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
         if pair.as_rule() != Rule::trait_fullname {
             break;
         }
-        values.push(parse_trait_fullname(pair, ctx));
+        let span = Span::from_pair(&ctx.source, &pair);
+        values.push((parse_trait_fullname(pair, ctx), span));
     }
     TraitAlias {
         id,

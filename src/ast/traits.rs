@@ -456,8 +456,8 @@ impl TraitInstance {
 pub struct TraitAlias {
     // Identifier of this trait (i.e., the name).
     pub id: Trait,
-    // Aliased traits.
-    pub value: Vec<Trait>,
+    // Aliased traits and its source span.
+    pub value: Vec<(Trait, Span)>,
     // Source location of alias definition.
     pub source: Option<Span>,
     // Kind of this trait alias.
@@ -466,14 +466,18 @@ pub struct TraitAlias {
 
 impl TraitAlias {
     // Find the minimum node which includes the specified source code position.
-    pub fn find_node_at(&self, _pos: &SourcePos) -> Option<EndNode> {
-        // TODO: Implement this.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        for (t, s) in &self.value {
+            if s.includes_pos(pos) {
+                return Some(EndNode::Trait(t.clone()));
+            }
+        }
         None
     }
 
     // Resolve namespace of trait names in value.
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
-        for trait_id in &mut self.value {
+        for (trait_id, _) in &mut self.value {
             trait_id.resolve_namespace(ctx, &self.source)?;
         }
         Ok(())
@@ -1069,10 +1073,10 @@ impl TraitEnv {
 
         // Check that values of trait aliases are defined.
         for (_, ta) in &self.aliases {
-            for v in &ta.value {
-                if !self.traits.contains_key(v) && !self.aliases.contains_key(v) {
+            for (t, _) in &ta.value {
+                if !self.traits.contains_key(t) && !self.aliases.contains_key(t) {
                     errors.append(Errors::from_msg_srcs(
-                        format!("Unknown trait `{}`.", v.to_string()),
+                        format!("Unknown trait `{}`.", t.to_string()),
                         &[&ta.source],
                     ));
                 }
@@ -1543,8 +1547,8 @@ impl TraitEnv {
                 res.push(trait_id.clone());
                 return Ok(());
             }
-            for v in &env.aliases.get(trait_id).unwrap().value {
-                resolve_aliases_inner(env, v, res, visited)?;
+            for (t, _) in &env.aliases.get(trait_id).unwrap().value {
+                resolve_aliases_inner(env, t, res, visited)?;
             }
             Ok(())
         }

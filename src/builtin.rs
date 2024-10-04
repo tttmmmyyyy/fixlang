@@ -169,7 +169,7 @@ pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
                 is_punched: false,
             }],
             source: None,
-            document: Some("The type of variable length (boxed) arrays.".to_string()),
+            document: Some("The type of variable length arrays. This is a boxed type.".to_string()),
         },
     );
     // String is defined in the source code of Std.
