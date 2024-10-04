@@ -277,6 +277,7 @@ impl Span {
         if to_absolute_path(&self.input.file_path) != to_absolute_path(&pos.input.file_path) {
             return false;
         }
-        self.start <= pos.pos && pos.pos < self.end
+        // Like rust-analyzer, we use not `pos.pos < self.end` but `pos.pos <= self.end`, because VSCode sometimes sends a position that is one character beyond the end of the symbol string.
+        self.start <= pos.pos && pos.pos <= self.end
     }
 }
