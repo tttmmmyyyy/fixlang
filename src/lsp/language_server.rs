@@ -791,7 +791,7 @@ fn handle_goto_definition(
     let node = node.unwrap();
 
     // The source location where the item is defined.
-    let def_src;
+    let mut def_src;
 
     // First check if the node is an expression or a pattern.
     let var_name = match &node {
@@ -818,21 +818,28 @@ fn handle_goto_definition(
                 unreachable!()
             }
             EndNode::Pattern(_, _) => {
-                unimplemented!()
+                unreachable!()
             }
             EndNode::Type(tycon) => {
                 def_src = program
                     .type_env
                     .tycons
                     .get(&tycon)
-                    .and_then(|ti| ti.source.clone())
+                    .and_then(|ti| ti.source.clone());
             }
-            EndNode::Trait(trait_id) => {
+            EndNode::Trait(trait_) => {
                 def_src = program
                     .trait_env
                     .traits
-                    .get(&trait_id)
-                    .and_then(|ti| ti.source.clone())
+                    .get(&trait_)
+                    .and_then(|ti| ti.source.clone());
+                if def_src.is_none() {
+                    def_src = program
+                        .trait_env
+                        .aliases
+                        .get(&trait_)
+                        .and_then(|ta| ta.source.clone());
+                }
             }
         }
     }

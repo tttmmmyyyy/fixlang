@@ -84,6 +84,18 @@ pub struct AssocTypeImpl {
 }
 
 impl AssocTypeImpl {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        if self.source.is_none() {
+            return None;
+        }
+        let src = self.source.as_ref().unwrap();
+        if !src.includes_pos(pos) {
+            return None;
+        }
+        self.value.find_node_at(pos)
+    }
+
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.value = self.value.resolve_type_aliases(type_env)?;
         Ok(())
@@ -153,6 +165,18 @@ pub struct MethodInfo {
 }
 
 impl MethodInfo {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        if self.source.is_none() {
+            return None;
+        }
+        let src = self.source.as_ref().unwrap();
+        if !src.includes_pos(pos) {
+            return None;
+        }
+        self.qual_ty.find_node_at(pos)
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         self.qual_ty.resolve_namespace(ctx)
     }
@@ -183,6 +207,17 @@ pub struct TraitInfo {
 }
 
 impl TraitInfo {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        for mi in &self.methods {
+            let node = mi.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        None
+    }
+
     // Get the document of this type.
     pub fn get_document(&self) -> Option<String> {
         // Try to get document from the source code.
@@ -308,6 +343,21 @@ pub struct TraitInstance {
 }
 
 impl TraitInstance {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        let node = self.qual_pred.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        for (_assoc_ty_name, assoc_ty_impl) in &self.assoc_types {
+            let node = assoc_ty_impl.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        None
+    }
+
     pub fn set_kinds_in_qual_pred(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
         let mut scope = HashMap::new();
         let preds = &self.qual_pred.pred_constraints;
@@ -415,6 +465,12 @@ pub struct TraitAlias {
 }
 
 impl TraitAlias {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, _pos: &SourcePos) -> Option<EndNode> {
+        // TODO: Implement this.
+        None
+    }
+
     // Resolve namespace of trait names in value.
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         for trait_id in &mut self.value {
@@ -435,16 +491,26 @@ pub struct QualPredicate {
 }
 
 impl QualPredicate {
-    // pub fn free_vars(&self) -> HashMap<Name, Arc<TyVar>> {
-    //     let mut vars = self.predicate.free_vars();
-    //     for pred in &self.pred_constraints {
-    //         vars.extend(pred.free_vars());
-    //     }
-    //     for eq in &self.eq_constraints {
-    //         vars.extend(eq.free_vars());
-    //     }
-    //     vars
-    // }
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        let node = self.predicate.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        for pred in &self.pred_constraints {
+            let node = pred.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        for eq in &self.eq_constraints {
+            let node = eq.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        None
+    }
 
     pub fn free_vars_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         for pred in &self.pred_constraints {
@@ -602,6 +668,27 @@ pub struct QualType {
 }
 
 impl QualType {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        let node = self.ty.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        for pred in &self.preds {
+            let node = pred.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        for eq in &self.eqs {
+            let node = eq.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        None
+    }
+
     pub fn to_string(&self) -> String {
         let mut s = String::default();
         if self.preds.len() > 0 || self.kind_signs.len() > 0 {
@@ -919,6 +1006,31 @@ pub struct TraitEnv {
 }
 
 impl TraitEnv {
+    // Find the minimum node which includes the specified source code position.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        for (_t, ti) in &self.traits {
+            let node = ti.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        for (_, insts) in &self.instances {
+            for inst in insts {
+                let node = inst.find_node_at(pos);
+                if node.is_some() {
+                    return node;
+                }
+            }
+        }
+        for (_, alias) in &self.aliases {
+            let node = alias.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        None
+    }
+
     // Get of list of trait names including aliases.
     pub fn trait_names(&self) -> HashSet<FullName> {
         let mut res: HashSet<FullName> = Default::default();

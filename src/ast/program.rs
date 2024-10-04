@@ -2020,7 +2020,7 @@ impl Program {
                 return node;
             }
         }
-        None
+        self.trait_env.find_node_at(pos)
     }
 }
 

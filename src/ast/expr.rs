@@ -707,7 +707,17 @@ impl ExprNode {
             return None;
         }
         match &*self.expr {
-            Expr::Var(v) => Some(EndNode::Expr(v.as_ref().clone(), self.ty.clone())),
+            Expr::Var(v) => {
+                // Return the variable node only if the `pos` is in the variable name (i.e., not in the namespace).
+                let name_len = v.name.name.len();
+                let mut span = self.source.as_ref().unwrap().clone();
+                span.start = span.end - name_len;
+                if span.includes_pos(pos) {
+                    return Some(EndNode::Expr(v.as_ref().clone(), self.ty.clone()));
+                } else {
+                    return None;
+                }
+            }
             Expr::LLVM(_) => None,
             Expr::App(func, args) => {
                 let node = func.find_node_at(pos);
