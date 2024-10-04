@@ -1,17 +1,17 @@
-use super::*;
-use ast::export_statement::ExportStatement;
 use build_time::build_time_utc;
-use compile_unit::CompileUnit;
-use cpu_features::CpuFeatures;
-use error::any_to_string;
-use error::error_exit;
-use error::Errors;
+use inkwell::context::Context;
+use inkwell::module::Module;
+use inkwell::values::BasicValue;
 use inkwell::{
     passes::PassManager,
     targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
 };
+use inkwell::{AddressSpace, OptimizationLevel};
 use rand::Rng;
+use std::fs::File;
+use std::io::Read;
 use std::panic::panic_any;
+use std::path::Path;
 use std::{
     fs::{self, create_dir_all, remove_dir_all},
     panic::{catch_unwind, AssertUnwindSafe},
@@ -19,7 +19,34 @@ use std::{
     process::{Command, Stdio},
     sync::Arc,
 };
-use stopwatch::StopWatch;
+
+use crate::ast::export_statement::ExportStatement;
+use crate::compile_unit::CompileUnit;
+use crate::cpu_features::CpuFeatures;
+use crate::error::{any_to_string, error_exit, exit_if_err, Errors};
+use crate::save_temporary_source;
+use crate::stopwatch::StopWatch;
+use crate::temporary_source_path;
+use crate::type_fun;
+use crate::uncurry_optimization;
+use crate::Configuration;
+use crate::ExprNode;
+use crate::GenerationContext;
+use crate::LinkType;
+use crate::Object;
+use crate::Program;
+use crate::TypeCheckContext;
+use crate::ValgrindTool;
+use crate::DOT_FIXLANG;
+use crate::GLOBAL_VAR_NAME_ARGC;
+use crate::GLOBAL_VAR_NAME_ARGV;
+use crate::INTERMEDIATE_PATH;
+use crate::{allocate_obj, FixOptimizationLevel};
+use crate::{borrowing_optimization, SubCommand};
+use crate::{build_runtime, parse_file_path};
+use crate::{llvm_passes, make_tuple_ty};
+use crate::{make_std_mod, runtime};
+use crate::{make_tuple_traits_mod, BuildMode};
 
 // The result of `build_object_files` function.
 pub struct BuildObjFilesResult {

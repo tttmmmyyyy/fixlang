@@ -82,7 +82,7 @@ use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructTy
 use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
 };
-use inkwell::{AddressSpace, IntPredicate, OptimizationLevel};
+use inkwell::{AddressSpace, IntPredicate};
 use lsp::language_server::launch_language_server;
 use misc::*;
 use object::*;
@@ -94,8 +94,6 @@ use runner::*;
 use runtime::*;
 use sourcefile::*;
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use std::vec::Vec;
