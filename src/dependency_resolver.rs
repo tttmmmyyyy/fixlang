@@ -138,7 +138,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     if let Some(package) = fixed.iter().find(|p| p.name == dependency.name) {
         if dependency.requirement.matches(&package.version) {
             logger(&format!(
-                "{}Already using \"{}@{}\", which satisfies the requirement `{}`. OK.",
+                "{}Already accepted \"{}@{}\" satisfies the requirement `{}`. OK.",
                 " ".repeat(indent),
                 dependency.name,
                 package.version,
@@ -147,9 +147,11 @@ fn try_resolve_dependency<'a, 'b, 'c>(
             return Ok(Some(fixed.to_vec()));
         } else {
             logger(&format!(
-                "{}Already using \"{}@{}\", which does not satisfy the requirement `{}`. Backtracking.",
+                "{}Already accpeted \"{}@{}\" conflicts with the requirement `{}`. Backtracking.",
                 " ".repeat(indent),
-                dependency.name, package.version, dependency.requirement
+                dependency.name,
+                package.version,
+                dependency.requirement
             ));
             return Ok(None);
         }
