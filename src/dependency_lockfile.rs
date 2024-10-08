@@ -435,7 +435,7 @@ pub enum ProjectSource {
 impl ProjectSource {
     fn equivalent(&self, other: &Self) -> bool {
         match (self, other) {
-            (ProjectSource::Local(path1), ProjectSource::Local(path2)) => path1 == path2,
+            (ProjectSource::Local(path1), ProjectSource::Local(path2)) => path1.canonicalize().unwrap() == path2.canonicalize().unwrap(),
             (ProjectSource::Git(url1, _), ProjectSource::Git(url2, _)) => url1 == url2,
             _ => false,
         }
