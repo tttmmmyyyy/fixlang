@@ -1741,8 +1741,8 @@ registries = [
 
 ## Generating documentation
 
-`fix docs -m {Module-names}` subcommand senerate documentations (markdown files) for specified Fix modules.
-This command requires the project file to be present in the current directory, and the project should be in the state that it can be built successfully.
+`fix docs` subcommand generates documentations (markdown files) for a Fix project.
+This command requires the project file to be present in the current directory.
 
 Consecutive line comments above declarations are recognized as documentations:
 
