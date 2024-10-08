@@ -13,7 +13,9 @@ pub struct ImportStatement {
     pub items: Vec<ImportTreeNode>,
     pub hiding: Vec<ImportTreeNode>,
     pub source: Option<Span>,
-    pub implicit: bool, // The module itself and `Std` modules is imported implicitly.
+    // Is this import statement is added implicitly by compiler?
+    // The module itself and `Std` module are imported implicitly.
+    pub implicit: bool,
 }
 
 impl ImportStatement {
