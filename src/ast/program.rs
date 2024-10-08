@@ -521,25 +521,25 @@ impl Program {
         import_statement: ImportStatement,
     ) -> Result<(), Errors> {
         // Refuse importing the module itself.
-        if import_statement.module == import_statement.importer {
+        if import_statement.module.0 == import_statement.importer {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Module `{}` cannot import itself.",
-                    import_statement.module.to_string()
+                    import_statement.module.0.to_string()
                 ),
                 &[&import_statement.source],
             ));
         }
 
         // When user imports `Std` explicitly, remove implicit `Std` import statement.
-        if import_statement.module == STD_NAME {
+        if import_statement.module.0 == STD_NAME {
             let stmts = self
                 .mod_to_import_stmts
                 .get_mut(&import_statement.importer)
                 .unwrap();
             *stmts = std::mem::replace(stmts, vec![])
                 .into_iter()
-                .filter(|stmt| !(stmt.module == STD_NAME && stmt.implicit))
+                .filter(|stmt| !(stmt.module.0 == STD_NAME && stmt.implicit))
                 .collect();
         }
 
@@ -1866,7 +1866,7 @@ impl Program {
                 break Ok(());
             }
             let import_stmt = unresolved_imports.pop().unwrap();
-            let module = import_stmt.module;
+            let module = &import_stmt.module.0;
 
             // If import is already resolved, do nothing.
             if self.is_linked(&module) {
@@ -1887,7 +1887,7 @@ impl Program {
             for stmt in stmts {
                 graph.connect(
                     *elem_to_idx.get(importer).unwrap(),
-                    *elem_to_idx.get(&stmt.module).unwrap(),
+                    *elem_to_idx.get(&stmt.module.0).unwrap(),
                 );
             }
         }

@@ -9,7 +9,7 @@ pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {
 #[derive(Clone)]
 pub struct ImportStatement {
     pub importer: Name,
-    pub module: Name,
+    pub module: (Name, Option<Span>),
     pub items: Vec<ImportTreeNode>,
     pub hiding: Vec<ImportTreeNode>,
     pub source: Option<Span>,
@@ -19,8 +19,9 @@ pub struct ImportStatement {
 }
 
 impl ImportStatement {
+    // Checks if the given name is made accessible by this import statement.
     pub fn is_accessible(&self, name: &FullName) -> bool {
-        if name.module() != self.module {
+        if name.module() != self.module.0 {
             return false;
         }
         let mut name = name.clone();
@@ -38,7 +39,7 @@ impl ImportStatement {
     pub fn implicit_self_import(module: Name) -> ImportStatement {
         ImportStatement {
             importer: module.clone(),
-            module,
+            module: (module, None),
             items: vec![ImportTreeNode::Any(None)],
             hiding: vec![],
             source: None,
@@ -49,7 +50,7 @@ impl ImportStatement {
     pub fn implicit_std_import(module: Name) -> ImportStatement {
         ImportStatement {
             importer: module,
-            module: STD_NAME.to_string(),
+            module: (STD_NAME.to_string(), None),
             items: vec![ImportTreeNode::Any(None)],
             hiding: vec![],
             source: None,
@@ -68,7 +69,7 @@ impl ImportStatement {
             result.append(&mut ImportTreeNode::items(item));
         }
         for item in &mut result {
-            item.push_front(self.module.clone());
+            item.push_front(self.module.0.clone());
         }
         result
     }

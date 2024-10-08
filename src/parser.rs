@@ -2027,7 +2027,7 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
     let module = module_pair.as_str().to_string();
     let mut stmt = ImportStatement {
         importer: ctx.module_name.clone(),
-        module,
+        module: (module, Some(module_span.clone())),
         items: vec![ImportTreeNode::Any(Some(module_span))],
         hiding: vec![],
         source: Some(span),
