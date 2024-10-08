@@ -7,9 +7,10 @@ use crate::{
     PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
 use semver::{Version, VersionReq};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
+    hash::Hash,
     io::{Read, Write},
     path::{Path, PathBuf},
 };
@@ -82,7 +83,7 @@ pub struct ProjectFileBuildTest {
 }
 
 // The entry of `dependencies` section of the project file.
-#[derive(Deserialize, Default, Clone)]
+#[derive(Deserialize, Serialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileDependency {
     // Name of the project.
@@ -107,7 +108,7 @@ impl ProjectFileDependency {
 }
 
 // The `git` field of the dependency.
-#[derive(Deserialize, Default, Clone)]
+#[derive(Deserialize, Serialize, Default, Clone, Hash)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileDependencyGit {
     // The URL of the git repository.
@@ -125,9 +126,6 @@ pub struct ProjectFile {
     // `dependencies` section
     #[serde(default)]
     pub dependencies: Vec<ProjectFileDependency>,
-    // The hash value of the project file.
-    #[serde(skip)]
-    pub hash: String,
     // The path to the project file.
     #[serde(skip)]
     pub path: PathBuf,
@@ -181,10 +179,6 @@ impl ProjectFile {
             }
         };
 
-        // Set `hash` field.
-        let content_hash = format!("{:x}", md5::compute(content.as_bytes()));
-        proj_file.hash = content_hash;
-
         // Set `path` field.
         proj_file.path = path.to_path_buf();
 
@@ -192,6 +186,20 @@ impl ProjectFile {
         proj_file.validate()?;
 
         Ok(proj_file)
+    }
+
+    // Calculate the hash value of the `dependencies` section.
+    pub fn calculate_dependencies_hash(&self) -> String {
+        // Sort the dependencies by name.
+        let mut deps = self.dependencies.clone();
+        deps.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let mut data = String::new();
+        for dep in deps {
+            data += serde_json::to_string(&dep).unwrap().as_str();
+        }
+        // Calculate the hash value.
+        format!("{:x}", md5::compute(data))
     }
 
     fn validate_project_name(name: &ProjectName, span: Option<Span>) -> Result<(), Errors> {
@@ -518,7 +526,7 @@ impl ProjectFile {
                 e, TRY_FIX_RESOLVE
             ))
         })?;
-        if lock_file.proj_file_hash != self.hash {
+        if lock_file.proj_file_hash != self.calculate_dependencies_hash() {
             return Err(Errors::from_msg(format!(
                 "The lock file is not up to date. {}",
                 TRY_FIX_RESOLVE

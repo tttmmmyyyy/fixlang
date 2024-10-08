@@ -62,7 +62,7 @@ impl DependecyLockFile {
 
         // Create a new lock file following the resolved dependencies.
         let mut lock_file = DependecyLockFile {
-            proj_file_hash: proj_file.hash.clone(),
+            proj_file_hash: proj_file.calculate_dependencies_hash(),
             dependencies: Vec::new(),
         };
         for prj in prjs {
