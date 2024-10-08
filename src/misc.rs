@@ -117,7 +117,7 @@ pub fn number_to_varname(n: usize) -> String {
 
 // Converts a path to an absolute path.
 pub fn to_absolute_path(path: &Path) -> PathBuf {
-    if path.is_absolute() {
+    let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
         match std::env::current_dir() {
@@ -126,5 +126,12 @@ pub fn to_absolute_path(path: &Path) -> PathBuf {
             }
             Ok(cur_dir) => cur_dir.join(path),
         }
-    }
+    };
+    abs.canonicalize().unwrap_or_else(|e| {
+        panic!(
+            "Failed to canonicalize path \"{}\": {}",
+            abs.to_string_lossy(),
+            e
+        )
+    })
 }
