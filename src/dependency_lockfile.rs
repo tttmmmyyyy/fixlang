@@ -14,7 +14,7 @@ use crate::{
     dependency_resolver::{self, Dependency, Package, PackageName},
     error::Errors,
     project_file::{ProjectFile, ProjectFileDependency, ProjectName},
-    EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, PROJECT_FILE_PATH,
+    to_absolute_path, EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, PROJECT_FILE_PATH,
 };
 
 #[derive(Deserialize, Serialize, Default)]
@@ -433,9 +433,21 @@ pub enum ProjectSource {
 }
 
 impl ProjectSource {
+    // Stringify the source for display.
+    fn to_string(&self) -> String {
+        match self {
+            ProjectSource::Local(path_buf) => {
+                to_absolute_path(path_buf).to_string_lossy().to_string()
+            }
+            ProjectSource::Git(url, _repo) => url.clone(),
+        }
+    }
+
     fn equivalent(&self, other: &Self) -> bool {
         match (self, other) {
-            (ProjectSource::Local(path1), ProjectSource::Local(path2)) => path1 == path2,
+            (ProjectSource::Local(path1), ProjectSource::Local(path2)) => {
+                to_absolute_path(path1) == to_absolute_path(path2)
+            }
             (ProjectSource::Git(url1, _), ProjectSource::Git(url2, _)) => url1 == url2,
             _ => false,
         }
@@ -542,8 +554,10 @@ fn create_package_retriever(
                     continue;
                 }
                 return Err(Errors::from_msg(format!(
-                    "Project \"{}\" is required twice with different sources.",
-                    dep.name
+                    "Project \"{}\" is required twice with different sources: \"{}\" and \"{}\".",
+                    dep.name,
+                    prj.source.to_string(),
+                    dep_src.to_string()
                 )));
             }
             let prj = ProjectInfo {
