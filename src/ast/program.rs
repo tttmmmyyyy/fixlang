@@ -2010,23 +2010,13 @@ impl Program {
 
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        let mod_name = self
-            .modules_from_files(&vec![pos.input.file_path.clone()])
-            .pop()?;
-
-        for (name, gv) in &self.global_values {
-            if name.module() != mod_name {
-                continue;
-            }
+        for (_name, gv) in &self.global_values {
             let node = gv.find_node_at(pos);
             if node.is_some() {
                 return node;
             }
         }
         for td in &self.type_defns {
-            if td.name.module() != mod_name {
-                continue;
-            }
             let node = td.find_node_at(pos);
             if node.is_some() {
                 return node;
@@ -2036,6 +2026,9 @@ impl Program {
         if node.is_some() {
             return node;
         }
+        let mod_name = self
+            .modules_from_files(&vec![pos.input.file_path.clone()])
+            .pop()?;
         for stmt in self
             .mod_to_import_stmts
             .get(&mod_name)
