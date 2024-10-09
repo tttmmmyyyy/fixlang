@@ -252,6 +252,7 @@ impl TypedExpr {
             }
             EndNode::Type(_) => {}
             EndNode::Trait(_) => {}
+            EndNode::Module(_) => {}
         }
         Some(node)
     }
@@ -2009,19 +2010,44 @@ impl Program {
 
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        for (_, gv) in &self.global_values {
+        let mod_name = self
+            .modules_from_files(&vec![pos.input.file_path.clone()])
+            .pop()?;
+
+        for (name, gv) in &self.global_values {
+            if name.module() != mod_name {
+                continue;
+            }
             let node = gv.find_node_at(pos);
             if node.is_some() {
                 return node;
             }
         }
         for td in &self.type_defns {
+            if td.name.module() != mod_name {
+                continue;
+            }
             let node = td.find_node_at(pos);
             if node.is_some() {
                 return node;
             }
         }
-        self.trait_env.find_node_at(pos)
+        let node = self.trait_env.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        for stmt in self
+            .mod_to_import_stmts
+            .get(&mod_name)
+            .unwrap_or(&vec![])
+            .iter()
+        {
+            let node = stmt.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        None
     }
 }
 
@@ -2030,4 +2056,5 @@ pub enum EndNode {
     Pattern(Var, Option<Arc<TypeNode>>),
     Type(TyCon),
     Trait(Trait),
+    Module(Name),
 }

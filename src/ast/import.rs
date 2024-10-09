@@ -19,6 +19,14 @@ pub struct ImportStatement {
 }
 
 impl ImportStatement {
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        let span = self.module.1.as_ref()?;
+        if !span.includes_pos(pos) {
+            return None;
+        }
+        return Some(EndNode::Module(self.module.0.clone()));
+    }
+
     // Checks if the given name is made accessible by this import statement.
     pub fn is_accessible(&self, name: &FullName) -> bool {
         if name.module() != self.module.0 {

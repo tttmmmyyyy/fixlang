@@ -800,6 +800,7 @@ fn handle_goto_definition(
         EndNode::Pattern(var, _) => Some(var.name.clone()),
         EndNode::Type(_) => None,
         EndNode::Trait(_) => None,
+        EndNode::Module(_) => None,
     };
     if let Some(var_name) = var_name {
         // If the variable is local, do nothing.
@@ -813,7 +814,7 @@ fn handle_goto_definition(
                 .and_then(|gv| gv.def_src.clone());
         }
     } else {
-        // Then handle the case of a type or a trait.
+        // Then handle the case of a type or a trait or a module.
         match node {
             EndNode::Expr(_, _) => {
                 unreachable!()
@@ -840,6 +841,13 @@ fn handle_goto_definition(
                         .aliases
                         .get(&trait_)
                         .and_then(|ta| ta.source.clone());
+                }
+            }
+            EndNode::Module(mod_name) => {
+                if let Some(mi) = program.modules.iter().find(|mi| mi.name == mod_name) {
+                    def_src = Some(mi.source.clone());
+                } else {
+                    def_src = None;
                 }
             }
         }
@@ -959,6 +967,16 @@ fn handle_hover(
             if let Some(ti) = program.trait_env.traits.get(&trait_id) {
                 if let Some(document) = ti.get_document() {
                     docs += &format!("\n\n{}", document);
+                }
+            }
+        }
+        EndNode::Module(mod_name) => {
+            docs += &format!("```\nmodule {}\n```", mod_name.to_string());
+            if let Some(mi) = program.modules.iter().find(|mi| mi.name == mod_name) {
+                if let Some(document) = mi.source.get_document().ok() {
+                    if !document.trim().is_empty() {
+                        docs += &format!("\n\n{}", document);
+                    }
                 }
             }
         }
