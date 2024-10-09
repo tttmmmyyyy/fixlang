@@ -3,8 +3,7 @@ Fix-lang: Fix Programming Language
 
 ## Overview
 
-Fix is a functional programming language focused on ease of learning and use. 
-We hope it will grow to a language that is recommended as "your first functional programming language".
+Fix is a functional programming language focused on ease of learning and use.
 
 You can try Fix in [fix playground](https://tttmmmyyyy.github.io/fixlang-playground/).
 
