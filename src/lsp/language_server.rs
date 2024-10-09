@@ -453,7 +453,7 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
                     " ".to_string(),
                     ".".to_string(),
                     "(".to_string(),
-                    ":".to_string(),
+                    // ":".to_string(),
                 ]),
                 all_commit_characters: None,
                 resolve_provider: Some(true),
@@ -596,13 +596,12 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
         if name.starts_with(INSTANCIATED_NAME_SEPARATOR) {
             continue;
         }
-        let in_namespace = " in ".to_string() + &full_name.namespace.to_string();
         let scheme = gv.scm.to_string_normalize();
 
         items.push(CompletionItem {
-            label: name,
+            label: full_name.to_string(),
             label_details: Some(CompletionItemLabelDetails {
-                detail: Some(in_namespace),
+                detail: None,
                 description: None,
             }),
             kind: Some(CompletionItemKind::FUNCTION),
@@ -612,7 +611,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
             preselect: None,
             sort_text: None,
             filter_text: None,
-            insert_text: None,
+            insert_text: Some(name.to_string()),
             insert_text_format: None,
             insert_text_mode: None,
             text_edit: None,
