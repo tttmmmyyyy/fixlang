@@ -900,7 +900,15 @@ fn handle_hover(
         return;
     }
     let node = node.unwrap();
+    let content = document_from_endnode(&node, program);
+    let hover = lsp_types::Hover {
+        contents: lsp_types::HoverContents::Markup(content),
+        range: None,
+    };
+    send_response(id, Ok::<_, ()>(hover))
+}
 
+fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
     // Create a hover message.
     let mut docs = String::new();
     match node {
@@ -971,7 +979,7 @@ fn handle_hover(
         }
         EndNode::Module(mod_name) => {
             docs += &format!("```\nmodule {}\n```", mod_name.to_string());
-            if let Some(mi) = program.modules.iter().find(|mi| mi.name == mod_name) {
+            if let Some(mi) = program.modules.iter().find(|mi| &mi.name == mod_name) {
                 if let Some(document) = mi.source.get_document().ok() {
                     if !document.trim().is_empty() {
                         docs += &format!("\n\n{}", document);
@@ -984,11 +992,7 @@ fn handle_hover(
         kind: lsp_types::MarkupKind::Markdown,
         value: docs,
     };
-    let hover = lsp_types::Hover {
-        contents: lsp_types::HoverContents::Markup(content),
-        range: None,
-    };
-    send_response(id, Ok::<_, ()>(hover))
+    content
 }
 
 // Convert a `lsp_types::Position` into a bytes position in a string.
