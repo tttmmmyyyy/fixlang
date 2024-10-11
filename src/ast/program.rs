@@ -2044,6 +2044,7 @@ impl Program {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum EndNode {
     Expr(Var, Option<Arc<TypeNode>>),
     Pattern(Var, Option<Arc<TypeNode>>),
