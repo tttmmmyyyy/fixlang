@@ -593,7 +593,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
     fn create_item(
         name: &FullName,
         kind: CompletionItemKind,
-        detail: String,
+        detail: Option<String>,
         data: &EndNode,
     ) -> CompletionItem {
         CompletionItem {
@@ -603,7 +603,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
                 description: None,
             }),
             kind: Some(kind),
-            detail: Some(detail),
+            detail,
             documentation: None,
             deprecated: None,
             preselect: None,
@@ -622,17 +622,40 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
     }
 
     for (full_name, gv) in &program.global_values {
-        let name = full_name.name.clone();
         // Skip compiler-defined entities
-        if name.contains('#') {
+        if full_name.to_string().contains('#') {
             continue;
         }
         let scheme = gv.scm.to_string_normalize();
         let item = create_item(
             full_name,
             CompletionItemKind::FUNCTION,
-            scheme,
+            Some(scheme),
             &EndNode::Expr(Var::create(full_name.clone()), None),
+        );
+        items.push(item);
+    }
+    for (tycon, _kind) in program.type_env.kinds() {
+        if tycon.name.to_string().contains('#') {
+            continue;
+        }
+        let item = create_item(
+            &tycon.name,
+            CompletionItemKind::CLASS,
+            None,
+            &EndNode::Type(tycon.clone()),
+        );
+        items.push(item);
+    }
+    for trait_ in program.traits_with_aliases() {
+        if trait_.to_string().contains('#') {
+            continue;
+        }
+        let item = create_item(
+            &trait_.name,
+            CompletionItemKind::INTERFACE,
+            None,
+            &EndNode::Trait(trait_.clone()),
         );
         items.push(item);
     }

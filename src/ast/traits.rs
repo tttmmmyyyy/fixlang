@@ -1038,12 +1038,19 @@ impl TraitEnv {
 
     // Get of list of trait names including aliases.
     pub fn trait_names(&self) -> HashSet<FullName> {
-        let mut res: HashSet<FullName> = Default::default();
+        self.traits_with_aliases()
+            .into_iter()
+            .map(|t| t.name)
+            .collect()
+    }
+
+    pub fn traits_with_aliases(&self) -> Vec<Trait> {
+        let mut res = vec![];
         for (k, _v) in &self.traits {
-            res.insert(k.name.clone());
+            res.push(k.clone());
         }
         for (k, _v) in &self.aliases {
-            res.insert(k.name.clone());
+            res.push(k.clone());
         }
         res
     }
