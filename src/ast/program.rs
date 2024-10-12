@@ -656,6 +656,10 @@ impl Program {
         self.trait_env.trait_names()
     }
 
+    pub fn traits_with_aliases(&self) -> Vec<Trait> {
+        self.trait_env.traits_with_aliases()
+    }
+
     // Add a global value.
     pub fn add_global_value(
         &mut self,
@@ -2044,6 +2048,7 @@ impl Program {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum EndNode {
     Expr(Var, Option<Arc<TypeNode>>),
     Pattern(Var, Option<Arc<TypeNode>>),

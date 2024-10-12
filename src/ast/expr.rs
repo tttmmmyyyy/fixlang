@@ -919,6 +919,10 @@ impl Var {
         ret.name = fullname;
         Arc::new(ret)
     }
+
+    pub fn create(name: FullName) -> Self {
+        Var { name }
+    }
 }
 
 pub fn var_var(name: FullName) -> Arc<Var> {

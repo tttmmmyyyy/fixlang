@@ -1,6 +1,5 @@
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
-use crate::constants::INSTANCIATED_NAME_SEPARATOR;
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::{
     constants::LOG_FILE_PATH,
@@ -9,7 +8,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, DiagnosticsConfig, EndNode, SourceFile, SourcePos};
+use crate::{to_absolute_path, DiagnosticsConfig, EndNode, SourceFile, SourcePos, Var};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
@@ -590,22 +589,21 @@ fn handle_textdocument_did_save(
 // Handle "textDocument/completion" method.
 fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
     let mut items = vec![];
-    for (full_name, gv) in &program.global_values {
-        let name = full_name.name.clone();
-        // Skip compiler-defined values.
-        if name.starts_with(INSTANCIATED_NAME_SEPARATOR) {
-            continue;
-        }
-        let scheme = gv.scm.to_string_normalize();
 
-        items.push(CompletionItem {
-            label: full_name.to_string(),
+    fn create_item(
+        name: &FullName,
+        kind: CompletionItemKind,
+        detail: Option<String>,
+        data: &EndNode,
+    ) -> CompletionItem {
+        CompletionItem {
+            label: name.to_string(),
             label_details: Some(CompletionItemLabelDetails {
                 detail: None,
                 description: None,
             }),
-            kind: Some(CompletionItemKind::FUNCTION),
-            detail: Some(scheme),
+            kind: Some(kind),
+            detail,
             documentation: None,
             deprecated: None,
             preselect: None,
@@ -618,9 +616,48 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
             additional_text_edits: None,
             command: None,
             commit_characters: None,
-            data: Some(serde_json::to_value(full_name.to_string()).unwrap()), // Full name of the global value.
+            data: Some(serde_json::to_value(data).unwrap()), // Full name of the global value.
             tags: None,
-        });
+        }
+    }
+
+    for (full_name, gv) in &program.global_values {
+        // Skip compiler-defined entities
+        if full_name.to_string().contains('#') {
+            continue;
+        }
+        let scheme = gv.scm.to_string_normalize();
+        let item = create_item(
+            full_name,
+            CompletionItemKind::FUNCTION,
+            Some(scheme),
+            &EndNode::Expr(Var::create(full_name.clone()), None),
+        );
+        items.push(item);
+    }
+    for (tycon, _kind) in program.type_env.kinds() {
+        if tycon.name.to_string().contains('#') {
+            continue;
+        }
+        let item = create_item(
+            &tycon.name,
+            CompletionItemKind::CLASS,
+            None,
+            &EndNode::Type(tycon.clone()),
+        );
+        items.push(item);
+    }
+    for trait_ in program.traits_with_aliases() {
+        if trait_.to_string().contains('#') {
+            continue;
+        }
+        let item = create_item(
+            &trait_.name,
+            CompletionItemKind::INTERFACE,
+            None,
+            &EndNode::Trait(trait_.clone()),
+        );
+        items.push(item);
     }
     send_response(id, Ok::<_, ()>(items));
 }
@@ -628,45 +665,32 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
 // Handle "textDocument/completion" method.
 // Add documentation to the completion item.
 fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program: &Program) {
-    // Extract the full name of the global value for which completion is requested from the params.
     if params.data.is_none() {
-        let msg = "Failed to get the data from the params.".to_string();
+        let msg = "In textDocument/completion, params.data is null.".to_string();
         write_log(msg.as_str());
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
-    let full_name_str = &params.data.as_ref().unwrap().as_str().unwrap();
-    let full_name = FullName::parse(full_name_str);
-    if full_name.is_none() {
-        let msg = format!("Failed to parse the full name `{}`.", full_name_str);
+    let data = params.data.as_ref().unwrap();
+    let node = serde_json::from_value::<EndNode>(data.clone());
+    if let Err(e) = node {
+        let msg = format!(
+            "In textDocument/completion, failed to parse params.data as EndNode: {}",
+            e
+        );
         write_log(msg.as_str());
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
-    let full_name = full_name.unwrap();
-
-    // Find the global value requested for completion.
-    let gv = program.global_values.get(&full_name);
-    if gv.is_none() {
-        let msg = format!("No value named `{}` is found.", full_name_str);
-        write_log(msg.as_str());
-        send_response(id, Err::<CompletionItem, String>(msg));
-        return;
-    }
-    let gv = gv.unwrap();
+    let node = node.unwrap();
 
     // Get the documentation.
-    let docs = gv.get_document();
+    let docs = document_from_endnode(&node, program);
 
     // Set the documentation into the given completion item.
-    let docs = docs.map(|doc_str| {
-        Documentation::MarkupContent(MarkupContent {
-            kind: lsp_types::MarkupKind::Markdown,
-            value: doc_str,
-        })
-    });
+    let docs = Documentation::MarkupContent(docs);
     let mut item = params.clone();
-    item.documentation = docs;
+    item.documentation = Some(docs);
 
     // Send the completion item.
     send_response(id, Ok::<_, ()>(item));
@@ -900,7 +924,15 @@ fn handle_hover(
         return;
     }
     let node = node.unwrap();
+    let content = document_from_endnode(&node, program);
+    let hover = lsp_types::Hover {
+        contents: lsp_types::HoverContents::Markup(content),
+        range: None,
+    };
+    send_response(id, Ok::<_, ()>(hover))
+}
 
+fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
     // Create a hover message.
     let mut docs = String::new();
     match node {
@@ -971,7 +1003,7 @@ fn handle_hover(
         }
         EndNode::Module(mod_name) => {
             docs += &format!("```\nmodule {}\n```", mod_name.to_string());
-            if let Some(mi) = program.modules.iter().find(|mi| mi.name == mod_name) {
+            if let Some(mi) = program.modules.iter().find(|mi| &mi.name == mod_name) {
                 if let Some(document) = mi.source.get_document().ok() {
                     if !document.trim().is_empty() {
                         docs += &format!("\n\n{}", document);
@@ -984,11 +1016,7 @@ fn handle_hover(
         kind: lsp_types::MarkupKind::Markdown,
         value: docs,
     };
-    let hover = lsp_types::Hover {
-        contents: lsp_types::HoverContents::Markup(content),
-        range: None,
-    };
-    send_response(id, Ok::<_, ()>(hover))
+    content
 }
 
 // Convert a `lsp_types::Position` into a bytes position in a string.

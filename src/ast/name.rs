@@ -163,6 +163,7 @@ impl FullName {
         }
     }
 
+    #[allow(dead_code)]
     pub fn parse(str: &str) -> Option<Self> {
         let mut names = str
             .split(NAMESPACE_SEPARATOR)
