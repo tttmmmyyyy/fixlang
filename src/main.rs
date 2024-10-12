@@ -384,7 +384,7 @@ fn main() {
             .append(&mut read_object_files_options(args)?);
 
         // Set `output_file_path`.
-        config.out_file_path = read_output_file_option(args);
+        config.out_file_path = read_output_file_option(args).or(config.out_file_path.clone());
 
         // Set `linked_libraries`.
         config
