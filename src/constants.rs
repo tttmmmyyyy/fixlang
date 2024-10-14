@@ -37,6 +37,7 @@ pub const C_SIZE_T_NAME: &str = "CSizeT";
 pub const C_FLOAT_NAME: &str = "CFloat";
 pub const C_DOUBLE_NAME: &str = "CDouble";
 
+pub const IOSTATE_NAME: &str = "IOState";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 pub const LAZY_NAME: &str = "Lazy";

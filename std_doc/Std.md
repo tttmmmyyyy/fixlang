@@ -17,7 +17,11 @@ The document for `Std` module describes about them up to N=3, but you can use la
 
 ### `type Array a = box { primitive }`
 
+The type of variable length arrays. This is a boxed type.
+
 ### `type Bool = unbox { primitive }`
+
+The type of boolean values.
 
 ### `type Boxed a = box struct { ...fields... }`
 
@@ -35,21 +39,39 @@ A type (alias) for error message.
 
 ### `type F32 = unbox { primitive }`
 
+The type of 32-bit floating point values.
+
 ### `type F64 = unbox { primitive }`
+
+The type of 64-bit floating point values.
 
 ### `type I16 = unbox { primitive }`
 
+The type of 16-bit signed integers.
+
 ### `type I32 = unbox { primitive }`
+
+The type of 32-bit signed integers.
 
 ### `type I64 = unbox { primitive }`
 
+The type of 64-bit signed integers.
+
 ### `type I8 = unbox { primitive }`
+
+The type of 8-bit signed integers.
 
 ### `type IO a = unbox struct { ...fields... }`
 
 `IO a` is a type representing I/O actions which return values of type `a`.
 
-#### field `_data : () -> a`
+#### field `_data : Std::IOState -> (Std::IOState, a)`
+
+### `type IOState = unbox { primitive }`
+
+The type of the "state"s modified by I/O operations. 
+
+The type `IO a` is isomorphic to `IOState -> (IOState, a)`.
 
 ### `type Iterator a = unbox struct { ...fields... }`
 
@@ -89,6 +111,8 @@ TODO: give better implementation.
 #### field `_data : Std::String`
 
 ### `type Ptr = unbox { primitive }`
+
+The type of pointers.
 
 ### `type PunchedArray a = unbox struct { ...fields... }`
 
@@ -131,11 +155,19 @@ A type of result value for a computation that may fail.
 
 ### `type U16 = unbox { primitive }`
 
+The type of 16-bit unsigned integers.
+
 ### `type U32 = unbox { primitive }`
+
+The type of 32-bit unsigned integers.
 
 ### `type U64 = unbox { primitive }`
 
+The type of 64-bit unsigned integers.
+
 ### `type U8 = unbox { primitive }`
+
+The type of 8-bit unsinged integers.
 
 ## `namespace Std::FFI`
 
@@ -1932,7 +1964,7 @@ Casts a value of `I8` into a value of `U8`.
 
 ## `namespace Std::IO`
 
-### `@_data : Std::IO a -> () -> a`
+### `@_data : Std::IO a -> Std::IOState -> (Std::IOState, a)`
 
 Retrieves the field `_data` from a value of `IO`.
 
@@ -1942,11 +1974,7 @@ Reads characters from an IOHandle.
 
 If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
 
-### `_unsafe_perform : Std::IO a -> a`
-
-Performs the I/O action. This may violate purity of Fix.
-
-### `act__data : [f : Std::Functor] ((() -> a) -> f (() -> a)) -> Std::IO a -> f (Std::IO a)`
+### `act__data : [f : Std::Functor] ((Std::IOState -> (Std::IOState, a)) -> f (Std::IOState -> (Std::IOState, a))) -> Std::IO a -> f (Std::IO a)`
 
 Updates a value of `IO` by applying a functorial action to field `_data`.
 
@@ -1974,9 +2002,9 @@ Exits the program with an error message and an error code.
 
 The error message is written to the standard error output.
 
-### `from_func : (() -> a) -> Std::IO a`
+### `from_io_runner : (Std::IOState -> (Std::IOState, a)) -> Std::IO a`
 
-Creates an IO action from a function.
+Creates an IO action from a runner function.
 
 ### `get_arg : Std::I64 -> Std::IO (Std::Option Std::String)`
 
@@ -2018,7 +2046,7 @@ Loop on lines read from an `IOHandle`.
 
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
-### `mod__data : ((() -> a) -> () -> a) -> Std::IO a -> Std::IO a`
+### `mod__data : ((Std::IOState -> (Std::IOState, a)) -> Std::IOState -> (Std::IOState, a)) -> Std::IO a -> Std::IO a`
 
 Updates a value of `IO` by applying a function to field `_data`.
 
@@ -2059,7 +2087,7 @@ Reads at most n bytes from an IOHandle.
 
 Reads all characters from an IOHandle.
 
-### `set__data : (() -> a) -> Std::IO a -> Std::IO a`
+### `set__data : (Std::IOState -> (Std::IOState, a)) -> Std::IO a -> Std::IO a`
 
 Updates a value of `IO` by setting field `_data` to a specified one.
 

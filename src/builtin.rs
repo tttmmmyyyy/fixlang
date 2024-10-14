@@ -12,6 +12,19 @@ use super::*;
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
     ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)),
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+            source: None,
+            document: Some(include_str!("./docs/std_iostate.md").to_string()),
+        },
+    );
+
+    ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], PTR_NAME)),
         TyConInfo {
             kind: kind_star(),
@@ -270,6 +283,11 @@ pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
         res = kind_arrow(kind_star(), res);
     }
     res
+}
+
+// Make the `IOState` type.
+pub fn make_iostate_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
 }
 
 // Get Ptr type.

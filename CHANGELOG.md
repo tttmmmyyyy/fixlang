@@ -28,12 +28,14 @@
 - Rename `Std::PunchedArray::plug_in!` and `Std::PunchedArray::punch!` to `Std::PunchedArray::plug_in` and `Std::PunchedArray::unsafe_punch` respectively.
 - Allow making empty structs.
 - Forbid underscores in type names, trait names, module names and namespaces.
-- Changed `CALL_C` to `FFI_CALL`.
+- Change `CALL_C` to `FFI_CALL`.
 - Remove `Std::abort` and added `Std::undefined : String -> a`.
-- Changed the type of arguments of `Std::FFI::unsafe_get_retain_function_of_boxed_value` and `Std::FFI::unsafe_get_release_function_of_boxed_value`.
+- Change the type of arguments of `Std::FFI::unsafe_get_retain_function_of_boxed_value` and `Std::FFI::unsafe_get_release_function_of_boxed_value`.
 - Remove `Debug` built-in module, which is moved into `Std::Debug` namespace.
 - Remove `AsyncTask`, `Character`, `Hash`, `HashMap`, `HashSet`, `Math`, `Random`, `RegExp`, `Subprocess` and `Time` built-in modules. They are provided as independent Fix projects.
-- Changed the type of `Debug::assert` and `Debug::assert_eq`. Now they return `IO ()`.
+- Change the type of `Debug::assert` and `Debug::assert_eq`. Now they return `IO ()`.
+- Change the internal representation of `IO a` types. Now `IO a` is isomorphic to `IOState -> (IOState, a)`.
+- Remove `IO::from_func` and added `IO::from_io_runner : (IOState -> (IOState, a)) -> IO a`.
 
 ### Fixed
 

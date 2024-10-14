@@ -431,7 +431,7 @@ namespace FFI {
 }
 
 // `IO a` is a type representing I/O actions which return values of type `a`.
-type IO a = unbox struct { _data : () -> a };
+type IO a = unbox struct { _data : IOState -> (IOState, a) };
 
 namespace IO {
     // Reads characters from an IOHandle.
@@ -439,12 +439,13 @@ namespace IO {
     // If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
     _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
-        IOFail { _data : IO { _data : |_| (
+        IOFail { _data : IO::from_io_runner $ |iostate| (
             let file_ptr = handle._file_ptr;
             if file_ptr == nullptr {
-                Result::err("Std::IO::_read_line_inner failed!: the IOHandle is already closed.")
+                let res = Result::err("Std::IO::_read_line_inner failed!: the IOHandle is already closed.");
+                (iostate, res)
             };
-            loop("", |str|
+            let res = loop("", |str|
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
                 let fgets_res = FFI_CALL[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, file_ptr];
@@ -469,32 +470,33 @@ namespace IO {
                 } else {
                     continue $ str
                 }
-            )
-        ) }}
+            );
+            (iostate, res)
+        ) }
     );
 
-    // Performs the I/O action. This may violate purity of Fix.
-    _unsafe_perform : IO a -> a;
-    _unsafe_perform = |io| (io.@_data)();
+    // // Performs the I/O action. This may violate purity of Fix.
+    // _unsafe_perform : IO a -> a;
+    // _unsafe_perform = |io| (io.@_data)();
 
     // Closes a file.
     // 
     // Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
     close_file : IOHandle -> IO ();
     close_file = |handle| (
-        IO { _data : |_| IOHandle::_unsafe_close(handle) }
+        IO::from_io_runner $ |iostate| (iostate, IOHandle::_unsafe_close(handle))
     );
 
     // Prints a string to stderr.
     eprint : String -> IO ();
     eprint = |str| (
-        IO { _data : |_| (
+        IO::from_io_runner $ |iostate| (
             eval str.borrow_c_str(|c_ptr|
                 let _ = FFI_CALL[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr];
                 ()
             );
-            ()
-        )}
+            (iostate, ())
+        )
     );
 
     // Prints a string followed by a newline to stderr.
@@ -507,7 +509,10 @@ namespace IO {
 
     // Exits the program with an error code.
     exit : I64 -> IO a;
-    exit = |code| IO { _data : |_| eval FFI_CALL[() exit(I32), code.to_I32]; undefined("") };
+    exit = |code| IO::from_io_runner $ |iostate| (
+        eval FFI_CALL[() exit(I32), code.to_I32];
+        (iostate, undefined(""))
+    );
 
     // Exits the program with an error message and an error code.
     //  
@@ -515,9 +520,9 @@ namespace IO {
     exit_with_msg : I64 -> String -> IO a;
     exit_with_msg = |code, msg| eval *eprintln(msg); exit(code);
 
-    // Creates an IO action from a function.
-    from_func : (() -> a) -> IO a;
-    from_func = |func| IO { _data : func };
+    // Creates an IO action from a runner function.
+    from_io_runner : (IOState -> (IOState, a)) -> IO a;
+    from_io_runner = |func| IO { _data : func };
 
     // `get_arg(n)` returns the n-th (0-indexed) command line argument.
     // 
@@ -579,15 +584,10 @@ namespace IO {
     // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
     loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s;
     loop_lines = |handle, state, worker| (
-        eval *pure();
-        if is_eof(handle)._unsafe_perform {
+        if *is_eof(handle).lift {
             pure $ state
         };
-        let line = read_line(handle).to_result._unsafe_perform;
-        if line.is_err {
-            IOFail::from_result(Result::err(line.as_err))
-        };
-        let line = line.as_ok;
+        let line = *read_line(handle);
         let res = worker(state, line);
         if res.is_break {
             pure $ res.as_break
@@ -601,20 +601,11 @@ namespace IO {
     // Similar to `loop_lines`, but the worker function can perform an IO action.
     loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s;
     loop_lines_io = |handle, state, worker| (
-        eval *pure();
-        if is_eof(handle)._unsafe_perform {
+        if *is_eof(handle).lift {
             pure $ state
         };
-        let line = read_line(handle).to_result._unsafe_perform;
-        if line.is_err {
-            IOFail::from_result(Result::err(line.as_err))
-        };
-        let line = line.as_ok;
-        let res = worker(state, line).to_result._unsafe_perform;
-        if res.is_err {
-            IOFail::from_result(Result::err(res.as_err))
-        };
-        let res = res.as_ok;
+        let line = *read_line(handle);
+        let res = *worker(state, line);
         if res.is_break {
             pure $ res.as_break
         };
@@ -625,7 +616,7 @@ namespace IO {
     // Openes a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOFail IOHandle;
     open_file = |path, mode| (
-        IOFail { _data  : IO { _data : |_|(
+        IOFail { _data  : IO::from_io_runner $ |iostate|(
             let path_str = path.to_string;
             let res = path_str.borrow_c_str(|path_ptr|
                 mode.borrow_c_str(|mode_str|
@@ -637,20 +628,20 @@ namespace IO {
                     }
                 )
             );
-            res
-        ) }}
+            (iostate, res)
+        ) }
     );
 
     // Prints a string to stdout.
     print : String -> IO ();
     print = |str| (
-        IO { _data : |_| (
+        IO::from_io_runner $ |iostate| (
             eval str.borrow_c_str(|c_ptr|
                 let _ = FFI_CALL[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr];
                 ()
             );
-            ()
-        )}
+            (iostate, ())
+        )
     );
 
     // Prints a string followed by a newline to stdout.
@@ -782,16 +773,19 @@ namespace IO {
 }
 
 impl IO : Functor {
-    map = |f, io| IO { _data : |_| f(io._unsafe_perform) };
+    map = |f, io| IO::from_io_runner $ |iostate| (
+        let (iostate, a) = (io.@_data)(iostate);
+        (iostate, f(a))
+    );
 }
 
 impl IO : Monad {
-    pure = |v| IO { _data : |_| v };
+    pure = |v| IO { _data : |iostate| (iostate, v) };
     bind = |f, io| (
-        IO { _data : |_| (
-            let a = io._unsafe_perform;
-            f(a)._unsafe_perform
-        )}
+        IO::from_io_runner $ |iostate| (
+            let (iostate, a) = (io.@_data)(iostate);
+            (f(a).@_data)(iostate)
+        )
     );
 }
 
@@ -2300,9 +2294,9 @@ namespace Debug {
     // 
     // If the assertion failed, prints a message to the stderr and aborts the program.
     assert : Lazy String -> Bool -> IO ();
-    assert = |msg, b| IO::from_func $ |_| (
+    assert = |msg, b| IO::from_io_runner $ |state| (
         if b {
-            ()
+            (state, ())
         } else {
             undefined("Assertion failed!: " + msg())
         }
@@ -2328,13 +2322,13 @@ namespace Debug {
     // Get clocks (cpu time) elapsed while executing an I/O action.
     consumed_time_while_io : IO a -> IO (a, F64);
     consumed_time_while_io = |io| (
-        IO { _data : |_| (
+        IO::from_io_runner $ |iostate| (
             let s = FFI_CALL[I64 fixruntime_clock()];
-            let r = io._unsafe_perform;
+            let (iostate, r) = (io.@_data)(iostate);
             let t = FFI_CALL[I64 fixruntime_clock()];
             let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
-            (r, t)
-        )}
+            (iostate, (r, t))
+        )
     );
 
     // Get clocks (cpu time) elapsed while evaluating a lazy value.

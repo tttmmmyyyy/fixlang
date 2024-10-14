@@ -249,12 +249,7 @@ fn type_entries(
 
         let mut doc = String::new();
 
-        let docstring = &ty_info
-            .source
-            .as_ref()
-            .map(|src| src.get_document())
-            .transpose()?
-            .unwrap_or_default();
+        let docstring = ty_info.get_document().unwrap_or_default();
         let docstring = docstring.trim();
         if !docstring.is_empty() {
             doc += &format!("\n\n{}", docstring);

@@ -24,7 +24,6 @@ use crate::ast::export_statement::ExportStatement;
 use crate::compile_unit::CompileUnit;
 use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, error_exit, exit_if_err, Errors};
-use crate::save_temporary_source;
 use crate::stopwatch::StopWatch;
 use crate::temporary_source_path;
 use crate::type_fun;
@@ -45,6 +44,7 @@ use crate::{allocate_obj, FixOptimizationLevel};
 use crate::{borrowing_optimization, SubCommand};
 use crate::{build_runtime, parse_file_path};
 use crate::{llvm_passes, make_tuple_ty};
+use crate::{make_iostate_ty, save_temporary_source};
 use crate::{make_std_mod, runtime};
 use crate::{make_tuple_traits_mod, BuildMode};
 
@@ -433,16 +433,10 @@ fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Ar
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
     let main_lambda_val = main_obj.load_field_nocap(gc, 0);
-    let main_lambda_ty = type_fun(make_tuple_ty(vec![]), make_tuple_ty(vec![]));
+    let main_lambda_ty = type_fun(make_iostate_ty(), make_tuple_ty(vec![]));
     let main_lambda = Object::create_from_value(main_lambda_val, main_lambda_ty, gc);
-    let unit = allocate_obj(
-        make_tuple_ty(vec![]),
-        &vec![],
-        None,
-        gc,
-        Some("unit_for_main_io"),
-    );
-    let ret = gc.apply_lambda(main_lambda, vec![unit], None);
+    let ios = allocate_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+    let ret = gc.apply_lambda(main_lambda, vec![ios], None);
     gc.release(ret);
 
     // Perform leak check

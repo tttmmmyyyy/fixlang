@@ -1186,13 +1186,12 @@ pub fn test50_3() {
             ));
             eval *assert_eq(|_|"case-loop", sum, 100 * 101 / 2);
 
-            let io_sum : IO I64 = Iterator::count_up(0).loop_iter_m(0, |sum, n| (
+            let sum = *Iterator::count_up(0).loop_iter_m(0, |sum, n| (
                 if n > 5 { break_m $ sum };
                 eval *(print $ n.to_string + " ");
                 continue_m $ sum + n
             ));
-            eval *println("");
-            eval *assert_eq(|_|"case-loop_m", io_sum._unsafe_perform, 5 * 6 / 2);
+            eval *assert_eq(|_|"case-loop_m", sum, 5 * 6 / 2);
 
             pure()
         );
@@ -2623,7 +2622,7 @@ pub fn test107() {
 
 #[test]
 pub fn test108() {
-    // Test write_file_string!, read_file_string!, read_line.
+    // Test write_file_string, read_file_string, read_line.
     let source = r#"
         module Main; 
         main : IO ();

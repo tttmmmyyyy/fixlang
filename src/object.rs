@@ -1173,7 +1173,9 @@ pub fn ty_to_object_ty(
                 assert!(capture.is_empty());
                 assert!(ti.is_unbox);
                 ret.is_unbox = ti.is_unbox;
-                if ty == &make_ptr_ty() {
+                if ty == &make_iostate_ty() {
+                    // There are no fields in IOState.
+                } else if ty == &make_ptr_ty() {
                     ret.field_types.push(ObjectFieldType::Ptr);
                 } else if ty == &make_bool_ty() {
                     ret.field_types.push(ObjectFieldType::U8);
