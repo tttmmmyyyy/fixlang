@@ -568,7 +568,7 @@ namespace IO {
     is_eof : IOHandle -> IO Bool;
     is_eof = |handle| (
         eval *pure();
-        pure $ FFI_CALL[I32 feof(Ptr), handle._file_ptr] != 0_I32
+        pure $ FFI_CALL[I32 feof(Ptr), handle._file_ptr] != 0_I32 // Should we borrow file_ptr?
     );
 
     // Loop on lines read from an `IOHandle`.
