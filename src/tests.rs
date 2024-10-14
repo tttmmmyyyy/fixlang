@@ -3094,9 +3094,9 @@ pub fn test_undefined() {
         main : IO ();
         main = (
             let x = 3;
-            let a = if true { Array::fill(1, |_| x) } else { undefined() };
+            let a = if true { Array::fill(1, |_| x) } else { undefined("") };
             eval assert_eq(|_|"case 1", (a.@(0))(1), x);
-            let a = if true { |_| x } else { undefined() };
+            let a = if true { |_| x } else { undefined("") };
             eval assert_eq(|_|"case 1", a(1), x);
             pure()
         );
@@ -6332,8 +6332,8 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 
         main: IO ();
         main = (
-            let release = (|_| undefined() : VoidType).unsafe_get_release_function_of_boxed_value;
-            let retain = (|_| undefined() : VoidType).unsafe_get_retain_function_of_boxed_value;
+            let release = (|_| undefined("") : VoidType).unsafe_get_release_function_of_boxed_value;
+            let retain = (|_| undefined("") : VoidType).unsafe_get_retain_function_of_boxed_value;
             pure()
         );
     "##;
@@ -6348,13 +6348,13 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 
         get_release_func_of_codom : (a -> b) -> Ptr;
         get_release_func_of_codom = |f| (
-            let lazy_b = |_| f(undefined());
+            let lazy_b = |_| f(undefined(""));
             lazy_b.unsafe_get_release_function_of_boxed_value
         );
 
         get_retain_func_of_dom : (a -> b) -> Ptr;
         get_retain_func_of_dom = |f| (
-            let lazy_a = |_| let x = undefined(); let _ = f(x); x;
+            let lazy_a = |_| let x = undefined(""); let _ = f(x); x;
             lazy_a.unsafe_get_release_function_of_boxed_value
         );
 
@@ -6375,7 +6375,7 @@ pub fn test_unsafe_get_release_function_of_boxed_value_error() {
 
         main: IO ();
         main = (
-            let release = (|_| undefined() : I64).unsafe_get_release_function_of_boxed_value;
+            let release = (|_| undefined("") : I64).unsafe_get_release_function_of_boxed_value;
             pure()
         );
     "##;
@@ -6389,7 +6389,7 @@ pub fn test_unsafe_get_retain_function_of_boxed_value_error() {
 
         main: IO ();
         main = (
-            let retain = (|_| undefined() : I64).unsafe_get_retain_function_of_boxed_value;
+            let retain = (|_| undefined("") : I64).unsafe_get_retain_function_of_boxed_value;
             pure()
         );
     "##;

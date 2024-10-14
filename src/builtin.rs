@@ -3628,6 +3628,8 @@ pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUndefinedFunctionBody {}
 
+const UNDEFINED_ARG_NAME: &str = "msg";
+
 impl InlineLLVMUndefinedFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
@@ -3636,10 +3638,21 @@ impl InlineLLVMUndefinedFunctionBody {
         _rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        // Abort
+        // Get the first argument.
+        let msg = gc.get_var(&FullName::local(UNDEFINED_ARG_NAME)).ptr.get(gc);
+
+        // Get the pointer to the message.
+        let msg = ObjectFieldType::get_struct_field_noclone(gc, &msg, 0);
+        let msg = msg.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let msg = gc.cast_pointer(msg, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
+
+        // Write it to stderr, and flush.
+        gc.call_runtime(RUNTIME_EPRINT, &[msg.into()]);
+
+        // Abort the program.
         gc.call_runtime(RUNTIME_ABORT, &[]);
 
-        // Return
+        // Return undefined value.
         Object::new(
             ty.get_struct_type(gc, &vec![])
                 .ptr_type(AddressSpace::from(0))
@@ -3652,13 +3665,12 @@ impl InlineLLVMUndefinedFunctionBody {
 // `undefined` built-in function
 pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
-    const UNIT_NAME: &str = "unit";
     let expr = expr_abs(
-        vec![var_local(UNIT_NAME)],
+        vec![var_local(UNDEFINED_ARG_NAME)],
         expr_llvm(
             LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody {}),
             vec![],
-            "undefined".to_string(),
+            "undefined(msg)".to_string(),
             type_tyvar_star(A_NAME),
             None,
         ),
@@ -3668,7 +3680,7 @@ pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_tyapp(make_lazy_ty(), type_tyvar_star(A_NAME)),
+        type_fun(make_string_ty(), type_tyvar_star(A_NAME)),
     );
     (expr, scm)
 }
