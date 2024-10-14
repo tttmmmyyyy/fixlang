@@ -27,6 +27,21 @@ pub fn test0() {
 }
 
 #[test]
+pub fn test_if_semicolon_in_let() {
+    let source = r#"    
+            module Main;
+            
+            main : IO ();
+            main = (
+                let x = if true { 1 }; 2; // First semicolon is for `if`, and second semicolon is for `let`.
+                eval assert_eq(|_|"case 1", x, 1);
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test1() {
     let source = r#"
             module Main; 
