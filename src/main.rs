@@ -236,22 +236,21 @@ fn main() {
     let deps_install =
         App::new("install").about("Install dependencies specified in the lock file.");
     let deps_update = App::new("update").about(
-        "Update the lock file and install dependencies so that it satisfies the dependencies specified in the project file.",
+        "Update the lock file so that it satisfies the dependencies specified in the project file, and install the dependencies."
     );
-    let add_about_str = format!("Add dependency to Fix projects.\n\
-        Repositories of Fix projects are searched in the registry files listed in \"~/.fixconfig.toml\" and the built-in registry \"{}\".\n\
-        If a repository which hosts the specified project is found, `[[dependencies]]` table is added to \"fixproj.toml\".", DEFAULT_REGISTRY);
+    let add_about_str = format!("Update the project file by adding `[[dependencies]]` tables which describe dependencies to specified Fix projects.\n\
+    Repositories for a Fix project is searched in the registry files listed in the configuration file (\"~/.fixconfig.toml\") and the default registry \"{}\".", DEFAULT_REGISTRY);
     let add_about_str: &'static str = add_about_str.leak();
     let deps_add = App::new("add")
-        .about("Add dependency to Fix projects.")
-        .long_about(Some(add_about_str))
-        .arg(Arg::new("projects")
-            .multiple_values(true)
-            .takes_value(true)
-            .help("Projects to be added. \nEach entry be in the form \"proj-name\" or \"proj-name@ver_req\" (e.g.,\"hashmap@0.1.0\").")
+        .about(add_about_str)
+        .arg(
+            Arg::new("projects")
+                .multiple_values(true)
+                .takes_value(true)
+                .help("Projects to be added. \nEach entry should be in the form \"proj-name\" or \"proj-name@ver_req\" (e.g.,\"hashmap@0.1.0\")."),
         );
 
-    let deps = deps
+    let mut deps_subc = deps
         .subcommand(deps_install)
         .subcommand(deps_update)
         .subcommand(deps_add);
@@ -291,7 +290,7 @@ fn main() {
         .subcommand(test_subc)
         .subcommand(clean_subc)
         .subcommand(lsp_subc)
-        .subcommand(deps)
+        .subcommand(deps_subc.clone())
         .subcommand(docs_subc)
         .subcommand(init_subc);
 
@@ -483,7 +482,7 @@ fn main() {
                 exit_if_err(proj_file.add_dependencies(&projects, &fix_config));
                 exit_if_err(DependecyLockFile::update_and_install());
             }
-            _ => eprintln!("Unknown command!"),
+            _ => deps_subc.print_help().unwrap(),
         },
         Some(("language-server", _args)) => {
             launch_language_server();
@@ -498,6 +497,6 @@ fn main() {
         Some(("init", _args)) => {
             exit_if_err(ProjectFile::create_example_file());
         }
-        _ => eprintln!("Unknown command!"),
+        _ => eprintln!("Unknown command. To show list of available commands, run `fix --help`."),
     }
 }
