@@ -769,14 +769,14 @@ main = (
 
 Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
 
-### `undefined : () -> a`
+### `undefined : Std::String -> a`
 
-An undefined value.
+Generates an undefined value.
 
-Since `undefined()` has generic type `a`, you can put it anywhere and it will be type-checked.
-This is useful as a placeholder value that you haven't implemented yet.
+Calling this function prints `msg` to the stderr, flush stderr, and aborts the program (calls `abort` in libc).
+Since `undefined(msg)` has generic type `a`, you can put it anywhere and it will be type-checked.
 
-Calling this value aborts the execution of the program (calls `abort` in libc).
+This is useful when you want to write a placeholder that will be implemented later.
 
 ### `unsafe_is_unique : a -> (Std::Bool, a)`
 
@@ -1334,7 +1334,7 @@ Returns a pointer to the function of type `void (*)(void*)` which releases a box
 This function is used to release a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
 
 Note that this function is requires a value of type `Lazy a`, not of `a`.
-So you can get release function for a boxed type `T` even when you don't have a value of type `T` -- you can just use `|_| undefined() : T`:
+So you can get release function for a boxed type `T` even when you don't have a value of type `T` -- you can just use `|_| undefined("") : T`:
 
 ```
 module Main;
@@ -1344,14 +1344,14 @@ type VoidType = box struct {};
 
 main: IO ();
 main = (
-    let release = (|_| undefined() : VoidType).unsafe_get_release_function_of_boxed_value; // Release function of `VoidType`.
+    let release = (|_| undefined("") : VoidType).unsafe_get_release_function_of_boxed_value; // Release function of `VoidType`.
     pure()
 );
 ```
 
-In case the type is not a specific `T`, but a generic parameter `a` that appears in the type signature of a function you are implementing, you cannot use the above technique, because writing `|_| undefined() : a` is not allowed in Fix's syntax. Even in such a case, if you have some value related to `a`, you can make a `Lazy a` value in many cases. For example:
-- If you have a function `f : b -> a`, then you can use `|_| f(undefined())` of type `Lazy a`. 
-- If you have a function `f : a -> b`, then you can use `|_| let x = undefined(); let _ = f(x); x` of type `Lazy a`.
+In case the type is not a specific `T`, but a generic parameter `a` that appears in the type signature of a function you are implementing, you cannot use the above technique, because writing `|_| undefined("") : a` is not allowed in Fix's syntax. Even in such a case, if you have some value related to `a`, you can make a `Lazy a` value in many cases. For example:
+- If you have a function `f : b -> a`, then you can use `|_| f(undefined(""))` of type `Lazy a`. 
+- If you have a function `f : a -> b`, then you can use `|_| let x = undefined(""); let _ = f(x); x` of type `Lazy a`.
 
 ### `unsafe_get_retain_function_of_boxed_value : (() -> a) -> Std::Ptr`
 
