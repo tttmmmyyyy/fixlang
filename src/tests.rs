@@ -19,7 +19,7 @@ pub fn test0() {
             
             main : IO ();
             main = (
-                eval assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 1e1_I64);
+                eval *assert_eq(|_|"case 1", 5 + 3 * 8 / 5 + 7 % 3, 1e1_I64);
                 pure()
             );
         "#;
@@ -34,7 +34,7 @@ pub fn test_if_semicolon_in_let() {
             main : IO ();
             main = (
                 let x = if true { 1 }; 2; // First semicolon is for `if`, and second semicolon is for `let`.
-                eval assert_eq(|_|"case 1", x, 1);
+                eval *assert_eq(|_|"case 1", x, 1);
                 pure()
             );
         "#;
@@ -48,7 +48,7 @@ pub fn test1() {
                         
             main : IO ();
             main = (
-                let u = assert_eq(|_|"", let x = 5 in -x, -5);
+                eval *assert_eq(|_|"", let x = 5 in -x, -5);
                 pure()
             );
         "#;
@@ -1083,13 +1083,13 @@ pub fn test47_6() {
                 |lhs| lhs.force_unique.append([4,5,6])
             );
             let arr = uni.as_some;
-            eval assert_eq(|_|"", arr.@(0), 1);
-            eval assert_eq(|_|"", arr.@(1), 2);
-            eval assert_eq(|_|"", arr.@(2), 3);
-            eval assert_eq(|_|"", arr.@(3), 4);
-            eval assert_eq(|_|"", arr.@(4), 5);
-            eval assert_eq(|_|"", arr.@(5), 6);
-            eval assert_eq(|_|"", arr.get_size, 6);
+            eval *assert_eq(|_|"", arr.@(0), 1);
+            eval *assert_eq(|_|"", arr.@(1), 2);
+            eval *assert_eq(|_|"", arr.@(2), 3);
+            eval *assert_eq(|_|"", arr.@(3), 4);
+            eval *assert_eq(|_|"", arr.@(4), 5);
+            eval *assert_eq(|_|"", arr.@(5), 6);
+            eval *assert_eq(|_|"", arr.get_size, 6);
             pure()
         );
     "#;
@@ -1184,7 +1184,7 @@ pub fn test50_3() {
                 if n > 100 { break $ sum };
                 continue $ sum + n
             ));
-            eval assert_eq(|_|"case-loop", sum, 100 * 101 / 2);
+            eval *assert_eq(|_|"case-loop", sum, 100 * 101 / 2);
 
             let io_sum : IO I64 = Iterator::count_up(0).loop_iter_m(0, |sum, n| (
                 if n > 5 { break_m $ sum };
@@ -1192,7 +1192,7 @@ pub fn test50_3() {
                 continue_m $ sum + n
             ));
             eval *println("");
-            eval assert_eq(|_|"case-loop_m", io_sum._unsafe_perform, 5 * 6 / 2);
+            eval *assert_eq(|_|"case-loop_m", io_sum._unsafe_perform, 5 * 6 / 2);
 
             pure()
         );
@@ -1520,7 +1520,7 @@ pub fn test63() {
     main : IO ();
     main = (
         let min = -9223372036854775808;
-        eval assert_eq(|_|"", min.to_string, "-9223372036854775808");
+        eval *assert_eq(|_|"", min.to_string, "-9223372036854775808");
         println $ min.to_string
     );
     "#;
@@ -1695,15 +1695,15 @@ pub fn test75() {
     main = (
         let iter = Iterator::from_map(|i| i*i );
         let (n, iter) = iter.advance.as_some;
-        eval assert_eq(|_|"", n, 0*0);
+        eval *assert_eq(|_|"", n, 0*0);
         let (n, iter) = iter.advance.as_some;
-        eval assert_eq(|_|"", n, 1*1);
+        eval *assert_eq(|_|"", n, 1*1);
         let (n, iter) = iter.advance.as_some;
-        eval assert_eq(|_|"", n, 2*2);
+        eval *assert_eq(|_|"", n, 2*2);
         let (n, iter) = iter.advance.as_some;
-        eval assert_eq(|_|"", n, 3*3);
+        eval *assert_eq(|_|"", n, 3*3);
         let (n, iter) = iter.advance.as_some;
-        eval assert_eq(|_|"", n, 4*4);
+        eval *assert_eq(|_|"", n, 4*4);
         pure()
     );
     "#;
@@ -1719,7 +1719,7 @@ pub fn test76() {
     main = (
         let array = Array::from_map(3, |_i| Array::from_map(3, |_j| 0));
         let array = array.mod(1, |arr| arr.assert_unique(|_|"The array is not unique!").set(1, 9));
-        eval assert_eq(|_|"", array.@(1).@(1), 9);
+        eval *assert_eq(|_|"", array.@(1).@(1), 9);
         pure()
     );
     "#;
@@ -1738,14 +1738,14 @@ pub fn test77() {
         let iter = iter0.zip(iter1);
         let iter = iter.map(|(a,b)| a+b).take(3);
         let res = iter.fold(0, add);
-        eval assert_eq(|_|"case 1", res, (5+2*0) + (6+2*1) + (7+2*2));
+        eval *assert_eq(|_|"case 1", res, (5+2*0) + (6+2*1) + (7+2*2));
 
         let subs = (Iterator::empty : Iterator I64).subsequences;
-        eval assert_eq(|_|"subsequences 1", subs.get_size, 1);
-        eval assert_eq(|_|"subsequences 2", subs.advance.as_some.@0.get_size, 0);
+        eval *assert_eq(|_|"subsequences 1", subs.get_size, 1);
+        eval *assert_eq(|_|"subsequences 2", subs.advance.as_some.@0.get_size, 0);
 
         let subs = [1,2,3].to_iter.subsequences;
-        eval assert_eq(|_|"subsequences 3", subs.map(to_array).to_array, [[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]]);
+        eval *assert_eq(|_|"subsequences 3", subs.map(to_array).to_array, [[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]]);
         // eval debug_println $ subs.to_iter.map(to_iter).map(map(to_string) >> join(", ") >> |s| "[" + s + "]").join(", ");
 
         pure()
@@ -1764,7 +1764,7 @@ pub fn test78() {
         let iter = Iterator::count_up(1).take(100);
         let iter = iter.filter(|n| n%3 == 0 || n%5 == 0);
         let count = iter.map(|_|1).fold(0, add);
-        eval assert_eq(|_|"", count, 100/3 + 100/5 - 100/15);
+        eval *assert_eq(|_|"", count, 100/3 + 100/5 - 100/15);
         pure()
     );
     "#;
@@ -1781,9 +1781,9 @@ pub fn test79() {
         let ls = Iterator::empty;
         let ls = ls.push_front(1).push_front(2);
         let (e, ls) = ls.advance.as_some;
-        eval assert_eq(|_|"", 2, e);
+        eval *assert_eq(|_|"", 2, e);
         let (e, ls) = ls.advance.as_some;
-        eval assert_eq(|_|"", 1, e);
+        eval *assert_eq(|_|"", 1, e);
         pure()
     );
     "#;
@@ -1799,9 +1799,9 @@ pub fn test80() {
     main = (
         let iter = Iterator::empty.push_front(4).push_front(3).push_front(2).push_front(1);
         let last = iter.find_last.as_some;
-        eval assert_eq(|_|"", last, 4);
+        eval *assert_eq(|_|"", last, 4);
         let last: Option Bool = Iterator::empty.find_last;
-        eval assert(|_|"", last.is_none);
+        eval *assert(|_|"", last.is_none);
         pure()
     );
     "#;
@@ -1816,9 +1816,9 @@ pub fn test81() {
     main : IO ();
     main = (
         let arr = [1,2,3,4];
-        eval assert_eq(|_|"", arr.get_size, 4);
+        eval *assert_eq(|_|"", arr.get_size, 4);
         let arr: Array Bool = [];
-        eval assert_eq(|_|"", arr.get_size, 0);
+        eval *assert_eq(|_|"", arr.get_size, 0);
         pure()
     );
     "#;
@@ -1837,26 +1837,26 @@ pub fn test82() {
         let v1 = [];
         let v2 = [3,4];
         let v = v1.append(v2);
-        eval assert_eq(|_|"wrong reserved length (0+2)", v.get_capacity, 2);
-        eval assert_eq(|_|"wrong length (0+2)", v.get_size, 2);
-        eval assert_eq(|_|"wrong element (0+2)", v.@(0), 3);
-        eval assert_eq(|_|"wrong element (0+2)", v.@(1), 4);
+        eval *assert_eq(|_|"wrong reserved length (0+2)", v.get_capacity, 2);
+        eval *assert_eq(|_|"wrong length (0+2)", v.get_size, 2);
+        eval *assert_eq(|_|"wrong element (0+2)", v.@(0), 3);
+        eval *assert_eq(|_|"wrong element (0+2)", v.@(1), 4);
 
         // Test 2+0
         let v1 = [1,2];
         let v2 = [];
         let v = v1.append(v2);
-        eval assert_eq(|_|"wrong reserved length (2+0)", v.get_capacity, 2);
-        eval assert_eq(|_|"wrong length (2+0)", v.get_size, 2);
-        eval assert_eq(|_|"wrong element (2+0)", v.@(0), 1);
-        eval assert_eq(|_|"wrong element (2+0)", v.@(1), 2);
+        eval *assert_eq(|_|"wrong reserved length (2+0)", v.get_capacity, 2);
+        eval *assert_eq(|_|"wrong length (2+0)", v.get_size, 2);
+        eval *assert_eq(|_|"wrong element (2+0)", v.@(0), 1);
+        eval *assert_eq(|_|"wrong element (2+0)", v.@(1), 2);
 
         // Test 0+0
         let v1: Array (I64 -> Bool) = [];
         let v2 = [];
         let v = v1.append(v2);
-        eval assert_eq(|_|"wrong capacity (0+0)", v.get_capacity, 0);
-        eval assert_eq(|_|"wrong length (0+0)", v.get_size, 0);
+        eval *assert_eq(|_|"wrong capacity (0+0)", v.get_capacity, 0);
+        eval *assert_eq(|_|"wrong length (0+0)", v.get_size, 0);
 
         // Test boxed elements.
         let v1 = [add(1), add(2)];
@@ -1864,13 +1864,13 @@ pub fn test82() {
         let v = v1.append(v2);
         let x = 0;
         let x = v.@(0) $ x;
-        eval assert_eq(|_|"wrong value (boxed) 0+1", x, 0+1);
+        eval *assert_eq(|_|"wrong value (boxed) 0+1", x, 0+1);
         let x = v.@(1) $ x;
-        eval assert_eq(|_|"wrong value (boxed) 0+1+2", x, 0+1+2);
+        eval *assert_eq(|_|"wrong value (boxed) 0+1+2", x, 0+1+2);
         let x = v.@(2) $ x;
-        eval assert_eq(|_|"wrong value (boxed) 0+1+2+3", x, 0+1+2+3);
+        eval *assert_eq(|_|"wrong value (boxed) 0+1+2+3", x, 0+1+2+3);
         let x = v.@(3) $ x;
-        eval assert_eq(|_|"wrong value (boxed) 0+1+2+3+4", x, 0+1+2+3+4);
+        eval *assert_eq(|_|"wrong value (boxed) 0+1+2+3+4", x, 0+1+2+3+4);
 
         // Test appending shared array.
         let v1 = [add(1), add(2)].reserve(4);
@@ -1880,13 +1880,13 @@ pub fn test82() {
         let x = 0;
         let x = v.@(0) $ x; // += 1
         let x = w.@(3) $ x; // += 2
-        eval assert_eq(|_|"", x, 3);
+        eval *assert_eq(|_|"", x, 3);
 
         let res = Array::empty(3);
         let v = [[1], [2], [3]].to_iter.fold(res, |res, v| (
             res.assert_unique(|_|"the array is not unique!").append(v)
         ));
-        eval assert_eq(|_|"", v, [1, 2, 3]);
+        eval *assert_eq(|_|"", v, [1, 2, 3]);
 
         pure()
     );
@@ -1908,18 +1908,18 @@ pub fn test83() {
             let v = v.push_back(idx);
             continue $ (idx+1, v)
         ));
-        eval loop(0, |idx|(
-            if idx == 100 { break $ () };
-            eval assert_eq(|_|"wrong element", idx, v.@(idx));
-            continue $ idx + 1
+        eval *loop_m(0, |idx|(
+            if idx == 100 { break_m $ () };
+            eval *assert_eq(|_|"wrong element", idx, v.@(idx));
+            continue_m $ idx + 1
         ));
         let v = loop((0, v), |(idx, v)|(
             if idx == 100 { break $ v };
             let v = v.pop_back;
             continue $ (idx+1, v)
         ));
-        eval assert_eq(|_|"wrong length after pop", 0, v.get_size);
-        eval assert(|_|"wrong reserved length after pop", v.get_capacity >= 100);
+        eval *assert_eq(|_|"wrong length after pop", 0, v.get_size);
+        eval *assert(|_|"wrong reserved length after pop", v.get_capacity >= 100);
     
         // Boxed element
         let v = [];
@@ -1933,14 +1933,14 @@ pub fn test83() {
             let x = v.@(idx) $ x;
             continue $ (idx + 1, x)
         ));
-        eval assert_eq(|_|"wrong value (boxed)", x, 99 * 100 / 2);
+        eval *assert_eq(|_|"wrong value (boxed)", x, 99 * 100 / 2);
         let v = loop((0, v), |(idx, v)|(
             if idx == 100 { break $ v };
             let v = v.pop_back;
             continue $ (idx+1, v)
         ));
-        eval assert_eq(|_|"wrong length after pop (boxed)", 0, v.get_size);
-        eval assert(|_|"wrong reserved length after pop (boxed)", v.get_capacity >= 100);
+        eval *assert_eq(|_|"wrong length after pop (boxed)", 0, v.get_size);
+        eval *assert(|_|"wrong reserved length after pop (boxed)", v.get_capacity >= 100);
     
         pure()
     );
@@ -1957,19 +1957,19 @@ pub fn test84() {
     main = (
         let v1 = [1,2,3];
         let v2 = [1,2,3];
-        eval assert(|_|"", v1 == v2);
+        eval *assert(|_|"", v1 == v2);
     
         let v1 = [1,2,3];
         let v2 = [0,2,3];
-        eval assert(|_|"", v1 != v2);
+        eval *assert(|_|"", v1 != v2);
     
         let v1 = [];
         let v2 = [0];
-        eval assert(|_|"", v1 != v2);
+        eval *assert(|_|"", v1 != v2);
     
         let v1: Array I64 = [];
         let v2 = [];
-        eval assert(|_|"", v1 == v2);
+        eval *assert(|_|"", v1 == v2);
     
         pure()
     );
@@ -1987,7 +1987,7 @@ pub fn test85() {
         let s1 = "Hello";
         let s2 = " ";
         let s3 = "World!";
-        eval assert_eq(|_|"", s1.concat(s2).concat(s3), "Hello World!");
+        eval *assert_eq(|_|"", s1.concat(s2).concat(s3), "Hello World!");
     
         pure()
     );
@@ -2004,7 +2004,7 @@ pub fn test86() {
     main : IO ();
     main = (
         let iter = Iterator::from_array(["Hello", " ", "World", "!"]);
-        eval assert_eq(|_|"", iter.concat_iter, "Hello World!");
+        eval *assert_eq(|_|"", iter.concat_iter, "Hello World!");
         pure()
     );
     
@@ -2021,15 +2021,15 @@ pub fn test87() {
     main = (
         let lhs = Iterator::from_array([1,2,3]);
         let rhs = Iterator::from_array([1,2,3]);
-        eval assert_eq(|_|"", lhs, rhs);
+        eval *assert_eq(|_|"", lhs, rhs);
 
         let lhs: Iterator Bool = Iterator::from_array([]);
         let rhs = Iterator::from_array([]);
-        eval assert_eq(|_|"", lhs, rhs);
+        eval *assert_eq(|_|"", lhs, rhs);
 
         let lhs = Iterator::from_array([]);
         let rhs = Iterator::from_array([1,2]);
-        eval assert(|_|"", lhs != rhs);
+        eval *assert(|_|"", lhs != rhs);
 
         pure()
     );
@@ -2047,15 +2047,15 @@ pub fn test88() {
     main = (
         let iter = Iterator::from_array([1,2,3]);
         let iter = iter.intersperse(0);
-        eval assert_eq(|_|"", iter, Iterator::from_array([1,0,2,0,3]));
+        eval *assert_eq(|_|"", iter, Iterator::from_array([1,0,2,0,3]));
     
         let iter = Iterator::from_array([1]);
         let iter = iter.intersperse(0);
-        eval assert_eq(|_|"", iter, Iterator::from_array([1]));
+        eval *assert_eq(|_|"", iter, Iterator::from_array([1]));
     
         let iter = Iterator::from_array([]);
         let iter = iter.intersperse(0);
-        eval assert_eq(|_|"", iter, Iterator::from_array([]));
+        eval *assert_eq(|_|"", iter, Iterator::from_array([]));
     
         pure()
     );
@@ -2073,19 +2073,19 @@ pub fn test89() {
     main = (
         let lhs = Iterator::from_array([1,2,3]);
         let rhs = Iterator::from_array([4,5,6]);
-        eval assert_eq(|_|"", lhs + rhs, Iterator::from_array([1,2,3,4,5,6]));
+        eval *assert_eq(|_|"", lhs + rhs, Iterator::from_array([1,2,3,4,5,6]));
     
         let lhs = Iterator::from_array([]);
         let rhs = Iterator::from_array([4,5,6]);
-        eval assert_eq(|_|"", lhs + rhs, Iterator::from_array([4,5,6]));
+        eval *assert_eq(|_|"", lhs + rhs, Iterator::from_array([4,5,6]));
 
         let lhs = Iterator::from_array([1,2,3]);
         let rhs = Iterator::from_array([]);
-        eval assert_eq(|_|"", lhs + rhs, Iterator::from_array([1,2,3]));
+        eval *assert_eq(|_|"", lhs + rhs, Iterator::from_array([1,2,3]));
 
         let lhs: Iterator I64 = Iterator::from_array([]);
         let rhs = Iterator::from_array([]);
-        eval assert_eq(|_|"", lhs + rhs, Iterator::from_array([]));
+        eval *assert_eq(|_|"", lhs + rhs, Iterator::from_array([]));
     
         pure()
     );
@@ -2103,15 +2103,15 @@ pub fn test90() {
     main = (
         let vec = [5,3,1,7,4,6,9,8,2];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
-        eval assert_eq(|_|"wrong result 9", vec, [1,2,3,4,5,6,7,8,9]);
+        eval *assert_eq(|_|"wrong result 9", vec, [1,2,3,4,5,6,7,8,9]);
 
         let vec = [1];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
-        eval assert_eq(|_|"wrong result 1", vec, [1]);
+        eval *assert_eq(|_|"wrong result 1", vec, [1]);
 
         let vec: Array I64 = [];
         let vec = vec.sort_by(|(lhs, rhs)| lhs < rhs);
-        eval assert_eq(|_|"wrong result 0", vec, []);
+        eval *assert_eq(|_|"wrong result 0", vec, []);
 
         pure()
     );
@@ -2186,19 +2186,19 @@ pub fn test95() {
                 let int_val = 42;
                 let (unique, _) = int_val.unsafe_is_unique;
                 let use = int_val + 1;
-                eval assert_eq(|_|"fail: int_val is shared", unique, true);
+                eval *assert_eq(|_|"fail: int_val is shared", unique, true);
 
                 // For boxed value, it returns true if the value isn't used later.
                 let arr = Array::fill(10, 10);
                 let (unique, arr) = arr.unsafe_is_unique;
                 let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
-                eval assert_eq(|_|"fail: arr is shared", unique, true);
+                eval *assert_eq(|_|"fail: arr is shared", unique, true);
 
                 // Fox boxed value, it returns false if the value will be used later.
                 let arr = Array::fill(10, 10);
                 let (unique, _) = arr.unsafe_is_unique;
                 let use = arr.@(0);
-                eval assert_eq(|_|"fail: arr is unique", unique, false);
+                eval *assert_eq(|_|"fail: arr is unique", unique, false);
 
                 let int_val = 42;
                 let _ = int_val.assert_unique(|_|"fail: int_val is shared (2)");
@@ -2221,15 +2221,15 @@ pub fn test96() {
             module Main;             
             main : IO ();
             main = (
-                eval assert_eq(|_|"", 255_U8, 255_U8);
-                eval assert_eq(|_|"", 'A', 65_U8);
-                eval assert_eq(|_|"", '\0', 0_U8);
-                eval assert_eq(|_|"", '\t', 9_U8);
-                eval assert_eq(|_|"", '\r', 13_U8);
-                eval assert_eq(|_|"", '\n', 10_U8);
-                eval assert_eq(|_|"", '\\', 92_U8);
-                eval assert_eq(|_|"", '\'', 39_U8);
-                eval assert_eq(|_|"", '\x7f', 127_U8);
+                eval *assert_eq(|_|"", 255_U8, 255_U8);
+                eval *assert_eq(|_|"", 'A', 65_U8);
+                eval *assert_eq(|_|"", '\0', 0_U8);
+                eval *assert_eq(|_|"", '\t', 9_U8);
+                eval *assert_eq(|_|"", '\r', 13_U8);
+                eval *assert_eq(|_|"", '\n', 10_U8);
+                eval *assert_eq(|_|"", '\\', 92_U8);
+                eval *assert_eq(|_|"", '\'', 39_U8);
+                eval *assert_eq(|_|"", '\x7f', 127_U8);
                 pure()
             );
         "#;
@@ -2243,21 +2243,21 @@ pub fn test97() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"1", -(1_U8), 255_U8);
-            eval assert_eq(|_|"2", 255_U8 + 3_U8, 2_U8);
-            eval assert_eq(|_|"3", 1_U8 - 3_U8, 254_U8);
-            eval assert_eq(|_|"4", 20_U8 * 30_U8, 88_U8);
-            eval assert_eq(|_|"5", 10_U8 / 3_U8, 3_U8);
-            eval assert_eq(|_|"6", 10_U8 % 3_U8, 1_U8);
-            eval assert_eq(|_|"7", 255_U8 > 0_U8, true);
-            eval assert_eq(|_|"8", 255_U8 >= 0_U8, true);
+            eval *assert_eq(|_|"1", -(1_U8), 255_U8);
+            eval *assert_eq(|_|"2", 255_U8 + 3_U8, 2_U8);
+            eval *assert_eq(|_|"3", 1_U8 - 3_U8, 254_U8);
+            eval *assert_eq(|_|"4", 20_U8 * 30_U8, 88_U8);
+            eval *assert_eq(|_|"5", 10_U8 / 3_U8, 3_U8);
+            eval *assert_eq(|_|"6", 10_U8 % 3_U8, 1_U8);
+            eval *assert_eq(|_|"7", 255_U8 > 0_U8, true);
+            eval *assert_eq(|_|"8", 255_U8 >= 0_U8, true);
 
-            eval assert_eq(|_|"9", 2147483647_I32 + 2_I32, -2147483647_I32);
-            eval assert_eq(|_|"10", -2147483647_I32 - 2_I32, 2147483647_I32);
-            eval assert_eq(|_|"11", 2147483647_I32 * 2_I32, -2_I32);
-            eval assert_eq(|_|"12", 10_I32 / -3_I32, -3_I32);
-            eval assert_eq(|_|"13", 10_I32 % -3_I32, 1_I32);
-            eval assert_eq(|_|"14", -1_I32 < 0_I32, true);
+            eval *assert_eq(|_|"9", 2147483647_I32 + 2_I32, -2147483647_I32);
+            eval *assert_eq(|_|"10", -2147483647_I32 - 2_I32, 2147483647_I32);
+            eval *assert_eq(|_|"11", 2147483647_I32 * 2_I32, -2_I32);
+            eval *assert_eq(|_|"12", 10_I32 / -3_I32, -3_I32);
+            eval *assert_eq(|_|"13", 10_I32 % -3_I32, 1_I32);
+            eval *assert_eq(|_|"14", -1_I32 < 0_I32, true);
             
             pure()
         );
@@ -2273,55 +2273,55 @@ pub fn test98() {
         main : IO ();
         main = (
             // I8
-            eval assert_eq(|_|"I8 1", -128_I8.to_string, "-128");
-            eval assert_eq(|_|"I8 2", 127_I8.to_string, "127");
-            eval assert_eq(|_|"I8 3", -128_I8, "-128".from_string.as_ok);
+            eval *assert_eq(|_|"I8 1", -128_I8.to_string, "-128");
+            eval *assert_eq(|_|"I8 2", 127_I8.to_string, "127");
+            eval *assert_eq(|_|"I8 3", -128_I8, "-128".from_string.as_ok);
 
             // U8
-            eval assert_eq(|_|"", 0_U8.to_string, "0");
-            eval assert_eq(|_|"", 255_U8.to_string, "255");
-            eval assert_eq(|_|"", 255_U8, "255".from_string.as_ok);
+            eval *assert_eq(|_|"", 0_U8.to_string, "0");
+            eval *assert_eq(|_|"", 255_U8.to_string, "255");
+            eval *assert_eq(|_|"", 255_U8, "255".from_string.as_ok);
 
             // I16
-            eval assert_eq(|_|"I16 1", -32768_I16.to_string, "-32768");
-            eval assert_eq(|_|"I16 2", 32767_I16.to_string, "32767");
-            eval assert_eq(|_|"I16 3", -32768_I16, "-32768".from_string.as_ok);
+            eval *assert_eq(|_|"I16 1", -32768_I16.to_string, "-32768");
+            eval *assert_eq(|_|"I16 2", 32767_I16.to_string, "32767");
+            eval *assert_eq(|_|"I16 3", -32768_I16, "-32768".from_string.as_ok);
 
             // U16
-            eval assert_eq(|_|"", 0_U16.to_string, "0");
-            eval assert_eq(|_|"", 65535_U16.to_string, "65535");
-            eval assert_eq(|_|"", 65535_U16, "65535".from_string.as_ok);
+            eval *assert_eq(|_|"", 0_U16.to_string, "0");
+            eval *assert_eq(|_|"", 65535_U16.to_string, "65535");
+            eval *assert_eq(|_|"", 65535_U16, "65535".from_string.as_ok);
 
             // I32
-            eval assert_eq(|_|"", -2147483648_I32.to_string, "-2147483648");
-            eval assert_eq(|_|"", 2147483647_I32.to_string, "2147483647");
-            eval assert_eq(|_|"", -2147483648_I32, "-2147483648".from_string.as_ok);
+            eval *assert_eq(|_|"", -2147483648_I32.to_string, "-2147483648");
+            eval *assert_eq(|_|"", 2147483647_I32.to_string, "2147483647");
+            eval *assert_eq(|_|"", -2147483648_I32, "-2147483648".from_string.as_ok);
 
             // U32
-            eval assert_eq(|_|"", 0_U32.to_string, "0");
-            eval assert_eq(|_|"", 4294967295_U32.to_string, "4294967295");
-            eval assert_eq(|_|"", 4294967295_U32, "4294967295".from_string.as_ok);
+            eval *assert_eq(|_|"", 0_U32.to_string, "0");
+            eval *assert_eq(|_|"", 4294967295_U32.to_string, "4294967295");
+            eval *assert_eq(|_|"", 4294967295_U32, "4294967295".from_string.as_ok);
 
             // I64
-            eval assert_eq(|_|"", -9223372036854775808_I64.to_string, "-9223372036854775808");
-            eval assert_eq(|_|"", 9223372036854775807_I64.to_string, "9223372036854775807");
-            eval assert_eq(|_|"", -9223372036854775808_I64, "-9223372036854775808".from_string.as_ok);
+            eval *assert_eq(|_|"", -9223372036854775808_I64.to_string, "-9223372036854775808");
+            eval *assert_eq(|_|"", 9223372036854775807_I64.to_string, "9223372036854775807");
+            eval *assert_eq(|_|"", -9223372036854775808_I64, "-9223372036854775808".from_string.as_ok);
 
             // U64
-            eval assert_eq(|_|"", 0_U64.to_string, "0");
-            eval assert_eq(|_|"", 18446744073709551615_U64.to_string, "18446744073709551615");
-            eval assert_eq(|_|"", 18446744073709551615_U64, "18446744073709551615".from_string.as_ok);
+            eval *assert_eq(|_|"", 0_U64.to_string, "0");
+            eval *assert_eq(|_|"", 18446744073709551615_U64.to_string, "18446744073709551615");
+            eval *assert_eq(|_|"", 18446744073709551615_U64, "18446744073709551615".from_string.as_ok);
 
             // Cases from_string fails.
 
             let res: Result ErrMsg I64 = "Hello World!".from_string;
-            eval assert(|_|"Case: from_string invalid format", res.is_err);
+            eval *assert(|_|"Case: from_string invalid format", res.is_err);
 
             let res: Result ErrMsg I64 = " 42".from_string;
-            eval assert(|_|"Case: from_string invalid format (whitespace)", res.is_err);
+            eval *assert(|_|"Case: from_string invalid format (whitespace)", res.is_err);
 
             let res: Result ErrMsg I64 = "1844674407370955161518446744073709551615".from_string;
-            eval assert(|_|"Case: from_string out of range", res.is_err);
+            eval *assert(|_|"Case: from_string out of range", res.is_err);
             
             pure()
         );
@@ -2363,7 +2363,7 @@ pub fn test99() {
                 r#""{} != {}, lhs=" + {}.to_string + ", rhs=" + {}.to_string"#,
                 lhs, rhs, lhs, rhs
             );
-            let case = format!("eval assert_eq(|_|{}, {}, {});", msg, lhs, rhs);
+            let case = format!("eval *assert_eq(|_|{}, {}, {});", msg, lhs, rhs);
             cases.push(case);
         }
     }
@@ -2388,23 +2388,23 @@ pub fn test99_5() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"", -3.14_F32.to_I8, -3_I8);
-            eval assert_eq(|_|"", 3.14_F32.to_U8, 3_U8);
-            eval assert_eq(|_|"", -3.14_F32.to_I16, -3_I16);
-            eval assert_eq(|_|"", 3.14_F32.to_U16, 3_U16);
-            eval assert_eq(|_|"", -3.14_F32.to_I32, -3_I32);
-            eval assert_eq(|_|"", 3.14_F32.to_U32, 3_U32);
-            eval assert_eq(|_|"", -3.14_F32.to_I64, -3_I64);
-            eval assert_eq(|_|"", 3.14_F32.to_U64, 3_U64);
+            eval *assert_eq(|_|"", -3.14_F32.to_I8, -3_I8);
+            eval *assert_eq(|_|"", 3.14_F32.to_U8, 3_U8);
+            eval *assert_eq(|_|"", -3.14_F32.to_I16, -3_I16);
+            eval *assert_eq(|_|"", 3.14_F32.to_U16, 3_U16);
+            eval *assert_eq(|_|"", -3.14_F32.to_I32, -3_I32);
+            eval *assert_eq(|_|"", 3.14_F32.to_U32, 3_U32);
+            eval *assert_eq(|_|"", -3.14_F32.to_I64, -3_I64);
+            eval *assert_eq(|_|"", 3.14_F32.to_U64, 3_U64);
 
-            eval assert_eq(|_|"", -3.14_F64.to_I8, -3_I8);
-            eval assert_eq(|_|"", 3.14_F64.to_U8, 3_U8);
-            eval assert_eq(|_|"", -3.14_F64.to_I16, -3_I16);
-            eval assert_eq(|_|"", 3.14_F64.to_U16, 3_U16);
-            eval assert_eq(|_|"", -3.14_F64.to_I32, -3_I32);
-            eval assert_eq(|_|"", 3.14_F64.to_U32, 3_U32);
-            eval assert_eq(|_|"", -3.14_F64.to_I64, -3_I64);
-            eval assert_eq(|_|"", 3.14_F64.to_U64, 3_U64);
+            eval *assert_eq(|_|"", -3.14_F64.to_I8, -3_I8);
+            eval *assert_eq(|_|"", 3.14_F64.to_U8, 3_U8);
+            eval *assert_eq(|_|"", -3.14_F64.to_I16, -3_I16);
+            eval *assert_eq(|_|"", 3.14_F64.to_U16, 3_U16);
+            eval *assert_eq(|_|"", -3.14_F64.to_I32, -3_I32);
+            eval *assert_eq(|_|"", 3.14_F64.to_U32, 3_U32);
+            eval *assert_eq(|_|"", -3.14_F64.to_I64, -3_I64);
+            eval *assert_eq(|_|"", 3.14_F64.to_U64, 3_U64);
 
             pure()
         );
@@ -2419,23 +2419,23 @@ pub fn test99_51() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"", -123_I8.to_F32, -123.0_F32);
-            eval assert_eq(|_|"", 123_U8.to_F32, 123.0_F32);
-            eval assert_eq(|_|"", -123_I16.to_F32, -123.0_F32);
-            eval assert_eq(|_|"", 123_U16.to_F32, 123.0_F32);
-            eval assert_eq(|_|"", -123_I32.to_F32, -123.0_F32);
-            eval assert_eq(|_|"", 123_U32.to_F32, 123.0_F32);
-            eval assert_eq(|_|"", -123_I64.to_F32, -123.0_F32);
-            eval assert_eq(|_|"", 123_U64.to_F32, 123.0_F32);
+            eval *assert_eq(|_|"", -123_I8.to_F32, -123.0_F32);
+            eval *assert_eq(|_|"", 123_U8.to_F32, 123.0_F32);
+            eval *assert_eq(|_|"", -123_I16.to_F32, -123.0_F32);
+            eval *assert_eq(|_|"", 123_U16.to_F32, 123.0_F32);
+            eval *assert_eq(|_|"", -123_I32.to_F32, -123.0_F32);
+            eval *assert_eq(|_|"", 123_U32.to_F32, 123.0_F32);
+            eval *assert_eq(|_|"", -123_I64.to_F32, -123.0_F32);
+            eval *assert_eq(|_|"", 123_U64.to_F32, 123.0_F32);
 
-            eval assert_eq(|_|"", -123_I8.to_F64, -123.0);
-            eval assert_eq(|_|"", 123_U8.to_F64, 123.0);
-            eval assert_eq(|_|"", -123_I16.to_F64, -123.0);
-            eval assert_eq(|_|"", 123_U16.to_F64, 123.0);
-            eval assert_eq(|_|"", -123_I32.to_F64, -123.0);
-            eval assert_eq(|_|"", 123_U32.to_F64, 123.0);
-            eval assert_eq(|_|"", -123_I64.to_F64, -123.0);
-            eval assert_eq(|_|"", 123_U64.to_F64, 123.0);
+            eval *assert_eq(|_|"", -123_I8.to_F64, -123.0);
+            eval *assert_eq(|_|"", 123_U8.to_F64, 123.0);
+            eval *assert_eq(|_|"", -123_I16.to_F64, -123.0);
+            eval *assert_eq(|_|"", 123_U16.to_F64, 123.0);
+            eval *assert_eq(|_|"", -123_I32.to_F64, -123.0);
+            eval *assert_eq(|_|"", 123_U32.to_F64, 123.0);
+            eval *assert_eq(|_|"", -123_I64.to_F64, -123.0);
+            eval *assert_eq(|_|"", 123_U64.to_F64, 123.0);
 
             pure()
         );
@@ -2450,10 +2450,10 @@ pub fn test100() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"case 1", 'A', 65_U8);
-            eval assert_eq(|_|"case 2", '0', 48_U8);
-            eval assert_eq(|_|"case 3", '\n', 10_U8);
-            eval assert_eq(|_|"case 3", '\x7f', 127_U8);
+            eval *assert_eq(|_|"case 1", 'A', 65_U8);
+            eval *assert_eq(|_|"case 2", '0', 48_U8);
+            eval *assert_eq(|_|"case 3", '\n', 10_U8);
+            eval *assert_eq(|_|"case 3", '\x7f', 127_U8);
             pure()
         );
     "#;
@@ -2469,15 +2469,15 @@ pub fn test101() {
         main = (
             let cap = 42;
             let arr: Array (() -> I64) = [];
-            eval assert_eq(|_|"case 1", arr.is_empty, true);
-            eval assert_eq(|_|"case 2", arr.get_first.is_none, true);
-            eval assert_eq(|_|"case 3", arr.get_last.is_none, true);
+            eval *assert_eq(|_|"case 1", arr.is_empty, true);
+            eval *assert_eq(|_|"case 2", arr.get_first.is_none, true);
+            eval *assert_eq(|_|"case 3", arr.get_last.is_none, true);
 
             let cap = 42;
             let arr: Array (() -> I64) = [|_|cap];
-            eval assert_eq(|_|"case 4", arr.is_empty, false);
-            eval assert_eq(|_|"case 5", arr.get_first.as_some $ (), 42);
-            eval assert_eq(|_|"case 6", arr.get_last.as_some $ (), 42);
+            eval *assert_eq(|_|"case 4", arr.is_empty, false);
+            eval *assert_eq(|_|"case 5", arr.get_first.as_some $ (), 42);
+            eval *assert_eq(|_|"case 6", arr.get_last.as_some $ (), 42);
 
             pure()
         );
@@ -2492,20 +2492,20 @@ pub fn test102() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"case 1", 0 == 0, true);
-            eval assert_eq(|_|"case 2", 0 == 1, false);
-            eval assert_eq(|_|"case 3", 0 != 0, false);
-            eval assert_eq(|_|"case 4", 0 != 1, true);
+            eval *assert_eq(|_|"case 1", 0 == 0, true);
+            eval *assert_eq(|_|"case 2", 0 == 1, false);
+            eval *assert_eq(|_|"case 3", 0 != 0, false);
+            eval *assert_eq(|_|"case 4", 0 != 1, true);
 
-            eval assert_eq(|_|"case 5", 0 < 0, false);
-            eval assert_eq(|_|"case 6", 0 > 0, false);
-            eval assert_eq(|_|"case 7", 0 < 1, true);
-            eval assert_eq(|_|"case 8", 0 > 1, false);
+            eval *assert_eq(|_|"case 5", 0 < 0, false);
+            eval *assert_eq(|_|"case 6", 0 > 0, false);
+            eval *assert_eq(|_|"case 7", 0 < 1, true);
+            eval *assert_eq(|_|"case 8", 0 > 1, false);
 
-            eval assert_eq(|_|"case 9", 0 <= 0, true);
-            eval assert_eq(|_|"case 10", 0 >= 0, true);
-            eval assert_eq(|_|"case 11", 0 <= 1, true);
-            eval assert_eq(|_|"case 12", 0 >= 1, false);
+            eval *assert_eq(|_|"case 9", 0 <= 0, true);
+            eval *assert_eq(|_|"case 10", 0 >= 0, true);
+            eval *assert_eq(|_|"case 11", 0 <= 1, true);
+            eval *assert_eq(|_|"case 12", 0 >= 1, false);
             pure()
         );
     "#;
@@ -2519,10 +2519,10 @@ pub fn test103() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"case 1", false == false, true);
-            eval assert_eq(|_|"case 2", false == true, false);
-            eval assert_eq(|_|"case 3", true == false, false);
-            eval assert_eq(|_|"case 4", true == true, true);
+            eval *assert_eq(|_|"case 1", false == false, true);
+            eval *assert_eq(|_|"case 2", false == true, false);
+            eval *assert_eq(|_|"case 3", true == false, false);
+            eval *assert_eq(|_|"case 4", true == true, true);
 
             pure()
         );
@@ -2537,8 +2537,8 @@ pub fn test104() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"case 1", true.to_string, "true");
-            eval assert_eq(|_|"case 2", false.to_string, "false");
+            eval *assert_eq(|_|"case 1", true.to_string, "true");
+            eval *assert_eq(|_|"case 2", false.to_string, "false");
 
             pure()
         );
@@ -2553,12 +2553,12 @@ pub fn test105() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"case 1", "".is_empty, true);
-            eval assert_eq(|_|"case 2", "".get_first_byte.is_none, true);
-            eval assert_eq(|_|"case 3", "".get_last_byte.is_none, true);
-            eval assert_eq(|_|"case 4", "abc".is_empty, false);
-            eval assert_eq(|_|"case 5", "abc".get_first_byte.as_some, 'a');
-            eval assert_eq(|_|"case 6", "abc".get_last_byte.as_some, 'c');
+            eval *assert_eq(|_|"case 1", "".is_empty, true);
+            eval *assert_eq(|_|"case 2", "".get_first_byte.is_none, true);
+            eval *assert_eq(|_|"case 3", "".get_last_byte.is_none, true);
+            eval *assert_eq(|_|"case 4", "abc".is_empty, false);
+            eval *assert_eq(|_|"case 5", "abc".get_first_byte.as_some, 'a');
+            eval *assert_eq(|_|"case 6", "abc".get_last_byte.as_some, 'c');
 
             pure()
         );
@@ -2575,19 +2575,19 @@ pub fn test106() {
         main = (
             let lhs: Option I64 = Option::none();
             let rhs: Option I64 = Option::none();
-            eval assert(|_|"case 1", lhs == rhs);
+            eval *assert(|_|"case 1", lhs == rhs);
 
             let lhs: Option I64 = Option::none();
             let rhs: Option I64 = Option::some(42);
-            eval assert(|_|"case 2", lhs != rhs);
+            eval *assert(|_|"case 2", lhs != rhs);
 
             let lhs: Option I64 = Option::some(84);
             let rhs: Option I64 = Option::some(42);
-            eval assert(|_|"case 3", lhs != rhs);
+            eval *assert(|_|"case 3", lhs != rhs);
 
             let lhs: Option I64 = Option::some(42);
             let rhs: Option I64 = Option::some(42);
-            eval assert(|_|"case 4", lhs == rhs);
+            eval *assert(|_|"case 4", lhs == rhs);
 
             pure()
         );
@@ -2602,18 +2602,18 @@ pub fn test107() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"case 1", "".pop_back_byte, "");
-            eval assert_eq(|_|"case 2", "a".pop_back_byte, "");
+            eval *assert_eq(|_|"case 1", "".pop_back_byte, "");
+            eval *assert_eq(|_|"case 2", "a".pop_back_byte, "");
 
-            eval assert_eq(|_|"case 3", "".strip_last_bytes(|c|c == 'x'), "");
-            eval assert_eq(|_|"case 4", "abc".strip_last_bytes(|_|true), "");
-            eval assert_eq(|_|"case 5", "".strip_last_bytes(|_|true), "");
-            eval assert_eq(|_|"case 6", "x".strip_last_bytes(|c|c == 'x'), "");
-            eval assert_eq(|_|"case 7", "y".strip_last_bytes(|c|c == 'x'), "y");
-            eval assert_eq(|_|"case 8", "yx".strip_last_bytes(|c|c == 'x'), "y");
-            eval assert_eq(|_|"case 9", "yxz".strip_last_bytes(|c|c == 'x'), "yxz");
+            eval *assert_eq(|_|"case 3", "".strip_last_bytes(|c|c == 'x'), "");
+            eval *assert_eq(|_|"case 4", "abc".strip_last_bytes(|_|true), "");
+            eval *assert_eq(|_|"case 5", "".strip_last_bytes(|_|true), "");
+            eval *assert_eq(|_|"case 6", "x".strip_last_bytes(|c|c == 'x'), "");
+            eval *assert_eq(|_|"case 7", "y".strip_last_bytes(|c|c == 'x'), "y");
+            eval *assert_eq(|_|"case 8", "yx".strip_last_bytes(|c|c == 'x'), "y");
+            eval *assert_eq(|_|"case 9", "yxz".strip_last_bytes(|c|c == 'x'), "yxz");
 
-            eval assert_eq(|_|"case 10", "abc\n\r".strip_last_newlines, "abc");
+            eval *assert_eq(|_|"case 10", "abc\n\r".strip_last_newlines, "abc");
 
             pure()
         );
@@ -2635,13 +2635,13 @@ pub fn test108() {
                 eval *write_file_string(file_path, content);
 
                 let read_content = *read_file_string(file_path);
-                eval assert_eq(|_|"case 1", content, read_content);
+                eval *assert_eq(|_|"case 1", content, read_content).lift;
 
                 let read_lines = *with_file(file_path, "r", |file| (
                     pure $ [*read_line(file), *read_line(file)]
                 ));
-                eval assert_eq(|_|"case 2", read_lines.@(0), lines.@(0) + "\n");
-                eval assert_eq(|_|"case 3", read_lines.@(1), lines.@(1));
+                eval *assert_eq(|_|"case 2", read_lines.@(0), lines.@(0) + "\n").lift;
+                eval *assert_eq(|_|"case 3", read_lines.@(1), lines.@(1)).lift;
 
                 pure()
             }.try(exit_with_msg(1))
@@ -2666,11 +2666,11 @@ pub fn test_is_eof() {
                 let read_content = *with_file(file_path, "r", |file| (
                     let content = *read_string(file);
                     let is_eof = *is_eof(file).lift;
-                    eval assert(|_|"file had not reached to EOF!", is_eof);
+                    eval *assert(|_|"file had not reached to EOF!", is_eof).lift;
                     pure $ content
                 ));
             
-                eval assert_eq(|_|"read_content != content", content, read_content);
+                eval *assert_eq(|_|"read_content != content", content, read_content).lift;
 
                 pure()
             }.try(exit_with_msg(1))
@@ -2693,7 +2693,7 @@ pub fn test108_5() {
                 eval *write_file_bytes(file_path, data);
 
                 let read = *read_file_bytes(file_path);
-                eval assert_eq(|_|"case 1", data, read);
+                eval *assert_eq(|_|"case 1", data, read).lift;
 
                 pure()
             }.try(exit_with_msg(1))
@@ -2725,26 +2725,26 @@ pub fn test109() {
             let three = Option::some(3);
             let none = Option::none();
 
-            eval assert_eq(|_|"case 1", add_opt_int(one, two), three);
-            eval assert_eq(|_|"case 2", add_opt_int(none, two), none);
-            eval assert_eq(|_|"case 3", add_opt_int(one, none), none);
-            eval assert_eq(|_|"case 4", add_opt_int(none, none), none);
+            eval *assert_eq(|_|"case 1", add_opt_int(one, two), three);
+            eval *assert_eq(|_|"case 2", add_opt_int(none, two), none);
+            eval *assert_eq(|_|"case 3", add_opt_int(one, none), none);
+            eval *assert_eq(|_|"case 4", add_opt_int(none, none), none);
 
             let res0 = Result::ok(0) : Result String I64;
             let res1 = Result::ok(1);
             let res2 = Result::ok(2);
             let res3 = Result::ok(3);
             let res_iter = Iterator::from_array([res0, res1, res2, res3]).sequence;
-            eval assert_eq(|_|"case 5", res_iter.is_ok, true);
-            eval assert_eq(|_|"case 6", res_iter.as_ok, Iterator::from_array([0, 1, 2, 3]));
+            eval *assert_eq(|_|"case 5", res_iter.is_ok, true);
+            eval *assert_eq(|_|"case 6", res_iter.as_ok, Iterator::from_array([0, 1, 2, 3]));
 
             let res0 = Result::ok(0) : Result String I64;
             let res1 = Result::ok(1);
             let res2 = Result::err("Error 2");
             let res3 = Result::err("Error 3");
             let res_iter = Iterator::from_array([res0, res1, res2, res3]).sequence;
-            eval assert_eq(|_|"case 5", res_iter.is_err, true);
-            eval assert_eq(|_|"case 6", res_iter.as_err, "Error 2");
+            eval *assert_eq(|_|"case 5", res_iter.is_err, true);
+            eval *assert_eq(|_|"case 6", res_iter.as_err, "Error 2");
 
             pure()
         );
@@ -2761,54 +2761,54 @@ pub fn test110a() {
         main = (
             let x = -3.1415_F32;
             let y = 3.1415_F32;
-            eval assert(|_|"case 1", x.abs == y);
-            eval assert(|_|"case 2", y.abs == y);
+            eval *assert(|_|"case 1", x.abs == y);
+            eval *assert(|_|"case 2", y.abs == y);
 
             let x = -3.1415;
             let y = 3.1415;
-            eval assert(|_|"case 3", x.abs == y);
-            eval assert(|_|"case 4", y.abs == y);
+            eval *assert(|_|"case 3", x.abs == y);
+            eval *assert(|_|"case 4", y.abs == y);
 
             let x = 3.1415_F32;
             let y = 3.1415_F32;
-            eval assert(|_|"case 5", x == y);
+            eval *assert(|_|"case 5", x == y);
 
             let x = 3.1415;
             let y = 3.1415;
-            eval assert(|_|"case 6", x == y);
+            eval *assert(|_|"case 6", x == y);
 
             let x = 3.1415_F32;
             let y = 2.7183_F32;
-            eval assert(|_|"case 7", x != y);
+            eval *assert(|_|"case 7", x != y);
 
             let x = 3.1415;
             let y = 2.7183;
-            eval assert(|_|"case 8", x != y);
+            eval *assert(|_|"case 8", x != y);
 
             let x = 3.1415_F32;
             let y = 2.7183_F32;
             let z = 5.8598_F32;
-            eval assert(|_|"case 9", (x + y - z).abs < 1.0e-4_F32);
+            eval *assert(|_|"case 9", (x + y - z).abs < 1.0e-4_F32);
 
             let x = 3.1415;
             let y = 2.7183;
             let z = 5.8598;
-            eval assert(|_|"case 10", (x + y - z).abs < 1.0e-4);
+            eval *assert(|_|"case 10", (x + y - z).abs < 1.0e-4);
 
             let x = 3.1415_F32;
             let y = 2.7183_F32;
             let z = 8.5395_F32;
-            eval assert(|_|"case 11", (x * y - z).abs < 1.0e-4_F32);
+            eval *assert(|_|"case 11", (x * y - z).abs < 1.0e-4_F32);
 
             let x = 3.1415;
             let y = 2.7183;
             let z = 8.5395;
-            eval assert(|_|"case 12", (x * y - z).abs < 1.0e-4);
+            eval *assert(|_|"case 12", (x * y - z).abs < 1.0e-4);
 
             let x = 3.1415_F32;
             let y = 2.7183_F32;
             let z = 1.1557_F32;
-            eval assert(|_|"case 13", (x / y - z).abs < 1.0e-4_F32);
+            eval *assert(|_|"case 13", (x / y - z).abs < 1.0e-4_F32);
 
             pure()
         );
@@ -2826,54 +2826,54 @@ pub fn test110b() {
             let x = 3.1415;
             let y = 2.7183;
             let z = 1.1557;
-            eval assert(|_|"case 14", (x / y - z).abs < 1.0e-4);
+            eval *assert(|_|"case 14", (x / y - z).abs < 1.0e-4);
 
             let x = 3.1415_F32;
             let y = 2.7183_F32;
-            eval assert(|_|"case 15", x > y);
+            eval *assert(|_|"case 15", x > y);
 
             let x = 3.1415;
             let y = 2.7183;
-            eval assert(|_|"case 16", x > y);
+            eval *assert(|_|"case 16", x > y);
 
             let x = 3.1415_F32;
             let y = 3.1415_F32;
-            eval assert(|_|"case 17", x >= y);
+            eval *assert(|_|"case 17", x >= y);
 
             let x = 3.1415;
             let y = 3.1415;
-            eval assert(|_|"case 18", x >= y);
+            eval *assert(|_|"case 18", x >= y);
 
             let x = 3.1415_F32;
             let y = 3.1415_F32;
-            eval assert(|_|"case 19.1", x.to_F32 == y);
+            eval *assert(|_|"case 19.1", x.to_F32 == y);
 
             let x = 3.1415;
             let y = 3.1415;
-            eval assert(|_|"case 19.1", x.to_F64 == y);
+            eval *assert(|_|"case 19.1", x.to_F64 == y);
 
             let x = 3.1415_F32;
             let y = 3.1415;
-            eval assert(|_|"case 19.3", (x.to_F64 - y) < 1.0e-4);
+            eval *assert(|_|"case 19.3", (x.to_F64 - y) < 1.0e-4);
 
             let x = 3.1415;
             let y = 3.1415_F32;
-            eval assert(|_|"case 19.4", (x.to_F32 - y) < 1.0e-4_F32);
+            eval *assert(|_|"case 19.4", (x.to_F32 - y) < 1.0e-4_F32);
 
             let x = 3141;
             let y = 3141.0;
-            eval assert(|_|"case 20", x.to_F64 == y);
+            eval *assert(|_|"case 20", x.to_F64 == y);
 
             let x = 3141.0;
             let y = 3141;            
-            eval assert(|_|"case 21", x.to_I64 == y);
+            eval *assert(|_|"case 21", x.to_I64 == y);
 
             let x = 3.14;
             let z : F64 = 3.14.to_string.from_string.as_ok;
 
             eval *println(z.to_string);
 
-            eval assert_eq(|_|"case 22", 3.14, z);
+            eval *assert_eq(|_|"case 22", 3.14, z);
 
             pure()
         );
@@ -2894,8 +2894,8 @@ pub fn test111() {
             let f_g = f << g;
             let g_f = f >> g;
 
-            eval assert_eq(|_|"case 1", f_g(0), 6);
-            eval assert_eq(|_|"case 2", g_f(0), 10);
+            eval *assert_eq(|_|"case 1", f_g(0), 6);
+            eval *assert_eq(|_|"case 2", g_f(0), 10);
 
             pure()
         );
@@ -2912,11 +2912,11 @@ pub fn test112() {
         main = (
             let iter = Iterator::generate(0, |_| Option::none());
             let ans = [] : Array I64;
-            eval assert_eq(|_|"case 1", iter.to_array, ans);
+            eval *assert_eq(|_|"case 1", iter.to_array, ans);
 
             let iter = Iterator::generate(0, |i| if i == 3 { Option::none() } else { Option::some $ (i, i+1) });
             let ans = [0, 1, 2];
-            eval assert_eq(|_|"case 1", iter.to_array, ans);
+            eval *assert_eq(|_|"case 1", iter.to_array, ans);
 
             pure()
         );
@@ -2933,23 +2933,23 @@ pub fn test113() {
         main = (
             // Shift
             let x = 10_U8.shift_right(2_U8);
-            eval assert_eq(|_|"case 1", x, 2_U8);
+            eval *assert_eq(|_|"case 1", x, 2_U8);
 
             let x = -10_I32.shift_right(2_I32);
-            eval assert_eq(|_|"case 1", x, -3_I32);
+            eval *assert_eq(|_|"case 1", x, -3_I32);
 
             let x = 10_U8.shift_left(2_U8);
-            eval assert_eq(|_|"case 1", x, 40_U8);
+            eval *assert_eq(|_|"case 1", x, 40_U8);
 
             // Xor, Or, And
             let x = 10.bit_xor(12);
-            eval assert_eq(|_|"case 1", x, 6);
+            eval *assert_eq(|_|"case 1", x, 6);
 
             let x = 10.bit_or(12);
-            eval assert_eq(|_|"case 1", x, 14);
+            eval *assert_eq(|_|"case 1", x, 14);
 
             let x = 10.bit_and(12);
-            eval assert_eq(|_|"case 1", x, 8);
+            eval *assert_eq(|_|"case 1", x, 8);
 
             pure()
         );
@@ -2967,10 +2967,10 @@ pub fn test114() {
             let arr = [0,1,2,3];
 
             let res = arr.find_by(|x| x % 5 == 2);
-            eval assert_eq(|_|"case 1", res, Option::some(2));
+            eval *assert_eq(|_|"case 1", res, Option::some(2));
 
             let res = arr.find_by(|x| x % 5 == 4);
-            eval assert_eq(|_|"case 1", res, Option::none());
+            eval *assert_eq(|_|"case 1", res, Option::none());
 
             pure()
         );
@@ -3031,8 +3031,8 @@ pub fn test117() {
         main : IO ();
         main = (
             let str = String::_unsafe_from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
-            eval assert_eq(|_|"case 1", str, "ABC");
-            eval assert_eq(|_|"case 2", str.get_size, 3);
+            eval *assert_eq(|_|"case 1", str, "ABC");
+            eval *assert_eq(|_|"case 2", str.get_size, 3);
             pure()
         );
     "#;
@@ -3095,9 +3095,9 @@ pub fn test_undefined() {
         main = (
             let x = 3;
             let a = if true { Array::fill(1, |_| x) } else { undefined("") };
-            eval assert_eq(|_|"case 1", (a.@(0))(1), x);
+            eval *assert_eq(|_|"case 1", (a.@(0))(1), x);
             let a = if true { |_| x } else { undefined("") };
-            eval assert_eq(|_|"case 1", a(1), x);
+            eval *assert_eq(|_|"case 1", a(1), x);
             pure()
         );
     "#;
@@ -3118,83 +3118,83 @@ pub fn test_punched_array() {
             // Case 1-1: Punch an array of two boxed values and release parray.
             let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 1-1", five.@x, 5);
+            eval *assert_eq(|_|"case 1-1", five.@x, 5);
 
             // Case 1-2: Punch an array of two boxed values and plug-in the same element.
             let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 1-2-a", five.@x, 5);
+            eval *assert_eq(|_|"case 1-2-a", five.@x, 5);
             let arr = parr.plug_in(five);
-            eval assert_eq(|_|"case 1-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 7);
+            eval *assert_eq(|_|"case 1-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 7);
 
             // Case 1-3: Punch an array of two boxed values and plug-in the other element.
             let seven = MyBoxed { x : 7 };
             let arr = [MyBoxed { x : 5 }, seven];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 1-3-a", five.@x, 5);
+            eval *assert_eq(|_|"case 1-3-a", five.@x, 5);
             let arr = parr.plug_in(seven);
-            eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 7);
+            eval *assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 7);
 
             // Case 1-4: Punch an array of two boxed values and plug-in another value.
             let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 1-3-a", five.@x, 5);
+            eval *assert_eq(|_|"case 1-3-a", five.@x, 5);
             let arr = parr.plug_in(MyBoxed { x : 11 });
-            eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 11);
+            eval *assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 11);
 
             // Case 2-1: Punch an array of two shared boxed values and release parray.
             let five = MyBoxed { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 2-1", five.@x, 5);
+            eval *assert_eq(|_|"case 2-1", five.@x, 5);
 
             // Case 2-2: Punch an array of two shared boxed values and plug-in the same element.
             let five = MyBoxed { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 2-2-a", five.@x, 5);
+            eval *assert_eq(|_|"case 2-2-a", five.@x, 5);
             let arr = parr.plug_in(five);
-            eval assert_eq(|_|"case 2-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
+            eval *assert_eq(|_|"case 2-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
 
             // Case 2-3: Punch an array of two shared boxed values and plug-in the value again.
             let five = MyBoxed { x : 5 };
             let arr = [five, five];
             let (parr, five1) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 2-3-a", five1.@x, 5);
+            eval *assert_eq(|_|"case 2-3-a", five1.@x, 5);
             let arr = parr.plug_in(five);
-            eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
+            eval *assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);
 
             // Case 2-4: Punch an array of two shared boxed values and plug-in another value.
             let five = MyBoxed { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 2-3-a", five.@x, 5);
+            eval *assert_eq(|_|"case 2-3-a", five.@x, 5);
             let arr = parr.plug_in(MyBoxed { x : 7 });
-            eval assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 5);
+            eval *assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 5);
 
             // Case 3-1: Punch an array of one boxed values and release parray.
             let arr = [MyBoxed { x : 5 }];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 3-1", five.@x, 5);
+            eval *assert_eq(|_|"case 3-1", five.@x, 5);
 
             // Case 3-2: Punch an array of two boxed values and plug-in the same element.
             let arr = [MyBoxed { x : 5 }];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 3-2-a", five.@x, 5);
+            eval *assert_eq(|_|"case 3-2-a", five.@x, 5);
             let arr = parr.plug_in(five);
-            eval assert_eq(|_|"case 3-2-b", arr.@(0).@x, 5);
+            eval *assert_eq(|_|"case 3-2-b", arr.@(0).@x, 5);
 
             // Case 4-1: Punch an array of two unboxed values and release parray.
             let arr = [5, 7];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 1-1", five, 5);
+            eval *assert_eq(|_|"case 1-1", five, 5);
 
             // Case 4-2: Punch an array of two boxed values and plug-in a value.
             let arr = [5, 7];
             let (parr, five) = arr.unsafe_punch(0);
-            eval assert_eq(|_|"case 4-2-a", five, 5);
+            eval *assert_eq(|_|"case 4-2-a", five, 5);
             let arr = parr.plug_in(13);
-            eval assert_eq(|_|"case 4-2-b", arr.@(0) + arr.@(1), 13 + 7);
+            eval *assert_eq(|_|"case 4-2-b", arr.@(0) + arr.@(1), 13 + 7);
 
             pure()
         );
@@ -3214,28 +3214,28 @@ pub fn test_array_act_0() {
             // If the array and the element is both unique, the action should receive an unique value.
             let arr = [[1,2,3], [4,5,6]];
             let arr = arr.act(0, |arr| let arr = arr.assert_unique(|_|"the array is not unique!"); (arr.to_iter.sum, []));
-            eval assert_eq(|_|"case 1", arr, (6, [[], [4,5,6]]));
+            eval *assert_eq(|_|"case 1", arr, (6, [[], [4,5,6]]));
 
             // Case where the array is shared.
             let arr = [[1,2,3], [4,5,6]];
             let arr1 = arr.act(0, |arr| (arr.to_iter.sum, []));
-            eval assert_eq(|_|"case 2", arr1, (6, [[], [4,5,6]]));
-            eval assert_eq(|_|"case 3", arr, [[1,2,3], [4,5,6]]);
+            eval *assert_eq(|_|"case 2", arr1, (6, [[], [4,5,6]]));
+            eval *assert_eq(|_|"case 3", arr, [[1,2,3], [4,5,6]]);
 
             // Case where the element is shared.
             let elem = [1,2,3];
             let arr = [elem, [4,5,6]];
             let arr = arr.act(0, |arr| (arr.to_iter.sum, []));
-            eval assert_eq(|_|"case 4", arr, (6, [[], [4,5,6]]));
-            eval assert_eq(|_|"case 5", elem, [1,2,3]);
+            eval *assert_eq(|_|"case 4", arr, (6, [[], [4,5,6]]));
+            eval *assert_eq(|_|"case 5", elem, [1,2,3]);
 
             // Case where the array and the element is both shared.
             let elem = [1,2,3];
             let arr = [elem, [4,5,6]];
             let arr1 = arr.act(0, |arr| (arr.to_iter.sum, []));
-            eval assert_eq(|_|"case 6", arr1, (6, [[], [4,5,6]]));
-            eval assert_eq(|_|"case 7", arr, [[1,2,3], [4,5,6]]);
-            eval assert_eq(|_|"case 8", elem, [1,2,3]);
+            eval *assert_eq(|_|"case 6", arr1, (6, [[], [4,5,6]]));
+            eval *assert_eq(|_|"case 7", arr, [[1,2,3], [4,5,6]]);
+            eval *assert_eq(|_|"case 8", elem, [1,2,3]);
 
             pure()
         );
@@ -3268,65 +3268,65 @@ pub fn test_array_act_1() {
             let case = "0-0-0-0";
             let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act0);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
-            eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
-            eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
-            eval assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_some);
+            eval *assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            eval *assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
+            eval *assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
 
             // Case 0-0-0-1: Boxed element, unique array, act0 fails.
             let case = "0-0-0-1";
             let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act0);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 0-0-1-0: Boxed element, unique array, act1 succeeds.
             let case = "0-0-1-0";
             let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act1);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
-            eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
-            eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
-            eval assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_some);
+            eval *assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            eval *assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
+            eval *assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
 
             // Case 0-0-1-1: Boxed element, unique array, act1 fails.
             let case = "0-0-1-1";
             let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act1);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 0-1-0-0: Boxed element, shared array, act01 succeeds.
             let case = "0-1-0-0";
             let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act01);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
-            eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
-            eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
-            eval assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
-            eval assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_some);
+            eval *assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            eval *assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
+            eval *assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
+            eval *assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);
 
             // Case 0-1-0-1: Boxed element, shared array, act0 fails.
             let case = "0-1-0-1";
             let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act0);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
-            eval assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
+            eval *assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
 
             // Case 0-1-1-0: Boxed element, shared array, act1 succeeds.
             let case = "0-1-1-0";
             let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act1);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
-            eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
-            eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
-            eval assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
-            eval assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_some);
+            eval *assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            eval *assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);
+            eval *assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);
+            eval *assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);
 
             // Case 0-1-1-1: Boxed element, shared array, act1 fails.
             let case = "0-1-1-1";
             let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
             let opt_arr = arr.act(0, act1);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
-            eval assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
+            eval *assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
 
             let act2: I64 -> Option I64 = |v| (
                 if v == 0 { Option::some $ v + 5 } else { Option::none() }
@@ -3336,33 +3336,33 @@ pub fn test_array_act_1() {
             let case = "1-0-0-0";
             let arr = [0, 3];
             let opt_arr = arr.act(0, act2);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
-            eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
-            eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0), 5);
-            eval assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1), 3);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_some);
+            eval *assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            eval *assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0), 5);
+            eval *assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1), 3);
 
             // Case 1-0-0-1: Unboxed element, unique array, act2 fails.
             let case = "1-0-0-1";
             let arr = [1, 3];
             let opt_arr = arr.act(0, act2);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 1-1-0-0: Unboxed element, shared array, act2 succeeds.
             let case = "1-1-0-0";
             let arr = [0, 3];
             let opt_arr = arr.act(0, act2);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
-            eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
-            eval assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0), 5);
-            eval assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1), 3);
-            eval assert_eq(|_|"Case " + case + "-e", arr.@(0) + arr.@(1), 3);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_some);
+            eval *assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);
+            eval *assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0), 5);
+            eval *assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1), 3);
+            eval *assert_eq(|_|"Case " + case + "-e", arr.@(0) + arr.@(1), 3);
 
             // Case 1-1-0-1: Unboxed element, shared array, act2 fails.
             let case = "1-1-0-1";
             let arr = [1, 3];
             let opt_arr = arr.act(0, act2);
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
-            eval assert_eq(|_|"Case " + case + "-e", arr.@(0) + arr.@(1), 4);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
+            eval *assert_eq(|_|"Case " + case + "-e", arr.@(0) + arr.@(1), 4);
 
             pure()
         );
@@ -3386,36 +3386,36 @@ pub fn test_array_act_2() {
             let case = "2-0-0";
             let arr = [[1, 2, 3], [4, 0, 6], [7, 8, 9]];
             let opt_arr = arr.act(1, act(1, act2));
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
-            eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_some);
+            eval *assert_eq(|_|"Case " + case + "-b", opt_arr.as_some, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
 
             // Case 2-0-1: Fails updating an element of unique two-dimensional array by act2.
             let case = "2-0-1";
             let arr = [[1, 2, 3], [4, 1, 6], [7, 8, 9]];
             let opt_arr = arr.act(1, act(1, act2));
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
             // Case 2-1-0: Succeeds updating an element of shared two-dimensional array by act2.
             let case = "2-1-0";
             let arr = [[1, 2, 3], [4, 0, 6], [7, 8, 9]];
             let opt_arr = arr.act(1, act(1, act2));
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_some);
-            eval assert_eq(|_|"Case " + case + "-b", opt_arr.as_some, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
-            eval assert_eq(|_|"Case " + case + "-c", arr, [[1, 2, 3], [4, 0, 6], [7, 8, 9]]);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_some);
+            eval *assert_eq(|_|"Case " + case + "-b", opt_arr.as_some, [[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+            eval *assert_eq(|_|"Case " + case + "-c", arr, [[1, 2, 3], [4, 0, 6], [7, 8, 9]]);
 
             // Case 2-1-1: Fails updating an element of shared two-dimensional array by act2.
             let case = "2-1-1";
             let arr = [[1, 2, 3], [4, 1, 6], [7, 8, 9]];
             let opt_arr = arr.act(1, act(1, act2));
-            eval assert(|_|"Case " + case + "-a", opt_arr.is_none);
-            eval assert_eq(|_|"Case " + case + "-c", arr, [[1, 2, 3], [4, 1, 6], [7, 8, 9]]);
+            eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
+            eval *assert_eq(|_|"Case " + case + "-c", arr, [[1, 2, 3], [4, 1, 6], [7, 8, 9]]);
 
             // Case 3: `plug_in` is called multiple times.
             let case = "3";
             let arr = [[0], [1], [2]];
             let arr = arr.act(0, |x| [[], x, x.push_back(1)]);
             eval *println(arr.to_string);
-            eval assert_eq(|_|"Case " + case, arr, [[[], [1], [2]], [[0], [1], [2]], [[0, 1], [1], [2]]]);
+            eval *assert_eq(|_|"Case " + case, arr, [[[], [1], [2]], [[0], [1], [2]], [[0, 1], [1], [2]]]);
 
             pure()
         );
@@ -3433,9 +3433,9 @@ pub fn test124() {
         main : IO ();
         main = (
             // flatten
-            eval assert_eq(|_|"case 1", [[1,2,3], [], [4, 5, 6]].flatten, [1, 2, 3, 4, 5, 6]);
-            eval assert_eq(|_|"case 2", [[]].flatten, []: Array I64);
-            eval assert_eq(|_|"case 3", [].flatten, []: Array I64);
+            eval *assert_eq(|_|"case 1", [[1,2,3], [], [4, 5, 6]].flatten, [1, 2, 3, 4, 5, 6]);
+            eval *assert_eq(|_|"case 2", [[]].flatten, []: Array I64);
+            eval *assert_eq(|_|"case 3", [].flatten, []: Array I64);
 
             // bind
             let arr = do {
@@ -3443,29 +3443,29 @@ pub fn test124() {
                 let y = *['a','b','c'];
                 pure $ (x, y)
             };
-            eval assert_eq(|_|"case 4", arr, [(1, 'a'), (1, 'b'), (1, 'c'), (2, 'a'), (2, 'b'), (2, 'c'), (3, 'a'), (3, 'b'), (3, 'c')]);
+            eval *assert_eq(|_|"case 4", arr, [(1, 'a'), (1, 'b'), (1, 'c'), (2, 'a'), (2, 'b'), (2, 'c'), (3, 'a'), (3, 'b'), (3, 'c')]);
 
             let arr = do {
                 let x = *[1,2,3];
                 [x, x]
             };
-            eval assert_eq(|_|"case 5", arr, [1, 1, 2, 2, 3, 3]);
+            eval *assert_eq(|_|"case 5", arr, [1, 1, 2, 2, 3, 3]);
 
             let arr = do {
                 let x = *[1,2,3];
                 []
             };
-            eval assert_eq(|_|"case 6", arr, [] : Array I64);
+            eval *assert_eq(|_|"case 6", arr, [] : Array I64);
 
             let arr = do {
                 let x = *[];
                 [x]
             };
-            eval assert_eq(|_|"case 7", arr, [] : Array I64);
+            eval *assert_eq(|_|"case 7", arr, [] : Array I64);
 
             // map
-            eval assert_eq(|_|"case 8", [1, 2, 3].map(|i| i*i), [1, 4, 9]);
-            eval assert_eq(|_|"case 9", [].map(|i| i*i), [] : Array I64);
+            eval *assert_eq(|_|"case 8", [1, 2, 3].map(|i| i*i), [1, 4, 9]);
+            eval *assert_eq(|_|"case 9", [].map(|i| i*i), [] : Array I64);
 
             pure()
         );
@@ -3483,7 +3483,7 @@ pub fn test125() {
         main : IO ();
         main = (
             let arr = [(), ()];
-            eval assert_eq(|_|"", arr.@(0), arr.@(1));
+            eval *assert_eq(|_|"", arr.@(0), arr.@(1));
 
             pure()
         );
@@ -3502,7 +3502,7 @@ pub fn test126() {
         main = (
             let n = 100;
             let v = Iterator::range(0, n+1).sum;
-            eval assert_eq(|_|"", v, n*(n+1)/2);
+            eval *assert_eq(|_|"", v, n*(n+1)/2);
 
             pure()
         );
@@ -3571,26 +3571,26 @@ pub fn test_trait_alias() {
         main : IO ();
         main = (
             let sum_vec = [Vector2{x : 1, y : 2}, Vector2{x : 3, y : 4}].to_iter.sum;
-            eval assert_eq(|_|"case 1", sum_vec.@x, 4);
-            eval assert_eq(|_|"case 2", sum_vec.@y, 6);
+            eval *assert_eq(|_|"case 1", sum_vec.@x, 4);
+            eval *assert_eq(|_|"case 2", sum_vec.@y, 6);
 
             let opts = [Option::some(1), Option::some(2)].to_iter;
             let opt_sum = opts.my_msum;
-            eval assert_eq(|_|"case 3", opt_sum.as_some, 1);
+            eval *assert_eq(|_|"case 3", opt_sum.as_some, 1);
 
             let opts = [Option::none(), Option::some(2)].to_iter;
             let opt_sum = opts.my_msum;
-            eval assert_eq(|_|"case 4", opt_sum.as_some, 2);
+            eval *assert_eq(|_|"case 4", opt_sum.as_some, 2);
 
             let opts = [Option::none(), Option::none()].to_iter;
             let opt_sum : Option I64 = opts.my_msum;
-            eval assert_eq(|_|"case 5", opt_sum.is_none, true);
+            eval *assert_eq(|_|"case 5", opt_sum.is_none, true);
 
             let opts = [].to_iter;
             let opt_sum : Option I64 = opts.my_msum;
-            eval assert_eq(|_|"case 6", opt_sum.is_none, true);
+            eval *assert_eq(|_|"case 6", opt_sum.is_none, true);
 
-            eval assert_eq(|_|"case 7", [1,2,3,4,5].my_sum, 1+2+3+4+5);
+            eval *assert_eq(|_|"case 7", [1,2,3,4,5].my_sum, 1+2+3+4+5);
 
             pure()
         );
@@ -3676,81 +3676,81 @@ pub fn test129() {
             let case = "U8";
             let n = 1;
             let x = 127_U8;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg U8 = Array::fill(n-1, 127_U8).from_bytes;
-            eval assert(|_|case + " 2", y.is_err);
+            eval *assert(|_|case + " 2", y.is_err);
 
             // I8
             let case = "I8";
             let n = 1;
             let x = 127_U8;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg I8 = Array::fill(n-1, 127_U8).from_bytes;
-            eval assert(|_|case + " 2", y.is_err);
+            eval *assert(|_|case + " 2", y.is_err);
 
             // U16
             let case = "U16";
             let n = 2;
             let x = 65535_U16;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             // let y : Result ErrMsg U16 = Array::fill(n-1, 127_U8).from_bytes;
-            // eval assert(|_|case + " 2", y.is_err);
+            // eval *assert(|_|case + " 2", y.is_err);
 
             // I16
             // let case = "I16";
             // let n = 2;
             // let x = -32768_I16;
-            // eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            // eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             // let y : Result ErrMsg I16 = Array::fill(n-1, 127_U8).from_bytes;
-            // eval assert(|_|case + " 2", y.is_err);
+            // eval *assert(|_|case + " 2", y.is_err);
 
             // U32
             let case = "U32";
             let n = 4;
             let x = 90123456_U32;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg U32 = Array::fill(n-1, 127_U8).from_bytes;
-            eval assert(|_|case + " 2", y.is_err);
+            eval *assert(|_|case + " 2", y.is_err);
 
             // I32
             let case = "I32";
             let n = 4;
             let x = -12345678_I32;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg I32 = Array::fill(n-1, 127_U8).from_bytes;
-            eval assert(|_|case + " 2", y.is_err);
+            eval *assert(|_|case + " 2", y.is_err);
 
             // U64
             let case = "U64";
             let n = 8;
             let x = 123456789012345678_U64;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg U64 = Array::fill(n-1, 127_U8).from_bytes;
-            eval assert(|_|case + " 2", y.is_err);
+            eval *assert(|_|case + " 2", y.is_err);
 
             // I64
             let case = "I64";
             let n = 8;
             let x = 123456789012345678_I64;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg I64 = Array::fill(n-1, 127_U8).from_bytes;
-            eval assert(|_|case + " 2", y.is_err);
+            eval *assert(|_|case + " 2", y.is_err);
 
             // F32
             let case = "F32";
             let n = 4;
             let x = 3.14_F32;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg F32 = Array::fill(n-1, 127_U8).from_bytes;
-            eval assert(|_|case + " 2", y.is_err);
+            eval *assert(|_|case + " 2", y.is_err);
 
             // F64
             let case = "F64";
             let n = 8;
             let x = 3.14_F64;
-            eval assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
+            eval *assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);
             let y : Result ErrMsg F64 = Array::fill(n-1, 127_U8).from_bytes;
-            eval assert(|_|case + " 2", y.is_err);
+            eval *assert(|_|case + " 2", y.is_err);
 
             pure()
         );
@@ -3792,17 +3792,17 @@ pub fn test_signed_integral_abs() {
         module Main; 
         main : IO ();
         main = (
-            eval assert_eq(|_|"", -123_I8.abs, 123_I8);
-            eval assert_eq(|_|"", 123_I8.abs, 123_I8);
+            eval *assert_eq(|_|"", -123_I8.abs, 123_I8);
+            eval *assert_eq(|_|"", 123_I8.abs, 123_I8);
 
-            eval assert_eq(|_|"", -123_I16.abs, 123_I16);
-            eval assert_eq(|_|"", 123_I16.abs, 123_I16);
+            eval *assert_eq(|_|"", -123_I16.abs, 123_I16);
+            eval *assert_eq(|_|"", 123_I16.abs, 123_I16);
 
-            eval assert_eq(|_|"", -123_I32.abs, 123_I32);
-            eval assert_eq(|_|"", 123_I32.abs, 123_I32);
+            eval *assert_eq(|_|"", -123_I32.abs, 123_I32);
+            eval *assert_eq(|_|"", 123_I32.abs, 123_I32);
 
-            eval assert_eq(|_|"", -123.abs, 123);
-            eval assert_eq(|_|"", 123.abs, 123);
+            eval *assert_eq(|_|"", -123.abs, 123);
+            eval *assert_eq(|_|"", 123.abs, 123);
 
             pure()
         );
@@ -3817,12 +3817,12 @@ pub fn test_float_to_string_precision() {
         main : IO ();
         main = (
             let x = 3.14_F32;
-            eval assert_eq(|_|"case to_string_precision F32 0", x.to_string_precision(0_U8), "3");
-            eval assert_eq(|_|"case to_string_precision F32 255", x.to_string_precision(255_U8), "3.140000104904174804687500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+            eval *assert_eq(|_|"case to_string_precision F32 0", x.to_string_precision(0_U8), "3");
+            eval *assert_eq(|_|"case to_string_precision F32 255", x.to_string_precision(255_U8), "3.140000104904174804687500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
             let x = -3.14;
-            eval assert_eq(|_|"case to_string_precision F64 0", x.to_string_precision(0_U8), "-3");
-            eval assert_eq(|_|"case to_string_precision F64 255", x.to_string_precision(255_U8), "-3.140000000000000124344978758017532527446746826171875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+            eval *assert_eq(|_|"case to_string_precision F64 0", x.to_string_precision(0_U8), "-3");
+            eval *assert_eq(|_|"case to_string_precision F64 255", x.to_string_precision(255_U8), "-3.140000000000000124344978758017532527446746826171875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 
             pure()
         );
@@ -3837,10 +3837,10 @@ pub fn test_float_to_string_exp() {
         main : IO ();
         main = (
             let x = 123.45_F32;
-            eval assert_eq(|_|"case to_string_exp F32", x.to_string_exp, "1.234500e+02");
+            eval *assert_eq(|_|"case to_string_exp F32", x.to_string_exp, "1.234500e+02");
 
             let x = -123.45_F64;
-            eval assert_eq(|_|"case to_string_exp F64", x.to_string_exp, "-1.234500e+02");
+            eval *assert_eq(|_|"case to_string_exp F64", x.to_string_exp, "-1.234500e+02");
         
             pure()
         );
@@ -3855,12 +3855,12 @@ pub fn test_float_to_string_exp_precision() {
         main : IO ();
         main = (
             let x = 123.45_F32;
-            eval assert_eq(|_|"", x.to_string_exp_precision(0_U8), "1e+02");
-            eval assert_eq(|_|"", x.to_string_exp_precision(255_U8), "1.234499969482421875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e+02");
+            eval *assert_eq(|_|"", x.to_string_exp_precision(0_U8), "1e+02");
+            eval *assert_eq(|_|"", x.to_string_exp_precision(255_U8), "1.234499969482421875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e+02");
 
             let x = -123.45_F64;
-            eval assert_eq(|_|"", x.to_string_exp_precision(0_U8), "-1e+02");
-            eval assert_eq(|_|"", x.to_string_exp_precision(255_U8), "-1.234500000000000028421709430404007434844970703125000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e+02");
+            eval *assert_eq(|_|"", x.to_string_exp_precision(0_U8), "-1e+02");
+            eval *assert_eq(|_|"", x.to_string_exp_precision(255_U8), "-1.234500000000000028421709430404007434844970703125000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e+02");
         
             pure()
         );
@@ -3877,7 +3877,7 @@ pub fn test_string_unsafe_from_c_str_ptr() {
         main = (
             let src = "Hello World!";
             let cpy = src.borrow_c_str(String::_unsafe_from_c_str_ptr);
-            eval assert_eq(|_|"", src, cpy);
+            eval *assert_eq(|_|"", src, cpy);
             pure()
         );
     "#;
@@ -3911,13 +3911,13 @@ pub fn test_loop_lines() {
         let file_path = Path::parse("test_GndeZP399tLX.txt").as_some;
         do {
             eval *write_file_string(file_path, ["0", "1", "2", "X", "3", "4"].to_iter.join("\n"));
-            eval assert_eq(|_|"", *sum_up_while(file_path), 0 + 1 + 2);
+            eval *assert_eq(|_|"", *sum_up_while(file_path), 0 + 1 + 2).lift;
 
             eval *write_file_string(file_path, ["0", "1", "2", "3", "4"].to_iter.join("\n"));
-            eval assert_eq(|_|"", *sum_up_while(file_path), 0 + 1 + 2 + 3 + 4);
+            eval *assert_eq(|_|"", *sum_up_while(file_path), 0 + 1 + 2 + 3 + 4).lift;
 
             eval *write_file_string(file_path, [].to_iter.join("\n"));
-            eval assert_eq(|_|"", *sum_up_while(file_path), 0);
+            eval *assert_eq(|_|"", *sum_up_while(file_path), 0).lift;
 
             pure()
         }.try(exit_with_msg(1))
@@ -3936,23 +3936,23 @@ pub fn test_array_get_sub() {
     main = (
         // Unboxed case
         let arr = [0, 1, 2, 3, 4];
-        eval assert_eq(|_|"", arr.get_sub(2, 4), [2, 3]);
-        eval assert_eq(|_|"", arr.get_sub(0, 0), []);
-        eval assert_eq(|_|"", arr.get_sub(3, 1), [3, 4, 0]);
-        eval assert_eq(|_|"", arr.get_sub(1, -1), [1, 2, 3]);
+        eval *assert_eq(|_|"", arr.get_sub(2, 4), [2, 3]);
+        eval *assert_eq(|_|"", arr.get_sub(0, 0), []);
+        eval *assert_eq(|_|"", arr.get_sub(3, 1), [3, 4, 0]);
+        eval *assert_eq(|_|"", arr.get_sub(1, -1), [1, 2, 3]);
     
         let arr : Array I64 = [];
-        eval assert_eq(|_|"", arr.get_sub(2, 4), []);
+        eval *assert_eq(|_|"", arr.get_sub(2, 4), []);
     
         // Boxed case
         let arr = [[0], [1], [2], [3], [4]];
-        eval assert_eq(|_|"", arr.get_sub(2, 4), [[2], [3]]);
-        eval assert_eq(|_|"", arr.get_sub(0, 0), []);
-        eval assert_eq(|_|"", arr.get_sub(3, 1), [[3], [4], [0]]);
-        eval assert_eq(|_|"", arr.get_sub(1, -1), [[1], [2], [3]]);
+        eval *assert_eq(|_|"", arr.get_sub(2, 4), [[2], [3]]);
+        eval *assert_eq(|_|"", arr.get_sub(0, 0), []);
+        eval *assert_eq(|_|"", arr.get_sub(3, 1), [[3], [4], [0]]);
+        eval *assert_eq(|_|"", arr.get_sub(1, -1), [[1], [2], [3]]);
     
         let arr : Array (Array I64) = [];
-        eval assert_eq(|_|"", arr.get_sub(2, 4), []);
+        eval *assert_eq(|_|"", arr.get_sub(2, 4), []);
     
         pure()
     );
@@ -3968,12 +3968,12 @@ pub fn test_string_get_sub() {
     main : IO ();
     main = (
         let str = "Hello";
-        eval assert_eq(|_|"", str.get_sub(2, 4), "ll");
-        eval assert_eq(|_|"", str.get_sub(0, 0), "");
-        eval assert_eq(|_|"", str.get_sub(3, 1), "loH");
-        eval assert_eq(|_|"", str.get_sub(1, -1), "ell");
+        eval *assert_eq(|_|"", str.get_sub(2, 4), "ll");
+        eval *assert_eq(|_|"", str.get_sub(0, 0), "");
+        eval *assert_eq(|_|"", str.get_sub(3, 1), "loH");
+        eval *assert_eq(|_|"", str.get_sub(1, -1), "ell");
     
-        eval assert_eq(|_|"", "".get_sub(2, 4), "");
+        eval *assert_eq(|_|"", "".get_sub(2, 4), "");
     
         pure()
     );
@@ -3988,12 +3988,12 @@ pub fn test_string_strip_first_spaces() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"", "".strip_first_spaces, "");
-        eval assert_eq(|_|"", "Hello".strip_first_spaces, "Hello");
-        eval assert_eq(|_|"", " Hello".strip_first_spaces, "Hello");
-        eval assert_eq(|_|"", " \tHello".strip_first_spaces, "Hello");
-        eval assert_eq(|_|"", " ".strip_first_spaces, "");
-        eval assert_eq(|_|"", "  ".strip_first_spaces, "");
+        eval *assert_eq(|_|"", "".strip_first_spaces, "");
+        eval *assert_eq(|_|"", "Hello".strip_first_spaces, "Hello");
+        eval *assert_eq(|_|"", " Hello".strip_first_spaces, "Hello");
+        eval *assert_eq(|_|"", " \tHello".strip_first_spaces, "Hello");
+        eval *assert_eq(|_|"", " ".strip_first_spaces, "");
+        eval *assert_eq(|_|"", "  ".strip_first_spaces, "");
     
         pure()
     );
@@ -4024,7 +4024,7 @@ pub fn test_loop_lines_io() {
 
             let content2 = *read_file_string(file2);
 
-            eval assert_eq(|_|"", content2, content1);
+            eval *assert_eq(|_|"", content2, content1).lift;
 
             pure()
         }.try(exit_with_msg(1))
@@ -4042,29 +4042,29 @@ pub fn test_string_find() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"1", "abcdef".find("ab", 0), Option::some(0));
-        eval assert_eq(|_|"2", "abcdef".find("bc", 0), Option::some(1));
-        eval assert_eq(|_|"3", "abcdef".find("ef", 0), Option::some(4));
-        eval assert_eq(|_|"4", "abcdef".find("xyz", 0), Option::none());
-        eval assert_eq(|_|"5", "abcdef".find("", 0), Option::some(0));
-        eval assert_eq(|_|"6", "".find("xyz", 0), Option::none());
-        eval assert_eq(|_|"7", "".find("", 0), Option::some(0));
+        eval *assert_eq(|_|"1", "abcdef".find("ab", 0), Option::some(0));
+        eval *assert_eq(|_|"2", "abcdef".find("bc", 0), Option::some(1));
+        eval *assert_eq(|_|"3", "abcdef".find("ef", 0), Option::some(4));
+        eval *assert_eq(|_|"4", "abcdef".find("xyz", 0), Option::none());
+        eval *assert_eq(|_|"5", "abcdef".find("", 0), Option::some(0));
+        eval *assert_eq(|_|"6", "".find("xyz", 0), Option::none());
+        eval *assert_eq(|_|"7", "".find("", 0), Option::some(0));
 
-        eval assert_eq(|_|"8", "abcdef".find("ab", 1), Option::none());
-        eval assert_eq(|_|"9", "abcdef".find("bc", 1), Option::some(1));
-        eval assert_eq(|_|"10", "abcdef".find("ef", 1), Option::some(4));
-        eval assert_eq(|_|"11", "abcdef".find("xyz", 1), Option::none());
-        eval assert_eq(|_|"12", "abcdef".find("", 1), Option::some(1));
-        eval assert_eq(|_|"13", "".find("xyz", 1), Option::none());
-        eval assert_eq(|_|"14", "".find("", 1), Option::some(0));
+        eval *assert_eq(|_|"8", "abcdef".find("ab", 1), Option::none());
+        eval *assert_eq(|_|"9", "abcdef".find("bc", 1), Option::some(1));
+        eval *assert_eq(|_|"10", "abcdef".find("ef", 1), Option::some(4));
+        eval *assert_eq(|_|"11", "abcdef".find("xyz", 1), Option::none());
+        eval *assert_eq(|_|"12", "abcdef".find("", 1), Option::some(1));
+        eval *assert_eq(|_|"13", "".find("xyz", 1), Option::none());
+        eval *assert_eq(|_|"14", "".find("", 1), Option::some(0));
 
-        eval assert_eq(|_|"15", "abcdef".find("ab", 7), Option::none());
-        eval assert_eq(|_|"16", "abcdef".find("bc", 7), Option::none());
-        eval assert_eq(|_|"17", "abcdef".find("ef", 7), Option::none());
-        eval assert_eq(|_|"18", "abcdef".find("xyz", 7), Option::none());
-        eval assert_eq(|_|"19", "abcdef".find("", 7), Option::some(6));
-        eval assert_eq(|_|"20", "".find("xyz", 7), Option::none());
-        eval assert_eq(|_|"21", "".find("", 7), Option::some(0));
+        eval *assert_eq(|_|"15", "abcdef".find("ab", 7), Option::none());
+        eval *assert_eq(|_|"16", "abcdef".find("bc", 7), Option::none());
+        eval *assert_eq(|_|"17", "abcdef".find("ef", 7), Option::none());
+        eval *assert_eq(|_|"18", "abcdef".find("xyz", 7), Option::none());
+        eval *assert_eq(|_|"19", "abcdef".find("", 7), Option::some(6));
+        eval *assert_eq(|_|"20", "".find("xyz", 7), Option::none());
+        eval *assert_eq(|_|"21", "".find("", 7), Option::some(0));
 
         pure()
     );
@@ -4092,7 +4092,7 @@ pub fn test_names_literal_prefix() {
         let false_local_num = 0;
         let nullptr_local_num = 0;
 
-        eval assert_eq(|_|"", true_global_val + false_global_val + nullptr_global_val + true_local_num + false_local_num + nullptr_local_num, 42 + 42);
+        eval *assert_eq(|_|"", true_global_val + false_global_val + nullptr_global_val + true_local_num + false_local_num + nullptr_local_num, 42 + 42);
 
         pure()
     );
@@ -4107,12 +4107,12 @@ pub fn test_string_split() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"1", "--ab---cde----".split("--").to_array, ["", "ab", "-cde", "", ""]);
-        eval assert_eq(|_|"2", "ab---cde----".split("--").to_array, ["ab", "-cde", "", ""]);
-        eval assert_eq(|_|"3", "--ab---cde".split("--").to_array, ["", "ab", "-cde"]);
-        eval assert_eq(|_|"3", "ab---cde".split("--").to_array, ["ab", "-cde"]);
-        eval assert_eq(|_|"4", "--".split("--").to_array, ["", ""]);
-        eval assert_eq(|_|"5", "".split("--").to_array, [""]);
+        eval *assert_eq(|_|"1", "--ab---cde----".split("--").to_array, ["", "ab", "-cde", "", ""]);
+        eval *assert_eq(|_|"2", "ab---cde----".split("--").to_array, ["ab", "-cde", "", ""]);
+        eval *assert_eq(|_|"3", "--ab---cde".split("--").to_array, ["", "ab", "-cde"]);
+        eval *assert_eq(|_|"3", "ab---cde".split("--").to_array, ["ab", "-cde"]);
+        eval *assert_eq(|_|"4", "--".split("--").to_array, ["", ""]);
+        eval *assert_eq(|_|"5", "".split("--").to_array, [""]);
 
         pure()
     );
@@ -4127,7 +4127,7 @@ pub fn test_ptr_to_string() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"", nullptr.add_offset(3134905646).to_string, "00000000badadd2e");
+        eval *assert_eq(|_|"", nullptr.add_offset(3134905646).to_string, "00000000badadd2e");
         pure()
     );
     "#;
@@ -4154,7 +4154,7 @@ pub fn test_tarai() {
     main : IO ();
     main = (
         let n = tarai $ (12, 6, 0);
-        eval assert_eq(|_|"", n, 12);
+        eval *assert_eq(|_|"", n, 12);
         pure()
     );
     "#;
@@ -4182,21 +4182,21 @@ pub fn test_float_inf_nan() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"", F32::infinity.to_string, "inf");
+        eval *assert_eq(|_|"", F32::infinity.to_string, "inf");
 
-        eval assert_eq(|_|"", F64::infinity.to_string, "inf");
+        eval *assert_eq(|_|"", F64::infinity.to_string, "inf");
 
-        eval assert_eq(|_|"", (-F32::infinity).to_string, "-inf");
+        eval *assert_eq(|_|"", (-F32::infinity).to_string, "-inf");
 
-        eval assert_eq(|_|"", (-F64::infinity).to_string, "-inf");
+        eval *assert_eq(|_|"", (-F64::infinity).to_string, "-inf");
 
-        eval assert_eq(|_|"", F32::quiet_nan.to_bytes, [255_U8, 255_U8, 255_U8, 127_U8]);
+        eval *assert_eq(|_|"", F32::quiet_nan.to_bytes, [255_U8, 255_U8, 255_U8, 127_U8]);
 
-        eval assert_eq(|_|"", F64::quiet_nan.to_bytes, [255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 127_U8]);
+        eval *assert_eq(|_|"", F64::quiet_nan.to_bytes, [255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 127_U8]);
 
-        eval assert_eq(|_|"", F32::quiet_nan.to_string, "nan");
+        eval *assert_eq(|_|"", F32::quiet_nan.to_string, "nan");
 
-        eval assert_eq(|_|"", F64::quiet_nan.to_string, "nan");
+        eval *assert_eq(|_|"", F64::quiet_nan.to_string, "nan");
 
         pure()
     );
@@ -4356,35 +4356,35 @@ pub fn test_hex_oct_bin_lit() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"", 0x0, 0);
-        eval assert_eq(|_|"", 0o0, 0);
-        eval assert_eq(|_|"", 0b0, 0);
-        eval assert_eq(|_|"", -0x0, 0);
-        eval assert_eq(|_|"", -0o0, 0);
-        eval assert_eq(|_|"", -0b0, 0);
-        eval assert_eq(|_|"", 0x0123456789abcdef, 81985529216486895);
-        eval assert_eq(|_|"", 0x0123456789ABCDEF, 81985529216486895);
-        eval assert_eq(|_|"", 0o01234567, 342391);
-        eval assert_eq(|_|"", 0b01, 1);
-        eval assert_eq(|_|"", -0x0123456789abcdef, -81985529216486895);
-        eval assert_eq(|_|"", -0x0123456789ABCDEF, -81985529216486895);
-        eval assert_eq(|_|"", -0o01234567, -342391);
-        eval assert_eq(|_|"", -0b01, -1);
-        eval assert_eq(|_|"", 0xdeadbeef, 3735928559);
-        eval assert_eq(|_|"", 0o33653337357, 3735928559);
-        eval assert_eq(|_|"", 0b11011110101011011011111011101111, 3735928559);
-        eval assert_eq(|_|"", 0x7FFFFFFFFFFFFFFF, 9223372036854775807);
-        eval assert_eq(|_|"", -0x8000000000000000, -9223372036854775808);
-        eval assert_eq(|_|"", 0o0777777777777777777777, 9223372036854775807);
-        eval assert_eq(|_|"", -0o1000000000000000000000, -9223372036854775808);
-        eval assert_eq(|_|"", 0b0111111111111111111111111111111111111111111111111111111111111111, 9223372036854775807);
-        eval assert_eq(|_|"", -0b1000000000000000000000000000000000000000000000000000000000000000, -9223372036854775808);
-        eval assert_eq(|_|"", 0xFFFFFFFFFFFFFFFF_U64, 18446744073709551615_U64);
-        eval assert_eq(|_|"", 0o1777777777777777777777_U64, 18446744073709551615_U64);
-        eval assert_eq(|_|"", 0b1111111111111111111111111111111111111111111111111111111111111111_U64, 18446744073709551615_U64);
-        eval assert_eq(|_|"", 0x7FFFFFFF_I32, 2147483647_I32);
-        eval assert_eq(|_|"", -0x80000000_I32, -2147483648_I32);
-        eval assert_eq(|_|"", 0xFFFFFFFF_U32, 4294967295_U32);
+        eval *assert_eq(|_|"", 0x0, 0);
+        eval *assert_eq(|_|"", 0o0, 0);
+        eval *assert_eq(|_|"", 0b0, 0);
+        eval *assert_eq(|_|"", -0x0, 0);
+        eval *assert_eq(|_|"", -0o0, 0);
+        eval *assert_eq(|_|"", -0b0, 0);
+        eval *assert_eq(|_|"", 0x0123456789abcdef, 81985529216486895);
+        eval *assert_eq(|_|"", 0x0123456789ABCDEF, 81985529216486895);
+        eval *assert_eq(|_|"", 0o01234567, 342391);
+        eval *assert_eq(|_|"", 0b01, 1);
+        eval *assert_eq(|_|"", -0x0123456789abcdef, -81985529216486895);
+        eval *assert_eq(|_|"", -0x0123456789ABCDEF, -81985529216486895);
+        eval *assert_eq(|_|"", -0o01234567, -342391);
+        eval *assert_eq(|_|"", -0b01, -1);
+        eval *assert_eq(|_|"", 0xdeadbeef, 3735928559);
+        eval *assert_eq(|_|"", 0o33653337357, 3735928559);
+        eval *assert_eq(|_|"", 0b11011110101011011011111011101111, 3735928559);
+        eval *assert_eq(|_|"", 0x7FFFFFFFFFFFFFFF, 9223372036854775807);
+        eval *assert_eq(|_|"", -0x8000000000000000, -9223372036854775808);
+        eval *assert_eq(|_|"", 0o0777777777777777777777, 9223372036854775807);
+        eval *assert_eq(|_|"", -0o1000000000000000000000, -9223372036854775808);
+        eval *assert_eq(|_|"", 0b0111111111111111111111111111111111111111111111111111111111111111, 9223372036854775807);
+        eval *assert_eq(|_|"", -0b1000000000000000000000000000000000000000000000000000000000000000, -9223372036854775808);
+        eval *assert_eq(|_|"", 0xFFFFFFFFFFFFFFFF_U64, 18446744073709551615_U64);
+        eval *assert_eq(|_|"", 0o1777777777777777777777_U64, 18446744073709551615_U64);
+        eval *assert_eq(|_|"", 0b1111111111111111111111111111111111111111111111111111111111111111_U64, 18446744073709551615_U64);
+        eval *assert_eq(|_|"", 0x7FFFFFFF_I32, 2147483647_I32);
+        eval *assert_eq(|_|"", -0x80000000_I32, -2147483648_I32);
+        eval *assert_eq(|_|"", 0xFFFFFFFF_U32, 4294967295_U32);
         pure()
     );
     "##;
@@ -4398,8 +4398,8 @@ pub fn test_array_to_string() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"", ([] : Array Bool).to_string, "[]");
-        eval assert_eq(|_|"", [1, 2, 3].to_string, "[1, 2, 3]");
+        eval *assert_eq(|_|"", ([] : Array Bool).to_string, "[]");
+        eval *assert_eq(|_|"", [1, 2, 3].to_string, "[1, 2, 3]");
         pure()
     );
     "##;
@@ -4413,8 +4413,8 @@ pub fn test_option_to_string() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"", (Option::none() : Option Bool).to_string, "none()");
-        eval assert_eq(|_|"", (Option::some(42) : Option I64).to_string, "some(42)");
+        eval *assert_eq(|_|"", (Option::none() : Option Bool).to_string, "none()");
+        eval *assert_eq(|_|"", (Option::some(42) : Option I64).to_string, "some(42)");
         pure()
     );
     "##;
@@ -4428,9 +4428,9 @@ pub fn test_unit_tuple_to_string() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"", ().to_string, "()");
-        eval assert_eq(|_|"", (42, true).to_string, "(42, true)");
-        eval assert_eq(|_|"", (42, true, "truth").to_string, "(42, true, truth)");
+        eval *assert_eq(|_|"", ().to_string, "()");
+        eval *assert_eq(|_|"", (42, true).to_string, "(42, true)");
+        eval *assert_eq(|_|"", (42, true, "truth").to_string, "(42, true, truth)");
         pure()
     );
     "##;
@@ -4444,15 +4444,15 @@ pub fn test_unit_tuple_eq() {
         
     main : IO ();
     main = (
-        eval assert(|_|"", () == ());
-        eval assert(|_|"", (42, true) == (42, true));
-        eval assert(|_|"", (0, true) != (42, true));
-        eval assert(|_|"", (42, false) != (42, true));
+        eval *assert(|_|"", () == ());
+        eval *assert(|_|"", (42, true) == (42, true));
+        eval *assert(|_|"", (0, true) != (42, true));
+        eval *assert(|_|"", (42, false) != (42, true));
 
-        eval assert(|_|"", (42, true, "truth") == (42, true, "truth"));
-        eval assert(|_|"", (0, true, "truth") != (42, true, "truth"));
-        eval assert(|_|"", (42, false, "truth") != (42, true, "truth"));
-        eval assert(|_|"", (42, false, "falsy") != (42, true, "truth"));
+        eval *assert(|_|"", (42, true, "truth") == (42, true, "truth"));
+        eval *assert(|_|"", (0, true, "truth") != (42, true, "truth"));
+        eval *assert(|_|"", (42, false, "truth") != (42, true, "truth"));
+        eval *assert(|_|"", (42, false, "falsy") != (42, true, "truth"));
 
         pure()
     );
@@ -4467,17 +4467,17 @@ pub fn test_tuple_less_than_and_less_than_or_eq() {
         
     main : IO ();
     main = (
-        eval assert_eq(|_|"", (1, 2) < (2, 1), true);
-        eval assert_eq(|_|"", (2, 1) < (1, 2), false);
-        eval assert_eq(|_|"", (1, 2) < (1, 1), false);
-        eval assert_eq(|_|"", (1, 1) < (1, 2), true);
-        eval assert_eq(|_|"", (1, 1) < (1, 1), false);
+        eval *assert_eq(|_|"", (1, 2) < (2, 1), true);
+        eval *assert_eq(|_|"", (2, 1) < (1, 2), false);
+        eval *assert_eq(|_|"", (1, 2) < (1, 1), false);
+        eval *assert_eq(|_|"", (1, 1) < (1, 2), true);
+        eval *assert_eq(|_|"", (1, 1) < (1, 1), false);
 
-        eval assert_eq(|_|"", (1, 2) <= (2, 1), true);
-        eval assert_eq(|_|"", (2, 1) <= (1, 2), false);
-        eval assert_eq(|_|"", (1, 2) <= (1, 1), false);
-        eval assert_eq(|_|"", (1, 1) <= (1, 2), true);
-        eval assert_eq(|_|"", (1, 1) <= (1, 1), true);
+        eval *assert_eq(|_|"", (1, 2) <= (2, 1), true);
+        eval *assert_eq(|_|"", (2, 1) <= (1, 2), false);
+        eval *assert_eq(|_|"", (1, 2) <= (1, 1), false);
+        eval *assert_eq(|_|"", (1, 1) <= (1, 2), true);
+        eval *assert_eq(|_|"", (1, 1) <= (1, 1), true);
 
         pure()
     );
@@ -4493,9 +4493,9 @@ pub fn test_result_to_string() {
     main : IO ();
     main = (
         let res : Result String Bool = Result::ok(true);
-        eval assert_eq(|_|"", res.to_string, "ok(true)");
+        eval *assert_eq(|_|"", res.to_string, "ok(true)");
         let res : Result String Bool = Result::err("error");
-        eval assert_eq(|_|"", res.to_string, "err(error)");
+        eval *assert_eq(|_|"", res.to_string, "err(error)");
         pure()
     );
     "##;
@@ -4522,7 +4522,7 @@ pub fn test_result_eq() {
             pure $ (i, j)
         };
         eval *indices.loop_iter_m((), |_, (i, j)| (
-            eval if i == j {
+            eval *if i == j {
                 assert_eq(|_|"", ress.@(i) == ress.@(j), true)
             } else {
                 assert_eq(|_|"", ress.@(i) == ress.@(j), false)
@@ -4557,8 +4557,8 @@ pub fn test_array_less_than_and_less_than_or_eq() {
             pure $ (i, j)
         };
         eval *indices.loop_iter_m((), |_, (i, j)| (
-            eval assert_eq(|_|"", arrs.@(i) < arrs.@(j), i < j);
-            eval assert_eq(|_|"", arrs.@(i) <= arrs.@(j), i <= j);
+            eval *assert_eq(|_|"", arrs.@(i) < arrs.@(j), i < j);
+            eval *assert_eq(|_|"", arrs.@(i) <= arrs.@(j), i <= j);
             continue_m $ ()
         ));
 
@@ -4589,8 +4589,8 @@ pub fn test_string_less_than_and_less_than_or_eq() {
             pure $ (i, j)
         };
         eval *indices.loop_iter_m((), |_, (i, j)| (
-            eval assert_eq(|_|"", ss.@(i) < ss.@(j), i < j);
-            eval assert_eq(|_|"", ss.@(i) <= ss.@(j), i <= j);
+            eval *assert_eq(|_|"", ss.@(i) < ss.@(j), i < j);
+            eval *assert_eq(|_|"", ss.@(i) <= ss.@(j), i <= j);
             continue_m $ ()
         ));
 
@@ -4618,8 +4618,8 @@ pub fn test_overlapping_trait_and_function() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"", Main::show(42), "(function) 42");
-        eval assert_eq(|_|"", Show::show(42), "(trait) 42");
+        eval *assert_eq(|_|"", Main::show(42), "(function) 42");
+        eval *assert_eq(|_|"", Show::show(42), "(trait) 42");
         pure()
     );
     "##;
@@ -4708,7 +4708,7 @@ pub fn test_implement_trait_on_arrow_1() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"fail", (|x| x + 1).to_string, "f(0) = 1, f(1) = 2");
+        eval *assert_eq(|_|"fail", (|x| x + 1).to_string, "f(0) = 1, f(1) = 2");
         pure()
     );
     "##;
@@ -4730,7 +4730,7 @@ pub fn test_implement_trait_on_arrow_2() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"fail", (|x| x + 1).to_string, "arrow");
+        eval *assert_eq(|_|"fail", (|x| x + 1).to_string, "arrow");
         pure()
     );
     "##;
@@ -4756,7 +4756,7 @@ pub fn test_overlapping_instances_1() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"fail", [1,2,3].to_string, "array");
+        eval *assert_eq(|_|"fail", [1,2,3].to_string, "array");
         pure()
     );
     "##;
@@ -4786,7 +4786,7 @@ pub fn test_overlapping_instances_2() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"fail", [1,2,3].to_string, "array");
+        eval *assert_eq(|_|"fail", [1,2,3].to_string, "array");
         pure()
     );
     "##;
@@ -4816,7 +4816,7 @@ pub fn test_overlapping_instances_3() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"fail", [1,2,3].to_string, "array");
+        eval *assert_eq(|_|"fail", [1,2,3].to_string, "array");
         pure()
     );
     "##;
@@ -4850,7 +4850,7 @@ pub fn test_overlapping_instances_4() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"fail", Result::ok(1), "result");
+        eval *assert_eq(|_|"fail", Result::ok(1), "result");
         pure()
     );
     "##;
@@ -4997,7 +4997,7 @@ pub fn test_typedef_struct_higher_kinded_type_variable() {
     main : IO ();
     main = (
         let x : X IO I64 = X { data : pure(42) };
-        eval assert_eq(|_|"", *x.@data, 42);
+        eval *assert_eq(|_|"", *x.@data, 42);
         pure()
     );
     "##;
@@ -5062,7 +5062,7 @@ pub fn test_state_t() {
             pure()
         };
         let ((), counter) = *(action.@runner)(0);
-        eval assert_eq(|_|"", counter, 3);
+        eval *assert_eq(|_|"", counter, 3);
         pure()
     );
     "##;
@@ -5489,19 +5489,19 @@ pub fn test_associated_type_collects() {
 
     main : IO ();
     main = (
-        eval assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);
-        eval assert_eq(|_|"", Iterator::empty.insert(3).insert(2).insert(1).to_array, [1, 2, 3]);
-        eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]), [1, 2, 3, 4, 5, 6]);
-        eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6].Collects::to_iter), [1, 2, 3, 4, 5, 6]);
-        eval assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6]).to_array, [6, 5, 4, 1, 2, 3]);
-        eval assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6].Collects::to_iter).to_array, [6, 5, 4, 1, 2, 3]);
-        eval assert_eq(|_|"", [1, 2, 3].has_equal_elements([1, 2, 3]), true);
-        eval assert_eq(|_|"", [1, 2, 3].stringify, "1, 2, 3");
-        eval assert_eq(|_|"", Wrapper { data : [false, true, true] }.to_string, "false, true, true");
-        eval assert_eq(|_|"", Wrapper { data : [false, true, true] }.Collects::to_iter.to_array, [false, true, true]);
-        eval assert_eq(|_|"", [1, 2, 3].sum_elements1, 6);
-        eval assert_eq(|_|"", [1, 2, 3].sum_elements2, 6);
-        eval assert_eq(|_|"", [1, 2, 3].sum_elements3, 6);
+        eval *assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);
+        eval *assert_eq(|_|"", Iterator::empty.insert(3).insert(2).insert(1).to_array, [1, 2, 3]);
+        eval *assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]), [1, 2, 3, 4, 5, 6]);
+        eval *assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6].Collects::to_iter), [1, 2, 3, 4, 5, 6]);
+        eval *assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6]).to_array, [6, 5, 4, 1, 2, 3]);
+        eval *assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6].Collects::to_iter).to_array, [6, 5, 4, 1, 2, 3]);
+        eval *assert_eq(|_|"", [1, 2, 3].has_equal_elements([1, 2, 3]), true);
+        eval *assert_eq(|_|"", [1, 2, 3].stringify, "1, 2, 3");
+        eval *assert_eq(|_|"", Wrapper { data : [false, true, true] }.to_string, "false, true, true");
+        eval *assert_eq(|_|"", Wrapper { data : [false, true, true] }.Collects::to_iter.to_array, [false, true, true]);
+        eval *assert_eq(|_|"", [1, 2, 3].sum_elements1, 6);
+        eval *assert_eq(|_|"", [1, 2, 3].sum_elements2, 6);
+        eval *assert_eq(|_|"", [1, 2, 3].sum_elements3, 6);
         pure()
     );
     "##;
@@ -5540,10 +5540,10 @@ pub fn test_associated_type_type_level_arithmetic() {
 
     main : IO ();
     main = (
-        eval assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
-        eval assert_eq(|_|"", (Nat::value : Value One).@data, 1);
-        eval assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
-        eval assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
+        eval *assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
+        eval *assert_eq(|_|"", (Nat::value : Value One).@data, 1);
+        eval *assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
+        eval *assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
         pure()
     );
     "##;
@@ -5567,28 +5567,28 @@ pub fn test_extra_comma() {
     main = (
         let _ = MyStruct0 { fst : 0, snd : false, };
 
-        eval assert_eq(|_|"", [1, 2, 3,], [1, 2, 3]);
-        eval assert_eq(|_|"", [1, 2, 3, ], [1, 2, 3]);
-        eval assert_eq(|_|"", [,], [] : Array Bool);
+        eval *assert_eq(|_|"", [1, 2, 3,], [1, 2, 3]);
+        eval *assert_eq(|_|"", [1, 2, 3, ], [1, 2, 3]);
+        eval *assert_eq(|_|"", [,], [] : Array Bool);
 
-        eval assert_eq(|_|"", (42), 42);
+        eval *assert_eq(|_|"", (42), 42);
 
         let zero_tuple : () = ();
-        eval assert_eq(|_|"", zero_tuple, ());
+        eval *assert_eq(|_|"", zero_tuple, ());
 
         let two_tuple : (I64, I64, ) = (0, 1,);
-        eval assert_eq(|_|"", two_tuple : (I64, I64), (0, 1));
+        eval *assert_eq(|_|"", two_tuple : (I64, I64), (0, 1));
 
         let one_tuple : (I64,) = (0,);
         let one_tuple = one_tuple.set_0(42);
-        eval assert_eq(|_|"", one_tuple, (42, ));
-        eval assert_eq(|_|"", one_tuple.to_string, "(42,)");
+        eval *assert_eq(|_|"", one_tuple, (42, ));
+        eval *assert_eq(|_|"", one_tuple.to_string, "(42,)");
 
         let unwrap_one_tuple = |(x,)| x;
-        eval assert_eq(|_|"", one_tuple.unwrap_one_tuple, 42);
+        eval *assert_eq(|_|"", one_tuple.unwrap_one_tuple, 42);
 
         let (one_tuple_elem,) = one_tuple;
-        eval assert_eq(|_|"", one_tuple_elem, 42);
+        eval *assert_eq(|_|"", one_tuple_elem, 42);
 
         pure()
     );
@@ -5612,9 +5612,9 @@ pub fn test_textual_name_of_tuples() {
 
     main : IO ();
     main = (
-        eval assert_eq(|_|"", compare_tuple2((42, true), (42, true)), true);
-        eval assert_eq(|_|"", compare_tuple1((42,), (42,)), true);
-        eval assert_eq(|_|"", compare_tuple0((), ()), true);
+        eval *assert_eq(|_|"", compare_tuple2((42, true), (42, true)), true);
+        eval *assert_eq(|_|"", compare_tuple1((42,), (42,)), true);
+        eval *assert_eq(|_|"", compare_tuple0((), ()), true);
         pure()
     );
     "##;
@@ -5628,7 +5628,7 @@ pub fn test_iterator_product() {
     
     main : IO ();
     main = (
-        eval assert_eq(|_|"", [1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);
+        eval *assert_eq(|_|"", [1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);
         pure()
     );
     "##;
@@ -5670,11 +5670,11 @@ pub fn test_type_alias() {
 
         main : IO ();
         main = (
-            eval assert_eq(|_|"", "John".greet + " " + get_name(Person { name : "Smith" }), "My name is John Smith");
+            eval *assert_eq(|_|"", "John".greet + " " + get_name(Person { name : "Smith" }), "My name is John Smith");
 
             // Type alias in type annotation.
             let names : Array Name = ["John Smith"];
-            eval assert_eq(|_|"", names.@(0).MyToString::to_string, "John Smith");
+            eval *assert_eq(|_|"", names.@(0).MyToString::to_string, "John Smith");
 
             pure()
         );
@@ -5886,7 +5886,7 @@ pub fn test_borrow_boxed_data_ptr() {
                     ()
                 )
             );
-            eval assert_eq(|_|"", x.@value, 0x00333231_I32); // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
+            eval *assert_eq(|_|"", x.@value, 0x00333231_I32); // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
             pure()
         );
     "##;
@@ -5907,7 +5907,7 @@ pub fn test_get_errno() {
                     unsafe_get_errno()
                 )
             );
-            eval assert(|_|"", errno != 0.to_CInt);
+            eval *assert(|_|"", errno != 0.to_CInt);
             pure()
         );
     "##;
@@ -5928,12 +5928,12 @@ pub fn test_monadic_bind_and_make_struct_ordering() {
         main: IO ();
         main = (
             let pairs = do { pure $ Pair { x : *[1, 2], y : *["a", "b"] } }; // Fix `x` first, and move `y`
-            eval assert_eq(|_|"", 
+            eval *assert_eq(|_|"", 
                             pairs.to_iter.map(to_string).join(", "), 
                             "(1, a), (1, b), (2, a), (2, b)");
 
             let pairs = do { pure $ Pair { y : *["a", "b"], x : *[1, 2] } }; // Fix `y` first, and move `x`.
-            eval assert_eq(|_|"", 
+            eval *assert_eq(|_|"", 
                             pairs.to_iter.map(to_string).join(", "), 
                             "(1, a), (2, a), (1, b), (2, b)");
             pure()
@@ -5984,68 +5984,68 @@ pub fn test_struct_act() {
 
             // BB case 1
             let s = BB { x : [true], y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [true], y : [1, 2], z : 3 }));
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [true], y : [1, 2], z : 3 }));
 
             // BB case 2
             let s = BB { x : [], y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::none());
 
             // BU case 1
             let s = BU { x : true, y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_bool), Option::some(BU { x : true, y : [1, 2], z : 3 }));
+            eval *assert_eq(|_|"", s.act_x(actor_bool), Option::some(BU { x : true, y : [1, 2], z : 3 }));
 
             // BU case 2
             let s = BU { x : false, y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_bool), Option::none());
+            eval *assert_eq(|_|"", s.act_x(actor_bool), Option::none());
 
             // UB case 1
             let s = UB { x : [true], y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(UB { x : [true], y : [1, 2], z : 3 }));
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::some(UB { x : [true], y : [1, 2], z : 3 }));
 
             // UB case 2
             let s = UB { x : [], y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::none());
 
             // UU case 1
             let s = UU { x : true, y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_bool), Option::some(UU { x : true, y : [1, 2], z : 3 }));
+            eval *assert_eq(|_|"", s.act_x(actor_bool), Option::some(UU { x : true, y : [1, 2], z : 3 }));
 
             // UU case 2
             let s = UU { x : false, y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_bool), Option::none());
+            eval *assert_eq(|_|"", s.act_x(actor_bool), Option::none());
 
             // GB case 1
             let actor_array = |x| if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
             let s = GB { x : [true], y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(GB { x : [true], y : [1, 2], z : 3 }));
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::some(GB { x : [true], y : [1, 2], z : 3 }));
 
             // GB case 2
             let s = GB { x : [], y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::none());
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::none());
 
             // Case where BB is shared.
             let actor_array = |x| if x.Array::get_size > 0 { Option::some(x.set(0, false)) } else { Option::none() };
             let s = BB { x : [true], y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
-            eval assert_eq(|_|"", s, BB { x : [true], y : [1, 2], z : 3 });
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
+            eval *assert_eq(|_|"", s, BB { x : [true], y : [1, 2], z : 3 });
 
             // Case where field is shared.
             let x = [true];
             let s = BB { x : x, y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
-            eval assert_eq(|_|"", x, [true]);
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
+            eval *assert_eq(|_|"", x, [true]);
 
             // Case where both of BB and field are shared.
             let x = [true];
             let s = BB { x : x, y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
-            eval assert_eq(|_|"", x, [true]);
-            eval assert_eq(|_|"", s, BB { x : [true], y : [1, 2], z : 3 });
+            eval *assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));
+            eval *assert_eq(|_|"", x, [true]);
+            eval *assert_eq(|_|"", s, BB { x : [true], y : [1, 2], z : 3 });
 
             // Case where `#plug_in(ps)` is called multiple times.
             let actor = |x| [x, x.push_back(false), x.push_back(true)];
             let s = BB { x : [true], y : [1, 2], z : 3 };
-            eval assert_eq(|_|"", s.act_x(actor), [
+            eval *assert_eq(|_|"", s.act_x(actor), [
                 BB { x : [true],              y : [1, 2], z : 3 },
                 BB { x : [true, false],       y : [1, 2], z : 3 },
                 BB { x : [true, true],        y : [1, 2], z : 3 }
@@ -6064,8 +6064,8 @@ pub fn test_tuple_functor() {
                 
         main: IO ();
         main = (
-            eval assert_eq(|_|"", (1,).map(|x| x + 1), (2,));
-            eval assert_eq(|_|"", (1, 2).map(|x| x + 1), (1, 3));
+            eval *assert_eq(|_|"", (1,).map(|x| x + 1), (2,));
+            eval *assert_eq(|_|"", (1, 2).map(|x| x + 1), (1, 3));
 
             pure()
         );
@@ -6095,11 +6095,11 @@ pub fn test_empty_struct() {
         main: IO ();
         main = (
             let empty = Empty {};
-            eval assert_eq(|_|"", empty.to_string, "Empty");
+            eval *assert_eq(|_|"", empty.to_string, "Empty");
             let box_empty = BoxEmpty {};
-            eval assert_eq(|_|"", box_empty.to_string, "Box Empty");
+            eval *assert_eq(|_|"", box_empty.to_string, "Box Empty");
             let unbox_empty = UnBoxEmpty {};
-            eval assert_eq(|_|"", unbox_empty.to_string, "Unbox Empty");
+            eval *assert_eq(|_|"", unbox_empty.to_string, "Unbox Empty");
             pure()
         );
     "##;
@@ -6165,7 +6165,7 @@ pub fn test_read_file_after_close() {
             let line = *read_line(fh);
             println(line).lift
         }.try(|msg|
-            eval assert_eq(|_|"", msg, "Std::IO::_read_line_inner failed!: the IOHandle is already closed.");
+            eval *assert_eq(|_|"", msg, "Std::IO::_read_line_inner failed!: the IOHandle is already closed.");
             pure()
         );
     "##;
@@ -6238,7 +6238,7 @@ pub fn test_export() {
         main: IO ();
         main = (
             let res = FFI_CALL[CInt call_fix_values()];
-            eval assert_eq(|_|"", res, 0.to_CInt);
+            eval *assert_eq(|_|"", res, 0.to_CInt);
             pure()
         );
     "##;

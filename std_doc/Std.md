@@ -811,19 +811,19 @@ main = (
     let int_val = 42;
     let (unique, _) = int_val.unsafe_is_unique;
     let use = int_val + 1;
-    eval assert_eq(|_|"fail: int_val is shared", unique, true);
+    eval *assert_eq(|_|"fail: int_val is shared", unique, true);
 
     // For boxed value, it returns true if the value isn't used later.
     let arr = Array::fill(10, 10);
     let (unique, arr) = arr.unsafe_is_unique;
     let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
-    eval assert_eq(|_|"fail: arr is shared", unique, true);
+    eval *assert_eq(|_|"fail: arr is shared", unique, true);
 
     // Fox boxed value, it returns false if the value will be used later.
     let arr = Array::fill(10, 10);
     let (unique, _) = arr.unsafe_is_unique;
     let use = arr.@(0);
-    eval assert_eq(|_|"fail: arr is unique", unique, false);
+    eval *assert_eq(|_|"fail: arr is unique", unique, false);
 
     pure()
 );
@@ -1019,13 +1019,16 @@ Updates a value of `Boxed` by setting field `value` to a specified one.
 
 Prints a string to the specified stream and flushes the stream.
 
-### `assert : (() -> Std::String) -> Std::Bool -> ()`
+### `assert : (() -> Std::String) -> Std::Bool -> Std::IO ()`
 
-Asserts that a condition (boolean value) is true. If the assertion failed, prints a message to the stderr and aborts the program.
+Asserts that a condition (boolean value) is true.
 
-### `assert_eq : [a : Std::Eq] (() -> Std::String) -> a -> a -> ()`
+If the assertion failed, prints a message to the stderr and aborts the program.
+
+### `assert_eq : [a : Std::Eq] (() -> Std::String) -> a -> a -> Std::IO ()`
 
 Asserts that two values are equal.
+
 If the assertion failed, prints a message to the stderr and aborts the program.
 
 ### `assert_unique : (() -> Std::String) -> a -> a`
@@ -1043,7 +1046,7 @@ Get clocks (cpu time) elapsed while executing an I/O action.
 
 Get clocks (cpu time) elapsed while evaluating a lazy value.
 
-NOTE: This function is not pure and should only be used for temporary debugging purposes or for benchmarking.
+NOTE: This function is not pure; the consumed time is not deterministic.
 
 ### `debug_eprint : Std::String -> ()`
 

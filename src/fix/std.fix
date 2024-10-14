@@ -1334,7 +1334,7 @@ namespace PunchedArray {
     unsafe_punch = |idx, arr| (
         // Bounds check.
         let size = arr.get_size;
-        eval assert(|_|"[PunchedArray::punch] Index out of range.", 0 <= idx && idx < size);
+        if !(0 <= idx && idx < size) { undefined("[PunchedArray::punch] Index out of range.") };
 
         // Move out the element.
         let elm = arr._unsafe_get(idx);
@@ -2296,19 +2296,22 @@ namespace Debug {
         ))
     );
 
-    // Asserts that a condition (boolean value) is true. If the assertion failed, prints a message to the stderr and aborts the program.
-    assert : Lazy String -> Bool -> ();
-    assert = |msg, b| (
-        if !b {
-            undefined("assertion failed!: " + msg())
-        } else {
+    // Asserts that a condition (boolean value) is true. 
+    // 
+    // If the assertion failed, prints a message to the stderr and aborts the program.
+    assert : Lazy String -> Bool -> IO ();
+    assert = |msg, b| IO::from_func $ |_| (
+        if b {
             ()
+        } else {
+            undefined("Assertion failed!: " + msg())
         }
     );
 
     // Asserts that two values are equal.
+    // 
     // If the assertion failed, prints a message to the stderr and aborts the program.
-    assert_eq : [a: Eq] Lazy String -> a -> a -> ();
+    assert_eq : [a: Eq] Lazy String -> a -> a -> IO ();
     assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
     // Asserts that the given value is unique, and returns the given value.
@@ -2318,7 +2321,7 @@ namespace Debug {
     assert_unique : Lazy String -> a -> a;
     assert_unique = |msg, x| (
         let (unique, x) = x.unsafe_is_unique;
-        eval assert(msg, unique);
+        if !unique { undefined("Value is not unique: " + msg()) };
         x
     );
 
@@ -2336,7 +2339,7 @@ namespace Debug {
 
     // Get clocks (cpu time) elapsed while evaluating a lazy value.
     // 
-    // NOTE: This function is not pure and should only be used for temporary debugging purposes or for benchmarking.
+    // NOTE: This function is not pure; the consumed time is not deterministic.
     consumed_time_while_lazy : Lazy a -> (a, F64);
     consumed_time_while_lazy = |l| (
         let s = FFI_CALL[I64 fixruntime_clock()];

@@ -1057,7 +1057,7 @@ module Main;
 
 main : IO ();
 main = (
-    eval assert(|_|"1 is not 2!", 1 == 2);
+    eval *assert(|_|"1 is not 2!", 1 == 2);
     eval "Contradiction: ".borrow_c_str(|ptr| let _ = FFI_CALL[I32 printf(Ptr, ...), ptr]; ());
     eval *println("1 is equal to 2!");
     pure()
@@ -1234,7 +1234,7 @@ stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
 main : IO ();
 main = (
-    eval assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");
+    eval *assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");
     pure()
 );
 ```
@@ -1282,10 +1282,10 @@ impl [n : Nat] Succ n : Nat {
 
 main : IO ();
 main = (
-    eval assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
-    eval assert_eq(|_|"", (Nat::value : Value One).@data, 1);
-    eval assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
-    eval assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
+    eval *assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
+    eval *assert_eq(|_|"", (Nat::value : Value One).@data, 1);
+    eval *assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
+    eval *assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
     pure()
 );
 ```

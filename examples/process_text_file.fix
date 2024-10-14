@@ -22,7 +22,7 @@ main = (
             ))            
         ));
         
-        eval assert_eq(|_|"", sum, 0 + 1 + 2);
+        eval *assert_eq(|_|"", sum, 0 + 1 + 2).lift;
         println("sum : " + sum.to_string).lift
     }.try(exit_with_msg(1)) // If some IO error occurred, print the error message and exits the program.
 );
