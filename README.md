@@ -72,40 +72,13 @@ main = (
 - [Asynchronous computation](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQppbXBvcnQgQXN5bmNUYXNrOw0KaW1wb3J0IERlYnVnOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBzdW1fcmFuZ2UgPSB8ZnJvbSwgdG98ICgNCiAgICAgICAgbG9vcCgoMCwgZnJvbSksIHwoc3VtLCBpKXwgKA0KICAgICAgICAgICAgaWYgaSA9PSB0byB7IGJyZWFrICQgc3VtIH07DQogICAgICAgICAgICBjb250aW51ZSAkIChzdW0gKyBpLCBpICsgMSkNCiAgICAgICAgKSkNCiAgICApOw0KICAgIGxldCBuID0gMTAwMDAwMDAwMDsNCiAgICAvLyBDb21wdXRlIHRoZSBzdW0gb2YgbnVtYmVycyBmcm9tIDAgdG8gbi8yIC0gMS4NCiAgICAvLyBUaGlzIHRhc2sgd2lsbCBiZSBleGVjdXRlZCBhc3luY2hyb25vdXNseSAoaWYgeW91IGFyZSB1c2luZyBtdWx0aS1jb3JlIENQVSkuDQogICAgbGV0IHN1bV9mb3JtZXIgPSBBc3luY1Rhc2s6Om1ha2UofF98IHN1bV9yYW5nZSgwLCBuLzIpKTsNCiAgICAvLyBDb21wdXRlIHRoZSBzdW0gb2YgbnVtYmVycyBmcm9tIG4vMiB0byBuLg0KICAgIC8vIFdlIHBlcmZvbSB0aGlzIGluIHRoZSBjdXJyZW50IHRocmVhZCB3aGlsZSB3YWl0aW5nIGZvciB0aGUgcmVzdWx0IG9mIHRoZSBmb3JtZXIgdGFzay4NCiAgICBsZXQgc3VtX2xhdHRlciA9IHN1bV9yYW5nZShuLzIsIG4pOw0KICAgIC8vIFN1bSB1cCB0aGUgcmVzdWx0cyBvZiB0aGUgdHdvIGNvbXB1dGF0aW9ucy4NCiAgICBsZXQgc3VtID0gc3VtX2Zvcm1lci5nZXQgKyBzdW1fbGF0dGVyOw0KICAgIC8vIFRoZW4gdGhlIHN1bSBzaG91bGQgYmUgbiAqIChuIC0gMSkgLyAyLg0KICAgIGV2YWwgYXNzZXJ0X2VxKHxffCIiLCBzdW0sIG4gKiAobiAtIDEpIC8gMik7DQogICAgcHJpbnRsbiAkIA0KICAgICAgICAiU3VtIG9mIG51bWJlcnMgZnJvbSAwIHRvICIgKyAobiAtIDEpLnRvX3N0cmluZyArIA0KICAgICAgICAiIGlzICIgKyBzdW1fZm9ybWVyLmdldC50b19zdHJpbmcgKyAiICsgIiArIHN1bV9sYXR0ZXIudG9fc3RyaW5nICsgDQogICAgICAgICIgPSAiICsgc3VtLnRvX3N0cmluZyArICIuIg0KKTs%3D)
 - For more, see [examples](./examples/).
 
-## Install
-
-You can install the Fix compiler on macOS / Linux (including WSL) following the instructions below.
-
-### Install prebuilt binary
-
-You can download pre-built compiler binary from [Releases](https://github.com/tttmmmyyyy/fixlang/releases/).
-
-### Bulid from source
-
-- Install [Rust](https://www.rust-lang.org/tools/install).
-- Install LLVM 12.0.x. 
-  - In Linux / WSL, you can download prebuilt binary of LLVM from [LLVM Download Page](https://releases.llvm.org/download.html).
-  - In macOS, you can get LLVM by `brew install llvm@12`.
-- Set LLVM_SYS_120_PREFIX variable to the directory to which LLVM is installed.
-- `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
-- `cargo install --locked --path .`. Then the compiler command `fix` will be installed to `~/.cargo/bin`.
-
-### Use Docker image
-
-Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker.com/r/pt9999/fixlang) is available! 
-
 ## Usage
 
-- You can run the source file (with extension ".fix") by `fix run -f {source-files}`.
-- If you want to build executable binary, run `fix build -f {source-files}.`.
-- For more details, see `fix help`, `fix build --help` or `fix run --help`.
-- For debugging, see [this section in Document.md](/Document.md#debugging).
-- An VSCode extension which provides syntax highlights is available in [here](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlangsyntax).
-- Language client extension for VSCode is available in [here](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client). NOTE: Implementation of language server protocol is WIP and not fully functional.
+- See [the tutorial](./Document.md#tutorial) for instructions on how to install and use Fix compiler.
 
 ## Document
 
-* [Document](/Document.md)
+* [Tutorial and document](/Document.md)
 * [Document for the standard library](/std_doc/Std.md)
 * [Change log](/CHANGELOG.md)
 * 紹介（日本語）：[HaskellとRustを足して2で割ったような関数型言語Fixを作っている話](https://qiita.com/tttmmmyyyy/items/ddb1c44efd81e3fc2370)

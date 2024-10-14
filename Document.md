@@ -2,7 +2,13 @@
 
 - [Table of contents](#table-of-contents)
 - [Tutorial](#tutorial)
-  - [An example program](#an-example-program)
+  - [Set up the tools](#set-up-the-tools)
+    - [Fix compiler](#fix-compiler)
+      - [Bulid from source](#bulid-from-source)
+      - [Use Docker image](#use-docker-image)
+      - [Use pre-built binary](#use-pre-built-binary)
+    - [(Optional) VScode extensions](#optional-vscode-extensions)
+  - [Run the first Fix program](#run-the-first-fix-program)
   - [Modules](#modules)
   - [Global values](#global-values)
   - [Namespaces](#namespaces)
@@ -66,8 +72,9 @@
     - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
   - [Operators](#operators)
-- [Compiler feature](#compiler-feature)
+- [Compiler features](#compiler-features)
   - [Project file](#project-file)
+  - [Managing dependencies](#managing-dependencies)
   - [Configuration file](#configuration-file)
   - [Generating documentation](#generating-documentation)
   - [Language Server Protocol](#language-server-protocol)
@@ -75,7 +82,42 @@
 
 # Tutorial
 
-## An example program
+## Set up the tools
+
+### Fix compiler
+
+Currently, Fix compiler is supported on macOS / Linux / Windows (via WSL). You can prepare the compiler one of the following ways:
+
+#### Bulid from source
+
+Fix compiler is written in Rust. Thanks to Cargo, it is relatively easy to build the compiler from source.
+
+1. Install [Rust](https://www.rust-lang.org/tools/install).
+2. Install LLVM 12.0.x. 
+  - In Linux / WSL, you can download prebuilt binary of LLVM from [LLVM Download Page](https://releases.llvm.org/download.html).
+  - In macOS, you can get LLVM by `brew install llvm@12`.
+3. Set LLVM_SYS_120_PREFIX variable to the directory to which LLVM is installed.
+4. `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
+5. `cargo install --locked --path .`. Then the command `fix` will be installed to `~/.cargo/bin`.
+
+#### Use Docker image
+
+Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker.com/r/pt9999/fixlang) is available! 
+
+#### Use pre-built binary
+
+You can download pre-built compiler binary from [Releases](https://github.com/tttmmmyyyy/fixlang/releases/).
+
+NOTE: Since Fix is under active development, features described in this tutorial may not be available in the pre-built binary.
+
+### (Optional) VScode extensions
+
+If you are using VScode, we recommend you to install the following extensions:
+
+- [Syntax highlighting](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlangsyntax)
+- [Language client](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)
+
+## Run the first Fix program
 
 The following is a Fix program that calculates the first 30 numbers of Fibonacci sequence. 
 
@@ -108,7 +150,19 @@ main = (
 ```
 [Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCmNhbGNfZmliIDogSTY0IC0%2BIEFycmF5IEk2NDsNCmNhbGNfZmliID0gfG58ICgNCiAgICBsZXQgYXJyID0gQXJyYXk6OmZpbGwobiwgMCk7DQogICAgbGV0IGFyciA9IGFyci5zZXQoMCwgMSk7DQogICAgbGV0IGFyciA9IGFyci5zZXQoMSwgMSk7DQogICAgbGV0IGFyciA9IGxvb3AoKDIsIGFyciksIHwoaWR4LCBhcnIpfA0KICAgICAgICBpZiBpZHggPT0gYXJyLmdldF9zaXplIHsNCiAgICAgICAgICAgIGJyZWFrICQgYXJyDQogICAgICAgIH0gZWxzZSB7DQogICAgICAgICAgICBsZXQgeCA9IGFyci5AKGlkeC0xKTsNCiAgICAgICAgICAgIGxldCB5ID0gYXJyLkAoaWR4LTIpOw0KICAgICAgICAgICAgbGV0IGFyciA9IGFyci5zZXQoaWR4LCB4K3kpOw0KICAgICAgICAgICAgY29udGludWUgJCAoaWR4KzEsIGFycikNCiAgICAgICAgfQ0KICAgICk7DQogICAgYXJyDQopOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBmaWIgPSBjYWxjX2ZpYigzMCk7DQogICAgcHJpbnRsbiAkIEl0ZXJhdG9yOjpmcm9tX2FycmF5KGZpYikubWFwKHRvX3N0cmluZykuam9pbigiLCAiKQ0KKTs%3D)
 
-If you save the above program to a file "main.fix" and run `fix run -f main.fix`, it prints 
+To run the program, create a working directory for your first Fix project, and save the above source code to a file "main.fix" in it.
+Next, run `fix init` in the same directory to create a file "fixproj.toml".
+The project file tells the compiler where the Fix source files are located.
+The default project file created by `fix init` contains the following lines:
+
+```toml
+[build]
+files = ["main.fix"]
+```
+
+so the compiler will recognize "main.fix" as the (unique) source file of this project.
+
+Now run `fix run` in the working directory. The program will be compiled and executed. You will see the following output:
 
 ```
 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040
@@ -116,7 +170,11 @@ If you save the above program to a file "main.fix" and run `fix run -f main.fix`
 
 to the standard output.
 
-In the followings, I explain the syntax and semantics of the program.
+As another way, run `fix build`, then the compiler will generate an executable binary ("a.out") which can be run by `./a.out`.
+
+These are the basic uses of Fix compiler. For more on the compiler feature, see [Compiler features](#compiler-features).
+
+In the followings, I will explain the syntax and semantics of the above example program.
 
 ## Modules
 
@@ -787,8 +845,6 @@ This program consists of two modules, `Lib` and `Main`.
 ```
 
 There is one special module: `Std`. This is a module of built-in entities. `Std` module is implicitly imported from all modules and you don't need to write `import Std` explicitly.
-
-There are also other convenient modules which is included in fix's compiler, such as `Debug` or `HashMap`. To import these modules, you need to write import statements explicitly, but no need for adding source files to arguments of `fix run` or `fix build` command.
 
 ## Namespaces and overloading
 
@@ -1707,21 +1763,27 @@ The following is the table of operators sorted by its precedence (operator of hi
 | &#124;&#124;      | right associative binary | -                                   | short-circuit logical OR                                           |
 | $                 | right associative binary | -                                   | right associative function application: f $ g $ x = f(g(x))        |
 
-# Compiler feature
+# Compiler features
 
 ## Project file
 
-If you are working on a non-trivial Fix program, you may want to
-- compile many Fix source files,
-- compile C source files into a native library, and link it to the Fix program,
-- install other Fix projects as dependencies, 
-- specify the project name, version or author, etc.
-In such cases, it is useful to have a project file which contains information about your Fix project.
+A project file is a TOML file which contains information about a Fix project, such as: 
+
+- The project name, version or author, etc.,
+- Which Fix source files are included in the project,
+- Dependencies to the other Fix projects,
+- Non-Fix programs (such as object files, static or dynamic libraries) to be linked,
+- Commands to be executed before the compilation.
 
 The project file should have a name "fixproj.toml".
-If a project file exists in the current directory, sucommands of "fix" will read and consider it.
+Many of features of "fix" command tries to read the project file in the current directory, and if found, uses the information in it.
+Moreover, some subcommands (e.g., "fix deps", "fix docs" or "fix language-server") requires the project file to be present.
 
 "fix init" command generates a template project file. To learn more about the project file, read the comments in it.
+
+## Managing dependencies
+
+(TODO; see "fix deps --help")
 
 ## Configuration file
 
