@@ -609,7 +609,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
             preselect: None,
             sort_text: None,
             filter_text: None,
-            insert_text: Some(name.to_string()),
+            insert_text: Some(name.name.clone()),
             insert_text_format: None,
             insert_text_mode: None,
             text_edit: None,
