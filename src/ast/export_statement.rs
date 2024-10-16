@@ -22,6 +22,7 @@ use crate::sourcefile::Span;
 use crate::uncurry_optimization;
 
 use super::error::Errors;
+use super::ObjectFieldType;
 
 #[derive(Clone)]
 pub struct ExportStatement {
@@ -139,16 +140,17 @@ impl ExportStatement {
         // If the `fix_value` is `IO C`, then run it.
         if is_io {
             let runner = fix_value.load_field_nocap(gc, 0);
-            let runner_ty = type_fun(make_tuple_ty(vec![]), codom.clone());
-            let runner_obj = Object::create_from_value(runner, runner_ty, gc);
-            let unit = allocate_obj(
-                make_tuple_ty(vec![]),
-                &vec![],
-                None,
-                gc,
-                Some("unit_for_exported_io"),
+            let runner_ty = type_fun(
+                make_iostate_ty(),
+                make_tuple_ty(vec![make_iostate_ty(), codom.clone()]),
             );
-            fix_value = gc.apply_lambda(runner_obj, vec![unit], None);
+            let runner_obj = Object::create_from_value(runner, runner_ty, gc);
+            let ios = allocate_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+            let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios], None);
+            fix_value = ObjectFieldType::get_struct_fields(gc, &ios_res_pair, vec![(1, None)])
+                .into_iter()
+                .next()
+                .unwrap();
         }
 
         // Return the result.
