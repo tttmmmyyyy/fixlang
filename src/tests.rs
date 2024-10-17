@@ -5252,7 +5252,7 @@ pub fn test_import_recursive_group() {
 
     main : IO ();
     main = (
-        println("Hello, World!")
+        eprintln("Hello, World!")
     );
     "##;
     test_source(&source, Configuration::develop_compiler_mode());

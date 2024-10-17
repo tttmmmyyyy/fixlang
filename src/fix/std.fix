@@ -439,63 +439,60 @@ namespace IO {
     // If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
     _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
-        IOFail { _data : IO::from_io_runner $ |iostate| (
+        IOFail { _data : IO::from_io_runner $ |ios| (
             let file_ptr = handle._file_ptr;
             if file_ptr == nullptr {
                 let res = Result::err("Std::IO::_read_line_inner failed!: the IOHandle is already closed.");
-                (iostate, res)
+                (ios, res)
             };
-            let res = loop("", |str|
+            loop((ios, ""), |(ios, str)|
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
-                let fgets_res = FFI_CALL[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, file_ptr];
+                // TODO: we should use `unsafe_borrow_mut` in future.
+                let (ios, fgets_res) = FFI_CALL_IO[Ptr fgets(Ptr, I32, Ptr), buf._get_ptr, buf_size.to_I32, file_ptr, ios];
                 if fgets_res == nullptr { 
-                    let err = FFI_CALL[I32 ferror(Ptr), file_ptr];
+                    let (ios, err) = FFI_CALL_IO[I32 ferror(Ptr), file_ptr, ios];
                     if err != 0_I32 { 
                         let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
-                        break $ Result::err(err)
+                        break $ (ios, Result::err(err))
                     } else {
-                        break $ Result::ok(str)
+                        break $ (ios, Result::ok(str))
                     }
                 };
-                let strlen = FFI_CALL[I64 strlen(Ptr), buf._get_ptr];
+                let (ios, strlen) = FFI_CALL_IO[I64 strlen(Ptr), buf._get_ptr, ios];
                 let buf = buf._unsafe_set_size(strlen + 1);
                 let read = String { _data : buf };
                 let str = str + read;
                 if upto_newline {
                     // If the last character is \n, break.
                     let last_byte = buf.@(strlen-1);
-                    if last_byte == '\n' { break $ Result::ok(str) };
-                    continue $ str
+                    if last_byte == '\n' { break $ (ios, Result::ok(str)) };
+                    continue $ (ios, str)
                 } else {
-                    continue $ str
+                    continue $ (ios, str)
                 }
-            );
-            (iostate, res)
+            )
         ) }
     );
-
-    // // Performs the I/O action. This may violate purity of Fix.
-    // _unsafe_perform : IO a -> a;
-    // _unsafe_perform = |io| (io.@_data)();
 
     // Closes a file.
     // 
     // Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
     close_file : IOHandle -> IO ();
     close_file = |handle| (
-        IO::from_io_runner $ |iostate| (iostate, IOHandle::_unsafe_close(handle))
+        IO::from_io_runner $ |ios| (
+            handle.@_data.borrow(|handle_ptr| FFI_CALL_IO[() fixruntime_iohandle_close(Ptr), handle_ptr, ios])
+        )
     );
 
     // Prints a string to stderr.
     eprint : String -> IO ();
     eprint = |str| (
-        IO::from_io_runner $ |iostate| (
-            eval str.borrow_c_str(|c_ptr|
-                let _ = FFI_CALL[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr];
-                ()
-            );
-            (iostate, ())
+        IO::from_io_runner $ |ios| (
+            str.borrow_c_str(|c_ptr|
+                let (ios, _code) = FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr, ios];
+                (ios, ())
+            )
         )
     );
 
@@ -509,9 +506,9 @@ namespace IO {
 
     // Exits the program with an error code.
     exit : I64 -> IO a;
-    exit = |code| IO::from_io_runner $ |iostate| (
-        eval FFI_CALL[() exit(I32), code.to_I32];
-        (iostate, undefined(""))
+    exit = |code| IO::from_io_runner $ |ios| (
+        let (ios, _) = FFI_CALL_IO[() exit(I32), code.to_I32, ios];
+        (ios, undefined(""))
     );
 
     // Exits the program with an error message and an error code.
@@ -531,16 +528,15 @@ namespace IO {
     get_arg = |n| (
         let argc = *get_arg_count;
         if n >= argc { pure $ Option::none() };
-        let arg_ptr = FFI_CALL[Ptr fixruntime_get_argv(I64), n];
+        let arg_ptr = *(IO::from_io_runner $ |ios| FFI_CALL_IO[Ptr fixruntime_get_argv(I64), n, ios]);
         pure $ Option::some(String::_unsafe_from_c_str_ptr(arg_ptr))
     );
 
     // Gets the number of command line arguments.
     get_arg_count : IO I64;
     get_arg_count = (
-        eval *pure();
-        let argc = FFI_CALL[I32 fixruntime_get_argc()].to_I64;
-        pure $ argc
+        let argc = *(IO::from_io_runner $ |ios| FFI_CALL_IO[I32 fixruntime_get_argc(), ios]);
+        pure $ argc.to_I64
     );
 
     // Gets command line arguments.
@@ -806,15 +802,6 @@ namespace IO::IOHandle {
     _file_ptr : IOHandle -> Ptr;
     _file_ptr = |handle| handle.@_data.borrow(|handle_ptr| 
         FFI_CALL[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]
-    );
-
-    // Closes an `IOHandle`. 
-    // 
-    // This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
-    _unsafe_close : IOHandle -> ();
-    _unsafe_close = |handle| (
-        eval handle.@_data.borrow(|handle_ptr| FFI_CALL[() fixruntime_iohandle_close(Ptr), handle_ptr]);
-        ()
     );
 
     // Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
