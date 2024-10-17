@@ -12,7 +12,7 @@ use super::*;
 pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
     let mut ret = HashMap::new();
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)),
+        TyCon::new(make_iostate_name()),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::Primitive,
@@ -285,9 +285,13 @@ pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
     res
 }
 
+pub fn make_iostate_name() -> FullName {
+    FullName::from_strs(&[STD_NAME, IO_NAME], IOSTATE_NAME)
+}
+
 // Make the `IOState` type.
 pub fn make_iostate_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IOSTATE_NAME)))
+    type_tycon(&tycon(make_iostate_name()))
 }
 
 // Get Ptr type.

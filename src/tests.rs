@@ -5899,13 +5899,13 @@ pub fn test_get_errno() {
                 
         main: IO ();
         main = (
-            let errno = "a_path_where_no_file_exists".borrow_c_str(|file|
+            let errno = *(IO::from_io_runner $ |state| "a_path_where_no_file_exists".borrow_c_str(|file|
                 "invalid_file_mode".borrow_c_str(|mode|
-                    eval unsafe_clear_errno();
-                    let _ = FFI_CALL[Ptr fopen(Ptr, Ptr), file, mode];
-                    unsafe_get_errno()
+                    let (state, _) = (clear_errno.@runner)(state);
+                    let (state, _) = FFI_CALL_IO[Ptr fopen(Ptr, Ptr), file, mode, state];
+                    (get_errno.@runner)(state)
                 )
-            );
+            ));
             eval *assert(|_|"", errno != 0.to_CInt);
             pure()
         );

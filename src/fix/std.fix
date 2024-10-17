@@ -393,12 +393,12 @@ namespace FFI {
     );
 
     // Gets errno which is set by C functions.
-    unsafe_get_errno : () -> CInt;
-    unsafe_get_errno = |_| FFI_CALL[CInt fixruntime_get_errno()];
+    get_errno : IO CInt;
+    get_errno = IO::from_io_runner $ |state| FFI_CALL_IO[CInt fixruntime_get_errno(), state];
 
     // Sets errno to zero.
-    unsafe_clear_errno : () -> ();
-    unsafe_clear_errno = |_| FFI_CALL[() fixruntime_clear_errno()];
+    clear_errno : IO ();
+    clear_errno = IO::from_io_runner $ |state| FFI_CALL_IO[() fixruntime_clear_errno(), state];
 
     // `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
     // When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
@@ -431,7 +431,7 @@ namespace FFI {
 }
 
 // `IO a` is a type representing I/O actions which return values of type `a`.
-type IO a = unbox struct { _data : IOState -> (IOState, a) };
+type IO a = unbox struct { runner : IOState -> (IOState, a) };
 
 namespace IO {
     // Reads characters from an IOHandle.
@@ -522,7 +522,7 @@ namespace IO {
 
     // Creates an IO action from a runner function.
     from_io_runner : (IOState -> (IOState, a)) -> IO a;
-    from_io_runner = |func| IO { _data : func };
+    from_io_runner = |runner| IO { runner : runner };
 
     // `get_arg(n)` returns the n-th (0-indexed) command line argument.
     // 
@@ -774,17 +774,17 @@ namespace IO {
 
 impl IO : Functor {
     map = |f, io| IO::from_io_runner $ |iostate| (
-        let (iostate, a) = (io.@_data)(iostate);
+        let (iostate, a) = (io.@runner)(iostate);
         (iostate, f(a))
     );
 }
 
 impl IO : Monad {
-    pure = |v| IO { _data : |iostate| (iostate, v) };
+    pure = |v| IO { runner : |iostate| (iostate, v) };
     bind = |f, io| (
         IO::from_io_runner $ |iostate| (
-            let (iostate, a) = (io.@_data)(iostate);
-            (f(a).@_data)(iostate)
+            let (iostate, a) = (io.@runner)(iostate);
+            (f(a).@runner)(iostate)
         )
     );
 }
@@ -2324,7 +2324,7 @@ namespace Debug {
     consumed_time_while_io = |io| (
         IO::from_io_runner $ |iostate| (
             let s = FFI_CALL[I64 fixruntime_clock()];
-            let (iostate, r) = (io.@_data)(iostate);
+            let (iostate, r) = (io.@runner)(iostate);
             let t = FFI_CALL[I64 fixruntime_clock()];
             let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
             (iostate, (r, t))

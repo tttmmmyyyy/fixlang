@@ -876,10 +876,13 @@ impl TypeCheckContext {
                         &[&ei.source],
                     ));
                 }
-                let param_tys = param_tys
+                let mut param_tys = param_tys
                     .iter()
                     .map(|tc| type_tycon(tc))
                     .collect::<Vec<_>>();
+                if *is_io {
+                    param_tys.push(make_iostate_ty());
+                }
                 let mut ei = ei.clone();
                 for (i, e) in args.iter().enumerate() {
                     assert!(i < param_tys.len());

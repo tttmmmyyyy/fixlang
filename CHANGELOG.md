@@ -6,7 +6,7 @@
 - Add `Std::Monad::unless : [m : Monad] Bool -> m () -> m ()`, `Std::Monad::when : [m : Monad] Bool -> m () -> m ()`.
 - Add type aliases `Std::FFI::CChar`, `Std::FFI::CUnsignedChar`, `Std::FFI::CShort`, `Std::FFI::CUnsignedShort`, `Std::FFI::CInt`, `Std::FFI::CUnsignedInt`, `Std::FFI::CLong`, `Std::FFI::CUnsignedLong`, `Std::FFI::CLongLong`, `Std::FFI::CUnsignedLongLong`, `Std::FFI::CSizeT`, `Std::FFI::CFloat`, `Std::FFI::CDouble`.
 - Add `Std::FFI::_unsafe_get_boxed_data_ptr`, `Std::FFI::unsafe_borrow_boxed_data_ptr`.
-- Add `Std::FFI::unsafe_get_errno`, `Std::FFI::unsafe_clear_errno`.
+- Add `Std::FFI::get_errno`, `Std::FFI::clear_errno`.
 - Add `act_{field} : [f : Functor] (F -> f F) -> S -> f S` for each field `{field}` of type `F` of a struct `S`, which is known as "Lens" in Haskell community.
 - Implement `Functor` for tuple types. `map` function acts the last component of tuples.
 - Add `FFI_EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `FFI_EXPORT`.

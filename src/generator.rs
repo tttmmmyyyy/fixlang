@@ -1877,7 +1877,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         &mut self,
         expr: &Arc<ExprNode>,
         fun_name: &Name,
-        ret_ty: &Arc<TyCon>,
+        ret_tycon: &Arc<TyCon>,
         param_tys: &Vec<Arc<TyCon>>,
         args: &Vec<Arc<ExprNode>>,
         is_io: bool,
@@ -1887,7 +1887,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            let ret_ty = type_tycon(ret_ty);
+            let ret_ty = type_tycon(ret_tycon);
             let ret_ty = if is_io {
                 make_tuple_ty(vec![make_iostate_ty(), ret_ty])
             } else {
@@ -1900,7 +1900,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let c_fun = match self.module.get_function(&fun_name) {
             Some(fun) => fun,
             None => {
-                let ret_c_ty = ret_ty.get_c_type(self.context);
+                let ret_c_ty = ret_tycon.get_c_type(self.context);
                 let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
                     .iter()
                     .map(|param_ty| {
@@ -1926,6 +1926,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         };
 
         // Evaluate arguments
+        let mut args = args.clone();
+        if is_io {
+            args.pop(); // Remove IOState
+        }
         let mut arg_objs = vec![];
         for i in 0..args.len() {
             self.scope_lock_as_used_later(args[i].free_vars());
@@ -1946,7 +1950,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder()
                 .build_call(c_fun, &args_vals, &format!("FFI_CALL({})", fun_name));
         match ret_c_val.try_as_basic_value() {
-            Either::Left(ret_c_val) => obj.store_field_nocap(self, 0, ret_c_val),
+            Either::Left(ret_c_val) => {
+                if is_io {
+                    let ret_str = type_tycon(ret_tycon).get_struct_type(self, &vec![]);
+                    let ret_str_val = ret_str.get_undef();
+                    let ret_str_val = self
+                        .builder()
+                        .build_insert_value(ret_str_val, ret_c_val, 0, "")
+                        .unwrap();
+                    obj.store_field_nocap(self, 1, ret_str_val)
+                } else {
+                    obj.store_field_nocap(self, 0, ret_c_val)
+                }
+            }
             Either::Right(_) => {}
         }
 
