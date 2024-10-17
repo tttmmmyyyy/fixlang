@@ -859,8 +859,13 @@ impl TypeCheckContext {
                 }
                 Ok(ei)
             }
-            Expr::FFICall(_, ret_ty, param_tys, args) => {
+            Expr::FFICall(_, ret_ty, param_tys, args, is_io) => {
                 let ret_ty = type_tycon(ret_ty);
+                let ret_ty = if *is_io {
+                    make_tuple_ty(vec![make_iostate_ty(), ret_ty])
+                } else {
+                    ret_ty
+                };
                 if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, &ret_ty))? {
                     return Err(Errors::from_msg_srcs(
                         format!(
@@ -1225,7 +1230,7 @@ impl TypeCheckContext {
                 let elems = collect_results(elems.iter().map(|e| self.finish_inferred_types(e.clone())))?;
                 expr.set_array_lit_elems(elems)
             }
-            Expr::FFICall(_, _, _, args) => {
+            Expr::FFICall(_, _, _, args,_) => {
                 let args = collect_results(args.iter().map(|arg| self.finish_inferred_types(arg.clone())))?;
                 expr.set_ffi_call_args(args)
             }

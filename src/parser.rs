@@ -1540,6 +1540,8 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     assert_eq!(pair.as_rule(), Rule::expr_call_c);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
+    let call_ffi_pair = pairs.next().unwrap();
+    let is_io = call_ffi_pair.as_rule() == Rule::ffi_call_c_io_symbol;
     let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx);
     let fun_name = pairs.next().unwrap().as_str().to_string();
     let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx);
@@ -1548,14 +1550,25 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
         .collect::<Result<Vec<_>, _>>()?;
 
     // Validate number of arguments.
-    if args.len() < param_tys.len() || args.len() > param_tys.len() {
+    let arg_num = param_tys.len() + if is_io { 1 } else { 0 };
+    if args.len() != arg_num {
         return Err(Errors::from_msg_srcs(
-            "Wrong number of arguments in FFI_CALL expression.".to_string(),
+            format!(
+                "Wrong number of arguments in FFI_CALL{} expression.",
+                if is_io { "_IO" } else { "" }
+            ),
             &[&Some(span)],
         ));
     }
 
-    Ok(expr_ffi_call(fun_name, ret_ty, param_tys, args, Some(span)))
+    Ok(expr_ffi_call(
+        fun_name,
+        ret_ty,
+        param_tys,
+        args,
+        is_io,
+        Some(span),
+    ))
 }
 
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {

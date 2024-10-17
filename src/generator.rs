@@ -1254,8 +1254,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.eval_make_struct(fields.clone(), struct_ty, rvo)
             }
             Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.ty.clone().unwrap(), rvo),
-            Expr::FFICall(fun_name, ret_ty, param_tys, args) => {
-                self.eval_ffi_call(&expr, fun_name, ret_ty, param_tys, args, rvo)
+            Expr::FFICall(fun_name, ret_ty, param_tys, args, is_io) => {
+                self.eval_ffi_call(&expr, fun_name, ret_ty, param_tys, args, *is_io, rvo)
             }
         };
 
@@ -1880,6 +1880,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ret_ty: &Arc<TyCon>,
         param_tys: &Vec<Arc<TyCon>>,
         args: &Vec<Arc<ExprNode>>,
+        is_io: bool,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Prepare return object.
@@ -1887,6 +1888,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             rvo.unwrap()
         } else {
             let ret_ty = type_tycon(ret_ty);
+            let ret_ty = if is_io {
+                make_tuple_ty(vec![make_iostate_ty(), ret_ty])
+            } else {
+                ret_ty
+            };
             allocate_obj(ret_ty.clone(), &vec![], None, self, Some("allocate_CallC"))
         };
 

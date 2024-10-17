@@ -225,7 +225,7 @@ fn set_released_param_indices(expr: &Arc<ExprNode>, program: &Program) -> Arc<Ex
             }
             expr
         }
-        Expr::FFICall(_, _, _, args) => {
+        Expr::FFICall(_, _, _, args, _) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
                 expr = expr.set_ffi_call_arg(set_released_param_indices(e, program), i)

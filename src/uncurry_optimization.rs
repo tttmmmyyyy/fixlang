@@ -219,7 +219,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
             }
             expr
         }
-        Expr::FFICall(_, _, _, args) => {
+        Expr::FFICall(_, _, _, args, _) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
                 expr = expr
@@ -409,7 +409,7 @@ fn replace_free_var(
             }
             Ok(expr)
         }
-        Expr::FFICall(_, _, _, elems) => {
+        Expr::FFICall(_, _, _, elems, _) => {
             let mut expr = expr.clone();
             for (i, e) in elems.iter().enumerate() {
                 let e = replace_free_var(e, from, to, scope)?;
