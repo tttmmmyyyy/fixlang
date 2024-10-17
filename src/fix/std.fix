@@ -630,7 +630,7 @@ namespace IO {
     print : String -> IO ();
     print = |str| (
         IO::from_runner $ |io| (
-            eval str.borrow_c_str(|c_ptr|
+            str.borrow_c_str(|c_ptr|
                 let (io, _) = FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr, io];
                 (io, ())
             )
