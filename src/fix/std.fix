@@ -2301,18 +2301,18 @@ namespace Debug {
     // Get clocks (cpu time) elapsed while executing an I/O action.
     consumed_time_while_io : IO a -> IO (a, F64);
     consumed_time_while_io = |io| (
-        IO::from_runner $ |iostate| (
-            let s = FFI_CALL[I64 fixruntime_clock()];
-            let (iostate, r) = (io.@runner)(iostate);
-            let t = FFI_CALL[I64 fixruntime_clock()];
+        IO::from_runner $ |ios| (
+            let (ios, s) = FFI_CALL_IO[I64 fixruntime_clock(), ios];
+            let (ios, r) = (io.@runner)(ios);
+            let (ios, t) = FFI_CALL_IO[I64 fixruntime_clock(), ios];
             let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
-            (iostate, (r, t))
+            (ios, (r, t))
         )
     );
 
     // Get clocks (cpu time) elapsed while evaluating a lazy value.
     // 
-    // NOTE: This function is not pure; the consumed time is not deterministic.
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
     consumed_time_while_lazy : Lazy a -> (a, F64);
     consumed_time_while_lazy = |l| (
         let s = FFI_CALL[I64 fixruntime_clock()];
@@ -2324,25 +2324,25 @@ namespace Debug {
 
     // Prints a string to stderr and flushes.
     // 
-    // NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
     debug_eprint : String -> ();
     debug_eprint = |msg| _debug_print_to_stream(stderr, msg);
 
     // Prints a string followed by a newline to stderr and flushes.
     //
-    // NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
     debug_eprintln : String -> ();
     debug_eprintln = |msg| debug_eprint(msg + "\n");
 
     // Prints a string to stdout and flushes.
     // 
-    // NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
     debug_print : String -> ();
     debug_print = |msg| _debug_print_to_stream(stdout, msg);
 
     // Prints a string followed by a newline to stdout and flushes.
     //
-    // NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
     debug_println : String -> ();
     debug_println = |msg| debug_print(msg + "\n");
 }

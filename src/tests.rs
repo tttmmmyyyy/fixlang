@@ -3768,7 +3768,7 @@ pub fn test_consumed_time() {
             let (r, t) = consumed_time_while_lazy(|_| (
                 loop((0, 0), |(i, sum)| if i == 1000000000 { break $ sum } else { continue $ (i + 1, sum + i) })
             ));
-            eval debug_println("loop time : " + t.to_string + ", sum : " + r.to_string);
+            eval *println("loop time : " + t.to_string + ", sum : " + r.to_string);
 
             let (_, t) = *consumed_time_while_io(
                 let file_path = Path::parse("test_tMB3iCfTeeES.txt").as_some;
@@ -3776,7 +3776,7 @@ pub fn test_consumed_time() {
                 let read_content = *read_file_string(file_path).try(exit_with_msg(1));
                 println $ read_content
             );
-            eval debug_println("write/read/println time : " + t.to_string);
+            eval *println("write/read/println time : " + t.to_string);
 
             pure()
         );
