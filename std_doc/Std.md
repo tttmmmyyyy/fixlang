@@ -65,13 +65,7 @@ The type of 8-bit signed integers.
 
 `IO a` is a type representing I/O actions which return values of type `a`.
 
-#### field `_data : Std::IOState -> (Std::IOState, a)`
-
-### `type IOState = unbox { primitive }`
-
-The type of the "state"s modified by I/O operations. 
-
-The type `IO a` is isomorphic to `IOState -> (IOState, a)`.
+#### field `runner : Std::IO::IOState -> (Std::IO::IOState, a)`
 
 ### `type Iterator a = unbox struct { ...fields... }`
 
@@ -229,6 +223,12 @@ You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_f
 There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
 
 #### field `_data : Std::FFI::Destructor Std::Ptr`
+
+### `type IOState = unbox { primitive }`
+
+The type of the "state"s modified by I/O operations. 
+
+The type `IO a` is isomorphic to `IOState -> (IOState, a)`.
 
 # Traits and aliases
 
@@ -1360,23 +1360,23 @@ on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to
 Note that if the call `v._unsafe_get_boxed_data_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
 To avoid issues caused by this, use `unsafe_borrow_boxed_data_ptr` instead.
 
+### `clear_errno : Std::IO ()`
+
+Sets errno to zero.
+
+### `get_errno : Std::IO Std::I32`
+
+Gets errno which is set by C functions.
+
 ### `unsafe_borrow_boxed_data_ptr : (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
 For more details, see the document of `_unsafe_get_boxed_data_ptr`.
 
-### `unsafe_clear_errno : () -> ()`
-
-Sets errno to zero.
-
 ### `unsafe_get_boxed_value_from_retained_ptr : Std::Ptr -> a`
 
 Creates a boxed value from a retained pointer obtained by `unsafe_get_retained_ptr_of_boxed_value`.
-
-### `unsafe_get_errno : () -> Std::I32`
-
-Gets errno which is set by C functions.
 
 ### `unsafe_get_release_function_of_boxed_value : (() -> a) -> Std::Ptr`
 
@@ -1964,9 +1964,9 @@ Casts a value of `I8` into a value of `U8`.
 
 ## `namespace Std::IO`
 
-### `@_data : Std::IO a -> Std::IOState -> (Std::IOState, a)`
+### `@runner : Std::IO a -> Std::IO::IOState -> (Std::IO::IOState, a)`
 
-Retrieves the field `_data` from a value of `IO`.
+Retrieves the field `runner` from a value of `IO`.
 
 ### `_read_line_inner : Std::Bool -> Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
@@ -1974,9 +1974,9 @@ Reads characters from an IOHandle.
 
 If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
 
-### `act__data : [f : Std::Functor] ((Std::IOState -> (Std::IOState, a)) -> f (Std::IOState -> (Std::IOState, a))) -> Std::IO a -> f (Std::IO a)`
+### `act_runner : [f : Std::Functor] ((Std::IO::IOState -> (Std::IO::IOState, a)) -> f (Std::IO::IOState -> (Std::IO::IOState, a))) -> Std::IO a -> f (Std::IO a)`
 
-Updates a value of `IO` by applying a functorial action to field `_data`.
+Updates a value of `IO` by applying a functorial action to field `runner`.
 
 ### `close_file : Std::IO::IOHandle -> Std::IO ()`
 
@@ -2002,7 +2002,7 @@ Exits the program with an error message and an error code.
 
 The error message is written to the standard error output.
 
-### `from_io_runner : (Std::IOState -> (Std::IOState, a)) -> Std::IO a`
+### `from_io_runner : (Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a`
 
 Creates an IO action from a runner function.
 
@@ -2046,9 +2046,9 @@ Loop on lines read from an `IOHandle`.
 
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
-### `mod__data : ((Std::IOState -> (Std::IOState, a)) -> Std::IOState -> (Std::IOState, a)) -> Std::IO a -> Std::IO a`
+### `mod_runner : ((Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a -> Std::IO a`
 
-Updates a value of `IO` by applying a function to field `_data`.
+Updates a value of `IO` by applying a function to field `runner`.
 
 ### `open_file : Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
 
@@ -2087,9 +2087,9 @@ Reads at most n bytes from an IOHandle.
 
 Reads all characters from an IOHandle.
 
-### `set__data : (Std::IOState -> (Std::IOState, a)) -> Std::IO a -> Std::IO a`
+### `set_runner : (Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a -> Std::IO a`
 
-Updates a value of `IO` by setting field `_data` to a specified one.
+Updates a value of `IO` by setting field `runner` to a specified one.
 
 ### `stderr : Std::IO::IOHandle`
 
