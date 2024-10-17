@@ -567,8 +567,7 @@ namespace IO {
     // Checks if an `IOHandle` reached to the EOF.
     is_eof : IOHandle -> IO Bool;
     is_eof = |handle| (
-        eval *pure();
-        pure $ FFI_CALL[I32 feof(Ptr), handle._file_ptr] != 0_I32 // Should we borrow file_ptr?
+        IO::from_runner $ |io| let (io, res) = FFI_CALL_IO[I32 feof(Ptr), handle._file_ptr, io]; (io, res != 0_I32) // Should we borrow file_ptr?
     );
 
     // Loop on lines read from an `IOHandle`.
@@ -612,31 +611,29 @@ namespace IO {
     // Openes a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOFail IOHandle;
     open_file = |path, mode| (
-        IOFail { _data  : IO::from_runner $ |iostate|(
+        IOFail { _data  : IO::from_runner $ |io| (
             let path_str = path.to_string;
-            let res = path_str.borrow_c_str(|path_ptr|
+            path_str.borrow_c_str(|path_ptr|
                 mode.borrow_c_str(|mode_str|
-                    let file_ptr = FFI_CALL[Ptr fopen(Ptr, Ptr), path_ptr, mode_str];
+                    let (io, file_ptr) = FFI_CALL_IO[Ptr fopen(Ptr, Ptr), path_ptr, mode_str, io];
                     if file_ptr == nullptr { 
-                        Result::err $ "Failed to open a file: " + path_str
+                        (io, Result::err $ "Failed to open a file: " + path_str)
                     } else {
-                        Result::ok $ IOHandle::from_file_ptr $ file_ptr
+                        (io, Result::ok $ IOHandle::from_file_ptr $ file_ptr)
                     }
                 )
-            );
-            (iostate, res)
+            )
         ) }
     );
 
     // Prints a string to stdout.
     print : String -> IO ();
     print = |str| (
-        IO::from_runner $ |iostate| (
+        IO::from_runner $ |io| (
             eval str.borrow_c_str(|c_ptr|
-                let _ = FFI_CALL[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr];
-                ()
-            );
-            (iostate, ())
+                let (io, _) = FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr, io];
+                (io, ())
+            )
         )
     );
 
