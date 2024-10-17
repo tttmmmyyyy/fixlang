@@ -5899,7 +5899,7 @@ pub fn test_get_errno() {
                 
         main: IO ();
         main = (
-            let errno = *(IO::from_io_runner $ |state| "a_path_where_no_file_exists".borrow_c_str(|file|
+            let errno = *(IO::from_runner $ |state| "a_path_where_no_file_exists".borrow_c_str(|file|
                 "invalid_file_mode".borrow_c_str(|mode|
                     let (state, _) = (clear_errno.@runner)(state);
                     let (state, _) = FFI_CALL_IO[Ptr fopen(Ptr, Ptr), file, mode, state];

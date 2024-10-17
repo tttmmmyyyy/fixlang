@@ -2002,7 +2002,7 @@ Exits the program with an error message and an error code.
 
 The error message is written to the standard error output.
 
-### `from_io_runner : (Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a`
+### `from_runner : (Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a`
 
 Creates an IO action from a runner function.
 
@@ -2175,12 +2175,6 @@ Gets pointer to C's `FILE` value from an `IOHandle`.
 
 DO NOT call `fclose` on the pointer returned by this function.
 To close an `IOHandle`, use `IO::close_file`.
-
-### `_unsafe_close : Std::IO::IOHandle -> ()`
-
-Closes an `IOHandle`.
-
-This is an I/O action not wrapped by `IO`; use `IO::close_file` in the usual case.
 
 ### `act__data : [f : Std::Functor] (Std::FFI::Destructor Std::Ptr -> f (Std::FFI::Destructor Std::Ptr)) -> Std::IO::IOHandle -> f Std::IO::IOHandle`
 

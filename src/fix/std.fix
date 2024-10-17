@@ -394,11 +394,11 @@ namespace FFI {
 
     // Gets errno which is set by C functions.
     get_errno : IO CInt;
-    get_errno = IO::from_io_runner $ |state| FFI_CALL_IO[CInt fixruntime_get_errno(), state];
+    get_errno = IO::from_runner $ |state| FFI_CALL_IO[CInt fixruntime_get_errno(), state];
 
     // Sets errno to zero.
     clear_errno : IO ();
-    clear_errno = IO::from_io_runner $ |state| FFI_CALL_IO[() fixruntime_clear_errno(), state];
+    clear_errno = IO::from_runner $ |state| FFI_CALL_IO[() fixruntime_clear_errno(), state];
 
     // `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
     // When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
@@ -439,7 +439,7 @@ namespace IO {
     // If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
     _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
-        IOFail { _data : IO::from_io_runner $ |ios| (
+        IOFail { _data : IO::from_runner $ |ios| (
             let file_ptr = handle._file_ptr;
             if file_ptr == nullptr {
                 let res = Result::err("Std::IO::_read_line_inner failed!: the IOHandle is already closed.");
@@ -480,7 +480,7 @@ namespace IO {
     // Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
     close_file : IOHandle -> IO ();
     close_file = |handle| (
-        IO::from_io_runner $ |ios| (
+        IO::from_runner $ |ios| (
             handle.@_data.borrow(|handle_ptr| FFI_CALL_IO[() fixruntime_iohandle_close(Ptr), handle_ptr, ios])
         )
     );
@@ -488,7 +488,7 @@ namespace IO {
     // Prints a string to stderr.
     eprint : String -> IO ();
     eprint = |str| (
-        IO::from_io_runner $ |ios| (
+        IO::from_runner $ |ios| (
             str.borrow_c_str(|c_ptr|
                 let (ios, _code) = FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr, ios];
                 (ios, ())
@@ -506,7 +506,7 @@ namespace IO {
 
     // Exits the program with an error code.
     exit : I64 -> IO a;
-    exit = |code| IO::from_io_runner $ |ios| (
+    exit = |code| IO::from_runner $ |ios| (
         let (ios, _) = FFI_CALL_IO[() exit(I32), code.to_I32, ios];
         (ios, undefined(""))
     );
@@ -518,8 +518,8 @@ namespace IO {
     exit_with_msg = |code, msg| eval *eprintln(msg); exit(code);
 
     // Creates an IO action from a runner function.
-    from_io_runner : (IOState -> (IOState, a)) -> IO a;
-    from_io_runner = |runner| IO { runner : runner };
+    from_runner : (IOState -> (IOState, a)) -> IO a;
+    from_runner = |runner| IO { runner : runner };
 
     // `get_arg(n)` returns the n-th (0-indexed) command line argument.
     // 
@@ -528,14 +528,14 @@ namespace IO {
     get_arg = |n| (
         let argc = *get_arg_count;
         if n >= argc { pure $ Option::none() };
-        let arg_ptr = *(IO::from_io_runner $ |ios| FFI_CALL_IO[Ptr fixruntime_get_argv(I64), n, ios]);
+        let arg_ptr = *(IO::from_runner $ |ios| FFI_CALL_IO[Ptr fixruntime_get_argv(I64), n, ios]);
         pure $ Option::some(String::_unsafe_from_c_str_ptr(arg_ptr))
     );
 
     // Gets the number of command line arguments.
     get_arg_count : IO I64;
     get_arg_count = (
-        let argc = *(IO::from_io_runner $ |ios| FFI_CALL_IO[I32 fixruntime_get_argc(), ios]);
+        let argc = *(IO::from_runner $ |ios| FFI_CALL_IO[I32 fixruntime_get_argc(), ios]);
         pure $ argc.to_I64
     );
 
@@ -612,7 +612,7 @@ namespace IO {
     // Openes a file. The second argument is a mode string for `fopen` C function. 
     open_file : Path -> String -> IOFail IOHandle;
     open_file = |path, mode| (
-        IOFail { _data  : IO::from_io_runner $ |iostate|(
+        IOFail { _data  : IO::from_runner $ |iostate|(
             let path_str = path.to_string;
             let res = path_str.borrow_c_str(|path_ptr|
                 mode.borrow_c_str(|mode_str|
@@ -631,7 +631,7 @@ namespace IO {
     // Prints a string to stdout.
     print : String -> IO ();
     print = |str| (
-        IO::from_io_runner $ |iostate| (
+        IO::from_runner $ |iostate| (
             eval str.borrow_c_str(|c_ptr|
                 let _ = FFI_CALL[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr];
                 ()
@@ -769,7 +769,7 @@ namespace IO {
 }
 
 impl IO : Functor {
-    map = |f, io| IO::from_io_runner $ |iostate| (
+    map = |f, io| IO::from_runner $ |iostate| (
         let (iostate, a) = (io.@runner)(iostate);
         (iostate, f(a))
     );
@@ -778,7 +778,7 @@ impl IO : Functor {
 impl IO : Monad {
     pure = |v| IO { runner : |iostate| (iostate, v) };
     bind = |f, io| (
-        IO::from_io_runner $ |iostate| (
+        IO::from_runner $ |iostate| (
             let (iostate, a) = (io.@runner)(iostate);
             (f(a).@runner)(iostate)
         )
@@ -2281,7 +2281,7 @@ namespace Debug {
     // 
     // If the assertion failed, prints a message to the stderr and aborts the program.
     assert : Lazy String -> Bool -> IO ();
-    assert = |msg, b| IO::from_io_runner $ |state| (
+    assert = |msg, b| IO::from_runner $ |state| (
         if b {
             (state, ())
         } else {
@@ -2309,7 +2309,7 @@ namespace Debug {
     // Get clocks (cpu time) elapsed while executing an I/O action.
     consumed_time_while_io : IO a -> IO (a, F64);
     consumed_time_while_io = |io| (
-        IO::from_io_runner $ |iostate| (
+        IO::from_runner $ |iostate| (
             let s = FFI_CALL[I64 fixruntime_clock()];
             let (iostate, r) = (io.@runner)(iostate);
             let t = FFI_CALL[I64 fixruntime_clock()];

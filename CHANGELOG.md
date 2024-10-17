@@ -35,7 +35,7 @@
 - Remove `AsyncTask`, `Character`, `Hash`, `HashMap`, `HashSet`, `Math`, `Random`, `RegExp`, `Subprocess` and `Time` built-in modules. They are provided as independent Fix projects.
 - Change the type of `Debug::assert` and `Debug::assert_eq`. Now they return `IO ()`.
 - Change the internal representation of `IO a` types. Now `IO a` is isomorphic to `IOState -> (IOState, a)`.
-- Remove `IO::from_func` and added `IO::from_io_runner : (IOState -> (IOState, a)) -> IO a`.
+- Remove `IO::from_func` and added `IO::from_runner : (IOState -> (IOState, a)) -> IO a`.
 
 ### Fixed
 
