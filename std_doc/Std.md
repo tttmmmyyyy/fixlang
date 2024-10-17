@@ -1078,31 +1078,31 @@ Get clocks (cpu time) elapsed while executing an I/O action.
 
 Get clocks (cpu time) elapsed while evaluating a lazy value.
 
-NOTE: This function is not pure; the consumed time is not deterministic.
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
 ### `debug_eprint : Std::String -> ()`
 
 Prints a string to stderr and flushes.
 
-NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
 ### `debug_eprintln : Std::String -> ()`
 
 Prints a string followed by a newline to stderr and flushes.
 
-NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
 ### `debug_print : Std::String -> ()`
 
 Prints a string to stdout and flushes.
 
-NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
 ### `debug_println : Std::String -> ()`
 
 Prints a string followed by a newline to stdout and flushes.
 
-NOTE: This function is not pure and should only be used for temporary debugging purposes or in test code.
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
 ## `namespace Std::Div`
 
