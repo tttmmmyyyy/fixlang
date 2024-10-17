@@ -678,21 +678,20 @@ namespace IO {
 
     // Reads at most n bytes from an IOHandle.
     read_n_bytes : IOHandle -> I64 -> IOFail (Array U8);
-    read_n_bytes = |handle, n| (
-        eval *pure();
+    read_n_bytes = |handle, n| IOFail { _data : IO::from_runner $ |io| (
         let buf = Array::empty(n);
-        let len = buf.borrow_ptr(|ptr| (
-            FFI_CALL[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr]
+        let (io, len) = buf.borrow_ptr(|ptr| (
+            FFI_CALL_IO[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr, io]
         ));
         // Check error.
-        let err = FFI_CALL[I32 ferror(Ptr), handle._file_ptr];
+        let (io, err) = FFI_CALL_IO[I32 ferror(Ptr), handle._file_ptr, io];
         if err != 0_I32 { 
             let err = "Std::IO::read_n_bytes failed!: some error occurred in fread.";
-            IOFail::from_result $ Result::err(err)
+            (io, Result::err(err))
         };
         let buf = buf._unsafe_set_size(len);
-        IOFail::from_result $ Result::ok(buf)
-    );
+        (io, Result::ok(buf))
+    )};
 
     // Reads all characters from an IOHandle.
     read_string : IOHandle -> IOFail String;
@@ -732,16 +731,14 @@ namespace IO {
 
     // Writes a byte array into an IOHandle.
     write_bytes : IOHandle -> Array U8 -> IOFail ();
-    write_bytes = |handle, array| (
-        eval *pure();
-        let res = array.borrow_ptr(|ptr| (
+    write_bytes = |handle, array| IOFail { _data : IO::from_runner $ |io| (
+        array.borrow_ptr(|ptr| (
             let n = array.get_size;
-            let res = FFI_CALL[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr];
-            if res < n { Result::err $ "Std::IO::write_bytes failed!: some error occurred in fwrite." };
-            Result::ok()
-        ));
-        IOFail::from_result $ res
-    );
+            let (io, res) = FFI_CALL_IO[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr, io];
+            if res < n { (io, Result::err $ "Std::IO::write_bytes failed!: some error occurred in fwrite.") };
+            (io, Result::ok())
+        ))
+    )};
 
     // Writes a byte array into a file.
     write_file_bytes : Path -> Array U8 -> IOFail ();
@@ -753,16 +750,14 @@ namespace IO {
 
     // Writes a string into an IOHandle.
     write_string : IOHandle -> String -> IOFail ();
-    write_string = |handle, content| (
-        eval *pure();
-        let res = content.borrow_c_str(|c_str| (
+    write_string = |handle, content| IOFail {_data : IO::from_runner $ |io| (
+        content.borrow_c_str(|c_str| (
             let file_ptr = handle._file_ptr;
-            let res = FFI_CALL[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr];
-            if res < 0_I32 { Result::err $ "Std::IO::write_string failed!: some error occurred in fputs." };
-            Result::ok()
-        ));
-        IOFail::from_result $ res
-    );
+            let (io, res) = FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr, io];
+            if res < 0_I32 { (io, Result::err $ "Std::IO::write_string failed!: some error occurred in fputs.") };
+            (io, Result::ok())
+        ))
+    )};
 }
 
 impl IO : Functor {
