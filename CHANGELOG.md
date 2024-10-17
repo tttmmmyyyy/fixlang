@@ -18,6 +18,7 @@
 - Add `fix test` subcommand, which runs `Test::test`.
 - Add `-O (--object)` option to specify object files to be linked.
 - Add `fix init` subcommand, which generates a template project file.
+- Add `FFI_CALL_IO` syntax, which is similar to `FFI_CALL` but suitable for foregin functions which have side effects.
 
 ### Changed
 
