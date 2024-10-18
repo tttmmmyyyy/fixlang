@@ -517,9 +517,7 @@ namespace IO {
     exit_with_msg : I64 -> String -> IO a;
     exit_with_msg = |code, msg| eval *eprintln(msg); exit(code);
 
-    // Creates an IO action from a runner function, which is a function of type `IOState -> (IOState, a)`.
-    //
-    // In a runner function, the argument `IOState` must not be duplicated. 
+    // Creates an IO action from a IO runner function, which is a function of type `IOState -> (IOState, a)`.
     from_runner : (IOState -> (IOState, a)) -> IO a;
     from_runner = |runner| IO { runner : runner };
 
