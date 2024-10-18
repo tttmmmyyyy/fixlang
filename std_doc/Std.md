@@ -1064,6 +1064,8 @@ Updates a value of `Boxed` by setting field `value` to a specified one.
 
 Prints a string to the specified stream and flushes the stream.
 
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
+
 ### `assert : (() -> Std::String) -> Std::Bool -> Std::IO ()`
 
 Asserts that a condition (boolean value) is true.

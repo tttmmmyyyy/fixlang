@@ -409,7 +409,7 @@ namespace FFI {
         // It is guaranteed that the `dtor` is alive during the call of `worker`.
         // In other words, the `worker` receives the contained value for which the destructor is not called yet.
         borrow : (a -> b) -> Destructor a -> b;
-        borrow = |worker, dtor| dtor.do_with_retained(|dtor| worker(dtor._value));
+        borrow = |worker, dtor| dtor.do_with_retained(|dtor| worker(dtor.@_value));
 
         // Make a destructor value.
         make : a -> (a -> ()) -> Destructor a;
