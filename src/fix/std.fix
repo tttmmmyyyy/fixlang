@@ -381,12 +381,7 @@ namespace FFI {
     // 
     // For more details, see the document of `_unsafe_get_boxed_data_ptr`.
     unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b;
-    unsafe_borrow_boxed_data_ptr = |act, val| (
-        let ptr = val._unsafe_get_boxed_data_ptr;
-        let res = act(ptr);
-        let _ = val; // Use val after calling act
-        res
-    );
+    unsafe_borrow_boxed_data_ptr = |act, val| val.do_with_retained(|val| act(val._unsafe_get_boxed_data_ptr));
 
     // Gets errno which is set by C functions.
     get_errno : IO CInt;
@@ -414,11 +409,7 @@ namespace FFI {
         // It is guaranteed that the `dtor` is alive during the call of `worker`.
         // In other words, the `worker` receives the contained value for which the destructor is not called yet.
         borrow : (a -> b) -> Destructor a -> b;
-        borrow = |worker, dtor| (
-            let res = worker(dtor.@_value);
-            let _ = dtor; // Prolong lifetime of `dtor`.
-            res
-        );
+        borrow = |worker, dtor| dtor.do_with_retained(|dtor| worker(dtor._value));
 
         // Make a destructor value.
         make : a -> (a -> ()) -> Destructor a;
@@ -1440,15 +1431,15 @@ namespace String {
     // `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
     find : String -> I64 -> String -> Option I64;
     find = |tok, start, str| (
-        let start = min(start, str.get_size);
-        let pos = FFI_CALL[Ptr strstr(Ptr, Ptr), str._get_c_str.add_offset(start), tok._get_c_str];
-        let _ = tok; // Prolong lifetime.
-        if pos == nullptr {
-            Option::none()
-        };
-        let pos = pos.subtract_ptr(str._get_c_str);
-        let _ = str; // Prolong lifetimes.
-        Option::some(pos)
+        str.borrow_c_str(|c_str|
+            let start = min(start, str.get_size);
+            let pos = tok.borrow_c_str(|tok_c_str| FFI_CALL[Ptr strstr(Ptr, Ptr), c_str.add_offset(start), tok_c_str]);
+            if pos == nullptr {
+                Option::none()
+            };
+            let pos = pos.subtract_ptr(c_str);
+            Option::some(pos)
+        )
     );
 
     // Gets the byte array of a string, containing null-terminator.
@@ -2254,16 +2245,6 @@ impl () : ToString {
 }
 
 namespace Debug {
-    // Prints a string to the specified stream and flushes the stream.
-    _debug_print_to_stream : IOHandle -> String -> ();
-    _debug_print_to_stream = |hdl, msg| (
-        msg.borrow_c_str(|str| (
-            let hdl = hdl._file_ptr;
-            let _ = FFI_CALL[I32 fputs(Ptr, Ptr), str, hdl];
-            let _ = FFI_CALL[I32 fflush(Ptr), hdl];
-            ()
-        ))
-    );
 
     // Asserts that a condition (boolean value) is true. 
     // 
@@ -2341,4 +2322,17 @@ namespace Debug {
     // NOTE: This function is not pure and should only be used for temporary debugging purposes.
     debug_println : String -> ();
     debug_println = |msg| debug_print(msg + "\n");
+
+    // Prints a string to the specified stream and flushes the stream.
+    // 
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    _debug_print_to_stream : IOHandle -> String -> ();
+    _debug_print_to_stream = |hdl, msg| (
+        msg.borrow_c_str(|str| (
+            let hdl = hdl._file_ptr;
+            let _ = FFI_CALL[I32 fputs(Ptr, Ptr), str, hdl];
+            let _ = FFI_CALL[I32 fflush(Ptr), hdl];
+            ()
+        ))
+    );
 }
