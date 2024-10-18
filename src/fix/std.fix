@@ -140,11 +140,7 @@ namespace Array {
 
     // Calls a function with a pointer to the memory region where elements are stored.
     borrow_ptr : (Ptr -> b) -> Array a -> b;
-    borrow_ptr = |f, arr| (
-        let res = f(arr._get_ptr);
-        let _ = arr; // Use array after calling f
-        res
-    );
+    borrow_ptr = |f, arr| arr.do_with_retained(|arr| f(arr._get_ptr));
 
     // Finds the first index at which the element satisfies a condition.
     find_by : (a -> Bool) -> Array a -> Option I64;

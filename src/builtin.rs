@@ -3691,7 +3691,7 @@ pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(UNDEFINED_ARG_NAME)],
         expr_llvm(
             LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody {}),
-            vec![],
+            vec![FullName::local(UNDEFINED_ARG_NAME)],
             "undefined(msg)".to_string(),
             type_tyvar_star(A_NAME),
             None,
@@ -3703,6 +3703,80 @@ pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![],
         vec![],
         type_fun(make_string_ty(), type_tyvar_star(A_NAME)),
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMDoWithRetainedFunctionBody {}
+
+const DO_WITH_RETAINED_F_ARG_NAME: &str = "f";
+const DO_WITH_RETAINED_X_ARG_NAME: &str = "x";
+
+impl InlineLLVMDoWithRetainedFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+        _borrowed_vars: &Vec<FullName>,
+    ) -> Object<'c> {
+        // Get the argument "f".
+        let f = gc
+            .get_var(&FullName::local(DO_WITH_RETAINED_F_ARG_NAME))
+            .ptr
+            .get(gc);
+
+        // Get the argument "x".
+        let x = gc
+            .get_var(&FullName::local(DO_WITH_RETAINED_X_ARG_NAME))
+            .ptr
+            .get(gc);
+
+        // Retain "x".
+        gc.retain(x.clone());
+
+        // Call "f" with "x".
+        let ret = gc.apply_lambda(f, vec![x.clone()], rvo);
+
+        // Release "x".
+        gc.release(x);
+
+        // Return the result.
+        ret
+    }
+}
+
+// `do_with_retained : (a -> b) -> a -> b` built-in function
+pub fn do_with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const A_NAME: &str = "a";
+    const B_NAME: &str = "b";
+    let expr = expr_abs(
+        vec![var_local(DO_WITH_RETAINED_F_ARG_NAME)],
+        expr_abs(
+            vec![var_local(DO_WITH_RETAINED_X_ARG_NAME)],
+            expr_llvm(
+                LLVMGenerator::DoWithRetainedFunctionBody(InlineLLVMDoWithRetainedFunctionBody {}),
+                vec![
+                    FullName::local(DO_WITH_RETAINED_F_ARG_NAME),
+                    FullName::local(DO_WITH_RETAINED_X_ARG_NAME),
+                ],
+                "do_with_retained(f, x)".to_string(),
+                type_tyvar_star(B_NAME),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            type_fun(type_tyvar_star(A_NAME), type_tyvar_star(B_NAME)),
+            type_fun(type_tyvar_star(A_NAME), type_tyvar_star(B_NAME)),
+        ),
     );
     (expr, scm)
 }

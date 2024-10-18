@@ -70,6 +70,7 @@ pub enum LLVMGenerator {
     ),
     GetRetainFunctionOfBoxedValueFunctionBody(InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody),
     GetBoxedDataPtrFunctionBody(InlineLLVMGetBoxedDataPtrFunctionBody),
+    DoWithRetainedFunctionBody(InlineLLVMDoWithRetainedFunctionBody),
 }
 
 impl LLVMGenerator {
@@ -150,6 +151,7 @@ impl LLVMGenerator {
             LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::StructPunchBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::StructPlugInBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::DoWithRetainedFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
         }
     }
 
