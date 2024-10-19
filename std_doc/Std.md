@@ -888,6 +888,8 @@ Gets an element of an array at the specified index.
 
 ### `_get_ptr : Std::Array a -> Std::Ptr`
 
+@deprecated Use `Std::FFI::_unsafe_get_boxed_data_ptr` instead.
+
 Get the pointer to the memory region where elements are stored.
 
 This function is dangerous because if the array is not used after call of this function, the array will be deallocated soon and the returned pointer will be dangling.

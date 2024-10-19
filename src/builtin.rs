@@ -4243,13 +4243,24 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
                 "`Std::FFI::_unsafe_get_boxed_data_ptr` can only be called on a boxed value.",
             )
         }
-        let ptr = obj.ptr(gc);
-        gc.release(obj.clone());
-        let struct_ty = obj.struct_ty(gc);
-        let ptr = gc.cast_pointer(ptr, struct_ty.ptr_type(AddressSpace::from(0)));
-        let data_ptr = gc.builder().build_struct_gep(ptr, 1, "elem_ptr").unwrap();
-        let data_ptr = gc.cast_pointer(data_ptr, ptr_to_object_type(gc.context));
 
+        // Get the pointer to the data field.
+        let data_field_idx = if obj.ty.is_array() {
+            ARRAY_BUF_IDX
+        } else {
+            BOXED_TYPE_DATA_IDX
+        };
+        // Get pointer
+        let ptr = obj.ptr_to_field_nocap(gc, data_field_idx);
+        let ptr_ty = ObjectFieldType::Ptr
+            .to_basic_type(gc, vec![])
+            .into_pointer_type();
+        let data_ptr = gc.cast_pointer(ptr, ptr_ty);
+
+        // Relase the argument object.
+        gc.release(obj.clone());
+
+        // Make returned object.
         let ret = if rvo.is_some() {
             rvo.unwrap()
         } else {
@@ -4285,7 +4296,7 @@ pub fn get_unsafe_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
                 var_name: VAR_NAME.to_string(),
             }),
             vec![FullName::local(VAR_NAME)],
-            format!("_get_boxed_data_ptr({})", VAR_NAME),
+            format!("_unsafe_get_boxed_data_ptr({})", VAR_NAME),
             ret_type,
             None,
         ),

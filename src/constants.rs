@@ -78,12 +78,15 @@ pub const CAP_NAME: &str = "#CAP";
 
 pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 
+// Struct layout constants.
+pub const CONTROL_BLOCK_IDX: u32 = 0;
+pub const BOXED_TYPE_DATA_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
-pub const ARRAY_LEN_IDX: u32 = 1/* ControlBlock */;
+pub const ARRAY_LEN_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
 pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
-pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = 1/* Next of ControlBlock */;
+pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 
 // REFCNT_STATE_* values are stored to a field of the control block of each boxed object.
