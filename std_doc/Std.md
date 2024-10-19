@@ -1371,6 +1371,9 @@ Converts a floating number to a string with specified precision (i.e., number of
 
 Returns a pointer to the data of a boxed value.
 
+The returned pointer points to the first element of the array if the value is an `Array`, and to the first field if the value is a struct.
+At present, this function is not properly implemented when the value is a union, so do not use it in such cases.
+
 The difference from `unsafe_get_retained_ptr_of_boxed_value` is that this function returns a pointer to region where the payload of a boxed value is stored;
 on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to the boxed value itself (i.e., the control block of the value).
 
