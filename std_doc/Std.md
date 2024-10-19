@@ -1443,9 +1443,9 @@ To release / retain the value in a foreign language, call the function pointer o
 Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
 If you want to get a pointer to the data of the boxed value, use `unsafe_borrow_boxed_data_ptr`.
 
-### `unsafe_mutate_boxed_data : (Std::Ptr -> Std::IO ()) -> a -> a`
+### `unsafe_mutate_boxed_data : (Std::Ptr -> Std::IO b) -> a -> (a, b)`
 
-`x.mutate_boxed_data(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns `x`.
+`x.unsafe_mutate_boxed_data(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of ``io(ptr)``.
 
 The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
 Do not perform any IO operations other than mutating the value of `x`.
@@ -1455,6 +1455,18 @@ This function first clones the value if `x` is not unique.
 At the moment, it is not specified what pointer is obtained for a union, so do not use this function with unions.
 
 This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
+
+### `unsafe_mutate_boxed_data_io : (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
+
+`x.unsafe_mutate_boxed_data_io(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of `io(ptr)`.
+
+Similar to `unsafe_mutate_boxed_data`, but this function is used when you want to run the IO action in the existing IO context.
+
+For more details, see the document of `unsafe_mutate_boxed_data`.
+
+### `unsafe_mutate_boxed_data_io_state : (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
+
+Internal implementation of the `unsafe_mutate_boxed_data_io` function.
 
 ## `namespace Std::FFI::Destructor`
 

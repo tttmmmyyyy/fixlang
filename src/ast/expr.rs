@@ -967,6 +967,13 @@ pub fn expr_abs(vars: Vec<Arc<Var>>, val: Arc<ExprNode>, src: Option<Span>) -> A
     Arc::new(Expr::Lam(vars, val)).into_expr_info(src)
 }
 
+pub fn expr_abs_many(mut vars: Vec<Arc<Var>>, mut val: Arc<ExprNode>) -> Arc<ExprNode> {
+    while let Some(var) = vars.pop() {
+        val = expr_abs(vec![var], val, None);
+    }
+    val
+}
+
 pub fn expr_app(lam: Arc<ExprNode>, args: Vec<Arc<ExprNode>>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::App(lam, args)).into_expr_info(src)
 }
