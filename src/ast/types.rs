@@ -732,7 +732,7 @@ impl TypeNode {
         tys
     }
 
-    fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
+    pub fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match &self.ty {
             Type::TyApp(fun, arg) => {

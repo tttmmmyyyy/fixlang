@@ -4244,18 +4244,8 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
             )
         }
 
-        // Get the pointer to the data field.
-        let data_field_idx = if obj.ty.is_array() {
-            ARRAY_BUF_IDX
-        } else {
-            BOXED_TYPE_DATA_IDX
-        };
-        // Get pointer
-        let ptr = obj.ptr_to_field_nocap(gc, data_field_idx);
-        let ptr_ty = ObjectFieldType::Ptr
-            .to_basic_type(gc, vec![])
-            .into_pointer_type();
-        let data_ptr = gc.cast_pointer(ptr, ptr_ty);
+        // Get data pointer.
+        let data_ptr = get_data_pointer_from_boxed_value(gc, &obj);
 
         // Relase the argument object.
         gc.release(obj.clone());
@@ -4276,6 +4266,25 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
 
         ret
     }
+}
+
+fn get_data_pointer_from_boxed_value<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    val: &Object<'c>,
+) -> PointerValue<'c> {
+    // Get the pointer to the data field.
+    let data_field_idx = if val.ty.is_array() {
+        ARRAY_BUF_IDX
+    } else {
+        BOXED_TYPE_DATA_IDX
+    };
+
+    // Get pointer
+    let ptr = val.ptr_to_field_nocap(gc, data_field_idx);
+    let ptr_ty = ObjectFieldType::Ptr
+        .to_basic_type(gc, vec![])
+        .into_pointer_type();
+    gc.cast_pointer(ptr, ptr_ty)
 }
 
 pub fn get_unsafe_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -4303,6 +4312,109 @@ pub fn get_unsafe_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMUnsafeMutateBoxedDataFunctionBody {
+    val_name: String,
+    io_act_name: String,
+}
+
+impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ret_ty: &Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+        _borrowed_vars: &Vec<FullName>,
+    ) -> Object<'c> {
+        // Get arguments.
+        let io_act = gc.get_var(&FullName::local(&self.io_act_name)).ptr.get(gc);
+        let val = gc.get_var(&FullName::local(&self.val_name)).ptr.get(gc);
+
+        // If `val` is not boxed, error.
+        if !val.is_box(gc.type_env()) {
+            error_exit(
+                "`Std::FFI::_unsafe_mutate_boxed_data_ptr` can only be called on a boxed value.",
+            )
+        }
+        assert!(rvo.is_none());
+
+        // Before mutating the value, force uniqueness of the value.
+        let is_array = val.ty.is_array();
+        let val = if is_array {
+            make_array_unique(gc, val, false)
+        } else {
+            make_struct_unique(gc, val, false)
+        };
+
+        // Get the data pointer.
+        let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
+        let data_ptr_obj = allocate_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+        data_ptr_obj.store_field_nocap(gc, 0, data_ptr);
+
+        // Run the IO action.
+        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], None);
+        run_io_value(gc, &io_act);
+
+        val
+    }
+}
+
+// mutate_boxed_data : (Ptr -> IO ()) -> a -> a
+pub fn get_unsafe_mutate_boxed_data() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const TYPE_NAME: &str = "a";
+    const IO_ACT_NAME: &str = "a";
+    const VAL_NAME: &str = "x";
+    let val_ty = type_tyvar(TYPE_NAME, &kind_star());
+    let unit_ty = make_unit_ty();
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            type_fun(make_ptr_ty(), type_tyapp(make_io_ty(), unit_ty)),
+            type_fun(val_ty.clone(), val_ty.clone()),
+        ),
+    );
+    let expr = expr_abs(
+        vec![var_local(IO_ACT_NAME)],
+        expr_abs(
+            vec![var_local(VAL_NAME)],
+            expr_llvm(
+                LLVMGenerator::UnsafeMutateBoxedDataFunctionBody(
+                    InlineLLVMUnsafeMutateBoxedDataFunctionBody {
+                        val_name: VAL_NAME.to_string(),
+                        io_act_name: IO_ACT_NAME.to_string(),
+                    },
+                ),
+                vec![FullName::local(VAL_NAME), FullName::local(IO_ACT_NAME)],
+                format!("unsafe_mutate_boxed_data({})", VAL_NAME),
+                val_ty,
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+// Run an IO runner in the IO monad and return the result.
+pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<'c>) -> Object<'c> {
+    let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
+    let runner = io.load_field_nocap(gc, 0);
+    let runner_ty = type_fun(
+        make_iostate_ty(),
+        make_tuple_ty(vec![make_iostate_ty(), res_ty.clone()]),
+    );
+    let runner_obj = Object::create_from_value(runner, runner_ty, gc);
+    let ios = allocate_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+    let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios], None);
+    ObjectFieldType::get_struct_fields(gc, &ios_res_pair, vec![(1, None)])
+        .into_iter()
+        .next()
+        .unwrap()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
