@@ -4523,7 +4523,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         // If `val` is not boxed, error.
         if !val.is_box(gc.type_env()) {
             error_exit(
-                "`Std::FFI::_unsafe_mutate_boxed_data_io_inner` can only be called on a boxed value.",
+                "`Std::FFI::unsafe_mutate_boxed_data_io_state` can only be called on a boxed value.",
             )
         }
 

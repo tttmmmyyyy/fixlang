@@ -384,7 +384,7 @@ namespace FFI {
     // 
     // For more details, see the document of `unsafe_mutate_boxed_data`.
     unsafe_mutate_boxed_data_io : (Ptr -> IO b) -> a -> IO (a, b);
-    unsafe_mutate_boxed_data_io = |act, val| IO::from_runner $ |ios| _unsafe_mutate_boxed_data_io_inner(act, val, ios);
+    unsafe_mutate_boxed_data_io = |act, val| IO::from_runner $ |ios| unsafe_mutate_boxed_data_io_state(act, val, ios);
 
     // Borrows a pointer to the data of a boxed value.
     // 
