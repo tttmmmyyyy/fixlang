@@ -2988,9 +2988,10 @@ pub fn test_destructor() {
             // Boxed case
             let dtor0 = Destructor { 
                 _value : [1,2,3], 
-                dtor : |arr| (
-                    let arr_str = arr.to_iter.map(to_string).join(", ");
-                    debug_println("dtor0 destructed. val: " + arr_str)
+                dtor : |val| (
+                    let arr_str = val.to_iter.map(to_string).join(", ");
+                    eval *println("dtor0 destructed. val: " + arr_str);
+                    pure $ val
                 )
             };
 
@@ -2998,7 +2999,8 @@ pub fn test_destructor() {
             let dtor1 = Destructor { 
                 _value : 42, 
                 dtor : |val| (
-                    debug_println("dtor1 destructed. val: " + val.to_string)
+                    eval *println("dtor1 destructed. val: " + val.to_string);
+                    pure $ val
                 )
             };
 
@@ -3006,13 +3008,15 @@ pub fn test_destructor() {
             let dtor3 = Destructor { 
                 _value : 2, 
                 dtor : |val| (
-                    debug_println("dtor3 destructed. val: " + val.to_string)
+                    eval *println("dtor3 destructed. val: " + val.to_string);
+                    pure $ val
                 )
             };
             let dtor2 = Destructor { 
                 _value : dtor3, 
                 dtor : |val| (
-                    debug_println("dtor2 destructed. val.@_value: " + val.@_value.to_string)
+                    eval *println("dtor2 destructed. val.@_value: " + val.@_value.to_string);
+                    pure $ val
                 )
             };
 
@@ -3221,7 +3225,6 @@ pub fn test_array_act_0() {
     // Test Array::act
     let source = r#"
         module Main; 
-
         
         main : IO ();
         main = (
@@ -3262,7 +3265,6 @@ pub fn test_array_act_1() {
     // Test Array::act
     let source = r#"
         module Main; 
-
         
         type MyBoxed = box struct { x : I64 };
 
@@ -3308,6 +3310,32 @@ pub fn test_array_act_1() {
             let opt_arr = arr.act(0, act1);
             eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
 
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_array_act_2() {
+    // Test Array::act
+    let source = r#"
+        module Main; 
+        
+        type MyBoxed = box struct { x : I64 };
+
+        main : IO ();
+        main = (
+            let act0: MyBoxed -> Option MyBoxed = |v| (
+                if v.@x == 0 { Option::some $ v.assert_unique(|_|"not unique!").mod_x(add(5)) } else { Option::none() }
+            );
+            let act01: MyBoxed -> Option MyBoxed = |v| (
+                if v.@x == 0 { Option::some $ v.mod_x(add(5)) } else { Option::none() }
+            );
+            let act1: MyBoxed -> Option MyBoxed = |v| (
+                if v.@x == 0 { Option::some $ MyBoxed { x : 5 } } else { Option::none() }
+            );
+
             // Case 0-1-0-0: Boxed element, shared array, act01 succeeds.
             let case = "0-1-0-0";
             let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
@@ -3342,6 +3370,31 @@ pub fn test_array_act_1() {
             eval *assert(|_|"Case " + case + "-a", opt_arr.is_none);
             eval *assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);
 
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_array_act_3() {
+    // Test Array::act
+    let source = r#"
+        module Main; 
+        
+        type MyBoxed = box struct { x : I64 };
+
+        main : IO ();
+        main = (
+            let act0: MyBoxed -> Option MyBoxed = |v| (
+                if v.@x == 0 { Option::some $ v.assert_unique(|_|"not unique!").mod_x(add(5)) } else { Option::none() }
+            );
+            let act01: MyBoxed -> Option MyBoxed = |v| (
+                if v.@x == 0 { Option::some $ v.mod_x(add(5)) } else { Option::none() }
+            );
+            let act1: MyBoxed -> Option MyBoxed = |v| (
+                if v.@x == 0 { Option::some $ MyBoxed { x : 5 } } else { Option::none() }
+            );
             let act2: I64 -> Option I64 = |v| (
                 if v == 0 { Option::some $ v + 5 } else { Option::none() }
             );
@@ -3385,7 +3438,7 @@ pub fn test_array_act_1() {
 }
 
 #[test]
-pub fn test_array_act_2() {
+pub fn test_array_act_4() {
     // Test Array::act (case 2)
     let source = r#"
         module Main; 

@@ -193,18 +193,19 @@ The type of 8-bit unsinged integers.
 
 ### `type Destructor a = box struct { ...fields... }`
 
-`Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
-When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
+`Destructor a` is a wrapper type for `a`, which can have a destructor function `a -> IO a`.
+Just before a value of type `Destructor a` is dropped, the destructor function is called on the contained value, and the value can be modified by the `IO` action.
 
-This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
+This type is used to create a Fix's type that wraps a resource allocated by FFI. In such cases, the destructor release the resource by FFI.
 
-NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
+NOTE: In the destructor, only IO actions for finalizing the passed value are allowed, and you should not perform other IO actions such as writing standard output.
 
-NOTE2: If the contained value is captured by another Fix's object than `Destructor`, the contained value is still alive after the destructor function is called.
+NOTE: Of course, if the value stored in `Destructor` also exists outside of `Destructor`, the value still exists in the Fix program even after the destructor function is called,
+and there is a possibility that the value is used after the destructor function is called.
 
 #### field `_value : a`
 
-#### field `dtor : a -> ()`
+#### field `dtor : a -> Std::IO a`
 
 ## `namespace Std::IO`
 
@@ -1478,7 +1479,7 @@ Internal implementation of the `unsafe_mutate_boxed_data_io` function.
 
 Retrieves the field `_value` from a value of `Destructor`.
 
-### `@dtor : Std::FFI::Destructor a -> a -> ()`
+### `@dtor : Std::FFI::Destructor a -> a -> Std::IO a`
 
 Retrieves the field `dtor` from a value of `Destructor`.
 
@@ -1486,7 +1487,7 @@ Retrieves the field `dtor` from a value of `Destructor`.
 
 Updates a value of `Destructor` by applying a functorial action to field `_value`.
 
-### `act_dtor : [f : Std::Functor] ((a -> ()) -> f (a -> ())) -> Std::FFI::Destructor a -> f (Std::FFI::Destructor a)`
+### `act_dtor : [f : Std::Functor] ((a -> Std::IO a) -> f (a -> Std::IO a)) -> Std::FFI::Destructor a -> f (Std::FFI::Destructor a)`
 
 Updates a value of `Destructor` by applying a functorial action to field `dtor`.
 
@@ -1499,7 +1500,7 @@ Borrow the contained value.
 It is guaranteed that the `dtor` is alive during the call of `worker`.
 In other words, the `worker` receives the contained value for which the destructor is not called yet.
 
-### `make : a -> (a -> ()) -> Std::FFI::Destructor a`
+### `make : a -> (a -> Std::IO a) -> Std::FFI::Destructor a`
 
 Make a destructor value.
 
@@ -1507,7 +1508,7 @@ Make a destructor value.
 
 Updates a value of `Destructor` by applying a function to field `_value`.
 
-### `mod_dtor : ((a -> ()) -> a -> ()) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
+### `mod_dtor : ((a -> Std::IO a) -> a -> Std::IO a) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
 
 Updates a value of `Destructor` by applying a function to field `dtor`.
 
@@ -1515,7 +1516,7 @@ Updates a value of `Destructor` by applying a function to field `dtor`.
 
 Updates a value of `Destructor` by setting field `_value` to a specified one.
 
-### `set_dtor : (a -> ()) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
+### `set_dtor : (a -> Std::IO a) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
 
 Updates a value of `Destructor` by setting field `dtor` to a specified one.
 

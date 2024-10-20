@@ -400,15 +400,16 @@ namespace FFI {
     clear_errno : IO ();
     clear_errno = IO::from_runner $ |state| FFI_CALL_IO[() fixruntime_clear_errno(), state];
 
-    // `Destructor a` is a boxed type which is containing a value of type `a` and a function `a -> ()` which is called destructor.
-    // When a value of `Destructor a` is deallocated, the destructor function will be called on the contained value.
+    // `Destructor a` is a wrapper type for `a`, which can have a destructor function `a -> IO a`.
+    // Just before a value of type `Destructor a` is dropped, the destructor function is called on the contained value, and the value can be modified by the `IO` action.
     // 
-    // This type is useful to free a resouce allocated by a C function automatically when the resource is no longer needed in Fix code.
+    // This type is used to create a Fix's type that wraps a resource allocated by FFI. In such cases, the destructor release the resource by FFI.
     // 
-    // NOTE1: Accessing the contained value directly by the field accessor function is not recommended. Use `borrow` function to access the value.
+    // NOTE: In the destructor, only IO actions for finalizing the passed value are allowed, and you should not perform other IO actions such as writing standard output.
     // 
-    // NOTE2: If the contained value is captured by another Fix's object than `Destructor`, the contained value is still alive after the destructor function is called.
-    type Destructor a = box struct { _value : a, dtor : a -> () };    
+    // NOTE: Of course, if the value stored in `Destructor` also exists outside of `Destructor`, the value still exists in the Fix program even after the destructor function is called, 
+    // and there is a possibility that the value is used after the destructor function is called.
+    type Destructor a = box struct { _value : a, dtor : a -> IO a };    
 
     namespace Destructor {
         // Borrow the contained value.
@@ -421,7 +422,7 @@ namespace FFI {
         borrow = |worker, dtor| dtor.do_with_retained(|dtor| worker(dtor.@_value));
 
         // Make a destructor value.
-        make : a -> (a -> ()) -> Destructor a;
+        make : a -> (a -> IO a) -> Destructor a;
         make = |val, dtor| Destructor { _value : val, dtor : dtor };
     }
 }
@@ -798,7 +799,10 @@ namespace IO::IOHandle {
     from_file_ptr : Ptr -> IOHandle;
     from_file_ptr = |file_ptr| (
         let handle_ptr = FFI_CALL[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
-        let dtor = |handle_ptr| FFI_CALL[() fixruntime_iohandle_delete(Ptr), handle_ptr];
+        let dtor = |handle_ptr| IO::from_runner $ |ios| (
+            let (ios, _) = FFI_CALL_IO[() fixruntime_iohandle_delete(Ptr), handle_ptr, ios];
+            (ios, nullptr)
+        );
         IOHandle { _data : Destructor::make(handle_ptr, dtor) }
     );
 }
@@ -1277,7 +1281,7 @@ namespace PunchedArray {
         
         // Clear destructor and extract the internal array.
         // Also note that if the `parr` had been cloned, then the internal array is retained here.
-        let arr = data.set_dtor(|_|()).@_value;
+        let arr = data.set_dtor(|arr| pure $ arr).@_value;
 
         let (is_unique, arr) = arr.unsafe_is_unique;
         if is_unique { 
@@ -1314,8 +1318,8 @@ namespace PunchedArray {
             let arr = arr._unsafe_set_size(0);
 
             // Release elements except the punched one.
-            loop((0, arr), |(i, arr)| (
-                if i == size { break $ () };
+            pure $ loop((0, arr), |(i, arr)| (
+                if i == size { break $ arr };
                 if i == idx { continue $ (i + 1, arr) };
                 let (arr, _) = arr._unsafe_get_linear(i); // Release the element. 
                 continue $ (i + 1, arr)

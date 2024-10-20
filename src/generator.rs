@@ -1036,14 +1036,20 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 obj,
                 DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
             );
-            self.retain(value.clone());
             let dtor = ObjectFieldType::get_struct_field_noclone(
                 self,
                 obj,
                 DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
             );
             self.retain(dtor.clone());
-            self.apply_lambda(dtor, vec![value], None);
+            let io_act = self.apply_lambda(dtor, vec![value], None);
+            let res = run_io_value(self, &io_act);
+            ObjectFieldType::set_struct_field_norelease(
+                self,
+                obj,
+                DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
+                &res,
+            );
             self.builder().build_unconditional_branch(shared_bb);
 
             self.builder().position_at_end(shared_bb);
