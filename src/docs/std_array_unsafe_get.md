@@ -1,1 +1,1 @@
-Gets a value from an array, without bounds checking and retaining the returned value.
+Gets a value from an array and returns it paired with the array itself, without bounds checking and retaining the value.

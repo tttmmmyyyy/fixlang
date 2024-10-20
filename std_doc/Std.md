@@ -909,6 +909,10 @@ This function receives a working buffer as the first argument to reduce memory a
 
 ### `_unsafe_get : Std::I64 -> Std::Array a -> a`
 
+Gets a value from an array and returns it paired with the array itself, without bounds checking and retaining the value.
+
+### `_unsafe_get_linear : Std::I64 -> Std::Array a -> (Std::Array a, a)`
+
 Gets a value from an array, without bounds checking and retaining the returned value.
 
 ### `_unsafe_set : Std::I64 -> a -> Std::Array a -> Std::Array a`

@@ -73,6 +73,7 @@ pub enum LLVMGenerator {
     DoWithRetainedFunctionBody(InlineLLVMDoWithRetainedFunctionBody),
     UnsafeMutateBoxedDataFunctionBody(InlineLLVMUnsafeMutateBoxedDataFunctionBody),
     UnsafeMutateBoxedDataIOStateFunctionBody(InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody),
+    ArrayUnsafeGetLinearFunctionBody(InlineLLVMArrayUnsafeGetLinearFunctionBody),
 }
 
 impl LLVMGenerator {
@@ -158,6 +159,7 @@ impl LLVMGenerator {
             LLVMGenerator::UnsafeMutateBoxedDataIOStateFunctionBody(x) => {
                 x.generate(gc, ty, rvo, bvs)
             }
+            LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
         }
     }
 

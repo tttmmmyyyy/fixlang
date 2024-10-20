@@ -1665,7 +1665,7 @@ impl InlineLLVMArrayUnsafeGetBody {
 }
 
 // Gets a value from an array, without bounds checking and retaining the returned value.
-pub fn unsafe_get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn array_unsafe_get_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";
@@ -1697,6 +1697,96 @@ pub fn unsafe_get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![],
         vec![],
         type_fun(make_i64_ty(), type_fun(array_ty, elem_tyvar.clone())),
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayUnsafeGetLinearFunctionBody {
+    arr_name: String,
+    idx_name: String,
+}
+
+impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ret_ty: &Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+        _borrowed_vars: &Vec<FullName>,
+    ) -> Object<'c> {
+        // Get argments
+        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
+        let idx = gc
+            .get_var_field(&FullName::local(&self.idx_name), 0)
+            .into_int_value();
+
+        let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
+
+        // Get array buffer
+        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+
+        // Get the element.
+        let elem = ObjectFieldType::read_from_array_buf_noretain(
+            gc,
+            None,
+            buf,
+            elem_ty.clone(),
+            idx,
+            None,
+        );
+
+        // Create the return value.
+        let res = if let Some(rvo) = rvo {
+            rvo
+        } else {
+            allocate_obj(
+                ret_ty.clone(),
+                &vec![],
+                None,
+                gc,
+                Some("alloca@array_unsafe_get_linear"),
+            )
+        };
+        ObjectFieldType::set_struct_field_norelease(gc, &res, 0, &array);
+        ObjectFieldType::set_struct_field_norelease(gc, &res, 1, &elem);
+
+        res
+    }
+}
+
+// Gets a value from an array, without bounds checking and retaining the returned value.
+// Type: I64 -> Array a -> (Array a, a)
+pub fn array_unsafe_get_linear_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const IDX_NAME: &str = "idx";
+    const ARR_NAME: &str = "array";
+    const ELEM_TYPE: &str = "a";
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+    let res_ty = make_tuple_ty(vec![array_ty.clone(), elem_tyvar.clone()]);
+
+    let expr = expr_abs_many(
+        vec![var_local(IDX_NAME), var_local(ARR_NAME)],
+        expr_llvm(
+            LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(
+                InlineLLVMArrayUnsafeGetLinearFunctionBody {
+                    arr_name: ARR_NAME.to_string(),
+                    idx_name: IDX_NAME.to_string(),
+                },
+            ),
+            vec![FullName::local(IDX_NAME), FullName::local(ARR_NAME)],
+            format!("{}.unsafe_get_linear({})", ARR_NAME, IDX_NAME),
+            res_ty.clone(),
+            None,
+        ),
+    );
+
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(make_i64_ty(), type_fun(array_ty, res_ty.clone())),
     );
     (expr, scm)
 }

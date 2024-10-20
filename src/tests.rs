@@ -3104,12 +3104,11 @@ pub fn test_undefined() {
 }
 
 #[test]
-pub fn test_punched_array() {
+pub fn test_punched_array_0() {
     // Test PunchedArray.
     let source = r#"
         module Main; 
 
-        
         type MyBoxed = box struct { x : I64 };
 
         main : IO ();
@@ -3171,6 +3170,22 @@ pub fn test_punched_array() {
             let arr = parr.plug_in(MyBoxed { x : 7 });
             eval *assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 5);
 
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_punched_array_1() {
+    // Test PunchedArray.
+    let source = r#"
+        module Main; 
+
+        type MyBoxed = box struct { x : I64 };
+
+        main : IO ();
+        main = (
             // Case 3-1: Punch an array of one boxed values and release parray.
             let arr = [MyBoxed { x : 5 }];
             let (parr, five) = arr.unsafe_punch(0);
