@@ -210,9 +210,7 @@ namespace Array {
     pop_back = |arr| (
         let len = arr.get_size;
         if len == 0 { arr };
-        let arr = arr.force_unique;
-        let released_elem = arr._unsafe_get(len-1);
-        arr._unsafe_set_size(len-1)
+        arr.force_unique._unsafe_set_size(len-1)._unsafe_get_linear(len-1).@0
     );
 
     // Pushes an element to the back of an array.
@@ -224,8 +222,7 @@ namespace Array {
         } else {
             arr
         };
-        let arr = arr.force_unique._unsafe_set_size(len+1);
-        arr._unsafe_set(len, e)
+        arr.force_unique._unsafe_set_size(len+1)._unsafe_set(len, e)
     );
 
     // Reserves the memory region for an array.
@@ -1310,7 +1307,7 @@ namespace PunchedArray {
         if !(0 <= idx && idx < size) { undefined("[PunchedArray::punch] Index out of range.") };
 
         // Move out the element.
-        let elm = arr._unsafe_get(idx);
+        let (arr, elm) = arr._unsafe_get_linear(idx);
 
         // Create the destructor.
         let dtor = |arr| (
