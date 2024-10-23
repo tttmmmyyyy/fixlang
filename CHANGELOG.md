@@ -38,6 +38,7 @@
 - Change the type of `Debug::assert` and `Debug::assert_eq`. Now they return `IO ()`.
 - Change the internal representation of `IO a` types. Now `IO a` is isomorphic to `IOState -> (IOState, a)`.
 - Remove `IO::from_func` and added `IO::from_runner : (IOState -> (IOState, a)) -> IO a`.
+- Change `force_unique` to `_unsafe_force_unique`.
 
 ### Fixed
 
