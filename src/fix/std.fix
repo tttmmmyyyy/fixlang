@@ -124,7 +124,7 @@ namespace Array {
         let v1 = if v1.get_capacity < len {
             v1.reserve(max(len, 2 * v1.get_capacity))
         } else {
-            v1.force_unique
+            v1._unsafe_force_unique
         };
         
         // Set length.
@@ -210,7 +210,7 @@ namespace Array {
     pop_back = |arr| (
         let len = arr.get_size;
         if len == 0 { arr };
-        arr.force_unique._unsafe_set_size(len-1)._unsafe_get_linear(len-1).@0
+        arr._unsafe_force_unique._unsafe_set_size(len-1)._unsafe_get_linear(len-1).@0
     );
 
     // Pushes an element to the back of an array.
@@ -222,7 +222,7 @@ namespace Array {
         } else {
             arr
         };
-        arr.force_unique._unsafe_set_size(len+1)._unsafe_set(len, e)
+        arr._unsafe_force_unique._unsafe_set_size(len+1)._unsafe_set(len, e)
     );
 
     // Reserves the memory region for an array.

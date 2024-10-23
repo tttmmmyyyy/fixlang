@@ -1080,7 +1080,7 @@ pub fn test47_6() {
         main : IO ();
         main = (
             let uni = Option::some([1,2,3]).mod_some(
-                |lhs| lhs.force_unique.append([4,5,6])
+                |lhs| lhs._unsafe_force_unique.append([4,5,6])
             );
             let arr = uni.as_some;
             eval *assert_eq(|_|"", arr.@(0), 1);

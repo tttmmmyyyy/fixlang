@@ -408,7 +408,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_array_unsafe_get_linear.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "force_unique"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_force_unique"),
         force_unique_array(),
         None,
         Some(include_str!("./docs/std_array_force_unique.md").to_string()),

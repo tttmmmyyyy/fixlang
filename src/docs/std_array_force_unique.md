@@ -2,7 +2,8 @@ Force the uniqueness of an array.
 If the given array is shared, this function returns the cloned array.
 
 @deprecated
-This function is deprecated because it is fragile when the "common expression elimination" optimization is implemented in the future. 
+
+This function is unsafe and deprecated because it is fragile when the "common expression elimination" optimization is implemented in the future. 
 Consider the following example:
 
 ```
@@ -30,3 +31,5 @@ let x = x.force_unique;
 let y = x.do_something_for_unique_array; // Here `x` is not unique
 let z = x.do_something_for_unique_array;
 ```
+
+Therefore, to use this function safely, you need to suppress the inlining of the above `f`. It is uncertain whether a function attribute such as "noinline" will be added in the future, so this function is deprecated currently.

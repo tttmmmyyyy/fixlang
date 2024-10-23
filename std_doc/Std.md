@@ -889,12 +889,13 @@ Gets an element of an array at the specified index.
 
 ### `_get_ptr : Std::Array a -> Std::Ptr`
 
-@deprecated Use `Std::FFI::_unsafe_get_boxed_data_ptr` instead.
-
 Get the pointer to the memory region where elements are stored.
 
 This function is dangerous because if the array is not used after call of this function, the array will be deallocated soon and the returned pointer will be dangling.
 Try using `borrow_ptr` instead.
+
+@deprecated
+Use `Std::FFI::_unsafe_get_boxed_data_ptr` instead.
 
 ### `_get_sub_size_asif : Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
@@ -907,6 +908,44 @@ and has a parameter to specify additional capacity of the returned `Array`.
 Sorts elements in a range of a vector by "less than" comparator.
 
 This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
+
+### `_unsafe_force_unique : Std::Array a -> Std::Array a`
+
+Force the uniqueness of an array.
+If the given array is shared, this function returns the cloned array.
+
+@deprecated
+
+This function is unsafe and deprecated because it is fragile when the "common expression elimination" optimization is implemented in the future. 
+Consider the following example:
+
+```
+f : Array a -> Array a
+f = |arr| arr.force_unique.do_something_for_unique_array;
+
+let x = [1, 2, 3];
+let y = f(x);
+let z = f(x);
+```
+
+When this function `f` is inlined, the code will be as follows.
+
+```
+let x = [1, 2, 3];
+let y = x.force_unique.do_something_for_unique_array;
+let z = x.force_unique.do_something_for_unique_array;
+```
+
+Here, if the optimization is applied to the two `x.force_unique`, the code will call `do_something_for_unique_array` with a non-unique array.
+
+```
+let x = [1, 2, 3];
+let x = x.force_unique;
+let y = x.do_something_for_unique_array; // Here `x` is not unique
+let z = x.do_something_for_unique_array;
+```
+
+Therefore, to use this function safely, you need to suppress the inlining of the above `f`. It is uncertain whether a function attribute such as "noinline" will be added in the future, so this function is deprecated currently.
 
 ### `_unsafe_get : Std::I64 -> Std::Array a -> a`
 
@@ -963,11 +1002,6 @@ Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 ### `find_by : (a -> Std::Bool) -> Std::Array a -> Std::Option Std::I64`
 
 Finds the first index at which the element satisfies a condition.
-
-### `force_unique : Std::Array a -> Std::Array a`
-
-Force the uniqueness of an array.
-If the given array is shared, this function returns the cloned array.
 
 ### `from_iter : Std::Iterator a -> Std::Array a`
 
