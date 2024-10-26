@@ -25,6 +25,7 @@
   - [Structs](#structs)
   - [Iterators](#iterators)
   - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
+  - [A bit on IO](#a-bit-on-io)
 - [Details on language](#details-on-language)
   - [Boolean values and literals](#boolean-values-and-literals)
   - [Numbers and literals](#numbers-and-literals)
@@ -45,7 +46,6 @@
   - [Namespaces and overloading](#namespaces-and-overloading)
   - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
   - [Recursion](#recursion)
-  - [`eval` syntax](#eval-syntax)
   - [Type annotation](#type-annotation)
   - [Pattern matching](#pattern-matching)
   - [Traits](#traits)
@@ -58,7 +58,7 @@
       - [Result-like monads](#result-like-monads)
       - [List-like monads](#list-like-monads)
     - [`do` block and monadic bind operator `*`](#do-block-and-monadic-bind-operator-)
-    - [Chaining IO actions by `eval` and `forget`](#chaining-io-actions-by-eval-and-forget)
+    - [Chaining monadic actions by `+` syntax](#chaining-monadic-actions-by--syntax)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
     - [Tuples and unit](#tuples-and-unit)
@@ -71,6 +71,7 @@
     - [Managing a foreign resource in Fix](#managing-a-foreign-resource-in-fix)
     - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
+  - [`eval` syntax](#eval-syntax)
   - [Operators](#operators)
 - [Compiler features](#compiler-features)
   - [Project file](#project-file)
@@ -145,10 +146,10 @@ calc_fib = |n| (
 main : IO ();
 main = (
     let fib = calc_fib(30);
+    +println("The first 30 numbers of Fibonacci sequence are: ");
     println $ Iterator::from_array(fib).map(to_string).join(", ")
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCmNhbGNfZmliIDogSTY0IC0%2BIEFycmF5IEk2NDsNCmNhbGNfZmliID0gfG58ICgNCiAgICBsZXQgYXJyID0gQXJyYXk6OmZpbGwobiwgMCk7DQogICAgbGV0IGFyciA9IGFyci5zZXQoMCwgMSk7DQogICAgbGV0IGFyciA9IGFyci5zZXQoMSwgMSk7DQogICAgbGV0IGFyciA9IGxvb3AoKDIsIGFyciksIHwoaWR4LCBhcnIpfA0KICAgICAgICBpZiBpZHggPT0gYXJyLmdldF9zaXplIHsNCiAgICAgICAgICAgIGJyZWFrICQgYXJyDQogICAgICAgIH0gZWxzZSB7DQogICAgICAgICAgICBsZXQgeCA9IGFyci5AKGlkeC0xKTsNCiAgICAgICAgICAgIGxldCB5ID0gYXJyLkAoaWR4LTIpOw0KICAgICAgICAgICAgbGV0IGFyciA9IGFyci5zZXQoaWR4LCB4K3kpOw0KICAgICAgICAgICAgY29udGludWUgJCAoaWR4KzEsIGFycikNCiAgICAgICAgfQ0KICAgICk7DQogICAgYXJyDQopOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIGxldCBmaWIgPSBjYWxjX2ZpYigzMCk7DQogICAgcHJpbnRsbiAkIEl0ZXJhdG9yOjpmcm9tX2FycmF5KGZpYikubWFwKHRvX3N0cmluZykuam9pbigiLCAiKQ0KKTs%3D)
 
 To run the program, create a working directory for your first Fix project, and save the above source code to a file "main.fix" in it.
 Next, run `fix init` in the same directory to create a file "fixproj.toml".
@@ -165,6 +166,7 @@ so the compiler will recognize "main.fix" as the (unique) source file of this pr
 Now run `fix run` in the working directory. The program will be compiled and executed. You will see the following output:
 
 ```
+The first 30 numbers of Fibonacci sequence are: 
 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040
 ```
 
@@ -715,6 +717,24 @@ since the updated array has the same name which was given to the old array, the 
 
 (*): This statement is true only when the array is referenced by a single thread.
 
+## A bit on IO
+
+Let's see the last few lines of the sample code.
+
+```
+main : IO ();
+main = (
+    let fib = calc_fib(30);
+    +println("The first 30 numbers of Fibonacci sequence are: ");
+    println $ Iterator::from_array(fib).map(to_string).join(", ")
+);
+```
+
+`println : String -> IO ()` is a function that takes a string and produces an IO action that prints the string to the screen. 
+In this code, two IO actions created by two `println` are combined by `+` syntax to create a larger IO action that prints two lines to the screen.
+
+How to combine IO actions and more generally, how to combine monads to create more complex monads are explained in [Monads](#monads).
+
 # Details on language
 
 ## Boolean values and literals
@@ -1038,35 +1058,6 @@ main = print $ fib(30).to_string; // 832040
 
 On the other hand, Fix's `let`-binding doesn't allow to make recursive definition. To define a recursive function locally, use `fix` built-in function.
 
-## `eval` syntax
-
-An expression `eval {expression_0}; {expression_1}` evaluates both of `{expression_0}` and `{expression_1}`, and returns value of `{expression_1}`.
-The type of `{expression_0}` has to be `()`.
-
-Since Fix is functional, only evaluating an expression and ignoring the result has no effect in most cases. 
-Typical use-cases of `eval` are to call functions which return `()` to get side-effects.
-
-- Calling functions in `Debug` module, such as `assert : Lazy String -> Bool -> ()` or `debug_println : String -> ()`. 
-- Calling C functions by FFI_CALL. 
-- Sequentially calling I/O functions. 
-
-Example: 
-
-```
-module Main;
-
-main : IO ();
-main = (
-    eval *assert(|_|"1 is not 2!", 1 == 2);
-    eval "Contradiction: ".borrow_c_str(|ptr| let _ = FFI_CALL[I32 printf(Ptr, ...), ptr]; ());
-    eval *println("1 is equal to 2!");
-    pure()
-);
-```
-
-For detail of `*` operator in front of `print` and `println`, see [Monads](#monads). 
-For FFI_CALL, see [Calling C functions from Fix](#calling-c-functions-from-fix).
-
 ## Type annotation
 
 You need to write types of global value explicity. You can specify the type of a local value for readability or for helping type / namespace inference of Fix compiler.
@@ -1082,14 +1073,13 @@ main = (
     let y : I64 = 42; // Type annotation on let-binding.
     let f = |v : I64| v * 3; // Type annotation on a variable of function.
     
-    eval *(println $ x.to_string);
-    eval *(println $ y.to_string);
-    eval *(println $ f(14).to_string);
+    +(println $ x.to_string);
+    +(println $ y.to_string);
+    +(println $ f(14).to_string);
 
     pure()
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgbGV0IHggPSA0MiA6IEk2NDsgLy8gVHlwZSBhbm5vdGF0aW9uIG9uIGV4cHJlc3Npb24uDQogICAgbGV0IHkgOiBJNjQgPSA0MjsgLy8gVHlwZSBhbm5vdGF0aW9uIG9uIGxldC1iaW5kaW5nLg0KICAgIGxldCBmID0gfHYgOiBJNjR8IHYgKiAzOyAvLyBUeXBlIGFubm90YXRpb24gb24gYSB2YXJpYWJsZSBvZiBmdW5jdGlvbi4NCiAgICANCiAgICBsZXQgXyA9ICoocHJpbnRsbiAkIHgudG9fc3RyaW5nKTsNCiAgICBsZXQgXyA9ICoocHJpbnRsbiAkIHkudG9fc3RyaW5nKTsNCiAgICBsZXQgXyA9ICoocHJpbnRsbiAkIGYoMTQpLnRvX3N0cmluZyk7DQoNCiAgICBwdXJlKCkNCik7)
 
 ## Pattern matching
 
@@ -1234,7 +1224,7 @@ stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
 main : IO ();
 main = (
-    eval *assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");
+    +assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");
     pure()
 );
 ```
@@ -1282,10 +1272,10 @@ impl [n : Nat] Succ n : Nat {
 
 main : IO ();
 main = (
-    eval *assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
-    eval *assert_eq(|_|"", (Nat::value : Value One).@data, 1);
-    eval *assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
-    eval *assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
+    +assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
+    +assert_eq(|_|"", (Nat::value : Value One).@data, 1);
+    +assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
+    +assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
     pure()
 );
 ```
@@ -1475,7 +1465,7 @@ add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
 
 which won't be compiled, because the inner `bind` requires a function that returns `Option I64` but the function `|y| (pure $ x + y).as_some` has type `I64 -> I64`.
 
-### Chaining IO actions by `eval` and `forget`
+### Chaining monadic actions by `+` syntax
 
 The `println : String -> IO ()` function takes a string and returns an IO action which prints the string to the standard output.
 If you want to perform `println` multiple times, you can write as follows using operator `*`.
@@ -1494,72 +1484,18 @@ main = (
 Here, `pure() : IO ()` is an IO action which does nothing and just returns `()`. 
 Since we don't need the result of the IO action `print(...)`, we get the result by a variable named `_` and forget about it.
 
-[The `eval` syntax](#eval-syntax) is a shorter way to write `let _ = `. Using this syntax, the following code can be rewritten as follows.
+Actually, the syntax `+{expr0}; {expr1}` is equivalent to `let _ = *{expr0}; {expr1}`. Therefore, the above code can be written as follows.
 
 ```
 module Main;
 
 main : IO ();
 main = (
-    eval *println("The sum of 1 + 2 is: ");
-    eval *println((1 + 2).to_string);
+    +println("The sum of 1 + 2 is: ");
+    +println((1 + 2).to_string);
     pure()
 );
 ```
-
-Actually, `eval` only accepts an expression of type `()`. It is a syntax sugar of `let _ : () = `. 
-This prevents you writing wrongly as 
-
-```
-module Main;
-
-main : IO ();
-main = (
-    eval *println("The sum of 1 + 2 is: ");
-    eval println((1 + 2).to_string); // Type error!
-    pure()
-);
-```
-
-because `println((1 + 2).to_string) : IO ()` does not match to the type `()`.
-
-Assume that you have `read : IO String` which reads strings from standard input, and write:
-
-```
-module Main;
-
-read : IO String;
-read = read_content(stdin).map(as_ok);
-
-main : IO ();
-main = (
-    eval *read; // Type error!
-    eval *println("You can type!");
-    pure()
-);
-```
-
-Fix failes to compile this, because the type of `*read` is not `()`, but `String`. 
-In this case, the function `Std::Functor::forget : [f : Functor] f a -> f ()` will be useful. 
-When used with `IO` monad, this function converts an `IO a` to `IO ()` by forgetting the result value.
-Using `forget`, the above can be rewritten as 
-
-```
-module Main;
-
-read : IO String;
-read = read_content(stdin).map(as_ok);
-
-main : IO ();
-main = (
-    eval *read.forget; // `forget : IO String -> IO ()`
-    eval *println("You can type!");
-    pure()
-);
-```
-
-which can be compiled successfully. 
-It is even better because it expresses we throw away the result of `read` intentionally.
 
 ## Boxed and unboxed types
 
@@ -1745,6 +1681,18 @@ If you want to access to the fields `x` and `y` of Fix's object `vec` from C sid
 NOTE: 
 At least in the current version of Fix, the memory layout of Fix's struct is determined by the default behaviour of LLVM, and as long as I know it is equivalent to C's struct memory layout. 
 In a future version, the situation may be changed. I may introduce a specifier (suppose it is written as `expr_c`) for a programmer to assure that the layout is equivalent to C, and the struct layout with no `expr_c` specifier may be optimized (e.g., reorder field ordering).
+
+## `eval` syntax
+
+An expression `eval {expr0}; {expr1}` evaluates both of `{expr0}` and `{expr1}`, and returns value of `{expr1}`.
+
+This syntax is rarely used. In Fix, evaluating an expression has no effect in most cases. Currently, it is used to call functions with side-effects, such as `debug_eprint : String -> ()`.
+
+If you write `let _ = {expr0}; {expr1}`, the code may be optimized to evaluate only `{expr1}`. By using `eval`, you can ensure that `{expr0}` is evaluated.
+
+NOTE: When you write `eval debug_eprint("Hello"); eval debug_eprint("Hello"); {expr1}`, the common subexpression optimization may cause `debug_eprint("Hello")` to be called only once.
+
+NOTE: The order of evaluation of `{expr0}` and `{expr1}` is unspecified.
 
 ## Operators
 

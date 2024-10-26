@@ -1313,6 +1313,20 @@ fn parse_expr_bind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     Ok(expr)
 }
 
+// Parse run monad syntax `+x; y`.
+fn parse_expr_run_monad(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+    assert_eq!(pair.as_rule(), Rule::expr_run_monad);
+    let _span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
+    let plus = pairs.next().unwrap();
+    let plus_span = Span::from_pair(&ctx.source, &plus);
+    let monad = parse_expr(pairs.next().unwrap(), ctx)?;
+    let _semicolon = pairs.next().unwrap();
+    let successor = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+    let _monad = ctx.do_context.push_monad(monad, plus_span);
+    Ok(successor)
+}
+
 // Parse left to right application sequence, e.g., `x.f.g`. (left-associative)
 fn parse_expr_ltr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_ltr_app);
@@ -1364,6 +1378,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         Rule::expr_lit => parse_expr_lit(pair, ctx)?,
         Rule::expr_var => parse_expr_var(pair, ctx),
         Rule::expr_let => parse_expr_let(pair, ctx)?,
+        Rule::expr_run_monad => parse_expr_run_monad(pair, ctx)?,
         Rule::expr_eval => parse_expr_eval(pair, ctx)?,
         Rule::expr_if => parse_expr_if(pair, ctx)?,
         Rule::expr_do => parse_expr_do(pair, ctx)?,
@@ -1433,7 +1448,7 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     let bound = parse_expr(pairs.next().unwrap(), ctx)?;
     pairs.next().unwrap(); // Skip `Rule::semicolon`.
     let val = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
-    let pat = PatternNode::make_var(var_local(EVAL_VAR_NAME), Some(make_unit_ty()));
+    let pat = PatternNode::make_var(var_local(EVAL_VAR_NAME), None);
     Ok(expr_let(pat, bound, val, Some(span)))
 }
 

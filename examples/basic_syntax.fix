@@ -50,11 +50,11 @@ truth2 = (
 main : IO ();
 main = (
     // `println : String -> IO ()` makes an I/O action that prints a string (and a newline).
-    // Roughly speaking, prefix operator `*act` performs the I/O action `act` and evaluates to the value returned by `act`.
-    eval *(println $ "truth : " + truth.to_string);
-    eval *(println $ "truth2 : " + truth2.to_string);
-    eval *(println $ "calc_fib(10) : " + calc_fib(10).to_string);
-    eval *(println $ "calc_fib2(10) : " + calc_fib2(10).to_string);
+    // Roughly speaking, prefix operator `+act` performs the I/O action `act` and ignores its return value.
+    +(println $ "truth : " + truth.to_string);
+    +(println $ "truth2 : " + truth2.to_string);
+    +(println $ "calc_fib(10) : " + calc_fib(10).to_string);
+    +(println $ "calc_fib2(10) : " + calc_fib2(10).to_string);
 
     // `pure : a -> IO a` creates an I/O action which does nothing and only returns a value. 
     // By a syntax sugar, you can write `pure()` instead of `pure(())`.

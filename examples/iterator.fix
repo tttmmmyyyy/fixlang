@@ -48,7 +48,7 @@ stringify_rational = |(n, d)| n.to_string + "/" + d.to_string;
 
 main : IO ();
 main = (
-    eval *(println $ "Number of divisors of 100 is " + count_divs(100).to_string + ".");
-    eval *(println $ "First 100 rationals : " + rationals.take(100).map(stringify_rational).join(", "));
+    +(println $ "Number of divisors of 100 is " + count_divs(100).to_string + ".");
+    +(println $ "First 100 rationals : " + rationals.take(100).map(stringify_rational).join(", "));
     pure()
 );

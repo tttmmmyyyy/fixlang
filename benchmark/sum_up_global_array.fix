@@ -29,6 +29,6 @@ main = (
             continue $ (i + 1, sum)
         }
     ));
-    eval *assert_eq(|_|"", sum, 4999999950000000);
+    +assert_eq(|_|"", sum, 4999999950000000);
     pure()
 );

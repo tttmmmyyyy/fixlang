@@ -6,9 +6,9 @@ main = (
     let y : I64 = 42; // Type annotation on let-binding.
     let f = |v : I64| v * 3; // Type annotation on a variable of function.
     
-    eval *(println $ x.to_string);
-    eval *(println $ y.to_string);
-    eval *(println $ f(14).to_string);
+    +(println $ x.to_string);
+    +(println $ y.to_string);
+    +(println $ f(14).to_string);
 
     pure()
 );

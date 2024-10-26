@@ -6,7 +6,7 @@ main = (
 
     do {
         // Write a `String` to a file.
-        eval *write_file_string(file_path, ["0", "1", "2", "X", "3", "4"].to_iter.join("\n"));
+        +write_file_string(file_path, ["0", "1", "2", "X", "3", "4"].to_iter.join("\n"));
 
         // Process each line of a file.
         let sum = *with_file(file_path, "r", |file| (
@@ -22,7 +22,7 @@ main = (
             ))            
         ));
         
-        eval *assert_eq(|_|"", sum, 0 + 1 + 2).lift;
+        +assert_eq(|_|"", sum, 0 + 1 + 2).lift;
         println("sum : " + sum.to_string).lift
     }.try(exit_with_msg(1)) // If some IO error occurred, print the error message and exits the program.
 );

@@ -494,8 +494,8 @@ namespace IO {
     // Prints a string followed by a newline to stderr.
     eprintln : String -> IO ();
     eprintln = |str| (
-        eval *eprint(str);
-        eval *eprint("\n");
+        +eprint(str);
+        +eprint("\n");
         pure()
     );
 
@@ -510,7 +510,7 @@ namespace IO {
     //  
     // The error message is written to the standard error output.
     exit_with_msg : I64 -> String -> IO a;
-    exit_with_msg = |code, msg| eval *eprintln(msg); exit(code);
+    exit_with_msg = |code, msg| +eprintln(msg); exit(code);
 
     // Creates an IO action from a IO runner function, which is a function of type `IOState -> (IOState, a)`.
     from_runner : (IOState -> (IOState, a)) -> IO a;
@@ -635,8 +635,8 @@ namespace IO {
     // Prints a string followed by a newline to stdout.
     println : String -> IO ();
     println = |str| (
-        eval *print(str);
-        eval *print("\n");
+        +print(str);
+        +print("\n");
         pure()
     );
 
@@ -719,7 +719,7 @@ namespace IO {
     with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
         let res = *action(handle);
-        eval *IOFail::lift(close_file(handle));
+        +IOFail::lift(close_file(handle));
         pure $ res
     );
 
@@ -1603,7 +1603,7 @@ compose = |f, g, a| g(f(a));
 // main = (
 //     loop_m(0, |i| (
 //         if i == 3 { break_m $ () };
-//         eval *println("Hello World! (" + i.to_string + ")");
+//         +println("Hello World! (" + i.to_string + ")");
 //         continue_m $ i + 1
 //     ))
 // );

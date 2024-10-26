@@ -7,7 +7,7 @@ main = (
     with_file(output, "w", |out_file| (
         with_file(input, "r", |in_file| (
             loop_lines_io(in_file, (), |_, line| (
-                eval *write_string(out_file, line);
+                +write_string(out_file, line);
                 continue_m $ ()
             ))
         ))
