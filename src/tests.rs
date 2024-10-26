@@ -6464,6 +6464,22 @@ pub fn test_unsafe_get_retain_function_of_boxed_value_error() {
 }
 
 #[test]
+pub fn test_double_bind() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let x = Option::some $ Option::some $ 42;
+            let y = do { pure $ **x };
+            eval *assert(|_|"", y.is_some);
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-math.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");
