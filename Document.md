@@ -1746,7 +1746,7 @@ Moreover, some subcommands (e.g., "fix deps", "fix docs" or "fix language-server
 
 ## Configuration file
 
-You can specify the bahavior of "fix" command by a configuration file named ".fixproj.toml" in the home directory.
+You can specify the bahavior of "fix" command by a configuration file named ".fixconfig.toml" in the home directory.
 
 The fields allowed in the configuration file are as follows:
 
