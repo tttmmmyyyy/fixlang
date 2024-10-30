@@ -38,6 +38,6 @@ stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
 main : IO ();
 main = (
-    +assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");
+    assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");;
     pure()
 );

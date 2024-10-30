@@ -805,7 +805,7 @@ main : IO ();
 main = (
     loop_m(0, |i| (
         if i == 3 { break_m $ () };
-        +println("Hello World! (" + i.to_string + ")");
+        println("Hello World! (" + i.to_string + ")");;
         continue_m $ i + 1
     ))
 );
@@ -857,19 +857,19 @@ main = (
     let int_val = 42;
     let (unique, _) = int_val.unsafe_is_unique;
     let use = int_val + 1;
-    +assert_eq(|_|"fail: int_val is shared", unique, true);
+    assert_eq(|_|"fail: int_val is shared", unique, true);;
 
     // For boxed value, it returns true if the value isn't used later.
     let arr = Array::fill(10, 10);
     let (unique, arr) = arr.unsafe_is_unique;
     let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
-    +assert_eq(|_|"fail: arr is shared", unique, true);
+    assert_eq(|_|"fail: arr is shared", unique, true);;
 
     // Fox boxed value, it returns false if the value will be used later.
     let arr = Array::fill(10, 10);
     let (unique, _) = arr.unsafe_is_unique;
     let use = arr.@(0);
-    +assert_eq(|_|"fail: arr is unique", unique, false);
+    assert_eq(|_|"fail: arr is unique", unique, false);;
 
     pure()
 );
@@ -2514,6 +2514,8 @@ Updates a value of union `LoopResult` by applying a function if it is the varian
 ## `namespace Std::Monad`
 
 ### `bind : [m : Std::Monad] (a -> m b) -> m a -> m b`
+
+### `bind_discarding : [m : Std::Monad] m b -> m a -> m b`
 
 ### `flatten : [m : Std::Monad] m (m a) -> m a`
 

@@ -37,9 +37,9 @@ impl [n : Nat] Succ n : Nat {
 
 main : IO ();
 main = (
-    +assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
-    +assert_eq(|_|"", (Nat::value : Value One).@data, 1);
-    +assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
-    +assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
+    assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);;
+    assert_eq(|_|"", (Nat::value : Value One).@data, 1);;
+    assert_eq(|_|"", (Nat::value : Value Two).@data, 2);;
+    assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);;
     pure()
 );

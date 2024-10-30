@@ -25,7 +25,7 @@
   - [Structs](#structs)
   - [Iterators](#iterators)
   - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
-  - [A bit on IO](#a-bit-on-io)
+  - [A bit on IO (or monads)](#a-bit-on-io-or-monads)
 - [Details on language](#details-on-language)
   - [Boolean values and literals](#boolean-values-and-literals)
   - [Numbers and literals](#numbers-and-literals)
@@ -58,7 +58,7 @@
       - [Result-like monads](#result-like-monads)
       - [List-like monads](#list-like-monads)
     - [`do` block and monadic bind operator `*`](#do-block-and-monadic-bind-operator-)
-    - [Chaining monadic actions by `+` syntax](#chaining-monadic-actions-by--syntax)
+    - [Chaining monadic actions by `;;` syntax](#chaining-monadic-actions-by--syntax)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
     - [Tuples and unit](#tuples-and-unit)
@@ -146,7 +146,7 @@ calc_fib = |n| (
 main : IO ();
 main = (
     let fib = calc_fib(30);
-    +println("The first 30 numbers of Fibonacci sequence are: ");
+    println("The first 30 numbers of Fibonacci sequence are: ");;
     println $ Iterator::from_array(fib).map(to_string).join(", ")
 );
 ```
@@ -717,7 +717,7 @@ since the updated array has the same name which was given to the old array, the 
 
 (*): This statement is true only when the array is referenced by a single thread.
 
-## A bit on IO
+## A bit on IO (or monads)
 
 Let's see the last few lines of the sample code.
 
@@ -725,13 +725,13 @@ Let's see the last few lines of the sample code.
 main : IO ();
 main = (
     let fib = calc_fib(30);
-    +println("The first 30 numbers of Fibonacci sequence are: ");
+    println("The first 30 numbers of Fibonacci sequence are: ");;
     println $ Iterator::from_array(fib).map(to_string).join(", ")
 );
 ```
 
 `println : String -> IO ()` is a function that takes a string and produces an IO action that prints the string to the screen. 
-In this code, two IO actions created by two `println` are combined by `+` syntax to create a larger IO action that prints two lines to the screen.
+In this code, two IO actions created by two `println` are combined by double-semicolon syntax (`;;`) to create a larger IO action that prints two lines to the screen.
 
 How to combine IO actions and more generally, how to combine monads to create more complex monads are explained in [Monads](#monads).
 
@@ -1073,9 +1073,9 @@ main = (
     let y : I64 = 42; // Type annotation on let-binding.
     let f = |v : I64| v * 3; // Type annotation on a variable of function.
     
-    +(println $ x.to_string);
-    +(println $ y.to_string);
-    +(println $ f(14).to_string);
+    println $ x.to_string;;
+    println $ y.to_string;;
+    println $ f(14).to_string;;
 
     pure()
 );
@@ -1224,7 +1224,7 @@ stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
 main : IO ();
 main = (
-    +assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");
+    assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");;
     pure()
 );
 ```
@@ -1272,10 +1272,10 @@ impl [n : Nat] Succ n : Nat {
 
 main : IO ();
 main = (
-    +assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);
-    +assert_eq(|_|"", (Nat::value : Value One).@data, 1);
-    +assert_eq(|_|"", (Nat::value : Value Two).@data, 2);
-    +assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);
+    assert_eq(|_|"", (Nat::value : Value Zero).@data, 0);;
+    assert_eq(|_|"", (Nat::value : Value One).@data, 1);;
+    assert_eq(|_|"", (Nat::value : Value Two).@data, 2);;
+    assert_eq(|_|"", (Nat::value : Value (Add One Two)).@data, 3);;
     pure()
 );
 ```
@@ -1417,7 +1417,8 @@ A prefix unary operator `*` provides a way to use `bind` in more concise way. A 
 
 - You can make `do` block explicitly by `do { ... }`.
 - Lambda-expression `|arg| ...` defines a `do` block `...` implicitly.
-- Let-definition `let name = val in ...` defines a `do` block `...` implicitly.
+- Let-definition `let name = val (in|;) ...` defines a `do` block `...` implicitly.
+- Double semicolon syntax (described later) `act;; ...` defines a `do` block `...` implicitly.
 - If-expression `if cond { ... } else { ... }` defines two blocks  `...` implicitly.
 - Global definition `name = ...` defines a `do` block `...` implicitly.
 
@@ -1465,7 +1466,7 @@ add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
 
 which won't be compiled, because the inner `bind` requires a function that returns `Option I64` but the function `|y| (pure $ x + y).as_some` has type `I64 -> I64`.
 
-### Chaining monadic actions by `+` syntax
+### Chaining monadic actions by `;;` syntax
 
 The `println : String -> IO ()` function takes a string and returns an IO action which prints the string to the standard output.
 If you want to perform `println` multiple times, you can write as follows using operator `*`.
@@ -1484,15 +1485,15 @@ main = (
 Here, `pure() : IO ()` is an IO action which does nothing and just returns `()`. 
 Since we don't need the result of the IO action `print(...)`, we get the result by a variable named `_` and forget about it.
 
-Actually, the syntax `+{expr0}; {expr1}` is equivalent to `let _ = *{expr0}; {expr1}`. Therefore, the above code can be written as follows.
+Actually, the syntax `{expr0};; {expr1}` is equivalent to `let _ = *{expr0}; {expr1}`. Therefore, the above code can be written as follows.
 
 ```
 module Main;
 
 main : IO ();
 main = (
-    +println("The sum of 1 + 2 is: ");
-    +println((1 + 2).to_string);
+    println("The sum of 1 + 2 is: ");;
+    println((1 + 2).to_string);;
     pure()
 );
 ```

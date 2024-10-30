@@ -912,7 +912,7 @@ fn parse_type_field(pair: Pair<Rule>, ctx: &mut ParseContext) -> Field {
 fn parse_expr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr);
     let pair = pair.into_inner().next().unwrap();
-    parse_expr_type_annotation(pair, ctx)
+    parse_expr_and_then_sequence(pair, ctx)
 }
 
 fn parse_expr_with_new_do(
@@ -945,6 +945,52 @@ fn parse_expr_type_annotation(
         Some(ty) => {
             expr = expr_tyanno(expr, parse_type(ty, ctx), Some(span));
         }
+    }
+    Ok(expr)
+}
+
+fn parse_expr_and_then_sequence(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Arc<ExprNode>, Errors> {
+    let mut exprs = vec![];
+    let mut op_spans = vec![];
+    let mut pairs = pair.into_inner();
+    while pairs.peek().is_some() {
+        let pair = pairs.next().unwrap();
+        let expr = if exprs.len() == 0 {
+            parse_expr_type_annotation(pair, ctx)?
+        } else {
+            parse_expr_with_new_do(pair, ctx)?
+        };
+        exprs.push(expr);
+        if pairs.peek().is_some() {
+            let pair = pairs.next().unwrap();
+            assert!(pair.as_rule() == Rule::operator_and_then);
+            op_spans.push(Span::from_pair(&ctx.source, &pair));
+        }
+    }
+    exprs.reverse();
+    op_spans.reverse();
+    let mut expr = exprs.pop().unwrap();
+    while exprs.len() > 0 {
+        let next_expr = exprs.pop().unwrap();
+        let next_expr_span = next_expr.source.clone();
+        let op_span = op_spans.pop().unwrap();
+        let bind_function = expr_var(
+            FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_DISCARD_AND_NAME),
+            Some(op_span.clone()),
+        );
+        let bind_next_expr_span = unite_span(&Some(op_span), &next_expr_span);
+        let bind_next_expr = expr_app(bind_function, vec![next_expr], bind_next_expr_span.clone())
+            .set_app_order(AppSourceCodeOrderType::FX);
+        let expr_span = expr.source.clone();
+        expr = expr_app(
+            bind_next_expr,
+            vec![expr],
+            unite_span(&bind_next_expr_span, &expr_span),
+        )
+        .set_app_order(AppSourceCodeOrderType::XDotF);
     }
     Ok(expr)
 }
@@ -1314,18 +1360,18 @@ fn parse_expr_bind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
 }
 
 // Parse run monad syntax `+x; y`.
-fn parse_expr_run_monad(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
-    assert_eq!(pair.as_rule(), Rule::expr_run_monad);
-    let _span = Span::from_pair(&ctx.source, &pair);
-    let mut pairs = pair.into_inner();
-    let plus = pairs.next().unwrap();
-    let plus_span = Span::from_pair(&ctx.source, &plus);
-    let monad = parse_expr(pairs.next().unwrap(), ctx)?;
-    let _semicolon = pairs.next().unwrap();
-    let successor = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
-    let _monad = ctx.do_context.push_monad(monad, plus_span);
-    Ok(successor)
-}
+// fn parse_expr_run_monad(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+//     assert_eq!(pair.as_rule(), Rule::expr_run_monad);
+//     let _span = Span::from_pair(&ctx.source, &pair);
+//     let mut pairs = pair.into_inner();
+//     let plus = pairs.next().unwrap();
+//     let plus_span = Span::from_pair(&ctx.source, &plus);
+//     let monad = parse_expr(pairs.next().unwrap(), ctx)?;
+//     let _semicolon = pairs.next().unwrap();
+//     let successor = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+//     let _monad = ctx.do_context.push_monad(monad, plus_span);
+//     Ok(successor)
+// }
 
 // Parse left to right application sequence, e.g., `x.f.g`. (left-associative)
 fn parse_expr_ltr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
@@ -1378,7 +1424,6 @@ fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         Rule::expr_lit => parse_expr_lit(pair, ctx)?,
         Rule::expr_var => parse_expr_var(pair, ctx),
         Rule::expr_let => parse_expr_let(pair, ctx)?,
-        Rule::expr_run_monad => parse_expr_run_monad(pair, ctx)?,
         Rule::expr_eval => parse_expr_eval(pair, ctx)?,
         Rule::expr_if => parse_expr_if(pair, ctx)?,
         Rule::expr_do => parse_expr_do(pair, ctx)?,
@@ -2150,6 +2195,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::export_symbol => "FFI_EXPORT".to_string(),
         Rule::global_defns => "definitions".to_string(),
         Rule::exported_c_function_name => "C function name".to_string(),
+        Rule::operator_and_then => "`;;`".to_string(),
         _ => format!("{:?}", r),
     }
 }

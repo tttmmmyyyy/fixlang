@@ -20,10 +20,10 @@ print_imports = |name, imports| (
 
 main : IO ();
 main = (
-    +print_imports(Main::name, Main::imports);
-    +print_imports(Lib0::name, Lib0::imports);
-    +print_imports(Lib1::name, Lib1::imports);
-    +print_imports(Lib2::name, Lib2::imports);
-    +print_imports(Lib2.Lib3::name, Lib3::imports);
+    print_imports(Main::name, Main::imports);;
+    print_imports(Lib0::name, Lib0::imports);;
+    print_imports(Lib1::name, Lib1::imports);;
+    print_imports(Lib2::name, Lib2::imports);;
+    print_imports(Lib2.Lib3::name, Lib3::imports);;
     pure()
 );

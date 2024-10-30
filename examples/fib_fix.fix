@@ -16,6 +16,6 @@ main = (
             let arr = arr.set(n, x+y);
             loop(arr, n+1)
     );
-    let fib_array = calc_fib_array(arr, 2) ;
+    let fib_array = calc_fib_array(arr, 2);
     println $ fib_array.@(30).to_string // 832040
 );

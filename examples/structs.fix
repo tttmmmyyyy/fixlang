@@ -63,8 +63,8 @@ main = (
     let y = Quantity::make(2.0, "kg");
     let z = Quantity::make(3.0, "m");
     let q = x.add(y).mul(z); // (1.0 kg + 2.0 kg) * 3.0 m 
-    +(println $ q.stringify);
+    println $ q.stringify;;
     let q2 = Quantity2::make(42, "s"); // q2 : Quantity2 I64
-    +(println $ q2.stringify);
+    println $ q2.stringify;;
     pure()
 );

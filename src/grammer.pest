@@ -70,10 +70,6 @@ expr_var = { (namespace ~ "::")? ~ var }
 
 expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
-operator_prefix_plus = { "+" }
-
-expr_run_monad = { operator_prefix_plus ~ sep* ~ expr ~ sep* ~ semicolon ~ sep* ~ expr }
-
 expr_eval = { "eval" ~ sep+ ~ expr ~ sep* ~ semicolon ~ sep* ~ expr }
 
 else_of_if = { semicolon | "else" }
@@ -95,7 +91,7 @@ expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ extra_
 expr_make_struct = { type_tycon ~ sep* ~ "{" ~ (sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ (sep* ~ ",")?)? ~ sep* ~ "}" }
 
 // nlr = non left recursive
-expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_run_monad | expr_if | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
+expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
 
 // List of arguments. Can be an empty list.
 arg_list = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }
@@ -143,9 +139,14 @@ expr_or = { expr_and ~ (sep* ~ operator_or ~ sep* ~ expr_and)* }
 combinator_dollar = _{ "$" }
 expr_rtl_app = { expr_or ~ (sep* ~ combinator_dollar ~ sep* ~ expr_or)* }
 
+// Type annotation syntax
 expr_type_annotation = { expr_rtl_app ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
-expr = { expr_type_annotation }
+// "and_then" syntax
+operator_and_then = { ";;" }
+expr_and_then_sequence = { expr_type_annotation ~ (sep* ~ operator_and_then ~ sep* ~ expr)* }
+
+expr = { expr_and_then_sequence }
 
 // === Patterns === 
 
