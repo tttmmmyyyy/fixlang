@@ -220,8 +220,13 @@ impl TyCon {
         }
     }
 
-    pub fn is_boolean(self: &TyCon) -> bool {
+    pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
+    }
+
+    #[allow(dead_code)]
+    pub fn is_iostate(&self) -> bool {
+        return self.name == make_iostate_name();
     }
 
     pub fn into_punched_type_name(&mut self, punched_at: usize) {

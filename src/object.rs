@@ -1585,6 +1585,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
     if is_primitive {
         // Primitive case
         if ty.toplevel_tycon().unwrap().is_boolean() {
+            // Boolean case
             return gc
                 .get_di_builder()
                 .create_basic_type(
@@ -1595,9 +1596,31 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(
                 )
                 .unwrap()
                 .as_type();
+        };
+        if obj_type.field_types.len() == 0 {
+            // Empty type case
+            gc.get_di_builder()
+                .create_struct_type(
+                    gc.get_di_compile_unit().as_debug_info_scope(),
+                    name,
+                    gc.create_di_file(None),
+                    0,
+                    0,
+                    0,
+                    0,
+                    None,
+                    &[],
+                    0,
+                    None,
+                    name,
+                )
+                .as_type()
+        } else {
+            // General primitive case
+            assert!(obj_type.field_types.len() == 1);
+            // Unwrap the element type from the struct type.
+            obj_type.field_types[0].to_debug_type(gc)
         }
-        // Do not wrap the element type into struct type.
-        obj_type.field_types[0].to_debug_type(gc)
     } else {
         // NOTE: Maybe we should use llvm's DataLayout::getStructLayout instead of get_abi_alignment, but it seems that the function isn't wrapped in llvm-sys.
         let str_type = obj_type.to_struct_type(gc, vec![]);
