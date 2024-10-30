@@ -2515,7 +2515,9 @@ Updates a value of union `LoopResult` by applying a function if it is the varian
 
 ### `bind : [m : Std::Monad] (a -> m b) -> m a -> m b`
 
-### `bind_discarding : [m : Std::Monad] m b -> m a -> m b`
+### `discard_and : [m : Std::Monad] m b -> m a -> m b`
+
+`act1.discard_and(act2)` performs `act1` and then `act2`, but discards the result of `act1`.
 
 ### `flatten : [m : Std::Monad] m (m a) -> m a`
 
