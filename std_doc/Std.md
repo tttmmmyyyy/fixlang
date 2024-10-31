@@ -2227,6 +2227,10 @@ Retrieves the field `_data` from a value of `IOFail`.
 
 Updates a value of `IOFail` by applying a functorial action to field `_data`.
 
+### `from_io_result : Std::IO (Std::Result Std::String a) -> Std::IO::IOFail a`
+
+Create from IO action of which returns `Result ErrMsg a`.
+
 ### `from_result : Std::Result Std::String a -> Std::IO::IOFail a`
 
 Creates an pure `IOFail` value from a `Result` value.

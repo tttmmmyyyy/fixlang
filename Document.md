@@ -1699,29 +1699,30 @@ NOTE: The order of evaluation of `{expr0}` and `{expr1}` is unspecified.
 
 The following is the table of operators sorted by its precedence (operator of higher precedence appears earlier).
 
-| Operator / syntax | Type                     | Trait / function                    | Explanation                                                        |
-| ----------------- | ------------------------ | ----------------------------------- | ------------------------------------------------------------------ |
-| f(x)              | syntax                   | -                                   | function application                                               |
-| .                 | left associative binary  | -                                   | right-to-left function application: x.f = f(x)                     |
-| *                 | unary prefix             | Std::Monad / bind                   | monadic bind                                                       |
-| <<                | left associative binary  | Std::compose                        | right-to-left function composition: g << f = &#124;x&#124; g(f(x)) |
-| >>                | left associative binary  | Std::compose                        | left-to-right function composition: f >> g = &#124;x&#124; g(f(x)) |
-| - (minus sign)    | unary prefix             | Std::Neg / neg                      | negative of number                                                 |
-| !                 | unary prefix             | Std::Not / not                      | logical NOT                                                        |
-| *                 | left associative binary  | Std::Mul / mul                      | multiplication of numbers                                          |
-| /                 | left associative binary  | Std::Div / div                      | division of numbers                                                |
-| %                 | left associative binary  | Std::Rem / rem                      | reminder of division                                               |
-| +                 | left associative binary  | Std::Add / add                      | addition of numbers                                                |
-| - (minus sign)    | left associative binary  | Std::Sub / sub                      | subtraction of numbers                                             |
-| ==                | left associative binary  | Std::Eq / eq                        | equality comparison                                                |
-| !=                | left associative binary  | -                                   | `x != y` is interpreted as `!(x == y)`                             |
-| <=                | left associative binary  | Std::LessThanOrEq / less_than_or_eq | less-than-or-equal-to comparison                                   |
-| >=                | left associative binary  | -                                   | `x >= y` is interpreted as `y <= x`                                |
-| <                 | left associative binary  | Std::LessThan / less_than           | less-than comparison                                               |
-| >                 | left associative binary  | -                                   | `x > y` is interpreted as `y < x`                                  |
-| &&                | right associative binary | -                                   | short-circuit logical AND.                                         |
-| &#124;&#124;      | right associative binary | -                                   | short-circuit logical OR                                           |
-| $                 | right associative binary | -                                   | right associative function application: f $ g $ x = f(g(x))        |
+| Operator / syntax | Type                     | Function                           | Explanation                                                            |
+| ----------------- | ------------------------ | ---------------------------------- | ---------------------------------------------------------------------- |
+| f(x)              | syntax                   | -                                  | function application                                                   |
+| .                 | left associative binary  | -                                  | right-to-left function application: `x.f` = `f(x)`                     |
+| *                 | unary prefix             | Std::Monad::bind                   | monadic bind                                                           |
+| <<                | left associative binary  | Std::compose                       | right-to-left function composition: `g << f` = `&#124;x&#124; g(f(x))` |
+| >>                | left associative binary  | Std::compose                       | left-to-right function composition: `f >> g` = `&#124;x&#124; g(f(x))` |
+| - (minus sign)    | unary prefix             | Std::Neg::neg                      | negative of number                                                     |
+| !                 | unary prefix             | Std::Not::not                      | logical NOT                                                            |
+| *                 | left associative binary  | Std::Mul::mul                      | multiplication of numbers                                              |
+| /                 | left associative binary  | Std::Div::div                      | division of numbers                                                    |
+| %                 | left associative binary  | Std::Rem::rem                      | reminder of division                                                   |
+| +                 | left associative binary  | Std::Add::add                      | addition of numbers                                                    |
+| - (minus sign)    | left associative binary  | Std::Sub::sub                      | subtraction of numbers                                                 |
+| ==                | left associative binary  | Std::Eq::eq                        | equality comparison                                                    |
+| !=                | left associative binary  | -                                  | `x != y` is interpreted as `!(x == y)`                                 |
+| <=                | left associative binary  | Std::LessThanOrEq::less_than_or_eq | less-than-or-equal-to comparison                                       |
+| >=                | left associative binary  | -                                  | `x >= y` is interpreted as `y <= x`                                    |
+| <                 | left associative binary  | Std::LessThan::less_than           | less-than comparison                                                   |
+| >                 | left associative binary  | -                                  | `x > y` is interpreted as `y < x`                                      |
+| &&                | right associative binary | -                                  | short-circuit logical AND.                                             |
+| &#124;&#124;      | right associative binary | -                                  | short-circuit logical OR                                               |
+| $                 | right associative binary | -                                  | right associative function application: `f $ g $ x` = `f(g(x))`        |
+| ;;                | right associative binary | Std::Monad::discard_and            | `m0;; m1` = `let _ = *m0; m1`                                          |
 
 # Compiler features
 
