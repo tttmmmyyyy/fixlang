@@ -1601,7 +1601,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let call_ffi_pair = pairs.next().unwrap();
-    let is_io = call_ffi_pair.as_rule() == Rule::ffi_call_c_io_symbol;
+    let is_io = call_ffi_pair.as_rule() == Rule::ffi_call_c_ios_symbol;
     let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx);
     let fun_name = pairs.next().unwrap().as_str().to_string();
     let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx);
