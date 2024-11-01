@@ -2174,7 +2174,7 @@ pub fn test_ffi_call() {
 }
 
 #[test]
-pub fn test_ffi_call_io() {
+pub fn test_ffi_call_ios() {
     // Test FFI
     let source = r#"
             module Main;     
@@ -2182,7 +2182,7 @@ pub fn test_ffi_call_io() {
             main = (
                 IO::from_runner(|ios|
                     "Hello C function! Number = %d\n".borrow_c_str(|ptr|
-                        FFI_CALL_IO[I32 printf(Ptr, I32), ptr, 42.to_I32, ios]
+                        FFI_CALL_IOS[I32 printf(Ptr, I32), ptr, 42.to_I32, ios]
                     )
                 );;
                 pure()
@@ -5963,7 +5963,7 @@ pub fn test_unsafe_mutate_boxed_data_io() {
             let x : Boxed I32 = Boxed { value : 0_I32 };
             let (x, _) = *x.unsafe_mutate_boxed_data_io(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IO[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
@@ -5983,7 +5983,7 @@ pub fn test_get_errno() {
             let errno = *(IO::from_runner $ |state| "a_path_where_no_file_exists".borrow_c_str(|file|
                 "invalid_file_mode".borrow_c_str(|mode|
                     let (state, _) = (clear_errno.@runner)(state);
-                    let (state, _) = FFI_CALL_IO[Ptr fopen(Ptr, Ptr), file, mode, state];
+                    let (state, _) = FFI_CALL_IOS[Ptr fopen(Ptr, Ptr), file, mode, state];
                     (get_errno.@runner)(state)
                 )
             ));

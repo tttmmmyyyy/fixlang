@@ -399,11 +399,11 @@ namespace FFI {
 
     // Gets errno which is set by C functions.
     get_errno : IO CInt;
-    get_errno = IO::from_runner $ |state| FFI_CALL_IO[CInt fixruntime_get_errno(), state];
+    get_errno = IO::from_runner $ |state| FFI_CALL_IOS[CInt fixruntime_get_errno(), state];
 
     // Sets errno to zero.
     clear_errno : IO ();
-    clear_errno = IO::from_runner $ |state| FFI_CALL_IO[() fixruntime_clear_errno(), state];
+    clear_errno = IO::from_runner $ |state| FFI_CALL_IOS[() fixruntime_clear_errno(), state];
 
     // `Destructor a` is a wrapper type for `a`, which can have a destructor function `a -> IO a`.
     // Just before a value of type `Destructor a` is dropped, the destructor function is called on the contained value, and the value can be modified by the `IO` action.
@@ -451,10 +451,10 @@ namespace IO {
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
                 let (ios, (buf, fgets_res)) = unsafe_mutate_boxed_data_io_state(|buf_ptr| (
-                    IO::from_runner $ |ios| FFI_CALL_IO[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.to_I32, file_ptr, ios]
+                    IO::from_runner $ |ios| FFI_CALL_IOS[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.to_I32, file_ptr, ios]
                 ), buf, ios);
                 if fgets_res == nullptr { 
-                    let (ios, err) = FFI_CALL_IO[I32 ferror(Ptr), file_ptr, ios];
+                    let (ios, err) = FFI_CALL_IOS[I32 ferror(Ptr), file_ptr, ios];
                     if err != 0_I32 { 
                         let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
                         break $ (ios, Result::err(err))
@@ -462,7 +462,7 @@ namespace IO {
                         break $ (ios, Result::ok(str))
                     }
                 };
-                let (ios, strlen) = FFI_CALL_IO[I64 strlen(Ptr), buf._unsafe_get_boxed_data_ptr, ios];
+                let (ios, strlen) = FFI_CALL_IOS[I64 strlen(Ptr), buf._unsafe_get_boxed_data_ptr, ios];
                 let buf = buf._unsafe_set_size(strlen + 1);
                 let read = String { _data : buf };
                 let str = str + read;
@@ -484,7 +484,7 @@ namespace IO {
     close_file : IOHandle -> IO ();
     close_file = |handle| (
         IO::from_runner $ |ios| (
-            handle.@_data.borrow(|handle_ptr| FFI_CALL_IO[() fixruntime_iohandle_close(Ptr), handle_ptr, ios])
+            handle.@_data.borrow(|handle_ptr| FFI_CALL_IOS[() fixruntime_iohandle_close(Ptr), handle_ptr, ios])
         )
     );
 
@@ -493,7 +493,7 @@ namespace IO {
     eprint = |str| (
         IO::from_runner $ |ios| (
             str.borrow_c_str(|c_ptr|
-                let (ios, _code) = FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr, ios];
+                let (ios, _code) = FFI_CALL_IOS[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr, ios];
                 (ios, ())
             )
         )
@@ -510,7 +510,7 @@ namespace IO {
     // Exits the program with an error code.
     exit : I64 -> IO a;
     exit = |code| IO::from_runner $ |ios| (
-        let (ios, _) = FFI_CALL_IO[() exit(I32), code.to_I32, ios];
+        let (ios, _) = FFI_CALL_IOS[() exit(I32), code.to_I32, ios];
         (ios, undefined(""))
     );
 
@@ -531,14 +531,14 @@ namespace IO {
     get_arg = |n| (
         let argc = *get_arg_count;
         if n >= argc { pure $ Option::none() };
-        let arg_ptr = *(IO::from_runner $ |ios| FFI_CALL_IO[Ptr fixruntime_get_argv(I64), n, ios]);
+        let arg_ptr = *(IO::from_runner $ |ios| FFI_CALL_IOS[Ptr fixruntime_get_argv(I64), n, ios]);
         pure $ Option::some(String::_unsafe_from_c_str_ptr(arg_ptr))
     );
 
     // Gets the number of command line arguments.
     get_arg_count : IO I64;
     get_arg_count = (
-        let argc = *(IO::from_runner $ |ios| FFI_CALL_IO[I32 fixruntime_get_argc(), ios]);
+        let argc = *(IO::from_runner $ |ios| FFI_CALL_IOS[I32 fixruntime_get_argc(), ios]);
         pure $ argc.to_I64
     );
 
@@ -570,7 +570,7 @@ namespace IO {
     // Checks if an `IOHandle` reached to the EOF.
     is_eof : IOHandle -> IO Bool;
     is_eof = |handle| (
-        IO::from_runner $ |io| let (io, res) = FFI_CALL_IO[I32 feof(Ptr), handle._file_ptr, io]; (io, res != 0_I32) // Should we borrow file_ptr?
+        IO::from_runner $ |io| let (io, res) = FFI_CALL_IOS[I32 feof(Ptr), handle._file_ptr, io]; (io, res != 0_I32) // Should we borrow file_ptr?
     );
 
     // Loop on lines read from an `IOHandle`.
@@ -618,7 +618,7 @@ namespace IO {
             let path_str = path.to_string;
             path_str.borrow_c_str(|path_ptr|
                 mode.borrow_c_str(|mode_str|
-                    let (io, file_ptr) = FFI_CALL_IO[Ptr fopen(Ptr, Ptr), path_ptr, mode_str, io];
+                    let (io, file_ptr) = FFI_CALL_IOS[Ptr fopen(Ptr, Ptr), path_ptr, mode_str, io];
                     if file_ptr == nullptr { 
                         (io, Result::err $ "Failed to open a file: " + path_str)
                     } else {
@@ -634,7 +634,7 @@ namespace IO {
     print = |str| (
         IO::from_runner $ |io| (
             str.borrow_c_str(|c_ptr|
-                let (io, _) = FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr, io];
+                let (io, _) = FFI_CALL_IOS[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr, io];
                 (io, ())
             )
         )
@@ -683,10 +683,10 @@ namespace IO {
     read_n_bytes = |handle, n| IOFail { _data : IO::from_runner $ |io| (
         let buf = Array::empty(n);
         let (io, len) = buf.borrow_ptr(|ptr| (
-            FFI_CALL_IO[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr, io]
+            FFI_CALL_IOS[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr, io]
         ));
         // Check error.
-        let (io, err) = FFI_CALL_IO[I32 ferror(Ptr), handle._file_ptr, io];
+        let (io, err) = FFI_CALL_IOS[I32 ferror(Ptr), handle._file_ptr, io];
         if err != 0_I32 { 
             let err = "Std::IO::read_n_bytes failed!: some error occurred in fread.";
             (io, Result::err(err))
@@ -736,7 +736,7 @@ namespace IO {
     write_bytes = |handle, array| IOFail { _data : IO::from_runner $ |io| (
         array.borrow_ptr(|ptr| (
             let n = array.get_size;
-            let (io, res) = FFI_CALL_IO[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr, io];
+            let (io, res) = FFI_CALL_IOS[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr, io];
             if res < n { (io, Result::err $ "Std::IO::write_bytes failed!: some error occurred in fwrite.") };
             (io, Result::ok())
         ))
@@ -755,7 +755,7 @@ namespace IO {
     write_string = |handle, content| IOFail {_data : IO::from_runner $ |io| (
         content.borrow_c_str(|c_str| (
             let file_ptr = handle._file_ptr;
-            let (io, res) = FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr, io];
+            let (io, res) = FFI_CALL_IOS[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr, io];
             if res < 0_I32 { (io, Result::err $ "Std::IO::write_string failed!: some error occurred in fputs.") };
             (io, Result::ok())
         ))
@@ -805,7 +805,7 @@ namespace IO::IOHandle {
     from_file_ptr = |file_ptr| (
         let handle_ptr = FFI_CALL[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
         let dtor = |handle_ptr| IO::from_runner $ |ios| (
-            let (ios, _) = FFI_CALL_IO[() fixruntime_iohandle_delete(Ptr), handle_ptr, ios];
+            let (ios, _) = FFI_CALL_IOS[() fixruntime_iohandle_delete(Ptr), handle_ptr, ios];
             (ios, nullptr)
         );
         IOHandle { _data : Destructor::make(handle_ptr, dtor) }
@@ -1414,7 +1414,7 @@ namespace String {
         let buf_len = len + 1;
         let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
         let (buf, _) = buf.unsafe_mutate_boxed_data(|buf_ptr| 
-            IO::from_runner $ |ios| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len, ios]
+            IO::from_runner $ |ios| FFI_CALL_IOS[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len, ios]
         );
         String { _data : buf }
     );
@@ -1896,14 +1896,14 @@ namespace Ptr {
 impl Ptr : ToString {
     to_string = |v| (
         let data = Array::empty(17);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_ptr_to_str(Ptr, Ptr), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_ptr_to_str(Ptr, Ptr), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
 impl U8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_set_size(1);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u8_to_bytes(Ptr, U8), ptr, v, ios]);
         data
     );
 }
@@ -1918,7 +1918,7 @@ impl U8 : FromBytes {
 impl U8 : ToString {
     to_string = |v| (
         let data = Array::empty(4); // len(255) + 1
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u8_to_str(Ptr, U8), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u8_to_str(Ptr, U8), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -1929,7 +1929,7 @@ impl U8 : FromString {
 impl U16 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(2)._unsafe_set_size(2);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, U16), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u16_to_bytes(Ptr, U16), ptr, v, ios]);
         data
     );
 }
@@ -1944,7 +1944,7 @@ impl U16 : FromBytes {
 impl U16 : ToString {
     to_string = |v| (
         let data = Array::empty(6); // len(65535) + 1
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u16_to_str(Ptr, U16), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u16_to_str(Ptr, U16), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -1955,7 +1955,7 @@ impl U16 : FromString {
 impl U32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v, ios]);
         data
     );
 }
@@ -1970,7 +1970,7 @@ impl U32 : FromBytes {
 impl U32 : ToString {
     to_string = |v| (
         let data = Array::empty(11);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u32_to_str(Ptr, U32), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u32_to_str(Ptr, U32), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -1981,7 +1981,7 @@ impl U32 : FromString {
 impl U64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v, ios]);
         data
     );
 }
@@ -1996,7 +1996,7 @@ impl U64 : FromBytes {
 impl U64 : ToString {
     to_string = |v| (
         let data = Array::empty(21);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u64_to_str(Ptr, U64), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u64_to_str(Ptr, U64), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2016,7 +2016,7 @@ impl U64 : FromString {
 impl I8 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(1)._unsafe_set_size(1);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, I8), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u8_to_bytes(Ptr, I8), ptr, v, ios]);
         data
     );
 }
@@ -2031,7 +2031,7 @@ impl I8 : FromBytes {
 impl I8 : ToString {
     to_string = |v| (
         let data = Array::empty(5); // len(-128) + 1
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_i8_to_str(Ptr, I8), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_i8_to_str(Ptr, I8), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2042,7 +2042,7 @@ impl I8 : FromString {
 impl I16 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(2)._unsafe_set_size(2);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, I16), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u16_to_bytes(Ptr, I16), ptr, v, ios]);
         data
     );
 }
@@ -2057,7 +2057,7 @@ impl I16 : FromBytes {
 impl I16 : ToString {
     to_string = |v| (
         let data = Array::empty(7); // len(-32768) + 1
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_i16_to_str(Ptr, I16), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_i16_to_str(Ptr, I16), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2068,7 +2068,7 @@ impl I16 : FromString {
 impl I32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, I32), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u32_to_bytes(Ptr, I32), ptr, v, ios]);
         data
     );
 }
@@ -2083,7 +2083,7 @@ impl I32 : FromBytes {
 impl I32 : ToString {
     to_string = |v| (
         let data = Array::empty(12);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_i32_to_str(Ptr, I32), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_i32_to_str(Ptr, I32), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2094,7 +2094,7 @@ impl I32 : FromString {
 impl I64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, I64), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_u64_to_bytes(Ptr, I64), ptr, v, ios]);
         data
     );
 }
@@ -2109,7 +2109,7 @@ impl I64 : FromBytes {
 impl I64 : ToString {
     to_string = |v| (
         let data = Array::empty(21);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_i64_to_str(Ptr, I64), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_i64_to_str(Ptr, I64), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2129,7 +2129,7 @@ impl I64 : FromString {
 impl F32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_set_size(4);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f32_to_bytes(Ptr, F32), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f32_to_bytes(Ptr, F32), ptr, v, ios]);
         data
     );
 }
@@ -2144,7 +2144,7 @@ impl F32 : FromBytes {
 impl F32 : ToString {
     to_string = |v| (
         let data = Array::empty(50);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f32_to_str(Ptr, F32), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f32_to_str(Ptr, F32), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2153,7 +2153,7 @@ namespace F32 {
     to_string_exp : F32 -> String;
     to_string_exp = |v| (
         let data = Array::empty(50);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f32_to_str_exp(Ptr, F32), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f32_to_str_exp(Ptr, F32), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -2161,7 +2161,7 @@ namespace F32 {
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), ptr, v, prec, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), ptr, v, prec, ios]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -2169,7 +2169,7 @@ namespace F32 {
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f32_to_str_precision(Ptr, F32, U8), ptr, v, prec, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f32_to_str_precision(Ptr, F32, U8), ptr, v, prec, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2189,7 +2189,7 @@ impl F32 : FromString {
 impl F64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_set_size(8);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f64_to_bytes(Ptr, F64), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f64_to_bytes(Ptr, F64), ptr, v, ios]);
         data
     );
 }
@@ -2204,7 +2204,7 @@ impl F64 : FromBytes {
 impl F64 : ToString {
     to_string = |v| (
         let data = Array::empty(500);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f64_to_str(Ptr, F64), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f64_to_str(Ptr, F64), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2213,7 +2213,7 @@ namespace F64 {
     to_string_exp : F64 -> String;
     to_string_exp = |v| (
         let data = Array::empty(500);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f64_to_str_exp(Ptr, F64), ptr, v, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f64_to_str_exp(Ptr, F64), ptr, v, ios]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -2221,7 +2221,7 @@ namespace F64 {
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), ptr, v, prec, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), ptr, v, prec, ios]);
         String::_unsafe_from_c_str(data)
     );
 
@@ -2229,7 +2229,7 @@ namespace F64 {
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
-        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IO[() fixruntime_f64_to_str_precision(Ptr, F64, U8), ptr, v, prec, ios]);
+        let (data, _) = data.unsafe_mutate_boxed_data(|ptr| IO::from_runner $ |ios| FFI_CALL_IOS[() fixruntime_f64_to_str_precision(Ptr, F64, U8), ptr, v, prec, ios]);
         String::_unsafe_from_c_str(data)
     );
 }
@@ -2286,9 +2286,9 @@ namespace Debug {
     consumed_time_while_io : IO a -> IO (a, F64);
     consumed_time_while_io = |io| (
         IO::from_runner $ |ios| (
-            let (ios, s) = FFI_CALL_IO[I64 fixruntime_clock(), ios];
+            let (ios, s) = FFI_CALL_IOS[I64 fixruntime_clock(), ios];
             let (ios, r) = (io.@runner)(ios);
-            let (ios, t) = FFI_CALL_IO[I64 fixruntime_clock(), ios];
+            let (ios, t) = FFI_CALL_IOS[I64 fixruntime_clock(), ios];
             let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
             (ios, (r, t))
         )

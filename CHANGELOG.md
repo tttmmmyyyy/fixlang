@@ -18,7 +18,7 @@
 - Add `fix test` subcommand, which runs `Test::test`.
 - Add `-O (--object)` option to specify object files to be linked.
 - Add `fix init` subcommand, which generates a template project file.
-- Add `FFI_CALL_IO` syntax, which is similar to `FFI_CALL` but suitable for foregin functions which have side effects.
+- Add `FFI_CALL_IOS` syntax, which is similar to `FFI_CALL` but suitable for foregin functions which have side effects.
 - Add `Std::do_with_retained`.
 - Add `{monad_expr};; {expr}` syntax, which is equivalent to `let _ = *{monad_expr}; {expr}`.
 

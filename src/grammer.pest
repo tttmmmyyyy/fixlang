@@ -286,7 +286,7 @@ expr_call_c = { (ffi_call_c_io_symbol | ffi_call_c_symbol) ~ sep* ~ "[" ~ sep* ~
 
 ffi_call_c_symbol = { "FFI_CALL" }
 
-ffi_call_c_io_symbol = { "FFI_CALL_IO" }
+ffi_call_c_io_symbol = { "FFI_CALL_IOS" }
 
 ffi_c_fun_char = _{ !("(") ~ ANY }
 

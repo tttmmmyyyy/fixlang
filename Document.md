@@ -1555,12 +1555,12 @@ FFI_CALL[{function_signature}, {arg_0}, {arg_1}, ...]
 ```
 
 ```
-FFI_CALL_IO[{function_signature}, {arg_0}, {arg_1}, ..., {iostate}]
+FFI_CALL_IOS[{function_signature}, {arg_0}, {arg_1}, ..., {iostate}]
 ```
 
-Use `FFI_CALL` to call a "pure" foreign function. If the foreign function has side effects, use `FFI_CALL_IO` instead.
+Use `FFI_CALL` to call a "pure" foreign function. If the foreign function has side effects, use `FFI_CALL_IOS` instead.
 `FFI_CALL[...]` just takes arguments corresponding to the ones in the foreign function, and evaluates to a Fix value for the return value of the foreign function.
-On the other hand, `FFI_CALL_IO[...]` takes an additional argument `{iostate}` of type `IOState`, and evaluated to a value of type `(IOState, a)`, where `a` is the return type of the foreign function.
+On the other hand, `FFI_CALL_IOS[...]` takes an additional argument `{iostate}` of type `IOState`, and evaluated to a value of type `(IOState, a)`, where `a` is the return type of the foreign function.
 
 A good example of these is the implementation of `Std::consumed_time_while_io`.
 
@@ -1569,9 +1569,9 @@ A good example of these is the implementation of `Std::consumed_time_while_io`.
 consumed_time_while_io : IO a -> IO (a, F64);
 consumed_time_while_io = |io| (
     IO::from_runner $ |ios| (
-        let (ios, s) = FFI_CALL_IO[I64 fixruntime_clock(), ios];
+        let (ios, s) = FFI_CALL_IOS[I64 fixruntime_clock(), ios];
         let (ios, r) = (io.@runner)(ios);
-        let (ios, t) = FFI_CALL_IO[I64 fixruntime_clock(), ios];
+        let (ios, t) = FFI_CALL_IOS[I64 fixruntime_clock(), ios];
         let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
         (ios, (r, t))
     )
