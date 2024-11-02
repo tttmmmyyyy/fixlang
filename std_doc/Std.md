@@ -1423,7 +1423,7 @@ The difference from `unsafe_get_retained_ptr_of_boxed_value` is that this functi
 on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to the boxed value itself (i.e., the control block of the value).
 
 Note that if the call `v._unsafe_get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
-To avoid issues caused by this, use `unsafe_borrow_boxed_ptr` instead.
+To avoid issues caused by this, use `unsafe_borrow_boxed` instead.
 
 This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
 
@@ -1435,7 +1435,7 @@ Sets errno to zero.
 
 Gets errno which is set by C functions.
 
-### `unsafe_borrow_boxed_ptr : (Std::Ptr -> b) -> a -> b`
+### `unsafe_borrow_boxed : (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
@@ -1486,7 +1486,7 @@ To get back the boxed value from the retained pointer, use `unsafe_get_boxed_val
 To release / retain the value in a foreign language, call the function pointer obtained by `unsafe_get_release_function_of_boxed_value` or `unsafe_get_retain_function_of_boxed_value` on the pointer.
 
 Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
-If you want to get a pointer to the data of the boxed value, use `unsafe_borrow_boxed_ptr`.
+If you want to get a pointer to the data of the boxed value, use `unsafe_borrow_boxed`.
 
 ### `unsafe_mutate_boxed : (Std::Ptr -> Std::IO b) -> a -> (a, b)`
 

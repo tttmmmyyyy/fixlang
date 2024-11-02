@@ -394,8 +394,8 @@ namespace FFI {
     // Borrows a pointer to the data of a boxed value.
     // 
     // For more details, see the document of `_unsafe_get_boxed_ptr`.
-    unsafe_borrow_boxed_ptr : (Ptr -> b) -> a -> b;
-    unsafe_borrow_boxed_ptr = |act, val| val.do_with_retained(|val| act(val._unsafe_get_boxed_ptr));
+    unsafe_borrow_boxed : (Ptr -> b) -> a -> b;
+    unsafe_borrow_boxed = |act, val| val.do_with_retained(|val| act(val._unsafe_get_boxed_ptr));
 
     // Gets errno which is set by C functions.
     get_errno : IO CInt;

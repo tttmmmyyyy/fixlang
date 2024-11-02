@@ -7,6 +7,6 @@ The difference from `unsafe_get_retained_ptr_of_boxed_value` is that this functi
 on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to the boxed value itself (i.e., the control block of the value).
 
 Note that if the call `v._unsafe_get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
-To avoid issues caused by this, use `unsafe_borrow_boxed_ptr` instead.
+To avoid issues caused by this, use `unsafe_borrow_boxed` instead.
 
 This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
