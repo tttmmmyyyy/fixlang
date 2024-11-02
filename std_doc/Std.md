@@ -2762,6 +2762,10 @@ Updates a value of `String` by applying a functorial action to field `_data`.
 
 Call a function with a null-terminated C string.
 
+### `borrow_c_str_io : (Std::Ptr -> Std::IO a) -> Std::String -> Std::IO a`
+
+Call an IO action with a null-terminated C string.
+
 ### `concat : Std::String -> Std::String -> Std::String`
 
 Concatenate two strings.
