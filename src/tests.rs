@@ -2178,12 +2178,30 @@ pub fn test_ffi_call_ios() {
     // Test FFI
     let source = r#"
             module Main;     
+
             main : IO ();
             main = (
                 IO::from_runner(|ios|
                     "Hello C function! Number = %d\n".borrow_c_str(|ptr|
                         FFI_CALL_IOS[I32 printf(Ptr, I32), ptr, 42.to_I32, ios]
                     )
+                );;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_ffi_call_io() {
+    // Test FFI
+    let source = r#"
+            module Main;     
+            
+            main : IO ();
+            main = (
+                "Hello C function! Number = %d\n".@_data.borrow_ptr_io(|ptr|
+                    FFI_CALL_IO[I32 printf(Ptr, I32), ptr, 42.to_I32]
                 );;
                 pure()
             );

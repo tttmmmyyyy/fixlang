@@ -806,7 +806,7 @@ pub enum Expr {
         Arc<TyCon>,         /* Return type */
         Vec<Arc<TyCon>>,    /* Parameter types */
         Vec<Arc<ExprNode>>, /* Arguments */
-        bool,               /* is_io */
+        bool,               /* is_ios */
     ),
 }
 
@@ -1009,10 +1009,10 @@ pub fn expr_ffi_call(
     ret_ty: Arc<TyCon>,
     param_tys: Vec<Arc<TyCon>>,
     args: Vec<Arc<ExprNode>>,
-    is_io: bool,
+    is_ios: bool,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::FFICall(fun_name, ret_ty, param_tys, args, is_io)).into_expr_info(src)
+    Arc::new(Expr::FFICall(fun_name, ret_ty, param_tys, args, is_ios)).into_expr_info(src)
 }
 
 // TODO: Use persistent binary search tree avoid O(n^2) complexity of calculate_free_vars?

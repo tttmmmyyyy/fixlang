@@ -144,7 +144,7 @@ namespace Array {
 
     // Calls an IO action with a pointer to the memory region where elements are stored.
     // 
-    // TODO: Define more general version (e.g., for state-like monads).
+    // TODO: Define more general version (e.g., for any state-like monads?).
     borrow_ptr_io : (Ptr -> IO b) -> Array a -> IO b;
     borrow_ptr_io = |act, arr| IO::from_runner $ |ios| (
         arr.borrow_ptr(|ptr| (act(ptr).@runner)(ios))

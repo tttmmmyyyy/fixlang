@@ -1548,19 +1548,26 @@ The programmer has a responsibility to hide the side effect of a foreign functio
 
 ### Call a foreign function in Fix
 
-Use the `FFI_CALL(_IO)[...]` expression to call a foreign function in Fix. The syntax is as follows:
+Use the `FFI_CALL(_IO|_IOS)[...]` expression to call a foreign function in Fix. The syntax is as follows:
 
 ```
 FFI_CALL[{function_signature}, {arg_0}, {arg_1}, ...]
 ```
 
 ```
+FFI_CALL_IO[{function_signature}, {arg_0}, {arg_1}, ...]
+```
+
+```
 FFI_CALL_IOS[{function_signature}, {arg_0}, {arg_1}, ..., {iostate}]
 ```
 
-Use `FFI_CALL` to call a "pure" foreign function. If the foreign function has side effects, use `FFI_CALL_IOS` instead.
-`FFI_CALL[...]` just takes arguments corresponding to the ones in the foreign function, and evaluates to a Fix value for the return value of the foreign function.
-On the other hand, `FFI_CALL_IOS[...]` takes an additional argument `{iostate}` of type `IOState`, and evaluated to a value of type `(IOState, a)`, where `a` is the return type of the foreign function.
+Use `FFI_CALL` to call a pure foreign function. `FFI_CALL[...]` takes the same arguments as the foreign function and returns a value of Fix corresponding to the return value of the foreign function.
+
+If the foreign function has side effects, use `FFI_CALL_IO`. This returns an `IO` monad value.
+
+You can use `FFI_CALL_IOS` also to call a foreign function with side effects. 
+This function takes an additional argument of type `IOState` and returns a value of type `(IOState, a)`, where `a` is the return type of the foreign function.
 
 A good example of these is the implementation of `Std::consumed_time_while_io`.
 

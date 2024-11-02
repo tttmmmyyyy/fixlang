@@ -991,7 +991,7 @@ Calls a function with a pointer to the memory region where elements are stored.
 
 Calls an IO action with a pointer to the memory region where elements are stored.
 
-TODO: Define more general version (e.g., for state-like monads).
+TODO: Define more general version (e.g., for any state-like monads?).
 
 ### `empty : Std::I64 -> Std::Array a`
 

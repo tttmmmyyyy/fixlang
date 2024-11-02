@@ -471,7 +471,12 @@ pub fn make_lazy_ty() -> Arc<TypeNode> {
 
 // Make type `IO`
 pub fn make_io_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], IO_NAME)))
+    type_tycon(&make_io_tycon())
+}
+
+// Make tycon `IO`
+pub fn make_io_tycon() -> Arc<TyCon> {
+    tycon(FullName::from_strs(&[STD_NAME], IO_NAME))
 }
 
 // Make type `IO ()`
