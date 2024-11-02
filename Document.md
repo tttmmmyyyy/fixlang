@@ -1683,8 +1683,8 @@ void access_vec(Vec* v) {
 }
 ```
 
-If you want to access to the fields `x` and `y` of Fix's object `vec` from C side, `Std::FFI::unsafe_borrow_boxed_data_ptr : (Ptr -> b) -> a -> b` will be useful: 
-`vec.unsafe_borrow_boxed_data_ptr(|p| FFI_CALL[() access_vec(Ptr), p])` will allows `access_vec` on work on `vec.@x` and `vec.@y`.
+If you want to access to the fields `x` and `y` of Fix's object `vec` from C side, `Std::FFI::unsafe_borrow_boxed_ptr : (Ptr -> b) -> a -> b` will be useful: 
+`vec.unsafe_borrow_boxed_ptr(|p| FFI_CALL[() access_vec(Ptr), p])` will allows `access_vec` on work on `vec.@x` and `vec.@y`.
 
 NOTE: 
 At least in the current version of Fix, the memory layout of Fix's struct is determined by the default behaviour of LLVM, and as long as I know it is equivalent to C's struct memory layout. 

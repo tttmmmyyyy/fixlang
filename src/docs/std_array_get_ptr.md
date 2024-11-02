@@ -4,4 +4,4 @@ This function is dangerous because if the array is not used after call of this f
 Try using `borrow_ptr` instead.
 
 @deprecated
-Use `Std::FFI::_unsafe_get_boxed_data_ptr` instead.
+Use `Std::FFI::_unsafe_get_boxed_ptr` instead.

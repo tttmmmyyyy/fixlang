@@ -4334,9 +4334,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         // Get argument.
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
         if !obj.is_box(gc.type_env()) {
-            error_exit(
-                "`Std::FFI::_unsafe_get_boxed_data_ptr` can only be called on a boxed value.",
-            )
+            error_exit("`Std::FFI::_unsafe_get_boxed_ptr` can only be called on a boxed value.")
         }
 
         // Get data pointer.
@@ -4354,7 +4352,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
                 &vec![],
                 None,
                 gc,
-                Some("ret_val@_unsafe_get_boxed_data_ptr"),
+                Some("ret_val@_unsafe_get_boxed_ptr"),
             )
         };
         ret.store_field_nocap(gc, 0, data_ptr);
@@ -4400,7 +4398,7 @@ pub fn get_unsafe_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
                 var_name: VAR_NAME.to_string(),
             }),
             vec![FullName::local(VAR_NAME)],
-            format!("_unsafe_get_boxed_data_ptr({})", VAR_NAME),
+            format!("_unsafe_get_boxed_ptr({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -4429,9 +4427,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 
         // If `val` is not boxed, error.
         if !val.is_box(gc.type_env()) {
-            error_exit(
-                "`Std::FFI::_unsafe_mutate_boxed_data_ptr` can only be called on a boxed value.",
-            )
+            error_exit("`Std::FFI::unsafe_mutate_boxed` can only be called on a boxed value.")
         }
 
         // Before mutating the value, force uniqueness of the value.
@@ -4465,7 +4461,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 }
 
 // mutate_boxed_data : (Ptr -> IO b) -> a -> (a, b)
-pub fn get_unsafe_mutate_boxed_data() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn get_unsafe_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_A_NAME: &str = "a";
     const TYPE_B_NAME: &str = "b";
     const IO_ACT_NAME: &str = "a";
@@ -4494,7 +4490,7 @@ pub fn get_unsafe_mutate_boxed_data() -> (Arc<ExprNode>, Arc<Scheme>) {
                     },
                 ),
                 vec![FullName::local(VAL_NAME), FullName::local(IO_ACT_NAME)],
-                format!("unsafe_mutate_boxed_data({})", VAL_NAME),
+                format!("unsafe_mutate_boxed({})", VAL_NAME),
                 res_ty,
                 None,
             ),
@@ -4527,9 +4523,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
 
         // If `val` is not boxed, error.
         if !val.is_box(gc.type_env()) {
-            error_exit(
-                "`Std::FFI::unsafe_mutate_boxed_data_io_state` can only be called on a boxed value.",
-            )
+            error_exit("`Std::FFI::unsafe_mutate_boxed_ios` can only be called on a boxed value.")
         }
 
         // Before mutating the value, force uniqueness of the value.
@@ -4571,8 +4565,8 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
     }
 }
 
-// unsafe_mutate_boxed_data_io_state : (Ptr -> IO b) -> a -> IOState -> (IOState, (a, b))
-pub fn get_unsafe_mutate_boxed_data_io_state() -> (Arc<ExprNode>, Arc<Scheme>) {
+// unsafe_mutate_boxed_ios : (Ptr -> IO b) -> a -> IOState -> (IOState, (a, b))
+pub fn get_unsafe_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const VAL_TYPE_NAME: &str = "a";
     const IO_RES_TYPE_NAME: &str = "b";
     const IO_ACT_NAME: &str = "a";
@@ -4612,7 +4606,7 @@ pub fn get_unsafe_mutate_boxed_data_io_state() -> (Arc<ExprNode>, Arc<Scheme>) {
                 FullName::local(IOSTATE_NAME),
             ],
             format!(
-                "unsafe_mutate_boxed_data_io_state({}, {}, {})",
+                "unsafe_mutate_boxed_ios({}, {}, {})",
                 IO_ACT_NAME, VAL_NAME, IOSTATE_NAME
             ),
             ret_ty,

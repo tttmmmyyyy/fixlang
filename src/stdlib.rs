@@ -537,22 +537,22 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         ),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "_unsafe_get_boxed_data_ptr"),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "_unsafe_get_boxed_ptr"),
         get_unsafe_get_boxed_ptr(),
         None,
-        Some(include_str!("./docs/std_ffi_unsafe_get_boxed_data_ptr.md").to_string()),
+        Some(include_str!("./docs/std_ffi_unsafe_get_boxed_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "unsafe_mutate_boxed_data"),
-        get_unsafe_mutate_boxed_data(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "unsafe_mutate_boxed"),
+        get_unsafe_mutate_boxed(),
         None,
-        Some(include_str!("./docs/std_ffi_unsafe_mutate_boxed_data.md").to_string()),
+        Some(include_str!("./docs/std_ffi_unsafe_mutate_boxed.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "unsafe_mutate_boxed_data_io_state"),
-        get_unsafe_mutate_boxed_data_io_state(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "unsafe_mutate_boxed_ios"),
+        get_unsafe_mutate_boxed_ios(),
         None,
-        Some(include_str!("./docs/std_ffi_unsafe_mutate_boxed_data_io_state.md").to_string()),
+        Some(include_str!("./docs/std_ffi_unsafe_mutate_boxed_ios.md").to_string()),
     ));
 
     errors.to_result()?;
