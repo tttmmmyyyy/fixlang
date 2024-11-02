@@ -490,14 +490,7 @@ namespace IO {
 
     // Prints a string to stderr.
     eprint : String -> IO ();
-    eprint = |str| (
-        IO::from_runner $ |ios| (
-            str.borrow_c_str(|c_ptr|
-                let (ios, _code) = FFI_CALL_IOS[I32 fputs(Ptr, Ptr), c_ptr, stderr._file_ptr, ios];
-                (ios, ())
-            )
-        )
-    );
+    eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, stderr._file_ptr]);; pure();
 
     // Prints a string followed by a newline to stderr.
     eprintln : String -> IO ();
@@ -1417,6 +1410,12 @@ namespace String {
     // Call a function with a null-terminated C string.
     borrow_c_str : (Ptr -> a) -> String -> a;
     borrow_c_str = |f, str| str.@_data.borrow_ptr(f);
+
+    // Call an IO action with a null-terminated C string.
+    borrow_c_str_io : (Ptr -> IO a) -> String -> IO a;
+    borrow_c_str_io = |act, str| IO::from_runner $ |ios| (
+        str.borrow_c_str(|c_str| (act(c_str).@runner)(ios))
+    );
 
     // Concatenate two strings.
     // 
