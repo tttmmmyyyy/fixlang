@@ -1575,13 +1575,11 @@ A good example of these is the implementation of `Std::consumed_time_while_io`.
 // Get clocks (cpu time) elapsed while executing an I/O action.
 consumed_time_while_io : IO a -> IO (a, F64);
 consumed_time_while_io = |io| (
-    IO::from_runner $ |ios| (
-        let (ios, s) = FFI_CALL_IOS[I64 fixruntime_clock(), ios];
-        let (ios, r) = (io.@runner)(ios);
-        let (ios, t) = FFI_CALL_IOS[I64 fixruntime_clock(), ios];
-        let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
-        (ios, (r, t))
-    )
+    let s = *FFI_CALL_IO[I64 fixruntime_clock()];
+    let r = *io;
+    let t = *FFI_CALL_IO[I64 fixruntime_clock()];
+    let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
+    pure $ (r, t)
 );
 ```
 
