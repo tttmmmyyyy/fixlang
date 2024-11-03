@@ -2289,14 +2289,20 @@ Do not directly close the file pointer by `fclose` or other functions.
 Instead you should close `IOHandle` by `IO::close_file`.
 
 DEPRECATED:
-Use `file_ptr` instead.
+Use `get_file_ptr` instead.
 This function is deprecated because it has a pure function interface, but the value of `_file_ptr` changes by calling `IO::close_file`.
 
 ### `act__data : [f : Std::Functor] (Std::FFI::Destructor Std::Ptr -> f (Std::FFI::Destructor Std::Ptr)) -> Std::IO::IOHandle -> f Std::IO::IOHandle`
 
 Updates a value of `IOHandle` by applying a functorial action to field `_data`.
 
-### `file_ptr : Std::IO::IOHandle -> Std::IO Std::Ptr`
+### `from_file_ptr : Std::Ptr -> Std::IO::IOHandle`
+
+Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
+
+Creating two `IOHandle`s from a single file pointer is forbidden.
+
+### `get_file_ptr : Std::IO::IOHandle -> Std::IO Std::Ptr`
 
 Gets pointer to C's `FILE` value from an `IOHandle`.
 
@@ -2308,12 +2314,6 @@ Instead you should close `IOHandle` by `IO::close_file`.
 
 NOTE:
 If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
-
-### `from_file_ptr : Std::Ptr -> Std::IO::IOHandle`
-
-Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
-
-Creating two `IOHandle`s from a single file pointer is forbidden.
 
 ### `mod__data : (Std::FFI::Destructor Std::Ptr -> Std::FFI::Destructor Std::Ptr) -> Std::IO::IOHandle -> Std::IO::IOHandle`
 

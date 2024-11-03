@@ -490,7 +490,7 @@ namespace IO {
 
     // Prints a string to stderr.
     eprint : String -> IO ();
-    eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.file_ptr]);; pure();
+    eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stderr.
     eprintln : String -> IO ();
@@ -555,7 +555,7 @@ namespace IO {
 
     // Checks if an `IOHandle` reached to the EOF.
     is_eof : IOHandle -> IO Bool;
-    is_eof = |handle| FFI_CALL_IO[I32 feof(Ptr), *handle.file_ptr].map(|res| res != 0_I32);
+    is_eof = |handle| FFI_CALL_IO[I32 feof(Ptr), *handle.get_file_ptr].map(|res| res != 0_I32);
 
     // Loop on lines read from an `IOHandle`.
     // 
@@ -611,7 +611,7 @@ namespace IO {
 
     // Prints a string to stdout.
     print : String -> IO ();
-    print = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.file_ptr]);; pure();
+    print = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stdout.
     println : String -> IO ();
@@ -649,20 +649,25 @@ namespace IO {
 
     // Reads at most n bytes from an IOHandle.
     read_n_bytes : IOHandle -> I64 -> IOFail (Array U8);
-    read_n_bytes = |handle, n| IOFail { _data : IO::from_runner $ |io| (
+    read_n_bytes = |handle, n| IOFail::from_io_result $ do {
+        // Get the file pointer.
+        let file_ptr = *handle.get_file_ptr;
+
+        // Read n bytes into a buffer.
         let buf = Array::empty(n);
-        let (io, len) = buf.borrow_ptr(|ptr| (
-            FFI_CALL_IOS[I64 fread(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr, io]
-        ));
+        let (buf, len) = buf.unsafe_mutate_boxed(|buf| FFI_CALL_IO[I64 fread(Ptr, I64, I64, Ptr), buf, 1, n, file_ptr]);
+
         // Check error.
-        let (io, err) = FFI_CALL_IOS[I32 ferror(Ptr), handle._file_ptr, io];
+        let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
         if err != 0_I32 { 
-            let err = "Std::IO::read_n_bytes failed!: some error occurred in fread.";
-            (io, Result::err(err))
+            let err = "Std::IO::read_n_bytes failed!: Some error occurred in `fread`.";
+            pure $ Result::err(err)
         };
+
+        // Return the result.
         let buf = buf._unsafe_set_size(len);
-        (io, Result::ok(buf))
-    )};
+        pure $ Result::ok(buf)
+    };
 
     // Reads all characters from an IOHandle.
     read_string : IOHandle -> IOFail String;
@@ -774,7 +779,7 @@ namespace IO::IOHandle {
     // Instead you should close `IOHandle` by `IO::close_file`.
     //
     // DEPRECATED: 
-    // Use `file_ptr` instead.
+    // Use `get_file_ptr` instead.
     // This function is deprecated because it has a pure function interface, but the value of `_file_ptr` changes by calling `IO::close_file`.
     _file_ptr : IOHandle -> Ptr;
     _file_ptr = |handle| handle.@_data.borrow(|handle_ptr| FFI_CALL[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]);
@@ -789,8 +794,8 @@ namespace IO::IOHandle {
     // 
     // NOTE: 
     // If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
-    file_ptr : IOHandle -> IO Ptr;
-    file_ptr = |handle| handle.@_data.borrow_io(|handle_ptr| FFI_CALL_IO[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]);
+    get_file_ptr : IOHandle -> IO Ptr;
+    get_file_ptr = |handle| handle.@_data.borrow_io(|handle_ptr| FFI_CALL_IO[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]);
 
     // Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
     // 
