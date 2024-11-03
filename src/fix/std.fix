@@ -626,11 +626,7 @@ namespace IO {
 
     // Prints a string followed by a newline to stdout.
     println : String -> IO ();
-    println = |str| (
-        print(str);;
-        print("\n");;
-        pure()
-    );
+    println = |str| print(str + "\n");
 
     // Raads all characters from a file.
     read_file_string : Path -> IOFail String;
