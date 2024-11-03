@@ -707,14 +707,15 @@ namespace IO {
 
     // Writes a byte array into an IOHandle.
     write_bytes : IOHandle -> Array U8 -> IOFail ();
-    write_bytes = |handle, array| IOFail { _data : IO::from_runner $ |io| (
-        array.borrow_ptr(|ptr| (
-            let n = array.get_size;
-            let (io, res) = FFI_CALL_IOS[I64 fwrite(Ptr, I64, I64, Ptr), ptr, 1, n, handle._file_ptr, io];
-            if res < n { (io, Result::err $ "Std::IO::write_bytes failed!: some error occurred in fwrite.") };
-            (io, Result::ok())
-        ))
-    )};
+    write_bytes = |handle, array| IOFail::from_io_result $ do {
+        let file_ptr = *handle.get_file_ptr;
+        let arr_size = array.get_size;
+        array.borrow_ptr_io(|array_buf|
+            let written = *FFI_CALL_IO[I64 fwrite(Ptr, I64, I64, Ptr), array_buf, 1, arr_size, file_ptr];
+            if written < arr_size { pure $ Result::err $ "Std::IO::write_bytes failed!: some error occurred in fwrite." };
+            pure $ Result::ok()
+        )
+    };
 
     // Writes a byte array into a file.
     write_file_bytes : Path -> Array U8 -> IOFail ();
