@@ -426,6 +426,10 @@ namespace FFI {
         borrow : (a -> b) -> Destructor a -> b;
         borrow = |worker, dtor| dtor.do_with_retained(|dtor| worker(dtor.@_value));
 
+        // Performs an IO action borrowing the contained value.
+        borrow_io : (a -> IO b) -> Destructor a -> IO b;
+        borrow_io = |act, dtor| IO::from_runner $ |ios| dtor.borrow(|val| (act(val).@runner)(ios));
+
         // Make a destructor value.
         make : a -> (a -> IO a) -> Destructor a;
         make = |val, dtor| Destructor { _value : val, dtor : dtor };
@@ -482,23 +486,15 @@ namespace IO {
     // 
     // Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
     close_file : IOHandle -> IO ();
-    close_file = |handle| (
-        IO::from_runner $ |ios| (
-            handle.@_data.borrow(|handle_ptr| FFI_CALL_IOS[() fixruntime_iohandle_close(Ptr), handle_ptr, ios])
-        )
-    );
+    close_file = |handle| handle.@_data.borrow_io(|handle_ptr| FFI_CALL_IO[() fixruntime_iohandle_close(Ptr), handle_ptr]);
 
     // Prints a string to stderr.
     eprint : String -> IO ();
-    eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, stderr._file_ptr]);; pure();
+    eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.file_ptr]);; pure();
 
     // Prints a string followed by a newline to stderr.
     eprintln : String -> IO ();
-    eprintln = |str| (
-        eprint(str);;
-        eprint("\n");;
-        pure()
-    );
+    eprintln = |str| eprint(str + "\n");
 
     // Exits the program with an error code.
     exit : I64 -> IO a;
@@ -773,20 +769,45 @@ namespace IO {
     // A handle type for read / write operations on files, stdin, stdout, stderr.
     // 
     // You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`. 
-    // 
     // There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
+    // 
+    // `IOHandle` is different from C's `FILE` structure in that it is safe to close it twice.
+    // If you try to get a file pointer by `file_ptr` from a closed `IOHandle`, you will get `nullptr`.
+    //
+    // NOTE: 
+    // `IOHandle` is implemented by `Destructor`, but the destructor function does not close the file pointer.
+    // (The destructor function only frees the management memory area.)
+    // You should explicitly close the file pointer by `IO::close_file`.
     type IOHandle = unbox struct { _data : Destructor Ptr };
 }
 
 namespace IO::IOHandle {
     // Gets pointer to C's `FILE` value from an `IOHandle`.
+    //
+    // If the `IOHandle` is already closed, the function returns `nullptr`.
     // 
-    // DO NOT call `fclose` on the pointer returned by this function.
-    // To close an `IOHandle`, use `IO::close_file`.
+    // NOTE: 
+    // Do not directly close the file pointer by `fclose` or other functions.
+    // Instead you should close `IOHandle` by `IO::close_file`.
+    //
+    // DEPRECATED: 
+    // Use `file_ptr` instead.
+    // This function is deprecated because it has a pure function interface, but the value of `_file_ptr` changes by calling `IO::close_file`.
     _file_ptr : IOHandle -> Ptr;
-    _file_ptr = |handle| handle.@_data.borrow(|handle_ptr| 
-        FFI_CALL[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]
-    );
+    _file_ptr = |handle| handle.@_data.borrow(|handle_ptr| FFI_CALL[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]);
+
+    // Gets pointer to C's `FILE` value from an `IOHandle`.
+    //
+    // If the `IOHandle` is already closed, the function returns `nullptr`.
+    // 
+    // NOTE: 
+    // Do not directly close the file pointer by `fclose` or other functions.
+    // Instead you should close `IOHandle` by `IO::close_file`.
+    // 
+    // NOTE: 
+    // If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
+    file_ptr : IOHandle -> IO Ptr;
+    file_ptr = |handle| handle.@_data.borrow_io(|handle_ptr| FFI_CALL_IO[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]);
 
     // Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
     // 
@@ -2322,12 +2343,14 @@ namespace Debug {
     // Prints a string to the specified stream and flushes the stream.
     // 
     // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    // 
+    // TODO: implement this using `IO::unsafe_perform`.
     _debug_print_to_stream : IOHandle -> String -> ();
-    _debug_print_to_stream = |hdl, msg| (
+    _debug_print_to_stream = |handle, msg| (
         msg.borrow_c_str(|str| (
-            let hdl = hdl._file_ptr;
-            let _ = FFI_CALL[I32 fputs(Ptr, Ptr), str, hdl];
-            let _ = FFI_CALL[I32 fflush(Ptr), hdl];
+            let handle_ptr = handle._file_ptr;
+            let _ = FFI_CALL[I32 fputs(Ptr, Ptr), str, handle_ptr];
+            let _ = FFI_CALL[I32 fflush(Ptr), handle_ptr];
             ()
         ))
     );

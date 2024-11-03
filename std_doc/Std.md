@@ -220,8 +220,19 @@ The type for I/O actions which may fail.
 A handle type for read / write operations on files, stdin, stdout, stderr.
 
 You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
+You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
+
+You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
 
 There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
+
+`IOHandle` is different from C's `FILE` structure in that it is safe to close it twice.
+If you try to get a file pointer by `_file_ptr` from a closed `IOHandle`, you will get `nullptr`.
+
+NOTE:
+`IOHandle` is implemented by `Destructor`, but the destructor function does not close the file pointer.
+(The destructor function only frees the management memory area.)
+You should explicitly close the file pointer by `IO::close_file`.
 
 #### field `_data : Std::FFI::Destructor Std::Ptr`
 
@@ -1113,6 +1124,8 @@ Prints a string to the specified stream and flushes the stream.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
+TODO: implement this using `IO::unsafe_perform`.
+
 ### `assert : (() -> Std::String) -> Std::Bool -> Std::IO ()`
 
 Asserts that a condition (boolean value) is true.
@@ -1539,6 +1552,10 @@ Borrow the contained value.
 
 It is guaranteed that the `dtor` is alive during the call of `worker`.
 In other words, the `worker` receives the contained value for which the destructor is not called yet.
+
+### `borrow_io : (a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO b`
+
+Performs an IO action borrowing the contained value.
 
 ### `make : a -> (a -> Std::IO a) -> Std::FFI::Destructor a`
 
@@ -2269,12 +2286,32 @@ Retrieves the field `_data` from a value of `IOHandle`.
 
 Gets pointer to C's `FILE` value from an `IOHandle`.
 
-DO NOT call `fclose` on the pointer returned by this function.
-To close an `IOHandle`, use `IO::close_file`.
+If the `IOHandle` is already closed, the function returns `nullptr`.
+
+NOTE:
+Do not directly close the file pointer by `fclose` or other functions.
+Instead you should close `IOHandle` by `IO::close_file`.
+
+DEPRECATED:
+Use `file_ptr` instead.
+This function is deprecated because it has a pure function interface, but the value of `_file_ptr` changes by calling `IO::close_file`.
 
 ### `act__data : [f : Std::Functor] (Std::FFI::Destructor Std::Ptr -> f (Std::FFI::Destructor Std::Ptr)) -> Std::IO::IOHandle -> f Std::IO::IOHandle`
 
 Updates a value of `IOHandle` by applying a functorial action to field `_data`.
+
+### `file_ptr : Std::IO::IOHandle -> Std::IO Std::Ptr`
+
+Gets pointer to C's `FILE` value from an `IOHandle`.
+
+If the `IOHandle` is already closed, the function returns `nullptr`.
+
+NOTE:
+Do not directly close the file pointer by `fclose` or other functions.
+Instead you should close `IOHandle` by `IO::close_file`.
+
+NOTE:
+If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
 
 ### `from_file_ptr : Std::Ptr -> Std::IO::IOHandle`
 
