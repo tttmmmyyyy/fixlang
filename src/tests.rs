@@ -5972,14 +5972,14 @@ pub fn test_c_type_aliases() {
 }
 
 #[test]
-pub fn test_unsafe_mutate_boxed_io() {
+pub fn test_mutate_boxed_io() {
     let source = r##"
         module Main;
                 
         main: IO ();
         main = (
             let x : Boxed I32 = Boxed { value : 0_I32 };
-            let (x, _) = *x.unsafe_mutate_boxed_io(|ptr| IO::from_runner $ |ios|
+            let (x, _) = *x.mutate_boxed_io(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
                     FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
                 )

@@ -543,14 +543,14 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_ffi_unsafe_get_boxed_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "unsafe_mutate_boxed"),
-        get_unsafe_mutate_boxed(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "mutate_boxed"),
+        get_mutate_boxed(),
         None,
         Some(include_str!("./docs/std_ffi_unsafe_mutate_boxed.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "unsafe_mutate_boxed_ios"),
-        get_unsafe_mutate_boxed_ios(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "mutate_boxed_ios"),
+        get_mutate_boxed_ios(),
         None,
         Some(include_str!("./docs/std_ffi_unsafe_mutate_boxed_ios.md").to_string()),
     ));

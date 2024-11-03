@@ -1431,10 +1431,8 @@ At the moment, it is not specified what pointer is returned for a union, so do n
 The difference from `unsafe_get_retained_ptr_of_boxed_value` is that this function returns a pointer to region where the payload of a boxed value is stored;
 on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to the boxed value itself (i.e., the control block of the value).
 
-Note that if the call `v._unsafe_get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
-To avoid issues caused by this, use `unsafe_borrow_boxed` instead.
-
-This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
+NOTE: This function is unsafe in that if the call `v._unsafe_get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
+To avoid issues caused by this, use `borrow_boxed` instead.
 
 ### `clear_errno : Std::IO ()`
 
@@ -1444,7 +1442,32 @@ Sets errno to zero.
 
 Gets errno which is set by C functions.
 
-### `unsafe_borrow_boxed : (Std::Ptr -> b) -> a -> b`
+### `mutate_boxed : (Std::Ptr -> Std::IO b) -> a -> (a, b)`
+
+`x.mutate_boxed(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of ``io(ptr)``.
+
+The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
+Do not perform any IO operations other than mutating the value of `x`.
+
+This function first clones the value if `x` is not unique.
+
+At the moment, it is not specified what pointer is obtained for a union, so do not use this function with unions.
+
+This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
+
+### `mutate_boxed_io : (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
+
+`x.mutate_boxed_io(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of `io(ptr)`.
+
+Similar to `mutate_boxed`, but this function is used when you want to run the IO action in the existing IO context.
+
+For more details, see the document of `mutate_boxed`.
+
+### `mutate_boxed_ios : (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
+
+Internal implementation of the `mutate_boxed_io` function.
+
+### `borrow_boxed : (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
@@ -1495,32 +1518,7 @@ To get back the boxed value from the retained pointer, use `unsafe_get_boxed_val
 To release / retain the value in a foreign language, call the function pointer obtained by `unsafe_get_release_function_of_boxed_value` or `unsafe_get_retain_function_of_boxed_value` on the pointer.
 
 Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
-If you want to get a pointer to the data of the boxed value, use `unsafe_borrow_boxed`.
-
-### `unsafe_mutate_boxed : (Std::Ptr -> Std::IO b) -> a -> (a, b)`
-
-`x.unsafe_mutate_boxed(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of ``io(ptr)``.
-
-The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
-Do not perform any IO operations other than mutating the value of `x`.
-
-This function first clones the value if `x` is not unique.
-
-At the moment, it is not specified what pointer is obtained for a union, so do not use this function with unions.
-
-This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
-
-### `unsafe_mutate_boxed_io : (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
-
-`x.unsafe_mutate_boxed_io(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of `io(ptr)`.
-
-Similar to `unsafe_mutate_boxed`, but this function is used when you want to run the IO action in the existing IO context.
-
-For more details, see the document of `unsafe_mutate_boxed`.
-
-### `unsafe_mutate_boxed_ios : (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
-
-Internal implementation of the `unsafe_mutate_boxed_io` function.
+If you want to get a pointer to the data of the boxed value, use `borrow_boxed`.
 
 ## `namespace Std::FFI::Destructor`
 

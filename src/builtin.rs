@@ -4427,7 +4427,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 
         // If `val` is not boxed, error.
         if !val.is_box(gc.type_env()) {
-            error_exit("`Std::FFI::unsafe_mutate_boxed` can only be called on a boxed value.")
+            error_exit("`Std::FFI::mutate_boxed` can only be called on a boxed value.")
         }
 
         // Before mutating the value, force uniqueness of the value.
@@ -4461,7 +4461,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 }
 
 // mutate_boxed_data : (Ptr -> IO b) -> a -> (a, b)
-pub fn get_unsafe_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn get_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_A_NAME: &str = "a";
     const TYPE_B_NAME: &str = "b";
     const IO_ACT_NAME: &str = "a";
@@ -4490,7 +4490,7 @@ pub fn get_unsafe_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
                     },
                 ),
                 vec![FullName::local(VAL_NAME), FullName::local(IO_ACT_NAME)],
-                format!("unsafe_mutate_boxed({})", VAL_NAME),
+                format!("mutate_boxed({})", VAL_NAME),
                 res_ty,
                 None,
             ),
@@ -4523,7 +4523,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
 
         // If `val` is not boxed, error.
         if !val.is_box(gc.type_env()) {
-            error_exit("`Std::FFI::unsafe_mutate_boxed_ios` can only be called on a boxed value.")
+            error_exit("`Std::FFI::mutate_boxed_ios` can only be called on a boxed value.")
         }
 
         // Before mutating the value, force uniqueness of the value.
@@ -4565,8 +4565,8 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
     }
 }
 
-// unsafe_mutate_boxed_ios : (Ptr -> IO b) -> a -> IOState -> (IOState, (a, b))
-pub fn get_unsafe_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
+// mutate_boxed_ios : (Ptr -> IO b) -> a -> IOState -> (IOState, (a, b))
+pub fn get_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const VAL_TYPE_NAME: &str = "a";
     const IO_RES_TYPE_NAME: &str = "b";
     const IO_ACT_NAME: &str = "a";
@@ -4606,7 +4606,7 @@ pub fn get_unsafe_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
                 FullName::local(IOSTATE_NAME),
             ],
             format!(
-                "unsafe_mutate_boxed_ios({}, {}, {})",
+                "mutate_boxed_ios({}, {}, {})",
                 IO_ACT_NAME, VAL_NAME, IOSTATE_NAME
             ),
             ret_ty,
