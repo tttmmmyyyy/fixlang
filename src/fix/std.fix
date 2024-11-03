@@ -595,22 +595,18 @@ namespace IO {
         loop_lines_io(handle, next_state, worker)
     );
 
-    // Openes a file. The second argument is a mode string for `fopen` C function. 
+    // Openes a file. The second argument is a mode string for `fopen` C function.
     open_file : Path -> String -> IOFail IOHandle;
     open_file = |path, mode| (
-        IOFail { _data  : IO::from_runner $ |io| (
-            let path_str = path.to_string;
-            path_str.borrow_c_str(|path_ptr|
-                mode.borrow_c_str(|mode_str|
-                    let (io, file_ptr) = FFI_CALL_IOS[Ptr fopen(Ptr, Ptr), path_ptr, mode_str, io];
-                    if file_ptr == nullptr { 
-                        (io, Result::err $ "Failed to open a file: " + path_str)
-                    } else {
-                        (io, Result::ok $ IOHandle::from_file_ptr $ file_ptr)
-                    }
-                )
-            )
-        ) }
+        let path = path.to_string;
+        IOFail::from_io_result $ path.borrow_c_str_io(|path_ptr| mode.borrow_c_str_io(|mode_ptr|
+            let file_ptr = *FFI_CALL_IO[Ptr fopen(Ptr, Ptr), path_ptr, mode_ptr];
+            if file_ptr == nullptr { 
+                pure $ Result::err $ "Failed to open a file: " + path
+            } else {
+                pure $ Result::ok $ IOHandle::from_file_ptr $ file_ptr
+            }
+        ))
     );
 
     // Prints a string to stdout.
