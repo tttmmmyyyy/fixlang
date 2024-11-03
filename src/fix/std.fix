@@ -794,10 +794,7 @@ namespace IO::IOHandle {
     from_file_ptr : Ptr -> IOHandle;
     from_file_ptr = |file_ptr| (
         let handle_ptr = FFI_CALL[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
-        let dtor = |handle_ptr| IO::from_runner $ |ios| (
-            let (ios, _) = FFI_CALL_IOS[() fixruntime_iohandle_delete(Ptr), handle_ptr, ios];
-            (ios, nullptr)
-        );
+        let dtor = |handle_ptr| FFI_CALL_IO[() fixruntime_iohandle_delete(Ptr), handle_ptr];; pure $ nullptr;
         IOHandle { _data : Destructor::make(handle_ptr, dtor) }
     );
 }
