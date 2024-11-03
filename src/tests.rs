@@ -6288,7 +6288,7 @@ pub fn test_read_file_after_close() {
             let line = *read_line(fh);
             println(line).lift
         }.try(|msg|
-            assert_eq(|_|"", msg, "Std::IO::_read_line_inner failed!: the IOHandle is already closed.");;
+            assert_eq(|_|"", msg, "`Std::IO::_read_line_inner` failed!: the IOHandle is already closed.");;
             pure()
         );
     "##;
