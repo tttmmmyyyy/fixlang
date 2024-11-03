@@ -445,41 +445,39 @@ namespace IO {
     // If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
     _read_line_inner : Bool -> IOHandle -> IOFail String;
     _read_line_inner = |upto_newline, handle| (
-        IOFail { _data : IO::from_runner $ |ios| (
-            let file_ptr = handle._file_ptr;
+        IOFail::from_io_result $ do {
+            let file_ptr = *handle.get_file_ptr;
             if file_ptr == nullptr {
-                let res = Result::err("Std::IO::_read_line_inner failed!: the IOHandle is already closed.");
-                (ios, res)
+                pure $ Result::err("`Std::IO::_read_line_inner` failed!: the IOHandle is already closed.")
             };
-            loop((ios, ""), |(ios, str)|
+            loop_m("", |str|
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
-                let (ios, (buf, fgets_res)) = mutate_boxed_ios(|buf_ptr| (
-                    IO::from_runner $ |ios| FFI_CALL_IOS[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.to_I32, file_ptr, ios]
-                ), buf, ios);
-                if fgets_res == nullptr { 
-                    let (ios, err) = FFI_CALL_IOS[I32 ferror(Ptr), file_ptr, ios];
+                let (buf, fgets_res) = *buf.mutate_boxed_io(|buf_ptr| (
+                    FFI_CALL_IO[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.to_I32, file_ptr]
+                ));
+                if fgets_res == nullptr {
+                    let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
                     if err != 0_I32 { 
-                        let err = "Std::IO::_read_line_inner failed!: an error occurred in fgets.";
-                        break $ (ios, Result::err(err))
+                        let err = "`Std::IO::_read_line_inner` failed!: an error occurred in `fgets`.";
+                        break_m $ Result::err(err)
                     } else {
-                        break $ (ios, Result::ok(str))
+                        break_m $ Result::ok(str)
                     }
                 };
-                let (ios, strlen) = FFI_CALL_IOS[I64 strlen(Ptr), buf._unsafe_get_boxed_ptr, ios];
-                let buf = buf._unsafe_set_size(strlen + 1);
-                let read = String { _data : buf };
-                let str = str + read;
+                let str = str + String::_unsafe_from_c_str(buf);
                 if upto_newline {
                     // If the last character is \n, break.
-                    let last_byte = buf.@(strlen-1);
-                    if last_byte == '\n' { break $ (ios, Result::ok(str)) };
-                    continue $ (ios, str)
+                    let last_byte = str.get_last_byte.as_some;
+                    if last_byte == '\n' { 
+                        break_m $ Result::ok(str)
+                    };
+                    continue_m $ str
                 } else {
-                    continue $ (ios, str)
+                    continue_m $ str
                 }
             )
-        ) }
+        }
     );
 
     // Closes a file.
