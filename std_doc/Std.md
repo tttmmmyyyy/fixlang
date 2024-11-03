@@ -220,14 +220,10 @@ The type for I/O actions which may fail.
 A handle type for read / write operations on files, stdin, stdout, stderr.
 
 You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
-You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
-
-You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
-
 There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
 
 `IOHandle` is different from C's `FILE` structure in that it is safe to close it twice.
-If you try to get a file pointer by `_file_ptr` from a closed `IOHandle`, you will get `nullptr`.
+If you try to get a file pointer by `file_ptr` from a closed `IOHandle`, you will get `nullptr`.
 
 NOTE:
 `IOHandle` is implemented by `Destructor`, but the destructor function does not close the file pointer.

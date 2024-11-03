@@ -615,14 +615,7 @@ namespace IO {
 
     // Prints a string to stdout.
     print : String -> IO ();
-    print = |str| (
-        IO::from_runner $ |io| (
-            str.borrow_c_str(|c_ptr|
-                let (io, _) = FFI_CALL_IOS[I32 fputs(Ptr, Ptr), c_ptr, stdout._file_ptr, io];
-                (io, ())
-            )
-        )
-    );
+    print = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.file_ptr]);; pure();
 
     // Prints a string followed by a newline to stdout.
     println : String -> IO ();
