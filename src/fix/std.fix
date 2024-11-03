@@ -555,9 +555,7 @@ namespace IO {
 
     // Checks if an `IOHandle` reached to the EOF.
     is_eof : IOHandle -> IO Bool;
-    is_eof = |handle| (
-        IO::from_runner $ |io| let (io, res) = FFI_CALL_IOS[I32 feof(Ptr), handle._file_ptr, io]; (io, res != 0_I32) // Should we borrow file_ptr?
-    );
+    is_eof = |handle| FFI_CALL_IO[I32 feof(Ptr), *handle.file_ptr].map(|res| res != 0_I32);
 
     // Loop on lines read from an `IOHandle`.
     // 
