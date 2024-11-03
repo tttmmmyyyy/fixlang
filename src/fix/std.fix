@@ -660,7 +660,7 @@ namespace IO {
         // Check error.
         let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
         if err != 0_I32 { 
-            let err = "Std::IO::read_n_bytes failed!: Some error occurred in `fread`.";
+            let err = "`Std::IO::read_n_bytes` failed!: Some error occurred in `fread`.";
             pure $ Result::err(err)
         };
 
@@ -712,7 +712,7 @@ namespace IO {
         let arr_size = array.get_size;
         array.borrow_ptr_io(|array_buf|
             let written = *FFI_CALL_IO[I64 fwrite(Ptr, I64, I64, Ptr), array_buf, 1, arr_size, file_ptr];
-            if written < arr_size { pure $ Result::err $ "Std::IO::write_bytes failed!: some error occurred in fwrite." };
+            if written < arr_size { pure $ Result::err $ "`Std::IO::write_bytes` failed!: some error occurred in `fwrite`." };
             pure $ Result::ok()
         )
     };
@@ -727,14 +727,14 @@ namespace IO {
 
     // Writes a string into an IOHandle.
     write_string : IOHandle -> String -> IOFail ();
-    write_string = |handle, content| IOFail {_data : IO::from_runner $ |io| (
-        content.borrow_c_str(|c_str| (
-            let file_ptr = handle._file_ptr;
-            let (io, res) = FFI_CALL_IOS[I32 fputs(Ptr, Ptr), c_str, handle._file_ptr, io];
-            if res < 0_I32 { (io, Result::err $ "Std::IO::write_string failed!: some error occurred in fputs.") };
-            (io, Result::ok())
-        ))
-    )};
+    write_string = |handle, content| IOFail::from_io_result $ do {
+        let file_ptr = *handle.get_file_ptr;
+        content.borrow_c_str_io(|c_str|
+            let res = *FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, file_ptr];
+            if res < 0_I32 { pure $ Result::err $ "`Std::IO::write_string` failed!: some error occurred in fputs." };
+            pure $ Result::ok()
+        )
+    };
 }
 
 impl IO : Functor {
