@@ -1434,6 +1434,12 @@ on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to
 NOTE: This function is unsafe in that if the call `v._unsafe_get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
 To avoid issues caused by this, use `borrow_boxed` instead.
 
+### `borrow_boxed : (Std::Ptr -> b) -> a -> b`
+
+Borrows a pointer to the data of a boxed value.
+
+For more details, see the document of `_unsafe_get_boxed_ptr`.
+
 ### `clear_errno : Std::IO ()`
 
 Sets errno to zero.
@@ -1466,12 +1472,6 @@ For more details, see the document of `mutate_boxed`.
 ### `mutate_boxed_ios : (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
 
 Internal implementation of the `mutate_boxed_io` function.
-
-### `borrow_boxed : (Std::Ptr -> b) -> a -> b`
-
-Borrows a pointer to the data of a boxed value.
-
-For more details, see the document of `_unsafe_get_boxed_ptr`.
 
 ### `unsafe_get_boxed_value_from_retained_ptr : Std::Ptr -> a`
 
