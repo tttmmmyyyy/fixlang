@@ -397,6 +397,10 @@ namespace FFI {
     borrow_boxed : (Ptr -> b) -> a -> b;
     borrow_boxed = |act, val| val.do_with_retained(|val| act(val._unsafe_get_boxed_ptr));
 
+    // Performs an IO action borrowing a pointer to the data of a boxed value.
+    borrow_boxed_io : (Ptr -> IO b) -> a -> IO b;
+    borrow_boxed_io = |act, val| IO::from_runner $ |ios| val.borrow_boxed(|ptr| (act(ptr).@runner)(ios));
+
     // Gets errno which is set by C functions.
     get_errno : IO CInt;
     get_errno = FFI_CALL_IO[CInt fixruntime_get_errno()];
