@@ -115,7 +115,7 @@ The type of punched arrays.
 A punched array is an array from which a certain element has been removed.
 This is used in the implementation of `Array::act`.
 
-#### field `_data : Std::FFI::Destructor (Std::Array a)`
+#### field `_arr : Std::Array a`
 
 #### field `idx : Std::I64`
 
@@ -1440,6 +1440,10 @@ Borrows a pointer to the data of a boxed value.
 
 For more details, see the document of `_unsafe_get_boxed_ptr`.
 
+### `borrow_boxed_io : (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
+
+Performs an IO action borrowing a pointer to the data of a boxed value.
+
 ### `clear_errno : Std::IO ()`
 
 Sets errno to zero.
@@ -2672,25 +2676,25 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 
 ## `namespace Std::PunchedArray`
 
-### `@_data : Std::PunchedArray a -> Std::FFI::Destructor (Std::Array a)`
+### `@_arr : Std::PunchedArray a -> Std::Array a`
 
-Retrieves the field `_data` from a value of `PunchedArray`.
+Retrieves the field `_arr` from a value of `PunchedArray`.
 
 ### `@idx : Std::PunchedArray a -> Std::I64`
 
 Retrieves the field `idx` from a value of `PunchedArray`.
 
-### `act__data : [f : Std::Functor] (Std::FFI::Destructor (Std::Array a) -> f (Std::FFI::Destructor (Std::Array a))) -> Std::PunchedArray a -> f (Std::PunchedArray a)`
+### `act__arr : [f : Std::Functor] (Std::Array a -> f (Std::Array a)) -> Std::PunchedArray a -> f (Std::PunchedArray a)`
 
-Updates a value of `PunchedArray` by applying a functorial action to field `_data`.
+Updates a value of `PunchedArray` by applying a functorial action to field `_arr`.
 
 ### `act_idx : [f : Std::Functor] (Std::I64 -> f Std::I64) -> Std::PunchedArray a -> f (Std::PunchedArray a)`
 
 Updates a value of `PunchedArray` by applying a functorial action to field `idx`.
 
-### `mod__data : (Std::FFI::Destructor (Std::Array a) -> Std::FFI::Destructor (Std::Array a)) -> Std::PunchedArray a -> Std::PunchedArray a`
+### `mod__arr : (Std::Array a -> Std::Array a) -> Std::PunchedArray a -> Std::PunchedArray a`
 
-Updates a value of `PunchedArray` by applying a function to field `_data`.
+Updates a value of `PunchedArray` by applying a function to field `_arr`.
 
 ### `mod_idx : (Std::I64 -> Std::I64) -> Std::PunchedArray a -> Std::PunchedArray a`
 
@@ -2700,9 +2704,9 @@ Updates a value of `PunchedArray` by applying a function to field `idx`.
 
 Plug in an element to a punched array to get back an array.
 
-### `set__data : Std::FFI::Destructor (Std::Array a) -> Std::PunchedArray a -> Std::PunchedArray a`
+### `set__arr : Std::Array a -> Std::PunchedArray a -> Std::PunchedArray a`
 
-Updates a value of `PunchedArray` by setting field `_data` to a specified one.
+Updates a value of `PunchedArray` by setting field `_arr` to a specified one.
 
 ### `set_idx : Std::I64 -> Std::PunchedArray a -> Std::PunchedArray a`
 
