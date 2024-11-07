@@ -459,11 +459,10 @@ namespace FFI {
                 let res = *action(val);
                 pure $ (dtor, res)
             } else {
-                // TODO: should use do_with_retained_io or act__value here.
-                let Destructor { _value : val, dtor : dtor } = dtor;
+                let val = dtor.@_value;
                 let val = *ctor(val);
                 let res = *action(val);
-                let dtor = Destructor::make(val, dtor);
+                let dtor = Destructor::make(val, dtor.@dtor);
                 pure $ (dtor, res)
             }
         );
