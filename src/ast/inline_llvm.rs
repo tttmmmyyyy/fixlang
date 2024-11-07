@@ -74,6 +74,7 @@ pub enum LLVMGenerator {
     UnsafeMutateBoxedDataFunctionBody(InlineLLVMUnsafeMutateBoxedDataFunctionBody),
     UnsafeMutateBoxedDataIOStateFunctionBody(InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody),
     ArrayUnsafeGetLinearFunctionBody(InlineLLVMArrayUnsafeGetLinearFunctionBody),
+    UnsafePerformFunctionBody(InlineLLVMUnsafePerformFunctionBody),
 }
 
 impl LLVMGenerator {
@@ -160,6 +161,7 @@ impl LLVMGenerator {
                 x.generate(gc, ty, rvo, bvs)
             }
             LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::UnsafePerformFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
         }
     }
 

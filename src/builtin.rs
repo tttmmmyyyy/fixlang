@@ -4445,7 +4445,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 
         // Run the IO action.
         let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], None);
-        let io_res = run_io_value(gc, &io_act);
+        let io_res = run_io_value(gc, &io_act, None);
 
         // Construct the return value.
         let res = if let Some(rvo) = rvo {
@@ -4541,7 +4541,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
 
         // Run the IO action.
         let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], None);
-        let io_res = run_io_value(gc, &io_act);
+        let io_res = run_io_value(gc, &io_act, None);
 
         // Construct the return value.
         let pair_ab = allocate_obj(
@@ -4616,8 +4616,55 @@ pub fn get_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMUnsafePerformFunctionBody {
+    io_act_name: String,
+}
+
+impl InlineLLVMUnsafePerformFunctionBody {
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ret_ty: &Arc<TypeNode>,
+        rvo: Option<Object<'c>>,
+        _borrowed_vars: &Vec<FullName>,
+    ) -> Object<'c> {
+        // Get arguments.
+        let io_act = gc.get_var(&FullName::local(&self.io_act_name)).ptr.get(gc);
+
+        // Run the IO action.
+        run_io_value(gc, &io_act, rvo)
+    }
+}
+
+// unsafe_perform : IO a -> a
+pub fn get_unsafe_perform() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const VAL_TYPE_NAME: &str = "a";
+    const IO_ACT_NAME: &str = "act";
+    let val_ty = type_tyvar(VAL_TYPE_NAME, &kind_star());
+    let io_ty = type_tyapp(make_io_ty(), val_ty.clone());
+    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(io_ty, val_ty.clone()));
+    let expr = expr_abs_many(
+        vec![var_local(IO_ACT_NAME)],
+        expr_llvm(
+            LLVMGenerator::UnsafePerformFunctionBody(InlineLLVMUnsafePerformFunctionBody {
+                io_act_name: IO_ACT_NAME.to_string(),
+            }),
+            vec![FullName::local(IO_ACT_NAME)],
+            format!("unsafe_perform({})", IO_ACT_NAME,),
+            val_ty,
+            None,
+        ),
+    );
+    (expr, scm)
+}
+
 // Run an IO runner in the IO monad and return the result.
-pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<'c>) -> Object<'c> {
+pub fn run_io_value<'b, 'm, 'c>(
+    gc: &mut GenerationContext<'c, 'm>,
+    io: &Object<'c>,
+    rvo: Option<Object<'c>>,
+) -> Object<'c> {
     let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
     let runner = io.load_field_nocap(gc, 0);
     let runner_ty = type_fun(
@@ -4627,7 +4674,7 @@ pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<
     let runner_obj = Object::create_from_value(runner, runner_ty, gc);
     let ios = allocate_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
     let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios], None);
-    ObjectFieldType::get_struct_fields(gc, &ios_res_pair, vec![(1, None)])
+    ObjectFieldType::get_struct_fields(gc, &ios_res_pair, vec![(1, rvo)])
         .into_iter()
         .next()
         .unwrap()

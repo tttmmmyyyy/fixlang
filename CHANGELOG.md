@@ -8,6 +8,7 @@
 - Add `Std::FFI::_unsafe_get_boxed_ptr`, `Std::FFI::borrow_boxed`.
 - Add `Std::FFI::get_errno`, `Std::FFI::clear_errno`.
 - Add `act_{field} : [f : Functor] (F -> f F) -> S -> f S` for each field `{field}` of type `F` of a struct `S`, which is known as "Lens" in Haskell community.
+- Add `Std::Destructor::mutate_unique` and `Std::Destructor::mutate_unique_io`.
 - Implement `Functor` for tuple types. `map` function acts the last component of tuples.
 - Add `FFI_EXPORT` syntax. Remove `fixruntime_run_function` native function since it can be implemented using `FFI_EXPORT`.
 - Add experimental support for language server protocol.

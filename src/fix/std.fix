@@ -446,8 +446,7 @@ namespace FFI {
         // The `action` is allowed to modify the external resource stored in `dtor` (e.g., if `value` is a pointer, it can modify the value pointed by the pointer).
         // Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resource stored in `dtor`.
         mutate_unique : (a -> IO a) -> (a -> IO b) -> Destructor a -> (Destructor a, b);
-        mutate_unique = undefined("Not yet implemented.");
-        // mutate_unique = |ctr, action| mutate_unique_io(ctr, action).unsafe_perform;
+        mutate_unique = |ctr, action| mutate_unique_io(ctr, action).unsafe_perform;
 
         // Apply an IO action which mutates the semantics of the value.
         // 

@@ -1043,7 +1043,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             );
             self.retain(dtor.clone());
             let io_act = self.apply_lambda(dtor, vec![value], None);
-            let res = run_io_value(self, &io_act);
+            let res = run_io_value(self, &io_act, None);
             ObjectFieldType::set_struct_field_norelease(
                 self,
                 obj,

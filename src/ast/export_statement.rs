@@ -136,7 +136,7 @@ impl ExportStatement {
 
         // If the `fix_value` is `IO C`, then run it.
         if is_io {
-            fix_value = run_io_value(gc, &fix_value);
+            fix_value = run_io_value(gc, &fix_value, None);
         }
 
         // Return the result.

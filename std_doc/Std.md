@@ -1567,6 +1567,22 @@ Updates a value of `Destructor` by applying a function to field `_value`.
 
 Updates a value of `Destructor` by applying a function to field `dtor`.
 
+### `mutate_unique : (a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> (Std::FFI::Destructor a, b)`
+
+Apply an IO action which mutates the semantics of the value.
+
+`dtor.mutate_unique(ctor, action)` applies `action` to `dtor` if `dtor` is unique.
+If `dtor` is shared, it creates a new `Destructor` value using `ctor` and applies `action` to the new value.
+
+The `action` is allowed to modify the external resource stored in `dtor` (e.g., if `value` is a pointer, it can modify the value pointed by the pointer).
+Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resource stored in `dtor`.
+
+### `mutate_unique_io : (a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO (Std::FFI::Destructor a, b)`
+
+Apply an IO action which mutates the semantics of the value.
+
+This is similar to `mutate_unique`, but the `ctor` and `action` is executed in the context of the external `IO` context.
+
 ### `set__value : a -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
 
 Updates a value of `Destructor` by setting field `_value` to a specified one.
@@ -2209,6 +2225,8 @@ The handle for standard input.
 ### `stdout : Std::IO::IOHandle`
 
 The handle for standard output.
+
+### `unsafe_perform : Std::IO a -> a`
 
 ### `with_file : Std::Path -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
 
