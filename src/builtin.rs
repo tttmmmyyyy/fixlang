@@ -4633,15 +4633,12 @@ impl InlineLLVMUnsafePerformFunctionBody {
         let io_act = gc.get_var(&FullName::local(&self.io_act_name)).ptr.get(gc);
 
         // Run the IO action.
-        let val = run_io_value(gc, &io_act, None).value(gc);
-        let out = if let Some(rvo) = rvo {
+        let res = if let Some(rvo) = rvo {
             rvo
         } else {
             allocate_obj(ret_ty.clone(), &vec![], None, gc, None)
         };
-        out.store_unbox(gc, val);
-        out
-        // TODO: utilize rvo argument of run_io_value
+        run_io_value(gc, &io_act, Some(res))
     }
 }
 
