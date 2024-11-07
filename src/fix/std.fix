@@ -446,23 +446,24 @@ namespace FFI {
         // The `action` is allowed to modify the external resource stored in `dtor` (e.g., if `value` is a pointer, it can modify the value pointed by the pointer).
         // Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resource stored in `dtor`.
         mutate_unique : (a -> IO a) -> (a -> IO b) -> Destructor a -> (Destructor a, b);
-        mutate_unique = |ctr, action| mutate_unique_io(ctr, action).unsafe_perform;
+        mutate_unique = |ctr, action, dtor| dtor.mutate_unique_io(ctr, action).unsafe_perform;
 
         // Apply an IO action which mutates the semantics of the value.
         // 
         // This is similar to `mutate_unique`, but the `ctor` and `action` is executed in the context of the external `IO` context.
         mutate_unique_io : (a -> IO a) -> (a -> IO b) -> Destructor a -> IO (Destructor a, b);
-        mutate_unique_io = |ctor, action, dtor| IO::from_runner $ |ios| (
+        mutate_unique_io = |ctor, action, dtor| (
             let (unique, dtor) = dtor.unsafe_is_unique;
             if unique {
                 let val = dtor.@_value;
-                let res = *action(val).to_result;
+                let res = *action(val);
                 pure $ (dtor, res)
             } else {
-                let val = dtor.@_value;
+                // TODO: should use do_with_retained_io or act__value here.
+                let Destructor { _value : val, dtor : dtor } = dtor;
                 let val = *ctor(val);
                 let res = *action(val);
-                let dtor = Destructor::make(val, dtor.dtor);
+                let dtor = Destructor::make(val, dtor);
                 pure $ (dtor, res)
             }
         );

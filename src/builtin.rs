@@ -4625,7 +4625,7 @@ impl InlineLLVMUnsafePerformFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ret_ty: &Arc<TypeNode>,
+        ret_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
@@ -4633,7 +4633,15 @@ impl InlineLLVMUnsafePerformFunctionBody {
         let io_act = gc.get_var(&FullName::local(&self.io_act_name)).ptr.get(gc);
 
         // Run the IO action.
-        run_io_value(gc, &io_act, rvo)
+        let val = run_io_value(gc, &io_act, None).value(gc);
+        let out = if let Some(rvo) = rvo {
+            rvo
+        } else {
+            allocate_obj(ret_ty.clone(), &vec![], None, gc, None)
+        };
+        out.store_unbox(gc, val);
+        out
+        // TODO: utilize rvo argument of run_io_value
     }
 }
 

@@ -6551,6 +6551,27 @@ pub fn test_double_semicolon_in_let() {
 }
 
 #[test]
+pub fn test_regression_unsafe_perform_bug() {
+    let source = r##"
+        module Main;
+
+        type Wrapper = struct {
+            _0 : Boxed I64
+        };
+
+        main: IO ();
+        main = (
+            let x = do {
+                pure $ Wrapper { _0 : Boxed { value : 1234 } }
+            }.unsafe_perform;
+
+            assert_eq(|_|"", x.@_0.@value, 1234)            
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-math.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");
