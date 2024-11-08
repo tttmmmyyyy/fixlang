@@ -356,7 +356,7 @@ fn replace_free_var(
                 val.clone()
             } else {
                 for v in vs {
-                    scope.push(&v.name.name, &());
+                    scope.push(&v.name.name, ());
                 }
                 let res = replace_free_var(val, from, to, scope)?;
                 for v in vs {
@@ -373,7 +373,7 @@ fn replace_free_var(
                 val.clone()
             } else {
                 for v in pat.pattern.vars() {
-                    scope.push(&v.name, &());
+                    scope.push(&v.name, ());
                 }
                 let res = replace_free_var(val, from, to, scope)?;
                 for v in pat.pattern.vars() {

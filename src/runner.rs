@@ -130,10 +130,13 @@ fn build_object_files<'c>(
     );
 
     // Register type declarations of global symbols to typechecker.
-    for (name, defn) in &program.global_values {
-        typechecker
-            .scope
-            .add_global(name.name.clone(), &name.namespace, &defn.scm)?;
+    {
+        let globals = program
+            .global_values
+            .iter()
+            .map(|(name, defn)| (name.clone(), defn.scm.clone()))
+            .collect::<Vec<_>>();
+        typechecker.scope.set_globals(globals);
     }
 
     // When running diagnostics, perform type checking of target modules and return here.

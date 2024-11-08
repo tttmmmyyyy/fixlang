@@ -11,28 +11,18 @@ use super::*;
 
 #[derive(Clone)]
 pub struct Scope<T> {
-    var: HashMap<String, ScopeValue<T>>,
-}
-
-#[derive(Clone)]
-struct ScopeValue<T> {
-    global: HashMap<NameSpace, T>,
-    local: Vec<T>,
-}
-
-impl<T> Default for ScopeValue<T> {
-    fn default() -> Self {
-        Self {
-            global: Default::default(),
-            local: Default::default(),
-        }
-    }
+    // Map from variable name to its value stacks.
+    local: HashMap<Name, Vec<T>>,
+    // List of pairs of global names and its values.
+    // Arc for sharing the list among multiple scopes.
+    global: Arc<Vec<(FullName, T)>>,
 }
 
 impl<T> Default for Scope<T> {
     fn default() -> Self {
         Self {
-            var: Default::default(),
+            local: Default::default(),
+            global: Arc::new(Default::default()),
         }
     }
 }
@@ -41,44 +31,35 @@ impl<T> Scope<T>
 where
     T: Clone,
 {
-    // TODO: throw TypeError when unwrap fails.
-    pub fn push(self: &mut Self, name: &str, ty: &T) {
-        if !self.var.contains_key(name) {
-            self.var.insert(String::from(name), Default::default());
-        }
-        self.var.get_mut(name).unwrap().local.push(ty.clone());
+    // Push a local value.
+    pub fn push(&mut self, name: &Name, v: T) {
+        misc::insert_to_hashmap_vec(&mut self.local, name, v);
     }
-    pub fn pop(self: &mut Self, name: &str) {
-        self.var.get_mut(name).unwrap().local.pop();
+
+    // Pop a local value.
+    pub fn pop(self: &mut Self, name: &Name) {
+        self.local.get_mut(name).unwrap().pop();
     }
+    
+    // Check if a local value exists.
+    fn has_value(&self, name: &Name) -> bool {
+        self.local.contains_key(name) && !self.local[name].is_empty()
+    }
+
+    // Get a set of local names.
     pub fn local_names(&self) -> HashSet<Name> {
         let mut res: HashSet<Name> = Default::default();
-        for (name, sv) in &self.var {
-            if !sv.local.is_empty() {
+        for (name, stack) in &self.local {
+            if !stack.is_empty() {
                 res.insert(name.clone());
             }
         }
         res
     }
-    fn get_mut(self: &mut Self, name: &str) -> Option<&mut ScopeValue<T>> {
-        self.var.get_mut(name)
-    }
-    pub fn add_global(&mut self, name: Name, namespace: &NameSpace, value: &T) -> Result<(), Errors> {
-        if !self.var.contains_key(&name) {
-            self.var.insert(name.clone(), Default::default());
-        }
-        if self.var[&name].global.contains_key(namespace) {
-            return Err(Errors::from_msg(format!(
-                "Duplicate definition for `{}.{}`",
-                namespace.to_string(),
-                name
-            )));
-        }
-        self.get_mut(&name)
-            .unwrap()
-            .global
-            .insert(namespace.clone(), value.clone());
-        Ok(())
+
+    // Set global values.
+    pub fn set_globals(&mut self, globals: Vec<(FullName, T)>) {
+        self.global = Arc::new(globals);
     }
 
     // Get candidates list for overload resolution.
@@ -87,20 +68,16 @@ where
         name: &FullName,
         import_stmts: &[ImportStatement],
     ) -> Vec<(NameSpace, T)> {
-        if !self.var.contains_key(&name.name) {
-            return vec![];
-        }
-        let sv = &self.var[&name.name];
-        if name.is_local() && sv.local.len() > 0 {
-            vec![(NameSpace::local(), sv.local.last().unwrap().clone())]
+        if name.is_local() && self.has_value(&name.name) {
+            vec![(NameSpace::local(), self.local[&name.name].last().unwrap().clone())]
         } else {
-            sv.global
+            self.global
                 .iter()
-                .filter(|(ns, _)| {
-                    import::is_accessible(import_stmts, &FullName::new(ns, &name.name))
+                .filter(|(full_name, _)| {
+                    full_name.name == name.name && name.namespace.is_suffix_of(&full_name.namespace) && 
+                    import::is_accessible(import_stmts, full_name)
                 })
-                .filter(|(ns, _)| name.namespace.is_suffix_of(ns))
-                .map(|(ns, v)| (ns.clone(), v.clone()))
+                .map(|(full_name, v)| (full_name.namespace.clone(), v.clone()))
                 .collect()
         }
     }
@@ -440,6 +417,18 @@ pub struct TypeCheckContext {
 }
 
 impl TypeCheckContext {
+    #[allow(dead_code)]
+    pub fn show_sizes(&self) {
+        println!("scope size = {}", self.scope.local.len());
+        println!("substitution size = {}", self.substitution.data.len());
+        println!("equalities size = {}", self.equalities.len());
+        println!("predicates size = {}", self.predicates.len());
+        // assumed_eqs
+        println!("assumed_eqs size = {}", self.assumed_eqs.len());
+        println!("assumed_preds size = {}", self.assumed_preds.len());
+        println!("fixed_tyvars size = {}", self.fixed_tyvars.len());
+    }
+
     // Create instance.
     pub fn new(
         trait_env: TraitEnv,
@@ -700,7 +689,7 @@ impl TypeCheckContext {
                     ));
                 }
                 assert!(arg.name.is_local());
-                self.scope.push(&arg.name.name, &Scheme::from_type(arg_ty));
+                self.scope.push(&arg.name.name, Scheme::from_type(arg_ty));
                 let body = self.unify_type_of_expr(body, body_ty)?;
                 self.scope.pop(&arg.name.name);
                 Ok(ei.set_lam_body(body))
@@ -717,7 +706,7 @@ impl TypeCheckContext {
                 });
                 for (name, scm) in var_scm.clone() {
                     assert!(name.is_local());
-                    self.scope.push(&name.name, &scm);
+                    self.scope.push(&name.name, scm);
                 }
                 let body = self.unify_type_of_expr(body, ty)?;
                 for (name, _) in var_scm {

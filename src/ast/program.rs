@@ -1109,6 +1109,7 @@ impl Program {
         let expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
                 // Specialize e's type to the required type `sym.ty`.
+                // tc.show();
                 let mut tc = tc.clone();
                 assert!(tc.substitution.is_empty());
                 tc.substitution = e.substitution.clone();
