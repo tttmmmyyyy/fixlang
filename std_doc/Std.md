@@ -1120,8 +1120,6 @@ Prints a string to the specified stream and flushes the stream.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
-TODO: implement this using `IO::unsafe_perform`.
-
 ### `assert : (() -> Std::String) -> Std::Bool -> Std::IO ()`
 
 Asserts that a condition (boolean value) is true.
