@@ -1009,7 +1009,7 @@ impl Program {
             te: Result<TypedExpr, Errors>,
             method_impl_idx: Option<usize>,
         }
-        let results = if tc.num_worker_threads <= 1 {
+        let results = if tc.num_worker_threads <= 1 || tasks.len() <= 1 {
             // Run tasks in the main thread.
             let mut results = vec![];
             for task in tasks {
