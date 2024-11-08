@@ -6572,6 +6572,21 @@ pub fn test_regression_unsafe_perform_bug() {
 }
 
 #[test]
+pub fn test_debug_println() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            eval debug_println("stdout");
+            eval debug_eprintln("stderr");
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-math.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");

@@ -2350,15 +2350,13 @@ namespace Debug {
     // Prints a string to the specified stream and flushes the stream.
     // 
     // NOTE: This function is not pure and should only be used for temporary debugging purposes.
-    // 
-    // TODO: implement this using `IO::unsafe_perform`.
     _debug_print_to_stream : IOHandle -> String -> ();
     _debug_print_to_stream = |handle, msg| (
-        msg.borrow_c_str(|str| (
-            let handle_ptr = handle._file_ptr;
-            let _ = FFI_CALL[I32 fputs(Ptr, Ptr), str, handle_ptr];
-            let _ = FFI_CALL[I32 fflush(Ptr), handle_ptr];
-            ()
-        ))
+        msg.borrow_c_str_io(|str|
+            let file_ptr = *handle.get_file_ptr;
+            FFI_CALL_IO[I32 fputs(Ptr, Ptr), str, file_ptr];;
+            FFI_CALL_IO[I32 fflush(Ptr), file_ptr];;
+            pure()
+        ).unsafe_perform
     );
 }
