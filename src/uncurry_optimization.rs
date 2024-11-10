@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ast::name::FullName;
+use misc::Set;
 
 use crate::typecheck::Scope;
 

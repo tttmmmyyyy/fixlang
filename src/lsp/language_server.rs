@@ -1,5 +1,6 @@
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
+use crate::misc::{to_absolute_path, Map, Set};
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::{
     constants::LOG_FILE_PATH,
@@ -8,7 +9,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, DiagnosticsConfig, EndNode, Map, Set, SourceFile, SourcePos, Var};
+use crate::{DiagnosticsConfig, EndNode, SourceFile, SourcePos, Var};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,

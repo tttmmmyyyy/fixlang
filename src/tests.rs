@@ -6,9 +6,10 @@ use std::{
 };
 
 use crate::{
-    misc::function_name, number_to_varname, run_file, split_by_max_size, test_source,
-    test_source_fail, Configuration, Graph, SubCommand, COMPILER_TEST_WORKING_PATH, I16_NAME,
-    I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    misc::{function_name, number_to_varname, split_by_max_size},
+    run_file, test_source, test_source_fail, Configuration, Graph, SubCommand,
+    COMPILER_TEST_WORKING_PATH, I16_NAME, I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME,
+    U64_NAME, U8_NAME,
 };
 use rand::Rng;
 

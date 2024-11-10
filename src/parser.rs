@@ -10,6 +10,7 @@ use ast::{
 };
 use either::Either;
 use error::Errors;
+use misc::{check_temporary_source, make_map, save_temporary_source, temporary_source_path, Map};
 use num_bigint::BigInt;
 use pest::error::Error;
 use std::{cmp::min, mem::swap, sync::Arc};

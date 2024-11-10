@@ -13,8 +13,9 @@ use crate::{
     configuration::Configuration,
     dependency_resolver::{self, Dependency, Package, PackageName},
     error::Errors,
+    misc::to_absolute_path,
     project_file::{ProjectFile, ProjectFileDependency, ProjectName},
-    to_absolute_path, EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, PROJECT_FILE_PATH,
+    EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, PROJECT_FILE_PATH,
 };
 
 #[derive(Deserialize, Serialize, Default)]

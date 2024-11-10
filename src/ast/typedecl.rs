@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use misc::{Map, Set};
 use name::{FullName, Name};
 
 use crate::error::{error_exit_with_src, Errors};

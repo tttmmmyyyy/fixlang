@@ -20,6 +20,9 @@ use inkwell::{
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
 };
+use misc::flatten_opt;
+use misc::Map;
+use misc::Set;
 
 use super::*;
 

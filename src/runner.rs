@@ -25,7 +25,8 @@ use crate::compile_unit::CompileUnit;
 use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, error_exit, exit_if_err, Errors};
 use crate::llvm_passes;
-use crate::save_temporary_source;
+use crate::misc::{save_temporary_source, temporary_source_path};
+use crate::run_io_value;
 use crate::stopwatch::StopWatch;
 use crate::uncurry_optimization;
 use crate::Configuration;
@@ -44,7 +45,6 @@ use crate::{borrowing_optimization, SubCommand};
 use crate::{build_runtime, parse_file_path};
 use crate::{make_std_mod, runtime};
 use crate::{make_tuple_traits_mod, BuildMode};
-use crate::{run_io_value, temporary_source_path};
 
 // The result of `build_object_files` function.
 pub struct BuildObjFilesResult {

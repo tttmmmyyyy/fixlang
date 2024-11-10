@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::error::Errors;
 use ast::{import::ImportStatement, name::{FullName, NameSpace}};
+use misc::{collect_results, Map, Set};
 use serde::{Deserialize, Serialize};
 use typecheckcache::TypeCheckCache;
 

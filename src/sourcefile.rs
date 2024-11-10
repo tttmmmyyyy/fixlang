@@ -6,7 +6,7 @@ use std::{
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Errors, parser::Rule, runner::read_file, to_absolute_path};
+use crate::{error::Errors, misc::to_absolute_path, parser::Rule, runner::read_file};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {

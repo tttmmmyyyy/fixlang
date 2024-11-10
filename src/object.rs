@@ -7,6 +7,7 @@ use inkwell::{
     module::Linkage,
     types::{BasicMetadataTypeEnum, BasicType},
 };
+use misc::Set;
 
 use super::*;
 

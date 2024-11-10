@@ -2,8 +2,7 @@
 Cache system for object (*.o) files.
 */
 
-use crate::misc::Map;
-use crate::Set;
+use crate::misc::{split_by_max_size, Map, Set};
 use std::fmt;
 use std::path::PathBuf;
 
@@ -12,7 +11,6 @@ use rand::Rng;
 use crate::ast::name::Name;
 use crate::configuration::Configuration;
 use crate::constants::COMPILATION_UNITS_PATH;
-use crate::split_by_max_size;
 use crate::InstantiatedSymbol;
 
 pub struct CompileUnit {

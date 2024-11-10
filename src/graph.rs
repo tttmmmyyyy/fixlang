@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::{Map, Set};
+use crate::misc::{Map, Set};
 
 pub struct Graph<T> {
     // Data stored in nodes;

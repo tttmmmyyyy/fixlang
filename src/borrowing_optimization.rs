@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ast::name::FullName;
+use misc::{nonempty_subsequences, Map};
 
 use super::*;
 

@@ -5,8 +5,9 @@ use crate::{
     build_file,
     error::Errors,
     kind_star,
+    misc::to_absolute_path,
     project_file::ProjectFile,
-    to_absolute_path, Configuration, Kind, KindSignature, Program, TyConVariant, TyVar,
+    Configuration, Kind, KindSignature, Program, TyConVariant, TyVar,
 };
 
 pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
