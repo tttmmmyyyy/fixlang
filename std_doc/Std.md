@@ -1482,7 +1482,7 @@ Gets errno which is set by C functions.
 ### `get_funptr_release : [a : Std::Boxed] (() -> a) -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
-This function is used to release a pointer obtained by `_boxed_to_retained_ptr`.
+This function is used to release a pointer obtained by `boxed_to_retained_ptr`.
 
 Note that this function is requires a value of type `Lazy a`, not of `a`.
 So you can get release function for a boxed type `T` even when you don't have a value of type `T` -- you can just use `|_| undefined("") : T`:
@@ -1507,7 +1507,7 @@ In case the type is not a specific `T`, but a generic parameter `a` that appears
 ### `get_funptr_retain : [a : Std::Boxed] (() -> a) -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which retains a boxed value of type `a`.
-This function is used to retain a pointer obtained by `_boxed_to_retained_ptr`.
+This function is used to retain a pointer obtained by `boxed_to_retained_ptr`.
 
 For the reason that this function requires a value of type `Lazy a`, not of `a`, see the document for `get_funptr_release`.
 
