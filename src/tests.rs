@@ -6470,13 +6470,13 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
     let source = r##"
         module Main;
 
-        get_release_func_of_codom : (a -> b) -> Ptr;
+        get_release_func_of_codom : [b : Boxed] (a -> b) -> Ptr;
         get_release_func_of_codom = |f| (
             let lazy_b = |_| f(undefined(""));
             lazy_b.get_funptr_release
         );
 
-        get_retain_func_of_dom : (a -> b) -> Ptr;
+        get_retain_func_of_dom : [a : Boxed] (a -> b) -> Ptr;
         get_retain_func_of_dom = |f| (
             let lazy_a = |_| let x = undefined(""); let _ = f(x); x;
             lazy_a.get_funptr_release
