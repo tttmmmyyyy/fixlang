@@ -1439,18 +1439,34 @@ At the moment, it is not specified what pointer is returned for a union, so do n
 The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
 on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (i.e., the control block of the value).
 
-NOTE: This function is unsafe in that if the call `v._get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
+NOTE: 
+This function is unsafe in that if the call `v._get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
 To avoid issues caused by this, use `borrow_boxed` instead.
 
-### `borrow_boxed : (Std::Ptr -> b) -> a -> b`
+### `borrow_boxed : [a : Std::Boxed] (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
 For more details, see the document of `_get_boxed_ptr`.
 
-### `borrow_boxed_io : (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
+### `borrow_boxed_io : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
 
 Performs an IO action borrowing a pointer to the data of a boxed value.
+
+### `boxed_from_retained_ptr : [a : Std::Boxed] Std::Ptr -> a`
+
+Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr`.
+
+### `boxed_to_retained_ptr : [a : Std::Boxed] a -> Std::Ptr`
+
+Returns a retained pointer to a boxed value.
+This function is used to share ownership of Fix's boxed values with foreign languages.
+
+To get back the boxed value from the retained pointer, use `from_retained_ptr`.
+To release / retain the value in a foreign language, call the function pointer obtained by `get_funptr_release` or `get_funptr_retain` on the pointer.
+
+Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
+If you want to get a pointer to the data of the boxed value, use `borrow_boxed`.
 
 ### `clear_errno : Std::IO ()`
 
@@ -1459,35 +1475,6 @@ Sets errno to zero.
 ### `get_errno : Std::IO Std::I32`
 
 Gets errno which is set by C functions.
-
-### `mutate_boxed : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> (a, b)`
-
-`x.mutate_boxed(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of ``io(ptr)``.
-
-The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
-Do not perform any IO operations other than mutating the value of `x`.
-
-This function first clones the value if `x` is not unique.
-
-At the moment, it is not specified what pointer is obtained for a union, so do not use this function with unions.
-
-This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
-
-### `mutate_boxed_io : (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
-
-`x.mutate_boxed_io(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of `io(ptr)`.
-
-Similar to `mutate_boxed`, but this function is used when you want to run the IO action in the existing IO context.
-
-For more details, see the document of `mutate_boxed`.
-
-### `mutate_boxed_ios : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
-
-Internal implementation of the `mutate_boxed_io` function.
-
-### `boxed_from_retained_ptr : [a : Std::Boxed] Std::Ptr -> a`
-
-Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr`.
 
 ### `get_funptr_release : [a : Std::Boxed] (() -> a) -> Std::Ptr`
 
@@ -1521,16 +1508,30 @@ This function is used to retain a pointer obtained by `_boxed_to_retained_ptr`.
 
 For the reason that this function requires a value of type `Lazy a`, not of `a`, see the document for `get_funptr_release`.
 
-### `boxed_to_retained_ptr : [a : Std::Boxed] a -> Std::Ptr`
+### `mutate_boxed : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> (a, b)`
 
-Returns a retained pointer to a boxed value.
-This function is used to share ownership of Fix's boxed values with foreign languages.
+`x.mutate_boxed(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of ``io(ptr)``.
 
-To get back the boxed value from the retained pointer, use `boxed_from_retained_ptr`.
-To release / retain the value in a foreign language, call the function pointer obtained by `get_funptr_release` or `get_funptr_retain` on the pointer.
+The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
+Do not perform any IO operations other than mutating the value of `x`.
 
-Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
-If you want to get a pointer to the data of the boxed value, use `borrow_boxed`.
+This function first clones the value if `x` is not unique.
+
+At the moment, it is not specified what pointer is obtained for a union, so do not use this function with unions.
+
+This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
+
+### `mutate_boxed_io : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
+
+`x.mutate_boxed_io(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of `io(ptr)`.
+
+Similar to `mutate_boxed`, but this function is used when you want to run the IO action in the existing IO context.
+
+For more details, see the document of `mutate_boxed`.
+
+### `mutate_boxed_ios : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
+
+Internal implementation of the `mutate_boxed_io` function.
 
 ## `namespace Std::FFI::Destructor`
 
