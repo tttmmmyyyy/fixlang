@@ -115,6 +115,7 @@ macro_rules! function_name {
         }
     }};
 }
+#[allow(unused_imports)]
 pub(crate) use function_name;
 
 // Creates a variable name from a number.

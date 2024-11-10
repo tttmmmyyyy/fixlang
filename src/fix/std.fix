@@ -395,17 +395,17 @@ namespace FFI {
     // Similar to `mutate_boxed`, but this function is used when you want to run the IO action in the existing IO context.
     // 
     // For more details, see the document of `mutate_boxed`.
-    mutate_boxed_io : (Ptr -> IO b) -> a -> IO (a, b);
+    mutate_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO (a, b);
     mutate_boxed_io = |act, val| IO::from_runner $ |ios| mutate_boxed_ios(act, val, ios);
 
     // Borrows a pointer to the data of a boxed value.
     // 
     // For more details, see the document of `_unsafe_get_boxed_ptr`.
-    borrow_boxed : (Ptr -> b) -> a -> b;
+    borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b;
     borrow_boxed = |act, val| val.do_with_retained(|val| act(val._unsafe_get_boxed_ptr));
 
     // Performs an IO action borrowing a pointer to the data of a boxed value.
-    borrow_boxed_io : (Ptr -> IO b) -> a -> IO b;
+    borrow_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO b;
     borrow_boxed_io = |act, val| IO::from_runner $ |ios| val.borrow_boxed(|ptr| (act(ptr).@runner)(ios));
 
     // Gets errno which is set by C functions.

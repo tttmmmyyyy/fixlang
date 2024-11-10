@@ -555,13 +555,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, FFI_NAME], "mutate_boxed"),
         get_mutate_boxed(),
         None,
-        Some(include_str!("./docs/std_ffi_unsafe_mutate_boxed.md").to_string()),
+        Some(include_str!("./docs/std_ffi_mutate_boxed.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "mutate_boxed_ios"),
         get_mutate_boxed_ios(),
         None,
-        Some(include_str!("./docs/std_ffi_unsafe_mutate_boxed_ios.md").to_string()),
+        Some(include_str!("./docs/std_ffi_mutate_boxed_ios.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, IO_NAME], "unsafe_perform"),

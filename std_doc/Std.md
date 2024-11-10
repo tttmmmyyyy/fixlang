@@ -1430,7 +1430,7 @@ Converts a floating number to a string with specified precision (i.e., number of
 
 ## `namespace Std::FFI`
 
-### `_unsafe_get_boxed_ptr : a -> Std::Ptr`
+### `_unsafe_get_boxed_ptr : [a : Std::Boxed] a -> Std::Ptr`
 
 Returns a pointer to the data of a boxed value.
 
@@ -1461,7 +1461,7 @@ Sets errno to zero.
 
 Gets errno which is set by C functions.
 
-### `mutate_boxed : (Std::Ptr -> Std::IO b) -> a -> (a, b)`
+### `mutate_boxed : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> (a, b)`
 
 `x.mutate_boxed(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of ``io(ptr)``.
 
@@ -1482,15 +1482,15 @@ Similar to `mutate_boxed`, but this function is used when you want to run the IO
 
 For more details, see the document of `mutate_boxed`.
 
-### `mutate_boxed_ios : (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
+### `mutate_boxed_ios : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
 
 Internal implementation of the `mutate_boxed_io` function.
 
-### `unsafe_get_boxed_value_from_retained_ptr : Std::Ptr -> a`
+### `unsafe_get_boxed_value_from_retained_ptr : [a : Std::Boxed] Std::Ptr -> a`
 
 Creates a boxed value from a retained pointer obtained by `unsafe_get_retained_ptr_of_boxed_value`.
 
-### `unsafe_get_release_function_of_boxed_value : (() -> a) -> Std::Ptr`
+### `unsafe_get_release_function_of_boxed_value : [a : Std::Boxed] (() -> a) -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
 This function is used to release a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
@@ -1515,14 +1515,14 @@ In case the type is not a specific `T`, but a generic parameter `a` that appears
 - If you have a function `f : b -> a`, then you can use `|_| f(undefined(""))` of type `Lazy a`. 
 - If you have a function `f : a -> b`, then you can use `|_| let x = undefined(""); let _ = f(x); x` of type `Lazy a`.
 
-### `unsafe_get_retain_function_of_boxed_value : (() -> a) -> Std::Ptr`
+### `unsafe_get_retain_function_of_boxed_value : [a : Std::Boxed] (() -> a) -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which retains a boxed value of type `a`.
 This function is used to retain a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
 
 For the reason that this function requires a value of type `Lazy a`, not of `a`, see the document for `unsafe_get_release_function_of_boxed_value`.
 
-### `unsafe_get_retained_ptr_of_boxed_value : a -> Std::Ptr`
+### `unsafe_get_retained_ptr_of_boxed_value : [a : Std::Boxed] a -> Std::Ptr`
 
 Returns a retained pointer to a boxed value.
 This function is used to share ownership of Fix's boxed values with foreign languages.

@@ -282,6 +282,11 @@ pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
 
+// Make `Std::Boxed` trait.
+pub fn make_boxed_trait() -> Trait {
+    Trait::from_fullname(FullName::from_strs(&[STD_NAME], BOXED_TRAIT_NAME))
+}
+
 pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
     let mut res = kind_star();
     for _ in 0..arity {
@@ -4027,7 +4032,7 @@ pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
         type_fun(obj_type.clone(), ret_type.clone()),
     );
@@ -4062,12 +4067,7 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
         rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        // Check that return type is boxed.
-        if !ret_ty.is_box(gc.type_env()) {
-            error_exit(
-                "Std::FFI::unsafe_get_boxed_value_from_retained_ptr cannot be called on an unboxed value.",
-            )
-        }
+        assert!(ret_ty.is_box(gc.type_env()));
         assert!(rvo.is_none());
 
         // Get argument.
@@ -4084,7 +4084,7 @@ pub fn get_boxed_value_from_retained_ptr_function() -> (Arc<ExprNode>, Arc<Schem
     let ptr_type = make_ptr_ty();
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
         type_fun(ptr_type.clone(), obj_type.clone()),
     );
@@ -4129,11 +4129,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         // Get the target type.
         let arg_ty = arg.ty.clone();
         let target_ty = arg_ty.get_lambda_dst();
-        if !target_ty.is_box(gc.type_env()) {
-            error_exit(
-                &format!("[Std::FFI::unsafe_get_release_function_of_boxed_value] Trying to get release function of an unboxed type `{}`.", target_ty.to_string_normalize()),
-            )
-        }
+        assert!(target_ty.is_box(gc.type_env()));
 
         // Get function pointer to release function.
         let release_function_name = format!("release#{}", arg.ty.to_string_normalize());
@@ -4190,11 +4186,13 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TARGET_TY_NAME: &str = "a";
     const VAR_NAME: &str = "x";
-    let arg_type = type_tyapp(make_lazy_ty(), type_tyvar_star(TARGET_TY_NAME));
+
+    let target_type = type_tyvar_star(TARGET_TY_NAME);
+    let arg_type = type_tyapp(make_lazy_ty(), target_type.clone());
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        vec![Predicate::make(make_boxed_trait(), target_type.clone())],
         vec![],
         type_fun(arg_type.clone(), ret_type.clone()),
     );
@@ -4236,11 +4234,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         // Get the target type.
         let arg_ty = arg.ty.clone();
         let target_ty = arg_ty.get_lambda_dst();
-        if !target_ty.is_box(gc.type_env()) {
-            error_exit(
-                &format!("[Std::FFI::unsafe_get_retain_function_of_boxed_value] Trying to get retain function of an unboxed type `{}`.", target_ty.to_string_normalize()),
-            )
-        }
+        assert!(target_ty.is_box(gc.type_env()));
 
         // Get function pointer to retain function.
         let retain_function_name = format!("retain#{}", arg.ty.to_string_normalize());
@@ -4297,11 +4291,12 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TARGET_TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
-    let arg_type = type_tyapp(make_lazy_ty(), type_tyvar_star(TARGET_TYPE_NAME));
+    let target_type = type_tyvar_star(TARGET_TYPE_NAME);
+    let arg_type = type_tyapp(make_lazy_ty(), target_type.clone());
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        vec![Predicate::make(make_boxed_trait(), target_type.clone())],
         vec![],
         type_fun(arg_type.clone(), ret_type.clone()),
     );
@@ -4338,9 +4333,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
     ) -> Object<'c> {
         // Get argument.
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
-        if !obj.is_box(gc.type_env()) {
-            error_exit("`Std::FFI::_unsafe_get_boxed_ptr` can only be called on a boxed value.")
-        }
+        assert!(obj.ty.is_box(gc.type_env()));
 
         // Get data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &obj);
@@ -4392,7 +4385,7 @@ pub fn get_unsafe_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
         type_fun(obj_type.clone(), ret_type.clone()),
     );
@@ -4431,9 +4424,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         let val = gc.get_var(&FullName::local(&self.val_name)).ptr.get(gc);
 
         // If `val` is not boxed, error.
-        if !val.is_box(gc.type_env()) {
-            error_exit("`Std::FFI::mutate_boxed` can only be called on a boxed value.")
-        }
+        assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
         let is_array = val.ty.is_array();
@@ -4476,7 +4467,7 @@ pub fn get_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
     let res_ty = make_tuple_ty(vec![val_ty.clone(), io_res_ty.clone()]);
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        vec![Predicate::make(make_boxed_trait(), val_ty.clone())],
         vec![],
         type_fun(
             type_fun(make_ptr_ty(), type_tyapp(make_io_ty(), io_res_ty.clone())),
@@ -4527,9 +4518,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         let ios = gc.get_var(&FullName::local(&self.iostate_name)).ptr.get(gc);
 
         // If `val` is not boxed, error.
-        if !val.is_box(gc.type_env()) {
-            error_exit("`Std::FFI::mutate_boxed_ios` can only be called on a boxed value.")
-        }
+        assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
         let is_array = val.ty.is_array();
@@ -4584,7 +4573,7 @@ pub fn get_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     let ret_ty = make_tuple_ty(vec![iostate_ty.clone(), pair_ty.clone()]);
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        vec![Predicate::make(make_boxed_trait(), val_ty.clone())],
         vec![],
         type_fun(
             type_fun(make_ptr_ty(), type_tyapp(make_io_ty(), io_res_ty.clone())),
@@ -5953,9 +5942,7 @@ pub fn not_trait_instance_bool() -> TraitInstance {
 }
 
 pub fn boxed_trait_instance(ty: &Arc<TypeNode>) -> TraitInstance {
-    let trait_id = Trait {
-        name: FullName::from_strs(&[STD_NAME], BOXED_TRAIT_NAME),
-    };
+    let trait_id = make_boxed_trait();
     TraitInstance {
         qual_pred: QualPredicate {
             pred_constraints: vec![],
