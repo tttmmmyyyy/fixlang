@@ -1653,18 +1653,18 @@ impl Program {
 
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for decl in &self.type_defns.clone() {
-            match &decl.value {
+        for defn in &self.type_defns.clone() {
+            match &defn.value {
                 TypeDeclValue::Struct(str) => {
-                    let struct_name = decl.name.clone();
+                    let struct_name = defn.name.clone();
                     for field in &str.fields {
                         // Add getter function
                         errors.eat_err(self.add_global_value(
                             FullName::new(
-                                &decl.name.to_namespace(),
+                                &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_GETTER_SYMBOL, &field.name),
                             ),
-                            struct_get(&struct_name, decl, &field.name),
+                            struct_get(&struct_name, defn, &field.name),
                             None,
                             Some(format!(
                                 "Retrieves the field `{}` from a value of `{}`.",
@@ -1674,10 +1674,10 @@ impl Program {
                         // Add setter function
                         errors.eat_err(self.add_global_value(
                             FullName::new(
-                                &decl.name.to_namespace(),
+                                &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_SETTER_SYMBOL, &field.name),
                             ),
-                            struct_set(&struct_name, decl, &field.name),
+                            struct_set(&struct_name, defn, &field.name),
                             None,
                             Some(format!(
                                 "Updates a value of `{}` by setting field `{}` to a specified one.",
@@ -1687,10 +1687,10 @@ impl Program {
                         // Add modifier functions.
                         errors.eat_err(self.add_global_value(
                             FullName::new(
-                                &decl.name.to_namespace(),
+                                &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_MODIFIER_SYMBOL, &field.name,),
                             ),
-                            struct_mod(&struct_name, decl, &field.name),
+                            struct_mod(&struct_name, defn, &field.name),
                             None,
                             Some(format!(
                                 "Updates a value of `{}` by applying a function to field `{}`.",
@@ -1700,10 +1700,10 @@ impl Program {
                         // Add act functions
                         errors.eat_err(self.add_global_value(
                             FullName::new(
-                                &decl.name.to_namespace(),
+                                &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_ACT_SYMBOL, &field.name),
                             ),
-                            struct_act(&struct_name, decl, &field.name),
+                            struct_act(&struct_name, defn, &field.name),
                             None,
                             Some(format!(
                                 "Updates a value of `{}` by applying a functorial action to field `{}`.",
@@ -1713,31 +1713,31 @@ impl Program {
                         // Add punch functions.
                         errors.eat_err(self.add_global_value(
                             FullName::new(
-                                &decl.name.to_namespace(),
+                                &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
                             ),
-                            struct_punch(&struct_name, decl, &field.name),
+                            struct_punch(&struct_name, defn, &field.name),
                             None,
                             None,
                         ));
                         // Add plug-in functions.
                         errors.eat_err(self.add_global_value(
                             FullName::new(
-                                &decl.name.to_namespace(),
+                                &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
                             ),
-                            struct_plug_in(&struct_name, decl, &field.name),
+                            struct_plug_in(&struct_name, defn, &field.name),
                             None,
                             None,
                         ));
                     }
                 }
                 TypeDeclValue::Union(union) => {
-                    let union_name = &decl.name;
+                    let union_name = &defn.name;
                     for field in &union.fields {
                         errors.eat_err(self.add_global_value(
-                            FullName::new(&decl.name.to_namespace(), &field.name),
-                            union_new(&union_name, &field.name, decl),
+                            FullName::new(&defn.name.to_namespace(), &field.name),
+                            union_new(&union_name, &field.name, defn),
                             None,
                             Some(format!(
                                 "Constructs a value of union `{}` taking the variant `{}`.",
@@ -1745,8 +1745,8 @@ impl Program {
                             )),
                         ));
                         errors.eat_err(self.add_global_value(
-                            FullName::new(&decl.name.to_namespace(), &format!("as_{}", field.name)),
-                            union_as(&union_name, &field.name, decl),
+                            FullName::new(&defn.name.to_namespace(), &format!("as_{}", field.name)),
+                            union_as(&union_name, &field.name, defn),
                             None,
                             Some(format!(
                                 "Unwraps a union value of `{}` as the variant `{}`.\nIf the value is not the variant `{}`, this function aborts the program.",
@@ -1754,8 +1754,8 @@ impl Program {
                             )),
                         ));
                         errors.eat_err(self.add_global_value(
-                            FullName::new(&decl.name.to_namespace(), &format!("is_{}", field.name)),
-                            union_is(&union_name, &field.name, decl),
+                            FullName::new(&defn.name.to_namespace(), &format!("is_{}", field.name)),
+                            union_is(&union_name, &field.name, defn),
                             None,
                             Some(format!(
                                 "Checks if a union value of `{}` is the variant `{}`.",
@@ -1764,10 +1764,10 @@ impl Program {
                         ));
                         errors.eat_err(self.add_global_value(
                             FullName::new(
-                                &decl.name.to_namespace(),
+                                &defn.name.to_namespace(),
                                 &format!("mod_{}", field.name),
                             ),
-                            union_mod_function(&union_name, &field.name, decl),
+                            union_mod_function(&union_name, &field.name, defn),
                             None,
                             Some(format!(
                                 "Updates a value of union `{}` by applying a function if it is the variant `{}`, or doing nothing otherwise.",
@@ -1780,6 +1780,28 @@ impl Program {
             }
         }
         errors.to_result()?;
+        Ok(())
+    }
+
+    // Add `Std::Boxed` implementations for all user-defined boxed types.
+    pub fn add_boxed_impls(&mut self) -> Result<(), Errors> {
+        for defn in &self.type_defns {
+            match &defn.value {
+                TypeDeclValue::Struct(str) => {
+                    if str.is_boxed() {
+                        let ty = defn.applied_type();
+                        self.trait_env.add_instance(boxed_trait_instance(&ty));
+                    }
+                }
+                TypeDeclValue::Union(union) => {
+                    if union.is_boxed() {
+                        let ty = defn.applied_type();
+                        self.trait_env.add_instance(boxed_trait_instance(&ty));
+                    }
+                }
+                TypeDeclValue::Alias(_) => {} // Nothing to do
+            }
+        }
         Ok(())
     }
 

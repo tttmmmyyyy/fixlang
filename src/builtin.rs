@@ -208,7 +208,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     }
     // Dynamic object
     ret.insert(
-        TyCon::new(make_dynamic_object_name()),
+        make_dynamic_object_tycon(),
         TyConInfo {
             kind: kind_star(),
             variant: TyConVariant::DynamicObject,
@@ -225,6 +225,10 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
 
 pub fn make_dynamic_object_name() -> FullName {
     FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)
+}
+
+pub fn make_dynamic_object_tycon() -> TyCon {
+    TyCon::new(make_dynamic_object_name())
 }
 
 pub fn make_destructor_object_name() -> FullName {
@@ -2515,7 +2519,7 @@ pub fn struct_get(
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
-    let str_ty = definition.ty();
+    let str_ty = definition.applied_type();
     const VAR_NAME: &str = "str_obj";
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
@@ -2591,7 +2595,7 @@ pub fn struct_punch(
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
-    let str_ty = definition.ty();
+    let str_ty = definition.applied_type();
     let punched_ty = str_ty.to_punched_struct(field_idx as usize);
     let dst_ty = make_tuple_ty(vec![field.ty.clone(), punched_ty]);
     let ty = type_fun(str_ty, dst_ty.clone());
@@ -2672,7 +2676,7 @@ pub fn struct_plug_in(
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
-    let str_ty = definition.ty();
+    let str_ty = definition.applied_type();
     let punched_ty = str_ty.to_punched_struct(field_idx as usize);
     let ty = type_fun(punched_ty, type_fun(field.ty.clone(), str_ty.clone()));
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
@@ -2782,7 +2786,7 @@ pub fn struct_mod_body(
         }),
         free_vars,
         name,
-        struct_defn.ty(),
+        struct_defn.applied_type(),
         None,
     )
 }
@@ -2797,7 +2801,7 @@ pub fn struct_mod(
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     let field_count = definition.fields().len();
-    let str_ty = definition.ty();
+    let str_ty = definition.applied_type();
     let expr = expr_abs(
         vec![var_local("f")],
         expr_abs(
@@ -2835,7 +2839,7 @@ pub fn struct_act(
     let (_field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     // Create type scheme of this function.
-    let str_ty = definition.ty();
+    let str_ty = definition.applied_type();
     let field_ty = field.ty.clone();
     let functor_ty = type_tyvar("f", &kind_arrow(kind_star(), kind_star()));
     let src_ty = type_fun(
@@ -3135,7 +3139,7 @@ pub fn struct_set(
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
     let field_count = definition.fields().len() as u32;
 
-    let str_ty = definition.ty();
+    let str_ty = definition.applied_type();
     let expr = expr_abs(
         vec![var_local(VALUE_NAME)],
         expr_abs(
@@ -3234,7 +3238,7 @@ pub fn union_new_body(
         }),
         free_vars,
         name,
-        union_defn.ty(),
+        union_defn.applied_type(),
         None,
     )
 }
@@ -3254,7 +3258,7 @@ pub fn union_new(
         union_new_body(union_name, union, field_name, field_idx),
         None,
     );
-    let union_ty = union.ty();
+    let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(field_ty, union_ty);
     let mut tvs = vec![];
@@ -3285,7 +3289,7 @@ pub fn union_as(
         ),
         None,
     );
-    let union_ty = union.ty();
+    let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx].ty.clone();
     let ty = type_fun(union_ty, field_ty);
     let mut tvs = vec![];
@@ -3369,7 +3373,7 @@ pub fn union_is(
         union_is_body(union_name, &union_arg_name, field_name, field_idx),
         None,
     );
-    let union_ty = union.ty();
+    let union_ty = union.applied_type();
     let ty = type_fun(union_ty, make_bool_ty());
     let mut tvs = vec![];
     ty.free_vars_to_vec(&mut tvs);
@@ -3579,7 +3583,7 @@ pub fn union_mod_function(
 
     let (field_idx, _) = union.get_field_by_name(&field_name).unwrap();
 
-    let union_ty = union.ty();
+    let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx as usize].ty.clone();
 
     let expr = expr_abs(
@@ -5946,4 +5950,22 @@ pub fn not_trait_instance_bool() -> TraitInstance {
         make_bool_ty(),
         LLVMGenerator::BoolNegBody(InlineLLVMBoolNegBody {}),
     )
+}
+
+pub fn boxed_trait_instance(ty: &Arc<TypeNode>) -> TraitInstance {
+    let trait_id = Trait {
+        name: FullName::from_strs(&[STD_NAME], BOXED_TRAIT_NAME),
+    };
+    TraitInstance {
+        qual_pred: QualPredicate {
+            pred_constraints: vec![],
+            eq_constraints: vec![],
+            kind_constraints: vec![],
+            predicate: Predicate::make(trait_id, ty.clone()),
+        },
+        methods: Map::default(),
+        assoc_types: Map::default(),
+        define_module: STD_NAME.to_string(),
+        source: None,
+    }
 }

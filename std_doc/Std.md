@@ -252,6 +252,13 @@ Trait for infix operator `+`.
 
 Adds two values. An expression `x + y` is translated to `add(x, y)`.
 
+### `trait a : Boxed`
+
+Marker trait for boxed types.
+
+This trait is automatically implemented for all boxed types.
+Implementing this trait manually is not allowed.
+
 ### `trait a : Div`
 
 Trait for infix operator `/`.
@@ -386,6 +393,8 @@ Returns "()".
 
 ### `impl Std::Array : Std::Monad`
 
+### `impl Std::Array a : Std::Boxed`
+
 ### `impl [a : Std::Eq] Std::Array a : Std::Eq`
 
 ### `impl [a : Std::Eq, a : Std::LessThan] Std::Array a : Std::LessThan`
@@ -407,6 +416,8 @@ Compares two arrays by lexicographic order.
 ### `impl Std::Bool : Std::Not`
 
 ### `impl Std::Bool : Std::ToString`
+
+### `impl Std::Box a : Std::Boxed`
 
 ### `impl Std::F32 : Std::Add`
 
@@ -459,6 +470,8 @@ Compares two arrays by lexicographic order.
 ### `impl Std::F64 : Std::ToString`
 
 ### `impl Std::F64 : Std::Zero`
+
+### `impl Std::FFI::Destructor a : Std::Boxed`
 
 ### `impl Std::I16 : Std::Add`
 

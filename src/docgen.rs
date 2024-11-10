@@ -398,6 +398,11 @@ fn trait_impl_entries(
             if &impl_.define_module != mod_name {
                 continue;
             }
+            // Skip impls for compiler-generated types / traits.
+            let impl_ty_str = impl_.impl_type().to_string_normalize();
+            if impl_ty_str.contains("#") {
+                continue;
+            }
 
             let title = format!("`impl {}`", impl_.qual_pred.to_string());
 

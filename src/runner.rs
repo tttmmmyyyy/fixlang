@@ -94,6 +94,9 @@ fn build_object_files<'c>(
     // Add struct / union methods
     program.add_methods()?;
 
+    // Add `Std::Boxed` trait implementations.
+    program.add_boxed_impls()?;
+
     // Validate trait env.
     program.validate_trait_env()?;
 

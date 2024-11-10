@@ -155,6 +155,15 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // Not
     fix_module.trait_env.add_instance(not_trait_instance_bool());
 
+    // Boxed
+    let builtin_boxed = vec![
+        type_tyapp(make_array_ty(), type_tyvar_star("a")), // Array a
+        make_dynamic_object_ty(),                          // #DynamicObject
+    ];
+    for ty in builtin_boxed {
+        fix_module.trait_env.add_instance(boxed_trait_instance(&ty));
+    }
+
     // Cast functions
 
     // Cast function between integers.

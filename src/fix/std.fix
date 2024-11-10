@@ -379,6 +379,12 @@ namespace Box {
     make = |val| Box { value : val };
 }
 
+// Marker trait for boxed types.
+// 
+// This trait is automatically implemented for all boxed types.
+// Implementing this trait manually is not allowed.
+trait a : Boxed {}
+
 // A type (alias) for error message. 
 type ErrMsg = String;
 

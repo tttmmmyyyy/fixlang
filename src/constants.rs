@@ -57,6 +57,7 @@ pub const MAIN_FUNCTION_NAME: &str = "main";
 pub const MAIN_MODULE_NAME: &str = "Main";
 pub const TEST_FUNCTION_NAME: &str = "test";
 pub const TEST_MODULE_NAME: &str = "Test";
+pub const BOXED_TRAIT_NAME: &str = "Boxed";
 
 // Array methods.
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";

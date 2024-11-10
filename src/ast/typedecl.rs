@@ -101,7 +101,9 @@ impl TypeDefn {
         }
     }
 
-    pub fn ty(&self) -> Arc<TypeNode> {
+    // Return TypeNode defined by this type definition.
+    // If the definition is higher kinded, it returns a fully applied type (i.e., returns a type of kind `*`).
+    pub fn applied_type(&self) -> Arc<TypeNode> {
         let mut ty = type_tycon(&Arc::new(self.tycon()));
         for tv in &self.tyvars {
             ty = type_tyapp(ty, type_from_tyvar(tv.clone()));
@@ -260,6 +262,10 @@ impl Struct {
             f.set_kinds(kinds);
         }
     }
+
+    pub fn is_boxed(&self) -> bool {
+        !self.is_unbox
+    }
 }
 
 #[derive(Clone)]
@@ -297,6 +303,10 @@ impl Union {
         for f in &mut self.fields {
             f.set_kinds(kinds);
         }
+    }
+
+    pub fn is_boxed(&self) -> bool {
+        !self.is_unbox
     }
 }
 
