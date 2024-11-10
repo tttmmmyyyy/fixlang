@@ -6447,7 +6447,7 @@ pub fn test_export() {
 
 #[test]
 pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_1() {
-    // Actual usage of `unsafe_get_release_function_of_boxed_value` is tested in asynctask.fix.
+    // Actual usage of `get_funptr_release` is tested in asynctask.fix.
     let source = r##"
         module Main;
 
@@ -6456,8 +6456,8 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 
         main: IO ();
         main = (
-            let release = (|_| undefined("") : VoidType).unsafe_get_release_function_of_boxed_value;
-            let retain = (|_| undefined("") : VoidType).unsafe_get_retain_function_of_boxed_value;
+            let release = (|_| undefined("") : VoidType).get_funptr_release;
+            let retain = (|_| undefined("") : VoidType).get_funptr_retain;
             pure()
         );
     "##;
@@ -6466,20 +6466,20 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 
 #[test]
 pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_2() {
-    // Actual usage of `unsafe_get_release_function_of_boxed_value` is tested in asynctask.fix.
+    // Actual usage of `get_funptr_release` is tested in asynctask.fix.
     let source = r##"
         module Main;
 
         get_release_func_of_codom : (a -> b) -> Ptr;
         get_release_func_of_codom = |f| (
             let lazy_b = |_| f(undefined(""));
-            lazy_b.unsafe_get_release_function_of_boxed_value
+            lazy_b.get_funptr_release
         );
 
         get_retain_func_of_dom : (a -> b) -> Ptr;
         get_retain_func_of_dom = |f| (
             let lazy_a = |_| let x = undefined(""); let _ = f(x); x;
-            lazy_a.unsafe_get_release_function_of_boxed_value
+            lazy_a.get_funptr_release
         );
 
         main: IO ();
@@ -6493,13 +6493,13 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
 }
 
 #[test]
-pub fn test_unsafe_get_release_function_of_boxed_value_error() {
+pub fn test_get_funptr_release_error() {
     let source = r##"
         module Main;
 
         main: IO ();
         main = (
-            let release = (|_| undefined("") : I64).unsafe_get_release_function_of_boxed_value;
+            let release = (|_| undefined("") : I64).get_funptr_release;
             pure()
         );
     "##;
@@ -6507,13 +6507,13 @@ pub fn test_unsafe_get_release_function_of_boxed_value_error() {
 }
 
 #[test]
-pub fn test_unsafe_get_retain_function_of_boxed_value_error() {
+pub fn test_get_funptr_retain_error() {
     let source = r##"
         module Main;
 
         main: IO ();
         main = (
-            let retain = (|_| undefined("") : I64).unsafe_get_retain_function_of_boxed_value;
+            let retain = (|_| undefined("") : I64).get_funptr_retain;
             pure()
         );
     "##;

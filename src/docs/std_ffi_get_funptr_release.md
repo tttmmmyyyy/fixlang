@@ -1,5 +1,5 @@
 Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
-This function is used to release a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
+This function is used to release a pointer obtained by `_boxed_to_retained_ptr`.
 
 Note that this function is requires a value of type `Lazy a`, not of `a`.
 So you can get release function for a boxed type `T` even when you don't have a value of type `T` -- you can just use `|_| undefined("") : T`:
@@ -12,7 +12,7 @@ type VoidType = box struct {};
 
 main: IO ();
 main = (
-    let release = (|_| undefined("") : VoidType).unsafe_get_release_function_of_boxed_value; // Release function of `VoidType`.
+    let release = (|_| undefined("") : VoidType).get_funptr_release; // Release function of `VoidType`.
     pure()
 );
 ```

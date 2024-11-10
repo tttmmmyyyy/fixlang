@@ -140,7 +140,7 @@ namespace Array {
 
     // Calls a function with a pointer to the memory region where elements are stored.
     borrow_ptr : (Ptr -> b) -> Array a -> b;
-    borrow_ptr = |f, arr| arr.do_with_retained(|arr| f(arr._unsafe_get_boxed_ptr));
+    borrow_ptr = |f, arr| arr.do_with_retained(|arr| f(arr._get_boxed_ptr));
 
     // Calls an IO action with a pointer to the memory region where elements are stored.
     // 
@@ -400,9 +400,9 @@ namespace FFI {
 
     // Borrows a pointer to the data of a boxed value.
     // 
-    // For more details, see the document of `_unsafe_get_boxed_ptr`.
+    // For more details, see the document of `_get_boxed_ptr`.
     borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b;
-    borrow_boxed = |act, val| val.do_with_retained(|val| act(val._unsafe_get_boxed_ptr));
+    borrow_boxed = |act, val| val.do_with_retained(|val| act(val._get_boxed_ptr));
 
     // Performs an IO action borrowing a pointer to the data of a boxed value.
     borrow_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO b;
@@ -1414,7 +1414,7 @@ namespace String {
     // 
     // Note that in case the string is not used after call of this function, the returned pointer will be already released.
     _get_c_str : String -> Ptr;
-    _get_c_str = |s| s.@_data._unsafe_get_boxed_ptr;
+    _get_c_str = |s| s.@_data._get_boxed_ptr;
 
     // Create a string from C string (i.e., null-terminated byte array).
     // 

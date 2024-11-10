@@ -4002,11 +4002,8 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
     ) -> Object<'c> {
         // Get argument
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
-        if !obj.is_box(gc.type_env()) {
-            error_exit(
-                "Std::FFI::unsafe_get_retained_ptr_of_boxed_value cannot be called on an unboxed value.",
-            )
-        }
+        assert!(obj.is_box(gc.type_env()));
+
         let ptr = obj.ptr(gc);
         let ret = if rvo.is_some() {
             rvo.unwrap()
@@ -4045,7 +4042,7 @@ pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>
                 },
             ),
             vec![FullName::local(VAR_NAME)],
-            format!("unsafe_get_retained_ptr_of_boxed_value({})", VAR_NAME),
+            format!("boxed_to_retained_ptr({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -4097,10 +4094,7 @@ pub fn get_boxed_value_from_retained_ptr_function() -> (Arc<ExprNode>, Arc<Schem
                 },
             ),
             vec![FullName::local(VAR_NAME)],
-            format!(
-                "unsafe_get_boxed_value_from_retained_ptr_function({})",
-                VAR_NAME
-            ),
+            format!("boxed_from_retained_ptr_function({})", VAR_NAME),
             obj_type,
             None,
         ),
@@ -4175,7 +4169,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
                 &vec![],
                 None,
                 gc,
-                Some("ret_val@unsafe_get_release_function_of_boxed_value"),
+                Some("ret_val@get_funptr_release"),
             )
         };
         ret.store_field_nocap(gc, 0, func_ptr);
@@ -4205,7 +4199,7 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
                 },
             ),
             vec![FullName::local(VAR_NAME)],
-            format!("unsafe_get_release_function_of_boxed_value({})", VAR_NAME),
+            format!("get_funptr_release({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -4280,7 +4274,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
                 &vec![],
                 None,
                 gc,
-                Some("ret_val@unsafe_get_retain_function_of_boxed_value"),
+                Some("ret_val@get_funptr_retain"),
             )
         };
         ret.store_field_nocap(gc, 0, func_ptr);
@@ -4309,7 +4303,7 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
                 },
             ),
             vec![FullName::local(VAR_NAME)],
-            format!("unsafe_get_retain_function_of_boxed_value({})", VAR_NAME),
+            format!("get_funptr_retain({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -4350,7 +4344,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
                 &vec![],
                 None,
                 gc,
-                Some("ret_val@_unsafe_get_boxed_ptr"),
+                Some("ret_val@_get_boxed_ptr"),
             )
         };
         ret.store_field_nocap(gc, 0, data_ptr);
@@ -4378,7 +4372,7 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
     gc.cast_pointer(ptr, ptr_ty)
 }
 
-pub fn get_unsafe_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
@@ -4396,7 +4390,7 @@ pub fn get_unsafe_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
                 var_name: VAR_NAME.to_string(),
             }),
             vec![FullName::local(VAR_NAME)],
-            format!("_unsafe_get_boxed_ptr({})", VAR_NAME),
+            format!("_get_boxed_ptr({})", VAR_NAME),
             ret_type,
             None,
         ),

@@ -1,0 +1,1 @@
+Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr`.

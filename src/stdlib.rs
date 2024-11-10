@@ -501,55 +501,34 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     // FFI
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(
-            &[STD_NAME, FFI_NAME],
-            "unsafe_get_retained_ptr_of_boxed_value",
-        ),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "boxed_to_retained_ptr"),
         get_retained_ptr_of_boxed_value_function(),
         None,
-        Some(include_str!("./docs/std_ffi_unsafe_get_retained_ptr_of_boxed_value.md").to_string()),
+        Some(include_str!("./docs/std_ffi_boxed_to_retained_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(
-            &[STD_NAME, FFI_NAME],
-            "unsafe_get_boxed_value_from_retained_ptr",
-        ),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "boxed_from_retained_ptr"),
         get_boxed_value_from_retained_ptr_function(),
         None,
-        Some(
-            include_str!("./docs/std_ffi_unsafe_get_boxed_value_from_retained_ptr.md").to_string(),
-        ),
+        Some(include_str!("./docs/std_ffi_boxed_from_retained_ptr.md").to_string()),
     ));
-    errors.eat_err(
-        fix_module.add_global_value(
-            FullName::from_strs(
-                &[STD_NAME, FFI_NAME],
-                "unsafe_get_release_function_of_boxed_value",
-            ),
-            get_release_function_of_boxed_value(),
-            None,
-            Some(
-                include_str!("./docs/std_ffi_unsafe_get_release_function_of_boxed_value.md")
-                    .to_string(),
-            ),
-        ),
-    );
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(
-            &[STD_NAME, FFI_NAME],
-            "unsafe_get_retain_function_of_boxed_value",
-        ),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "get_funptr_release"),
+        get_release_function_of_boxed_value(),
+        None,
+        Some(include_str!("./docs/std_ffi_get_funptr_release.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "get_funptr_retain"),
         get_retain_function_of_boxed_value(),
         None,
-        Some(
-            include_str!("./docs/std_ffi_unsafe_get_retain_function_of_boxed_value.md").to_string(),
-        ),
+        Some(include_str!("./docs/std_ffi_get_funptr_retain.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "_unsafe_get_boxed_ptr"),
-        get_unsafe_get_boxed_ptr(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "_get_boxed_ptr"),
+        get_get_boxed_ptr(),
         None,
-        Some(include_str!("./docs/std_ffi_unsafe_get_boxed_ptr.md").to_string()),
+        Some(include_str!("./docs/std_ffi_get_boxed_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "mutate_boxed"),

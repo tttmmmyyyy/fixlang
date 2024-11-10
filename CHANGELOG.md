@@ -5,7 +5,7 @@
 ### Added
 - Add `Std::Monad::unless : [m : Monad] Bool -> m () -> m ()`, `Std::Monad::when : [m : Monad] Bool -> m () -> m ()`.
 - Add type aliases `Std::FFI::CChar`, `Std::FFI::CUnsignedChar`, `Std::FFI::CShort`, `Std::FFI::CUnsignedShort`, `Std::FFI::CInt`, `Std::FFI::CUnsignedInt`, `Std::FFI::CLong`, `Std::FFI::CUnsignedLong`, `Std::FFI::CLongLong`, `Std::FFI::CUnsignedLongLong`, `Std::FFI::CSizeT`, `Std::FFI::CFloat`, `Std::FFI::CDouble`.
-- Add `Std::FFI::_unsafe_get_boxed_ptr`, `Std::FFI::borrow_boxed`.
+- Add `Std::FFI::_get_boxed_ptr`, `Std::FFI::borrow_boxed`.
 - Add `Std::FFI::get_errno`, `Std::FFI::clear_errno`.
 - Add `act_{field} : [f : Functor] (F -> f F) -> S -> f S` for each field `{field}` of type `F` of a struct `S`, which is known as "Lens" in Haskell community.
 - Add `Std::Destructor::mutate_unique` and `Std::Destructor::mutate_unique_io`.
@@ -35,7 +35,7 @@
 - Forbid underscores in type names, trait names, module names and namespaces.
 - Change `CALL_C` to `FFI_CALL`.
 - Remove `Std::abort` and added `Std::undefined : String -> a`.
-- Change the type of arguments of `Std::FFI::unsafe_get_retain_function_of_boxed_value` and `Std::FFI::unsafe_get_release_function_of_boxed_value`.
+- Change the type of arguments of `Std::FFI::get_funptr_retain` and `Std::FFI::get_funptr_release`.
 - Remove `Debug` built-in module, which is moved into `Std::Debug` namespace.
 - Remove `AsyncTask`, `Character`, `Hash`, `HashMap`, `HashSet`, `Math`, `Random`, `RegExp`, `Subprocess` and `Time` built-in modules. They are provided as independent Fix projects.
 - Change the type of `Debug::assert` and `Debug::assert_eq`. Now they return `IO ()`.

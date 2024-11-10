@@ -1642,15 +1642,15 @@ For details, see [the document for `Destructor`](/std_doc/Std.md#type-destructor
 
 ### Managing ownership of Fix's boxed value in a foreign language
 
-The function `Std::FFI::unsafe_get_retained_ptr_of_boxed_value : a -> Ptr` returns a retained pointer to a *boxed* value allocated by Fix.
+The function `Std::FFI::boxed_to_retained_ptr : a -> Ptr` returns a retained pointer to a *boxed* value allocated by Fix.
 Here, "retained" means that the pointer has a shared ownership of the value, and you are responsible for decrementing the reference counter to avoid memory leak.
-You can get back a Fix value from a retained pointer by `Std::FFI::unsafe_get_boxed_value_from_retained_ptr : Ptr -> a`.
+You can get back a Fix value from a retained pointer by `Std::FFI::boxed_from_retained_ptr : Ptr -> a`.
 
 If you have a retained pointer of a Fix value in a foreign language, you may need to release it (i.e., decrement the reference counter) when you drop the pointer, or retain it (i.e., increment the reference counter) when you copy the pointer.
-To do this, first get the pointer to the retain / release function for a Fix value by `Std::FFI::unsafe_get_release_function_of_boxed_value` and `Std::FFI::unsafe_get_retain_function_of_boxed_value`:
+To do this, first get the pointer to the retain / release function for a Fix value by `Std::FFI::get_funptr_release` and `Std::FFI::get_funptr_retain`:
 
-- `Std::FFI::unsafe_get_release_function_of_boxed_value : a -> Ptr`
-- `Std::FFI::unsafe_get_retain_function_of_boxed_value : a -> Ptr`
+- `Std::FFI::get_funptr_release : a -> Ptr`
+- `Std::FFI::get_funptr_retain : a -> Ptr`
 
 Each function returns a function pointer of type `void (*)(void*)`.
 Then you can retain / release a Fix's value of type `a` via the function pointer.

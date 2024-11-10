@@ -911,7 +911,7 @@ This function is dangerous because if the array is not used after call of this f
 Try using `borrow_ptr` instead.
 
 @deprecated
-Use `Std::FFI::_unsafe_get_boxed_ptr` instead.
+Use `Std::FFI::_get_boxed_ptr` instead.
 
 ### `_get_sub_size_asif : Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
@@ -930,8 +930,7 @@ This function receives a working buffer as the first argument to reduce memory a
 Force the uniqueness of an array.
 If the given array is shared, this function returns the cloned array.
 
-@deprecated
-
+DEPRECATED:
 This function is unsafe and deprecated because it is fragile when the "common expression elimination" optimization is implemented in the future. 
 Consider the following example:
 
@@ -1430,24 +1429,24 @@ Converts a floating number to a string with specified precision (i.e., number of
 
 ## `namespace Std::FFI`
 
-### `_unsafe_get_boxed_ptr : [a : Std::Boxed] a -> Std::Ptr`
+### `_get_boxed_ptr : [a : Std::Boxed] a -> Std::Ptr`
 
 Returns a pointer to the data of a boxed value.
 
 The returned pointer points to the first element of the array if the value is an `Array`, and to the first field if the value is a struct.
 At the moment, it is not specified what pointer is returned for a union, so do not use this function with unions.
 
-The difference from `unsafe_get_retained_ptr_of_boxed_value` is that this function returns a pointer to region where the payload of a boxed value is stored;
-on the other hand, `unsafe_get_retained_ptr_of_boxed_value` returns a pointer to the boxed value itself (i.e., the control block of the value).
+The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
+on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (i.e., the control block of the value).
 
-NOTE: This function is unsafe in that if the call `v._unsafe_get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
+NOTE: This function is unsafe in that if the call `v._get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
 To avoid issues caused by this, use `borrow_boxed` instead.
 
 ### `borrow_boxed : (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
-For more details, see the document of `_unsafe_get_boxed_ptr`.
+For more details, see the document of `_get_boxed_ptr`.
 
 ### `borrow_boxed_io : (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
 
@@ -1486,14 +1485,14 @@ For more details, see the document of `mutate_boxed`.
 
 Internal implementation of the `mutate_boxed_io` function.
 
-### `unsafe_get_boxed_value_from_retained_ptr : [a : Std::Boxed] Std::Ptr -> a`
+### `boxed_from_retained_ptr : [a : Std::Boxed] Std::Ptr -> a`
 
-Creates a boxed value from a retained pointer obtained by `unsafe_get_retained_ptr_of_boxed_value`.
+Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr`.
 
-### `unsafe_get_release_function_of_boxed_value : [a : Std::Boxed] (() -> a) -> Std::Ptr`
+### `get_funptr_release : [a : Std::Boxed] (() -> a) -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
-This function is used to release a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
+This function is used to release a pointer obtained by `_boxed_to_retained_ptr`.
 
 Note that this function is requires a value of type `Lazy a`, not of `a`.
 So you can get release function for a boxed type `T` even when you don't have a value of type `T` -- you can just use `|_| undefined("") : T`:
@@ -1506,7 +1505,7 @@ type VoidType = box struct {};
 
 main: IO ();
 main = (
-    let release = (|_| undefined("") : VoidType).unsafe_get_release_function_of_boxed_value; // Release function of `VoidType`.
+    let release = (|_| undefined("") : VoidType).get_funptr_release; // Release function of `VoidType`.
     pure()
 );
 ```
@@ -1515,20 +1514,20 @@ In case the type is not a specific `T`, but a generic parameter `a` that appears
 - If you have a function `f : b -> a`, then you can use `|_| f(undefined(""))` of type `Lazy a`. 
 - If you have a function `f : a -> b`, then you can use `|_| let x = undefined(""); let _ = f(x); x` of type `Lazy a`.
 
-### `unsafe_get_retain_function_of_boxed_value : [a : Std::Boxed] (() -> a) -> Std::Ptr`
+### `get_funptr_retain : [a : Std::Boxed] (() -> a) -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which retains a boxed value of type `a`.
-This function is used to retain a pointer obtained by `_unsafe_get_retained_ptr_of_boxed_value`.
+This function is used to retain a pointer obtained by `_boxed_to_retained_ptr`.
 
-For the reason that this function requires a value of type `Lazy a`, not of `a`, see the document for `unsafe_get_release_function_of_boxed_value`.
+For the reason that this function requires a value of type `Lazy a`, not of `a`, see the document for `get_funptr_release`.
 
-### `unsafe_get_retained_ptr_of_boxed_value : [a : Std::Boxed] a -> Std::Ptr`
+### `boxed_to_retained_ptr : [a : Std::Boxed] a -> Std::Ptr`
 
 Returns a retained pointer to a boxed value.
 This function is used to share ownership of Fix's boxed values with foreign languages.
 
-To get back the boxed value from the retained pointer, use `unsafe_get_boxed_value_from_retained_ptr`.
-To release / retain the value in a foreign language, call the function pointer obtained by `unsafe_get_release_function_of_boxed_value` or `unsafe_get_retain_function_of_boxed_value` on the pointer.
+To get back the boxed value from the retained pointer, use `boxed_from_retained_ptr`.
+To release / retain the value in a foreign language, call the function pointer obtained by `get_funptr_release` or `get_funptr_retain` on the pointer.
 
 Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
 If you want to get a pointer to the data of the boxed value, use `borrow_boxed`.

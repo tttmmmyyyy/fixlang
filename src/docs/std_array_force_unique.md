@@ -1,8 +1,7 @@
 Force the uniqueness of an array.
 If the given array is shared, this function returns the cloned array.
 
-@deprecated
-
+DEPRECATED:
 This function is unsafe and deprecated because it is fragile when the "common expression elimination" optimization is implemented in the future. 
 Consider the following example:
 
