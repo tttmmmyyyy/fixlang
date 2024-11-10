@@ -143,7 +143,7 @@ impl TypeDefn {
 
     // Check if all of type variables in field types appear in lhs of type definition.
     pub fn check_tyvars(&self) {
-        let tyvars = HashSet::<String>::from_iter(self.tyvars.iter().map(|tv| tv.name.clone()));
+        let tyvars = Set::<String>::from_iter(self.tyvars.iter().map(|tv| tv.name.clone()));
         for v in self.free_variables_in_definition() {
             if !tyvars.contains(&v.name) {
                 error_exit_with_src(
@@ -160,7 +160,7 @@ impl TypeDefn {
 
     // Set kinds to type variables in `self.value` using kind information in `self.tyvars`.
     pub fn set_kinds_in_value(&mut self) {
-        let kind_scope: HashMap<_, _> = self
+        let kind_scope: Map<_, _> = self
             .tyvars
             .iter()
             .map(|tv| (tv.name.clone(), tv.kind.clone()))
@@ -214,7 +214,7 @@ impl TypeDeclValue {
         }
     }
 
-    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &Map<Name, Arc<Kind>>) {
         match self {
             TypeDeclValue::Struct(s) => s.set_kinds(kinds),
             TypeDeclValue::Union(u) => u.set_kinds(kinds),
@@ -254,7 +254,7 @@ impl Struct {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &Map<Name, Arc<Kind>>) {
         for f in &mut self.fields {
             f.set_kinds(kinds);
         }
@@ -292,7 +292,7 @@ impl Union {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &Map<Name, Arc<Kind>>) {
         for f in &mut self.fields {
             f.set_kinds(kinds);
         }
@@ -315,7 +315,7 @@ impl TypeAlias {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &Map<Name, Arc<Kind>>) {
         self.value = self.value.set_kinds(scope);
     }
 }
@@ -345,7 +345,7 @@ impl Field {
 
     // Check if fields are duplicated. If duplication is found, it returns the duplicated field.
     pub fn check_duplication(fields: &Vec<Field>) -> Option<Name> {
-        let mut names: HashSet<Name> = Default::default();
+        let mut names: Set<Name> = Default::default();
         for field in fields {
             if names.contains(&field.name) {
                 return Some(field.name.clone());
@@ -356,7 +356,7 @@ impl Field {
         return None;
     }
 
-    pub fn set_kinds(&mut self, kinds: &HashMap<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &Map<Name, Arc<Kind>>) {
         self.ty = self.ty.set_kinds(kinds);
     }
 }

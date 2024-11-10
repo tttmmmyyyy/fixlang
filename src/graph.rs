@@ -1,5 +1,6 @@
-use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
+
+use crate::{Map, Set};
 
 pub struct Graph<T> {
     // Data stored in nodes;
@@ -63,7 +64,7 @@ impl<T> Graph<T> {
 
     // Create a graph from a set of elements.
     // Returns a map from element to a node.
-    pub fn from_set(elems: HashSet<T>) -> (Self, HashMap<T, usize>)
+    pub fn from_set(elems: Set<T>) -> (Self, Map<T, usize>)
     where
         T: Clone + Eq + Hash,
     {
@@ -72,7 +73,7 @@ impl<T> Graph<T> {
             .iter()
             .enumerate()
             .map(|(idx, elem)| (elem.clone(), idx))
-            .collect::<HashMap<_, _>>();
+            .collect::<Map<_, _>>();
         (Graph::new(elems), inv_map)
     }
 
@@ -87,7 +88,7 @@ impl<T> Graph<T> {
     }
 
     // Collect nodes reachable from a node.
-    fn reachable_nodes_inner(&self, from: usize, visited: &mut HashSet<usize>) {
+    fn reachable_nodes_inner(&self, from: usize, visited: &mut Set<usize>) {
         if visited.contains(&from) {
             return;
         }
@@ -98,8 +99,8 @@ impl<T> Graph<T> {
     }
 
     // Collect nodes reachable from a node.
-    pub fn reachable_nodes(&self, from: usize) -> HashSet<usize> {
-        let mut nodes: HashSet<usize> = Default::default();
+    pub fn reachable_nodes(&self, from: usize) -> Set<usize> {
+        let mut nodes: Set<usize> = Default::default();
         self.reachable_nodes_inner(from, &mut nodes);
         nodes
     }
@@ -111,9 +112,9 @@ impl<T> Graph<T> {
     pub fn find_loop(&self) -> Vec<usize> {
         fn visit<T>(
             pos: usize,
-            path_set: &mut HashSet<usize>,
+            path_set: &mut Set<usize>,
             path_vec: &mut Vec<usize>,
-            verified: &mut HashSet<usize>,
+            verified: &mut Set<usize>,
             graph: &Graph<T>,
         ) -> Vec<usize> {
             if path_set.contains(&pos) {
@@ -142,9 +143,9 @@ impl<T> Graph<T> {
             return vec![];
         }
 
-        let mut path_set: HashSet<usize> = Default::default();
+        let mut path_set: Set<usize> = Default::default();
         let mut path_vec: Vec<usize> = Default::default();
-        let mut visited: HashSet<usize> = Default::default();
+        let mut visited: Set<usize> = Default::default();
         path_set.reserve(self.elems.len());
         visited.reserve(self.elems.len());
 

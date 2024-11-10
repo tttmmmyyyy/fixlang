@@ -8,7 +8,7 @@ use crate::{
     runner::build_file,
     Configuration, Span,
 };
-use crate::{to_absolute_path, DiagnosticsConfig, EndNode, SourceFile, SourcePos, Var};
+use crate::{to_absolute_path, DiagnosticsConfig, EndNode, Map, Set, SourceFile, SourcePos, Var};
 use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
@@ -23,10 +23,8 @@ use lsp_types::{
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 use std::path::Path;
 use std::{
-    collections::HashSet,
     fs::File,
     io::{Read, Write},
     path::PathBuf,
@@ -105,8 +103,7 @@ pub fn launch_language_server() {
     let mut last_diag: Option<DiagnosticsResult> = None;
 
     // Maps to get file contents from Uris.
-    let mut uri_to_latest_content: HashMap<lsp_types::Uri, String> =
-        std::collections::HashMap::new();
+    let mut uri_to_latest_content: Map<lsp_types::Uri, String> = Map::default();
 
     loop {
         // If new diagnostics are available, send store it to `last_diag`.
@@ -541,7 +538,7 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>) {
 // Handle "textDocument/didOpen" method.
 fn handle_textdocument_did_open(
     params: &DidOpenTextDocumentParams,
-    uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut Map<lsp_types::Uri, String>,
 ) {
     // Store the content of the file into the maps.
     uri_to_latest_content.insert(
@@ -553,7 +550,7 @@ fn handle_textdocument_did_open(
 // Handle "textDocument/didChange" method.
 fn handle_textdocument_did_change(
     params: &DidChangeTextDocumentParams,
-    uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut Map<lsp_types::Uri, String>,
 ) {
     // Store the content of the file into `uri_to_content`.
     if let Some(change) = params.content_changes.last() {
@@ -565,7 +562,7 @@ fn handle_textdocument_did_change(
 fn handle_textdocument_did_save(
     diag_send: Sender<DiagnosticsMessage>,
     params: &DidSaveTextDocumentParams,
-    uri_to_latest_content: &mut HashMap<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut Map<lsp_types::Uri, String>,
 ) {
     // Store the content of the file into maps.
     if let Some(text) = &params.text {
@@ -751,7 +748,7 @@ fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> O
 fn get_node_at(
     text_position: &TextDocumentPositionParams,
     program: &Program,
-    uri_to_content: &HashMap<lsp_types::Uri, String>,
+    uri_to_content: &Map<lsp_types::Uri, String>,
 ) -> Option<EndNode> {
     // Get the latest file content.
     let uri = &text_position.text_document.uri;
@@ -800,7 +797,7 @@ fn handle_goto_definition(
     id: u32,
     params: &GotoDefinitionParams,
     program: &Program,
-    uri_to_content: &HashMap<lsp_types::Uri, String>,
+    uri_to_content: &Map<lsp_types::Uri, String>,
 ) {
     // Get the node at the cursor position.
     let node = get_node_at(
@@ -911,7 +908,7 @@ fn handle_hover(
     id: u32,
     params: &HoverParams,
     program: &Program,
-    uri_to_content: &HashMap<lsp_types::Uri, String>,
+    uri_to_content: &Map<lsp_types::Uri, String>,
 ) {
     // Get the node at the cursor position.
     let node = get_node_at(
@@ -1040,7 +1037,7 @@ fn position_to_bytes(string: &str, position: lsp_types::Position) -> usize {
 
 // The entry point of the diagnostics thread.
 fn diagnostics_thread(req_recv: Receiver<DiagnosticsMessage>, res_send: Sender<DiagnosticsResult>) {
-    let mut prev_err_paths = HashSet::new();
+    let mut prev_err_paths = Set::default();
     let typecheck_cache = Arc::new(typecheckcache::MemoryCache::new());
 
     loop {
@@ -1084,10 +1081,7 @@ fn diagnostics_thread(req_recv: Receiver<DiagnosticsMessage>, res_send: Sender<D
             }
             Err(errs) => errs,
         };
-        prev_err_paths = send_diagnostics_notification(
-            errs,
-            std::mem::replace(&mut prev_err_paths, HashSet::new()),
-        );
+        prev_err_paths = send_diagnostics_notification(errs, std::mem::take(&mut prev_err_paths));
     }
 }
 
@@ -1114,11 +1108,8 @@ fn span_to_range(span: &Span) -> lsp_types::Range {
 // Send the diagnostics notification to the client.
 // Return the paths of the files that have errors.
 // - `prev_err_paths`: The paths of the files that have errors in the previous diagnostics. This is used to clear the diagnostics for the files that have no errors.
-fn send_diagnostics_notification(
-    errs: Errors,
-    mut prev_err_paths: HashSet<PathBuf>,
-) -> HashSet<PathBuf> {
-    let mut err_paths = HashSet::new();
+fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>) -> Set<PathBuf> {
+    let mut err_paths = Set::default();
 
     // Get the current directory.
     let cdir = std::env::current_dir();

@@ -12,7 +12,7 @@ use super::*;
 #[derive(Clone)]
 pub struct Scope<T> {
     // Map from variable name to its value stacks.
-    local: HashMap<Name, Vec<T>>,
+    local: Map<Name, Vec<T>>,
     // List of pairs of global names and its values.
     // Arc for sharing the list among multiple scopes.
     global: Arc<Vec<(FullName, T)>>,
@@ -33,7 +33,7 @@ where
 {
     // Push a local value.
     pub fn push(&mut self, name: &Name, v: T) {
-        misc::insert_to_hashmap_vec(&mut self.local, name, v);
+        misc::insert_to_map_vec(&mut self.local, name, v);
     }
 
     // Pop a local value.
@@ -47,8 +47,8 @@ where
     }
 
     // Get a set of local names.
-    pub fn local_names(&self) -> HashSet<Name> {
-        let mut res: HashSet<Name> = Default::default();
+    pub fn local_names(&self) -> Set<Name> {
+        let mut res: Set<Name> = Default::default();
         for (name, stack) in &self.local {
             if !stack.is_empty() {
                 res.insert(name.clone());
@@ -88,7 +88,7 @@ where
 // when we want to COMPLETELY substitute type variables in a type by `substitution`, we only apply this mapy only ONCE.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
-    pub data: HashMap<Name, Arc<TypeNode>>,
+    pub data: Map<Name, Arc<TypeNode>>,
 }
 
 impl Default for Substitution {
@@ -106,7 +106,7 @@ impl Substitution {
 
     // Make single substitution.
     pub fn single(var: &str, ty: Arc<TypeNode>) -> Self {
-        let mut data = HashMap::<String, Arc<TypeNode>>::default();
+        let mut data = Map::<String, Arc<TypeNode>>::default();
         data.insert(var.to_string(), ty);
         Self { data }
     }
@@ -217,7 +217,7 @@ impl Substitution {
     pub fn matching(
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
-        fixed_tyvars: &HashSet<Name>,
+        fixed_tyvars: &Set<Name>,
         kind_env: &KindEnv
     ) -> Result<Option<Self>, Errors> {
         match &ty1.ty {
@@ -339,8 +339,8 @@ impl Substitution {
 
 //     // pub fn from_equality(
 //     //     eq: Equality,
-//     //     kind_map: &HashMap<TyCon, Arc<Kind>>,
-//     //     assoc_tys: &HashMap<FullName, Vec<EqualityScheme>>,
+//     //     kind_map: &Map<TyCon, Arc<Kind>>,
+//     //     assoc_tys: &Map<FullName, Vec<EqualityScheme>>,
 //     // ) -> Result<Unification, UnificationErr> {
 //     //     let mut uni = Self::default();
 //     //     uni.add_equality(eq, kind_map, assoc_tys)?;
@@ -399,17 +399,17 @@ pub struct TypeCheckContext {
     pub kind_env: Arc<KindEnv>,
     // A map from a module to the import statements.
     // To decrease clone-cost, wrap it in reference counter.
-    pub import_statements: Arc<HashMap<Name, Vec<ImportStatement>>>,
+    pub import_statements: Arc<Map<Name, Vec<ImportStatement>>>,
     // In which module is the current expression defined?
     // This is used as a state variable for typechecking.
     pub current_module: Option<Name>,
     // Equalities assumed.
-    pub assumed_eqs: HashMap<TyAssoc, Vec<EqualityScheme>>,
+    pub assumed_eqs: Map<TyAssoc, Vec<EqualityScheme>>,
     // Predicates assumed.
-    pub assumed_preds: HashMap<Trait, Vec<QualPredScheme>>,
+    pub assumed_preds: Map<Trait, Vec<QualPredScheme>>,
     // Fixed type variables.
     // In unification, these type variables are not allowed to be replaced to another type.
-    pub fixed_tyvars: HashSet<Name>,
+    pub fixed_tyvars: Set<Name>,
     // Type check cache.
     pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
     // Number of worker threads.
@@ -434,7 +434,7 @@ impl TypeCheckContext {
         trait_env: TraitEnv,
         type_env: TypeEnv,
         kind_env: KindEnv,
-        import_statements: HashMap<Name, Vec<ImportStatement>>,
+        import_statements: Map<Name, Vec<ImportStatement>>,
         cache: Arc<dyn TypeCheckCache + Sync + Send>,
         num_worker_threads: usize,
     ) -> Self {
@@ -453,7 +453,7 @@ impl TypeCheckContext {
             equalities: vec![],
             assumed_preds,
             assumed_eqs,
-            fixed_tyvars: HashSet::default(),
+            fixed_tyvars: Set::default(),
             cache,
             num_worker_threads,
         }
@@ -539,7 +539,7 @@ impl TypeCheckContext {
                             predicate: pred
                         }
                     };
-                    misc::insert_to_hashmap_vec(&mut self.assumed_preds, &trait_id, qual_pred_scm);
+                    misc::insert_to_map_vec(&mut self.assumed_preds, &trait_id, qual_pred_scm);
                 }
                 for eq in eqs {
                     let assoc_ty = eq.assoc_type.clone();
@@ -547,7 +547,7 @@ impl TypeCheckContext {
                         gen_vars: vec![],
                         equality: eq,
                     };
-                    misc::insert_to_hashmap_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
+                    misc::insert_to_map_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
                 }
                 return Ok(scheme.ty.clone());
             },
@@ -779,10 +779,10 @@ impl TypeCheckContext {
                 let field_names = ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
 
                 // Validate fields.
-                let field_names_in_struct_defn: HashSet<Name> =
-                    HashSet::from_iter(field_names.iter().cloned());
-                let field_names_in_expression: HashSet<Name> =
-                    HashSet::from_iter(fields.iter().map(|(name, _)| name.clone()));
+                let field_names_in_struct_defn: Set<Name> =
+                    Set::from_iter(field_names.iter().cloned());
+                let field_names_in_expression: Set<Name> =
+                    Set::from_iter(fields.iter().map(|(name, _)| name.clone()));
                 for f in &field_names_in_struct_defn {
                     if !field_names_in_expression.contains(f) {
                         return Err(Errors::from_msg_srcs(
@@ -816,8 +816,8 @@ impl TypeCheckContext {
                 assert_eq!(field_tys.len(), fields.len());
 
                 // Reorder fields as ordering of fields in struct definition.
-                let fields: HashMap<Name, Arc<ExprNode>> =
-                    HashMap::from_iter(fields.iter().cloned());
+                let fields: Map<Name, Arc<ExprNode>> =
+                    Map::from_iter(fields.iter().cloned());
                 let mut fields = field_names
                     .iter()
                     .map(|name| (name.clone(), fields[name].clone()))
@@ -1119,7 +1119,7 @@ impl TypeCheckContext {
     // If predicates are unsatisfiable, return Err.
     fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
         let preds = std::mem::replace(&mut self.predicates, vec![]);
-        let mut already_added : HashSet<String> = HashSet::new();
+        let mut already_added : Set<String> = Set::default();
         for pred in preds {
             self.add_predicate_reducing(pred, &mut already_added)?;
         }
@@ -1127,7 +1127,7 @@ impl TypeCheckContext {
     }
 
     // Add a predicate after reducing it.
-    fn add_predicate_reducing(&mut self, pred : Predicate, already_added: &mut HashSet<Name>) -> Result<(), UnifOrOtherErr> {
+    fn add_predicate_reducing(&mut self, pred : Predicate, already_added: &mut Set<Name>) -> Result<(), UnifOrOtherErr> {
         for pred in pred.resolve_trait_aliases(&self.trait_env)? {
             self.add_predicate_reducing_noalias(pred, already_added)?;
         }
@@ -1136,7 +1136,7 @@ impl TypeCheckContext {
 
     // Add a predicate after reducing it.
     // Trait in `pred` should not be a trait alias.
-    fn add_predicate_reducing_noalias(&mut self, mut pred : Predicate, already_added: &mut HashSet<Name>) -> Result<(), UnifOrOtherErr> {
+    fn add_predicate_reducing_noalias(&mut self, mut pred : Predicate, already_added: &mut Set<Name>) -> Result<(), UnifOrOtherErr> {
         self.substitute_predicate(&mut pred);
         pred.ty = self.reduce_type_by_equality(pred.ty)?;
         let pred_str = pred.to_string();

@@ -1,5 +1,6 @@
-use std::{collections::HashMap, fmt::Display, path::PathBuf};
+use std::{fmt::Display, path::PathBuf};
 
+use crate::misc::Map;
 use crate::{misc, sourcefile::Span};
 
 pub struct Errors {
@@ -80,13 +81,13 @@ impl Errors {
     // If an `Error` has no `Span`, it will be considered as having a default PathBuf.
     pub fn organize_by_path(&self) -> Vec<(PathBuf, Vec<Error>)> {
         // Organize errors into a hashmap.
-        let mut map: HashMap<PathBuf, Vec<Error>> = HashMap::default();
+        let mut map: Map<PathBuf, Vec<Error>> = Map::default();
         for err in &self.errs {
             let path = match err.srcs.first() {
                 None => PathBuf::new(),
                 Some(span) => span.input.file_path.clone(),
             };
-            misc::insert_to_hashmap_vec(&mut map, &path, err.clone());
+            misc::insert_to_map_vec(&mut map, &path, err.clone());
         }
 
         // Convert the hashmap into a vector.

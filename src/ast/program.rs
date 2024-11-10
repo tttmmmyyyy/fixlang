@@ -10,9 +10,9 @@ use super::*;
 #[derive(Clone)]
 pub struct TypeEnv {
     // List of type constructors including user-defined types.
-    pub tycons: Arc<HashMap<TyCon, TyConInfo>>,
+    pub tycons: Arc<Map<TyCon, TyConInfo>>,
     // List of type aliases.
-    pub aliases: Arc<HashMap<TyCon, TyAliasInfo>>,
+    pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
 }
 
 impl Default for TypeEnv {
@@ -25,15 +25,15 @@ impl Default for TypeEnv {
 }
 
 impl TypeEnv {
-    pub fn new(tycons: HashMap<TyCon, TyConInfo>, aliases: HashMap<TyCon, TyAliasInfo>) -> TypeEnv {
+    pub fn new(tycons: Map<TyCon, TyConInfo>, aliases: Map<TyCon, TyAliasInfo>) -> TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
             aliases: Arc::new(aliases),
         }
     }
 
-    pub fn kinds(&self) -> HashMap<TyCon, Arc<Kind>> {
-        let mut res = HashMap::default();
+    pub fn kinds(&self) -> Map<TyCon, Arc<Kind>> {
+        let mut res = Map::default();
         for (tc, ti) in self.tycons.as_ref().iter() {
             res.insert(tc.clone(), ti.kind.clone());
         }
@@ -56,8 +56,8 @@ impl InstantiatedSymbol {
     // The set of modules that this symbol depends on.
     // If any of these modules, or any of their importee are changed, then they are required to be re-compiled.
     // Note that this set may not be fully spanned in the importing graph.
-    pub fn dependent_modules(&self) -> HashSet<Name> {
-        let mut dep_mods = HashSet::default();
+    pub fn dependent_modules(&self) -> Set<Name> {
+        let mut dep_mods = Set::default();
         dep_mods.insert(self.instantiated_name.module());
         self.ty.define_modules_of_tycons(&mut dep_mods);
         dep_mods
@@ -288,21 +288,21 @@ impl MethodImpl {
 }
 
 pub struct NameResolutionContext {
-    pub candidates: HashMap<FullName, NameResolutionType>,
-    pub assoc_ty_to_arity: HashMap<FullName, usize>,
+    pub candidates: Map<FullName, NameResolutionType>,
+    pub assoc_ty_to_arity: Map<FullName, usize>,
     pub import_statements: Vec<ImportStatement>,
 }
 
 impl<'a> NameResolutionContext {
     pub fn new(
-        tycon_names_with_aliases: &HashSet<FullName>,
-        trait_names_with_aliases: &HashSet<FullName>,
-        assoc_ty_to_arity: HashMap<FullName, usize>,
+        tycon_names_with_aliases: &Set<FullName>,
+        trait_names_with_aliases: &Set<FullName>,
+        assoc_ty_to_arity: Map<FullName, usize>,
         import_statements: Vec<ImportStatement>,
     ) -> Self {
-        let mut candidates: HashMap<FullName, NameResolutionType> = HashMap::new();
+        let mut candidates: Map<FullName, NameResolutionType> = Map::default();
         fn check_insert(
-            candidates: &mut HashMap<FullName, NameResolutionType>,
+            candidates: &mut Map<FullName, NameResolutionType>,
             name: FullName,
             nrt: NameResolutionType,
         ) {
@@ -411,7 +411,7 @@ pub struct ModuleInfo {
 pub struct Program {
     /* AST */
     // Global values.
-    pub global_values: HashMap<FullName, GlobalValue>,
+    pub global_values: Map<FullName, GlobalValue>,
     // Type definitions.
     pub type_defns: Vec<TypeDefn>,
     // Type environment, which is calculated from `type_defns` once and cached.
@@ -426,11 +426,11 @@ pub struct Program {
     // Key is the name of the importer module.
     // Each module implicitly imports itself.
     // This is used to namespace resolution and overloading resolution.
-    pub mod_to_import_stmts: HashMap<Name, Vec<ImportStatement>>,
+    pub mod_to_import_stmts: Map<Name, Vec<ImportStatement>>,
 
     /* Instantiation */
     // Instantiated symbols.
-    pub instantiated_symbols: HashMap<FullName, InstantiatedSymbol>,
+    pub instantiated_symbols: Map<FullName, InstantiatedSymbol>,
     // Deferred instantiation, which is a state variable for the instantiation process.
     pub deferred_instantiation: Vec<InstantiatedSymbol>,
 
@@ -586,7 +586,7 @@ impl Program {
     pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let mut tycons = bulitin_tycons();
-        let mut aliases: HashMap<TyCon, TyAliasInfo> = HashMap::new();
+        let mut aliases: Map<TyCon, TyAliasInfo> = Map::default();
         for type_decl in &mut self.type_defns {
             // Set kinds of type variables in the right hand side of type definition.
             type_decl.set_kinds_in_value();
@@ -636,8 +636,8 @@ impl Program {
     }
 
     // Get of list of tycons that can be used for namespace resolution.
-    pub fn tycon_names_with_aliases(&self) -> HashSet<FullName> {
-        let mut res: HashSet<FullName> = Default::default();
+    pub fn tycon_names_with_aliases(&self) -> Set<FullName> {
+        let mut res: Set<FullName> = Default::default();
         for (k, _) in self.type_env().tycons.iter() {
             res.insert(k.name.clone());
         }
@@ -647,12 +647,12 @@ impl Program {
         res
     }
 
-    pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
+    pub fn assoc_ty_to_arity(&self) -> Map<FullName, usize> {
         self.trait_env.assoc_ty_to_arity()
     }
 
     // Get of list of traits that can be used for namespace resolution.
-    pub fn trait_names_with_aliases(&self) -> HashSet<FullName> {
+    pub fn trait_names_with_aliases(&self) -> Set<FullName> {
         self.trait_env.trait_names()
     }
 
@@ -713,7 +713,7 @@ impl Program {
             defn: Option<GlobalValueDefn>,
             decl: Option<GlobalValueDecl>,
         }
-        let mut global_values: HashMap<FullName, GlobalValue> = Default::default();
+        let mut global_values: Map<FullName, GlobalValue> = Default::default();
 
         // Register definitions checking duplication.
         for defn in exprs {
@@ -916,7 +916,7 @@ impl Program {
         }
         let mut tasks: Vec<CheckTask> = vec![];
 
-        let mut mod_to_nrctx: HashMap<Name, Arc<NameResolutionContext>> = HashMap::new();
+        let mut mod_to_nrctx: Map<Name, Arc<NameResolutionContext>> = Map::default();
         let mut get_nrctx = |mod_name: &Name| -> Arc<NameResolutionContext> {
             if !mod_to_nrctx.contains_key(mod_name) {
                 mod_to_nrctx.insert(
@@ -1782,7 +1782,7 @@ impl Program {
         Ok(())
     }
 
-    pub fn linked_mods(&self) -> HashSet<Name> {
+    pub fn linked_mods(&self) -> Set<Name> {
         self.mod_to_import_stmts.keys().cloned().collect()
     }
 
@@ -1887,7 +1887,7 @@ impl Program {
     }
 
     // Create a graph of modules. If module A imports module B, an edge from A to B is added.
-    pub fn importing_module_graph(&self) -> (Graph<Name>, HashMap<Name, usize>) {
+    pub fn importing_module_graph(&self) -> (Graph<Name>, Map<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
         for (importer, stmts) in &self.mod_to_import_stmts {
             for stmt in stmts {
@@ -1901,7 +1901,7 @@ impl Program {
     }
 
     // Calculate a set of modules on which a module depends.
-    pub fn dependent_modules(&self, module: &Name) -> HashSet<Name> {
+    pub fn dependent_modules(&self, module: &Name) -> Set<Name> {
         let (importing_graph, mod_to_node) = self.importing_module_graph();
         importing_graph
             .reachable_nodes(*mod_to_node.get(module).unwrap())
@@ -1911,10 +1911,10 @@ impl Program {
     }
 
     // Calculate a map from a module to a set of modules on which the module depends.
-    pub fn module_dependency_map(&self) -> HashMap<Name, HashSet<Name>> {
+    pub fn module_dependency_map(&self) -> Map<Name, Set<Name>> {
         // TODO: Improve time complexity.
         let mods = self.linked_mods();
-        let mut dependency = HashMap::new();
+        let mut dependency = Map::default();
         for module in &mods {
             dependency.insert(module.clone(), self.dependent_modules(&module));
         }
@@ -1948,10 +1948,10 @@ impl Program {
     }
 
     // Calculate a map from a module to a hash value of the module which is affected by source codes of all dependent modules.
-    pub fn module_dependency_hash_map(&self) -> HashMap<Name, String> {
+    pub fn module_dependency_hash_map(&self) -> Map<Name, String> {
         // TODO: Improve time complexity.
         let mods = self.linked_mods();
-        let mut mod_to_hash = HashMap::new();
+        let mut mod_to_hash = Map::default();
         for module in &mods {
             mod_to_hash.insert(module.clone(), self.module_dependency_hash(&module));
         }
@@ -1965,7 +1965,7 @@ impl Program {
         let stmts = self.import_statements();
         let items = stmts.iter().map(|stmt| stmt.referred_items()).flatten();
 
-        let values = self.global_values.keys().collect::<HashSet<_>>();
+        let values = self.global_values.keys().collect::<Set<_>>();
         let types = self.tycon_names_with_aliases();
         let traits = self.trait_names_with_aliases();
 

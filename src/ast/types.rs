@@ -368,7 +368,7 @@ impl TypeNode {
     }
 
     // The set of defining modules of type constructors that appear in this type.
-    pub fn define_modules_of_tycons(&self, out_set: &mut HashSet<Name>) {
+    pub fn define_modules_of_tycons(&self, out_set: &mut Set<Name>) {
         match &self.ty {
             Type::TyVar(_) => {}
             Type::TyCon(tc) => {
@@ -429,7 +429,7 @@ impl TypeNode {
     }
 
     // Set kinds to type variables.
-    pub fn set_kinds(self: &Arc<TypeNode>, tv_to_kind: &HashMap<Name, Arc<Kind>>) -> Arc<TypeNode> {
+    pub fn set_kinds(self: &Arc<TypeNode>, tv_to_kind: &Map<Name, Arc<Kind>>) -> Arc<TypeNode> {
         match &self.ty {
             Type::TyVar(tv) => {
                 if tv_to_kind.contains_key(&tv.name) {
@@ -1234,12 +1234,12 @@ impl TypeNode {
             general_err(err_msg_for_impl, impl_type, src_for_err);
         }
         let mut tyvars = vec![tyvar_from_name("%impl_type", &kind_star())];
-        let impl_ty_tyvar_set: HashSet<Name> = impl_type
+        let impl_ty_tyvar_set: Set<Name> = impl_type
             .free_vars_vec()
             .iter()
             .map(|tv| tv.name.clone())
             .collect();
-        let mut tyvars_set: HashSet<Name> = HashSet::default();
+        let mut tyvars_set: Set<Name> = Set::default();
         for i in 2..app_seq.len() {
             match &app_seq[i].ty {
                 Type::TyVar(tv) => {
@@ -1309,7 +1309,7 @@ impl TypeNode {
         // Create substitution that normalizes the names of type variables.
         let mut s = Substitution::default();
         let mut next_tyvar_no = 0;
-        let mut appeared: HashSet<Name> = HashSet::default();
+        let mut appeared: Set<Name> = Set::default();
         for fv in free_vars {
             if appeared.contains(&fv.name) {
                 continue;
@@ -1542,8 +1542,8 @@ pub struct TypeInfo {
 
 impl TypeNode {
     // Calculate free type variables.
-    pub fn free_vars(self: &Arc<TypeNode>) -> HashMap<Name, Arc<TyVar>> {
-        let mut free_vars: HashMap<String, Arc<TyVar>> = HashMap::default();
+    pub fn free_vars(self: &Arc<TypeNode>) -> Map<Name, Arc<TyVar>> {
+        let mut free_vars: Map<String, Arc<TyVar>> = Map::default();
         match &self.ty {
             Type::TyVar(tv) => {
                 free_vars.insert(tv.name.clone(), tv.clone());
@@ -1772,7 +1772,7 @@ impl Scheme {
 
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
         let mut ret = self.clone();
-        let mut scope: HashMap<Name, Arc<Kind>> = Default::default();
+        let mut scope: Map<Name, Arc<Kind>> = Default::default();
         // If a kind in `self.vars` is not `*`, then the kind is explicitly specified by user, so we insert it into `scope`.
         for tv in &self.gen_vars {
             if tv.kind != kind_star() {
@@ -1907,7 +1907,7 @@ impl Scheme {
 
 #[derive(Default, Clone)]
 pub struct KindEnv {
-    pub tycons: HashMap<TyCon, Arc<Kind>>,
-    pub assoc_tys: HashMap<TyAssoc, AssocTypeKindInfo>,
-    pub traits_and_aliases: HashMap<Trait, Arc<Kind>>,
+    pub tycons: Map<TyCon, Arc<Kind>>,
+    pub assoc_tys: Map<TyAssoc, AssocTypeKindInfo>,
+    pub traits_and_aliases: Map<Trait, Arc<Kind>>,
 }

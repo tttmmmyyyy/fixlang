@@ -2,6 +2,26 @@ use super::*;
 use core::panic;
 use std::{fs, hash::Hash};
 
+pub type Map<K, V> = fxhash::FxHashMap<K, V>;
+
+pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K, V> {
+    let mut map = Map::default();
+    for (k, v) in kvs {
+        map.insert(k, v);
+    }
+    map
+}
+
+pub type Set<T> = fxhash::FxSet<T>;
+
+pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
+    let mut set = Set::default();
+    for elem in iter {
+        set.insert(elem);
+    }
+    set
+}
+
 pub fn temporary_source_name(file_name: &str, hash: &str) -> String {
     format!("{}.{}.fix", file_name, hash)
 }
@@ -70,11 +90,7 @@ pub fn split_by_max_size<T>(mut v: Vec<T>, max_size: usize) -> Vec<Vec<T>> {
     result
 }
 
-pub fn insert_to_hashmap_vec<K: Clone + Eq + Hash, V>(
-    map: &mut HashMap<K, Vec<V>>,
-    key: &K,
-    elem: V,
-) {
+pub fn insert_to_map_vec<K: Clone + Eq + Hash, V>(map: &mut Map<K, Vec<V>>, key: &K, elem: V) {
     if let Some(vec) = map.get_mut(key) {
         vec.push(elem);
     } else {

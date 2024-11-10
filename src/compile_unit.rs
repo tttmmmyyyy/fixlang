@@ -2,8 +2,8 @@
 Cache system for object (*.o) files.
 */
 
-use std::collections::HashMap;
-use std::collections::HashSet;
+use crate::misc::Map;
+use crate::Set;
 use std::fmt;
 use std::path::PathBuf;
 
@@ -76,7 +76,7 @@ impl CompileUnit {
     // Calculate the hash of this compilation unit and set it to `self`.
     fn update_unit_hash(
         &mut self,
-        module_dependency_hash: &HashMap<Name, String>,
+        module_dependency_hash: &Map<Name, String>,
         config: &Configuration,
     ) {
         if self.unit_hash.len() > 0 {
@@ -141,17 +141,17 @@ impl CompileUnit {
     // Given a sequence of symbols, split it into compilation units.
     pub fn split_symbols(
         symbols: Vec<InstantiatedSymbol>,
-        module_dependency_hash: &HashMap<Name, String>,
-        module_dependency_map: &HashMap<Name, HashSet<Name>>,
+        module_dependency_hash: &Map<Name, String>,
+        module_dependency_map: &Map<Name, Set<Name>>,
         config: &Configuration,
     ) -> Vec<CompileUnit> {
-        let mut units: HashMap<
+        let mut units: Map<
             String, /* concatenated string of dependent modules sorted by their names */
             CompileUnit,
-        > = HashMap::new();
+        > = Map::default();
         // Classify symbols into compilation units depending on their dependent modules.
         for symbol in symbols {
-            let mut depmods = HashSet::new();
+            let mut depmods = Set::default();
             for module in symbol.dependent_modules() {
                 depmods.extend(module_dependency_map[&module].clone());
             }

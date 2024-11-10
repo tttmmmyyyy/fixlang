@@ -47,7 +47,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
     }
 
     // Replace application expressions so that they use uncurried pointers.
-    let mut symbol_names: HashSet<FullName> = Default::default();
+    let mut symbol_names: Set<FullName> = Default::default();
     for (name, _sym) in &fix_mod.instantiated_symbols {
         symbol_names.insert(name.clone());
     }
@@ -135,7 +135,7 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
 // Replace "call closure" expression to "call function pointer" expression.
 pub fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
-    symbols: &HashSet<FullName>,
+    symbols: &Set<FullName>,
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
     let fun_ty = fun.ty.as_ref().unwrap();
@@ -175,7 +175,7 @@ pub fn replace_closure_call_to_funptr_call(
 // Replace all "call closure" subexpressions to "call function pointer" expression.
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
-    symbols: &HashSet<FullName>,
+    symbols: &Set<FullName>,
 ) -> Arc<ExprNode> {
     let expr = replace_closure_call_to_funptr_call(expr, symbols);
     match &*expr.expr {

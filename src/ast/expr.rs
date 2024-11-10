@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 use core::panic;
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 // The ways of apply a function to an argument in source code.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -16,7 +16,7 @@ pub enum AppSourceCodeOrderType {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ExprNode {
     pub expr: Arc<Expr>,
-    pub free_vars: Option<HashSet<FullName>>,
+    pub free_vars: Option<Set<FullName>>,
     pub source: Option<Span>,
     pub app_order: AppSourceCodeOrderType,
     pub ty: Option<Arc<TypeNode>>,
@@ -26,7 +26,7 @@ pub struct ExprNode {
 
 impl ExprNode {
     // Set free vars
-    fn set_free_vars(&self, free_vars: HashSet<FullName>) -> Arc<Self> {
+    fn set_free_vars(&self, free_vars: Set<FullName>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.free_vars = Some(free_vars);
         Arc::new(ret)
@@ -40,7 +40,7 @@ impl ExprNode {
     }
 
     // Get free vars
-    pub fn free_vars(self: &Self) -> &HashSet<FullName> {
+    pub fn free_vars(self: &Self) -> &Set<FullName> {
         self.free_vars.as_ref().unwrap()
     }
 
@@ -644,9 +644,9 @@ impl ExprNode {
 
     // If a global value `g` is used only in the body of a lambda expression, then `g` is not included in the result.
     #[allow(dead_code)]
-    pub fn depending_global_values(self: &Arc<ExprNode>) -> HashSet<FullName> {
+    pub fn depending_global_values(self: &Arc<ExprNode>) -> Set<FullName> {
         // Filter out local variables.
-        fn filter_out_local(names: HashSet<FullName>) -> HashSet<FullName> {
+        fn filter_out_local(names: Set<FullName>) -> Set<FullName> {
             names.into_iter().filter(|name| !name.is_local()).collect()
         }
 
@@ -660,7 +660,7 @@ impl ExprNode {
                 }
                 free_vars
             }
-            Expr::Lam(_, _) => HashSet::default(),
+            Expr::Lam(_, _) => Set::default(),
             Expr::Let(_, bound, val) => {
                 // NOTE: Our let is non-recursive let, i.e.,
                 // "let x = f x in g x" is equal to "let y = f x in g y",
@@ -677,21 +677,21 @@ impl ExprNode {
             }
             Expr::TyAnno(e, _) => e.depending_global_values(),
             Expr::MakeStruct(_, fields) => {
-                let mut free_vars = HashSet::default();
+                let mut free_vars = Set::default();
                 for (_, field_expr) in fields {
                     free_vars.extend(field_expr.depending_global_values());
                 }
                 free_vars
             }
             Expr::ArrayLit(elems) => {
-                let mut free_vars = HashSet::default();
+                let mut free_vars = Set::default();
                 for elem in elems {
                     free_vars.extend(elem.depending_global_values());
                 }
                 free_vars
             }
             Expr::FFICall(_, _, _, args, _) => {
-                let mut free_vars: HashSet<FullName> = Default::default();
+                let mut free_vars: Set<FullName> = Default::default();
                 for (_, e) in args.iter().enumerate() {
                     free_vars.extend(e.depending_global_values());
                 }
@@ -1082,7 +1082,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             ei.set_tyanno_expr(e).set_free_vars(free_vars)
         }
         Expr::MakeStruct(_, fields) => {
-            let mut free_vars: HashSet<FullName> = Default::default();
+            let mut free_vars: Set<FullName> = Default::default();
             let mut ei = ei.clone();
             for (field_name, field_expr) in fields {
                 let field_expr = calculate_free_vars(field_expr.clone());
@@ -1092,7 +1092,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             ei.set_free_vars(free_vars)
         }
         Expr::ArrayLit(elems) => {
-            let mut free_vars: HashSet<FullName> = Default::default();
+            let mut free_vars: Set<FullName> = Default::default();
             let mut ei = ei.clone();
             for (i, e) in elems.iter().enumerate() {
                 let e = calculate_free_vars(e.clone());
@@ -1102,7 +1102,7 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             ei.set_free_vars(free_vars)
         }
         Expr::FFICall(_, _, _, args, _) => {
-            let mut free_vars: HashSet<FullName> = Default::default();
+            let mut free_vars: Set<FullName> = Default::default();
             let mut ei = ei.clone();
             for (i, e) in args.iter().enumerate() {
                 let e = calculate_free_vars(e.clone());

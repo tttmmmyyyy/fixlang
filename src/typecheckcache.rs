@@ -143,7 +143,7 @@ pub struct MemoryCache {
 impl MemoryCache {
     pub fn new() -> Self {
         MemoryCache {
-            data: Mutex::new(BTreeMap::new()),
+            data: Mutex::new(BTreeMap::default()),
         }
     }
 

@@ -346,7 +346,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInf
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
     let trait_name = pairs.next().unwrap().as_str().to_string();
     let mut methods: Vec<MethodInfo> = vec![];
-    let mut type_syns: HashMap<Name, AssocTypeDefn> = HashMap::new();
+    let mut type_syns: Map<Name, AssocTypeDefn> = Map::default();
     for pair in pairs {
         match parse_trait_member_defn(pair, &impl_type, ctx)? {
             Either::Left(method_info) => {
@@ -470,8 +470,8 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitIns
     let mut pairs = pair.into_inner();
     let qual_pred = parse_predicate_qualified(pairs.next().unwrap(), ctx)?;
     let impl_type = qual_pred.predicate.ty.clone();
-    let mut methods: HashMap<Name, Arc<ExprNode>> = HashMap::default();
-    let mut assoc_types: HashMap<Name, AssocTypeImpl> = HashMap::default();
+    let mut methods: Map<Name, Arc<ExprNode>> = Map::default();
+    let mut assoc_types: Map<Name, AssocTypeImpl> = Map::default();
     for pair in pairs {
         match parse_trait_member_impl(pair, &impl_type, ctx)? {
             Either::Left((name, expr)) => {
@@ -792,7 +792,7 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn,
     let mut pairs = pair.into_inner();
 
     // Parse constraints to specify kinds of type variables.
-    let mut kinds: HashMap<Name, Arc<Kind>> = HashMap::new();
+    let mut kinds: Map<Name, Arc<Kind>> = Map::default();
     if pairs.peek().unwrap().as_rule() == Rule::constraints {
         let pair = pairs.next().unwrap();
         let (preds, eqs, kind_signs) = parse_constraints(pair, ctx)?;
@@ -1039,7 +1039,7 @@ impl BinaryOpInfo {
 fn parse_binary_operator_sequence(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-    ops: HashMap<&str, BinaryOpInfo>,
+    ops: Map<&str, BinaryOpInfo>,
     operator_rule: Rule,
     inner_parser: fn(Pair<Rule>, &mut ParseContext) -> Result<Arc<ExprNode>, Errors>,
 ) -> Result<Arc<ExprNode>, Errors> {
@@ -1097,7 +1097,7 @@ fn parse_expr_cmp(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     parse_binary_operator_sequence(
         pair,
         ctx,
-        HashMap::from([
+        make_map([
             (
                 "==",
                 BinaryOpInfo::new(EQ_TRAIT_NAME, EQ_TRAIT_EQ_NAME).reverse(),
@@ -1182,7 +1182,7 @@ fn parse_expr_plus(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     parse_binary_operator_sequence(
         pair,
         ctx,
-        HashMap::from([
+        make_map([
             ("+", BinaryOpInfo::new(ADD_TRAIT_NAME, ADD_TRAIT_ADD_NAME)),
             (
                 "-",
@@ -1200,7 +1200,7 @@ fn parse_expr_mul(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     parse_binary_operator_sequence(
         pair,
         ctx,
-        HashMap::from([
+        make_map([
             (
                 "*",
                 BinaryOpInfo::new(MULTIPLY_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME),

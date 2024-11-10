@@ -62,7 +62,7 @@ fn create_borrowing_function(
 
 // Adds a borrowing version of functions in a program.
 pub fn define_borrowing_functions(program: &mut Program) {
-    let mut new_functions: HashMap<FullName, InstantiatedSymbol> = Default::default();
+    let mut new_functions: Map<FullName, InstantiatedSymbol> = Default::default();
     for (sym_name, sym) in &program.instantiated_symbols {
         let expr = sym.expr.as_ref().unwrap();
         if !expr.is_lam() {

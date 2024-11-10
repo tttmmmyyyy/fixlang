@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 // Implement built-in functions, types, etc.
 use super::*;
 
-pub fn bulitin_tycons() -> HashMap<TyCon, TyConInfo> {
-    let mut ret = HashMap::new();
+pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
+    let mut ret = Map::default();
     ret.insert(
         TyCon::new(make_iostate_name()),
         TyConInfo {
@@ -4793,7 +4793,7 @@ pub fn unary_opeartor_instance(
             kind_constraints: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
-        methods: HashMap::from([(
+        methods: make_map([(
             method_name.to_string(),
             expr_abs(
                 vec![var_local(UNARY_OPERATOR_RHS_NAME)],
@@ -4807,7 +4807,7 @@ pub fn unary_opeartor_instance(
                 None,
             ),
         )]),
-        assoc_types: HashMap::new(),
+        assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,
     }
@@ -4830,7 +4830,7 @@ pub fn binary_opeartor_instance(
             kind_constraints: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
-        methods: HashMap::from([(
+        methods: make_map([(
             method_name.to_string(),
             expr_abs(
                 vec![var_local(BINARY_OPERATOR_LHS_NAME)],
@@ -4851,7 +4851,7 @@ pub fn binary_opeartor_instance(
                 None,
             ),
         )]),
-        assoc_types: HashMap::new(),
+        assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,
     }

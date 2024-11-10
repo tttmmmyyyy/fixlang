@@ -1,6 +1,5 @@
 extern crate rustc_version;
 use core::panic;
-use std::collections::HashMap;
 use std::ffi::CStr;
 use std::ops::AddAssign;
 use std::sync::Mutex;
@@ -9,7 +8,7 @@ use once_cell::sync::Lazy;
 
 static OBJECT_ID: Lazy<Mutex<i64>> = Lazy::new(|| Mutex::new(0));
 
-static OBJECT_TABLE: Lazy<Mutex<HashMap<i64, ObjectInfo>>> =
+static OBJECT_TABLE: Lazy<Mutex<Map<i64, ObjectInfo>>> =
     Lazy::new(|| Mutex::new(Default::default()));
 
 static PERF_RETAIN_COUNT: Lazy<Mutex<i64>> = Lazy::new(|| Mutex::new(0));

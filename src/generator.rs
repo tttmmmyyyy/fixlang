@@ -231,7 +231,7 @@ impl<'c> Object<'c> {
 
 #[derive(Default)]
 pub struct Scope<'c> {
-    data: HashMap<FullName, Vec<Variable<'c>>>,
+    data: Map<FullName, Vec<Variable<'c>>>,
 }
 
 impl<'c> Scope<'c> {
@@ -258,7 +258,7 @@ impl<'c> Scope<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
 
-    fn modify_used_later(&mut self, vars: &HashSet<FullName>, by: i32) {
+    fn modify_used_later(&mut self, vars: &Set<FullName>, by: i32) {
         for var in vars {
             if !var.is_local() {
                 continue;
@@ -273,10 +273,10 @@ impl<'c> Scope<'c> {
             *used_later = add_i32_to_u32(*used_later, by);
         }
     }
-    fn increment_used_later(&mut self, names: &HashSet<FullName>) {
+    fn increment_used_later(&mut self, names: &Set<FullName>) {
         self.modify_used_later(names, 1);
     }
-    fn decrement_used_later(&mut self, names: &HashSet<FullName>) {
+    fn decrement_used_later(&mut self, names: &Set<FullName>) {
         self.modify_used_later(names, -1);
     }
     fn is_used_later(&self, name: &FullName) -> bool {
@@ -300,7 +300,7 @@ pub struct GenerationContext<'c, 'm> {
     debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
     debug_scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>, // None implies that currently generating codes for function whose source is unknown.
     debug_location: Vec<Option<Span>>, // None implies that currently generating codes for function whose source is unknown.
-    pub global: HashMap<FullName, Variable<'c>>,
+    pub global: Map<FullName, Variable<'c>>,
     type_env: TypeEnv,
     pub target_data: TargetData,
     pub config: Configuration,
@@ -534,7 +534,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Lock variables in scope to avoid being moved out.
-    pub fn scope_lock_as_used_later(self: &mut Self, names: &HashSet<FullName>) {
+    pub fn scope_lock_as_used_later(self: &mut Self, names: &Set<FullName>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -543,7 +543,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Unlock variables in scope.
-    pub fn scope_unlock_as_used_later(self: &mut Self, names: &HashSet<FullName>) {
+    pub fn scope_unlock_as_used_later(self: &mut Self, names: &Set<FullName>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -1721,7 +1721,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let field_to_idx = str_fields
                     .enumerate()
                     .map(|(i, name)| (name.clone(), i as u32))
-                    .collect::<HashMap<_, _>>();
+                    .collect::<Map<_, _>>();
 
                 // Extract fields.
                 let field_indices_rvo = field_to_pat

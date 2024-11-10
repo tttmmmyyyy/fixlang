@@ -813,8 +813,8 @@ impl ObjectFieldType {
         } else {
             // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
             // just release fields that are not not in `ret`.
-            let field_indices: HashSet<u32> =
-                HashSet::from_iter(field_indices_rvo.iter().map(|(i, _)| i.clone()));
+            let field_indices: Set<u32> =
+                Set::from_iter(field_indices_rvo.iter().map(|(i, _)| i.clone()));
             for field_idx in 0..str.ty.field_types(gc.type_env()).len() {
                 let field_idx = field_idx as u32;
                 if !field_indices.contains(&field_idx) {

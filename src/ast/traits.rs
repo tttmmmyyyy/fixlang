@@ -133,7 +133,7 @@ impl AssocTypeImpl {
             *param = param.set_kind(kind.clone());
             tvs_in_value.push(param.clone());
         }
-        let mut tv_to_kind = HashMap::new();
+        let mut tv_to_kind = Map::default();
         for tv_in_value in tvs_in_value {
             tv_to_kind.insert(tv_in_value.name.clone(), tv_in_value.kind.clone());
         }
@@ -197,7 +197,7 @@ pub struct TraitInfo {
     // Methods of this trait.
     pub methods: Vec<MethodInfo>,
     // Associated type synonyms.
-    pub assoc_types: HashMap<Name, AssocTypeDefn>,
+    pub assoc_types: Map<Name, AssocTypeDefn>,
     // Kind signatures at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_signs: Vec<KindSignature>,
     // Source location of trait definition.
@@ -334,9 +334,9 @@ pub struct TraitInstance {
     // Statement such as "[a: Show, b: Show] (a, b): Show".
     pub qual_pred: QualPredicate,
     // Method implementation.
-    pub methods: HashMap<Name, Arc<ExprNode>>,
+    pub methods: Map<Name, Arc<ExprNode>>,
     // Associated type synonym implementation.
-    pub assoc_types: HashMap<Name, AssocTypeImpl>,
+    pub assoc_types: Map<Name, AssocTypeImpl>,
     // Module where this instance is defined.
     pub define_module: Name,
     // Source location where this instance is defined.
@@ -360,7 +360,7 @@ impl TraitInstance {
     }
 
     pub fn set_kinds_in_qual_pred(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
-        let mut scope = HashMap::new();
+        let mut scope = Map::default();
         let preds = &self.qual_pred.pred_constraints;
         let eqs = &self.qual_pred.eq_constraints;
         let kind_signs = &self.qual_pred.kind_constraints;
@@ -575,14 +575,14 @@ impl QualPredicate {
     }
 
     pub fn extend_kind_scope(
-        scope: &mut HashMap<Name, Arc<Kind>>,
+        scope: &mut Map<Name, Arc<Kind>>,
         preds: &Vec<Predicate>,
         eqs: &Vec<Equality>,
         kind_signs: &Vec<KindSignature>,
         kind_env: &KindEnv,
     ) -> Result<(), String> {
         fn insert(
-            scope: &mut HashMap<Name, Arc<Kind>>,
+            scope: &mut Map<Name, Arc<Kind>>,
             tyvar: String,
             kind: Arc<Kind>,
         ) -> Result<(), String> {
@@ -596,7 +596,7 @@ impl QualPredicate {
             Ok(())
         }
         fn extend_by_assoc_ty_application(
-            scope: &mut HashMap<Name, Arc<Kind>>,
+            scope: &mut Map<Name, Arc<Kind>>,
             assoc_ty_app: Arc<TypeNode>,
             kind_env: &KindEnv,
         ) -> Result<(), String> {
@@ -801,7 +801,7 @@ impl Predicate {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
 
-    pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &Map<Name, Arc<Kind>>) {
         self.ty = self.ty.set_kinds(scope);
     }
 
@@ -943,7 +943,7 @@ impl Equality {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, scope: &HashMap<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &Map<Name, Arc<Kind>>) {
         for arg in &mut self.args {
             *arg = arg.set_kinds(scope);
         }
@@ -1005,9 +1005,9 @@ pub struct EqualityScheme {
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
-    pub traits: HashMap<Trait, TraitInfo>,
-    pub instances: HashMap<Trait, Vec<TraitInstance>>,
-    pub aliases: HashMap<Trait, TraitAlias>,
+    pub traits: Map<Trait, TraitInfo>,
+    pub instances: Map<Trait, Vec<TraitInstance>>,
+    pub aliases: Map<Trait, TraitAlias>,
 }
 
 impl TraitEnv {
@@ -1037,7 +1037,7 @@ impl TraitEnv {
     }
 
     // Get of list of trait names including aliases.
-    pub fn trait_names(&self) -> HashSet<FullName> {
+    pub fn trait_names(&self) -> Set<FullName> {
         self.traits_with_aliases()
             .into_iter()
             .map(|t| t.name)
@@ -1116,13 +1116,13 @@ impl TraitEnv {
         // If some errors are found upto here, throw them.
         errors.to_result()?;
 
-        let aliases: HashSet<_> = self.aliases.keys().collect();
+        let aliases: Set<_> = self.aliases.keys().collect();
         // Prepare TypeCheckContext to use `unify`.
         let tc = TypeCheckContext::new(
             TraitEnv::default(),
             TypeEnv::default(),
             kind_env,
-            HashMap::new(),
+            Map::default(),
             Arc::new(typecheckcache::FileCache::new()),
             0,
         );
@@ -1285,7 +1285,7 @@ impl TraitEnv {
     pub fn resolve_namespace(
         &mut self,
         ctx: &mut NameResolutionContext,
-        imported_modules: &HashMap<Name, Vec<ImportStatement>>,
+        imported_modules: &Map<Name, Vec<ImportStatement>>,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -1313,7 +1313,7 @@ impl TraitEnv {
 
         // Resolve names in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
-        let mut instances_resolved: HashMap<Trait, Vec<TraitInstance>> = Default::default();
+        let mut instances_resolved: Map<Trait, Vec<TraitInstance>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Set up NameResolutionContext.
@@ -1351,7 +1351,7 @@ impl TraitEnv {
 
         // Resolve aliases in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
-        let mut instances_resolved: HashMap<Trait, Vec<TraitInstance>> = Default::default();
+        let mut instances_resolved: Map<Trait, Vec<TraitInstance>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Resolve names in TrantInstance.
@@ -1432,13 +1432,13 @@ impl TraitEnv {
         Ok(())
     }
 
-    pub fn qualified_predicates(&self) -> HashMap<Trait, Vec<QualPredScheme>> {
-        let mut qps = HashMap::default();
+    pub fn qualified_predicates(&self) -> Map<Trait, Vec<QualPredScheme>> {
+        let mut qps = Map::default();
         for (trait_id, insts) in &self.instances {
             for inst in insts {
                 let mut vars = vec![];
                 inst.qual_pred.free_vars_vec(&mut vars);
-                misc::insert_to_hashmap_vec(
+                misc::insert_to_map_vec(
                     &mut qps,
                     trait_id,
                     QualPredScheme {
@@ -1452,8 +1452,8 @@ impl TraitEnv {
     }
 
     // From implementation of associated types, get generalized type equalities.
-    pub fn type_equalities(&self) -> HashMap<TyAssoc, Vec<EqualityScheme>> {
-        let mut eq_scms = HashMap::default();
+    pub fn type_equalities(&self) -> Map<TyAssoc, Vec<EqualityScheme>> {
+        let mut eq_scms = Map::default();
         for (trait_id, insts) in &self.instances {
             for inst in insts {
                 for (assoc_type_name, assoc_type_impl) in &inst.assoc_types {
@@ -1472,7 +1472,7 @@ impl TraitEnv {
                         value: assoc_type_impl.value.clone(),
                         source: assoc_type_impl.source.clone(),
                     };
-                    misc::insert_to_hashmap_vec(
+                    misc::insert_to_map_vec(
                         &mut eq_scms,
                         &equality.assoc_type,
                         equality.generalize(),
@@ -1483,7 +1483,7 @@ impl TraitEnv {
         eq_scms
     }
 
-    // pub fn assoc_ty_names(&self) -> HashSet<FullName> {
+    // pub fn assoc_ty_names(&self) -> Set<FullName> {
     //     let mut names = vec![];
     //     for (trait_id, trait_info) in &self.traits {
     //         for (assoc_ty_name, _assoc_ty_info) in &trait_info.assoc_types {
@@ -1492,11 +1492,11 @@ impl TraitEnv {
     //             names.push(assoc_type_fullname)
     //         }
     //     }
-    //     names.into_iter().collect::<HashSet<_>>()
+    //     names.into_iter().collect::<Set<_>>()
     // }
 
-    pub fn assoc_ty_to_arity(&self) -> HashMap<FullName, usize> {
-        let mut assoc_ty_arity = HashMap::new();
+    pub fn assoc_ty_to_arity(&self) -> Map<FullName, usize> {
+        let mut assoc_ty_arity = Map::default();
         for (trait_id, trait_info) in &self.traits {
             for (assoc_ty_name, assoc_ty_info) in &trait_info.assoc_types {
                 let assoc_type_namespace = trait_id.name.to_namespace();
@@ -1508,8 +1508,8 @@ impl TraitEnv {
         assoc_ty_arity
     }
 
-    pub fn assoc_ty_kind_info(&self) -> HashMap<TyAssoc, AssocTypeKindInfo> {
-        let mut assoc_ty_kind_info = HashMap::new();
+    pub fn assoc_ty_kind_info(&self) -> Map<TyAssoc, AssocTypeKindInfo> {
+        let mut assoc_ty_kind_info = Map::default();
         for (trait_id, trait_info) in &self.traits {
             for (assoc_ty_name, assoc_ty_info) in &trait_info.assoc_types {
                 let assoc_type_namespace = trait_id.name.to_namespace();
@@ -1535,7 +1535,7 @@ impl TraitEnv {
             env: &TraitEnv,
             trait_id: &Trait,
             res: &mut Vec<Trait>,
-            visited: &mut HashSet<Trait>,
+            visited: &mut Set<Trait>,
         ) -> Result<(), Errors> {
             if visited.contains(trait_id) {
                 return Err(Errors::from_msg_srcs(
@@ -1562,7 +1562,7 @@ impl TraitEnv {
         }
 
         let mut res = vec![];
-        let mut visited = HashSet::new();
+        let mut visited = Set::default();
         resolve_aliases_inner(self, trait_id, &mut res, &mut visited)?;
         Ok(res)
     }
@@ -1585,7 +1585,7 @@ impl TraitEnv {
         errors.to_result()?;
 
         // Set kinds in trait aliases definitions.
-        let mut resolved_aliases: HashMap<Trait, Vec<Trait>> = HashMap::new();
+        let mut resolved_aliases: Map<Trait, Vec<Trait>> = Map::default();
         for (id, _) in &self.aliases {
             resolved_aliases.insert(id.clone(), self.resolve_aliases(id)?); // If circular aliasing is detected, throw it immediately.
         }
@@ -1617,7 +1617,7 @@ impl TraitEnv {
         for (_trait_id, trait_impls) in &mut self.instances {
             for inst in trait_impls {
                 errors.eat_err(inst.set_kinds_in_qual_pred(kind_env));
-                let mut assoc_tys = std::mem::replace(&mut inst.assoc_types, HashMap::default());
+                let mut assoc_tys = std::mem::replace(&mut inst.assoc_types, Map::default());
                 for (_, assoc_ty_impl) in &mut assoc_tys {
                     errors.eat_err(assoc_ty_impl.set_kinds(&inst, kind_env));
                 }
@@ -1627,8 +1627,8 @@ impl TraitEnv {
         errors.to_result()
     }
 
-    pub fn trait_kind_map_with_aliases(&self) -> HashMap<Trait, Arc<Kind>> {
-        let mut res: HashMap<Trait, Arc<Kind>> = HashMap::default();
+    pub fn trait_kind_map_with_aliases(&self) -> Map<Trait, Arc<Kind>> {
+        let mut res: Map<Trait, Arc<Kind>> = Map::default();
         for (id, ti) in &self.traits {
             res.insert(id.clone(), ti.type_var.kind.clone());
         }

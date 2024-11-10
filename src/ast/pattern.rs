@@ -18,7 +18,7 @@ impl PatternNode {
     pub fn get_typed(
         self: &Arc<PatternNode>,
         typechcker: &mut TypeCheckContext,
-    ) -> Result<(Arc<PatternNode>, HashMap<FullName, Arc<TypeNode>>), Errors> {
+    ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
         match &self.pattern {
             Pattern::Var(v, ty) => {
                 let var_name = v.name.clone();
@@ -34,13 +34,13 @@ impl PatternNode {
                     }
                     ty.clone()
                 };
-                let mut var_to_ty = HashMap::default();
+                let mut var_to_ty = Map::default();
                 var_to_ty.insert(var_name, ty.clone());
                 Ok((self.set_inferred_type(ty), var_to_ty))
             }
             Pattern::Struct(tc, field_to_pat) => {
                 let ty = tc.get_struct_union_value_type(typechcker);
-                let mut var_to_ty = HashMap::default();
+                let mut var_to_ty = Map::default();
                 let field_tys = ty.field_types(&typechcker.type_env);
                 let fields = &typechcker.type_env.tycons.get(&tc).unwrap().fields;
                 assert_eq!(fields.len(), field_tys.len());
@@ -51,7 +51,7 @@ impl PatternNode {
                         let ty = field_tys[i].clone();
                         (field.name.clone(), ty)
                     })
-                    .collect::<HashMap<_, _>>();
+                    .collect::<Map<_, _>>();
                 let mut field_to_pat = field_to_pat.clone();
                 for (field_name, pat) in &mut field_to_pat {
                     let (typed_pat, var_ty) = pat.get_typed(typechcker)?;
@@ -81,7 +81,7 @@ impl PatternNode {
             }
             Pattern::Union(tc, field_name, pat) => {
                 let ty = tc.get_struct_union_value_type(typechcker);
-                let mut var_to_ty = HashMap::default();
+                let mut var_to_ty = Map::default();
                 let fields = &typechcker.type_env.tycons.get(&tc).unwrap().fields;
                 let field_tys = ty.field_types(&typechcker.type_env);
                 assert_eq!(fields.len(), field_tys.len());
@@ -160,15 +160,11 @@ impl PatternNode {
             Pattern::Var(_, _) => {}
             Pattern::Struct(tc, pats) => {
                 let ti = te.tycons.get(&tc).unwrap();
-                let fields_str = ti
-                    .fields
-                    .iter()
-                    .map(|f| f.name.clone())
-                    .collect::<HashSet<_>>();
+                let fields_str = ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
                 let fields_pat = pats
                     .iter()
                     .map(|(name, _)| name.clone())
-                    .collect::<HashSet<_>>();
+                    .collect::<Set<_>>();
                 if fields_pat.len() < pats.len() {
                     return Err(Errors::from_msg_srcs(
                         "Duplicate field in struct pattern.".to_string(),
@@ -427,11 +423,11 @@ impl Pattern {
     }
 
     // Calculate the set of variables that appears in this pattern.
-    pub fn vars(&self) -> HashSet<FullName> {
+    pub fn vars(&self) -> Set<FullName> {
         match self {
-            Pattern::Var(var, _) => HashSet::from([var.name.clone()]),
+            Pattern::Var(var, _) => make_set([var.name.clone()]),
             Pattern::Struct(_, pats) => {
-                let mut ret = HashSet::default();
+                let mut ret = Set::default();
                 for (_, pat) in pats {
                     ret.extend(pat.pattern.vars());
                 }
