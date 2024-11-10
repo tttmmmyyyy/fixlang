@@ -23,13 +23,9 @@ The type of variable length arrays. This is a boxed type.
 
 The type of boolean values.
 
-### `type Boxed a = box struct { ...fields... }`
+### `type Box a = box struct { ...fields... }`
 
 Boxed wrapper for a type.
-
-```
-type Boxed a = box struct { value : a };
-```
 
 #### field `value : a`
 
@@ -1094,23 +1090,25 @@ Truncates an array, keeping the given number of first elements.
 
 `truncante(len, arr)` does nothing if `len >= arr.get_size`.
 
-## `namespace Std::Boxed`
+## `namespace Std::Box`
 
-### `@value : Std::Boxed a -> a`
+### `@value : Std::Box a -> a`
 
-Retrieves the field `value` from a value of `Boxed`.
+Retrieves the field `value` from a value of `Box`.
 
-### `act_value : [f : Std::Functor] (a -> f a) -> Std::Boxed a -> f (Std::Boxed a)`
+### `act_value : [f : Std::Functor] (a -> f a) -> Std::Box a -> f (Std::Box a)`
 
-Updates a value of `Boxed` by applying a functorial action to field `value`.
+Updates a value of `Box` by applying a functorial action to field `value`.
 
-### `mod_value : (a -> a) -> Std::Boxed a -> Std::Boxed a`
+### `make : a -> Std::Box a`
 
-Updates a value of `Boxed` by applying a function to field `value`.
+### `mod_value : (a -> a) -> Std::Box a -> Std::Box a`
 
-### `set_value : a -> Std::Boxed a -> Std::Boxed a`
+Updates a value of `Box` by applying a function to field `value`.
 
-Updates a value of `Boxed` by setting field `value` to a specified one.
+### `set_value : a -> Std::Box a -> Std::Box a`
+
+Updates a value of `Box` by setting field `value` to a specified one.
 
 ## `namespace Std::Debug`
 

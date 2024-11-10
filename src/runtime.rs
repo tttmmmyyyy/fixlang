@@ -695,61 +695,6 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(
     return;
 }
 
-// // Build `fixruntime_run_task` function, which is called from runtime.c.
-// pub fn build_run_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
-//     let context = gc.context;
-//     let module = gc.module;
-
-//     let func = match mode {
-//         BuildMode::Declare => {
-//             if let Some(_func) = gc.module.get_function(RUNTIME_RUN_FUNCTION) {
-//                 return;
-//             }
-//             let fn_type =
-//                 ptr_to_object_type(context).fn_type(&[ptr_to_object_type(context).into()], false);
-//             module.add_function(RUNTIME_RUN_FUNCTION, fn_type, None);
-//             return;
-//         }
-//         BuildMode::Implement => match gc.module.get_function(RUNTIME_RUN_FUNCTION) {
-//             Some(func) => func,
-//             None => panic!("Runtime function {} is not declared", RUNTIME_RUN_FUNCTION),
-//         },
-//     };
-
-//     let bb = context.append_basic_block(func, "entry");
-
-//     let _builder_guard = gc.push_builder();
-//     gc.builder().position_at_end(bb);
-
-//     // Create type `Boxed (() -> a)` where `a = Boxed ()`.
-//     // Since we don't have information of which the type `a` is, and use `Boxed ()` instead.
-//     // This is not a problem because the following code only depends on the fact that `a` is a boxed type.
-//     let boxed_ty = type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOXED_NAME)));
-//     let unit_ty = make_unit_ty();
-//     let task_func_ty = type_fun(
-//         make_unit_ty(),
-//         type_tyapp(boxed_ty.clone(), unit_ty.clone()),
-//     );
-//     let boxed_task_func_ty = type_tyapp(boxed_ty, task_func_ty);
-
-//     // Create an boxed task function object from the function parameter.
-//     let task_func_ptr = func.get_first_param().unwrap().into_pointer_value();
-//     let boxed_task_func = Object::new(task_func_ptr, boxed_task_func_ty);
-
-//     // Extract task function from `boxed_task_func`.
-//     let task_func =
-//         ObjectFieldType::get_struct_fields(gc, &boxed_task_func, vec![(0, None)])[0].clone();
-
-//     // Call the task function.
-//     let unit_val: Object<'_> = allocate_obj(unit_ty, &vec![], None, gc, Some("unit_value"));
-//     let task_result = gc.apply_lambda(task_func, vec![unit_val], None);
-//     let task_result_ptr = task_result.ptr(gc);
-
-//     gc.builder().build_return(Some(&task_result_ptr));
-
-//     return;
-// }
-
 fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
     let argc_gv_ty = gc.context.i32_type();
     let func = match mode {

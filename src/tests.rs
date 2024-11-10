@@ -3150,45 +3150,45 @@ pub fn test_punched_array_0() {
     let source = r#"
         module Main; 
 
-        type MyBoxed = box struct { x : I64 };
+        type MyBox = box struct { x : I64 };
 
         main : IO ();
         main = (
             // Case 1-1: Punch an array of two boxed values and release parray.
-            let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
+            let arr = [MyBox { x : 5 }, MyBox { x : 7 }];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 1-1", five.@x, 5);;
 
             // Case 1-2: Punch an array of two boxed values and plug-in the same element.
-            let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
+            let arr = [MyBox { x : 5 }, MyBox { x : 7 }];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 1-2-a", five.@x, 5);;
             let arr = parr.plug_in(five);
             assert_eq(|_|"case 1-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 7);;
 
             // Case 1-3: Punch an array of two boxed values and plug-in the other element.
-            let seven = MyBoxed { x : 7 };
-            let arr = [MyBoxed { x : 5 }, seven];
+            let seven = MyBox { x : 7 };
+            let arr = [MyBox { x : 5 }, seven];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 1-3-a", five.@x, 5);;
             let arr = parr.plug_in(seven);
             assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 7);;
 
             // Case 1-4: Punch an array of two boxed values and plug-in another value.
-            let arr = [MyBoxed { x : 5 }, MyBoxed { x : 7 }];
+            let arr = [MyBox { x : 5 }, MyBox { x : 7 }];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 1-3-a", five.@x, 5);;
-            let arr = parr.plug_in(MyBoxed { x : 11 });
+            let arr = parr.plug_in(MyBox { x : 11 });
             assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 11);;
 
             // Case 2-1: Punch an array of two shared boxed values and release parray.
-            let five = MyBoxed { x : 5 };
+            let five = MyBox { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 2-1", five.@x, 5);;
 
             // Case 2-2: Punch an array of two shared boxed values and plug-in the same element.
-            let five = MyBoxed { x : 5 };
+            let five = MyBox { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 2-2-a", five.@x, 5);;
@@ -3196,7 +3196,7 @@ pub fn test_punched_array_0() {
             assert_eq(|_|"case 2-2-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);;
 
             // Case 2-3: Punch an array of two shared boxed values and plug-in the value again.
-            let five = MyBoxed { x : 5 };
+            let five = MyBox { x : 5 };
             let arr = [five, five];
             let (parr, five1) = arr.unsafe_punch(0);
             assert_eq(|_|"case 2-3-a", five1.@x, 5);;
@@ -3204,11 +3204,11 @@ pub fn test_punched_array_0() {
             assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 5 + 5);;
 
             // Case 2-4: Punch an array of two shared boxed values and plug-in another value.
-            let five = MyBoxed { x : 5 };
+            let five = MyBox { x : 5 };
             let arr = [five, five];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 2-3-a", five.@x, 5);;
-            let arr = parr.plug_in(MyBoxed { x : 7 });
+            let arr = parr.plug_in(MyBox { x : 7 });
             assert_eq(|_|"case 1-3-b", arr.@(0).@x + arr.@(1).@x, 7 + 5);;
 
             pure()
@@ -3223,17 +3223,17 @@ pub fn test_punched_array_1() {
     let source = r#"
         module Main; 
 
-        type MyBoxed = box struct { x : I64 };
+        type MyBox = box struct { x : I64 };
 
         main : IO ();
         main = (
             // Case 3-1: Punch an array of one boxed values and release parray.
-            let arr = [MyBoxed { x : 5 }];
+            let arr = [MyBox { x : 5 }];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 3-1", five.@x, 5);;
 
             // Case 3-2: Punch an array of two boxed values and plug-in the same element.
-            let arr = [MyBoxed { x : 5 }];
+            let arr = [MyBox { x : 5 }];
             let (parr, five) = arr.unsafe_punch(0);
             assert_eq(|_|"case 3-2-a", five.@x, 5);;
             let arr = parr.plug_in(five);
@@ -3303,47 +3303,47 @@ pub fn test_array_act_1() {
     let source = r#"
         module Main; 
         
-        type MyBoxed = box struct { x : I64 };
+        type MyBox = box struct { x : I64 };
 
         main : IO ();
         main = (
-            let act0: MyBoxed -> Option MyBoxed = |v| (
+            let act0: MyBox -> Option MyBox = |v| (
                 if v.@x == 0 { Option::some $ v.assert_unique(|_|"not unique!").mod_x(add(5)) } else { Option::none() }
             );
-            let act01: MyBoxed -> Option MyBoxed = |v| (
+            let act01: MyBox -> Option MyBox = |v| (
                 if v.@x == 0 { Option::some $ v.mod_x(add(5)) } else { Option::none() }
             );
-            let act1: MyBoxed -> Option MyBoxed = |v| (
-                if v.@x == 0 { Option::some $ MyBoxed { x : 5 } } else { Option::none() }
+            let act1: MyBox -> Option MyBox = |v| (
+                if v.@x == 0 { Option::some $ MyBox { x : 5 } } else { Option::none() }
             );
 
-            // Case 0-0-0-0: Boxed element, unique array, act0 succeeds.
+            // Case 0-0-0-0: Box element, unique array, act0 succeeds.
             let case = "0-0-0-0";
-            let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
+            let arr = [MyBox { x : 0 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act0);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
             assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
             assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);;
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);;
 
-            // Case 0-0-0-1: Boxed element, unique array, act0 fails.
+            // Case 0-0-0-1: Box element, unique array, act0 fails.
             let case = "0-0-0-1";
-            let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
+            let arr = [MyBox { x : 1 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act0);
             assert(|_|"Case " + case + "-a", opt_arr.is_none);;
 
-            // Case 0-0-1-0: Boxed element, unique array, act1 succeeds.
+            // Case 0-0-1-0: Box element, unique array, act1 succeeds.
             let case = "0-0-1-0";
-            let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
+            let arr = [MyBox { x : 0 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act1);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
             assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
             assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);;
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);;
 
-            // Case 0-0-1-1: Boxed element, unique array, act1 fails.
+            // Case 0-0-1-1: Box element, unique array, act1 fails.
             let case = "0-0-1-1";
-            let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
+            let arr = [MyBox { x : 1 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act1);
             assert(|_|"Case " + case + "-a", opt_arr.is_none);;
 
@@ -3359,23 +3359,23 @@ pub fn test_array_act_2() {
     let source = r#"
         module Main; 
         
-        type MyBoxed = box struct { x : I64 };
+        type MyBox = box struct { x : I64 };
 
         main : IO ();
         main = (
-            let act0: MyBoxed -> Option MyBoxed = |v| (
+            let act0: MyBox -> Option MyBox = |v| (
                 if v.@x == 0 { Option::some $ v.assert_unique(|_|"not unique!").mod_x(add(5)) } else { Option::none() }
             );
-            let act01: MyBoxed -> Option MyBoxed = |v| (
+            let act01: MyBox -> Option MyBox = |v| (
                 if v.@x == 0 { Option::some $ v.mod_x(add(5)) } else { Option::none() }
             );
-            let act1: MyBoxed -> Option MyBoxed = |v| (
-                if v.@x == 0 { Option::some $ MyBoxed { x : 5 } } else { Option::none() }
+            let act1: MyBox -> Option MyBox = |v| (
+                if v.@x == 0 { Option::some $ MyBox { x : 5 } } else { Option::none() }
             );
 
-            // Case 0-1-0-0: Boxed element, shared array, act01 succeeds.
+            // Case 0-1-0-0: Box element, shared array, act01 succeeds.
             let case = "0-1-0-0";
-            let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
+            let arr = [MyBox { x : 0 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act01);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
             assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
@@ -3383,16 +3383,16 @@ pub fn test_array_act_2() {
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);;
             assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);;
 
-            // Case 0-1-0-1: Boxed element, shared array, act0 fails.
+            // Case 0-1-0-1: Box element, shared array, act0 fails.
             let case = "0-1-0-1";
-            let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
+            let arr = [MyBox { x : 1 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act0);
             assert(|_|"Case " + case + "-a", opt_arr.is_none);;
             assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);;
 
-            // Case 0-1-1-0: Boxed element, shared array, act1 succeeds.
+            // Case 0-1-1-0: Box element, shared array, act1 succeeds.
             let case = "0-1-1-0";
-            let arr = [MyBoxed { x : 0 }, MyBoxed { x : 3 }];
+            let arr = [MyBox { x : 0 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act1);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
             assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
@@ -3400,9 +3400,9 @@ pub fn test_array_act_2() {
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);;
             assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);;
 
-            // Case 0-1-1-1: Boxed element, shared array, act1 fails.
+            // Case 0-1-1-1: Box element, shared array, act1 fails.
             let case = "0-1-1-1";
-            let arr = [MyBoxed { x : 1 }, MyBoxed { x : 3 }];
+            let arr = [MyBox { x : 1 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act1);
             assert(|_|"Case " + case + "-a", opt_arr.is_none);;
             assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 4);;
@@ -3419,18 +3419,18 @@ pub fn test_array_act_3() {
     let source = r#"
         module Main; 
         
-        type MyBoxed = box struct { x : I64 };
+        type MyBox = box struct { x : I64 };
 
         main : IO ();
         main = (
-            let act0: MyBoxed -> Option MyBoxed = |v| (
+            let act0: MyBox -> Option MyBox = |v| (
                 if v.@x == 0 { Option::some $ v.assert_unique(|_|"not unique!").mod_x(add(5)) } else { Option::none() }
             );
-            let act01: MyBoxed -> Option MyBoxed = |v| (
+            let act01: MyBox -> Option MyBox = |v| (
                 if v.@x == 0 { Option::some $ v.mod_x(add(5)) } else { Option::none() }
             );
-            let act1: MyBoxed -> Option MyBoxed = |v| (
-                if v.@x == 0 { Option::some $ MyBoxed { x : 5 } } else { Option::none() }
+            let act1: MyBox -> Option MyBox = |v| (
+                if v.@x == 0 { Option::some $ MyBox { x : 5 } } else { Option::none() }
             );
             let act2: I64 -> Option I64 = |v| (
                 if v == 0 { Option::some $ v + 5 } else { Option::none() }
@@ -5979,7 +5979,7 @@ pub fn test_mutate_boxed_io() {
                 
         main: IO ();
         main = (
-            let x : Boxed I32 = Boxed { value : 0_I32 };
+            let x : Box I32 = Box { value : 0_I32 };
             let (x, _) = *x.mutate_boxed_io(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
                     FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
@@ -6557,13 +6557,13 @@ pub fn test_regression_unsafe_perform_bug() {
         module Main;
 
         type Wrapper = struct {
-            _0 : Boxed I64
+            _0 : Box I64
         };
 
         main: IO ();
         main = (
             let x = do {
-                pure $ Wrapper { _0 : Boxed { value : 1234 } }
+                pure $ Wrapper { _0 : Box { value : 1234 } }
             }.unsafe_perform;
 
             assert_eq(|_|"", x.@_0.@value, 1234)            

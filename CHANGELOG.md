@@ -22,6 +22,7 @@
 - Add `FFI_CALL_IO` and `FFI_CALL_IOS` syntax, which is similar to `FFI_CALL` but suitable for foregin functions which have side effects.
 - Add `Std::do_with_retained`.
 - Add `{monad_expr};; {expr}` syntax, which is equivalent to `let _ = *{monad_expr}; {expr}`.
+- Add `Std::Box::make` function.
 
 ### Changed
 
@@ -42,6 +43,7 @@
 - Remove `IO::from_func` and added `IO::from_runner : (IOState -> (IOState, a)) -> IO a`.
 - Change `force_unique` to `_unsafe_force_unique`.
 - Change the semantics of the "eval" syntax. See the document for details.
+- Rename `Std::Boxed` type to `Std::Box`. 
 
 ### Fixed
 
