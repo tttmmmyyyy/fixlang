@@ -1014,7 +1014,7 @@ pub fn test46() {
 }
 
 #[test]
-pub fn test47() {
+pub fn union_basic_unboxed() {
     // Basic use of union.
     let source = r#"
         module Main; 
@@ -1035,7 +1035,7 @@ pub fn test47() {
 }
 
 #[test]
-pub fn test47_2() {
+pub fn union_basic_boxed() {
     // Basic use of boxed union.
     let source = r#"
         module Main; 
