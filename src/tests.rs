@@ -6588,6 +6588,29 @@ pub fn test_debug_println() {
 }
 
 #[test]
+pub fn test_impl_boxed_by_hand() {
+    let source = r##"
+        module Main;
+
+        type MyType = box struct {
+            value : I64
+        };
+
+        impl MyType : Boxed {}
+
+        main: IO ();
+        main = (
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Implementing `Std::Boxed` by hand is not allowed.",
+    );
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-math.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");

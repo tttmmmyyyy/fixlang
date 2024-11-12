@@ -4798,6 +4798,7 @@ pub fn unary_opeartor_instance(
         assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,
+        is_user_defined: false,
     }
 }
 
@@ -4842,6 +4843,7 @@ pub fn binary_opeartor_instance(
         assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,
+        is_user_defined: false,
     }
 }
 
@@ -5948,5 +5950,6 @@ pub fn boxed_trait_instance(ty: &Arc<TypeNode>) -> TraitInstance {
         assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,
+        is_user_defined: false,
     }
 }

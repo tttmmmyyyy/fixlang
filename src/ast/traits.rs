@@ -342,6 +342,8 @@ pub struct TraitInstance {
     pub define_module: Name,
     // Source location where this instance is defined.
     pub source: Option<Span>,
+    // Is this instance implememted by user? (not by compiler)
+    pub is_user_defined: bool,
 }
 
 impl TraitInstance {
@@ -1249,6 +1251,14 @@ impl TraitEnv {
                         &[&inst.source.as_ref().map(|s| s.to_head_character())],
                     ));
                 }
+
+                // Check `Std::Boxed` is not implemented by user.
+                if trait_id == &make_boxed_trait() && inst.is_user_defined {
+                    errors.append(Errors::from_msg_srcs(
+                        "Implementing `Std::Boxed` by hand is not allowed. It is automatically implemented for all boxed types by compiler.".to_string(),
+                        &[&inst.source],
+                    ));
+                }
             }
             // Throw errors if any.
             errors.to_result()?;
@@ -1266,11 +1276,16 @@ impl TraitEnv {
                     {
                         continue;
                     }
+                    let mut msg = format!(
+                        "Two trait implementations for `{}` are overlapping.",
+                        trait_id.to_string()
+                    );
+                    if inst_i.trait_id() == make_boxed_trait() {
+                        msg +=
+                            "NOTE: `Std::Boxed` is automatically implemented for all boxed types by compiler."
+                    }
                     errors.append(Errors::from_msg_srcs(
-                        format!(
-                            "Two trait implementations for `{}` are overlapping.",
-                            trait_id.to_string()
-                        ),
+                        msg,
                         &[
                             &inst_i.source.as_ref().map(|s| s.to_head_character()),
                             &inst_j.source.as_ref().map(|s| s.to_head_character()),
@@ -1382,7 +1397,7 @@ impl TraitEnv {
             errors.eat_err(self.add_trait(trait_info));
         }
         for trait_impl in trait_impls {
-            self.add_instance(trait_impl);
+            errors.eat_err(self.add_instance(trait_impl));
         }
         for trait_alias in trait_aliases {
             errors.eat_err(self.add_alias(trait_alias));
@@ -1408,12 +1423,13 @@ impl TraitEnv {
     }
 
     // Add an instance.
-    pub fn add_instance(&mut self, inst: TraitInstance) {
+    pub fn add_instance(&mut self, inst: TraitInstance) -> Result<(), Errors> {
         let trait_id = inst.trait_id();
         if !self.instances.contains_key(&trait_id) {
             self.instances.insert(trait_id.clone(), vec![]);
         }
         self.instances.get_mut(&trait_id).unwrap().push(inst);
+        Ok(())
     }
 
     // Add an trait alias.
@@ -1648,7 +1664,7 @@ impl TraitEnv {
         }
         for (_, insts) in other.instances {
             for inst in insts {
-                self.add_instance(inst);
+                errors.eat_err(self.add_instance(inst));
             }
         }
         for (_, alias) in other.aliases {

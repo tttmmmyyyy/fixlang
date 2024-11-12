@@ -1790,13 +1790,13 @@ impl Program {
                 TypeDeclValue::Struct(str) => {
                     if str.is_boxed() {
                         let ty = defn.applied_type();
-                        self.trait_env.add_instance(boxed_trait_instance(&ty));
+                        self.trait_env.add_instance(boxed_trait_instance(&ty))?;
                     }
                 }
                 TypeDeclValue::Union(union) => {
                     if union.is_boxed() {
                         let ty = defn.applied_type();
-                        self.trait_env.add_instance(boxed_trait_instance(&ty));
+                        self.trait_env.add_instance(boxed_trait_instance(&ty))?;
                     }
                 }
                 TypeDeclValue::Alias(_) => {} // Nothing to do

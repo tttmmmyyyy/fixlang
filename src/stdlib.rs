@@ -47,113 +47,115 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(eq_trait_instance_int(ty.clone()));
+            .add_instance(eq_trait_instance_int(ty.clone()))?;
     }
     for ty in float_types {
         fix_module
             .trait_env
-            .add_instance(eq_trait_instance_float(ty.clone()));
+            .add_instance(eq_trait_instance_float(ty.clone()))?;
     }
     fix_module
         .trait_env
-        .add_instance(eq_trait_instance_int(make_bool_ty()));
+        .add_instance(eq_trait_instance_int(make_bool_ty()))?;
     fix_module
         .trait_env
-        .add_instance(eq_trait_instance_ptr(make_ptr_ty()));
+        .add_instance(eq_trait_instance_ptr(make_ptr_ty()))?;
 
     // Add
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(add_trait_instance_int(ty.clone()));
+            .add_instance(add_trait_instance_int(ty.clone()))?;
     }
     for ty in float_types {
         fix_module
             .trait_env
-            .add_instance(add_trait_instance_float(ty.clone()));
+            .add_instance(add_trait_instance_float(ty.clone()))?;
     }
 
     // Sub
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(subtract_trait_instance_int(ty.clone()));
+            .add_instance(subtract_trait_instance_int(ty.clone()))?;
     }
     for ty in float_types {
         fix_module
             .trait_env
-            .add_instance(subtract_trait_instance_float(ty.clone()));
+            .add_instance(subtract_trait_instance_float(ty.clone()))?;
     }
 
     // Neg
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(negate_trait_instance_int(ty.clone()));
+            .add_instance(negate_trait_instance_int(ty.clone()))?;
     }
     for ty in float_types {
         fix_module
             .trait_env
-            .add_instance(negate_trait_instance_float(ty.clone()));
+            .add_instance(negate_trait_instance_float(ty.clone()))?;
     }
 
     // Mul
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(multiply_trait_instance_int(ty.clone()));
+            .add_instance(multiply_trait_instance_int(ty.clone()))?;
     }
     for ty in float_types {
         fix_module
             .trait_env
-            .add_instance(multiply_trait_instance_float(ty.clone()));
+            .add_instance(multiply_trait_instance_float(ty.clone()))?;
     }
 
     // Div
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(divide_trait_instance_int(ty.clone()));
+            .add_instance(divide_trait_instance_int(ty.clone()))?;
     }
     for ty in float_types {
         fix_module
             .trait_env
-            .add_instance(divide_trait_instance_float(ty.clone()));
+            .add_instance(divide_trait_instance_float(ty.clone()))?;
     }
 
     // Rem
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(remainder_trait_instance_int(ty.clone()));
+            .add_instance(remainder_trait_instance_int(ty.clone()))?;
     }
 
     // LessThan
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(less_than_trait_instance_int(ty.clone()));
+            .add_instance(less_than_trait_instance_int(ty.clone()))?;
     }
     for ty in float_types {
         fix_module
             .trait_env
-            .add_instance(less_than_trait_instance_float(ty.clone()));
+            .add_instance(less_than_trait_instance_float(ty.clone()))?;
     }
 
     // LessThanOrEq
     for ty in integral_types {
         fix_module
             .trait_env
-            .add_instance(less_than_or_equal_to_trait_instance_int(ty.clone()));
+            .add_instance(less_than_or_equal_to_trait_instance_int(ty.clone()))?;
     }
     for ty in float_types {
         fix_module
             .trait_env
-            .add_instance(less_than_or_equal_to_trait_instance_float(ty.clone()));
+            .add_instance(less_than_or_equal_to_trait_instance_float(ty.clone()))?;
     }
 
     // Not
-    fix_module.trait_env.add_instance(not_trait_instance_bool());
+    fix_module
+        .trait_env
+        .add_instance(not_trait_instance_bool())?;
 
     // Boxed
     let builtin_boxed = vec![
@@ -161,7 +163,9 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         make_dynamic_object_ty(),                          // #DynamicObject
     ];
     for ty in builtin_boxed {
-        fix_module.trait_env.add_instance(boxed_trait_instance(&ty));
+        fix_module
+            .trait_env
+            .add_instance(boxed_trait_instance(&ty))?;
     }
 
     // Cast functions

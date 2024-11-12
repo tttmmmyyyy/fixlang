@@ -502,6 +502,7 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitIns
         assoc_types,
         define_module: ctx.module_name.clone(),
         source: Some(span),
+        is_user_defined: true,
     })
 }
 
