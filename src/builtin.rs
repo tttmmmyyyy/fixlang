@@ -3034,7 +3034,7 @@ fn make_struct_unique<'c, 'm>(
     if !is_unbox {
         // In boxed case, `str` should be replaced to cloned object if it is shared.
 
-        // Branch by refcnt is one.
+        // Branch by if refcnt is one.
         let str_ptr = str.ptr(gc);
         let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(str_ptr);
         let end_bb = gc
