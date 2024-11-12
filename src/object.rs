@@ -700,7 +700,7 @@ impl ObjectFieldType {
     ) -> Object<'c> {
         let is_unbox = union.ty.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
-        let buf = union.ptr_to_field_nocap(gc, 1 + offset);
+        let buf = union.ptr_to_field_nocap(gc, offset + 1);
 
         // Make return value by cloning the field in the union buffer,
         // because lifetime of returned value may be longer than that of union object itself.
