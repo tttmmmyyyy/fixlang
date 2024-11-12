@@ -1433,8 +1433,10 @@ Converts a floating number to a string with specified precision (i.e., number of
 
 Returns a pointer to the data of a boxed value.
 
-The returned pointer points to the first element of the array if the value is an `Array`, and to the first field if the value is a struct.
-At the moment, it is not specified what pointer is returned for a union, so do not use this function with unions.
+The returned pointer points to:
+- if the value is an `Array`, the first element of the array,
+- if the value is a struct, the first field,
+- if the value is an union, the data field (not the tag field).
 
 The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
 on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (i.e., the control block of the value).
@@ -1518,11 +1520,9 @@ For the reason that this function requires a value of type `Lazy a`, not of `a`,
 The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
 Do not perform any IO operations other than mutating the value of `x`.
 
+For more details on the value of the pointer passed to `io`, see the documentation of `get_boxed_ptr`.
+
 This function first clones the value if `x` is not unique.
-
-At the moment, it is not specified what pointer is obtained for a union, so do not use this function with unions.
-
-This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
 
 ### `mutate_boxed_io : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
 
