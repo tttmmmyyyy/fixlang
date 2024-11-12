@@ -1,7 +1,9 @@
 Returns a pointer to the data of a boxed value.
 
-The returned pointer points to the first element of the array if the value is an `Array`, and to the first field if the value is a struct.
-At the moment, it is not specified what pointer is returned for a union, so do not use this function with unions.
+The returned pointer points to:
+- if the value is an `Array`, the first element of the array,
+- if the value is a struct, the first field,
+- if the value is an union, the data field (not the tag field).
 
 The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
 on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (i.e., the control block of the value).

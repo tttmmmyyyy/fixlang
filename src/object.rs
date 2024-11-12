@@ -699,8 +699,8 @@ impl ObjectFieldType {
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let is_unbox = union.ty.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { 1 };
-        let buf = union.ptr_to_field_nocap(gc, offset + 1);
+        let offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
+        let buf = union.ptr_to_field_nocap(gc, offset + UNION_DATA_IDX);
 
         // Make return value by cloning the field in the union buffer,
         // because lifetime of returned value may be longer than that of union object itself.

@@ -970,6 +970,22 @@ impl TypeNode {
         return is_array_tycon(tc.as_ref());
     }
 
+    pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
+        let ti = self.toplevel_tycon_info(type_env);
+        match ti.variant {
+            TyConVariant::Struct => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_union(&self, type_env: &TypeEnv) -> bool {
+        let ti = self.toplevel_tycon_info(type_env);
+        match ti.variant {
+            TyConVariant::Union => true,
+            _ => false,
+        }
+    }
+
     pub fn is_dynamic(&self) -> bool {
         let tc = self.toplevel_tycon();
         if tc.is_none() {

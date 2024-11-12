@@ -4360,8 +4360,11 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
     // Get the pointer to the data field.
     let data_field_idx = if val.ty.is_array() {
         ARRAY_BUF_IDX
-    } else {
+    } else if val.ty.is_struct(gc.type_env()) {
         BOXED_TYPE_DATA_IDX
+    } else {
+        assert!(val.ty.is_union(gc.type_env()));
+        BOXED_TYPE_DATA_IDX + UNION_DATA_IDX
     };
 
     // Get pointer

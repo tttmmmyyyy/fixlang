@@ -3,8 +3,6 @@
 The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
 Do not perform any IO operations other than mutating the value of `x`.
 
+For more details on the value of the pointer passed to `io`, see the documentation of `get_boxed_ptr`.
+
 This function first clones the value if `x` is not unique.
-
-At the moment, it is not specified what pointer is obtained for a union, so do not use this function with unions.
-
-This function is unsafe in the sense that it returns different `Ptr` values created by the same expression.
