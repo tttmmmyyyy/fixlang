@@ -1014,7 +1014,7 @@ pub fn test46() {
 }
 
 #[test]
-pub fn union_basic_unboxed() {
+pub fn test_union_basic_unboxed() {
     // Basic use of union.
     let source = r#"
         module Main; 
@@ -1035,7 +1035,7 @@ pub fn union_basic_unboxed() {
 }
 
 #[test]
-pub fn union_basic_boxed() {
+pub fn test_union_basic_boxed() {
     // Basic use of boxed union.
     let source = r#"
         module Main; 
@@ -1056,8 +1056,7 @@ pub fn union_basic_boxed() {
 }
 
 #[test]
-pub fn test47_5() {
-    // Test union of closure object
+pub fn test_union_mod_closure() {
     let source = r#"
         module Main; 
         type Union = union {val: I64, func: I64 -> I64};
@@ -1076,23 +1075,57 @@ pub fn test47_5() {
 }
 
 #[test]
-pub fn test47_6() {
-    // Test union of boxed object
+pub fn test_union_mod_array() {
+    // Test union for array.
     let source = r#"
         module Main; 
         main : IO ();
         main = (
-            let uni = Option::some([1,2,3]).mod_some(
-                |lhs| lhs._unsafe_force_unique.append([4,5,6])
-            );
+            let uni = Option::some([1,2,3]).mod_some(|arr| arr.append([4,5,6]));
+
             let arr = uni.as_some;
+            assert_eq(|_|"", arr.get_size, 6);;
             assert_eq(|_|"", arr.@(0), 1);;
             assert_eq(|_|"", arr.@(1), 2);;
             assert_eq(|_|"", arr.@(2), 3);;
             assert_eq(|_|"", arr.@(3), 4);;
             assert_eq(|_|"", arr.@(4), 5);;
             assert_eq(|_|"", arr.@(5), 6);;
+
+            pure()
+        );
+    "#;
+    test_source(source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_shared_union_mod() {
+    // Test union for array.
+    let source = r#"
+        module Main; 
+
+        type MyOption a = box union { some : a, none : () };
+
+        main : IO ();
+        main = (
+            let uni0 = MyOption::some([1,2,3]);
+            let uni1 = uni0.mod_some(|arr| arr.append([4,5,6]));
+
+            let arr = uni0.as_some;
+            assert_eq(|_|"", arr.get_size, 3);;
+            assert_eq(|_|"", arr.@(0), 1);;
+            assert_eq(|_|"", arr.@(1), 2);;
+            assert_eq(|_|"", arr.@(2), 3);;
+
+            let arr = uni1.as_some;
             assert_eq(|_|"", arr.get_size, 6);;
+            assert_eq(|_|"", arr.@(0), 1);;
+            assert_eq(|_|"", arr.@(1), 2);;
+            assert_eq(|_|"", arr.@(2), 3);;
+            assert_eq(|_|"", arr.@(3), 4);;
+            assert_eq(|_|"", arr.@(4), 5);;
+            assert_eq(|_|"", arr.@(5), 6);;
+            
             pure()
         );
     "#;

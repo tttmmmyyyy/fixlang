@@ -1331,7 +1331,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.apply_lambda(fun_obj, arg_objs, rvo)
     }
 
-    // Evaluate literal
+    // Evaluate llvm
     fn eval_llvm(
         &mut self,
         llvm: Arc<InlineLLVM>,
