@@ -6611,6 +6611,31 @@ pub fn test_impl_boxed_by_hand() {
 }
 
 #[test]
+pub fn test_get_boxed_data_ptr_for_union() {
+    let source = r##"
+        module Main;
+
+        type MyUnion = box union {
+            a : I64,
+            b : F64
+        };
+
+        main: IO ();
+        main = (
+            let instance = MyUnion::a(42);
+            let ptr0 = instance.boxed_to_retained_ptr;
+            let ptr1 = instance._get_boxed_ptr;
+            let offset = ptr1.subtract_ptr(ptr0);
+            assert_eq(|_|"", offset, 16 + 8);; // Control block (refcnt state, refcnt) + tag(with padding)
+            pure()
+        );
+    "##;
+    let mut config = Configuration::develop_compiler_mode();
+    config.set_valgrind(crate::ValgrindTool::None); // Since instance will be leaked, valgrind should not be used.
+    test_source(&source, config);
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project("https://github.com/tttmmmyyyy/fixlang-math.git");
     test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");
