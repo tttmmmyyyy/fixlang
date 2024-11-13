@@ -102,7 +102,7 @@ impl<'c> Object<'c> {
         if self.ty.is_box(gc.type_env()) || self.is_funptr() {
             self.ptr(gc).as_basic_value_enum()
         } else {
-            self.load_value(gc).as_basic_value_enum()
+            self.load_value_unbox(gc).as_basic_value_enum()
         }
     }
 
@@ -146,8 +146,10 @@ impl<'c> Object<'c> {
         ty_to_object_ty(&self.ty, &vec![], gc.type_env()).to_struct_type(gc, vec![])
     }
 
-    pub fn load_value<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
+    pub fn load_value_unbox<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
         assert!(!self.is_funptr());
+        // If applied to boxed value, the following code loads not only the value of the object but also the reference counter. So this function should not be applied to boxed value.
+        assert!(self.is_unbox(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder()
@@ -155,11 +157,13 @@ impl<'c> Object<'c> {
             .into_struct_value()
     }
 
-    pub fn store_value<'m, V>(&self, gc: &mut GenerationContext<'c, 'm>, value: V)
+    pub fn store_value_unbox<'m, V>(&self, gc: &mut GenerationContext<'c, 'm>, value: V)
     where
         V: BasicValue<'c>,
     {
         assert!(!self.is_funptr());
+        // If applied to boxed value, the following code stores not only the value of the object but also the reference counter. So this function should not be applied to boxed value.
+        assert!(self.is_unbox(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder().build_store(ptr, value);
@@ -596,7 +600,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 if rvo.is_some() {
                     let rvo = rvo.unwrap();
                     let obj_val = obj.value(self);
-                    rvo.store_value(self, obj_val);
+                    rvo.store_value_unbox(self, obj_val);
                     rvo
                 } else {
                     Object::create_from_value(obj.value(self), obj.ty, self)
@@ -612,7 +616,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 assert!(obj.is_unbox(self.type_env()));
                 let rvo = rvo.unwrap();
                 let obj_val = obj.value(self);
-                rvo.store_value(self, obj_val);
+                rvo.store_value_unbox(self, obj_val);
                 rvo
             } else {
                 obj

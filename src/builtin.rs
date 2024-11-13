@@ -2660,7 +2660,7 @@ impl InlineLLVMStructPlugInBody {
         // Convert punched_str into the struct type.
         let punched_value = punched_str.value(gc);
         let str = if let Some(rvo) = rvo {
-            rvo.store_value(gc, punched_value);
+            rvo.store_value_unbox(gc, punched_value);
             rvo
         } else {
             Object::create_from_value(punched_value, struct_ty.clone(), gc)
@@ -2755,8 +2755,8 @@ impl InlineLLVMStructModBody {
             assert!(is_unbox);
             // Move str to rvo.
             let rvo = rvo.unwrap();
-            let str_val = str.load_value(gc);
-            rvo.store_value(gc, str_val);
+            let str_val = str.load_value_unbox(gc);
+            rvo.store_value_unbox(gc, str_val);
             str = rvo;
         }
 
@@ -3128,8 +3128,8 @@ impl InlineLLVMStructSetBody {
             assert!(str_ty.is_unbox(gc.type_env()));
             // Move str to rvo.
             let rvo = rvo.unwrap();
-            let str_val = str.load_value(gc);
-            rvo.store_value(gc, str_val);
+            let str_val = str.load_value_unbox(gc);
+            rvo.store_value_unbox(gc, str_val);
             str = rvo;
         }
 
@@ -4705,8 +4705,8 @@ impl InlineLLVMMarkThreadedFunctionBody {
         if rvo.is_some() {
             assert!(obj.is_unbox(gc.type_env()));
             let rvo = rvo.unwrap();
-            let val = obj.load_value(gc);
-            rvo.store_value(gc, val);
+            let val = obj.load_value_unbox(gc);
+            rvo.store_value_unbox(gc, val);
             rvo
         } else {
             obj

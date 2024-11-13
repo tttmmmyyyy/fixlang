@@ -429,7 +429,7 @@ impl ObjectFieldType {
                     gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
                 } else {
                     gc.builder()
-                        .build_store(ptr_to_obj_ptr, value.load_value(gc));
+                        .build_store(ptr_to_obj_ptr, value.load_value_unbox(gc));
                 }
             };
 
@@ -494,7 +494,7 @@ impl ObjectFieldType {
         // Return value
         let elem_obj = if rvo.is_some() {
             let rvo = rvo.unwrap();
-            rvo.store_value(gc, elem_val);
+            rvo.store_value_unbox(gc, elem_val);
             rvo
         } else {
             Object::create_from_value(elem_val, elem_ty, gc)
@@ -786,7 +786,7 @@ impl ObjectFieldType {
             Object::create_from_value(field_val, elem_ty.clone(), gc)
         } else {
             let rvo = rvo.unwrap();
-            rvo.store_value(gc, field_val);
+            rvo.store_value_unbox(gc, field_val);
             rvo
         };
         if union.is_box(gc.type_env()) {
@@ -876,7 +876,7 @@ impl ObjectFieldType {
                 Object::create_from_value(field_val, field.ty, gc)
             } else {
                 let rvo = rvo.as_ref().unwrap();
-                rvo.store_value(gc, field_val);
+                rvo.store_value_unbox(gc, field_val);
                 rvo.clone()
             };
             ret.push(field);
