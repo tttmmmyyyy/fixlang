@@ -84,7 +84,8 @@ pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 // Struct layout constants.
 pub const CONTROL_BLOCK_IDX: u32 = 0;
 pub const BOXED_TYPE_DATA_IDX: u32 = CONTROL_BLOCK_IDX + 1;
-pub const UNION_DATA_IDX: u32 = 1; // The first fieid is tag.
+pub const UNION_TAG_IDX: u32 = 0; // Should be added to `BOXED_TYPE_DATA_IDX` if the union is boxed.
+pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 pub const ARRAY_LEN_IDX: u32 = CONTROL_BLOCK_IDX + 1;

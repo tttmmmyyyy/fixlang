@@ -1953,12 +1953,14 @@ pub fn get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Force array object to be unique.
 // If it is unique, do nothing.
-// If it is shared, clone the object or panics if panic_if_shared is true.
+// If it is shared, clone the object.
 fn make_array_unique<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     array: Object<'c>,
     panic_if_shared: bool,
 ) -> Object<'c> {
+    assert!(array.ty.is_array());
+
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
     let arr_ptr = array.ptr(gc);
     let current_bb = gc.builder().get_insert_block().unwrap();
@@ -2653,12 +2655,12 @@ impl InlineLLVMStructPlugInBody {
         //
         // The uniquness is not assured even if `#plug_x` is only used in the implementation of `act_x` and the `#punch_x` function has uniqueness checking.
         // In the impelementation of `act_x`, we use `map(#plug_in_x(ps))`, and `map` can be call `#plug_in_x(ps)` multiple times, so the punched struct value `ps` can be shared.
-        let punched_str = make_struct_unique(gc, punched_str, false);
+        let punched_str = make_struct_unique(gc, punched_str);
 
         // Convert punched_str into the struct type.
         let punched_value = punched_str.value(gc);
         let str = if let Some(rvo) = rvo {
-            rvo.store_unbox(gc, punched_value);
+            rvo.store_value(gc, punched_value);
             rvo
         } else {
             Object::create_from_value(punched_value, struct_ty.clone(), gc)
@@ -2742,7 +2744,7 @@ impl InlineLLVMStructModBody {
         let modfier = gc.get_var(&self.f_name).ptr.get(gc);
         let str = gc.get_var(&self.x_name).ptr.get(gc);
 
-        let mut str = make_struct_unique(gc, str, false);
+        let mut str = make_struct_unique(gc, str);
 
         // Modify field
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
@@ -2753,8 +2755,8 @@ impl InlineLLVMStructModBody {
             assert!(is_unbox);
             // Move str to rvo.
             let rvo = rvo.unwrap();
-            let str_val = str.load_nocap(gc);
-            rvo.store_unbox(gc, str_val);
+            let str_val = str.load_value(gc);
+            rvo.store_value(gc, str_val);
             str = rvo;
         }
 
@@ -3022,69 +3024,73 @@ pub fn struct_act(
     (expr, scm)
 }
 
-// Make struct object to unique.
+// Make struct object unique.
 // If it is (unboxed or) unique, do nothing.
-// If it is shared, clone the object or panics if panic_if_shared is true.
-fn make_struct_unique<'c, 'm>(
+// If it is shared, clone the object.
+fn make_struct_unique<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, str: Object<'c>) -> Object<'c> {
+    make_struct_union_unique(gc, str)
+}
+
+// Make struct / union object unique.
+// If it is (unboxed or) unique, do nothing.
+// If it is shared, clone the object.
+fn make_struct_union_unique<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
-    mut str: Object<'c>,
-    panic_if_shared: bool,
+    mut obj: Object<'c>,
 ) -> Object<'c> {
-    let is_unbox = str.ty.is_unbox(gc.type_env());
-    if !is_unbox {
-        // In boxed case, `str` should be replaced to cloned object if it is shared.
+    assert!(obj.ty.is_union(gc.type_env()) || obj.ty.is_struct(gc.type_env()));
 
-        // Branch by if refcnt is one.
-        let str_ptr = str.ptr(gc);
-        let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(str_ptr);
-        let end_bb = gc
-            .context
-            .append_basic_block(unique_bb.get_parent().unwrap(), "end_bb");
-
-        // Implement shared_bb.
-        gc.builder().position_at_end(shared_bb);
-        if panic_if_shared {
-            // In case of unique version, panic in this case.
-            gc.panic("A struct object is asserted as unique but is shared!\n");
-        }
-        // Create new struct and clone fields.
-        let cloned_str = allocate_obj(str.ty.clone(), &vec![], None, gc, Some("cloned_str"));
-        for (i, field) in str.ty.fields(gc.type_env()).iter().enumerate() {
-            // Skip the punched field.
-            if field.is_punched {
-                continue;
-            }
-
-            // Retain the field.
-            let field = ObjectFieldType::get_struct_field_noclone(gc, &str, i as u32);
-            gc.retain(field.clone());
-
-            // Clone the field.
-            ObjectFieldType::set_struct_field_norelease(gc, &cloned_str, i as u32, &field);
-        }
-        gc.release(str.clone());
-        let cloned_str_ptr = cloned_str.ptr(gc);
-        let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-        gc.builder().build_unconditional_branch(end_bb);
-
-        // Implement unique_bb.
-        gc.builder().position_at_end(unique_bb);
-        // Jump to end_bb.
-        gc.builder().build_unconditional_branch(end_bb);
-
-        // Implement end_bb.
-        gc.builder().position_at_end(end_bb);
-        // Build phi value.
-        let str_phi = gc.builder().build_phi(str.ptr(gc).get_type(), "str_phi");
-        str_phi.add_incoming(&[(&str_ptr, unique_bb), (&cloned_str_ptr, succ_of_shared_bb)]);
-
-        str = Object::new(
-            str_phi.as_basic_value().into_pointer_value(),
-            str.ty.clone(),
-        );
+    let is_unbox = obj.ty.is_unbox(gc.type_env());
+    if is_unbox {
+        // In unboxed case, `obj` is always treated as unique object.
+        return obj;
     }
-    // In unboxed case, str is always treated as unique object.
-    str
+    // In boxed case, `obj` should be replaced to cloned object if it is shared.
+
+    // Branch by if refcnt is one.
+    let obj_ptr = obj.ptr(gc);
+    let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
+    let end_bb = gc
+        .context
+        .append_basic_block(unique_bb.get_parent().unwrap(), "end_bb");
+
+    // Implement shared_bb.
+    gc.builder().position_at_end(shared_bb);
+
+    // Create new object and clone fields.
+    let cloned_obj = allocate_obj(obj.ty.clone(), &vec![], None, gc, Some("cloned_obj"));
+    if obj.ty.is_struct(gc.type_env()) {
+        ObjectFieldType::clone_struct(gc, &obj, &cloned_obj);
+    } else if obj.ty.is_union(gc.type_env()) {
+        ObjectFieldType::clone_union(gc, &obj, &cloned_obj);
+    } else {
+        unreachable!()
+    }
+
+    // Release the old object.
+    gc.release(obj.clone());
+
+    let cloned_obj_ptr = cloned_obj.ptr(gc);
+    let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
+    gc.builder().build_unconditional_branch(end_bb);
+
+    // Implement unique_bb.
+    gc.builder().position_at_end(unique_bb);
+    // Jump to end_bb.
+    gc.builder().build_unconditional_branch(end_bb);
+
+    // Implement end_bb.
+    gc.builder().position_at_end(end_bb);
+    // Build phi value.
+    let obj_phi = gc.builder().build_phi(obj.ptr(gc).get_type(), "obj_phi");
+    obj_phi.add_incoming(&[(&obj_ptr, unique_bb), (&cloned_obj_ptr, succ_of_shared_bb)]);
+
+    obj = Object::new(
+        obj_phi.as_basic_value().into_pointer_value(),
+        obj.ty.clone(),
+    );
+
+    obj
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -3108,7 +3114,7 @@ impl InlineLLVMStructSetBody {
         let str = gc.get_var(&FullName::local(&self.struct_name)).ptr.get(gc);
 
         // Make struct object unique.
-        let mut str = make_struct_unique(gc, str, false);
+        let mut str = make_struct_unique(gc, str);
 
         // Release old value
         let old_value = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
@@ -3122,8 +3128,8 @@ impl InlineLLVMStructSetBody {
             assert!(str_ty.is_unbox(gc.type_env()));
             // Move str to rvo.
             let rvo = rvo.unwrap();
-            let str_val = str.load_nocap(gc);
-            rvo.store_unbox(gc, str_val);
+            let str_val = str.load_value(gc);
+            rvo.store_value(gc, str_val);
             str = rvo;
         }
 
@@ -3407,9 +3413,6 @@ impl InlineLLVMUnionIsBody {
             .ptr
             .get(gc);
 
-        let is_unbox = obj.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { 1 };
-
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
             .to_basic_type(gc, vec![])
@@ -3417,7 +3420,7 @@ impl InlineLLVMUnionIsBody {
             .const_int(self.field_idx as u64, false);
 
         // Get tag value.
-        let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
+        let tag_value = ObjectFieldType::get_union_tag(gc, &obj);
 
         // Create returned value.
         let ret = if rvo.is_none() {
@@ -4428,7 +4431,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         let val = if is_array {
             make_array_unique(gc, val, false)
         } else {
-            make_struct_unique(gc, val, false)
+            make_struct_union_unique(gc, val)
         };
 
         // Get the data pointer.
@@ -4522,7 +4525,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         let val = if is_array {
             make_array_unique(gc, val, false)
         } else {
-            make_struct_unique(gc, val, false)
+            make_struct_union_unique(gc, val)
         };
 
         // Get the data pointer.
@@ -4702,8 +4705,8 @@ impl InlineLLVMMarkThreadedFunctionBody {
         if rvo.is_some() {
             assert!(obj.is_unbox(gc.type_env()));
             let rvo = rvo.unwrap();
-            let val = obj.load_nocap(gc);
-            rvo.store_unbox(gc, val);
+            let val = obj.load_value(gc);
+            rvo.store_value(gc, val);
             rvo
         } else {
             obj

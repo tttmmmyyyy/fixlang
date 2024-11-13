@@ -102,7 +102,7 @@ impl<'c> Object<'c> {
         if self.ty.is_box(gc.type_env()) || self.is_funptr() {
             self.ptr(gc).as_basic_value_enum()
         } else {
-            self.load_nocap(gc).as_basic_value_enum()
+            self.load_value(gc).as_basic_value_enum()
         }
     }
 
@@ -146,22 +146,22 @@ impl<'c> Object<'c> {
         ty_to_object_ty(&self.ty, &vec![], gc.type_env()).to_struct_type(gc, vec![])
     }
 
-    pub fn load_nocap<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
+    pub fn load_value<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
         assert!(!self.is_funptr());
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder()
-            .build_load(ptr, "load_unbox")
+            .build_load(ptr, "load_value")
             .into_struct_value()
     }
 
-    pub fn store_unbox<'m, V>(&self, gc: &mut GenerationContext<'c, 'm>, value: V)
+    pub fn store_value<'m, V>(&self, gc: &mut GenerationContext<'c, 'm>, value: V)
     where
         V: BasicValue<'c>,
     {
-        assert!(self.is_unbox(gc.type_env()));
         assert!(!self.is_funptr());
-        let ptr = self.ptr(gc);
+        let struct_ty = self.struct_ty(gc);
+        let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
         gc.builder().build_store(ptr, value);
     }
 
@@ -596,7 +596,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 if rvo.is_some() {
                     let rvo = rvo.unwrap();
                     let obj_val = obj.value(self);
-                    rvo.store_unbox(self, obj_val);
+                    rvo.store_value(self, obj_val);
                     rvo
                 } else {
                     Object::create_from_value(obj.value(self), obj.ty, self)
@@ -612,7 +612,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 assert!(obj.is_unbox(self.type_env()));
                 let rvo = rvo.unwrap();
                 let obj_val = obj.value(self);
-                rvo.store_unbox(self, obj_val);
+                rvo.store_value(self, obj_val);
                 rvo
             } else {
                 obj

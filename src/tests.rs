@@ -1125,7 +1125,7 @@ pub fn test_shared_union_mod() {
             assert_eq(|_|"", arr.@(3), 4);;
             assert_eq(|_|"", arr.@(4), 5);;
             assert_eq(|_|"", arr.@(5), 6);;
-            
+
             pure()
         );
     "#;
@@ -6026,6 +6026,27 @@ pub fn test_mutate_boxed_io() {
 }
 
 #[test]
+pub fn test_mutate_boxed_io_shared() {
+    let source = r##"
+        module Main;
+                
+        main: IO ();
+        main = (
+            let x : Box I32 = Box { value : 0_I32 };
+            let (y, _) = *x.mutate_boxed_io(|ptr| IO::from_runner $ |ios|
+                "%d".borrow_c_str(|c_str|
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
+                )
+            );
+            assert_eq(|_|"", x.@value, 0_I32);;
+            assert_eq(|_|"", y.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_get_errno() {
     let source = r##"
         module Main;
@@ -6437,13 +6458,17 @@ pub fn test_export() {
         }
     "##;
 
+    test_fix_linked_with_c(&source, &c_source, function_name!());
+}
+
+fn test_fix_linked_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     // Create a working directory.
     let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
 
     // Save `c_source` to a file.
-    let c_file = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, function_name!());
+    let c_file = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, test_name);
     let mut file = File::create(&c_file).unwrap();
-    file.write_all(c_source.as_bytes()).unwrap();
+    file.write_all(c_src.as_bytes()).unwrap();
 
     // Build `c_source` into a shared library.
     let lib_name = function_name!();
@@ -6472,7 +6497,7 @@ pub fn test_export() {
     config.library_search_paths.push(PathBuf::from("."));
 
     // Run the Fix program.
-    test_source(&source, config);
+    test_source(&fix_src, config);
 
     // Remove the shared library.
     let _ = fs::remove_file(so_file_path);
@@ -6656,16 +6681,79 @@ pub fn test_get_boxed_data_ptr_for_union() {
         main: IO ();
         main = (
             let instance = MyUnion::a(42);
-            let ptr0 = instance.boxed_to_retained_ptr;
-            let ptr1 = instance._get_boxed_ptr;
-            let offset = ptr1.subtract_ptr(ptr0);
-            assert_eq(|_|"", offset, 16 + 8);; // Control block (refcnt state, refcnt) + tag(with padding)
-            pure()
+            let val = instance.do_with_retained(|instance|
+                let ptr = instance._get_boxed_ptr;
+                FFI_CALL[I64 deref(Ptr), ptr]
+            );
+            assert_eq(|_|"", val, 42)
         );
     "##;
-    let mut config = Configuration::develop_compiler_mode();
-    config.set_valgrind(crate::ValgrindTool::None); // Since instance will be leaked, valgrind should not be used.
-    test_source(&source, config);
+    let c_source = r##"
+        #include <stdio.h>
+        #include <stdint.h>
+
+        int64_t deref(int64_t* ptr) {
+            return *ptr;
+        }
+    "##;
+    test_fix_linked_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_mutate_boxed_io_union() {
+    let source = r##"
+        module Main;
+
+        type MyUnion = box union {
+            a : I64,
+            b : Bool
+        };
+
+        main: IO ();
+        main = (
+            let uni = MyUnion::a(42);
+            let (uni, _) = *uni.mutate_boxed_io(|ptr| FFI_CALL_IO[() negate(Ptr), ptr]);
+            assert_eq(|_|"", uni.as_a, -42)
+        );
+    "##;
+    let c_source = r##"
+        #include <stdio.h>
+        #include <stdint.h>
+
+        void negate(int64_t* ptr) {
+            *ptr = -(*ptr);
+        }
+    "##;
+    test_fix_linked_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_mutate_boxed_io_union_shared() {
+    let source = r##"
+        module Main;
+
+        type MyUnion = box union {
+            a : I64,
+            b : Bool
+        };
+
+        main: IO ();
+        main = (
+            let uni = MyUnion::a(42);
+            let (uni2, _) = *uni.mutate_boxed_io(|ptr| FFI_CALL_IO[() negate(Ptr), ptr]);
+            assert_eq(|_|"", uni.as_a, 42);;
+            assert_eq(|_|"", uni2.as_a, -42)
+        );
+    "##;
+    let c_source = r##"
+        #include <stdio.h>
+        #include <stdint.h>
+
+        void negate(int64_t* ptr) {
+            *ptr = -(*ptr);
+        }
+    "##;
+    test_fix_linked_with_c(&source, &c_source, function_name!());
 }
 
 #[test]

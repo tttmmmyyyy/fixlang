@@ -429,7 +429,7 @@ impl ObjectFieldType {
                     gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
                 } else {
                     gc.builder()
-                        .build_store(ptr_to_obj_ptr, value.load_nocap(gc));
+                        .build_store(ptr_to_obj_ptr, value.load_value(gc));
                 }
             };
 
@@ -494,7 +494,7 @@ impl ObjectFieldType {
         // Return value
         let elem_obj = if rvo.is_some() {
             let rvo = rvo.unwrap();
-            rvo.store_unbox(gc, elem_val);
+            rvo.store_value(gc, elem_val);
             rvo
         } else {
             Object::create_from_value(elem_val, elem_ty, gc)
@@ -599,6 +599,50 @@ impl ObjectFieldType {
         }
     }
 
+    // Clone an struct object `str` into `dst`.
+    // `dst` should be already allocated but not initialized.
+    // `src` will not be released.
+    pub fn clone_struct<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        src: &Object<'c>,
+        dst: &Object<'c>,
+    ) {
+        for (i, field) in src.ty.fields(gc.type_env()).iter().enumerate() {
+            // Skip the punched field.
+            if field.is_punched {
+                continue;
+            }
+
+            // Retain the field.
+            let field = ObjectFieldType::get_struct_field_noclone(gc, src, i as u32);
+            gc.retain(field.clone());
+
+            // Clone the field.
+            ObjectFieldType::set_struct_field_norelease(gc, dst, i as u32, &field);
+        }
+    }
+
+    // Clone an union object `str` into `dst`.
+    // `dst` should be already allocated but not initialized.
+    // `src` will not be released.
+    pub fn clone_union<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        src: &Object<'c>,
+        dst: &Object<'c>,
+    ) {
+        // Get tag value and buffer.
+        let tag = ObjectFieldType::get_union_tag(gc, &src);
+        let buf = ObjectFieldType::get_union_buf(gc, &src);
+
+        // Clone the value.
+        let value = src.load_value(gc);
+        dst.store_value(gc, value);
+
+        // Retain the value.
+        let variants = src.ty.field_types(gc.type_env());
+        ObjectFieldType::retain_union_buf(gc, buf, tag, &variants);
+    }
+
     // Perform retain or release or mark global or mark threaded on an object included in a union buffer.
     fn retain_release_mark_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
@@ -691,6 +735,35 @@ impl ObjectFieldType {
         gc.builder().build_store(buf, val);
     }
 
+    #[allow(dead_code)]
+    pub fn set_union_tag<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        union: &Object<'c>,
+        tag: IntValue<'c>,
+    ) {
+        let is_unbox = union.is_unbox(gc.type_env());
+        let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
+        union.store_field_nocap(gc, union_tag_idx, tag);
+    }
+
+    pub fn get_union_tag<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        union: &Object<'c>,
+    ) -> IntValue<'c> {
+        let is_unbox = union.is_unbox(gc.type_env());
+        let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
+        union.load_field_nocap(gc, union_tag_idx).into_int_value()
+    }
+
+    pub fn get_union_buf<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        union: &Object<'c>,
+    ) -> PointerValue<'c> {
+        let is_unbox = union.is_unbox(gc.type_env());
+        let union_buf_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_DATA_IDX;
+        union.ptr_to_field_nocap(gc, union_buf_idx)
+    }
+
     // Get field of union (with refcnt managed).
     pub fn get_union_field<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
@@ -698,9 +771,7 @@ impl ObjectFieldType {
         elem_ty: &Arc<TypeNode>,
         rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        let is_unbox = union.ty.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
-        let buf = union.ptr_to_field_nocap(gc, offset + UNION_DATA_IDX);
+        let buf = ObjectFieldType::get_union_buf(gc, &union);
 
         // Make return value by cloning the field in the union buffer,
         // because lifetime of returned value may be longer than that of union object itself.
@@ -709,7 +780,7 @@ impl ObjectFieldType {
             Object::create_from_value(field_val, elem_ty.clone(), gc)
         } else {
             let rvo = rvo.unwrap();
-            rvo.store_unbox(gc, field_val);
+            rvo.store_value(gc, field_val);
             rvo
         };
         if union.is_box(gc.type_env()) {
@@ -799,7 +870,7 @@ impl ObjectFieldType {
                 Object::create_from_value(field_val, field.ty, gc)
             } else {
                 let rvo = rvo.as_ref().unwrap();
-                rvo.store_unbox(gc, field_val);
+                rvo.store_value(gc, field_val);
                 rvo.clone()
             };
             ret.push(field);
