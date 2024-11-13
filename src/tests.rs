@@ -6908,7 +6908,7 @@ fn test_fix_linked_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     file.write_all(c_src.as_bytes()).unwrap();
 
     // Build `c_source` into a shared library.
-    let lib_name = function_name!();
+    let lib_name = test_name;
     let so_file_path = format!("lib{}.so", lib_name);
     let mut com = Command::new("gcc");
     let output = com
