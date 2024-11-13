@@ -1727,7 +1727,7 @@ The following is the table of operators sorted by its precedence (operator of hi
 | &&                | right associative binary | -                                  | short-circuit logical AND.                                             |
 | &#124;&#124;      | right associative binary | -                                  | short-circuit logical OR                                               |
 | $                 | right associative binary | -                                  | right associative function application: `f $ g $ x` = `f(g(x))`        |
-| ;;                | right associative binary | Std::Monad::discard_and            | `m0;; m1` = `let _ = *m0; m1`                                          |
+| ;;                | right associative binary | -                                  | `m0;; m1` = `let _ = *m0; m1`                                          |
 
 # Compiler features
 

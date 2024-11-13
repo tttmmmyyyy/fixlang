@@ -1859,10 +1859,6 @@ namespace Monad {
     // `when(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is true.
     when : [m : Monad] Bool -> m () -> m ();
     when = |cond, act| if cond { act } else { pure $ () };
-
-    // `act1.discard_and(act2)` performs `act1` and then `act2`, but discards the result of `act1`.
-    discard_and : [m : Monad] m b -> m a -> m b;
-    discard_and = |act2, act1| act1.bind(|_| act2);
 }
 
 trait a : ToBytes {

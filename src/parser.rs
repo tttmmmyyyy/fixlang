@@ -980,12 +980,17 @@ fn parse_expr_and_then_sequence(
         let next_expr_span = next_expr.source.clone();
         let op_span = op_spans.pop().unwrap();
         let bind_function = expr_var(
-            FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_DISCARD_AND_NAME),
+            FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME),
             Some(op_span.clone()),
         );
         let bind_next_expr_span = unite_span(&Some(op_span), &next_expr_span);
-        let bind_next_expr = expr_app(bind_function, vec![next_expr], bind_next_expr_span.clone())
-            .set_app_order(AppSourceCodeOrderType::FX);
+        let lazy_next_expr = expr_abs(vec![var_local(ARG_NAME)], next_expr, next_expr_span);
+        let bind_next_expr = expr_app(
+            bind_function,
+            vec![lazy_next_expr],
+            bind_next_expr_span.clone(),
+        )
+        .set_app_order(AppSourceCodeOrderType::FX);
         let expr_span = expr.source.clone();
         expr = expr_app(
             bind_next_expr,
