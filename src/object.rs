@@ -630,16 +630,22 @@ impl ObjectFieldType {
         src: &Object<'c>,
         dst: &Object<'c>,
     ) {
-        // Get tag value and buffer.
+        // Clone the tag.
         let tag = ObjectFieldType::get_union_tag(gc, &src);
-        let buf = ObjectFieldType::get_union_buf(gc, &src);
+        ObjectFieldType::set_union_tag(gc, dst, tag);
 
         // Clone the value.
-        let value = src.load_value(gc);
-        dst.store_value(gc, value);
+        let value_field_idx = if src.is_unbox(gc.type_env()) {
+            0
+        } else {
+            BOXED_TYPE_DATA_IDX
+        } + UNION_DATA_IDX;
+        let value = src.load_field_nocap(gc, value_field_idx);
+        dst.store_field_nocap(gc, value_field_idx, value);
 
         // Retain the value.
         let variants = src.ty.field_types(gc.type_env());
+        let buf = ObjectFieldType::get_union_buf(gc, &dst);
         ObjectFieldType::retain_union_buf(gc, buf, tag, &variants);
     }
 

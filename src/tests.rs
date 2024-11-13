@@ -6006,12 +6006,33 @@ pub fn test_c_type_aliases() {
 }
 
 #[test]
+pub fn test_mutate_boxed() {
+    let source = r##"
+        module Main;
+                
+        main: IO ();
+        main = (
+            let x : Box I32 = Box { value : 0_I32 };
+            let (x, _) = x.mutate_boxed(|ptr| IO::from_runner $ |ios|
+                "%d".borrow_c_str(|c_str|
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
+                )
+            );
+            assert_eq(|_|"", x.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_mutate_boxed_io() {
     let source = r##"
         module Main;
                 
         main: IO ();
         main = (
+            println("test_mutate_boxed_io");; // This makes the `x` local and therefore unique.
             let x : Box I32 = Box { value : 0_I32 };
             let (x, _) = *x.mutate_boxed_io(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
@@ -6019,6 +6040,27 @@ pub fn test_mutate_boxed_io() {
                 )
             );
             assert_eq(|_|"", x.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_mutate_boxed_shared() {
+    let source = r##"
+        module Main;
+                
+        main: IO ();
+        main = (
+            let x : Box I32 = Box { value : 0_I32 };
+            let (y, _) = x.mutate_boxed(|ptr| IO::from_runner $ |ios|
+                "%d".borrow_c_str(|c_str|
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
+                )
+            );
+            assert_eq(|_|"", x.@value, 0_I32);;
+            assert_eq(|_|"", y.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
             pure()
         );
     "##;
@@ -6461,48 +6503,6 @@ pub fn test_export() {
     test_fix_linked_with_c(&source, &c_source, function_name!());
 }
 
-fn test_fix_linked_with_c(fix_src: &str, c_src: &str, test_name: &str) {
-    // Create a working directory.
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-
-    // Save `c_source` to a file.
-    let c_file = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, test_name);
-    let mut file = File::create(&c_file).unwrap();
-    file.write_all(c_src.as_bytes()).unwrap();
-
-    // Build `c_source` into a shared library.
-    let lib_name = function_name!();
-    let so_file_path = format!("lib{}.so", lib_name);
-    let mut com = Command::new("gcc");
-    let output = com
-        .arg("-shared")
-        .arg("-fPIC")
-        .arg("-o")
-        .arg(so_file_path.clone())
-        .arg(&c_file)
-        .output()
-        .expect("Failed to run gcc.");
-    if output.stderr.len() > 0 {
-        eprintln!(
-            "{}",
-            String::from_utf8(output.stderr)
-                .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
-        );
-    }
-
-    // Link the shared library to the Fix program.
-    let mut config = Configuration::develop_compiler_mode();
-    config.add_dyanmic_library(lib_name);
-    // Add the library search path.
-    config.library_search_paths.push(PathBuf::from("."));
-
-    // Run the Fix program.
-    test_source(&fix_src, config);
-
-    // Remove the shared library.
-    let _ = fs::remove_file(so_file_path);
-}
-
 #[test]
 pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique_1() {
     // Actual usage of `get_funptr_release` is tested in asynctask.fix.
@@ -6700,6 +6700,34 @@ pub fn test_get_boxed_data_ptr_for_union() {
 }
 
 #[test]
+pub fn test_mutate_boxed_union() {
+    let source = r##"
+        module Main;
+
+        type MyUnion = box union {
+            a : I64,
+            b : Bool
+        };
+
+        main: IO ();
+        main = (
+            let uni = MyUnion::a(42);
+            let (uni, _) = uni.mutate_boxed(|ptr| FFI_CALL_IO[() negate(Ptr), ptr]);
+            assert_eq(|_|"", uni.as_a, -42)
+        );
+    "##;
+    let c_source = r##"
+        #include <stdio.h>
+        #include <stdint.h>
+
+        void negate(int64_t* ptr) {
+            *ptr = -(*ptr);
+        }
+    "##;
+    test_fix_linked_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
 pub fn test_mutate_boxed_io_union() {
     let source = r##"
         module Main;
@@ -6714,6 +6742,35 @@ pub fn test_mutate_boxed_io_union() {
             let uni = MyUnion::a(42);
             let (uni, _) = *uni.mutate_boxed_io(|ptr| FFI_CALL_IO[() negate(Ptr), ptr]);
             assert_eq(|_|"", uni.as_a, -42)
+        );
+    "##;
+    let c_source = r##"
+        #include <stdio.h>
+        #include <stdint.h>
+
+        void negate(int64_t* ptr) {
+            *ptr = -(*ptr);
+        }
+    "##;
+    test_fix_linked_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_mutate_boxed_union_shared() {
+    let source = r##"
+        module Main;
+
+        type MyUnion = box union {
+            a : I64,
+            b : Bool
+        };
+
+        main: IO ();
+        main = (
+            let uni = MyUnion::a(42);
+            let (uni2, _) = uni.mutate_boxed(|ptr| FFI_CALL_IO[() negate(Ptr), ptr]);
+            assert_eq(|_|"", uni.as_a, 42);;
+            assert_eq(|_|"", uni2.as_a, -42)
         );
     "##;
     let c_source = r##"
@@ -6839,4 +6896,46 @@ pub fn test_generate_docs() {
         .current_dir("std_doc")
         .output()
         .expect("Failed to run fix doc.");
+}
+
+fn test_fix_linked_with_c(fix_src: &str, c_src: &str, test_name: &str) {
+    // Create a working directory.
+    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+
+    // Save `c_source` to a file.
+    let c_file = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, test_name);
+    let mut file = File::create(&c_file).unwrap();
+    file.write_all(c_src.as_bytes()).unwrap();
+
+    // Build `c_source` into a shared library.
+    let lib_name = function_name!();
+    let so_file_path = format!("lib{}.so", lib_name);
+    let mut com = Command::new("gcc");
+    let output = com
+        .arg("-shared")
+        .arg("-fPIC")
+        .arg("-o")
+        .arg(so_file_path.clone())
+        .arg(&c_file)
+        .output()
+        .expect("Failed to run gcc.");
+    if output.stderr.len() > 0 {
+        eprintln!(
+            "{}",
+            String::from_utf8(output.stderr)
+                .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
+        );
+    }
+
+    // Link the shared library to the Fix program.
+    let mut config = Configuration::develop_compiler_mode();
+    config.add_dyanmic_library(lib_name);
+    // Add the library search path.
+    config.library_search_paths.push(PathBuf::from("."));
+
+    // Run the Fix program.
+    test_source(&fix_src, config);
+
+    // Remove the shared library.
+    let _ = fs::remove_file(so_file_path);
 }
