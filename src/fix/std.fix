@@ -400,11 +400,13 @@ namespace FFI {
 
     // Borrows a pointer to the data of a boxed value.
     // 
-    // For more details, see the document of `_get_boxed_ptr`.
+    // For the details of the pointer, see the document of `_get_boxed_ptr`.
     borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b;
     borrow_boxed = |act, val| val.do_with_retained(|val| act(val._get_boxed_ptr));
 
     // Performs an IO action borrowing a pointer to the data of a boxed value.
+    // 
+    // For the details of the pointer, see the document of `_get_boxed_ptr`.
     borrow_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO b;
     borrow_boxed_io = |act, val| IO::from_runner $ |ios| val.borrow_boxed(|ptr| (act(ptr).@runner)(ios));
 

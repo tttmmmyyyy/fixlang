@@ -1439,21 +1439,23 @@ The returned pointer points to:
 - if the value is an union, the data field (not the tag field).
 
 The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
-on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (i.e., the control block of the value).
+on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (which currently points to the reference counter of the boxed value).
 
 NOTE: 
 This function is unsafe in that if the call `v._get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
-To avoid issues caused by this, use `borrow_boxed` instead.
+To avoid this issue, use `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`, or `mutate_boxed_io` instead.
 
 ### `borrow_boxed : [a : Std::Boxed] (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
-For more details, see the document of `_get_boxed_ptr`.
+For the details of the pointer, see the document of `_get_boxed_ptr`.
 
 ### `borrow_boxed_io : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
 
 Performs an IO action borrowing a pointer to the data of a boxed value.
+
+For the details of the pointer, see the document of `_get_boxed_ptr`.
 
 ### `boxed_from_retained_ptr : [a : Std::Boxed] Std::Ptr -> a`
 
@@ -1520,7 +1522,7 @@ For the reason that this function requires a value of type `Lazy a`, not of `a`,
 The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
 Do not perform any IO operations other than mutating the value of `x`.
 
-For more details on the value of the pointer passed to `io`, see the documentation of `get_boxed_ptr`.
+For more details on the value of the pointer passed to `io`, see the document of `_get_boxed_ptr`.
 
 This function first clones the value if `x` is not unique.
 
