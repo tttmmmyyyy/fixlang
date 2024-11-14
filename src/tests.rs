@@ -745,7 +745,7 @@ pub fn test37_5() {
 }
 
 #[test]
-pub fn test38() {
+pub fn test_type_annotation() {
     // Test type annotation.
     let source = r#"
         module Main; 
@@ -766,7 +766,7 @@ pub fn test38() {
 }
 
 #[test]
-pub fn test39() {
+pub fn test_type_annotation_2() {
     // Test type annotation.
     let source = r#"
         module Main; 
@@ -787,7 +787,7 @@ pub fn test39() {
 }
 
 #[test]
-pub fn test40() {
+pub fn test_type_annotated_pattern() {
     // Test type annotation at let-binding.
     let source = r#"
         module Main; 
@@ -808,7 +808,7 @@ pub fn test40() {
 }
 
 #[test]
-pub fn test41() {
+pub fn test_type_annotated_pattern_2() {
     // Test type annotation at let-binding.
     let source = r#"
         module Main;         
@@ -6811,6 +6811,38 @@ pub fn test_mutate_boxed_io_union_shared() {
         }
     "##;
     test_fix_linked_with_c(&source, &c_source, function_name!());
+}
+
+#[test]
+pub fn test_type_variable_in_type_annotation() {
+    let source = r##"
+        module Main;
+
+        empty_array : Array a;
+        empty_array = [] : Array a;
+
+        main: IO ();
+        main = (
+            assert_eq(|_|"", empty_array : Array I64, [])
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_type_variable_in_type_annotated_pattern() {
+    let source = r##"
+        module Main;
+
+        empty_array : Array a;
+        empty_array = let x : Array a = [] in x;
+
+        main: IO ();
+        main = (
+            assert_eq(|_|"", [] : Array I64, [])
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
 }
 
 #[test]

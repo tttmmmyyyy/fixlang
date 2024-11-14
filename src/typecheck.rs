@@ -555,6 +555,27 @@ impl TypeCheckContext {
         }
     }
 
+    pub fn validate_type_annotation(&mut self, ty: &Arc<TypeNode>) -> Result<(), Errors> {
+        // All type variables should be fixed by the TypeCheckContext, i.e., appear in the generalized variables of the current scheme.
+        for tv in ty.free_vars_vec() {
+            if !self.fixed_tyvars.contains(&tv.name) {
+                return Err(Errors::from_msg_srcs(
+                    format!("Unknown type variable `{}`.", tv.name),
+                    &[&ty.get_source()],
+                ));
+            }
+        }
+
+        // Add predicates required by associated type usages in `anno_ty`.
+        let mut req_preds = ty.predicates_from_associated_types();
+        for req_pred in &mut req_preds {
+            self.substitute_predicate(req_pred);
+        }
+        self.predicates.append(&mut req_preds.clone());
+
+        Ok(())
+    }
+
     // Perform typechecking.
     // Update type substitution so that `ei` has type `ty`.
     // Returns given AST augmented with inferred information.
@@ -723,23 +744,10 @@ impl TypeCheckContext {
                     .set_if_then(then_expr)
                     .set_if_else(else_expr))
             }
-            Expr::TyAnno(e, anno_ty) => {
-                for tv in anno_ty.free_vars_vec() {
-                    if !self.fixed_tyvars.contains(&tv.name) {
-                        return Err(Errors::from_msg_srcs(
-                            format!("Unknown type variable `{}`.", tv.name),
-                            &[&ei.source],
-                        ));
-                    }
-                }
-                // Add predicates required by associated type usages in `anno_ty`.
-                let mut req_preds = anno_ty.predicates_from_associated_types();
-                for req_pred in &mut req_preds {
-                    self.substitute_predicate(req_pred);
-                }
-                self.predicates.append(&mut req_preds.clone());
-                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, anno_ty))? {
-                    let ty_strs = TypeNode::to_string_normalize_many(&vec![self.substitute_type(&ty), self.substitute_type(&anno_ty)]);
+            Expr::TyAnno(e, ty_anno) => {
+                self.validate_type_annotation(&ty_anno)?;
+                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, ty_anno))? {
+                    let ty_strs = TypeNode::to_string_normalize_many(&vec![self.substitute_type(&ty), self.substitute_type(&ty)]);
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`.",

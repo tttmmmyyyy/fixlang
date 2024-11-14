@@ -27,12 +27,7 @@ impl PatternNode {
                     type_tyvar_star(&typechcker.new_tyvar())
                 } else {
                     let ty = ty.as_ref().unwrap();
-                    if !ty.free_vars().is_empty() {
-                        return Err(Errors::from_msg_srcs(
-                            "Currently, cannot use type variable in type annotation.".to_string(),
-                            &[ty.get_source()],
-                        ));
-                    }
+                    typechcker.validate_type_annotation(ty)?;
                     ty.clone()
                 };
                 let mut var_to_ty = Map::default();
