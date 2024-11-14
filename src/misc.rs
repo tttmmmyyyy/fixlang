@@ -12,7 +12,7 @@ pub fn make_map<K: Eq + Hash, V>(kvs: impl IntoIterator<Item = (K, V)>) -> Map<K
     map
 }
 
-pub type Set<T> = fxhash::FxSet<T>;
+pub type Set<T> = fxhash::FxHashSet<T>;
 
 pub fn make_set<T: Eq + Hash>(iter: impl IntoIterator<Item = T>) -> Set<T> {
     let mut set = Set::default();
