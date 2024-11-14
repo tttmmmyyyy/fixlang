@@ -6849,7 +6849,10 @@ pub fn test_type_variable_in_type_annotated_pattern() {
         module Main;
 
         empty_array : Array a;
-        empty_array = let x : Array a = [] in x;
+        empty_array = (
+            let x : Array a = [];
+            x
+        );
 
         main: IO ();
         main = (
