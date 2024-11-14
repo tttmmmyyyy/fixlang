@@ -16,7 +16,3 @@ main = (
     pure()
 );
 ```
-
-In case the type is not a specific `T`, but a generic parameter `a` that appears in the type signature of a function you are implementing, you cannot use the above technique, because writing `|_| undefined("") : a` is not allowed in Fix's syntax. Even in such a case, if you have some value related to `a`, you can make a `Lazy a` value in many cases. For example:
-- If you have a function `f : b -> a`, then you can use `|_| f(undefined(""))` of type `Lazy a`. 
-- If you have a function `f : a -> b`, then you can use `|_| let x = undefined(""); let _ = f(x); x` of type `Lazy a`.

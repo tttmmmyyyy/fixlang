@@ -6534,9 +6534,21 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
             lazy_b.get_funptr_release
         );
 
+        get_release_func_of_codom_2 : [b : Boxed] (a -> b) -> Ptr;
+        get_release_func_of_codom_2 = |f| (
+            let lazy_b = |_| undefined("") : b;
+            lazy_b.get_funptr_release
+        );
+
         get_retain_func_of_dom : [a : Boxed] (a -> b) -> Ptr;
         get_retain_func_of_dom = |f| (
             let lazy_a = |_| let x = undefined(""); let _ = f(x); x;
+            lazy_a.get_funptr_release
+        );
+
+        get_retain_func_of_dom_2 : [a : Boxed] (a -> b) -> Ptr;
+        get_retain_func_of_dom_2 = |f| (
+            let lazy_a : Lazy a = |_| undefined("");
             lazy_a.get_funptr_release
         );
 
@@ -6544,6 +6556,8 @@ pub fn test_unsafe_get_release_retain_function_of_boxed_value_decltype_technique
         main = (
             let release = get_release_func_of_codom(|_ : I64| [42]);
             let retain = get_retain_func_of_dom(|_ : Array I64| 42);
+            let release_2 = get_release_func_of_codom_2(|_ : I64| [42]);
+            let retain_2 = get_retain_func_of_dom_2(|_ : Array I64| 42);
             pure()
         );
     "##;
