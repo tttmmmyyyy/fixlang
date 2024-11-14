@@ -471,7 +471,7 @@ impl TypeCheckContext {
     pub fn new_tyvar(&mut self) -> String {
         let id = self.tyvar_id;
         self.tyvar_id += 1;
-        "%a".to_string() + &id.to_string() // To avlid confliction with user-defined type variable, we add prefix #.
+        "#a".to_string() + &id.to_string() // To avlid confliction with user-defined type variable, we add prefix #.
     }
 
     // Apply substitution to type.
@@ -739,11 +739,12 @@ impl TypeCheckContext {
                 }
                 self.predicates.append(&mut req_preds.clone());
                 if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, anno_ty))? {
+                    let ty_strs = TypeNode::to_string_normalize_many(&vec![self.substitute_type(&ty), self.substitute_type(&anno_ty)]);
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
-                            &self.substitute_type(&ty).to_string_normalize(),
-                            &self.substitute_type(&anno_ty).to_string_normalize(),
+                            &ty_strs[0],
+                            &ty_strs[1],
                         ),
                         &[&ei.source],
                     ));
