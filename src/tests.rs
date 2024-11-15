@@ -6863,6 +6863,61 @@ pub fn test_type_variable_in_type_annotated_pattern() {
 }
 
 #[test]
+pub fn test_regression_higher_kinded_type_variable_in_type_annotation() {
+    let source = r##"
+        // The following test code was written by pt9999, and is licensed under the MIT License.
+        // Copyright (c) 2023 pt9999
+
+        // Tests for type annotations which use type variables
+        module Main;
+
+        type Reader e a = unbox struct {
+            data: e -> a
+        };
+
+        make_reader: (e -> a) -> Reader e a;
+        make_reader = |f| Reader { data: f };
+
+        run_reader: e -> Reader e a -> a;
+        run_reader = |e, reader| (reader.@data)(e);
+
+        // Test for identity reader
+        test_reader: e -> e;
+        test_reader = (
+            let reader: Reader e e = make_reader(|env| env);
+            |env| reader.run_reader(env)
+        );
+
+
+        type [m: *->*] ReaderT e m a = unbox struct {
+            data: e -> m a
+        };
+
+        make_reader_t: [m: Monad] (e -> m a) -> ReaderT e m a;
+        make_reader_t = |f| ReaderT { data: f };
+
+        run_reader_t: [m: Monad] e -> ReaderT e m a -> m a;
+        run_reader_t = |e, reader| (reader.@data)(e);
+
+        // Test for identity reader_t
+        test_reader_t: [m: Monad] e -> m e;
+        test_reader_t = (
+            let reader: ReaderT e m e = make_reader_t(|env| pure(env));
+            |env| reader.run_reader_t(env)
+        );
+
+        main: IO ();
+        main = (
+            let str = test_reader("abc");
+            assert_eq(|_|"test_reader", str, "abc");;
+            let str = *test_reader_t("abc");
+            assert_eq(|_|"test_reader_t", str, "abc")
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_create_dylib() {
     let fix_src = r##"
         module Main;
