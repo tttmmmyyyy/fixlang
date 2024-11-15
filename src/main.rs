@@ -171,7 +171,7 @@ fn main() {
         .takes_value(true)
         .possible_value(PossibleValue::new("exe").help("Builds an executable file."))
         .possible_value(PossibleValue::new("dylib").help("Builds a dynamic library."))
-        .default_value("executable");
+        .default_value("exe");
     let verbose = Arg::new("verbose")
         .long("verbose")
         .short('v')
