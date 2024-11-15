@@ -3,8 +3,8 @@ use crate::{
     dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
     registry_file::RegistryFile,
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, SourceFile, Span, LOCK_FILE_PATH,
-    PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, SourceFile, Span,
+    LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -59,6 +59,7 @@ pub struct ProjectFileBuild {
     debug: Option<bool>,
     opt_level: Option<String>,
     output: Option<PathBuf>,
+    output_type: Option<String>,
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
     test: Option<ProjectFileBuildTest>,
@@ -304,6 +305,11 @@ impl ProjectFile {
         // Should we consider `[build.test]` section?
         // If the project is a dependent project, we do not consider the `[build.test]` section.
         let use_build_test = !is_dependent_proj && config.subcommand.use_test_files();
+
+        // Set the output file type.
+        if let Some(output_file_type) = self.build.output_type.as_ref() {
+            config.output_file_type = OutputFileType::from_str(output_file_type)?;
+        }
 
         // Append source files.
         config

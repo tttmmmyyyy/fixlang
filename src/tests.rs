@@ -6863,18 +6863,133 @@ pub fn test_type_variable_in_type_annotated_pattern() {
 }
 
 #[test]
+pub fn test_create_dylib() {
+    let fix_src = r##"
+        module Main;
+    
+        get_truth : IO CInt;
+        get_truth = pure $ 42.to_CInt;
+
+        FFI_EXPORT[get_truth, get_truth];
+    "##;
+    let c_str = r##"
+        #include <stdio.h>
+        #include <stdint.h>
+
+        int get_truth();
+
+        int main() {
+            int x = get_truth();
+            if (x != 42) {
+                return 1;
+            }
+            return 0;
+        }
+    "##;
+    install_fix();
+
+    // Recreate working directory for this test.
+    let work_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::remove_dir_all(&work_dir);
+    let _ = fs::create_dir_all(&work_dir);
+
+    // Save `fix_src` to a file.
+    let fix_file = format!("{}/lib.fix", work_dir.to_str().unwrap());
+    let mut file = File::create(&fix_file).unwrap();
+    file.write_all(fix_src.as_bytes()).unwrap();
+
+    // Create dynamic library using `fix`.
+    let output = Command::new("fix")
+        .arg("build")
+        .arg("--output-type")
+        .arg("dylib")
+        .arg("--file")
+        .arg("lib.fix")
+        .arg("--output")
+        .arg("libfixtest.so")
+        .current_dir(&work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+
+    // Save `c_str` to a file.
+    let c_file = format!("{}/main.c", work_dir.to_str().unwrap());
+    let mut file = File::create(&c_file).unwrap();
+    file.write_all(c_str.as_bytes()).unwrap();
+
+    // Build the C program, link it with the dynamic library, and run it.
+    let output = Command::new("gcc")
+        .arg("-o")
+        .arg("main")
+        .arg("main.c")
+        .arg("-L.")
+        .arg("-lfixtest")
+        .current_dir(&work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+
+    // Run the C program.
+    let output = Command::new("./main")
+        .current_dir(&work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+
+    // Remove the working directory.
+    let _ = fs::remove_dir_all(&work_dir);
+}
+
+#[test]
 pub fn test_external_projects() {
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-math.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-hashmap.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-hashset.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-random.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-time.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-character.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-subprocess.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-regexp.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-asynctask.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-gmp.git");
-    test_external_project("https://github.com/tttmmmyyyy/fixlang-misc-algos.git");
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-math.git",
+        "fixlang-math",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-hashmap.git",
+        "fixlang-hashmap",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-hashset.git",
+        "fixlang-hashset",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-random.git",
+        "fixlang-random",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-time.git",
+        "fixlang-time",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-character.git",
+        "fixlang-character",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-subprocess.git",
+        "fixlang-subprocess",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-regexp.git",
+        "fixlang-regexp",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-asynctask.git",
+        "fixlang-asynctask",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-gmp.git",
+        "fixlang-gmp",
+    );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-misc-algos.git",
+        "fixlang-misc-algos",
+    );
 }
 
 // Run `cargo install --locked --path .`.
@@ -6888,16 +7003,12 @@ pub fn install_fix() {
         .expect("Failed to run cargo install.");
 }
 
-pub fn test_external_project(url: &str) {
+pub fn test_external_project(url: &str, test_name: &str) {
     println!("Testing external project: {}", url);
     install_fix();
 
     // Recreate working directory for this test.
-    let work_dir = PathBuf::from(format!(
-        "{}/{}",
-        COMPILER_TEST_WORKING_PATH,
-        function_name!()
-    ));
+    let work_dir = PathBuf::from(format!("{}/{}", COMPILER_TEST_WORKING_PATH, test_name));
     let _ = fs::remove_dir_all(&work_dir);
     let _ = fs::create_dir_all(&work_dir);
 

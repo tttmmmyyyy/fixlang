@@ -23,6 +23,7 @@
 - Add `Std::do_with_retained`.
 - Add `{monad_expr};; {expr}` syntax, which is equivalent to `let _ = *{monad_expr}; {expr}`.
 - Add `Std::Box::make` function.
+- Support building dynamic libraries (use `--output-type dylib`).
 
 ### Changed
 

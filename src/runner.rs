@@ -24,7 +24,6 @@ use crate::ast::export_statement::ExportStatement;
 use crate::compile_unit::CompileUnit;
 use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, error_exit, exit_if_err, Errors};
-use crate::llvm_passes;
 use crate::misc::{save_temporary_source, temporary_source_path};
 use crate::run_io_value;
 use crate::stopwatch::StopWatch;
@@ -43,6 +42,7 @@ use crate::GLOBAL_VAR_NAME_ARGV;
 use crate::INTERMEDIATE_PATH;
 use crate::{borrowing_optimization, SubCommand};
 use crate::{build_runtime, parse_file_path};
+use crate::{llvm_passes, OutputFileType};
 use crate::{make_std_mod, runtime};
 use crate::{make_tuple_traits_mod, BuildMode};
 
@@ -154,8 +154,16 @@ fn build_object_files<'c>(
     }
 
     // Instantiate Main::main (or Test::test).
-    let main_expr = program
-        .instantiate_main_function(&typechecker, matches!(config.subcommand, SubCommand::Test))?;
+    let main_expr = match config.output_file_type {
+        OutputFileType::Executable => {
+            let main_expr = program.instantiate_main_function(
+                &typechecker,
+                matches!(config.subcommand, SubCommand::Test),
+            )?;
+            Some(main_expr)
+        }
+        OutputFileType::DynamicLibrary => None,
+    };
 
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
@@ -238,7 +246,7 @@ fn build_object_files<'c>(
             vec![]
         };
 
-        let main_expr = main_expr.clone();
+        let entry_expr = main_expr.clone();
         threads.push(std::thread::spawn(move || {
             // Create GenerationContext.
             let context = Context::create();
@@ -285,7 +293,9 @@ fn build_object_files<'c>(
                 build_exported_c_functions(&mut gc, &export_statements);
 
                 // Implement the `main()` function.
-                build_main_function(&mut gc, main_expr.clone());
+                if let Some(main_expr) = entry_expr {
+                    build_main_function(&mut gc, main_expr.clone());
+                }
             }
 
             // If debug info is generated, finalize it.
@@ -587,12 +597,17 @@ fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> T
     let cpu_name = TargetMachine::get_host_cpu_name();
     let mut features = CpuFeatures::parse(TargetMachine::get_host_cpu_features().to_str().unwrap());
     config.edit_features(&mut features);
+    let reloc_mode = if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
+        RelocMode::PIC
+    } else {
+        RelocMode::Default
+    };
     let target_machine = target.create_target_machine(
         &triple,
         cpu_name.to_str().unwrap(),
         &features.to_string(),
         opt_level,
-        RelocMode::Default,
+        reloc_mode,
         CodeModel::Default,
     );
     match target_machine {
@@ -610,7 +625,7 @@ pub struct BuildFileResult {
 }
 
 pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors> {
-    let exec_path = config.get_output_executable_file_path();
+    let out_path = config.get_output_file_path();
 
     // Run extra commands.
     if config.subcommand.run_preliminary_commands() {
@@ -666,6 +681,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     let mut runtime_obj_hash_source = "".to_string();
     runtime_obj_hash_source += build_time_utc!();
     runtime_obj_hash_source += &config.runtime_c_macro.join("_");
+    runtime_obj_hash_source += config.output_file_type.to_str();
     let runtime_obj_path = PathBuf::from(INTERMEDIATE_PATH).join(format!(
         "fixruntime.{:x}.o",
         md5::compute(runtime_obj_hash_source)
@@ -697,6 +713,9 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
         for m in &config.runtime_c_macro {
             com = com.arg(format!("-D{}", m));
         }
+        if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
+            com = com.arg("-fPIC");
+        }
         let output = com.output().expect("Failed to run gcc.");
 
         if output.stderr.len() > 0 {
@@ -716,13 +735,18 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     }
 
     let mut com = Command::new("gcc");
-    com.arg("-Wno-unused-command-line-argument").arg("-no-pie");
+    com.arg("-Wno-unused-command-line-argument");
+    if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
+        com.arg("-shared");
+    } else {
+        com.arg("-no-pie");
+    }
     if std::env::consts::OS == "macos" {
         com.arg("-Wl,-dead_strip");
     } else {
         com.arg("-Wl,--gc-sections");
     }
-    com.arg("-o").arg(exec_path.to_str().unwrap());
+    com.arg("-o").arg(out_path.to_str().unwrap());
 
     let mut obj_paths = build_res.obj_paths;
     obj_paths.append(&mut config.object_files.clone());

@@ -166,6 +166,12 @@ fn main() {
         .short('o')
         .takes_value(true)
         .help("Path to output file.");
+    let output_type = Arg::new("output-file-type")
+        .long("output-type")
+        .takes_value(true)
+        .possible_value(PossibleValue::new("exe").help("Builds an executable file."))
+        .possible_value(PossibleValue::new("dylib").help("Builds a dynamic library."))
+        .default_value("executable");
     let verbose = Arg::new("verbose")
         .long("verbose")
         .short('v')
@@ -188,6 +194,7 @@ fn main() {
         .arg(source_file.clone())
         .arg(object_file.clone())
         .arg(output_file.clone())
+        .arg(output_type.clone())
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
         .arg(library_paths.clone())
@@ -319,6 +326,13 @@ fn main() {
         Ok(pathbufs)
     }
 
+    fn read_output_file_type_option(m: &ArgMatches) -> Result<Option<OutputFileType>, Errors> {
+        match m.get_one::<String>("output-file-type") {
+            None => return Ok(None),
+            Some(file_type) => Ok(Some(OutputFileType::from_str(file_type)?)),
+        }
+    }
+
     fn read_modules_options(m: &ArgMatches) -> Result<Vec<Name>, Errors> {
         let modules = m.get_many::<String>("modules");
         if modules.is_none() {
@@ -380,6 +394,11 @@ fn main() {
         config
             .object_files
             .append(&mut read_object_files_options(args)?);
+
+        // Set `output_file_type`.
+        if let Some(type_) = read_output_file_type_option(args)? {
+            config.output_file_type = type_;
+        }
 
         // Set `output_file_path`.
         config.out_file_path = read_output_file_option(args).or(config.out_file_path.clone());

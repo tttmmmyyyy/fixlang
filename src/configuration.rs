@@ -25,6 +25,32 @@ pub enum LinkType {
     Dynamic,
 }
 
+#[derive(Clone, Copy)]
+pub enum OutputFileType {
+    Executable,
+    DynamicLibrary,
+}
+
+impl OutputFileType {
+    pub fn from_str(file_type: &str) -> Result<Self, Errors> {
+        match file_type {
+            "exe" => Ok(OutputFileType::Executable),
+            "dylib" => Ok(OutputFileType::DynamicLibrary),
+            _ => Err(Errors::from_msg(format!(
+                "Unknown output file type: `{}`",
+                file_type
+            ))),
+        }
+    }
+
+    pub fn to_str(&self) -> &str {
+        match self {
+            OutputFileType::Executable => "exe",
+            OutputFileType::DynamicLibrary => "dylib",
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum ValgrindTool {
     None,
@@ -115,10 +141,12 @@ pub struct Configuration {
     pub library_search_paths: Vec<PathBuf>,
     // Create debug info.
     pub debug_info: bool,
-    // Is emit llvm?
+    // Whether to emit LLVM IR.
     pub emit_llvm: bool,
     // Output file name.
     pub out_file_path: Option<PathBuf>,
+    // Output file type.
+    pub output_file_type: OutputFileType,
     // Use threads.
     // To turn on this true and link pthread library, use `set_threaded` function.
     pub threaded: bool,
@@ -219,6 +247,7 @@ impl Configuration {
             debug_info: false,
             emit_llvm: false,
             out_file_path: None,
+            output_file_type: OutputFileType::Executable,
             threaded: false,
             runtime_c_macro: vec![],
             show_build_times: false,
@@ -312,13 +341,29 @@ impl Configuration {
         }
     }
 
-    pub fn get_output_executable_file_path(&self) -> PathBuf {
+    pub fn get_output_file_path(&self) -> PathBuf {
         match &self.out_file_path {
-            None => PathBuf::from(if env::consts::OS != "windows" {
-                "a.out"
-            } else {
-                "a.exe"
-            }),
+            None => {
+                let path = match self.output_file_type {
+                    OutputFileType::Executable => {
+                        if env::consts::OS == "windows" {
+                            "a.exe"
+                        } else {
+                            "a.out"
+                        }
+                    }
+                    OutputFileType::DynamicLibrary => {
+                        if env::consts::OS == "windows" {
+                            "lib.dll"
+                        } else if env::consts::OS == "macos" {
+                            "lib.dylib"
+                        } else {
+                            "lib.so"
+                        }
+                    }
+                };
+                PathBuf::from(path)
+            }
             Some(out_file_path) => out_file_path.clone(),
         }
     }
