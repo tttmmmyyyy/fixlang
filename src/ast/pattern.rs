@@ -27,8 +27,7 @@ impl PatternNode {
                     type_tyvar_star(&typechcker.new_tyvar())
                 } else {
                     let ty = ty.as_ref().unwrap();
-                    typechcker.validate_type_annotation(ty)?;
-                    ty.clone()
+                    typechcker.validate_type_annotation(ty)?
                 };
                 let mut var_to_ty = Map::default();
                 var_to_ty.insert(var_name, ty.clone());

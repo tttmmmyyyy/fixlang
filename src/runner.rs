@@ -110,7 +110,8 @@ fn build_object_files<'c>(
     // This check should be done after `add_methods` and `create_trait_method_symbols`.
     program.validate_import_statements()?;
 
-    // Set and check kinds that appear in the module.
+    // Set and check kinds that appear in type signatures.
+    // NOTE: kinds of type variables appearing in type annotations in expressions are set not at this stage but at the type inference stage.
     program.set_kinds()?;
 
     // If typechecking is not needed, return here.

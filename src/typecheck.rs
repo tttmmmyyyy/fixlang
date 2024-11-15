@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::error::Errors;
 use ast::{import::ImportStatement, name::{FullName, NameSpace}};
-use misc::{collect_results, Map, Set};
+use misc::{collect_results, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
 use typecheckcache::TypeCheckCache;
 
@@ -218,7 +218,7 @@ impl Substitution {
     pub fn matching(
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
-        fixed_tyvars: &Set<Name>,
+        fixed_tyvars: &[Arc<TyVar>],
         kind_env: &KindEnv
     ) -> Result<Option<Self>, Errors> {
         match &ty1.ty {
@@ -235,7 +235,7 @@ impl Substitution {
                 if ty1.kind(kind_env)? != ty2.kind(kind_env)? {
                     return Ok(None);
                 }
-                if fixed_tyvars.contains(&v1.name) {
+                if fixed_tyvars.iter().any(|tv| tv.name == v1.name) {
                     if ty1.to_string() == ty2.to_string() {
                         return Ok(Some(Self::default()));
                     } else {
@@ -410,7 +410,8 @@ pub struct TypeCheckContext {
     pub assumed_preds: Map<Trait, Vec<QualPredScheme>>,
     // Fixed type variables.
     // In unification, these type variables are not allowed to be replaced to another type.
-    pub fixed_tyvars: Set<Name>,
+    // NOTE: We use `Vec` instead of `Set` because the expected size is small.
+    pub fixed_tyvars: Vec<Arc<TyVar>>,
     // Type check cache.
     pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
     // Number of worker threads.
@@ -424,7 +425,6 @@ impl TypeCheckContext {
         println!("substitution size = {}", self.substitution.data.len());
         println!("equalities size = {}", self.equalities.len());
         println!("predicates size = {}", self.predicates.len());
-        // assumed_eqs
         println!("assumed_eqs size = {}", self.assumed_eqs.len());
         println!("assumed_preds size = {}", self.assumed_preds.len());
         println!("fixed_tyvars size = {}", self.fixed_tyvars.len());
@@ -454,7 +454,7 @@ impl TypeCheckContext {
             equalities: vec![],
             assumed_preds,
             assumed_eqs,
-            fixed_tyvars: Set::default(),
+            fixed_tyvars: vec![],
             cache,
             num_worker_threads,
         }
@@ -527,7 +527,7 @@ impl TypeCheckContext {
             },
             ConstraintInstantiationMode::Assume => {
                 for tv in &scheme.gen_vars {
-                    self.fixed_tyvars.insert(tv.name.clone());
+                    self.fixed_tyvars.push(tv.clone());
                 }
                 for pred in preds {
                     let trait_id = pred.trait_id.clone();
@@ -555,16 +555,22 @@ impl TypeCheckContext {
         }
     }
 
-    pub fn validate_type_annotation(&mut self, ty: &Arc<TypeNode>) -> Result<(), Errors> {
+    pub fn validate_type_annotation(&mut self, ty: &Arc<TypeNode>) -> Result<Arc<TypeNode>, Errors> {
         // All type variables should be fixed by the TypeCheckContext, i.e., appear in the generalized variables of the current scheme.
         for tv in ty.free_vars_vec() {
-            if !self.fixed_tyvars.contains(&tv.name) {
+            if !self.fixed_tyvars.iter().any(|fixed_tv| fixed_tv.name == tv.name) {
                 return Err(Errors::from_msg_srcs(
                     format!("Unknown type variable `{}`.", tv.name),
                     &[&ty.get_source()],
                 ));
             }
         }
+
+        // Set kinds of type variables in the type annotation.
+        let sub = Substitution {
+            data : make_map(self.fixed_tyvars.iter().map(|tv| (tv.name.clone(), type_from_tyvar(tv.clone()))))
+        };
+        let ty = sub.substitute_type(ty);
 
         // Add predicates required by associated type usages in `anno_ty`.
         let mut req_preds = ty.predicates_from_associated_types();
@@ -573,7 +579,7 @@ impl TypeCheckContext {
         }
         self.predicates.append(&mut req_preds.clone());
 
-        Ok(())
+        Ok(ty)
     }
 
     // Perform typechecking.
@@ -744,10 +750,10 @@ impl TypeCheckContext {
                     .set_if_then(then_expr)
                     .set_if_else(else_expr))
             }
-            Expr::TyAnno(e, ty_anno) => {
-                self.validate_type_annotation(&ty_anno)?;
-                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, ty_anno))? {
-                    let ty_strs = TypeNode::to_string_normalize_many(&vec![self.substitute_type(&ty), self.substitute_type(&ty)]);
+            Expr::TyAnno(e, anno_ty) => {
+                let anno_ty = self.validate_type_annotation(&anno_ty)?;
+                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, &anno_ty))? {
+                    let ty_strs = TypeNode::to_string_normalize_many(&vec![self.substitute_type(&ty), self.substitute_type(&anno_ty)]);
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
@@ -1026,7 +1032,7 @@ impl TypeCheckContext {
         for _ in 0..2 {
             match &ty1.ty {
                 Type::TyVar(var1) => {
-                    if !self.fixed_tyvars.contains(&var1.name) {
+                    if !self.fixed_tyvars.iter().any(|fixed_tv| fixed_tv.name == var1.name) {
                         return self.unify_tyvar(var1.clone(), ty2.clone());
                     }
                 }
@@ -1102,7 +1108,8 @@ impl TypeCheckContext {
         tyvar1: Arc<TyVar>,
         ty2: Arc<TypeNode>,
     ) -> Result<(), UnifOrOtherErr> {
-        assert!(!self.fixed_tyvars.contains(&tyvar1.name));
+        assert!(!self.fixed_tyvars.iter().any(|fixed_tv| fixed_tv.name == tyvar1.name));
+
         match &ty2.ty {
             Type::TyVar(tyvar2) => {
                 if tyvar1.name == tyvar2.name {
