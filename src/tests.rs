@@ -7146,6 +7146,7 @@ pub fn test_match_boxed_union() {
 // TODO: test otherwise pattern.
 // TODO: variant name confliction; resolve by type annotation.
 // TODO: variant name error: bad namespace.
+// TODO: single match case.
 
 #[test]
 pub fn test_external_projects() {

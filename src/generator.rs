@@ -1926,6 +1926,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // Evaluate the value.
             let val_obj = self.eval_expr(val.clone(), rvo.clone());
+            let bb = self.builder().get_insert_block().unwrap();
             val_objs.push((val_obj, bb));
 
             // Pop subobjects from scope.
@@ -1951,7 +1952,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             // In this case, build phi node.
             let phi_ty = val_objs[0].0.ptr(self).get_type();
-            let phi = self.builder().build_phi(phi_ty, "phi");
+            let phi = self.builder().build_phi(phi_ty, "match_phi");
             for (val, bb) in &val_objs {
                 phi.add_incoming(&[(&val.ptr(self), bb.clone())]);
             }
