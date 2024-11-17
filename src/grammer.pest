@@ -3,7 +3,7 @@ sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
 extra_comma = { "," }
 
-keywords = _{ ("let" | "eval" | "in" | "if" | "else" | "do" | "type" | "trait" | "impl") ~ sep+ }
+keywords = _{ ("let" | "eval" | "in" | "if" | "match" | "else" | "do" | "type" | "trait" | "impl") ~ sep+ }
 
 semicolon = { ";" } // Generate rule for semicolon for better parsing error messages.
 
@@ -72,7 +72,7 @@ expr_let = { "let" ~ sep+ ~ pattern_nounion ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ s
 
 match_arrow = { "=>" }
 
-expr_match = { "match" ~ sep+ ~ expr ~ sep* ~ "{" ~ (sep* ~ pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr ~ sep* ~ semicolon)* ~ "}" }
+expr_match = { "match" ~ sep+ ~ expr ~ sep* ~ "{" ~ (sep* ~ pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr ~ sep* ~ semicolon)* ~ sep* ~ "}" }
 
 expr_eval = { "eval" ~ sep+ ~ expr ~ sep* ~ semicolon ~ sep* ~ expr }
 

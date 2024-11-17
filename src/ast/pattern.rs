@@ -222,6 +222,7 @@ impl PatternNode {
                     .set_struct_field_to_pat(field_to_pat_res))
             }
             Pattern::Union(_, subpat) => {
+                // Namespace of the variant name is resolved in the type-checking phase (`validate_variant_name`).
                 let subpat = subpat.resolve_namespace(ctx)?;
                 Ok(self.set_union_pat(subpat))
             }

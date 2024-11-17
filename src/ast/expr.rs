@@ -575,8 +575,7 @@ impl ExprNode {
             Expr::Match(cond, pat_vals) => {
                 let mut pat_vals_res = vec![];
                 for (pat, val) in pat_vals {
-                    // Name resolution for match cases (i.e., `pat`) is done in type checking phase.
-                    pat_vals_res.push((pat.clone(), val.resolve_namespace(ctx)?));
+                    pat_vals_res.push((pat.resolve_namespace(ctx)?, val.resolve_namespace(ctx)?));
                 }
                 Ok(self
                     .clone()

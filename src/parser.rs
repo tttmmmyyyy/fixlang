@@ -1562,6 +1562,8 @@ fn parse_expr_match(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
         assert_eq!(pair.as_rule(), Rule::match_arrow); // Skip `=>`.
         let pair = pairs.next().unwrap();
         let expr = parse_expr_with_new_do(pair, ctx)?;
+        let pair = pairs.next().unwrap();
+        assert_eq!(pair.as_rule(), Rule::semicolon); // Skip `;`.
         cases.push((pat, expr));
     }
     // Forbid empty match.
@@ -2253,6 +2255,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::global_defns => "definitions".to_string(),
         Rule::exported_c_function_name => "C function name".to_string(),
         Rule::operator_and_then => "`;;`".to_string(),
+        Rule::match_arrow => "`=>`".to_string(),
         _ => format!("{:?}", r),
     }
 }

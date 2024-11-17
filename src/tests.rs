@@ -7000,6 +7000,154 @@ pub fn test_create_dylib() {
 }
 
 #[test]
+pub fn test_match_option() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        // Value is unboxed 
+        let x = Option::some(42);
+        let v = match x {
+            some(v) => v;
+            none(_) => 0;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        let x = Option::none();
+        let v = match x {
+            some(v) => v;
+            none(_) => 0;
+        };
+        assert_eq(|_|"", v, 0);;
+
+        // Value is boxed
+        let x = Option::some(Box::make(42));
+        let v = match x {
+            some(v) => v;
+            none(_) => Box::make(0);
+        };
+        assert_eq(|_|"", v.@value, 42);;
+
+        let x : Option (Box I64) = Option::none();
+        let v = match x {
+            some(v) => v;
+            none(_) => Box::make(0);
+        };
+        assert_eq(|_|"", v.@value, 0);;
+
+        // Value is boxed and shared
+        let x = Option::some(Box::make(42));
+        let v = match x {
+            some(v) => v;
+            none(_) => Box::make(0);
+        };
+        assert_eq(|_|"", v.@value, 42);;
+        assert_eq(|_|"", x.as_some.@value, 42);;
+
+        // Value is a closure
+        let x = Option::some(|x| x + 1);
+        let v = match x {
+            some(v) => v(41);
+            none(_) => 0;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        // Value is a closure and shared
+        let x = Option::some(|x| x + 1);
+        let v = match x {
+            some(v) => v(41);
+            none(_) => 0;
+        };
+        assert_eq(|_|"", v, 42);;
+        assert_eq(|_|"", (x.as_some)(41), 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_match_boxed_union() {
+    let source = r##"
+    module Main;
+
+    type MyEither a b = box union {
+        left : a,
+        right : b
+    };
+
+    main: IO ();
+    main = (
+        // Value is unboxed
+        let x = MyEither::left(42);
+        let v = match x {
+            left(v) => v;
+            right(_ : Bool) => 0;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        let x = MyEither::right(false);
+        let v = match x {
+            left(v) => v;
+            right(_) => 0;
+        };
+        assert_eq(|_|"", v, 0);;
+
+        // Value is boxed
+        let x = MyEither::left(Box::make(42));
+        let v = match x {
+            left(v) => v;
+            right(_ : Bool) => Box::make(0);
+        };
+        assert_eq(|_|"", v.@value, 42);;
+
+        let x = MyEither::right(false);
+        let v = match x {
+            left(v) => v;
+            right(_ : Bool) => Box::make(0);
+        };
+        assert_eq(|_|"", v.@value, 0);;
+
+        // Value is boxed and shared
+        let x = MyEither::left(Box::make(42));
+        let v = match x {
+            left(v) => v;
+            right(_ : Bool) => Box::make(0);
+        };
+        assert_eq(|_|"", v.@value, 42);;
+        assert_eq(|_|"", x.as_left.@value, 42);;
+
+        // Value is a closure
+        let x = MyEither::left(|x| x + 1);
+        let v = match x {
+            left(v) => v(41);
+            right(_ : Bool) => 0;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        // Value is a closure and shared
+        let x = MyEither::left(|x| x + 1);
+        let v = match x {
+            left(v) => v(41);
+            right(_ : Bool) => 0;
+        };
+        assert_eq(|_|"", v, 42);;
+        assert_eq(|_|"", (x.as_left)(41), 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+// TODO: test non-exhaustive pattern.
+// TODO: test otherwise pattern.
+// TODO: variant name confliction; resolve by type annotation.
+// TODO: variant name error: bad namespace.
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
