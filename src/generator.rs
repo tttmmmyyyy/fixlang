@@ -1879,10 +1879,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             tag_pat_val_bbs.push((tag_val, pat.clone(), val.clone(), pat_bb));
         }
 
-        // Get the union tag value.
-        let tag_val = ObjectFieldType::get_union_tag(self, &cond);
-
-        // Build switch.
+        // Build switch (if the match cases are variant patterns).
         // NOTE: It is already validated that:
         // - there are no empty `match`, and
         // - non-variant pattern is at the end of the cases.
@@ -1892,7 +1889,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .take(tag_pat_val_bbs.len() - 1) // Skip the last one.
             .map(|(tag_val, _, _, bb)| (tag_val.unwrap(), *bb))
             .collect::<Vec<_>>();
-        self.builder().build_switch(tag_val, else_bb, &cases);
+        if cases.len() > 0 {
+            let tag_val = ObjectFieldType::get_union_tag(self, &cond);
+            self.builder().build_switch(tag_val, else_bb, &cases);
+        } else {
+            self.builder().build_unconditional_branch(else_bb);
+        }
 
         // Implement each cases.
         let mut val_objs: Vec<(Object, BasicBlock)> = vec![];

@@ -156,7 +156,7 @@ expr = { expr_and_then_sequence }
 
 pattern_nounion = { pattern_var | pattern_tuple | pattern_struct }
 
-pattern_case = { pattern_union | pattern_var }
+pattern_case = { pattern_union | pattern_var | pattern_tuple | pattern_struct }
 
 pattern_var = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
