@@ -1,7 +1,7 @@
-use crate::constants::{CHECK_C_TYPES_EXEC_PATH, CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
+use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::cpu_features::CpuFeatures;
 use crate::error::{exit_if_err, Errors};
-use crate::misc::to_absolute_path;
+use crate::misc::{to_absolute_path, Finally};
 use crate::typecheckcache::{self, TypeCheckCache};
 use crate::{error::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
@@ -534,36 +534,56 @@ int main() {
     return 0;
 }
         "#;
-        // Then save it to a temporary file ".fixlang/check_c_types.c".
-        let check_c_types_path = PathBuf::from(CHECK_C_TYPES_PATH);
+        let mut finally = Finally::new();
 
-        // Create parent folders.
-        let parent = check_c_types_path.parent().unwrap();
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            return Err(Errors::from_msg(format!(
-                "Failed to create directory \"{}\": {}",
-                parent.to_string_lossy().to_string(),
-                e
-            )));
-        }
-        if let Err(e) = std::fs::write(&check_c_types_path, c_source) {
-            return Err(Errors::from_msg(format!(
-                "Failed to write file \"{}\": {}",
-                check_c_types_path.to_string_lossy().to_string(),
-                e
-            )));
+        // Then save it to a temporary file ".fixlang/check_c_types.{random_number}.c".
+        let check_c_types_path =
+            CHECK_C_TYPES_PATH.to_string() + &format!(".{}.c", rand::random::<u32>());
+        {
+            // Create parent folders
+            let check_c_types_path = PathBuf::from(check_c_types_path.clone());
+            let parent = check_c_types_path.parent().unwrap();
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                return Err(Errors::from_msg(format!(
+                    "Failed to create directory \"{}\": {}",
+                    parent.to_string_lossy().to_string(),
+                    e
+                )));
+            }
+
+            let check_c_types_path_clone = check_c_types_path.clone();
+            finally.defer(move || {
+                let _ = std::fs::remove_file(&check_c_types_path_clone);
+            });
+
+            // Write the C source to the file.
+            if let Err(e) = std::fs::write(&check_c_types_path, c_source) {
+                return Err(Errors::from_msg(format!(
+                    "Failed to write file \"{}\": {}",
+                    check_c_types_path.to_string_lossy().to_string(),
+                    e
+                )));
+            }
         }
 
-        // Run it by gcc.
+        // Build the program to an executable file ".fixlang/check_c_types.out.{random_number}".
+        let check_c_types_exec_path =
+            CHECK_C_TYPES_PATH.to_string() + &format!(".{}.out", rand::random::<u32>());
+
+        let check_c_types_exec_path_clone = check_c_types_exec_path.clone();
+        finally.defer(move || {
+            let _ = std::fs::remove_file(&check_c_types_exec_path_clone);
+        });
+
         let output = Command::new("gcc")
-            .arg(CHECK_C_TYPES_PATH)
+            .arg(check_c_types_path.clone())
             .arg("-o")
-            .arg(CHECK_C_TYPES_EXEC_PATH)
+            .arg(check_c_types_exec_path.clone())
             .output();
         if let Err(e) = output {
             return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": {}.",
-                CHECK_C_TYPES_PATH, e
+                check_c_types_path, e
             )));
         }
         let output = output.unwrap();
@@ -572,22 +592,22 @@ int main() {
         if !output.status.success() {
             return Err(Errors::from_msg(format!(
                 "Failed to compile \"{}\": \"{}\".",
-                CHECK_C_TYPES_PATH,
+                check_c_types_path,
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
-        let output = Command::new(CHECK_C_TYPES_EXEC_PATH).output();
+        let output = Command::new(check_c_types_exec_path.clone()).output();
         if let Err(e) = output {
             return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": {}.",
-                CHECK_C_TYPES_EXEC_PATH, e
+                check_c_types_exec_path, e
             )));
         }
         let output = output.unwrap();
         if !output.status.success() {
             return Err(Errors::from_msg(format!(
                 "Failed to run \"{}\": \"{}\".",
-                CHECK_C_TYPES_EXEC_PATH,
+                check_c_types_exec_path,
                 String::from_utf8_lossy(&output.stderr)
             )));
         }

@@ -152,3 +152,25 @@ pub fn to_absolute_path(path: &Path) -> PathBuf {
         )
     })
 }
+
+pub struct Finally {
+    works: Vec<Box<dyn FnOnce()>>,
+}
+
+impl Finally {
+    pub fn new() -> Self {
+        Self { works: vec![] }
+    }
+
+    pub fn defer<F: FnOnce() + 'static>(&mut self, work: F) {
+        self.works.push(Box::new(work));
+    }
+}
+
+impl Drop for Finally {
+    fn drop(&mut self) {
+        for work in self.works.drain(..).rev() {
+            work();
+        }
+    }
+}
