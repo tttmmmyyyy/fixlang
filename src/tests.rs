@@ -7360,6 +7360,25 @@ pub fn test_match_on_nonunion_types() {
 }
 
 #[test]
+pub fn test_match_on_variant_for_nonunion() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let v = match [] {
+            foo(_) => 0;
+            _ => 42;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source_fail(&source, Configuration::develop_compiler_mode(), "The condition of `match` has type `Std::Array a` which is not union, but matched on a variant pattern `foo(_)`.");
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",

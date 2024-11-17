@@ -721,8 +721,8 @@ impl TypeCheckContext {
                             let cond_ti = self.type_env.tycons.get(&cond_tycon).unwrap().clone();
                             if cond_ti.variant != TyConVariant::Union {
                                 return Err(Errors::from_msg_srcs(
-                                    format!("The condition of `match` is of type `{}` which is not union, but matched on a variant pattern.", cond_ty.to_string_normalize()),
-                                    &[&cond.source],
+                                    format!("The condition of `match` has type `{}` which is not union, but matched on a variant pattern `{}`.", cond_ty.to_string_normalize(), pat.pattern.to_string()),
+                                    &[&cond.source, &pat.info.source],
                                 ));
                             }
                             cond_tc_info = Some((cond_tycon.clone(), cond_ti.clone()));
