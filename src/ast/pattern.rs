@@ -14,8 +14,8 @@ pub struct PatternNode {
 }
 
 impl PatternNode {
-    // Returns the typed pattern node.
-    // Also returns the map from variable name to its type.
+    // Set `self.info.inferred_ty`.
+    // Returns the pattern itself with a map which maps variable names to their types.
     pub fn get_typed(
         self: &Arc<PatternNode>,
         typechcker: &mut TypeCheckContext,
@@ -56,7 +56,7 @@ impl PatternNode {
                         &pat.info.inferred_ty.as_ref().unwrap(),
                         field_name_to_ty.get(field_name).unwrap(),
                     ))?;
-                    if let Err(_) = unify_res {
+                    if unify_res.is_err() {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
@@ -74,35 +74,38 @@ impl PatternNode {
                     var_to_ty,
                 ))
             }
-            Pattern::Union(tc, field_name, pat) => {
-                let ty = tc.get_struct_union_value_type(typechcker);
-                let mut var_to_ty = Map::default();
-                let fields = &typechcker.type_env.tycons.get(&tc).unwrap().fields;
-                let field_tys = ty.field_types(&typechcker.type_env);
-                assert_eq!(fields.len(), field_tys.len());
-                let field_idx = fields
-                    .iter()
-                    .enumerate()
-                    .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
-                    .unwrap();
-                let field_ty = field_tys[field_idx].clone();
-                let (pat, var_ty) = pat.get_typed(typechcker)?;
-                var_to_ty.extend(var_ty);
+            Pattern::Union(variant_name, subpat) => {
+                let (variant_idx, tc, _ti) =
+                    Pattern::get_variant_info(&variant_name, &typechcker.type_env);
+
+                // Get the union type and variant type.
+                let union_ty = tc.get_struct_union_value_type(typechcker);
+                let variant_ty = union_ty.field_types(&typechcker.type_env)[variant_idx].clone();
+
+                // Infer the type of the subpattern.
+                let (subpat, var_ty) = subpat.get_typed(typechcker)?;
+
+                // Unify the type of the subpattern with the type of the variant.
                 let unify_res = UnifOrOtherErr::extract_others(
-                    typechcker.unify(&pat.info.inferred_ty.as_ref().unwrap(), &field_ty),
+                    typechcker.unify(&subpat.info.inferred_ty.as_ref().unwrap(), &variant_ty),
                 )?;
-                if let Err(_) = unify_res {
+                if unify_res.is_err() {
                     return Err(Errors::from_msg_srcs(
                         format!(
-                            "Inappropriate pattern `{}` for a value of field `{}` of union `{}`.",
-                            pat.pattern.to_string(),
-                            field_name,
+                            "Inappropriate pattern `{}` for a value of variant `{}` of union `{}`.",
+                            subpat.pattern.to_string(),
+                            variant_name.to_string(),
                             tc.to_string(),
                         ),
-                        &[&pat.info.source],
+                        &[&subpat.info.source],
                     ));
                 }
-                Ok((self.set_inferred_type(ty).set_union_pat(pat), var_to_ty))
+
+                // Return the typed pattern.
+                Ok((
+                    self.set_inferred_type(union_ty).set_union_pat(subpat),
+                    var_ty,
+                ))
             }
         }
     }
@@ -139,12 +142,12 @@ impl PatternNode {
                 }
                 Some(EndNode::Type(tc.as_ref().clone()))
             }
-            Pattern::Union(tc, _, pat) => {
-                let node = pat.find_node_at_pos(pos);
+            Pattern::Union(_variant, subpat) => {
+                let node = subpat.find_node_at_pos(pos);
                 if node.is_some() {
                     return node;
                 }
-                Some(EndNode::Type(tc.as_ref().clone()))
+                None
             }
         }
     }
@@ -182,19 +185,8 @@ impl PatternNode {
                     p.validate(te)?;
                 }
             }
-            Pattern::Union(tc, field, pat) => {
-                let ti = te.tycons.get(&tc).unwrap();
-                if ti.fields.iter().find(|f| &f.name == field).is_none() {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Unknown variant `{}` for union `{}`.",
-                            field,
-                            tc.name.to_string()
-                        ),
-                        &[&self.info.source],
-                    ));
-                }
-                pat.validate(te)?;
+            Pattern::Union(_, subpat) => {
+                subpat.validate(te)?;
             }
         }
         if self.pattern.has_duplicate_vars() {
@@ -229,12 +221,9 @@ impl PatternNode {
                     .set_struct_tycon(Arc::new(tc))
                     .set_struct_field_to_pat(field_to_pat_res))
             }
-            Pattern::Union(tc, _, pat) => {
-                let mut tc = tc.as_ref().clone();
-                tc.resolve_namespace(ctx, &self.info.source)?;
-                Ok(self
-                    .set_union_tycon(Arc::new(tc))
-                    .set_union_pat(pat.resolve_namespace(ctx)?))
+            Pattern::Union(_, subpat) => {
+                let subpat = subpat.resolve_namespace(ctx)?;
+                Ok(self.set_union_pat(subpat))
             }
         }
     }
@@ -264,15 +253,9 @@ impl PatternNode {
                 }
                 Ok(self.set_struct_field_to_pat(field_to_pat_res))
             }
-            Pattern::Union(tc, _, pat) => {
-                if type_env.aliases.contains_key(tc) {
-                    return Err(Errors::from_msg_srcs(
-                        "In union pattern, cannot use type alias instead of union name."
-                            .to_string(),
-                        &[&self.info.source],
-                    ));
-                }
-                Ok(self.set_union_pat(pat.resolve_type_aliases(type_env)?))
+            Pattern::Union(_, subpat) => {
+                let subpat = subpat.resolve_type_aliases(type_env)?;
+                Ok(self.set_union_pat(subpat))
             }
         }
     }
@@ -313,26 +296,26 @@ impl PatternNode {
         Arc::new(node)
     }
 
-    pub fn set_union_tycon(self: &PatternNode, tc: Arc<TyCon>) -> Arc<PatternNode> {
+    pub fn set_union_pat(self: &PatternNode, pat: Arc<PatternNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
-            Pattern::Union(_, field_name, pat) => {
-                node.pattern = Pattern::Union(tc, field_name.clone(), pat.clone());
+            Pattern::Union(variant, _) => {
+                node.pattern = Pattern::Union(variant.clone(), pat);
             }
             _ => panic!(),
         }
         Arc::new(node)
     }
 
-    pub fn set_union_pat(self: &PatternNode, pat: Arc<PatternNode>) -> Arc<PatternNode> {
-        let mut node = self.clone();
+    pub fn get_union_variant(&self) -> &FullName {
         match &self.pattern {
-            Pattern::Union(tc, field_name, _) => {
-                node.pattern = Pattern::Union(tc.clone(), field_name.clone(), pat);
-            }
+            Pattern::Union(variant, _) => variant,
             _ => panic!(),
         }
-        Arc::new(node)
+    }
+
+    pub fn is_union(&self) -> bool {
+        matches!(&self.pattern, Pattern::Union(_, _))
     }
 
     pub fn set_source(self: &PatternNode, src: Span) -> Arc<PatternNode> {
@@ -364,15 +347,46 @@ impl PatternNode {
         })
     }
 
-    pub fn make_union(
-        tycon: Arc<TyCon>,
-        field: Name,
-        subpat: Arc<PatternNode>,
-    ) -> Arc<PatternNode> {
+    pub fn make_union(variant: FullName, subpat: Arc<PatternNode>) -> Arc<PatternNode> {
         Arc::new(PatternNode {
-            pattern: Pattern::Union(tycon, field, subpat),
+            pattern: Pattern::Union(variant, subpat),
             info: PatternInfo::default(),
         })
+    }
+
+    // Validate the variant name of `Union` pattern.
+    pub fn validate_variant_name(
+        self: &PatternNode,
+        union_tycon: &TyCon,
+        union_ti: &TyConInfo,
+    ) -> Result<Arc<PatternNode>, Errors> {
+        let name_space = union_tycon.name.to_namespace();
+        match &self.pattern {
+            Pattern::Union(variant, subpat) => {
+                // Check the variant name.
+                let is_ns_ok = variant.namespace.is_suffix_of(&name_space);
+                let is_name_ok = union_ti.fields.iter().any(|f| &f.name == &variant.name);
+                if !is_ns_ok || !is_name_ok {
+                    return Err(Errors::from_msg_srcs(
+                        format!(
+                            "Variant `{}` is not a member of union `{}`.",
+                            variant.to_string(),
+                            union_tycon.name.to_string()
+                        ),
+                        &[&self.info.source],
+                    ));
+                }
+
+                // Then, complete the namespace of the variant name.
+                let mut variant = variant.clone();
+                variant.namespace = name_space;
+                Ok(Arc::new(PatternNode {
+                    pattern: Pattern::Union(variant, subpat.clone()),
+                    info: self.info.clone(),
+                }))
+            }
+            _ => panic!(),
+        }
     }
 }
 
@@ -386,7 +400,7 @@ pub struct PatternInfo {
 pub enum Pattern {
     Var(Arc<Var>, Option<Arc<TypeNode>>),
     Struct(Arc<TyCon>, Vec<(Name, Arc<PatternNode>)>),
-    Union(Arc<TyCon>, Name, Arc<PatternNode>),
+    Union(FullName, Arc<PatternNode>),
 }
 
 impl Pattern {
@@ -413,7 +427,7 @@ impl Pattern {
                 }
                 ret
             }
-            Pattern::Union(_, _, pat) => pat.pattern.count_vars(),
+            Pattern::Union(_, pat) => pat.pattern.count_vars(),
         }
     }
 
@@ -428,7 +442,7 @@ impl Pattern {
                 }
                 ret
             }
-            Pattern::Union(_, _, pat) => pat.pattern.vars(),
+            Pattern::Union(_, pat) => pat.pattern.vars(),
         }
     }
 
@@ -465,9 +479,83 @@ impl Pattern {
                     format!("{} {{{}}}", tc.to_string(), pats.join(", "))
                 }
             }
-            Pattern::Union(tc, field, pat) => {
-                format!("{}.{}({})", tc.to_string(), field, pat.pattern.to_string())
+            Pattern::Union(variant, pat) => {
+                format!("{}({})", variant.to_string(), pat.pattern.to_string())
             }
         }
+    }
+
+    // From a fully-resolved variant name, gets the variant index, the type constructor of the union, and the type constructor info.
+    pub fn get_variant_info<'a, 'b>(
+        variant_name: &'a FullName,
+        type_env: &'b TypeEnv,
+    ) -> (usize, TyCon, &'b TyConInfo) {
+        let tc: TyCon = TyCon::new(variant_name.namespace.clone().to_fullname());
+        let ti = type_env.tycons.get(&tc).unwrap();
+        let variant_idx = ti
+            .fields
+            .iter()
+            .position(|v: &Field| &v.name == &variant_name.name)
+            .unwrap();
+        (variant_idx, tc, ti)
+    }
+
+    // Checks if patterns which are used in `match` syntax are exhaustive.
+    pub fn validate_match_cases_exhaustiveness(
+        union_tc: &TyCon,
+        union_ti: &TyConInfo,
+        match_src: &Option<Span>,
+        pats: impl Iterator<Item = Arc<PatternNode>>,
+    ) -> Result<(), Errors> {
+        let mut variants = union_ti.fields.iter().map(|f| &f.name).collect::<Set<_>>();
+        let mut otherwise: Option<Arc<PatternNode>> = None;
+        for pat in pats {
+            if let Some(otherwise) = otherwise {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "Pattern after `{}` is unreachable.",
+                        otherwise.pattern.to_string()
+                    ),
+                    &[&pat.info.source],
+                ));
+            }
+            match &pat.pattern {
+                Pattern::Union(variant, _) => {
+                    if !variants.contains(&variant.name) {
+                        return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Variant `{}` is not a member of union `{}`.",
+                                variant.to_string(),
+                                union_tc.to_string()
+                            ),
+                            &[&pat.info.source],
+                        ));
+                    }
+                    variants.remove(&variant.name);
+                }
+                _ => {
+                    otherwise = Some(pat.clone());
+                }
+            }
+        }
+        if otherwise.is_none() && !variants.is_empty() {
+            let msg = if variants.len() == 1 {
+                format!(
+                    "Variant `{}` is not covered.",
+                    variants.iter().next().unwrap()
+                )
+            } else {
+                format!(
+                    "Variants {} are not covered.",
+                    variants
+                        .iter()
+                        .map(|var| format!("`{}`", var))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            return Err(Errors::from_msg_srcs(msg, &[&match_src]));
+        }
+        Ok(())
     }
 }

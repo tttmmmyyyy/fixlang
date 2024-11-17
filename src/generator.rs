@@ -1261,6 +1261,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::If(cond_expr, then_expr, else_expr) => {
                 self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), rvo)
             }
+            Expr::Match(cond, pat_vals) => self.eval_match(cond.clone(), pat_vals, rvo),
             Expr::TyAnno(e, _) => self.eval_expr(e.clone(), rvo),
             Expr::MakeStruct(_, fields) => {
                 let struct_ty = expr.ty.clone().unwrap();
@@ -1681,8 +1682,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.scope_lock_as_used_later(&used_in_val_except_pat);
         let bound = self.eval_expr(bound.clone(), None);
         self.scope_unlock_as_used_later(&used_in_val_except_pat);
-        let suboobjs = self.destructure_object_by_pattern(pat, &bound);
-        for (var_name, obj) in &suboobjs {
+        let subobjs = self.destructure_object_by_pattern(pat, &bound);
+        for (var_name, obj) in &subobjs {
             if val.free_vars().contains(&var_name) {
                 self.scope_push(var_name, &obj);
             } else {
@@ -1693,16 +1694,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.create_debug_local_variable(&var_name.to_string(), &obj);
             }
         }
-        let val_code = self.eval_expr(val.clone(), rvo);
-        for (var_name, _) in &suboobjs {
+        let val_obj = self.eval_expr(val.clone(), rvo);
+        for (var_name, _) in &subobjs {
             if val.free_vars().contains(&var_name) {
                 self.scope_pop(var_name);
             }
         }
-        val_code
+        val_obj
     }
 
-    // Destructure object by pattern
+    // Destructure object by pattern.
+    // For union pattern, the tag value is NOT checked.
     fn destructure_object_by_pattern(
         &mut self,
         pat: &Arc<PatternNode>,
@@ -1742,26 +1744,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     ret.append(&mut self.destructure_object_by_pattern(&pat, &fields[i]));
                 }
             }
-            Pattern::Union(tc, field_name, pat) => {
-                let union_fields = self
-                    .type_env()
-                    .tycons
-                    .get(tc.as_ref())
-                    .unwrap()
-                    .fields
-                    .iter();
-                let field_idx = union_fields
-                    .enumerate()
-                    .find_map(|(i, f)| if &f.name == field_name { Some(i) } else { None })
-                    .unwrap();
-                let field_ty = obj.ty.field_types(self.type_env())[field_idx].clone();
-                let expect_tag_value = ObjectFieldType::UnionTag
-                    .to_basic_type(self, vec![])
-                    .into_int_type()
-                    .const_int(field_idx as u64, false);
-                ObjectFieldType::panic_if_union_tag_unmatch(self, obj.clone(), expect_tag_value);
-                let field = ObjectFieldType::get_union_field(self, obj.clone(), &field_ty, None);
-                ret.append(&mut self.destructure_object_by_pattern(pat, &field));
+            Pattern::Union(variant_name, subpat) => {
+                let (variant_idx, _union_tycon, _union_ti) =
+                    Pattern::get_variant_info(variant_name, self.type_env());
+                let variant_ty = obj.ty.field_types(self.type_env())[variant_idx].clone();
+                let value = ObjectFieldType::get_union_field(self, obj.clone(), &variant_ty, None);
+                ret.append(&mut self.destructure_object_by_pattern(subpat, &value));
             }
         }
         ret
@@ -1839,7 +1827,142 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    // Evaluate make pair
+    fn eval_match(
+        &mut self,
+        cond: Arc<ExprNode>,
+        pat_vals: &[(Arc<PatternNode>, Arc<ExprNode>)],
+        rvo: Option<Object<'c>>,
+    ) -> Object<'c> {
+        // Calculate the set of free variables used in values.
+        let mut vars_used_in_any_case = Set::default();
+        for (pat, val) in pat_vals {
+            vars_used_in_any_case.extend(val.free_vars_shadowed_by(&pat.pattern.vars()));
+        }
+
+        // Evaluate the condition.
+        self.scope_lock_as_used_later(&vars_used_in_any_case);
+        let cond = self.eval_expr(cond, None);
+        self.scope_unlock_as_used_later(&vars_used_in_any_case);
+
+        // Prepare basic blocks for each pattern.
+        let current_func = self
+            .builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+        let cont_bb = self.context.append_basic_block(current_func, "match_cont");
+        let mut tag_pat_val_bbs: Vec<(
+            Option<IntValue>,
+            Arc<PatternNode>,
+            Arc<ExprNode>,
+            BasicBlock,
+        )> = vec![];
+        for (pat, val) in pat_vals {
+            let pat_str = pat.pattern.to_string();
+            let pat_bb = self
+                .context
+                .append_basic_block(current_func, &format!("case_`{}`", pat_str));
+            let tag_val = if !pat.is_union() {
+                // Non-variant pattern.
+                None
+            } else {
+                // Variant pattern.
+                let (variant_idx, _union_tycon, _union_ti) =
+                    Pattern::get_variant_info(pat.get_union_variant(), self.type_env());
+                let tag_val = ObjectFieldType::UnionTag
+                    .to_basic_type(self, vec![])
+                    .into_int_type()
+                    .const_int(variant_idx as u64, false);
+                Some(tag_val)
+            };
+            tag_pat_val_bbs.push((tag_val, pat.clone(), val.clone(), pat_bb));
+        }
+
+        // Get the union tag value.
+        let tag_val = ObjectFieldType::get_union_tag(self, &cond);
+
+        // Build switch.
+        // NOTE: It is already validated that:
+        // - there are no empty `match`, and
+        // - non-variant pattern is at the end of the cases.
+        let else_bb = tag_pat_val_bbs.last().unwrap().3;
+        let cases = tag_pat_val_bbs
+            .iter()
+            .take(tag_pat_val_bbs.len() - 1) // Skip the last one.
+            .map(|(tag_val, _, _, bb)| (tag_val.unwrap(), *bb))
+            .collect::<Vec<_>>();
+        self.builder().build_switch(tag_val, else_bb, &cases);
+
+        // Implement each cases.
+        let mut val_objs: Vec<(Object, BasicBlock)> = vec![];
+        for (_, pat, val, bb) in tag_pat_val_bbs {
+            self.builder().position_at_end(bb);
+
+            // Release variables used only in the other cases.
+            let vars_used_in_later = val.free_vars_shadowed_by(&pat.pattern.vars());
+            let vars_used_only_in_others = vars_used_in_any_case.difference(&vars_used_in_later);
+            for var in vars_used_only_in_others {
+                if self.get_var(var).used_later == 0 {
+                    self.release(self.get_var(var).ptr.get(self));
+                }
+            }
+
+            // Destructure object by pattern.
+            let subobjs = self.destructure_object_by_pattern(&pat, &cond);
+
+            // Push subobjects on scope.
+            for (var_name, obj) in &subobjs {
+                if val.free_vars().contains(&var_name) {
+                    self.scope_push(var_name, &obj);
+                } else {
+                    self.release(obj.clone());
+                }
+                // Create local variable for debug info.
+                if self.has_di() {
+                    self.create_debug_local_variable(&var_name.to_string(), &obj);
+                }
+            }
+
+            // Evaluate the value.
+            let val_obj = self.eval_expr(val.clone(), rvo.clone());
+            val_objs.push((val_obj, bb));
+
+            // Pop subobjects from scope.
+            for (var_name, _) in &subobjs {
+                if val.free_vars().contains(&var_name) {
+                    self.scope_pop(var_name);
+                }
+            }
+
+            self.builder().build_unconditional_branch(cont_bb);
+        }
+
+        // Implement the cont_bb.
+        self.builder().position_at_end(cont_bb);
+
+        // Return value.
+        if let Some(rvo) = rvo {
+            // In case performing RVO, then the result value is already stored in `rvo`.
+            rvo
+        } else if val_objs.len() == 1 {
+            // If there is only one case, then return the value directly.
+            val_objs.pop().unwrap().0
+        } else {
+            // In this case, build phi node.
+            let phi_ty = val_objs[0].0.ptr(self).get_type();
+            let phi = self.builder().build_phi(phi_ty, "phi");
+            for (val, bb) in &val_objs {
+                phi.add_incoming(&[(&val.ptr(self), bb.clone())]);
+            }
+            Object::new(
+                phi.as_basic_value().into_pointer_value(),
+                val_objs[0].0.ty.clone(),
+            )
+        }
+    }
+
+    // Evaluate `MakeStruct` expression.
     fn eval_make_struct(
         &mut self,
         fields: Vec<(Name, Arc<ExprNode>)>,

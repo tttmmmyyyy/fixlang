@@ -1283,6 +1283,15 @@ impl Program {
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
+            Expr::Match(cond, pat_vals) => {
+                let cond = self.instantiate_expr(cond)?;
+                let mut new_pat_vals = vec![];
+                for (pat, e) in pat_vals {
+                    let e = self.instantiate_expr(e)?;
+                    new_pat_vals.push((pat.clone(), e));
+                }
+                expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
+            }
             Expr::TyAnno(e, _) => {
                 let e = self.instantiate_expr(e)?;
                 expr.set_tyanno_expr(e)

@@ -133,7 +133,7 @@ impl TyCon {
     // Get the type of struct / union value.
     // If struct / union have type parameter, introduces new type arguments.
     pub fn get_struct_union_value_type(
-        self: &Arc<TyCon>,
+        self: &TyCon,
         typechcker: &mut TypeCheckContext,
     ) -> Arc<TypeNode> {
         let ti = typechcker.type_env.tycons.get(self).unwrap();
@@ -151,7 +151,7 @@ impl TyCon {
         }
 
         // Make type.
-        let mut ty = type_tycon(self);
+        let mut ty = type_tycon(&Arc::new(self.clone()));
         for tv in new_tyvars {
             ty = type_tyapp(ty, tv);
         }

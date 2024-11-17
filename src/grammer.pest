@@ -68,7 +68,11 @@ expr_lit = { expr_number_lit | expr_bool_lit | expr_string_lit | expr_array_lit 
 
 expr_var = { (namespace ~ "::")? ~ var }
 
-expr_let = { "let" ~ sep+ ~ pattern ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
+expr_let = { "let" ~ sep+ ~ pattern_nounion ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
+
+match_arrow = { "=>" }
+
+expr_match = { "match" ~ sep+ ~ expr ~ sep* ~ "{" ~ (sep* ~ pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr ~ sep* ~ semicolon)* ~ "}" }
 
 expr_eval = { "eval" ~ sep+ ~ expr ~ sep* ~ semicolon ~ sep* ~ expr }
 
@@ -78,7 +82,7 @@ else_of_if_with_space = { semicolon | ("else" ~ sep) }
 
 expr_if = { "if" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" ~ sep* ~ ((else_of_if ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}") | (else_of_if_with_space ~ sep* ~ expr)) }
 
-expr_lam = { "|" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ sep* ~ "|" ~ sep* ~ expr }
+expr_lam = { "|" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ sep* ~ "|" ~ sep* ~ expr }
 
 expr_do = { "do" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" }
 
@@ -90,8 +94,8 @@ expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ extra_
 
 expr_make_struct = { type_tycon ~ sep* ~ "{" ~ (sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ (sep* ~ ",")?)? ~ sep* ~ "}" }
 
-// nlr = non left recursive
-expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
+// Non Left Recursive expressions
+expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_match | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
 
 // List of arguments. Can be an empty list.
 arg_list = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }
@@ -150,16 +154,17 @@ expr = { expr_and_then_sequence }
 
 // === Patterns === 
 
-// pattern = { pattern_var | pattern_tuple | pattern_struct | pattern_union } // We currently disable pattern_union because we don't have "if-let" or "match" yet.
-pattern = { pattern_var | pattern_tuple | pattern_struct }
+pattern_nounion = { pattern_var | pattern_tuple | pattern_struct }
+
+pattern_case = { pattern_union | pattern_var }
 
 pattern_var = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
-pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ pattern)* ~ (sep* ~ ",")? ~ sep* ~ ")" }
+pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ (sep* ~ ",")? ~ sep* ~ ")" }
 
-pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern)* ~ sep* ~ "}" }
+pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion)* ~ sep* ~ "}" }
 
-pattern_union = { (capital_name ~ "::")+ ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern ~ sep* ~ ")" }
+pattern_union = { (capital_name ~ "::")* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern_nounion ~ sep* ~ ")" }
 
 // === Types ===
 type_expr = { type_fun }

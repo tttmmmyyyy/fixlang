@@ -311,6 +311,35 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_match_cond(&self, cond_expr: Arc<ExprNode>) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Match(_, pat_vals) => {
+                ret.expr = Arc::new(Expr::Match(cond_expr, pat_vals.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_match_pat_vals(
+        &self,
+        pat_vals: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
+    ) -> Arc<Self> {
+        let mut ret = self.clone();
+        match &*self.expr {
+            Expr::Match(cond, _) => {
+                ret.expr = Arc::new(Expr::Match(cond.clone(), pat_vals));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
     pub fn set_tyanno_expr(&self, expr: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone();
         match &*self.expr {
@@ -543,6 +572,17 @@ impl ExprNode {
                 .set_if_cond(cond.resolve_namespace(ctx)?)
                 .set_if_then(then_expr.resolve_namespace(ctx)?)
                 .set_if_else(else_expr.resolve_namespace(ctx)?)),
+            Expr::Match(cond, pat_vals) => {
+                let mut pat_vals_res = vec![];
+                for (pat, val) in pat_vals {
+                    // Name resolution for match cases (i.e., `pat`) is done in type checking phase.
+                    pat_vals_res.push((pat.clone(), val.resolve_namespace(ctx)?));
+                }
+                Ok(self
+                    .clone()
+                    .set_match_cond(cond.resolve_namespace(ctx)?)
+                    .set_match_pat_vals(pat_vals_res))
+            }
             Expr::TyAnno(expr, ty) => Ok(self
                 .clone()
                 .set_tyanno_expr(expr.resolve_namespace(ctx)?)
@@ -607,6 +647,18 @@ impl ExprNode {
                 .set_if_cond(cond.resolve_type_aliases(type_env)?)
                 .set_if_then(then_expr.resolve_type_aliases(type_env)?)
                 .set_if_else(else_expr.resolve_type_aliases(type_env)?)),
+            Expr::Match(cond, pat_vals) => {
+                let cond = cond.resolve_type_aliases(type_env)?;
+                let mut pat_vals_res = vec![];
+                for (pat, val) in pat_vals {
+                    let val = val.resolve_type_aliases(type_env)?;
+                    pat_vals_res.push((pat.clone(), val));
+                }
+                Ok(self
+                    .clone()
+                    .set_match_cond(cond)
+                    .set_match_pat_vals(pat_vals_res))
+            }
             Expr::TyAnno(expr, ty) => Ok(self
                 .clone()
                 .set_tyanno_expr(expr.resolve_type_aliases(type_env)?)
@@ -639,64 +691,6 @@ impl ExprNode {
                     expr = expr.set_ffi_call_arg(arg.resolve_type_aliases(type_env)?, i);
                 }
                 Ok(expr)
-            }
-        }
-    }
-
-    // If a global value `g` is used only in the body of a lambda expression, then `g` is not included in the result.
-    #[allow(dead_code)]
-    pub fn depending_global_values(self: &Arc<ExprNode>) -> Set<FullName> {
-        // Filter out local variables.
-        fn filter_out_local(names: Set<FullName>) -> Set<FullName> {
-            names.into_iter().filter(|name| !name.is_local()).collect()
-        }
-
-        match &*self.expr {
-            Expr::Var(var) => filter_out_local(vec![var.name.clone()].into_iter().collect()),
-            Expr::LLVM(lit) => filter_out_local(lit.free_vars.clone().into_iter().collect()),
-            Expr::App(func, args) => {
-                let mut free_vars = func.depending_global_values();
-                for arg in args {
-                    free_vars.extend(arg.depending_global_values());
-                }
-                free_vars
-            }
-            Expr::Lam(_, _) => Set::default(),
-            Expr::Let(_, bound, val) => {
-                // NOTE: Our let is non-recursive let, i.e.,
-                // "let x = f x in g x" is equal to "let y = f x in g y",
-                // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
-                let mut free_vars = bound.depending_global_values();
-                free_vars.extend(val.depending_global_values());
-                free_vars
-            }
-            Expr::If(cond, then_expr, else_expr) => {
-                let mut free_vars = cond.depending_global_values();
-                free_vars.extend(then_expr.depending_global_values());
-                free_vars.extend(else_expr.depending_global_values());
-                free_vars
-            }
-            Expr::TyAnno(e, _) => e.depending_global_values(),
-            Expr::MakeStruct(_, fields) => {
-                let mut free_vars = Set::default();
-                for (_, field_expr) in fields {
-                    free_vars.extend(field_expr.depending_global_values());
-                }
-                free_vars
-            }
-            Expr::ArrayLit(elems) => {
-                let mut free_vars = Set::default();
-                for elem in elems {
-                    free_vars.extend(elem.depending_global_values());
-                }
-                free_vars
-            }
-            Expr::FFICall(_, _, _, args, _) => {
-                let mut free_vars: Set<FullName> = Default::default();
-                for (_, e) in args.iter().enumerate() {
-                    free_vars.extend(e.depending_global_values());
-                }
-                free_vars
             }
         }
     }
@@ -749,6 +743,23 @@ impl ExprNode {
                 }
                 else_expr.find_node_at(pos)
             }
+            Expr::Match(cond, pat_vals) => {
+                let node = cond.find_node_at(pos);
+                if node.is_some() {
+                    return node;
+                }
+                for (pat, val) in pat_vals {
+                    let node = pat.find_node_at_pos(pos);
+                    if node.is_some() {
+                        return node;
+                    }
+                    let node = val.find_node_at(pos);
+                    if node.is_some() {
+                        return node;
+                    }
+                }
+                None
+            }
             Expr::TyAnno(e, ty) => {
                 let node = e.find_node_at(pos);
                 if node.is_some() {
@@ -785,6 +796,12 @@ impl ExprNode {
             }
         }
     }
+
+    pub fn free_vars_shadowed_by(&self, shadowed_vars: &Set<FullName>) -> Set<FullName> {
+        let mut free_vars = self.free_vars().clone();
+        free_vars.retain(|v| !shadowed_vars.contains(v));
+        free_vars
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -797,10 +814,9 @@ pub enum Expr {
     Lam(Vec<Arc<Var>>, Arc<ExprNode>),
     Let(Arc<PatternNode>, Arc<ExprNode>, Arc<ExprNode>),
     If(Arc<ExprNode>, Arc<ExprNode>, Arc<ExprNode>),
+    Match(Arc<ExprNode>, Vec<(Arc<PatternNode>, Arc<ExprNode>)>),
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
     ArrayLit(Vec<Arc<ExprNode>>),
-    // Expresison `(x, y)` is not parsed to `Tuple2.new x y`, but to `MakeStruct x y`.
-    // `MakeStruct x y` is compiled to a more performant code than function call (currently).
     MakeStruct(Arc<TyCon>, Vec<(Name, Arc<ExprNode>)>),
     FFICall(
         Name,               /* function name */
@@ -870,6 +886,14 @@ impl Expr {
                 t.expr.to_string(),
                 e.expr.to_string()
             ),
+            Expr::Match(cond, pat_vals) => {
+                let mut ret = format!("match {} {{", cond.expr.to_string());
+                for (pat, val) in pat_vals {
+                    ret += &format!("{} => ({});", pat.pattern.to_string(), val.expr.to_string());
+                }
+                ret += "}";
+                ret
+            }
             Expr::TyAnno(e, t) => format!("{}: {}", e.expr.to_string(), t.to_string()),
             Expr::MakeStruct(tc, fields) => {
                 format!(
@@ -993,6 +1017,14 @@ pub fn expr_if(
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
+pub fn expr_match(
+    cond: Arc<ExprNode>,
+    cases: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
+    src: Option<Span>,
+) -> Arc<ExprNode> {
+    Arc::new(Expr::Match(cond, cases)).into_expr_info(src)
+}
+
 pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::TyAnno(expr, ty)).into_expr_info(src)
 }
@@ -1075,6 +1107,23 @@ pub fn calculate_free_vars(ei: Arc<ExprNode>) -> Arc<ExprNode> {
             ei.set_if_cond(cond)
                 .set_if_then(then_expr)
                 .set_if_else(else_expr)
+                .set_free_vars(free_vars)
+        }
+        Expr::Match(cond, pat_vals) => {
+            let mut free_vars = Set::default();
+            let cond = calculate_free_vars(cond.clone());
+            free_vars.extend(cond.free_vars.clone().unwrap());
+            let mut pat_vals_res = vec![];
+            for (pat, val) in pat_vals {
+                let val = calculate_free_vars(val.clone());
+                let mut free_vars_shadowed = val.free_vars.clone().unwrap();
+                let pat_vars = pat.pattern.vars();
+                free_vars_shadowed.retain(|v| !pat_vars.contains(v));
+                free_vars.extend(free_vars_shadowed);
+                pat_vals_res.push((pat.clone(), val));
+            }
+            ei.set_match_cond(cond)
+                .set_match_pat_vals(pat_vals_res)
                 .set_free_vars(free_vars)
         }
         Expr::TyAnno(e, _) => {

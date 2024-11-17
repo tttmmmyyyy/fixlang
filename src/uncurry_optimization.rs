@@ -200,6 +200,15 @@ fn replace_closure_call_to_funptr_call_subexprs(
             .set_if_cond(replace_closure_call_to_funptr_call_subexprs(c, symbols))
             .set_if_then(replace_closure_call_to_funptr_call_subexprs(t, symbols))
             .set_if_else(replace_closure_call_to_funptr_call_subexprs(e, symbols)),
+        Expr::Match(cond, pat_vals) => {
+            let cond = replace_closure_call_to_funptr_call_subexprs(cond, symbols);
+            let mut new_pat_vals = vec![];
+            for (pat, val) in pat_vals {
+                let val = replace_closure_call_to_funptr_call_subexprs(val, symbols);
+                new_pat_vals.push((pat.clone(), val));
+            }
+            expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
+        }
         Expr::TyAnno(e, _) => {
             expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(e, symbols))
         }
@@ -389,6 +398,15 @@ fn replace_free_var(
             let t = replace_free_var(t, from, to, scope)?;
             let e = replace_free_var(e, from, to, scope)?;
             Ok(expr.set_if_cond(c).set_if_then(t).set_if_else(e))
+        }
+        Expr::Match(cond, pat_vals) => {
+            let cond = replace_free_var(cond, from, to, scope)?;
+            let mut new_pat_vals = vec![];
+            for (pat, val) in pat_vals {
+                let val = replace_free_var(val, from, to, scope)?;
+                new_pat_vals.push((pat.clone(), val));
+            }
+            Ok(expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
         }
         Expr::TyAnno(e, _) => {
             let e = replace_free_var(e, from, to, scope)?;

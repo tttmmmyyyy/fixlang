@@ -1433,6 +1433,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         Rule::expr_let => parse_expr_let(pair, ctx)?,
         Rule::expr_eval => parse_expr_eval(pair, ctx)?,
         Rule::expr_if => parse_expr_if(pair, ctx)?,
+        Rule::expr_match => parse_expr_match(pair, ctx)?,
         Rule::expr_do => parse_expr_do(pair, ctx)?,
         Rule::expr_lam => parse_expr_lam(pair, ctx)?,
         Rule::expr_tuple => parse_expr_tuple(pair, ctx)?,
@@ -1485,7 +1486,7 @@ fn parse_expr_lit(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
 fn parse_expr_let(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     let span = Span::from_pair(&ctx.source, &expr);
     let mut pairs = expr.into_inner();
-    let pat = parse_pattern(pairs.next().unwrap(), ctx);
+    let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
     let _eq_of_let = pairs.next().unwrap();
     let bound = parse_expr(pairs.next().unwrap(), ctx)?;
     let _in_of_let = pairs.next().unwrap();
@@ -1508,8 +1509,8 @@ fn parse_expr_lam(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     let span = Span::from_pair(&ctx.source, &expr);
     let mut pairs = expr.into_inner();
     let mut pats = vec![];
-    while pairs.peek().unwrap().as_rule() == Rule::pattern {
-        let pat = parse_pattern(pairs.next().unwrap(), ctx);
+    while pairs.peek().unwrap().as_rule() == Rule::pattern_nounion {
+        let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
         pats.push(pat);
     }
     let mut expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
@@ -1545,6 +1546,32 @@ fn parse_expr_if(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNod
         parse_expr_with_new_do(else_val, ctx)?,
         Some(span),
     ))
+}
+
+fn parse_expr_match(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+    assert_eq!(expr.as_rule(), Rule::expr_match);
+    let span = Span::from_pair(&ctx.source, &expr);
+    let mut pairs = expr.into_inner();
+    let cond = pairs.next().unwrap();
+    let cond = parse_expr(cond, ctx)?;
+    let mut cases = vec![];
+    while pairs.peek().is_some() {
+        let pair = pairs.next().unwrap();
+        let pat = parse_pattern_case(pair, ctx);
+        let pair = pairs.next().unwrap();
+        assert_eq!(pair.as_rule(), Rule::match_arrow); // Skip `=>`.
+        let pair = pairs.next().unwrap();
+        let expr = parse_expr_with_new_do(pair, ctx)?;
+        cases.push((pat, expr));
+    }
+    // Forbid empty match.
+    if cases.is_empty() {
+        return Err(Errors::from_msg_srcs(
+            "Empty `match` is not allowed.".to_string(),
+            &[&Some(span)],
+        ));
+    }
+    Ok(expr_match(cond, cases, Some(span)))
 }
 
 fn parse_expr_do(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
@@ -2037,14 +2064,25 @@ fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     .set_source(Some(span))
 }
 
-fn parse_pattern(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNode> {
-    assert_eq!(pair.as_rule(), Rule::pattern);
+fn parse_pattern_nounion(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNode> {
+    assert_eq!(pair.as_rule(), Rule::pattern_nounion);
     let span = Span::from_pair(&ctx.source, &pair);
     let pair = pair.into_inner().next().unwrap();
     match pair.as_rule() {
         Rule::pattern_var => parse_pattern_var(pair, ctx),
         Rule::pattern_tuple => parse_pattern_tuple(pair, ctx),
         Rule::pattern_struct => parse_pattern_struct(pair, ctx),
+        _ => unreachable!(),
+    }
+    .set_source(span)
+}
+
+fn parse_pattern_case(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNode> {
+    assert_eq!(pair.as_rule(), Rule::pattern_case);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let pair = pair.into_inner().next().unwrap();
+    match pair.as_rule() {
+        Rule::pattern_var => parse_pattern_var(pair, ctx),
         Rule::pattern_union => parse_pattern_union(pair, ctx),
         _ => unreachable!(),
     }
@@ -2065,7 +2103,7 @@ fn parse_pattern_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
     let span = Span::from_pair(&ctx.source, &pair);
     let pairs = pair.into_inner();
     let pats = pairs
-        .map(|pair| parse_pattern(pair, ctx))
+        .map(|pair| parse_pattern_nounion(pair, ctx))
         .collect::<Vec<_>>();
     let tuple_size = pats.len();
     ctx.tuple_sizes.push(tuple_size as u32);
@@ -2087,7 +2125,7 @@ fn parse_pattern_struct(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Pattern
     let mut field_to_pats = Vec::default();
     while pairs.peek().is_some() {
         let field_name = pairs.next().unwrap().as_str().to_string();
-        let pat = parse_pattern(pairs.next().unwrap(), ctx);
+        let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
         field_to_pats.push((field_name, pat));
     }
     PatternNode::make_struct(tycon, field_to_pats).set_source(span)
@@ -2101,13 +2139,11 @@ fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
     while pairs.peek().unwrap().as_rule() == Rule::capital_name {
         names.push(pairs.next().unwrap().as_str().to_string());
     }
-    let union_name = names.pop().unwrap();
-    let union_namespace = NameSpace::new(names);
-    let union_tycon = tycon(FullName::new(&union_namespace, &union_name));
-    assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_field_name);
-    let field_name = pairs.next().unwrap().as_str().to_string();
-    let pat = parse_pattern(pairs.next().unwrap(), ctx);
-    PatternNode::make_union(union_tycon, field_name, pat).set_source(span)
+    let pair = pairs.next().unwrap();
+    assert_eq!(pair.as_rule(), Rule::type_field_name);
+    let variant = FullName::new(&NameSpace::new(names), pair.as_str());
+    let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
+    PatternNode::make_union(variant, pat).set_source(span)
 }
 
 fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportStatement {

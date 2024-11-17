@@ -682,22 +682,81 @@ impl TypeCheckContext {
                 pat.validate(&self.type_env)?;
                 let (pat, var_ty) = pat.get_typed(self)?;
                 let val = self.unify_type_of_expr(val, pat.info.inferred_ty.as_ref().unwrap().clone())?;
-                let var_scm = var_ty.iter().map(|(name, ty)| {
-                    (
-                        name.clone(),
-                        Scheme::from_type(ty.clone()),
-                    )
-                });
-                for (name, scm) in var_scm.clone() {
-                    assert!(name.is_local());
-                    self.scope.push(&name.name, scm);
+                for (var_name, var_ty) in &var_ty {
+                    assert!(var_name.is_local());
+                    self.scope.push(&var_name.name, Scheme::from_type(var_ty.clone()));
                 }
                 let body = self.unify_type_of_expr(body, ty)?;
-                for (name, _) in var_scm {
+                for (name, _) in var_ty {
                     self.scope.pop(&name.name);
                 }
                 Ok(ei.set_let_pat(pat).set_let_bound(val).set_let_value(body))
             }
+            Expr::Match(cond, pat_vals) => {
+                // First, perform type inference for the condition.
+                let cond_ty = type_tyvar_star(&self.new_tyvar());
+                let cond = self.unify_type_of_expr(cond, cond_ty.clone())?;
+
+                // Determine the type constructor of the condition.
+                const MSG_NOT_UNION: &str = "The condition of `match` is not a union, as far as the type checker knows at this point.\
+                        If you believe that it is, please give a type annotation to the condition.";
+                let cond_ty = self.substitute_type(&cond_ty);
+                let cond_ty = self.reduce_type_by_equality(cond_ty)?;
+                let union_tycon = cond_ty.toplevel_tycon();
+                if union_tycon.is_none() {
+                    return Err(Errors::from_msg_srcs(
+                        MSG_NOT_UNION.to_string(),
+                        &[&ei.source],
+                    ));
+                }
+                let union_tycon = union_tycon.unwrap();
+                let union_ti = self.type_env.tycons.get(&union_tycon).unwrap().clone();
+                if union_ti.variant != TyConVariant::Union {
+                    return Err(Errors::from_msg_srcs(
+                        MSG_NOT_UNION.to_string(),
+                        &[&ei.source],
+                    ));
+                }
+
+                // Validate each cases.
+                let mut new_pat_vals = vec![];
+                for (pat, val) in pat_vals {
+                    // Check if the union variant name is valid.
+                    let pat = if pat.is_union() { pat.validate_variant_name(&union_tycon, &union_ti)? } else { pat.clone() };
+
+                    // Check if the type of the pattern matches the type of the condition.
+                    let (pat, var_ty) = pat.get_typed(self)?;
+                    let pat_ty = pat.info.inferred_ty.as_ref().unwrap().clone();
+                    if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
+                        let type_strs = TypeNode::to_string_normalize_many(&vec![cond_ty.clone(), pat_ty.clone()]);
+                        return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Type mismatch. Expected `{}`, found `{}`.",
+                                &type_strs[0],
+                                &type_strs[1],
+                            ),
+                            &[&ei.source],
+                        ));
+                    }
+
+                    // Check if the type of the value matches the whole type.
+                    for (var_name, var_ty) in &var_ty {
+                        assert!(var_name.is_local());
+                        self.scope.push(&var_name.name, Scheme::from_type(var_ty.clone()));
+                    }
+                    let val = self.unify_type_of_expr(val, ty.clone())?;
+                    for (var_name, _) in var_ty {
+                        self.scope.pop(&var_name.name);
+                    }
+                    new_pat_vals.push((pat, val));
+                }
+
+                // Check if the match cases are exhaustive.
+                let pats = new_pat_vals.iter().map(|(pat, _)| pat.clone());
+                Pattern::validate_match_cases_exhaustiveness(&union_tycon, &union_ti, &ei.source, pats)?;
+                
+                Ok(ei.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
+            },
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.unify_type_of_expr(cond, make_bool_ty())?;
                 let then_expr = self.unify_type_of_expr(then_expr, ty.clone())?;
@@ -1182,6 +1241,15 @@ impl TypeCheckContext {
                 let else_expr = self.finish_inferred_types(else_expr.clone())?;
                 expr.set_if_cond(cond).set_if_then(then_expr).set_if_else(else_expr)
             }
+            Expr::Match(cond, pat_vals) => {
+                let cond = self.finish_inferred_types(cond.clone())?;
+                let mut new_pat_vals = vec![];
+                for (pat, val) in pat_vals {
+                    let val = self.finish_inferred_types(val.clone())?;
+                    new_pat_vals.push((pat.clone(), val));
+                }
+                expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
+            },
             Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.finish_inferred_types(e.clone())?),
             Expr::MakeStruct(_tc, fields) => {
                 let mut fields_res = vec![];

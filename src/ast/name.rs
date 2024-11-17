@@ -37,6 +37,16 @@ impl NameSpace {
         self.names.len() == 0
     }
 
+    // Convert to a full name.
+    pub fn to_fullname(mut self) -> FullName {
+        assert!(!self.names.is_empty());
+        let name = self.names.pop().unwrap();
+        FullName {
+            namespace: self,
+            name,
+        }
+    }
+
     pub fn to_string(&self) -> String {
         self.names.join(NAMESPACE_SEPARATOR)
     }

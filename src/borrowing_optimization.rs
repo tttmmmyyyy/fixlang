@@ -209,6 +209,15 @@ fn set_released_param_indices(expr: &Arc<ExprNode>, program: &Program) -> Arc<Ex
             .set_if_cond(set_released_param_indices(c, program))
             .set_if_then(set_released_param_indices(t, program))
             .set_if_else(set_released_param_indices(e, program)),
+        Expr::Match(cond, pat_vals) => {
+            let cond = set_released_param_indices(cond, program);
+            let mut new_pat_vals = vec![];
+            for (pat, val) in pat_vals {
+                let val = set_released_param_indices(val, program);
+                new_pat_vals.push((pat.clone(), val));
+            }
+            expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
+        }
         Expr::TyAnno(e, _) => expr.set_tyanno_expr(set_released_param_indices(e, program)),
         Expr::ArrayLit(elems) => {
             let mut expr = expr.clone();
