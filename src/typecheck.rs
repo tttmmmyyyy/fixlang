@@ -702,16 +702,16 @@ impl TypeCheckContext {
                         If you believe that it is, please give a type annotation to the condition.";
                 let cond_ty = self.substitute_type(&cond_ty);
                 let cond_ty = self.reduce_type_by_equality(cond_ty)?;
-                let union_tycon = cond_ty.toplevel_tycon();
-                if union_tycon.is_none() {
+                let cond_tycon = cond_ty.toplevel_tycon();
+                if cond_tycon.is_none() {
                     return Err(Errors::from_msg_srcs(
                         MSG_NOT_UNION.to_string(),
                         &[&ei.source],
                     ));
                 }
-                let union_tycon = union_tycon.unwrap();
-                let union_ti = self.type_env.tycons.get(&union_tycon).unwrap().clone();
-                if union_ti.variant != TyConVariant::Union {
+                let cond_tycon = cond_tycon.unwrap();
+                let cond_ti = self.type_env.tycons.get(&cond_tycon).unwrap().clone();
+                if cond_ti.variant != TyConVariant::Union {
                     return Err(Errors::from_msg_srcs(
                         MSG_NOT_UNION.to_string(),
                         &[&ei.source],
@@ -722,7 +722,7 @@ impl TypeCheckContext {
                 let mut new_pat_vals = vec![];
                 for (pat, val) in pat_vals {
                     // Check if the union variant name is valid.
-                    let pat = if pat.is_union() { pat.validate_variant_name(&union_tycon, &union_ti)? } else { pat.clone() };
+                    let pat = if pat.is_union() { pat.validate_variant_name(&cond_tycon, &cond_ti)? } else { pat.clone() };
 
                     // Check if the type of the pattern matches the type of the condition.
                     let (pat, var_ty) = pat.get_typed(self)?;
@@ -753,8 +753,8 @@ impl TypeCheckContext {
 
                 // Check if the match cases are exhaustive.
                 let pats = new_pat_vals.iter().map(|(pat, _)| pat.clone());
-                Pattern::validate_match_cases_exhaustiveness(&union_tycon, &union_ti, &ei.source, pats)?;
-                
+                Pattern::validate_match_cases_exhaustiveness(&cond_tycon, &cond_ti, &ei.source, pats)?;
+
                 Ok(ei.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
             },
             Expr::If(cond, then_expr, else_expr) => {

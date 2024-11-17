@@ -358,21 +358,21 @@ impl PatternNode {
     // Validate the variant name of `Union` pattern.
     pub fn validate_variant_name(
         self: &PatternNode,
-        union_tycon: &TyCon,
-        union_ti: &TyConInfo,
+        cond_tycon: &TyCon,
+        cond_ti: &TyConInfo,
     ) -> Result<Arc<PatternNode>, Errors> {
-        let name_space = union_tycon.name.to_namespace();
+        let name_space = cond_tycon.name.to_namespace();
         match &self.pattern {
             Pattern::Union(variant, subpat) => {
                 // Check the variant name.
                 let is_ns_ok = variant.namespace.is_suffix_of(&name_space);
-                let is_name_ok = union_ti.fields.iter().any(|f| &f.name == &variant.name);
+                let is_name_ok = cond_ti.fields.iter().any(|f| &f.name == &variant.name);
                 if !is_ns_ok || !is_name_ok {
                     return Err(Errors::from_msg_srcs(
                         format!(
-                            "Variant `{}` is not a member of union `{}`.",
+                            "`{}` is not a variant of union `{}`.",
                             variant.to_string(),
-                            union_tycon.name.to_string()
+                            cond_tycon.name.to_string()
                         ),
                         &[&self.info.source],
                     ));
@@ -503,12 +503,12 @@ impl Pattern {
 
     // Checks if patterns which are used in `match` syntax are exhaustive.
     pub fn validate_match_cases_exhaustiveness(
-        union_tc: &TyCon,
-        union_ti: &TyConInfo,
+        cond_tc: &TyCon,
+        cond_ti: &TyConInfo,
         match_src: &Option<Span>,
         pats: impl Iterator<Item = Arc<PatternNode>>,
     ) -> Result<(), Errors> {
-        let mut variants = union_ti.fields.iter().map(|f| &f.name).collect::<Set<_>>();
+        let mut variants = cond_ti.fields.iter().map(|f| &f.name).collect::<Set<_>>();
         let mut otherwise: Option<Arc<PatternNode>> = None;
         for pat in pats {
             if let Some(otherwise) = otherwise {
@@ -525,9 +525,9 @@ impl Pattern {
                     if !variants.contains(&variant.name) {
                         return Err(Errors::from_msg_srcs(
                             format!(
-                                "Variant `{}` is not a member of union `{}`.",
+                                "`{}` is not a variant of union `{}`.",
                                 variant.to_string(),
-                                union_tc.to_string()
+                                cond_tc.to_string()
                             ),
                             &[&pat.info.source],
                         ));
@@ -542,17 +542,19 @@ impl Pattern {
         if otherwise.is_none() && !variants.is_empty() {
             let msg = if variants.len() == 1 {
                 format!(
-                    "Variant `{}` is not covered.",
-                    variants.iter().next().unwrap()
+                    "Variant `{}` of union `{}` is not covered.",
+                    variants.iter().next().unwrap(),
+                    cond_tc.to_string()
                 )
             } else {
                 format!(
-                    "Variants {} are not covered.",
+                    "Variants {} of union `{}` are not covered.",
                     variants
                         .iter()
                         .map(|var| format!("`{}`", var))
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join(", "),
+                    cond_tc.to_string()
                 )
             };
             return Err(Errors::from_msg_srcs(msg, &[&match_src]));

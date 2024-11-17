@@ -7142,11 +7142,189 @@ pub fn test_match_boxed_union() {
     test_source(&source, Configuration::develop_compiler_mode());
 }
 
-// TODO: test non-exhaustive pattern.
-// TODO: test otherwise pattern.
-// TODO: variant name confliction; resolve by type annotation.
-// TODO: variant name error: bad namespace.
-// TODO: single match case.
+#[test]
+pub fn test_match_non_exhaustive() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x = Option::some(42);
+        let v = match x {
+            some(v) => v;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Variant `none` of union `Std::Option` is not covered.",
+    );
+}
+
+#[test]
+pub fn test_match_otherwise() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x = Option::none();
+        let v = match x {
+            some(v) => v;
+            x => if x.is_none { 42 } else { 0 };
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_early_otherwise() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x = Option::none();
+        let v = match x {
+            x => if x.is_none { 42 } else { 0 };
+            some(v) => v;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Pattern after `x` is unreachable.",
+    );
+}
+
+#[test]
+pub fn test_match_bad_variant() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x = Option::none();
+        let v = match x {
+            foo(v) => v;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "`foo` is not a variant of union `Std::Option`.",
+    );
+}
+
+#[test]
+pub fn test_match_variant_with_namespace() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x = Option::none();
+        let v = match x {
+            Option::some(v) => v;
+            Option::none(_) => 42;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_match_variant_with_bad_namespace() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x = Option::none();
+        let v = match x {
+            LoopResult::some(v) => v;
+            Option::none(_) => 42;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "`LoopResult::some` is not a variant of union `Std::Option`.",
+    );
+}
+
+#[test]
+pub fn test_match_single_variant() {
+    let source = r##"
+    module Main;
+
+    type MyPair a b = box struct { first : a, second : b };
+
+    main: IO ();
+    main = (
+        let x = Option::some(MyPair { first: 6, second: 7 });
+        let v = match x {
+            some(MyPair { first: a, second: b }) => a * b;
+            none(_) => 0;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        let x = Option::some((6, 7));
+        let v = match x {
+            some((a, b)) => a * b;
+            none(_) => 0;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_tuple_or_struct_in_match() {
+    let source = r##"
+    module Main;
+
+    type MyUnion = box union { a : I64 };
+
+    main: IO ();
+    main = (
+        let x = MyUnion::a(42);
+        let v = match x {
+            a(v) => v;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
 
 #[test]
 pub fn test_external_projects() {
