@@ -998,16 +998,6 @@ Appends an array to an array.
 
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 
-### `borrow_ptr : (Std::Ptr -> b) -> Std::Array a -> b`
-
-Calls a function with a pointer to the memory region where elements are stored.
-
-### `borrow_ptr_io : (Std::Ptr -> Std::IO b) -> Std::Array a -> Std::IO b`
-
-Calls an IO action with a pointer to the memory region where elements are stored.
-
-TODO: Define more general version (e.g., for any state-like monads?).
-
 ### `empty : Std::I64 -> Std::Array a`
 
 Creates an empty array with specified capacity.

@@ -326,51 +326,7 @@ impl Substitution {
     }
 }
 
-// impl Unification {
-//     pub fn is_empty(&self) -> bool {
-//         self.substitution.data.is_empty() && self.equalities.is_empty()
-//     }
-
-//     pub fn single_substitution(var: &str, ty: Arc<TypeNode>) -> Unification {
-//         Unification {
-//             substitution: Substitution::single(var, ty),
-//             equalities: vec![],
-//         }
-//     }
-
-//     // pub fn from_equality(
-//     //     eq: Equality,
-//     //     kind_map: &Map<TyCon, Arc<Kind>>,
-//     //     assoc_tys: &Map<FullName, Vec<EqualityScheme>>,
-//     // ) -> Result<Unification, UnificationErr> {
-//     //     let mut uni = Self::default();
-//     //     uni.add_equality(eq, kind_map, assoc_tys)?;
-//     //     Ok(uni)
-//     // }
-
-//     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
-//         self.substitution.substitute_type(ty)
-//     }
-// }
-
-// impl TypeResolver {
-//     // Set type environment.
-//     pub fn set_type_env(&mut self, type_env: TypeEnv) {
-//         self.kind_map = type_env.kinds();
-//     }
-
-//     // Apply substitution to type.
-//     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
-//         self.unification.substitute_type(ty)
-//     }
-
-//     // Apply substitution to a predicate.
-//     pub fn substitute_predicate(&self, p: &mut Predicate) {
-//         self.unification.substitution.substitute_predicate(p)
-//     }
-// }
-
-// In TypeCheckContext::instantiate_scheme, how constraints of type scheme is handled?
+// In TypeCheckContext::instantiate_scheme, how constraints of type scheme should be handled?
 pub enum ConstraintInstantiationMode {
     // Require the constraints to be satisfied.
     Require,

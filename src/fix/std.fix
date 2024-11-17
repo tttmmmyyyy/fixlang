@@ -138,18 +138,6 @@ namespace Array {
         ))
     );
 
-    // Calls a function with a pointer to the memory region where elements are stored.
-    borrow_ptr : (Ptr -> b) -> Array a -> b;
-    borrow_ptr = |f, arr| arr.do_with_retained(|arr| f(arr._get_boxed_ptr));
-
-    // Calls an IO action with a pointer to the memory region where elements are stored.
-    // 
-    // TODO: Define more general version (e.g., for any state-like monads?).
-    borrow_ptr_io : (Ptr -> IO b) -> Array a -> IO b;
-    borrow_ptr_io = |act, arr| IO::from_runner $ |ios| (
-        arr.borrow_ptr(|ptr| (act(ptr).@runner)(ios))
-    );
-
     // Finds the first index at which the element satisfies a condition.
     find_by : (a -> Bool) -> Array a -> Option I64;
     find_by = |cond, arr| (
@@ -750,7 +738,7 @@ namespace IO {
     write_bytes = |handle, array| IOFail::from_io_result $ do {
         let file_ptr = *handle.get_file_ptr;
         let arr_size = array.get_size;
-        array.borrow_ptr_io(|array_buf|
+        array.borrow_boxed_io(|array_buf|
             let written = *FFI_CALL_IO[I64 fwrite(Ptr, I64, I64, Ptr), array_buf, 1, arr_size, file_ptr];
             if written < arr_size { pure $ Result::err $ "`Std::IO::write_bytes` failed!: some error occurred in `fwrite`." };
             pure $ Result::ok()
@@ -1424,7 +1412,7 @@ namespace String {
     _unsafe_from_c_str : Array U8 -> String;
     _unsafe_from_c_str = |buf| (
         // Return length.
-        let len = buf.borrow_ptr(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
+        let len = buf.borrow_boxed(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
         let buf = buf._unsafe_set_size(len + 1);
         String { _data : buf }
     );
@@ -1443,7 +1431,7 @@ namespace String {
 
     // Call a function with a null-terminated C string.
     borrow_c_str : (Ptr -> a) -> String -> a;
-    borrow_c_str = |f, str| str.@_data.borrow_ptr(f);
+    borrow_c_str = |f, str| str.@_data.borrow_boxed(f);
 
     // Call an IO action with a null-terminated C string.
     borrow_c_str_io : (Ptr -> IO a) -> String -> IO a;
@@ -1936,7 +1924,7 @@ impl U8 : FromBytes {
         if bs.get_size != 1 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U8."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[U8 fixruntime_u8_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
 }
 impl U8 : ToString {
@@ -1962,7 +1950,7 @@ impl U16 : FromBytes {
         if bs.get_size != 2 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U16."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[U16 fixruntime_u16_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
 }
 impl U16 : ToString {
@@ -1988,7 +1976,7 @@ impl U32 : FromBytes {
         if bs.get_size != 4 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U32."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
 }
 impl U32 : ToString {
@@ -2014,7 +2002,7 @@ impl U64 : FromBytes {
         if bs.get_size != 8 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U64."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
 }
 impl U64 : ToString {
@@ -2049,7 +2037,7 @@ impl I8 : FromBytes {
         if bs.get_size != 1 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I8."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[I8 fixruntime_u8_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
 }
 impl I8 : ToString {
@@ -2075,7 +2063,7 @@ impl I16 : FromBytes {
         if bs.get_size != 2 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I16."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[I16 fixruntime_u16_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
 }
 impl I16 : ToString {
@@ -2101,7 +2089,7 @@ impl I32 : FromBytes {
         if bs.get_size != 4 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I32."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[I32 fixruntime_u32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
 }
 impl I32 : ToString {
@@ -2127,7 +2115,7 @@ impl I64 : FromBytes {
         if bs.get_size != 8 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I64."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[I64 fixruntime_u64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
 }
 impl I64 : ToString {
@@ -2162,7 +2150,7 @@ impl F32 : FromBytes {
         if bs.get_size != 4 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F32."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[F32 fixruntime_f32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[F32 fixruntime_f32_from_bytes(Ptr), ptr])
     );
 }
 impl F32 : ToString {
@@ -2222,7 +2210,7 @@ impl F64 : FromBytes {
         if bs.get_size != 8 {
             Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F64."
         };
-        Result::ok $ bs.borrow_ptr(|ptr| FFI_CALL[F64 fixruntime_f64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[F64 fixruntime_f64_from_bytes(Ptr), ptr])
     );
 }
 impl F64 : ToString {

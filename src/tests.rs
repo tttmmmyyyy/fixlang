@@ -2234,7 +2234,7 @@ pub fn test_ffi_call_io() {
 
             main : IO ();
             main = (
-                "Hello C function! Number = %d\n".@_data.borrow_ptr_io(|ptr|
+                "Hello C function! Number = %d\n".@_data.borrow_boxed_io(|ptr|
                     FFI_CALL_IO[I32 printf(Ptr, I32), ptr, 42.to_I32]
                 );;
                 pure()
