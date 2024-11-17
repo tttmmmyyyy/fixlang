@@ -7327,6 +7327,39 @@ pub fn test_tuple_or_struct_in_match() {
 }
 
 #[test]
+pub fn test_match_on_nonunion_types() {
+    let source = r##"
+    module Main;
+
+    type MyStruct = box struct { a : I64, b : I64 };
+
+    main: IO ();
+    main = (
+        let x = Box::make(42);
+        let v = match x {
+            y => y.@value;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        let v = match (6, 7) {
+            (x, y) => x * y;
+        };
+        assert_eq(|_|"", v, 42);;
+
+        let x = MyStruct { a: 6, b: 7 };
+        let v = match x {
+            MyStruct { a: x, b: y } => x * y;
+        };
+        assert_eq(|_|"", v, 42);;
+        assert_eq(|_|"", x.@a * x.@b, 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",

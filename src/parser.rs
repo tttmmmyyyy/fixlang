@@ -2086,6 +2086,8 @@ fn parse_pattern_case(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNo
     match pair.as_rule() {
         Rule::pattern_var => parse_pattern_var(pair, ctx),
         Rule::pattern_union => parse_pattern_union(pair, ctx),
+        Rule::pattern_struct => parse_pattern_struct(pair, ctx),
+        Rule::pattern_tuple => parse_pattern_tuple(pair, ctx),
         _ => unreachable!(),
     }
     .set_source(span)
