@@ -26,7 +26,7 @@
   - [Iterators](#iterators)
   - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
   - [A bit on IO (or monads)](#a-bit-on-io-or-monads)
-- [Details on language](#details-on-language)
+- [More on language](#more-on-language)
   - [Boolean values and literals](#boolean-values-and-literals)
   - [Numbers and literals](#numbers-and-literals)
   - [Strings and literals](#strings-and-literals)
@@ -735,7 +735,7 @@ In this code, two IO actions created by two `println` are combined by double-sem
 
 How to combine IO actions and more generally, how to combine monads to create more complex monads are explained in [Monads](#monads).
 
-# Details on language
+# More on language
 
 ## Boolean values and literals
 
@@ -1083,23 +1083,49 @@ main = (
 
 ## Pattern matching
 
-Pattern matching are available in let-binding or function definition.
+Pattern matching is a syntax for extracting values from structs (especially, tuples) or unions.
+Pattern matching for structs can be used in function arguments or let-bindings. 
+Pattern matching for unions can be used in `match` expressions.
+
+Examples:
+```
+module Main;
+
+type IntBool = struct { i : I64, b : Bool };
+
+to_pair : IntBool -> (I64, Bool);
+to_pair = |IntBool { i : x, b : y }| (x, y); // Pattern matching for function argument
+
+main : IO ();
+main = (
+    let int_bool = IntBool { i : 42, b : true };
+    let (i, b) = to_pair(int_bool); // Pattern matching at let-binding
+    println $ "(" + i.to_string + ", " + b.to_string + ")"
+);
+```
 
 ```
 module Main;
 
-type IntBool = struct { int_field : I64, bool_field : Bool };
-
-destructure : IntBool -> (I64, Bool);
-destructure = |IntBool { int_field : i, bool_field : b }| (i, b); // Pattern matching on function definition
-
 main : IO ();
 main = (
-    let (i, b) = destructure $ IntBool { int_field : 42, bool_field : true }; // Pattern matching on let-binding
-    println $ "(" + i.to_string + ", " + b.to_string + ")"
+    let opt = Option::some(42);
+
+    let x = match opt {
+        some(v) => v
+        none(_) => 0,
+    };
+    assert_eq(|_|"", x, 42);;
+
+    let x = match opt {
+        some(v) => v
+        _ => 0, // Any value can be matched by a variable pattern. Recall that in Fix `_` is NOT a special wildcard symbol, but just a variable name.
+    };
+    assert_eq(|_|"", x, 42);;
+
+    pure()
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCnR5cGUgSW50Qm9vbCA9IHN0cnVjdCB7IGludF9maWVsZCA6IEk2NCwgYm9vbF9maWVsZCA6IEJvb2wgfTsNCg0KZGVzdHJ1Y3R1cmUgOiBJbnRCb29sIC0%2BIChJNjQsIEJvb2wpOw0KZGVzdHJ1Y3R1cmUgPSB8SW50Qm9vbCB7IGludF9maWVsZCA6IGksIGJvb2xfZmllbGQgOiBiIH18IChpLCBiKTsgLy8gUGF0dGVybiBtYXRjaGluZyBvbiBmdW5jdGlvbiBkZWZpbml0aW9uDQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgbGV0IChpLCBiKSA9IGRlc3RydWN0dXJlICQgSW50Qm9vbCB7IGludF9maWVsZCA6IDQyLCBib29sX2ZpZWxkIDogdHJ1ZSB9OyAvLyBQYXR0ZXJuIG1hdGNoaW5nIG9uIGxldC1iaW5kaW5nDQogICAgcHJpbnRsbiAkICIoIiArIGkudG9fc3RyaW5nICsgIiwgIiArIGIudG9fc3RyaW5nICsgIikiDQopOw%3D%3D)
 
 ## Traits
 
