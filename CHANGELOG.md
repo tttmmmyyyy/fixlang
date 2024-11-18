@@ -25,6 +25,7 @@
 - Add `Std::Box::make` function.
 - Support building dynamic libraries (use `--output-type dylib`).
 - Add `match` syntax.
+- Change the bit width of reference counter from 64 to 32.
 
 ### Changed
 

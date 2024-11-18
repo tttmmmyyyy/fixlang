@@ -1037,12 +1037,12 @@ impl ObjectType {
 }
 
 pub fn refcnt_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
-    context.i64_type()
+    context.i32_type()
 }
 
 pub fn refcnt_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
     builder
-        .create_basic_type("<refcnt>", 64, DW_ATE_UNSIGNED, 0)
+        .create_basic_type("<refcnt>", 32, DW_ATE_UNSIGNED, 0)
         .unwrap()
         .as_type()
 }
