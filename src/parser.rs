@@ -1557,13 +1557,16 @@ fn parse_expr_match(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
     let mut cases = vec![];
     while pairs.peek().is_some() {
         let pair = pairs.next().unwrap();
-        let pat = parse_pattern_case(pair, ctx);
+        let pat = parse_pattern_case(pair, ctx); // Parse pattern.
         let pair = pairs.next().unwrap();
         assert_eq!(pair.as_rule(), Rule::match_arrow); // Skip `=>`.
         let pair = pairs.next().unwrap();
-        let expr = parse_expr_with_new_do(pair, ctx)?;
-        let pair = pairs.next().unwrap();
-        assert_eq!(pair.as_rule(), Rule::semicolon); // Skip `;`.
+        let expr = parse_expr_with_new_do(pair, ctx)?; // Parse value expression.
+        if pairs.peek().is_some() {
+            // Skip `,` if exists.
+            let pair = pairs.next().unwrap();
+            assert_eq!(pair.as_rule(), Rule::comma_);
+        }
         cases.push((pat, expr));
     }
     // Forbid empty match.
@@ -1589,7 +1592,7 @@ fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
     let mut exprs = vec![];
     let mut extra_comma = false;
     for pair in pairs {
-        if pair.as_rule() == Rule::extra_comma {
+        if pair.as_rule() == Rule::comma_ {
             extra_comma = true;
             break;
         }
@@ -2045,7 +2048,7 @@ fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     let mut types = vec![];
     let mut extra_comma = false;
     for pair in pair.into_inner() {
-        if pair.as_rule() == Rule::extra_comma {
+        if pair.as_rule() == Rule::comma_ {
             extra_comma = true;
             break;
         }
@@ -2252,7 +2255,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::import_items_positive => "`::`".to_string(),
         Rule::import_items_negative => "`hiding`".to_string(),
         Rule::semicolon => "`;`".to_string(),
-        Rule::extra_comma => ",".to_string(),
+        Rule::comma_ => ",".to_string(),
         Rule::export_symbol => "FFI_EXPORT".to_string(),
         Rule::global_defns => "definitions".to_string(),
         Rule::exported_c_function_name => "C function name".to_string(),

@@ -7009,38 +7009,38 @@ pub fn test_match_option() {
         // Value is unboxed 
         let x = Option::some(42);
         let v = match x {
-            some(v) => v;
-            none(_) => 0;
+            some(v) => v,
+            none(_) => 0
         };
         assert_eq(|_|"", v, 42);;
 
         let x = Option::none();
         let v = match x {
-            some(v) => v;
-            none(_) => 0;
+            some(v) => v,
+            none(_) => 0
         };
         assert_eq(|_|"", v, 0);;
 
         // Value is boxed
         let x = Option::some(Box::make(42));
         let v = match x {
-            some(v) => v;
-            none(_) => Box::make(0);
+            some(v) => v,
+            none(_) => Box::make(0)
         };
         assert_eq(|_|"", v.@value, 42);;
 
         let x : Option (Box I64) = Option::none();
         let v = match x {
-            some(v) => v;
-            none(_) => Box::make(0);
+            some(v) => v,
+            none(_) => Box::make(0)
         };
         assert_eq(|_|"", v.@value, 0);;
 
         // Value is boxed and shared
         let x = Option::some(Box::make(42));
         let v = match x {
-            some(v) => v;
-            none(_) => Box::make(0);
+            some(v) => v,
+            none(_) => Box::make(0)
         };
         assert_eq(|_|"", v.@value, 42);;
         assert_eq(|_|"", x.as_some.@value, 42);;
@@ -7048,19 +7048,39 @@ pub fn test_match_option() {
         // Value is a closure
         let x = Option::some(|x| x + 1);
         let v = match x {
-            some(v) => v(41);
-            none(_) => 0;
+            some(v) => v(41),
+            none(_) => 0
         };
         assert_eq(|_|"", v, 42);;
 
         // Value is a closure and shared
         let x = Option::some(|x| x + 1);
         let v = match x {
-            some(v) => v(41);
-            none(_) => 0;
+            some(v) => v(41),
+            none(_) => 0
         };
         assert_eq(|_|"", v, 42);;
         assert_eq(|_|"", (x.as_some)(41), 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_match_extra_comma() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x = Option::some(42);
+        let v = match x {
+            some(v) => v,
+            none(_) => 0, // Extra comma
+        };
+        assert_eq(|_|"", v, 42);;
 
         pure()
     );
@@ -7083,38 +7103,38 @@ pub fn test_match_boxed_union() {
         // Value is unboxed
         let x = MyEither::left(42);
         let v = match x {
-            left(v) => v;
-            right(_ : Bool) => 0;
+            left(v) => v,
+            right(_ : Bool) => 0
         };
         assert_eq(|_|"", v, 42);;
 
         let x = MyEither::right(false);
         let v = match x {
-            left(v) => v;
-            right(_) => 0;
+            left(v) => v,
+            right(_) => 0
         };
         assert_eq(|_|"", v, 0);;
 
         // Value is boxed
         let x = MyEither::left(Box::make(42));
         let v = match x {
-            left(v) => v;
-            right(_ : Bool) => Box::make(0);
+            left(v) => v,            
+            right(_ : Bool) => Box::make(0)
         };
         assert_eq(|_|"", v.@value, 42);;
 
         let x = MyEither::right(false);
         let v = match x {
-            left(v) => v;
-            right(_ : Bool) => Box::make(0);
+            left(v) => v,
+            right(_ : Bool) => Box::make(0)
         };
         assert_eq(|_|"", v.@value, 0);;
 
         // Value is boxed and shared
         let x = MyEither::left(Box::make(42));
         let v = match x {
-            left(v) => v;
-            right(_ : Bool) => Box::make(0);
+            left(v) => v,
+            right(_ : Bool) => Box::make(0)
         };
         assert_eq(|_|"", v.@value, 42);;
         assert_eq(|_|"", x.as_left.@value, 42);;
@@ -7122,16 +7142,16 @@ pub fn test_match_boxed_union() {
         // Value is a closure
         let x = MyEither::left(|x| x + 1);
         let v = match x {
-            left(v) => v(41);
-            right(_ : Bool) => 0;
+            left(v) => v(41),
+            right(_ : Bool) => 0
         };
         assert_eq(|_|"", v, 42);;
 
         // Value is a closure and shared
         let x = MyEither::left(|x| x + 1);
         let v = match x {
-            left(v) => v(41);
-            right(_ : Bool) => 0;
+            left(v) => v(41),
+            right(_ : Bool) => 0
         };
         assert_eq(|_|"", v, 42);;
         assert_eq(|_|"", (x.as_left)(41), 42);;
@@ -7151,7 +7171,7 @@ pub fn test_match_non_exhaustive() {
     main = (
         let x = Option::some(42);
         let v = match x {
-            some(v) => v;
+            some(v) => v
         };
         assert_eq(|_|"", v, 42);;
 
@@ -7174,8 +7194,8 @@ pub fn test_match_otherwise() {
     main = (
         let x = Option::none();
         let v = match x {
-            some(v) => v;
-            x => if x.is_none { 42 } else { 0 };
+            some(v) => v,
+            x => if x.is_none { 42 } else { 0 }
         };
         assert_eq(|_|"", v, 42);;
 
@@ -7194,8 +7214,8 @@ pub fn test_early_otherwise() {
     main = (
         let x = Option::none();
         let v = match x {
-            x => if x.is_none { 42 } else { 0 };
-            some(v) => v;
+            x => if x.is_none { 42 } else { 0 },
+            some(v) => v
         };
         assert_eq(|_|"", v, 42);;
 
@@ -7218,7 +7238,7 @@ pub fn test_match_bad_variant() {
     main = (
         let x = Option::none();
         let v = match x {
-            foo(v) => v;
+            foo(v) => v
         };
         assert_eq(|_|"", v, 42);;
 
@@ -7241,8 +7261,8 @@ pub fn test_match_variant_with_namespace() {
     main = (
         let x = Option::none();
         let v = match x {
-            Option::some(v) => v;
-            Option::none(_) => 42;
+            Option::some(v) => v,
+            Option::none(_) => 42
         };
         assert_eq(|_|"", v, 42);;
 
@@ -7261,8 +7281,8 @@ pub fn test_match_variant_with_bad_namespace() {
     main = (
         let x = Option::none();
         let v = match x {
-            LoopResult::some(v) => v;
-            Option::none(_) => 42;
+            LoopResult::some(v) => v,
+            Option::none(_) => 42
         };
         assert_eq(|_|"", v, 42);;
 
@@ -7287,15 +7307,15 @@ pub fn test_match_single_variant() {
     main = (
         let x = Option::some(MyPair { first: 6, second: 7 });
         let v = match x {
-            some(MyPair { first: a, second: b }) => a * b;
-            none(_) => 0;
+            some(MyPair { first: a, second: b }) => a * b,
+            none(_) => 0
         };
         assert_eq(|_|"", v, 42);;
 
         let x = Option::some((6, 7));
         let v = match x {
-            some((a, b)) => a * b;
-            none(_) => 0;
+            some((a, b)) => a * b,
+            none(_) => 0
         };
         assert_eq(|_|"", v, 42);;
 
@@ -7316,7 +7336,7 @@ pub fn test_tuple_or_struct_in_match() {
     main = (
         let x = MyUnion::a(42);
         let v = match x {
-            a(v) => v;
+            a(v) => v
         };
         assert_eq(|_|"", v, 42);;
 
@@ -7337,18 +7357,18 @@ pub fn test_match_on_nonunion_types() {
     main = (
         let x = Box::make(42);
         let v = match x {
-            y => y.@value;
+            y => y.@value
         };
         assert_eq(|_|"", v, 42);;
 
         let v = match (6, 7) {
-            (x, y) => x * y;
+            (x, y) => x * y
         };
         assert_eq(|_|"", v, 42);;
 
         let x = MyStruct { a: 6, b: 7 };
         let v = match x {
-            MyStruct { a: x, b: y } => x * y;
+            MyStruct { a: x, b: y } => x * y
         };
         assert_eq(|_|"", v, 42);;
         assert_eq(|_|"", x.@a * x.@b, 42);;
@@ -7367,8 +7387,8 @@ pub fn test_match_on_variant_for_nonunion() {
     main: IO ();
     main = (
         let v = match [] {
-            foo(_) => 0;
-            _ => 42;
+            foo(_) => 0,
+            _ => 42,
         };
         assert_eq(|_|"", v, 42);;
 

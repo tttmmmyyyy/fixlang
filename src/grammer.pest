@@ -1,7 +1,7 @@
 // === Basic rules ===
 sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
 
-extra_comma = { "," }
+comma_ = { "," }
 
 keywords = _{ ("let" | "eval" | "in" | "if" | "match" | "else" | "do" | "type" | "trait" | "impl") ~ sep+ }
 
@@ -72,7 +72,13 @@ expr_let = { "let" ~ sep+ ~ pattern_nounion ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ s
 
 match_arrow = { "=>" }
 
-expr_match = { "match" ~ sep+ ~ expr ~ sep* ~ "{" ~ (sep* ~ pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr ~ sep* ~ semicolon)* ~ sep* ~ "}" }
+expr_match = { 
+    "match" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~
+    (pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr) ~ sep* ~ 
+    (comma_ ~ sep* ~ pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr ~ sep*)* ~
+    (comma_ ~ sep*)? ~
+    "}"
+}
 
 expr_eval = { "eval" ~ sep+ ~ expr ~ sep* ~ semicolon ~ sep* ~ expr }
 
@@ -90,9 +96,15 @@ expr_do = { "do" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" }
 // - the unit value i.e., `()`
 // - tuple value e.g., `(42,)`, `(42, true)`, ... 
 // - bracketed expression e.g., `(42)`
-expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ extra_comma)?)? ~ sep* ~ ")" }
+expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ comma_)?)? ~ sep* ~ ")" }
 
-expr_make_struct = { type_tycon ~ sep* ~ "{" ~ (sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~ (sep* ~ ",")?)? ~ sep* ~ "}" }
+expr_make_struct = { 
+    type_tycon ~ sep* ~ "{" ~ (
+        sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ // First field
+        (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~  // Following fields
+        (sep* ~ ",")? // Allow extra comma
+    )? ~ sep* ~ "}"
+}
 
 // Non Left Recursive expressions
 expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_match | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
@@ -169,7 +181,7 @@ pattern_union = { (capital_name ~ "::")* ~ type_field_name ~ sep* ~ "(" ~ sep* ~
 // === Types ===
 type_expr = { type_fun }
 
-type_tuple = { "(" ~ (sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)* ~ (sep* ~ extra_comma)?)? ~ sep* ~ ")" }
+type_tuple = { "(" ~ (sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)* ~ (sep* ~ comma_)?)? ~ sep* ~ ")" }
 
 type_nlr = { type_tycon | type_var | type_tuple }
 

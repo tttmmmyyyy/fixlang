@@ -1112,14 +1112,14 @@ main = (
     let opt = Option::some(42);
 
     let x = match opt {
-        some(v) => v;
-        none(_) => 0;
+        some(v) => v,
+        none(_) => 0
     };
     assert_eq(|_|"", x, 42);;
 
     let x = match opt {
-        some(v) => v;
-        _ => 0; // Any value can be matched by a variable pattern. 
+        some(v) => v,
+        _ => 0 // Any value can be matched by a variable pattern. 
                 // Recall that in Fix `_` is NOT a special wildcard symbol, but just a variable name.
     };
     assert_eq(|_|"", x, 42);;
