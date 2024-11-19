@@ -574,7 +574,7 @@ fn handle_textdocument_did_save(
     }
 
     // Get the path of the saved file.
-    let path = PathBuf::from(params.text_document.uri.path().to_string());
+    let path = uri_to_path(&params.text_document.uri);
 
     // Send a message to the diagnostics thread.
     if let Err(e) = diag_send.send(DiagnosticsMessage::OnSaveFile(path)) {
@@ -582,6 +582,15 @@ fn handle_textdocument_did_save(
         msg.push_str(&format!("{:?}", e));
         write_log(msg.as_str());
     }
+}
+
+fn uri_to_path(uri: &lsp_types::Uri) -> PathBuf {
+    PathBuf::from(
+        urlencoding::decode(&uri.path().to_string())
+            .ok()
+            .unwrap()
+            .as_ref(),
+    )
 }
 
 // Handle "textDocument/completion" method.
@@ -763,7 +772,7 @@ fn get_node_at(
     let latest_content = uri_to_content.get(uri).unwrap();
 
     // Get the path of the file.
-    let path = PathBuf::from(uri.path().to_string());
+    let path = uri_to_path(uri);
 
     // Get the file content at the time of the last successful diagnostics.
     let saved_content = get_file_content_at_previous_diagnostics(program, &path);
@@ -1275,11 +1284,32 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
 }
 
 fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
-    let path = path.to_str();
-    if path.is_none() {
-        return Err(format!("Failed to convert a path into string: {:?}", path));
+    // URI-encode each component of the path.
+    let path = to_absolute_path(path);
+    let mut components = vec![];
+    for comp in path.components() {
+        match comp {
+            std::path::Component::Normal(comp) => {
+                let comp = comp.to_str();
+                if comp.is_none() {
+                    return Err(format!("Failed to convert a path into string: {:?}", path));
+                }
+                let comp = urlencoding::encode(comp.unwrap()).to_string();
+                components.push(comp);
+            }
+            std::path::Component::Prefix(prefix) => {
+                let comp = prefix.as_os_str().to_str();
+                if comp.is_none() {
+                    return Err(format!("Failed to convert a path into string: {:?}", path));
+                }
+                components.push(comp.unwrap().to_string());
+            }
+            std::path::Component::RootDir => {}
+            std::path::Component::CurDir => unreachable!(),
+            std::path::Component::ParentDir => unreachable!(),
+        }
     }
-    let path = "file://".to_string() + path.unwrap();
+    let path = "file:///".to_string() + components.join("/").as_str();
     let uri = lsp_types::Uri::from_str(&path);
     if uri.is_err() {
         return Err(format!("Failed to convert a path into Uri: {:?}", path));

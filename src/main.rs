@@ -21,6 +21,7 @@ extern crate serde_json;
 extern crate serde_pickle;
 extern crate tempfile;
 extern crate toml;
+extern crate urlencoding;
 
 mod ast;
 mod borrowing_optimization;
