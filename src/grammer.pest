@@ -176,7 +176,7 @@ pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern_nounion ~ (sep* ~ "," 
 
 pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion)* ~ sep* ~ "}" }
 
-pattern_union = { (capital_name ~ "::")* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern_nounion ~ sep* ~ ")" }
+pattern_union = { (capital_name ~ "::")* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern_nounion? ~ sep* ~ ")" }
 
 // === Types ===
 type_expr = { type_fun }

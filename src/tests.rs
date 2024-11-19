@@ -7402,6 +7402,26 @@ pub fn test_match_on_variant_for_nonunion() {
 }
 
 #[test]
+pub fn test_match_omit_parentheses() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x = Option::none();
+        let v = match x {
+            some(v) => v,
+            none() => if x.is_none { 42 } else { 0 } // `none()` instead of `none(())`
+        };
+        assert_eq(|_|"", v, 42);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",

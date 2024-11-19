@@ -2149,7 +2149,11 @@ fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
     let pair = pairs.next().unwrap();
     assert_eq!(pair.as_rule(), Rule::type_field_name);
     let variant = FullName::new(&NameSpace::new(names), pair.as_str());
-    let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
+    let pat = if let Some(pair) = pairs.next() {
+        parse_pattern_nounion(pair, ctx)
+    } else {
+        PatternNode::make_struct(tycon(make_tuple_name(0 as u32)), vec![])
+    };
     PatternNode::make_union(variant, pat).set_source(span)
 }
 

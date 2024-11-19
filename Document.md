@@ -1119,6 +1119,12 @@ main = (
 
     let x = match opt {
         some(v) => v,
+        none() => 0 // By a special syntax, you can omit the variable name for a variant of type `()`.
+    };
+    assert_eq(|_|"", x, 42);;
+
+    let x = match opt {
+        some(v) => v,
         _ => 0 // Any value can be matched by a variable pattern. 
                 // Recall that in Fix `_` is NOT a special wildcard symbol, but just a variable name.
     };
