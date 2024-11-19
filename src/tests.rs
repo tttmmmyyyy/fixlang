@@ -5570,7 +5570,7 @@ pub fn test_associated_type_collects() {
     
     trait c : Collects {
         type Elem c;
-        empty : Elem c;
+        empty : c;
         insert : Elem c -> c -> c;
         to_iter : c -> Iterator (Elem c);
     }
@@ -5588,6 +5588,9 @@ pub fn test_associated_type_collects() {
         insert = |x, xs| xs.push_front(x);
         to_iter = |xs| xs;
     }
+
+    triple : [c : Collects, Elem c = e] e -> e -> e -> c;
+    triple = |x, y, z| Collects::empty.insert(x).insert(y).insert(z);
 
     extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
     extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
@@ -5624,12 +5627,12 @@ pub fn test_associated_type_collects() {
     main = (
         assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);;
         assert_eq(|_|"", Iterator::empty.insert(3).insert(2).insert(1).to_array, [1, 2, 3]);;
-        assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]), [1, 2, 3, 4, 5, 6]);;
-        assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6].Collects::to_iter), [1, 2, 3, 4, 5, 6]);;
-        assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6]).to_array, [6, 5, 4, 1, 2, 3]);;
-        assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6].Collects::to_iter).to_array, [6, 5, 4, 1, 2, 3]);;
-        assert_eq(|_|"", [1, 2, 3].has_equal_elements([1, 2, 3]), true);;
-        assert_eq(|_|"", [1, 2, 3].stringify, "1, 2, 3");;
+        assert_eq(|_|"", triple(1, 2, 3).extend([4, 5, 6]), [1, 2, 3, 4, 5, 6]);;
+        assert_eq(|_|"", triple(1, 2, 3).extend([4, 5, 6].Collects::to_iter), [1, 2, 3, 4, 5, 6]);;
+        assert_eq(|_|"", triple(1, 2, 3).Collects::to_iter.extend([4, 5, 6]).to_array, [6, 5, 4, 1, 2, 3]);;
+        assert_eq(|_|"", triple(1, 2, 3).Collects::to_iter.extend([4, 5, 6].Collects::to_iter).to_array, [6, 5, 4, 1, 2, 3]);;
+        assert_eq(|_|"", triple(1, 2, 3).has_equal_elements([1, 2, 3]), true);;
+        assert_eq(|_|"", triple(1, 2, 3).stringify, "1, 2, 3");;
         assert_eq(|_|"", Wrapper { data : [false, true, true] }.to_string, "false, true, true");;
         assert_eq(|_|"", Wrapper { data : [false, true, true] }.Collects::to_iter.to_array, [false, true, true]);;
         assert_eq(|_|"", [1, 2, 3].sum_elements1, 6);;
