@@ -4,7 +4,8 @@
 /main.ll
 /examples/*.o
 .fixlang
-a.out
+*.out
 before_opt.ll
 after_opt.ll
 benchmark/data_copied.csv
+cachegrind.out.*

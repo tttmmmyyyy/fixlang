@@ -1,0 +1,15 @@
+module Main;
+
+main : IO ();
+main = (
+    let input = Path::parse("benchmark/data.csv").as_some;
+    let output = Path::parse("benchmark/data_copied.csv").as_some;
+    with_file(output, "w", |out_file| (
+        with_file(input, "r", |in_file| (
+            loop_lines_io(in_file, (), |_, line| (
+                +write_string(out_file, line);
+                continue_m $ ()
+            ))
+        ))
+    )).try(exit_with_msg(1))
+);

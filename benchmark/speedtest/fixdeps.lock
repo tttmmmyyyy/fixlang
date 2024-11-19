@@ -1,0 +1,10 @@
+proj_file_hash = "90d5b2047de8b38bd5de2b2a41c35c3e"
+
+[[dependencies]]
+name = "random"
+version = "0.1.1"
+path = ".fixlang/deps/random_0.1.1"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/fixlang-random.git"
+rev = "b77979767813d7cabff93e36c7516a8f8f8e90de"
