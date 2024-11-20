@@ -29,7 +29,7 @@ ax2.plot(commit_hashes, df['memory_accesses'],
 ax2.tick_params(axis='y', labelcolor='tab:red')
 
 # グラフのタイトル
-plt.title('Instructions and Memory Accesses vs Commit Hash')
+plt.title('Speedtest Result')
 
 # グラフを表示
 plt.xticks(rotation=45)
