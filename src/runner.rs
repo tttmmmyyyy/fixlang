@@ -449,9 +449,6 @@ fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Ar
     let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
     run_io_value(gc, &main_obj, None);
 
-    // Perform leak check
-    gc.check_leak();
-
     // Return main function.
     gc.builder()
         .build_return(Some(&gc.context.i32_type().const_int(0, false)));
@@ -671,11 +668,6 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
             }
         }
         libs_opts.push(format!("-l{}", lib_name));
-    }
-    if config.sanitize_memory {
-        libs_opts.push("-Wl,-rpath=./sanitizer".to_string());
-        libs_opts.push("-Wl,-Bdynamic".to_string());
-        libs_opts.push("-lfixsanitizer".to_string());
     }
 
     // Build runtime.c to object file.

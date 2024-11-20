@@ -5,11 +5,6 @@ use super::*;
 pub const RUNTIME_ABORT: &str = "abort";
 pub const RUNTIME_EPRINT: &str = "fixruntime_eprint";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
-pub const RUNTIME_REPORT_MALLOC: &str = "report_malloc";
-pub const RUNTIME_REPORT_RETAIN: &str = "report_retain";
-pub const RUNTIME_REPORT_RELEASE: &str = "report_release";
-pub const RUNTIME_REPORT_MARK_GLOBAL: &str = "report_mark_global";
-pub const RUNTIME_CHECK_LEAK: &str = "check_leak";
 pub const RUNTIME_RETAIN_BOXED_OBJECT: &str = "fixruntime_retain_obj";
 pub const RUNTIME_RELEASE_BOXED_OBJECT: &str = "fixruntime_release_obj";
 pub const RUNTIME_MARK_GLOBAL_BOXED_OBJECT: &str = "fixruntime_mark_global_obj";
@@ -25,13 +20,6 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: Build
     build_abort_function(gc, mode);
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
-    if gc.config.sanitize_memory {
-        build_report_malloc_function(gc, mode);
-        build_report_retain_function(gc, mode);
-        build_report_release_function(gc, mode);
-        build_check_leak_function(gc, mode);
-        build_report_mark_global_function(gc, mode);
-    }
     build_retain_boxed_function(gc, mode);
     build_release_boxed_function(gc, mode);
     build_mark_global_boxed_object_function(gc, mode);
@@ -112,93 +100,6 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: Buil
     return;
 }
 
-fn build_report_malloc_function<'c, 'm>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_REPORT_MALLOC) {
-        return;
-    }
-
-    let fn_ty = gc.context.i64_type().fn_type(
-        &[
-            ptr_to_object_type(gc.context).into(),
-            gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
-        ],
-        false,
-    );
-    gc.module.add_function(RUNTIME_REPORT_MALLOC, fn_ty, None);
-    return;
-}
-
-fn build_report_retain_function<'c, 'm>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_REPORT_RETAIN) {
-        return;
-    }
-
-    let fn_ty = gc.context.void_type().fn_type(
-        &[
-            ptr_to_object_type(gc.context).into(),
-            obj_id_type(gc.context).into(),
-        ],
-        false,
-    );
-    gc.module.add_function(RUNTIME_REPORT_RETAIN, fn_ty, None);
-    return;
-}
-
-fn build_report_release_function<'c, 'm>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_REPORT_RELEASE) {
-        return;
-    }
-
-    let fn_ty = gc.context.void_type().fn_type(
-        &[
-            ptr_to_object_type(gc.context).into(),
-            obj_id_type(gc.context).into(),
-        ],
-        false,
-    );
-    gc.module.add_function(RUNTIME_REPORT_RELEASE, fn_ty, None);
-    return;
-}
-
-fn build_report_mark_global_function<'c, 'm>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_REPORT_MARK_GLOBAL) {
-        return;
-    }
-
-    let fn_ty = gc
-        .context
-        .void_type()
-        .fn_type(&[obj_id_type(gc.context).into()], false);
-    gc.module
-        .add_function(RUNTIME_REPORT_MARK_GLOBAL, fn_ty, None);
-    return;
-}
-
-fn build_check_leak_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
-    if mode != BuildMode::Declare {
-        return;
-    }
-    if let Some(_func) = gc.module.get_function(RUNTIME_CHECK_LEAK) {
-        return;
-    }
-
-    let fn_ty = gc.context.void_type().fn_type(&[], false);
-    gc.module.add_function(RUNTIME_CHECK_LEAK, fn_ty, None);
-    return;
-}
-
 fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
     let context = gc.context;
     let module = gc.module;
@@ -237,18 +138,6 @@ fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
     // Branch by refcnt_state.
     let (local_bb, threaded_bb, global_bb) = gc.build_branch_by_refcnt_state(obj_ptr);
 
-    // A function to genearte code to report retain to sanitizer.
-    fn report_retain_to_sanitizer<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        obj_ptr: PointerValue<'c>,
-    ) {
-        // Report retain to sanitizer.
-        if gc.config.sanitize_memory {
-            let obj_id = gc.get_obj_id(obj_ptr);
-            gc.call_runtime(RUNTIME_REPORT_RETAIN, &[obj_ptr.into(), obj_id.into()]);
-        }
-    }
-
     // Implement `local_bb`.
     gc.builder().position_at_end(local_bb);
     // Increment refcnt and return.
@@ -260,7 +149,6 @@ fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
         "",
     );
     gc.builder().build_store(ptr_to_refcnt, new_refcnt);
-    report_retain_to_sanitizer(gc, obj_ptr);
     gc.builder().build_return(None);
 
     // Implement threaded_bb.
@@ -279,7 +167,6 @@ fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
                 inkwell::AtomicOrdering::Monotonic,
             )
             .unwrap();
-        report_retain_to_sanitizer(gc, obj_ptr);
         gc.builder().build_return(None);
     }
 
@@ -338,18 +225,6 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
         .append_basic_block(release_func, "destruction_bb");
     let end_bb = gc.context.append_basic_block(release_func, "end_bb");
 
-    // A function to genearte code to report retain to sanitizer.
-    fn report_release_to_sanitizer<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        obj_ptr: PointerValue<'c>,
-    ) {
-        // Report release to sanitizer.
-        if gc.config.sanitize_memory {
-            let obj_id = gc.get_obj_id(obj_ptr);
-            gc.call_runtime(RUNTIME_REPORT_RELEASE, &[obj_ptr.into(), obj_id.into()]);
-        }
-    }
-
     // Implement local_bb.
     gc.builder().position_at_end(local_bb);
     let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
@@ -361,7 +236,6 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
         "",
     );
     gc.builder().build_store(ptr_to_refcnt, new_refcnt);
-    report_release_to_sanitizer(gc, obj_ptr);
 
     // Branch to `destruction_bb` if old_refcnt is one.
     let is_refcnt_one = gc.builder().build_int_compare(
@@ -389,7 +263,6 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
                 inkwell::AtomicOrdering::Release,
             )
             .unwrap();
-        report_release_to_sanitizer(gc, obj_ptr);
 
         // Branch to `threaded_destruction_bb` if old_refcnt is one.
         let threaded_destruction_bb = gc
@@ -561,12 +434,6 @@ fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
         gc.mark_global_one(ptr_to_obj);
     } else {
         gc.mark_threaded_one(ptr_to_obj);
-    }
-
-    if mark_global && gc.config.sanitize_memory {
-        // Report mark global to sanitizer.
-        let obj_id = gc.get_obj_id(ptr_to_obj);
-        gc.call_runtime(RUNTIME_REPORT_MARK_GLOBAL, &[obj_id.into()]);
     }
 
     gc.builder().build_return(None);

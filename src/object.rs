@@ -1053,17 +1053,6 @@ pub fn refcnt_state_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-pub fn obj_id_type<'ctx>(context: &'ctx Context) -> IntType<'ctx> {
-    context.i64_type()
-}
-
-pub fn obj_id_di_type<'ctx>(builder: &DebugInfoBuilder<'ctx>) -> DIType<'ctx> {
-    builder
-        .create_basic_type("<object id>", 64, DW_ATE_UNSIGNED, 0)
-        .unwrap()
-        .as_type()
-}
-
 pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     context.i8_type().ptr_type(AddressSpace::from(0))
 }
@@ -1092,10 +1081,6 @@ pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<
     fields.push(refcnt_type(gc.context).into());
     assert_eq!(fields.len(), CTRL_BLK_REFCNT_STATE_IDX as usize);
     fields.push(refcnt_state_type(gc.context).into());
-    if gc.config.sanitize_memory {
-        assert_eq!(fields.len(), CTRL_BLK_OBJ_ID_IDX as usize);
-        fields.push(obj_id_type(gc.context).into())
-    }
     gc.context.struct_type(&fields, false)
 }
 
@@ -1120,28 +1105,7 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DITy
             refcnt_di_type(gc.get_di_builder()),
         )
         .as_type();
-    let mut elements = vec![refcnt_member];
-    if gc.config.sanitize_memory {
-        let obj_id_ty = refcnt_type(gc.context);
-        let obj_id_size_in_bits = gc.target_data.get_bit_size(&obj_id_ty);
-        let obj_id_align_in_bits = gc.target_data.get_abi_alignment(&obj_id_ty) * 8;
-        let obj_id_offset_in_bits = gc.target_data.offset_of_element(&str_type, 1).unwrap();
-        let obj_id_member = gc
-            .get_di_builder()
-            .create_member_type(
-                gc.get_di_compile_unit().as_debug_info_scope(),
-                "<object id>",
-                gc.create_di_file(None),
-                0,
-                obj_id_size_in_bits,
-                obj_id_align_in_bits,
-                obj_id_offset_in_bits,
-                0,
-                obj_id_di_type(gc.get_di_builder()),
-            )
-            .as_type();
-        elements.push(obj_id_member);
-    }
+    let elements = vec![refcnt_member];
 
     let name = "<control block>";
     let size_in_bits = gc.target_data.get_bit_size(&str_type);
@@ -1343,7 +1307,7 @@ pub fn allocate_obj<'c, 'm>(
     capture: &Vec<Arc<TypeNode>>,         // used in dynamic object
     array_capacity: Option<IntValue<'c>>, // used in array
     gc: &mut GenerationContext<'c, 'm>,
-    name: Option<&str>,
+    _name: Option<&str>,
 ) -> Object<'c> {
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
@@ -1369,24 +1333,6 @@ pub fn allocate_obj<'c, 'm>(
                 .unwrap()
         }
     };
-
-    // If sanitize memory, create object id.
-    let mut object_id = obj_id_type(gc.context).const_int(0, false);
-    if gc.config.sanitize_memory && !object_type.is_unbox {
-        let string_ptr = name.unwrap_or("N/A");
-        let string_ptr = gc
-            .builder()
-            .build_global_string_ptr(string_ptr, "name_of_obj");
-        let string_ptr = string_ptr.as_pointer_value();
-        let string_ptr = gc.builder().build_pointer_cast(
-            string_ptr,
-            gc.context.i8_type().ptr_type(AddressSpace::from(0)),
-            "name_of_obj_i8ptr",
-        );
-        let ptr = gc.cast_pointer(ptr_to_obj, ptr_to_object_type(gc.context));
-        let obj_id = gc.call_runtime(RUNTIME_REPORT_MALLOC, &[ptr.into(), string_ptr.into()]);
-        object_id = obj_id.try_as_basic_value().unwrap_left().into_int_value();
-    }
 
     // Initialize refcnt, refcnt_state and traverser for dynamic object.
     for (i, ft) in object_type.field_types.iter().enumerate() {
@@ -1416,19 +1362,6 @@ pub fn allocate_obj<'c, 'm>(
                     ptr_to_refcnt_state,
                     refcnt_state_type(context).const_int(REFCNT_STATE_LOCAL as u64, false),
                 );
-
-                // If sanitize memory, set object id.
-                if gc.config.sanitize_memory {
-                    let ptr_to_obj_id = gc
-                        .builder()
-                        .build_struct_gep(
-                            ptr_to_control_block,
-                            CTRL_BLK_OBJ_ID_IDX,
-                            "ptr_to_obj_id",
-                        )
-                        .unwrap();
-                    gc.builder().build_store(ptr_to_obj_id, object_id);
-                }
             }
             ObjectFieldType::Ptr => {}
             ObjectFieldType::I8 => {}

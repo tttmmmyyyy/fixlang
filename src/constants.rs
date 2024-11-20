@@ -100,7 +100,6 @@ pub const REFCNT_STATE_GLOBAL: u8 = 2; // This is global object and should not b
 
 pub const CTRL_BLK_REFCNT_IDX: u32 = 0;
 pub const CTRL_BLK_REFCNT_STATE_IDX: u32 = 1;
-pub const CTRL_BLK_OBJ_ID_IDX: u32 = 2;
 
 // Paths
 pub const DOT_FIXLANG: &str = ".fixlang";

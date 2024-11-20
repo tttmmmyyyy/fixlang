@@ -130,9 +130,6 @@ pub struct Configuration {
     pub source_files: Vec<PathBuf>,
     // Object files to be linked.
     pub object_files: Vec<PathBuf>,
-    // Runs memory sanitizer to detect memory leak and invalid memory reference at early time.
-    // Requires shared library ,/sanitizer/libfixsanitizer.so.
-    pub sanitize_memory: bool,
     // Fix's optimization level.
     pub fix_opt_level: FixOptimizationLevel,
     // Linked libraries
@@ -241,7 +238,6 @@ impl Configuration {
             subcommand,
             source_files: vec![],
             object_files: vec![],
-            sanitize_memory: false,
             fix_opt_level: FixOptimizationLevel::Default, // Fix's optimization level.
             linked_libraries: vec![],
             debug_info: false,
@@ -374,11 +370,6 @@ impl Configuration {
         self.add_dyanmic_library("pthread");
     }
 
-    #[allow(dead_code)]
-    pub fn set_sanitize_memory(&mut self) {
-        self.sanitize_memory = true;
-    }
-
     pub fn set_debug_info(&mut self) {
         self.debug_info = true;
         self.set_fix_opt_level(FixOptimizationLevel::None);
@@ -418,7 +409,6 @@ impl Configuration {
     // Get hash value of the configurations that affect the object file generation.
     pub fn object_generation_hash(&self) -> String {
         let mut data = String::new();
-        data.push_str(&self.sanitize_memory.to_string());
         data.push_str(&self.fix_opt_level.to_string());
         data.push_str(&self.debug_info.to_string());
         data.push_str(&self.threaded.to_string());

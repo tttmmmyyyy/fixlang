@@ -1224,13 +1224,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.call_runtime(RUNTIME_ABORT, &[]);
     }
 
-    // Get object id of a object
-    pub fn get_obj_id(&self, ptr_to_obj: PointerValue<'c>) -> IntValue<'c> {
-        assert!(self.config.sanitize_memory);
-        self.load_obj_field(ptr_to_obj, control_block_type(self), CTRL_BLK_OBJ_ID_IDX)
-            .into_int_value()
-    }
-
     // Call a runtime function.
     pub fn call_runtime(
         &self,
@@ -2217,13 +2210,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().get_current_debug_location().unwrap(),
             self.builder().get_insert_block().unwrap(),
         );
-    }
-
-    pub fn check_leak(&mut self) {
-        if !self.config.sanitize_memory {
-            return;
-        }
-        self.call_runtime(RUNTIME_CHECK_LEAK, &[]);
     }
 
     pub fn declare_symbol(&mut self, sym: &InstantiatedSymbol) -> FunctionValue<'c> {
