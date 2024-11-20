@@ -184,7 +184,6 @@ add_scoped_no_alias_aa_pass
 add_simplify_lib_calls_pass
 add_slp_vectorize_pass
 add_strip_dead_prototypes_pass
-add_strip_symbol_pass
 add_tail_call_elimination_pass
 add_type_based_alias_analysis_pass
 '''
