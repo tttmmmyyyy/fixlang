@@ -7,7 +7,7 @@ trait c : Collects {
     // When implementing `Collects` trait for a type `c`, you need to specify the value (which is a type) `Elem c`.
     type Elem c;
     // You can use `Elem c` in trait method definitions.
-    empty : Elem c;
+    empty : c;
     insert : Elem c -> c -> c;
     to_iter : c -> Iterator (Elem c);
 }
@@ -28,6 +28,10 @@ impl Iterator a : Collects {
     to_iter = |xs| xs;
 }
 
+// Takes three elements and returns a collection containing them.
+triple : [c : Collects, Elem c = e] e -> e -> e -> c;
+triple = |x, y, z| Collects::empty.insert(x).insert(y).insert(z);
+
 // Takes two collections with the same element type, and insert all elements of the second collection to the first one.
 extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
 extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
@@ -38,6 +42,11 @@ stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
 main : IO ();
 main = (
-    assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");;
+    // You need to specify the type annotation to avoid ambiguity between `Array` and `Iterator` for the type created by `triple`.
+    assert_eq(|_|"", (triple(1, 2, 3) : Array I64).extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");;
+
+    // If you use `Iterator`, the `insert` is `push_front`, so the result is in reverse order.
+    assert_eq(|_|"", (triple(1, 2, 3) : Iterator I64).extend([4, 5, 6]).stringify, "6, 5, 4, 3, 2, 1");;
+    
     pure()
 );
