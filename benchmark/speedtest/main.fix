@@ -36,19 +36,3 @@ main = (
     assert_eq(|_|"count-primes", 1000000.prime_table.count_element(true), 78498);;
     pure()
 );
-
-
-// let init = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
-// let random = init_by_array(init);
-// let (_, time) = consumed_time_while_lazy(|_| (
-//     eval loop((0, random), |(i, random)|
-//         if i >= 80000000 {
-//             break $ ()
-//         };
-//         let (random, x) = generate_U64(random);
-//         continue $ (i + 1, random)
-//     );
-//     let n = is_prime(50000000).count(true);
-//     ()
-// ));
-// time.to_string.println
