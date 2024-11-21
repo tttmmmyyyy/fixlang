@@ -1410,7 +1410,25 @@ pub fn get_traverser_ptr<'c, 'm>(
 ) -> PointerValue<'c> {
     match create_traverser(ty, capture, gc) {
         Some(fv) => fv.as_global_value().as_pointer_value(),
-        None => ptr_to_traverser_type(gc.context).const_null(),
+        None => {
+            // Define an empty function (if there is none) and return its pointer.
+            let fv = if let Some(fv) = gc.module.get_function("fixruntime_empty_traverser") {
+                fv
+            } else {
+                let func_type = traverser_type(gc.context);
+                let func = gc.module.add_function(
+                    "fixruntime_empty_traverser",
+                    func_type,
+                    Some(Linkage::Internal),
+                );
+                let bb = gc.context.append_basic_block(func, "entry");
+                let _builder_guard = gc.push_builder();
+                gc.builder().position_at_end(bb);
+                gc.builder().build_return(None);
+                func
+            };
+            fv.as_global_value().as_pointer_value()
+        }
     }
 }
 

@@ -290,23 +290,7 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
     // Get dtor.
     let ptr_to_dtor = release_func.get_nth_param(1).unwrap().into_pointer_value();
 
-    // If dtor is null, then skip calling dtor and jump to free_bb.
-    let free_bb = gc.context.append_basic_block(release_func, "free");
-    let call_dtor_bb = gc.context.append_basic_block(release_func, "call_dtor");
-    let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-    let is_dtor_null = gc.builder().build_int_compare(
-        IntPredicate::EQ,
-        gc.builder()
-            .build_ptr_to_int(ptr_to_dtor, ptr_int_ty, "ptr_to_dtor"),
-        ptr_int_ty.const_zero(),
-        "is_dtor_null",
-    );
-    gc.builder()
-        .build_conditional_branch(is_dtor_null, free_bb, call_dtor_bb);
-
-    // Implement `call_dtor_bb`.
-    gc.builder().position_at_end(call_dtor_bb);
-    // Call dtor and jump to free_bb.
+    // Call dtor.
     let dtor_func = CallableValue::try_from(ptr_to_dtor).unwrap();
     gc.builder().build_call(
         dtor_func,
@@ -318,10 +302,8 @@ fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, 
         ],
         "call_dtor",
     );
-    gc.builder().build_unconditional_branch(free_bb);
 
     // free.
-    gc.builder().position_at_end(free_bb);
     gc.builder().build_free(obj_ptr);
     gc.builder().build_unconditional_branch(end_bb);
 
@@ -394,22 +376,6 @@ fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
     // Get pointer to traverser function.
     let ptr_to_traverser = mark_func.get_nth_param(1).unwrap().into_pointer_value();
 
-    // If traverser is null, then skip calling traverser.
-    let mark_self_bb = gc.context.append_basic_block(mark_func, "mark_self");
-    let call_traverser_bb = gc.context.append_basic_block(mark_func, "call_traverser");
-    let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-    let is_traverser_null = gc.builder().build_int_compare(
-        IntPredicate::EQ,
-        gc.builder()
-            .build_ptr_to_int(ptr_to_traverser, ptr_int_ty, "ptr_to_traverser"),
-        ptr_int_ty.const_zero(),
-        "is_traverser_null",
-    );
-    gc.builder()
-        .build_conditional_branch(is_traverser_null, mark_self_bb, call_traverser_bb);
-
-    // Call traverser to mark all subobjects as global.
-    gc.builder().position_at_end(call_traverser_bb);
     let traverser = CallableValue::try_from(ptr_to_traverser).unwrap();
     let work = if mark_global {
         TRAVERSER_WORK_MARK_GLOBAL
@@ -426,10 +392,8 @@ fn build_mark_global_or_threaded_boxed_object_function<'c, 'm>(
         ],
         "call_traverser_for_mark",
     );
-    gc.builder().build_unconditional_branch(mark_self_bb);
 
     // Mark the object itself.
-    gc.builder().position_at_end(mark_self_bb);
     if mark_global {
         gc.mark_global_one(ptr_to_obj);
     } else {
