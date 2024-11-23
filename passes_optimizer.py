@@ -211,7 +211,7 @@ def run_benchmark(timeout=10):
             return None
         else:
             # Split the output by comma and take the second element
-            int(cp.output.split(',')[1])
+            return int(cp.stdout.strip().split(',')[1])
 
     except subprocess.TimeoutExpired:
         return None
@@ -224,7 +224,7 @@ def print_passes(passes):
 def add_log(phase, time, passes):
     passes = [ADD_PASS_FORMAT.format(p) for p in passes]
     with open(LOG_FILE, 'a') as f:
-        f.write(f'{phase},{time},"{",".join(passes)}"\n')
+        f.write(f'{phase},{time},"{"".join(passes)}"\n')
 
 
 def optimize():
@@ -248,7 +248,7 @@ def optimize():
 
     while True:
         # add passes
-        print(f'Phase {phase}:')
+        print(f'\nPhase {phase}:')
         phase += 1
         added_passes_count = random.randint(1, ADDED_PASSES_NUM)
         added_passes = []
@@ -271,7 +271,7 @@ def optimize():
             print('No improvement found.')
 
         # minimize passes
-        print(f'Phase {phase}:')
+        print(f'\nPhase {phase}:')
         phase += 1
         passes = []
         removed_passes = []
@@ -284,7 +284,7 @@ def optimize():
         print_passes(removed_passes)
         write_source_file(passes)
         time = run_benchmark()
-        if time <= optimum_time:
+        if time is not None and time <= optimum_time:
             optimum_passes = passes
             optimum_time = time
             print('Minimize success!')
