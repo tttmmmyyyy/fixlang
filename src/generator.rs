@@ -205,29 +205,14 @@ impl<'c> Object<'c> {
         gc.store_obj_field(self.ptr, struct_ty, field_idx, val)
     }
 
-    // Get function pointer to traverser.
-    pub fn get_traverser_ptr_boxed<'m>(
+    // Get the pointer to traverser function from a dynamic object.
+    pub fn get_traverser_from_dynamic<'m>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
     ) -> PointerValue<'c> {
-        assert!(self.is_box(gc.type_env()));
-        assert!(!self.is_funptr());
-        if self.ty.is_dynamic() {
-            self.load_field_nocap(gc, DYNAMIC_OBJ_TRAVARSER_IDX)
-                .into_pointer_value()
-        } else {
-            get_traverser_ptr(&self.ty, &vec![], gc)
-        }
-    }
-
-    // Get traverser function.
-    pub fn get_traverser_unboxed<'m>(
-        &self,
-        gc: &mut GenerationContext<'c, 'm>,
-    ) -> Option<FunctionValue<'c>> {
-        assert!(self.is_unbox(gc.type_env()));
-        assert!(!self.is_funptr());
-        create_traverser(&self.ty, &vec![], gc)
+        assert!(self.ty.is_dynamic());
+        self.load_field_nocap(gc, DYNAMIC_OBJ_TRAVARSER_IDX)
+            .into_pointer_value()
     }
 
     // Check if the pointer is null.
@@ -1025,13 +1010,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Release or mark global or mark threaded nonnull boxed object.
-    pub fn release_or_mark_nonnull_boxed(
-        &mut self,
-        obj: &Object<'c>,
-        work_type: TraverserWorkType,
-    ) {
+    pub fn build_release_mark_nonnull_boxed(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
         // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
-        if work_type == TraverserWorkType::release() && obj.is_destructor_object() {
+        if work == TraverserWorkType::release() && obj.is_destructor_object() {
             // Branch by whether or not the reference counter is one.
             let obj_ptr = obj.ptr(self);
             let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr);
@@ -1062,17 +1043,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().position_at_end(shared_bb);
         }
 
-        let ptr = obj.ptr(self);
-        let ptr = self.cast_pointer(ptr, ptr_to_object_type(self.context));
-        let traverser = obj.get_traverser_ptr_boxed(self);
-        self.call_runtime(
-            work_type.runtime_function(),
-            &[ptr.into(), traverser.into()],
-        );
+        if work == TraverserWorkType::release() {
+            self.build_release_boxed(obj);
+        } else {
+            self.build_mark_boxed(obj, work);
+        }
     }
 
     // Release or mark global or mark threaded an object.
-    pub fn release_or_mark(&mut self, obj: Object<'c>, work_type: TraverserWorkType) {
+    pub fn build_release_mark(&mut self, obj: Object<'c>, work: TraverserWorkType) {
         if obj.is_box(self.type_env()) {
             let cont_bb = if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1101,7 +1080,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             };
 
             // If the object is boxed and not dynamic,
-            self.release_or_mark_nonnull_boxed(&obj, work_type);
+            self.build_release_mark_nonnull_boxed(&obj, work);
 
             if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
@@ -1109,47 +1088,208 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.builder().position_at_end(cont_bb.unwrap());
             }
         } else if obj.is_funptr() {
-            // Nothing to do.
+            // Nothing to do for function pointers.
         } else {
-            match obj.get_traverser_unboxed(self) {
-                Some(traverser) => {
-                    // Argument of dtor function is i8*, even when the object is unboxed.
+            // Unboxed case (inlude lambda object).
+            match create_traverser(&obj.ty, &vec![], self, Some(work)) {
+                Some(trav) => {
+                    // Argument of traverser function is i8*, even when the object is unboxed.
                     let ptr = obj.ptr(self);
                     let ptr: PointerValue<'_> =
                         self.cast_pointer(ptr, ptr_to_object_type(self.context));
-                    self.builder().build_call(
-                        traverser,
-                        &[
-                            ptr.into(),
-                            traverser_work_type(self.context)
-                                .const_int(work_type.0 as u64, false)
-                                .into(),
-                        ],
-                        "call_traverser_of_unboxed",
-                    );
+                    self.builder()
+                        .build_call(trav, &[ptr.into()], "call_traverser_of_unboxed");
                 }
                 None => {}
             }
         }
     }
 
+    // Reelase a boxed object.
+    fn build_release_boxed(&mut self, obj: &Object<'c>) {
+        // Get pointer to the object.
+        let obj_ptr = obj.ptr(self);
+        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(self.context));
+
+        // Branch by refcnt_state.
+        let current_func = self
+            .builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+        let destruction_bb = self
+            .context
+            .append_basic_block(current_func, "destruction_bb");
+        let end_bb = self
+            .context
+            .append_basic_block(current_func, "end_release_bb");
+
+        // Implement local_bb.
+        self.builder().position_at_end(local_bb);
+        let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+
+        // Decrement refcnt.
+        let old_refcnt = self
+            .builder()
+            .build_load(ptr_to_refcnt, "")
+            .into_int_value();
+        let new_refcnt = self.builder().build_int_nsw_sub(
+            old_refcnt,
+            refcnt_type(self.context).const_int(1, false).into(),
+            "",
+        );
+        self.builder().build_store(ptr_to_refcnt, new_refcnt);
+
+        // Branch to `destruction_bb` if old_refcnt is one.
+        let is_refcnt_one = self.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            old_refcnt,
+            refcnt_type(self.context).const_int(1, false),
+            "is_refcnt_zero",
+        );
+        self.builder()
+            .build_conditional_branch(is_refcnt_one, destruction_bb, end_bb);
+
+        // Implement threaded_bb.
+        if threaded_bb.is_some() {
+            let threaded_bb = threaded_bb.unwrap();
+
+            self.builder().position_at_end(threaded_bb);
+            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+            // Decrement refcnt atomically.
+            let old_refcnt = self
+                .builder()
+                .build_atomicrmw(
+                    inkwell::AtomicRMWBinOp::Sub,
+                    ptr_to_refcnt,
+                    refcnt_type(self.context).const_int(1, false),
+                    inkwell::AtomicOrdering::Release,
+                )
+                .unwrap();
+
+            // Branch to `threaded_destruction_bb` if old_refcnt is one.
+            let threaded_destruction_bb = self
+                .context
+                .append_basic_block(current_func, "threaded_destruction_bb");
+            let is_refcnt_one = self.builder().build_int_compare(
+                inkwell::IntPredicate::EQ,
+                old_refcnt,
+                refcnt_type(self.context).const_int(1, false),
+                "is_refcnt_one",
+            );
+            self.builder()
+                .build_conditional_branch(is_refcnt_one, threaded_destruction_bb, end_bb);
+
+            // Implement `threaded_destruction_bb`.
+            self.builder().position_at_end(threaded_destruction_bb);
+            self.builder()
+                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+            self.builder().build_unconditional_branch(destruction_bb);
+        }
+
+        // Implement `destruction_bb`
+        self.builder().position_at_end(destruction_bb);
+
+        // Call dtor.
+        if obj.is_dynamic_object() {
+            // If the object is dynamic, extract the traverser from the object and call it.
+            let trav = obj.get_traverser_from_dynamic(self);
+            let trav = CallableValue::try_from(trav).unwrap();
+            self.builder().build_call(
+                trav,
+                &[
+                    obj_ptr.into(),
+                    traverser_work_type(self.context)
+                        .const_int(TRAVERSER_WORK_RELEASE as u64, false)
+                        .into(),
+                ],
+                "call_dtor",
+            );
+        } else {
+            // If the object is not dynamic, call the dtor of the object.
+            let dtor = object::create_traverser(
+                &obj.ty,
+                &vec![],
+                self,
+                Some(TraverserWorkType::release()),
+            );
+            if let Some(dtor) = dtor {
+                self.builder()
+                    .build_call(dtor, &[obj_ptr.into()], "call_dtor");
+            }
+        }
+
+        // free.
+        self.builder().build_free(obj_ptr);
+        self.builder().build_unconditional_branch(end_bb);
+
+        // Implement global_bb.
+        self.builder().position_at_end(global_bb);
+        self.builder().build_unconditional_branch(end_bb);
+
+        self.builder().position_at_end(end_bb);
+    }
+
+    // Mark global or mark threaded a boxed object.
+    fn build_mark_boxed(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
+        assert!(
+            work == TraverserWorkType::mark_global() || work == TraverserWorkType::mark_threaded()
+        );
+
+        // Get pointer to the object.
+        let obj_ptr = obj.ptr(self);
+        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(self.context));
+
+        // Get pointer to call the traverser function.
+        if obj.is_dynamic_object() {
+            let trav = obj.get_traverser_from_dynamic(self);
+            let trav = CallableValue::try_from(trav).unwrap();
+            self.builder().build_call(
+                trav,
+                &[
+                    obj_ptr.into(),
+                    traverser_work_type(self.context)
+                        .const_int(work.0 as u64, false)
+                        .into(),
+                ],
+                "call_trav_dynamic_for_mark",
+            );
+        } else {
+            // If the object is not dynamic, call the dtor of the object.
+            let trav = object::create_traverser(&obj.ty, &vec![], self, Some(work));
+            if let Some(trav) = trav {
+                self.builder()
+                    .build_call(trav, &[obj_ptr.into()], "call_trav_for_mark");
+            }
+        }
+
+        // Mark the object itself.
+        if work == TraverserWorkType::mark_global() {
+            self.mark_global_one(obj_ptr);
+        } else {
+            self.mark_threaded_one(obj_ptr);
+        }
+    }
+
     // Release object.
     pub fn release(&mut self, obj: Object<'c>) {
-        self.release_or_mark(obj, TraverserWorkType::release())
+        self.build_release_mark(obj, TraverserWorkType::release())
     }
 
     // Release nonnull boxed object.
     pub fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
-        self.release_or_mark_nonnull_boxed(obj, TraverserWorkType::release())
+        self.build_release_mark_nonnull_boxed(obj, TraverserWorkType::release())
     }
 
     // Mark all objects reachable from `obj` as global.
     pub fn mark_global(&mut self, obj: Object<'c>) {
-        self.release_or_mark(obj, TraverserWorkType::mark_global())
+        self.build_release_mark(obj, TraverserWorkType::mark_global())
     }
 
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
-        self.release_or_mark(obj, TraverserWorkType::mark_threaded())
+        self.build_release_mark(obj, TraverserWorkType::mark_threaded())
     }
 
     pub fn mark_as_local_one(&mut self, ptr: PointerValue<'c>) {

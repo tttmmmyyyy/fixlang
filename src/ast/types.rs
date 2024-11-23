@@ -1443,7 +1443,11 @@ impl TypeNode {
     }
 
     // Get traverser name.
-    pub fn traverser_name(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
+    pub fn traverser_name(
+        self: &Arc<TypeNode>,
+        capture: &Vec<Arc<TypeNode>>,
+        work: Option<TraverserWorkType>,
+    ) -> String {
         let mut str = "".to_string();
         str += &self.to_string_normalize();
         if capture.len() > 0 {
@@ -1456,7 +1460,16 @@ impl TypeNode {
         if capture.len() > 0 {
             str += "]";
         }
-        "trav_".to_string() + &format!("{:x}", md5::compute(str))
+        let prefix = match work {
+            None => "trav_dyn_",
+            Some(work) => match work.0 {
+                TRAVERSER_WORK_RELEASE => "trav_release_",
+                TRAVERSER_WORK_MARK_GLOBAL => "trav_mark_global_",
+                TRAVERSER_WORK_MARK_THREADED => "trav_mark_threaded_",
+                _ => unreachable!(),
+            },
+        };
+        prefix.to_string() + &format!("{:x}", md5::compute(str))
     }
 
     // Get hash value.

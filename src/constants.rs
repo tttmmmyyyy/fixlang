@@ -1,10 +1,5 @@
 use inkwell::{context::Context, types::IntType, values::IntValue};
 
-use crate::{
-    RUNTIME_MARK_GLOBAL_BOXED_OBJECT, RUNTIME_MARK_THREADED_BOXED_OBJECT,
-    RUNTIME_RELEASE_BOXED_OBJECT,
-};
-
 pub const NAMESPACE_SEPARATOR: &str = "::";
 pub const MODULE_SEPARATOR: &str = ".";
 
@@ -142,14 +137,14 @@ impl TraverserWorkType {
     pub fn mark_threaded() -> Self {
         Self(TRAVERSER_WORK_MARK_THREADED)
     }
-    pub fn runtime_function(&self) -> &str {
-        match self.0 {
-            TRAVERSER_WORK_RELEASE => RUNTIME_RELEASE_BOXED_OBJECT,
-            TRAVERSER_WORK_MARK_GLOBAL => RUNTIME_MARK_GLOBAL_BOXED_OBJECT,
-            TRAVERSER_WORK_MARK_THREADED => RUNTIME_MARK_THREADED_BOXED_OBJECT,
-            _ => unreachable!(),
-        }
-    }
+    // pub fn runtime_function(&self) -> &str {
+    //     match self.0 {
+    //         TRAVERSER_WORK_RELEASE => RUNTIME_RELEASE_BOXED_OBJECT,
+    //         TRAVERSER_WORK_MARK_GLOBAL => RUNTIME_MARK_GLOBAL_BOXED_OBJECT,
+    //         TRAVERSER_WORK_MARK_THREADED => RUNTIME_MARK_THREADED_BOXED_OBJECT,
+    //         _ => unreachable!(),
+    //     }
+    // }
 }
 pub const TRAVERSER_WORK_RELEASE: u32 = 0;
 pub const TRAVERSER_WORK_MARK_GLOBAL: u32 = 1;

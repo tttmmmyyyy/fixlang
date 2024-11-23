@@ -43,7 +43,7 @@ impl ObjectFieldType {
     ) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
-            ObjectFieldType::TraverseFunction => ptr_to_traverser_type(gc.context).into(),
+            ObjectFieldType::TraverseFunction => ptr_to_traverser_type(gc.context, true).into(),
             ObjectFieldType::LambdaFunction(_ty) => {
                 opaque_lambda_function_ptr_type(&gc.context).into()
             }
@@ -390,7 +390,7 @@ impl ObjectFieldType {
             };
             // Perform release or mark global or mark threaded.
             let obj = Object::new(obj, elem_ty.clone());
-            gc.release_or_mark(obj, work_type);
+            gc.build_release_mark(obj, work_type);
         };
 
         // After loop, do nothing.
@@ -704,7 +704,7 @@ impl ObjectFieldType {
             if work_type.is_none() {
                 gc.retain(obj);
             } else {
-                gc.release_or_mark(obj, work_type.unwrap());
+                gc.build_release_mark(obj, work_type.unwrap());
             }
             gc.builder().build_unconditional_branch(end_bb);
 
@@ -1057,22 +1057,23 @@ pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     context.i8_type().ptr_type(AddressSpace::from(0))
 }
 
-fn traverser_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
-    context.void_type().fn_type(
-        &[
-            ptr_to_object_type(context).into(),  // Pointer to object.
-            traverser_work_type(context).into(), // Data to specify work.
-        ],
-        false,
-    )
+// Type of traverser function.
+// - is_dynamic: If true, the traverser is dynamic and takes the work type as the second argument.
+fn traverser_type<'ctx>(context: &'ctx Context, is_dynamic: bool) -> FunctionType<'ctx> {
+    let mut arg_tys: Vec<BasicMetadataTypeEnum<'ctx>> = vec![];
+    arg_tys.push(ptr_to_object_type(context).into());
+    if is_dynamic {
+        arg_tys.push(context.i8_type().into());
+    }
+    context.void_type().fn_type(&arg_tys, false)
 }
 
 pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-fn ptr_to_traverser_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    traverser_type(context).ptr_type(AddressSpace::from(0))
+fn ptr_to_traverser_type<'ctx>(context: &'ctx Context, is_dynamic: bool) -> PointerType<'ctx> {
+    traverser_type(context, is_dynamic).ptr_type(AddressSpace::from(0))
 }
 
 pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
@@ -1392,8 +1393,8 @@ pub fn allocate_obj<'c, 'm>(
                     .builder()
                     .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_dtor_field")
                     .unwrap();
-                let dtor = get_traverser_ptr(&ty, capture, gc);
-                gc.builder().build_store(ptr_to_dtor_field, dtor);
+                let trav = get_traverser_ptr(&ty, capture, gc, None);
+                gc.builder().build_store(ptr_to_dtor_field, trav);
             }
             ObjectFieldType::UnionBuf(_) => {}
             ObjectFieldType::UnionTag => {}
@@ -1407,20 +1408,26 @@ pub fn get_traverser_ptr<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
     gc: &mut GenerationContext<'c, 'm>,
+    work: Option<TraverserWorkType>,
 ) -> PointerValue<'c> {
-    match create_traverser(ty, capture, gc) {
+    match create_traverser(ty, capture, gc, work) {
         Some(fv) => fv.as_global_value().as_pointer_value(),
         None => {
+            let is_dynamic = work.is_none();
+            let func_name = if is_dynamic {
+                "fixruntime_empty_traverser_dynamic"
+            } else {
+                "fixruntime_empty_traverser"
+            };
+
             // Define an empty function (if there is none) and return its pointer.
-            let fv = if let Some(fv) = gc.module.get_function("fixruntime_empty_traverser") {
+            let fv = if let Some(fv) = gc.module.get_function(func_name) {
                 fv
             } else {
-                let func_type = traverser_type(gc.context);
-                let func = gc.module.add_function(
-                    "fixruntime_empty_traverser",
-                    func_type,
-                    Some(Linkage::Internal),
-                );
+                let func_type = traverser_type(gc.context, work.is_none());
+                let func = gc
+                    .module
+                    .add_function(func_name, func_type, Some(Linkage::Internal));
                 let bb = gc.context.append_basic_block(func, "entry");
                 let _builder_guard = gc.push_builder();
                 gc.builder().position_at_end(bb);
@@ -1432,16 +1439,20 @@ pub fn get_traverser_ptr<'c, 'm>(
     }
 }
 
+// Create a traverser function for an object of specified type.
+//
 // Traverser function is a function that traverses all fields of an object and does some work on them.
-// Traverser function takes two arguments: a pointer to the object, and an 8-bit integer value called `work`.
-// If `work` is 0, then traverser function works as destructor of an object.
-// If `work` is 1, then traverser function marks all reachable objects as global.
-// If `work` is 2, then traverser function marks all reachable objects as threaded.
+// Traverser function takes the pointer to the object as an argument.
+// If `work` is Some(0), then traverser function works as destructor of an object. This is called as `destructor`.
+// If `work` is Some(1), then traverser function marks all reachable objects as global. This is called as `mark_global`.
+// If `work` is Some(2), then traverser function marks all reachable objects as threaded. This is called as `mark_threaded`.
+// If `work` is None, then traverser function takes the second argument of as a work type. This is called as `(dynamic_)traverser`.
 // This function returns `None` if traverser function is empty.
 pub fn create_traverser<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
     gc: &mut GenerationContext<'c, 'm>,
+    work: Option<TraverserWorkType>,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
@@ -1451,14 +1462,14 @@ pub fn create_traverser<'c, 'm>(
     if ty.is_fully_unboxed(gc.type_env()) {
         return None;
     }
-    let trav_name = ty.traverser_name(capture);
+    let trav_name = ty.traverser_name(capture, work);
     match gc.module.get_function(&trav_name) {
         Some(fv) => Some(fv),
         None => {
             // Define traverser function.
             let object_type = ty_to_object_ty(ty, capture, gc.type_env());
             let struct_type = object_type.to_struct_type(gc, vec![]);
-            let func_type = traverser_type(gc.context);
+            let func_type = traverser_type(gc.context, work.is_none());
             let func = gc
                 .module
                 .add_function(&trav_name, func_type, Some(Linkage::Internal));
@@ -1524,7 +1535,7 @@ pub fn create_traverser<'c, 'm>(
                                     .into_pointer_value()
                             };
                             let obj = Object::new(ptr_to_subobj, ty.clone());
-                            gc.release_or_mark(obj, work_type);
+                            gc.build_release_mark(obj, work_type);
                         }
                         ObjectFieldType::ControlBlock => {}
                         ObjectFieldType::LambdaFunction(_) => {}
