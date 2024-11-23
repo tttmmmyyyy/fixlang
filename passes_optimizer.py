@@ -1,4 +1,5 @@
 from math import ceil
+import select
 import subprocess
 import re
 import itertools
@@ -10,95 +11,6 @@ import numpy as np
 SOURCE_FILE = './src/llvm_passes_optimized.txt'
 
 LOG_FILE = './passes_optimizer.log'
-
-INITIAL_PASSES = '''
-early_cse_pass
-scalar_repl_aggregates_pass_ssa
-global_optimizer_pass
-aggressive_dce_pass
-loop_unroll_and_jam_pass
-ipsccp_pass
-function_inlining_pass
-early_cse_pass
-loop_deletion_pass
-constant_merge_pass
-dead_store_elimination_pass
-constant_merge_pass
-function_inlining_pass
-instruction_combining_pass
-scalar_repl_aggregates_pass
-tail_call_elimination_pass
-promote_memory_to_register_pass
-jump_threading_pass
-ipsccp_pass
-loop_rotate_pass
-loop_vectorize_pass
-scalar_repl_aggregates_pass_ssa
-strip_dead_prototypes_pass
-always_inliner_pass
-always_inliner_pass
-strip_dead_prototypes_pass
-scoped_no_alias_aa_pass
-slp_vectorize_pass
-sccp_pass
-dead_store_elimination_pass
-aggressive_dce_pass
-ipsccp_pass
-simplify_lib_calls_pass
-instruction_combining_pass
-ind_var_simplify_pass
-aggressive_inst_combiner_pass
-dead_store_elimination_pass
-always_inliner_pass
-early_cse_pass
-scalar_repl_aggregates_pass_ssa
-function_attrs_pass
-simplify_lib_calls_pass
-sccp_pass
-loop_vectorize_pass
-global_optimizer_pass
-aggressive_dce_pass
-promote_memory_to_register_pass
-ipsccp_pass
-loop_idiom_pass
-bit_tracking_dce_pass
-instruction_simplify_pass
-simplify_lib_calls_pass
-strip_dead_prototypes_pass
-type_based_alias_analysis_pass
-ind_var_simplify_pass
-strip_dead_prototypes_pass
-global_optimizer_pass
-promote_memory_to_register_pass
-basic_alias_analysis_pass
-slp_vectorize_pass
-aggressive_inst_combiner_pass
-instruction_simplify_pass
-basic_alias_analysis_pass
-loop_unroll_pass
-early_cse_pass
-instruction_simplify_pass
-correlated_value_propagation_pass
-loop_rotate_pass
-loop_reroll_pass
-type_based_alias_analysis_pass
-dead_arg_elimination_pass
-scalar_repl_aggregates_pass
-bit_tracking_dce_pass
-memcpy_optimize_pass
-memcpy_optimize_pass
-lower_switch_pass
-aggressive_dce_pass
-loop_reroll_pass
-loop_unroll_and_jam_pass
-ipsccp_pass
-merged_load_store_motion_pass
-loop_vectorize_pass
-scoped_no_alias_aa_pass
-'''
-INITIAL_PASSES = INITIAL_PASSES.split('\n')
-INITIAL_PASSES = [line.strip() for line in INITIAL_PASSES]
-INITIAL_PASSES = [line for line in INITIAL_PASSES if len(line) > 0]
 
 ADDED_PASSES_NUM = 10
 
@@ -233,7 +145,13 @@ def optimize():
     install_fix()
 
     all_passes = get_all_passes()
-    optimum_passes = INITIAL_PASSES.copy()
+
+    # Read the initial passes from the source file
+    with open(SOURCE_FILE, 'r') as f:
+        initial_passes = f.readlines()
+        initial_passes = [line.strip() for line in initial_passes]
+
+    optimum_passes = initial_passes
 
     # Clear log file
     with open(LOG_FILE, 'w') as f:
@@ -251,6 +169,13 @@ def optimize():
     phase = 0
 
     while True:
+        # If any character with newline is pressed, break the loop
+        readable, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if readable:
+            user_input = sys.stdin.readline().strip()
+            if len(user_input) > 0:
+                break
+
         # add passes
         print(f'\nPhase {phase}:')
         phase += 1
@@ -300,6 +225,9 @@ def optimize():
         print('Current optimum passes:')
         print_passes(optimum_passes)
         print('Current optimum time: {}'.format(optimum_time))
+
+    # Write the final optimum passes to the source file
+    write_source_file(optimum_passes)
 
 
 if __name__ == '__main__':
