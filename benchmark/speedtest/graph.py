@@ -15,7 +15,7 @@ commit_hashes = df['commit_hash'].str[:7]
 fig, ax1 = plt.subplots(figsize=(10, 6))
 
 # 左側の軸（instructions）のプロット
-ax1.set_xlabel('Commit Hash')
+ax1.set_xlabel('Commit')
 ax1.set_ylabel('Instructions', color='tab:blue')
 ax1.plot(commit_hashes, df['instructions'],
          color='tab:blue', marker='o', label='Instructions')
@@ -29,7 +29,7 @@ ax2.plot(commit_hashes, df['memory_accesses'],
 ax2.tick_params(axis='y', labelcolor='tab:red')
 
 # グラフのタイトル
-plt.title('Speedtest Result')
+plt.title('Speedtest Log')
 
 # グラフを表示
 plt.xticks(rotation=45)
