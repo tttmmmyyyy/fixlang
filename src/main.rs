@@ -37,7 +37,8 @@ mod docgen;
 mod error;
 mod generator;
 mod graph;
-mod llvm_passes;
+mod llvm_passes_hand;
+mod llvm_passes_opt;
 mod lsp;
 mod misc;
 mod object;
@@ -79,7 +80,6 @@ use graph::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::passes::PassManager;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructType};
 use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
