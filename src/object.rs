@@ -43,7 +43,7 @@ impl ObjectFieldType {
     ) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
-            ObjectFieldType::TraverseFunction => ptr_to_traverser_type(gc.context).into(),
+            ObjectFieldType::TraverseFunction => ptr_to_traverser_type(gc.context, true).into(),
             ObjectFieldType::LambdaFunction(_ty) => {
                 opaque_lambda_function_ptr_type(&gc.context).into()
             }
@@ -390,7 +390,7 @@ impl ObjectFieldType {
             };
             // Perform release or mark global or mark threaded.
             let obj = Object::new(obj, elem_ty.clone());
-            gc.release_or_mark(obj, work_type);
+            gc.build_release_mark(obj, work_type);
         };
 
         // After loop, do nothing.
@@ -704,7 +704,7 @@ impl ObjectFieldType {
             if work_type.is_none() {
                 gc.retain(obj);
             } else {
-                gc.release_or_mark(obj, work_type.unwrap());
+                gc.build_release_mark(obj, work_type.unwrap());
             }
             gc.builder().build_unconditional_branch(end_bb);
 
@@ -1057,22 +1057,23 @@ pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
     context.i8_type().ptr_type(AddressSpace::from(0))
 }
 
-fn traverser_type<'ctx>(context: &'ctx Context) -> FunctionType<'ctx> {
-    context.void_type().fn_type(
-        &[
-            ptr_to_object_type(context).into(),  // Pointer to object.
-            traverser_work_type(context).into(), // Data to specify work.
-        ],
-        false,
-    )
+// Type of traverser function.
+// - is_dynamic: If true, the traverser is dynamic and takes the work type as the second argument.
+fn traverser_type<'ctx>(context: &'ctx Context, is_dynamic: bool) -> FunctionType<'ctx> {
+    let mut arg_tys: Vec<BasicMetadataTypeEnum<'ctx>> = vec![];
+    arg_tys.push(ptr_to_object_type(context).into());
+    if is_dynamic {
+        arg_tys.push(context.i8_type().into());
+    }
+    context.void_type().fn_type(&arg_tys, false)
 }
 
 pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-fn ptr_to_traverser_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    traverser_type(context).ptr_type(AddressSpace::from(0))
+fn ptr_to_traverser_type<'ctx>(context: &'ctx Context, is_dynamic: bool) -> PointerType<'ctx> {
+    traverser_type(context, is_dynamic).ptr_type(AddressSpace::from(0))
 }
 
 pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
@@ -1392,8 +1393,8 @@ pub fn allocate_obj<'c, 'm>(
                     .builder()
                     .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_dtor_field")
                     .unwrap();
-                let dtor = get_traverser_ptr(&ty, capture, gc);
-                gc.builder().build_store(ptr_to_dtor_field, dtor);
+                let trav = get_traverser_ptr(&ty, capture, gc, None);
+                gc.builder().build_store(ptr_to_dtor_field, trav);
             }
             ObjectFieldType::UnionBuf(_) => {}
             ObjectFieldType::UnionTag => {}
@@ -1407,23 +1408,51 @@ pub fn get_traverser_ptr<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
     gc: &mut GenerationContext<'c, 'm>,
+    work: Option<TraverserWorkType>,
 ) -> PointerValue<'c> {
-    match create_traverser(ty, capture, gc) {
+    match create_traverser(ty, capture, gc, work) {
         Some(fv) => fv.as_global_value().as_pointer_value(),
-        None => ptr_to_traverser_type(gc.context).const_null(),
+        None => {
+            let is_dynamic = work.is_none();
+            let func_name = if is_dynamic {
+                "fixruntime_empty_traverser_dynamic"
+            } else {
+                "fixruntime_empty_traverser"
+            };
+
+            // Define an empty function (if there is none) and return its pointer.
+            let fv = if let Some(fv) = gc.module.get_function(func_name) {
+                fv
+            } else {
+                let func_type = traverser_type(gc.context, work.is_none());
+                let func = gc
+                    .module
+                    .add_function(func_name, func_type, Some(Linkage::Internal));
+                let _builder_guard = gc.push_builder();
+                let bb = gc.context.append_basic_block(func, "entry");
+                gc.builder().position_at_end(bb);
+                gc.builder().build_return(None);
+                func
+            };
+            fv.as_global_value().as_pointer_value()
+        }
     }
 }
 
+// Create a traverser function for an object of specified type.
+//
 // Traverser function is a function that traverses all fields of an object and does some work on them.
-// Traverser function takes two arguments: a pointer to the object, and an 8-bit integer value called `work`.
-// If `work` is 0, then traverser function works as destructor of an object.
-// If `work` is 1, then traverser function marks all reachable objects as global.
-// If `work` is 2, then traverser function marks all reachable objects as threaded.
+// Traverser function takes the pointer to the object as an argument.
+// If `work` is Some(0), then traverser function works as destructor of an object. This is called as `destructor`.
+// If `work` is Some(1), then traverser function marks all reachable objects as global. This is called as `mark_global`.
+// If `work` is Some(2), then traverser function marks all reachable objects as threaded. This is called as `mark_threaded`.
+// If `work` is None, then traverser function takes the second argument of as a work type. This is called as `(dynamic_)traverser`.
 // This function returns `None` if traverser function is empty.
 pub fn create_traverser<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
     gc: &mut GenerationContext<'c, 'm>,
+    work: Option<TraverserWorkType>,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
@@ -1433,37 +1462,44 @@ pub fn create_traverser<'c, 'm>(
     if ty.is_fully_unboxed(gc.type_env()) {
         return None;
     }
-    let trav_name = ty.traverser_name(capture);
-    match gc.module.get_function(&trav_name) {
-        Some(fv) => Some(fv),
+
+    // If the function already exists, return it.
+    let trav_name = ty.traverser_name(capture, work);
+    if let Some(fv) = gc.module.get_function(&trav_name) {
+        return Some(fv);
+    }
+
+    // Define traverser function.
+    let func_type = traverser_type(gc.context, work.is_none());
+    let func = gc
+        .module
+        .add_function(&trav_name, func_type, Some(Linkage::Internal));
+    // Set the function "always inline".
+    func.add_attribute(
+        inkwell::attributes::AttributeLoc::Function,
+        gc.context.create_string_attribute("alwaysinline", "1"),
+    );
+
+    let bb = gc.context.append_basic_block(func, "entry");
+
+    // Implement traverser function.
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(bb);
+
+    // Get the pointer to the object.
+    let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
+
+    match work {
+        Some(work) => {
+            // Static traverser case.
+            build_traverse(ty, capture, obj_ptr, work, gc);
+            gc.builder().build_return(None);
+        }
         None => {
-            // Define traverser function.
-            let object_type = ty_to_object_ty(ty, capture, gc.type_env());
-            let struct_type = object_type.to_struct_type(gc, vec![]);
-            let func_type = traverser_type(gc.context);
-            let func = gc
-                .module
-                .add_function(&trav_name, func_type, Some(Linkage::Internal));
-            let bb = gc.context.append_basic_block(func, "entry");
+            // Dynamic traverser case.
 
-            let _builder_guard = gc.push_builder();
-
-            gc.builder().position_at_end(bb);
-            let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
+            // The second argument is the work type.
             let work = func.get_nth_param(1).unwrap().into_int_value();
-
-            // In this function, we need to access captured fields, so fundamentally we cannot use Object's methods to access fields.
-            let ptr_to_field =
-                |field_idx: u32, gc: &mut GenerationContext<'c, 'm>| -> PointerValue<'c> {
-                    let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
-                    gc.builder()
-                        .build_struct_gep(
-                            ptr_to_struct,
-                            field_idx,
-                            &format!("ptr_to_{}th_field", field_idx),
-                        )
-                        .unwrap()
-                };
 
             // Depending the value of `work`, do different works: destruction of objects (`work == 0`), or marking object as global (`work` == 1).
             let release_bb = gc.context.append_basic_block(func, "release_bb@traverser");
@@ -1483,81 +1519,99 @@ pub fn create_traverser<'c, 'm>(
             let work_ty = traverser_work_type(gc.context);
             let mut switches = work_bbs
                 .iter()
-                .map(|(work_type, bb)| (work_ty.const_int(*work_type as u64, false), bb.clone()))
+                .map(|(work, bb)| (work_ty.const_int(*work as u64, false), bb.clone()))
                 .collect::<Vec<_>>();
             gc.builder()
                 .build_switch(work, switches.pop().unwrap().1, &switches);
 
-            for (work_type, work_bb) in work_bbs.iter() {
-                let work_type = TraverserWorkType(*work_type);
+            for (work, work_bb) in work_bbs.iter() {
+                let work = TraverserWorkType(*work);
                 gc.builder().position_at_end(*work_bb);
-
-                let mut union_tag: Option<IntValue<'c>> = None;
-                for (i, ft) in object_type.field_types.iter().enumerate() {
-                    match ft {
-                        ObjectFieldType::SubObject(ty, is_punched) => {
-                            if *is_punched {
-                                continue;
-                            }
-                            let ptr_to_subobj = if ty.is_unbox(gc.type_env()) {
-                                ptr_to_field(i as u32, gc)
-                            } else {
-                                gc.load_obj_field(ptr_to_obj, struct_type, i as u32)
-                                    .into_pointer_value()
-                            };
-                            let obj = Object::new(ptr_to_subobj, ty.clone());
-                            gc.release_or_mark(obj, work_type);
-                        }
-                        ObjectFieldType::ControlBlock => {}
-                        ObjectFieldType::LambdaFunction(_) => {}
-                        ObjectFieldType::Ptr => {}
-                        ObjectFieldType::I8 => {}
-                        ObjectFieldType::U8 => {}
-                        ObjectFieldType::I16 => {}
-                        ObjectFieldType::U16 => {}
-                        ObjectFieldType::I32 => {}
-                        ObjectFieldType::U32 => {}
-                        ObjectFieldType::I64 => {}
-                        ObjectFieldType::U64 => {}
-                        ObjectFieldType::F32 => {}
-                        ObjectFieldType::F64 => {}
-                        ObjectFieldType::Array(ty) => {
-                            assert_eq!(i, ARRAY_CAP_IDX as usize);
-                            let size = gc
-                                .load_obj_field(ptr_to_obj, struct_type, ARRAY_LEN_IDX)
-                                .into_int_value();
-                            let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
-                            ObjectFieldType::release_or_mark_array_buf(
-                                gc,
-                                size,
-                                buffer,
-                                ty.clone(),
-                                work_type,
-                            );
-                        }
-                        ObjectFieldType::UnionTag => {
-                            union_tag = Some(
-                                gc.load_obj_field(ptr_to_obj, struct_type, i as u32)
-                                    .into_int_value(),
-                            );
-                        }
-                        ObjectFieldType::UnionBuf(_) => {
-                            let buf = ptr_to_field(i as u32, gc);
-                            ObjectFieldType::retain_release_mark_union_buf(
-                                gc,
-                                buf,
-                                union_tag.unwrap(),
-                                &ty.field_types(gc.type_env()),
-                                Some(work_type),
-                            );
-                        }
-                        ObjectFieldType::TraverseFunction => {}
-                    }
-                }
+                build_traverse(ty, capture, obj_ptr, work, gc);
                 gc.builder().build_return(None);
             }
+        }
+    }
 
-            Some(func)
+    Some(func)
+}
+
+fn build_traverse<'c, 'm>(
+    ty: &Arc<TypeNode>,
+    capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
+    obj_ptr: PointerValue<'c>,
+    work: TraverserWorkType,
+    gc: &mut GenerationContext<'c, 'm>,
+) {
+    let object_type = ty_to_object_ty(ty, capture, gc.type_env());
+    let struct_type = object_type.to_struct_type(gc, vec![]);
+
+    // In this function, we need to access captured fields, so fundamentally we cannot use Object's methods to access fields.
+    let ptr_to_field = |field_idx: u32, gc: &mut GenerationContext<'c, 'm>| -> PointerValue<'c> {
+        let ptr_to_struct = gc.cast_pointer(obj_ptr, ptr_type(struct_type));
+        gc.builder()
+            .build_struct_gep(
+                ptr_to_struct,
+                field_idx,
+                &format!("ptr_to_{}th_field", field_idx),
+            )
+            .unwrap()
+    };
+
+    let mut union_tag: Option<IntValue<'c>> = None;
+    for (i, ft) in object_type.field_types.iter().enumerate() {
+        match ft {
+            ObjectFieldType::SubObject(ty, is_punched) => {
+                if *is_punched {
+                    continue;
+                }
+                let ptr_to_subobj = if ty.is_unbox(gc.type_env()) {
+                    ptr_to_field(i as u32, gc)
+                } else {
+                    gc.load_obj_field(obj_ptr, struct_type, i as u32)
+                        .into_pointer_value()
+                };
+                let obj = Object::new(ptr_to_subobj, ty.clone());
+                gc.build_release_mark(obj, work);
+            }
+            ObjectFieldType::ControlBlock => {}
+            ObjectFieldType::LambdaFunction(_) => {}
+            ObjectFieldType::Ptr => {}
+            ObjectFieldType::I8 => {}
+            ObjectFieldType::U8 => {}
+            ObjectFieldType::I16 => {}
+            ObjectFieldType::U16 => {}
+            ObjectFieldType::I32 => {}
+            ObjectFieldType::U32 => {}
+            ObjectFieldType::I64 => {}
+            ObjectFieldType::U64 => {}
+            ObjectFieldType::F32 => {}
+            ObjectFieldType::F64 => {}
+            ObjectFieldType::Array(ty) => {
+                assert_eq!(i, ARRAY_CAP_IDX as usize);
+                let size = gc
+                    .load_obj_field(obj_ptr, struct_type, ARRAY_LEN_IDX)
+                    .into_int_value();
+                let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
+                ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, ty.clone(), work);
+            }
+            ObjectFieldType::UnionTag => {
+                union_tag = Some(
+                    gc.load_obj_field(obj_ptr, struct_type, i as u32)
+                        .into_int_value(),
+                );
+            }
+            ObjectFieldType::UnionBuf(_) => {
+                let buf = ptr_to_field(i as u32, gc);
+                ObjectFieldType::retain_release_mark_union_buf(
+                    gc,
+                    buf,
+                    union_tag.unwrap(),
+                    &ty.field_types(gc.type_env()),
+                    Some(work),
+                );
+            }
+            ObjectFieldType::TraverseFunction => {}
         }
     }
 }

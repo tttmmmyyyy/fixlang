@@ -79,7 +79,6 @@ use graph::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::passes::PassManager;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructType};
 use inkwell::values::{
     BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
@@ -188,6 +187,12 @@ fn main() {
             Decreasing this value improves parallelism of compilation, but increases time for linking.\n\
             NOTE: Separate compilation is disabled under the default optimization level.\n",
         );
+    let llvm_passes_file = Arg::new("llvm-passes-file")
+        .long("llvm-passes-file")
+        .takes_value(true)
+        .help(
+            "Path to a file which contains a list of LLVM passes. Used for compiler development.",
+        );
 
     // "fix build" subcommand
     let build_subc = App::new("build")
@@ -204,7 +209,8 @@ fn main() {
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
         .arg(verbose.clone())
-        .arg(max_cu_size.clone());
+        .arg(max_cu_size.clone())
+        .arg(llvm_passes_file.clone());
 
     // "fix run" subcommand
     let run_subc = App::new("run")
@@ -455,6 +461,11 @@ fn main() {
         config.max_cu_size = *args
             .get_one::<usize>("max-cu-size")
             .unwrap_or(&DEFAULT_COMPILATION_UNIT_MAX_SIZE);
+
+        // Set `llvm_passes_file`.
+        if let Some(llvm_passes_file) = args.get_one::<String>("llvm-passes-file") {
+            config.llvm_passes_file = Some(PathBuf::from(llvm_passes_file));
+        }
 
         Ok(())
     }

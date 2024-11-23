@@ -167,6 +167,8 @@ pub struct Configuration {
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
     // Number of worker threads.
     pub num_worker_thread: usize,
+    // File containing LLVM passes. Used only for compiler development.
+    pub llvm_passes_file: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -255,6 +257,7 @@ impl Configuration {
             extra_commands: vec![],
             type_check_cache: Arc::new(typecheckcache::FileCache::new()),
             num_worker_thread: 0,
+            llvm_passes_file: None,
         })
     }
 }

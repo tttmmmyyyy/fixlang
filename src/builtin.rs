@@ -3528,8 +3528,8 @@ impl InlineLLVMUnionModBody {
         );
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
-        let match_bb = gc.context.append_basic_block(current_func, "match_bb");
-        let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
+        let mut match_bb = gc.context.append_basic_block(current_func, "match_bb");
+        let mut unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
         let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
         gc.builder()
             .build_conditional_branch(is_tag_match, match_bb, unmatch_bb);
@@ -3552,12 +3552,14 @@ impl InlineLLVMUnionModBody {
         let buf = ret_obj.ptr_to_field_nocap(gc, offset + 1);
         ObjectFieldType::set_value_to_union_buf(gc, buf, value);
         let match_ret_obj_ptr = ret_obj.ptr(gc);
+        match_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
 
         // Implement unmatch_bb
         gc.builder().position_at_end(unmatch_bb);
         gc.release(modifier);
         let unmatch_ret_obj_ptr = obj.ptr(gc);
+        unmatch_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
 
         // Return the value.

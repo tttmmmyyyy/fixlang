@@ -25,7 +25,6 @@ use crate::compile_unit::CompileUnit;
 use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, error_exit, exit_if_err, Errors};
 use crate::misc::{save_temporary_source, temporary_source_path};
-use crate::run_io_value;
 use crate::stopwatch::StopWatch;
 use crate::uncurry_optimization;
 use crate::Configuration;
@@ -33,6 +32,7 @@ use crate::ExprNode;
 use crate::FixOptimizationLevel;
 use crate::GenerationContext;
 use crate::LinkType;
+use crate::OutputFileType;
 use crate::Program;
 use crate::TypeCheckContext;
 use crate::ValgrindTool;
@@ -42,7 +42,7 @@ use crate::GLOBAL_VAR_NAME_ARGV;
 use crate::INTERMEDIATE_PATH;
 use crate::{borrowing_optimization, SubCommand};
 use crate::{build_runtime, parse_file_path};
-use crate::{llvm_passes, OutputFileType};
+use crate::{llvm_passes, run_io_value};
 use crate::{make_std_mod, runtime};
 use crate::{make_tuple_traits_mod, BuildMode};
 
@@ -393,11 +393,11 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
         }
         FixOptimizationLevel::Separated => {
             llvm_passes::add_basic_optimization_passes(&passmgr);
-            llvm_passes::add_optimized_optimization_passes(&passmgr);
+            llvm_passes::add_optimized_optimization_passes(&passmgr, &config.llvm_passes_file);
         }
         FixOptimizationLevel::Default => {
             llvm_passes::add_basic_optimization_passes(&passmgr);
-            llvm_passes::add_optimized_optimization_passes(&passmgr);
+            llvm_passes::add_optimized_optimization_passes(&passmgr, &config.llvm_passes_file);
             llvm_passes::add_strip_passes(&passmgr);
         }
     }

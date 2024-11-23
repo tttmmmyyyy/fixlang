@@ -1,0 +1,14 @@
+global_optimizer_pass
+ipsccp_pass
+function_inlining_pass
+scalar_repl_aggregates_pass
+jump_threading_pass
+always_inliner_pass
+early_cse_pass
+ind_var_simplify_pass
+dead_arg_elimination_pass
+loop_unswitch_pass
+scalar_repl_aggregates_pass
+prune_eh_pass
+cfg_simplification_pass
+reassociate_pass
