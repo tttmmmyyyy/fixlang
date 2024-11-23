@@ -1462,37 +1462,38 @@ pub fn create_traverser<'c, 'm>(
     if ty.is_fully_unboxed(gc.type_env()) {
         return None;
     }
+
+    // If the function already exists, return it.
     let trav_name = ty.traverser_name(capture, work);
-    match gc.module.get_function(&trav_name) {
-        Some(fv) => Some(fv),
+    if let Some(fv) = gc.module.get_function(&trav_name) {
+        return Some(fv);
+    }
+
+    // Define traverser function.
+    let func_type = traverser_type(gc.context, work.is_none());
+    let func = gc
+        .module
+        .add_function(&trav_name, func_type, Some(Linkage::Internal));
+    let bb = gc.context.append_basic_block(func, "entry");
+
+    // Implement traverser function.
+    let _builder_guard = gc.push_builder();
+    gc.builder().position_at_end(bb);
+
+    // Get the pointer to the object.
+    let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
+
+    match work {
+        Some(work) => {
+            // Static traverser case.
+            build_traverse(ty, capture, obj_ptr, work, gc);
+            gc.builder().build_return(None);
+        }
         None => {
-            // Define traverser function.
-            let object_type = ty_to_object_ty(ty, capture, gc.type_env());
-            let struct_type = object_type.to_struct_type(gc, vec![]);
-            let func_type = traverser_type(gc.context, work.is_none());
-            let func = gc
-                .module
-                .add_function(&trav_name, func_type, Some(Linkage::Internal));
-            let bb = gc.context.append_basic_block(func, "entry");
+            // Dynamic traverser case.
 
-            let _builder_guard = gc.push_builder();
-
-            gc.builder().position_at_end(bb);
-            let ptr_to_obj = func.get_first_param().unwrap().into_pointer_value();
+            // The second argument is the work type.
             let work = func.get_nth_param(1).unwrap().into_int_value();
-
-            // In this function, we need to access captured fields, so fundamentally we cannot use Object's methods to access fields.
-            let ptr_to_field =
-                |field_idx: u32, gc: &mut GenerationContext<'c, 'm>| -> PointerValue<'c> {
-                    let ptr_to_struct = gc.cast_pointer(ptr_to_obj, ptr_type(struct_type));
-                    gc.builder()
-                        .build_struct_gep(
-                            ptr_to_struct,
-                            field_idx,
-                            &format!("ptr_to_{}th_field", field_idx),
-                        )
-                        .unwrap()
-                };
 
             // Depending the value of `work`, do different works: destruction of objects (`work == 0`), or marking object as global (`work` == 1).
             let release_bb = gc.context.append_basic_block(func, "release_bb@traverser");
@@ -1512,81 +1513,99 @@ pub fn create_traverser<'c, 'm>(
             let work_ty = traverser_work_type(gc.context);
             let mut switches = work_bbs
                 .iter()
-                .map(|(work_type, bb)| (work_ty.const_int(*work_type as u64, false), bb.clone()))
+                .map(|(work, bb)| (work_ty.const_int(*work as u64, false), bb.clone()))
                 .collect::<Vec<_>>();
             gc.builder()
                 .build_switch(work, switches.pop().unwrap().1, &switches);
 
-            for (work_type, work_bb) in work_bbs.iter() {
-                let work_type = TraverserWorkType(*work_type);
+            for (work, work_bb) in work_bbs.iter() {
+                let work = TraverserWorkType(*work);
                 gc.builder().position_at_end(*work_bb);
-
-                let mut union_tag: Option<IntValue<'c>> = None;
-                for (i, ft) in object_type.field_types.iter().enumerate() {
-                    match ft {
-                        ObjectFieldType::SubObject(ty, is_punched) => {
-                            if *is_punched {
-                                continue;
-                            }
-                            let ptr_to_subobj = if ty.is_unbox(gc.type_env()) {
-                                ptr_to_field(i as u32, gc)
-                            } else {
-                                gc.load_obj_field(ptr_to_obj, struct_type, i as u32)
-                                    .into_pointer_value()
-                            };
-                            let obj = Object::new(ptr_to_subobj, ty.clone());
-                            gc.build_release_mark(obj, work_type);
-                        }
-                        ObjectFieldType::ControlBlock => {}
-                        ObjectFieldType::LambdaFunction(_) => {}
-                        ObjectFieldType::Ptr => {}
-                        ObjectFieldType::I8 => {}
-                        ObjectFieldType::U8 => {}
-                        ObjectFieldType::I16 => {}
-                        ObjectFieldType::U16 => {}
-                        ObjectFieldType::I32 => {}
-                        ObjectFieldType::U32 => {}
-                        ObjectFieldType::I64 => {}
-                        ObjectFieldType::U64 => {}
-                        ObjectFieldType::F32 => {}
-                        ObjectFieldType::F64 => {}
-                        ObjectFieldType::Array(ty) => {
-                            assert_eq!(i, ARRAY_CAP_IDX as usize);
-                            let size = gc
-                                .load_obj_field(ptr_to_obj, struct_type, ARRAY_LEN_IDX)
-                                .into_int_value();
-                            let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
-                            ObjectFieldType::release_or_mark_array_buf(
-                                gc,
-                                size,
-                                buffer,
-                                ty.clone(),
-                                work_type,
-                            );
-                        }
-                        ObjectFieldType::UnionTag => {
-                            union_tag = Some(
-                                gc.load_obj_field(ptr_to_obj, struct_type, i as u32)
-                                    .into_int_value(),
-                            );
-                        }
-                        ObjectFieldType::UnionBuf(_) => {
-                            let buf = ptr_to_field(i as u32, gc);
-                            ObjectFieldType::retain_release_mark_union_buf(
-                                gc,
-                                buf,
-                                union_tag.unwrap(),
-                                &ty.field_types(gc.type_env()),
-                                Some(work_type),
-                            );
-                        }
-                        ObjectFieldType::TraverseFunction => {}
-                    }
-                }
+                build_traverse(ty, capture, obj_ptr, work, gc);
                 gc.builder().build_return(None);
             }
+        }
+    }
 
-            Some(func)
+    Some(func)
+}
+
+fn build_traverse<'c, 'm>(
+    ty: &Arc<TypeNode>,
+    capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
+    obj_ptr: PointerValue<'c>,
+    work: TraverserWorkType,
+    gc: &mut GenerationContext<'c, 'm>,
+) {
+    let object_type = ty_to_object_ty(ty, capture, gc.type_env());
+    let struct_type = object_type.to_struct_type(gc, vec![]);
+
+    // In this function, we need to access captured fields, so fundamentally we cannot use Object's methods to access fields.
+    let ptr_to_field = |field_idx: u32, gc: &mut GenerationContext<'c, 'm>| -> PointerValue<'c> {
+        let ptr_to_struct = gc.cast_pointer(obj_ptr, ptr_type(struct_type));
+        gc.builder()
+            .build_struct_gep(
+                ptr_to_struct,
+                field_idx,
+                &format!("ptr_to_{}th_field", field_idx),
+            )
+            .unwrap()
+    };
+
+    let mut union_tag: Option<IntValue<'c>> = None;
+    for (i, ft) in object_type.field_types.iter().enumerate() {
+        match ft {
+            ObjectFieldType::SubObject(ty, is_punched) => {
+                if *is_punched {
+                    continue;
+                }
+                let ptr_to_subobj = if ty.is_unbox(gc.type_env()) {
+                    ptr_to_field(i as u32, gc)
+                } else {
+                    gc.load_obj_field(obj_ptr, struct_type, i as u32)
+                        .into_pointer_value()
+                };
+                let obj = Object::new(ptr_to_subobj, ty.clone());
+                gc.build_release_mark(obj, work);
+            }
+            ObjectFieldType::ControlBlock => {}
+            ObjectFieldType::LambdaFunction(_) => {}
+            ObjectFieldType::Ptr => {}
+            ObjectFieldType::I8 => {}
+            ObjectFieldType::U8 => {}
+            ObjectFieldType::I16 => {}
+            ObjectFieldType::U16 => {}
+            ObjectFieldType::I32 => {}
+            ObjectFieldType::U32 => {}
+            ObjectFieldType::I64 => {}
+            ObjectFieldType::U64 => {}
+            ObjectFieldType::F32 => {}
+            ObjectFieldType::F64 => {}
+            ObjectFieldType::Array(ty) => {
+                assert_eq!(i, ARRAY_CAP_IDX as usize);
+                let size = gc
+                    .load_obj_field(obj_ptr, struct_type, ARRAY_LEN_IDX)
+                    .into_int_value();
+                let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
+                ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, ty.clone(), work);
+            }
+            ObjectFieldType::UnionTag => {
+                union_tag = Some(
+                    gc.load_obj_field(obj_ptr, struct_type, i as u32)
+                        .into_int_value(),
+                );
+            }
+            ObjectFieldType::UnionBuf(_) => {
+                let buf = ptr_to_field(i as u32, gc);
+                ObjectFieldType::retain_release_mark_union_buf(
+                    gc,
+                    buf,
+                    union_tag.unwrap(),
+                    &ty.field_types(gc.type_env()),
+                    Some(work),
+                );
+            }
+            ObjectFieldType::TraverseFunction => {}
         }
     }
 }
