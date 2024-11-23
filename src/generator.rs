@@ -695,7 +695,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder()
                 .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
             // Mark the object as non_threaded.
-            self.mark_as_local_one(obj_ptr);
+            self.mark_local_one(obj_ptr);
             // And jump to unique_bb.
             self.builder().build_unconditional_branch(unique_bb);
         }
@@ -1292,7 +1292,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.build_release_mark(obj, TraverserWorkType::mark_threaded())
     }
 
-    pub fn mark_as_local_one(&mut self, ptr: PointerValue<'c>) {
+    fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_LOCAL` to `ptr_refcnt_state`.
         self.builder().build_store(
@@ -1301,7 +1301,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
     }
 
-    pub fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
+    fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
         let current_bb = self.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let cont_bb = self
@@ -1342,7 +1342,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Mark object as global so that it will not be retained or released.
-    pub fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
+    fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_GLOBAL` to `ptr_refcnt_state`.
         self.builder().build_store(
