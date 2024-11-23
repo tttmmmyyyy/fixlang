@@ -1442,12 +1442,28 @@ impl TypeNode {
         }
     }
 
-    // Get traverser name.
+    // Create the name of traverser function.
     pub fn traverser_name(
         self: &Arc<TypeNode>,
         capture: &Vec<Arc<TypeNode>>,
         work: Option<TraverserWorkType>,
     ) -> String {
+        let prefix = match work {
+            None => "trav_dyn_",
+            Some(work) => match work.0 {
+                TRAVERSER_WORK_RELEASE => "trav_release_",
+                TRAVERSER_WORK_MARK_GLOBAL => "trav_mark_global_",
+                TRAVERSER_WORK_MARK_THREADED => "trav_mark_threaded_",
+                _ => unreachable!(),
+            },
+        };
+        prefix.to_string() + self.hash_with_capture(capture).as_str()
+    }
+
+    // Get the hash value of the type with the given capturing types (used for dynamic objects).
+    pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
+        // If the type is not dynamic, then the capturing types should be empty.
+        assert!(self.is_dynamic() || capture.len() == 0);
         let mut str = "".to_string();
         str += &self.to_string_normalize();
         if capture.len() > 0 {
@@ -1460,16 +1476,7 @@ impl TypeNode {
         if capture.len() > 0 {
             str += "]";
         }
-        let prefix = match work {
-            None => "trav_dyn_",
-            Some(work) => match work.0 {
-                TRAVERSER_WORK_RELEASE => "trav_release_",
-                TRAVERSER_WORK_MARK_GLOBAL => "trav_mark_global_",
-                TRAVERSER_WORK_MARK_THREADED => "trav_mark_threaded_",
-                _ => unreachable!(),
-            },
-        };
-        prefix.to_string() + &format!("{:x}", md5::compute(str))
+        format!("{:x}", md5::compute(str))
     }
 
     // Get hash value.
