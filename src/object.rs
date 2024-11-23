@@ -1428,8 +1428,8 @@ pub fn get_traverser_ptr<'c, 'm>(
                 let func = gc
                     .module
                     .add_function(func_name, func_type, Some(Linkage::Internal));
-                let bb = gc.context.append_basic_block(func, "entry");
                 let _builder_guard = gc.push_builder();
+                let bb = gc.context.append_basic_block(func, "entry");
                 gc.builder().position_at_end(bb);
                 gc.builder().build_return(None);
                 func
@@ -1474,6 +1474,12 @@ pub fn create_traverser<'c, 'm>(
     let func = gc
         .module
         .add_function(&trav_name, func_type, Some(Linkage::Internal));
+    // Set the function "always inline".
+    func.add_attribute(
+        inkwell::attributes::AttributeLoc::Function,
+        gc.context.create_string_attribute("alwaysinline", "1"),
+    );
+
     let bb = gc.context.append_basic_block(func, "entry");
 
     // Implement traverser function.

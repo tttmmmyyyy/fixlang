@@ -8,6 +8,7 @@ pub fn add_strip_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
 }
 
 pub fn add_basic_optimization_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
+    passmgr.add_always_inliner_pass();
     passmgr.add_function_inlining_pass();
     passmgr.add_strip_dead_prototypes_pass();
     passmgr.add_dead_store_elimination_pass();

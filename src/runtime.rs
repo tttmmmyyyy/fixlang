@@ -5,7 +5,7 @@ use super::*;
 pub const RUNTIME_ABORT: &str = "abort";
 pub const RUNTIME_EPRINT: &str = "fixruntime_eprint";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
-pub const RUNTIME_RETAIN_BOXED_OBJECT: &str = "fixruntime_retain_obj";
+// pub const RUNTIME_RETAIN_BOXED_OBJECT: &str = "fixruntime_retain_obj";
 // pub const RUNTIME_RELEASE_BOXED_OBJECT: &str = "fixruntime_release_obj";
 // pub const RUNTIME_MARK_GLOBAL_BOXED_OBJECT: &str = "fixruntime_mark_global_obj";
 // pub const RUNTIME_MARK_THREADED_BOXED_OBJECT: &str = "fixruntime_mark_threaded_obj";
@@ -20,7 +20,7 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: Build
     build_abort_function(gc, mode);
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
-    build_retain_boxed_function(gc, mode);
+    // build_retain_boxed_function(gc, mode);
     // build_release_boxed_function(gc, mode);
     // build_mark_global_boxed_object_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
@@ -100,83 +100,83 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: Buil
     return;
 }
 
-fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
-    let context = gc.context;
-    let module = gc.module;
+// fn build_retain_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
+//     let context = gc.context;
+//     let module = gc.module;
 
-    let retain_func = match mode {
-        BuildMode::Declare => {
-            if let Some(_func) = gc.module.get_function(RUNTIME_RETAIN_BOXED_OBJECT) {
-                return;
-            }
-            let void_type = context.void_type();
-            let func_type = void_type.fn_type(&[ptr_to_object_type(context).into()], false);
-            module.add_function(
-                RUNTIME_RETAIN_BOXED_OBJECT,
-                func_type,
-                Some(gc.config.external_if_separated()),
-            );
-            return;
-        }
-        BuildMode::Implement => match gc.module.get_function(RUNTIME_RETAIN_BOXED_OBJECT) {
-            Some(func) => func,
-            None => panic!(
-                "Runtime function {} is not declared",
-                RUNTIME_RETAIN_BOXED_OBJECT
-            ),
-        },
-    };
+//     let retain_func = match mode {
+//         BuildMode::Declare => {
+//             if let Some(_func) = gc.module.get_function(RUNTIME_RETAIN_BOXED_OBJECT) {
+//                 return;
+//             }
+//             let void_type = context.void_type();
+//             let func_type = void_type.fn_type(&[ptr_to_object_type(context).into()], false);
+//             module.add_function(
+//                 RUNTIME_RETAIN_BOXED_OBJECT,
+//                 func_type,
+//                 Some(gc.config.external_if_separated()),
+//             );
+//             return;
+//         }
+//         BuildMode::Implement => match gc.module.get_function(RUNTIME_RETAIN_BOXED_OBJECT) {
+//             Some(func) => func,
+//             None => panic!(
+//                 "Runtime function {} is not declared",
+//                 RUNTIME_RETAIN_BOXED_OBJECT
+//             ),
+//         },
+//     };
 
-    let bb = context.append_basic_block(retain_func, "entry");
+//     let bb = context.append_basic_block(retain_func, "entry");
 
-    let _builder_guard = gc.push_builder();
-    gc.builder().position_at_end(bb);
+//     let _builder_guard = gc.push_builder();
+//     gc.builder().position_at_end(bb);
 
-    // Get pointer to object.
-    let obj_ptr = retain_func.get_first_param().unwrap().into_pointer_value();
+//     // Get pointer to object.
+//     let obj_ptr = retain_func.get_first_param().unwrap().into_pointer_value();
 
-    // Branch by refcnt_state.
-    let (local_bb, threaded_bb, global_bb) = gc.build_branch_by_refcnt_state(obj_ptr);
+//     // Branch by refcnt_state.
+//     let (local_bb, threaded_bb, global_bb) = gc.build_branch_by_refcnt_state(obj_ptr);
 
-    // Implement `local_bb`.
-    gc.builder().position_at_end(local_bb);
-    // Increment refcnt and return.
-    let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-    let old_refcnt_local = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
-    let new_refcnt = gc.builder().build_int_nsw_add(
-        old_refcnt_local,
-        refcnt_type(gc.context).const_int(1, false).into(),
-        "",
-    );
-    gc.builder().build_store(ptr_to_refcnt, new_refcnt);
-    gc.builder().build_return(None);
+//     // Implement `local_bb`.
+//     gc.builder().position_at_end(local_bb);
+//     // Increment refcnt and return.
+//     let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+//     let old_refcnt_local = gc.builder().build_load(ptr_to_refcnt, "").into_int_value();
+//     let new_refcnt = gc.builder().build_int_nsw_add(
+//         old_refcnt_local,
+//         refcnt_type(gc.context).const_int(1, false).into(),
+//         "",
+//     );
+//     gc.builder().build_store(ptr_to_refcnt, new_refcnt);
+//     gc.builder().build_return(None);
 
-    // Implement threaded_bb.
-    if threaded_bb.is_some() {
-        let threaded_bb = threaded_bb.unwrap();
+//     // Implement threaded_bb.
+//     if threaded_bb.is_some() {
+//         let threaded_bb = threaded_bb.unwrap();
 
-        gc.builder().position_at_end(threaded_bb);
-        // Increment refcnt atomically and jump to `end_bb`.
-        let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
-        let _old_refcnt_threaded = gc
-            .builder()
-            .build_atomicrmw(
-                inkwell::AtomicRMWBinOp::Add,
-                ptr_to_refcnt,
-                refcnt_type(gc.context).const_int(1, false),
-                inkwell::AtomicOrdering::Monotonic,
-            )
-            .unwrap();
-        gc.builder().build_return(None);
-    }
+//         gc.builder().position_at_end(threaded_bb);
+//         // Increment refcnt atomically and jump to `end_bb`.
+//         let ptr_to_refcnt = gc.get_refcnt_ptr(obj_ptr);
+//         let _old_refcnt_threaded = gc
+//             .builder()
+//             .build_atomicrmw(
+//                 inkwell::AtomicRMWBinOp::Add,
+//                 ptr_to_refcnt,
+//                 refcnt_type(gc.context).const_int(1, false),
+//                 inkwell::AtomicOrdering::Monotonic,
+//             )
+//             .unwrap();
+//         gc.builder().build_return(None);
+//     }
 
-    // Implement global_bb.
-    gc.builder().position_at_end(global_bb);
-    // In this case, nothing to do.
-    gc.builder().build_return(None);
+//     // Implement global_bb.
+//     gc.builder().position_at_end(global_bb);
+//     // In this case, nothing to do.
+//     gc.builder().build_return(None);
 
-    return;
-}
+//     return;
+// }
 
 // fn build_release_boxed_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
 //     let release_func = match mode {

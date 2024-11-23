@@ -577,7 +577,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let obj = var.ptr.get(self);
         if var.used_later > 0 {
             // If used later, clone object.
-            self.retain(obj.clone());
+            self.build_retain(obj.clone());
             if obj.is_unbox(self.type_env()) {
                 // if unboxed, in addition to retain, we also need to store the value to another memory region other than obj,
                 // since all unboxed values are treated as like unique object (i.e., the object of refcnt = 1)
@@ -916,41 +916,106 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Retain an object.
     pub fn retain(&mut self, obj: Object<'c>) {
+        // Get retain function.
+        let func_name = "retain_".to_string() + &obj.ty.hash();
+        let func = if let Some(func) = self.module.get_function(&func_name) {
+            func
+        } else {
+            let func = self.module.add_function(
+                &func_name,
+                self.context
+                    .void_type()
+                    .fn_type(&[ptr_to_object_type(&self.context).into()], false),
+                Some(Linkage::Internal),
+            );
+            let bb = self.context.append_basic_block(func, "entry");
+            let _builder_guard = self.push_builder();
+            self.builder().position_at_end(bb);
+            let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
+            let obj = Object::new(obj_ptr, obj.ty.clone());
+            self.build_retain(obj);
+            self.builder().build_return(None);
+            func
+        };
+
+        // Call retain function.
+        let obj_ptr = obj.ptr(self);
+        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(&self.context));
+        self.builder()
+            .build_call(func, &[obj_ptr.into()], "call_retain");
+    }
+
+    // Retain an object.
+    fn build_retain(&mut self, obj: Object<'c>) {
         if obj.is_box(self.type_env()) {
-            let cont_bb = if obj.is_dynamic_object() {
+            let current_bb = self.builder().get_insert_block().unwrap();
+            let current_func = current_bb.get_parent().unwrap();
+            let cont_bb = self
+                .context
+                .append_basic_block(current_func, "cont_bb@retain");
+
+            if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
 
                 // Dynamic object can be null.
-                let current_bb = self.builder().get_insert_block().unwrap();
-                let current_func = current_bb.get_parent().unwrap();
                 let nonnull_bb = self
                     .context
-                    .append_basic_block(current_func, "nonnull_in_retain_dynamic");
-                let cont_bb = self
-                    .context
-                    .append_basic_block(current_func, "cont_in_retain_dynamic");
+                    .append_basic_block(current_func, "nonnull_bb@retain");
 
                 // Branch to nonnull_bb if object is not null.
                 let is_null = obj.is_null(self);
                 self.builder()
                     .build_conditional_branch(is_null, cont_bb, nonnull_bb);
 
-                // Implement nonnull_bb.
+                // Implement code to retain in nonnull_bb.
                 self.builder().position_at_end(nonnull_bb);
-
-                Some(cont_bb)
-            } else {
-                None
-            };
+            }
 
             let obj_ptr = obj.ptr(self);
-            self.call_runtime(RUNTIME_RETAIN_BOXED_OBJECT, &[obj_ptr.into()]);
+            // Branch by refcnt_state.
+            let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
 
-            if obj.is_dynamic_object() {
-                // Dynamic object can be null, so build null checking.
-                self.builder().build_unconditional_branch(cont_bb.unwrap());
-                self.builder().position_at_end(cont_bb.unwrap());
+            // Implement `local_bb`.
+            self.builder().position_at_end(local_bb);
+
+            // In `local_bb`, increment refcnt and jump to `cont_bb`.
+            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+            let old_refcnt_local = self
+                .builder()
+                .build_load(ptr_to_refcnt, "")
+                .into_int_value();
+            let new_refcnt = self.builder().build_int_nsw_add(
+                old_refcnt_local,
+                refcnt_type(self.context).const_int(1, false).into(),
+                "",
+            );
+            self.builder().build_store(ptr_to_refcnt, new_refcnt);
+            self.builder().build_unconditional_branch(cont_bb);
+
+            // Implement threaded_bb.
+            if threaded_bb.is_some() {
+                let threaded_bb = threaded_bb.unwrap();
+                self.builder().position_at_end(threaded_bb);
+
+                // In `threaded_bb`, increment refcnt atomically and jump to `cont_bb`.
+                let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+                let _old_refcnt_threaded = self
+                    .builder()
+                    .build_atomicrmw(
+                        inkwell::AtomicRMWBinOp::Add,
+                        ptr_to_refcnt,
+                        refcnt_type(self.context).const_int(1, false),
+                        inkwell::AtomicOrdering::Monotonic,
+                    )
+                    .unwrap();
+                self.builder().build_unconditional_branch(cont_bb);
             }
+
+            // Implement global_bb.
+            self.builder().position_at_end(global_bb);
+            self.builder().build_unconditional_branch(cont_bb);
+
+            self.builder().position_at_end(cont_bb);
         } else {
             // When the object is unboxed,
             let obj_type = ty_to_object_ty(&obj.ty, &vec![], self.type_env());
@@ -1010,7 +1075,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Release or mark global or mark threaded nonnull boxed object.
-    pub fn build_release_mark_nonnull_boxed(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
+    fn build_release_mark_nonnull_boxed(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
         // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
         if work == TraverserWorkType::release() && obj.is_destructor_object() {
             // Branch by whether or not the reference counter is one.
@@ -1029,7 +1094,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 obj,
                 DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
             );
-            self.retain(dtor.clone());
+            self.build_retain(dtor.clone());
             let io_act = self.apply_lambda(dtor, vec![value], None);
             let res = run_io_value(self, &io_act, None);
             ObjectFieldType::set_struct_field_norelease(
@@ -1105,7 +1170,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    // Reelase a boxed object.
+    // Release a boxed object.
     fn build_release_boxed(&mut self, obj: &Object<'c>) {
         // Get pointer to the object.
         let obj_ptr = obj.ptr(self);
@@ -1275,21 +1340,99 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Release object.
     pub fn release(&mut self, obj: Object<'c>) {
-        self.build_release_mark(obj, TraverserWorkType::release())
+        // Get release function.
+        let func_name = "release_".to_string() + &obj.ty.hash();
+        let func = if let Some(func) = self.module.get_function(&func_name) {
+            func
+        } else {
+            let func = self.module.add_function(
+                &func_name,
+                self.context
+                    .void_type()
+                    .fn_type(&[ptr_to_object_type(&self.context).into()], false),
+                Some(Linkage::Internal),
+            );
+            let bb = self.context.append_basic_block(func, "entry");
+            let _builder_guard = self.push_builder();
+            self.builder().position_at_end(bb);
+            let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
+            let obj = Object::new(obj_ptr, obj.ty.clone());
+            self.build_release_mark(obj, TraverserWorkType::release());
+            self.builder().build_return(None);
+            func
+        };
+
+        // Call release function.
+        let obj_ptr = obj.ptr(self);
+        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(&self.context));
+        self.builder()
+            .build_call(func, &[obj_ptr.into()], "call_release");
     }
 
     // Release nonnull boxed object.
-    pub fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
+    fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
         self.build_release_mark_nonnull_boxed(obj, TraverserWorkType::release())
     }
 
     // Mark all objects reachable from `obj` as global.
     pub fn mark_global(&mut self, obj: Object<'c>) {
-        self.build_release_mark(obj, TraverserWorkType::mark_global())
+        // Get `mark_global` function.
+        let func_name = "mark_global_".to_string() + &obj.ty.hash();
+        let func = if let Some(func) = self.module.get_function(&func_name) {
+            func
+        } else {
+            let func = self.module.add_function(
+                &func_name,
+                self.context
+                    .void_type()
+                    .fn_type(&[ptr_to_object_type(&self.context).into()], false),
+                Some(Linkage::Internal),
+            );
+            let bb = self.context.append_basic_block(func, "entry");
+            let _builder_guard = self.push_builder();
+            self.builder().position_at_end(bb);
+            let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
+            let obj = Object::new(obj_ptr, obj.ty.clone());
+            self.build_release_mark(obj, TraverserWorkType::mark_global());
+            self.builder().build_return(None);
+            func
+        };
+
+        // Call `mark_global` function.
+        let obj_ptr = obj.ptr(self);
+        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(&self.context));
+        self.builder()
+            .build_call(func, &[obj_ptr.into()], "call_mark_global");
     }
 
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
-        self.build_release_mark(obj, TraverserWorkType::mark_threaded())
+        // Get `mark_threaded` function.
+        let func_name = "mark_threaded_".to_string() + &obj.ty.hash();
+        let func = if let Some(func) = self.module.get_function(&func_name) {
+            func
+        } else {
+            let func = self.module.add_function(
+                &func_name,
+                self.context
+                    .void_type()
+                    .fn_type(&[ptr_to_object_type(&self.context).into()], false),
+                Some(Linkage::Internal),
+            );
+            let bb = self.context.append_basic_block(func, "entry");
+            let _builder_guard = self.push_builder();
+            self.builder().position_at_end(bb);
+            let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
+            let obj = Object::new(obj_ptr, obj.ty.clone());
+            self.build_release_mark(obj, TraverserWorkType::mark_threaded());
+            self.builder().build_return(None);
+            func
+        };
+
+        // Call `mark_threaded` function.
+        let obj_ptr = obj.ptr(self);
+        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(&self.context));
+        self.builder()
+            .build_call(func, &[obj_ptr.into()], "call_mark_threaded");
     }
 
     fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
@@ -1682,7 +1825,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     i as u32 + DYNAMIC_OBJ_CAP_IDX,
                 );
                 let cap_obj = Object::create_from_value(cap_val, cap_ty.clone(), self);
-                self.retain(cap_obj.clone());
+                self.build_retain(cap_obj.clone());
                 self.scope_push(cap_name, &cap_obj);
                 // Create local variable for debug info.
                 if self.has_di() {
