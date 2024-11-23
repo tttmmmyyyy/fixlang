@@ -32,6 +32,7 @@ use crate::ExprNode;
 use crate::FixOptimizationLevel;
 use crate::GenerationContext;
 use crate::LinkType;
+use crate::OutputFileType;
 use crate::Program;
 use crate::TypeCheckContext;
 use crate::ValgrindTool;
@@ -41,8 +42,7 @@ use crate::GLOBAL_VAR_NAME_ARGV;
 use crate::INTERMEDIATE_PATH;
 use crate::{borrowing_optimization, SubCommand};
 use crate::{build_runtime, parse_file_path};
-use crate::{llvm_passes_hand, run_io_value};
-use crate::{llvm_passes_opt, OutputFileType};
+use crate::{llvm_passes, run_io_value};
 use crate::{make_std_mod, runtime};
 use crate::{make_tuple_traits_mod, BuildMode};
 
@@ -392,13 +392,13 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
             passmgr.add_tail_call_elimination_pass();
         }
         FixOptimizationLevel::Separated => {
-            llvm_passes_hand::add_basic_optimization_passes(&passmgr);
-            llvm_passes_opt::add_optimized_optimization_passes(&passmgr);
+            llvm_passes::add_basic_optimization_passes(&passmgr);
+            llvm_passes::add_optimized_optimization_passes(&passmgr, &config.llvm_passes_file);
         }
         FixOptimizationLevel::Default => {
-            llvm_passes_hand::add_basic_optimization_passes(&passmgr);
-            llvm_passes_opt::add_optimized_optimization_passes(&passmgr);
-            llvm_passes_hand::add_strip_passes(&passmgr);
+            llvm_passes::add_basic_optimization_passes(&passmgr);
+            llvm_passes::add_optimized_optimization_passes(&passmgr, &config.llvm_passes_file);
+            llvm_passes::add_strip_passes(&passmgr);
         }
     }
     passmgr.add_verifier_pass(); // Verification after optimization.

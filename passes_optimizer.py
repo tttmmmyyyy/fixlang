@@ -7,113 +7,98 @@ import random
 from statsmodels.stats.weightstats import ttest_ind
 import numpy as np
 
-# Optimizes llvm optimization passes by updating llvm_passes.rs.
-SOURCE_FILE = './src/llvm_passes_opt.rs'
+SOURCE_FILE = './src/llvm_passes_optimized.txt'
 
 LOG_FILE = './passes_optimizer.log'
 
 INITIAL_PASSES = '''
-add_early_cse_pass
-add_scalar_repl_aggregates_pass_ssa
-add_global_optimizer_pass
-add_aggressive_dce_pass
-add_loop_unroll_and_jam_pass
-add_ipsccp_pass
-add_function_inlining_pass
-add_early_cse_pass
-add_loop_deletion_pass
-add_constant_merge_pass
-add_dead_store_elimination_pass
-add_constant_merge_pass
-add_function_inlining_pass
-add_instruction_combining_pass
-add_scalar_repl_aggregates_pass
-add_tail_call_elimination_pass
-add_promote_memory_to_register_pass
-add_jump_threading_pass
-add_ipsccp_pass
-add_loop_rotate_pass
-add_loop_vectorize_pass
-add_scalar_repl_aggregates_pass_ssa
-add_strip_dead_prototypes_pass
-add_always_inliner_pass
-add_always_inliner_pass
-add_strip_dead_prototypes_pass
-add_scoped_no_alias_aa_pass
-add_slp_vectorize_pass
-add_sccp_pass
-add_dead_store_elimination_pass
-add_aggressive_dce_pass
-add_ipsccp_pass
-add_simplify_lib_calls_pass
-add_instruction_combining_pass
-add_ind_var_simplify_pass
-add_aggressive_inst_combiner_pass
-add_dead_store_elimination_pass
-add_always_inliner_pass
-add_early_cse_pass
-add_scalar_repl_aggregates_pass_ssa
-add_function_attrs_pass
-add_simplify_lib_calls_pass
-add_sccp_pass
-add_loop_vectorize_pass
-add_global_optimizer_pass
-add_aggressive_dce_pass
-add_promote_memory_to_register_pass
-add_ipsccp_pass
-add_loop_idiom_pass
-add_bit_tracking_dce_pass
-add_instruction_simplify_pass
-add_simplify_lib_calls_pass
-add_strip_dead_prototypes_pass
-add_type_based_alias_analysis_pass
-add_ind_var_simplify_pass
-add_strip_dead_prototypes_pass
-add_global_optimizer_pass
-add_promote_memory_to_register_pass
-add_basic_alias_analysis_pass
-add_slp_vectorize_pass
-add_aggressive_inst_combiner_pass
-add_instruction_simplify_pass
-add_basic_alias_analysis_pass
-add_loop_unroll_pass
-add_early_cse_pass
-add_instruction_simplify_pass
-add_correlated_value_propagation_pass
-add_loop_rotate_pass
-add_loop_reroll_pass
-add_type_based_alias_analysis_pass
-add_dead_arg_elimination_pass
-add_scalar_repl_aggregates_pass
-add_bit_tracking_dce_pass
-add_memcpy_optimize_pass
-add_memcpy_optimize_pass
-add_lower_switch_pass
-add_aggressive_dce_pass
-add_loop_reroll_pass
-add_loop_unroll_and_jam_pass
-add_ipsccp_pass
-add_merged_load_store_motion_pass
-add_loop_vectorize_pass
-add_scoped_no_alias_aa_pass
+early_cse_pass
+scalar_repl_aggregates_pass_ssa
+global_optimizer_pass
+aggressive_dce_pass
+loop_unroll_and_jam_pass
+ipsccp_pass
+function_inlining_pass
+early_cse_pass
+loop_deletion_pass
+constant_merge_pass
+dead_store_elimination_pass
+constant_merge_pass
+function_inlining_pass
+instruction_combining_pass
+scalar_repl_aggregates_pass
+tail_call_elimination_pass
+promote_memory_to_register_pass
+jump_threading_pass
+ipsccp_pass
+loop_rotate_pass
+loop_vectorize_pass
+scalar_repl_aggregates_pass_ssa
+strip_dead_prototypes_pass
+always_inliner_pass
+always_inliner_pass
+strip_dead_prototypes_pass
+scoped_no_alias_aa_pass
+slp_vectorize_pass
+sccp_pass
+dead_store_elimination_pass
+aggressive_dce_pass
+ipsccp_pass
+simplify_lib_calls_pass
+instruction_combining_pass
+ind_var_simplify_pass
+aggressive_inst_combiner_pass
+dead_store_elimination_pass
+always_inliner_pass
+early_cse_pass
+scalar_repl_aggregates_pass_ssa
+function_attrs_pass
+simplify_lib_calls_pass
+sccp_pass
+loop_vectorize_pass
+global_optimizer_pass
+aggressive_dce_pass
+promote_memory_to_register_pass
+ipsccp_pass
+loop_idiom_pass
+bit_tracking_dce_pass
+instruction_simplify_pass
+simplify_lib_calls_pass
+strip_dead_prototypes_pass
+type_based_alias_analysis_pass
+ind_var_simplify_pass
+strip_dead_prototypes_pass
+global_optimizer_pass
+promote_memory_to_register_pass
+basic_alias_analysis_pass
+slp_vectorize_pass
+aggressive_inst_combiner_pass
+instruction_simplify_pass
+basic_alias_analysis_pass
+loop_unroll_pass
+early_cse_pass
+instruction_simplify_pass
+correlated_value_propagation_pass
+loop_rotate_pass
+loop_reroll_pass
+type_based_alias_analysis_pass
+dead_arg_elimination_pass
+scalar_repl_aggregates_pass
+bit_tracking_dce_pass
+memcpy_optimize_pass
+memcpy_optimize_pass
+lower_switch_pass
+aggressive_dce_pass
+loop_reroll_pass
+loop_unroll_and_jam_pass
+ipsccp_pass
+merged_load_store_motion_pass
+loop_vectorize_pass
+scoped_no_alias_aa_pass
 '''
 INITIAL_PASSES = INITIAL_PASSES.split('\n')
 INITIAL_PASSES = [line.strip() for line in INITIAL_PASSES]
 INITIAL_PASSES = [line for line in INITIAL_PASSES if len(line) > 0]
-
-HEADER = '''
-// LLVM passes selected by "passes_optimizer.py".
-
-use inkwell::passes::{PassManager, PassManagerSubType};
-
-pub fn add_optimized_optimization_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
-'''
-
-FOOTER = '''
-}
-'''
-
-ADD_PASS_FORMAT = 'passmgr.{}();'
 
 ADDED_PASSES_NUM = 10
 
@@ -127,44 +112,44 @@ ADDED_PASSES_NUM = 10
 #  add_early_cse_mem_ssa_pass (breaks program (Random module))
 #  add_merge_functions_pass (breaks program)
 PASSES = '''
-add_function_inlining_pass
-add_early_cse_pass
-add_function_inlining_pass
-add_scalar_repl_aggregates_pass_ssa
-add_sccp_pass
-add_instruction_simplify_pass
-add_loop_reroll_pass
-add_ipsccp_pass
-add_function_inlining_pass
-add_loop_unroll_pass
-add_correlated_value_propagation_pass
-add_strip_dead_prototypes_pass
-add_loop_unroll_and_jam_pass
-add_scalar_repl_aggregates_pass
-add_ind_var_simplify_pass
-add_cfg_simplification_pass
-add_scalar_repl_aggregates_pass
-add_partially_inline_lib_calls_pass
-add_instruction_combining_pass
-add_reassociate_pass
-add_loop_reroll_pass
-add_partially_inline_lib_calls_pass
-add_aggressive_inst_combiner_pass
-add_loop_deletion_pass
-add_loop_unroll_pass
-add_aggressive_inst_combiner_pass
-add_instruction_combining_pass
-add_loop_rotate_pass
-add_merged_load_store_motion_pass
-add_loop_deletion_pass
-add_loop_unroll_pass
-add_function_inlining_pass
-add_loop_idiom_pass
-add_slp_vectorize_pass
-add_ipsccp_pass
-add_early_cse_pass
-add_early_cse_pass
-add_ind_var_simplify_pass
+function_inlining_pass
+early_cse_pass
+function_inlining_pass
+scalar_repl_aggregates_pass_ssa
+sccp_pass
+instruction_simplify_pass
+loop_reroll_pass
+ipsccp_pass
+function_inlining_pass
+loop_unroll_pass
+correlated_value_propagation_pass
+strip_dead_prototypes_pass
+loop_unroll_and_jam_pass
+scalar_repl_aggregates_pass
+ind_var_simplify_pass
+cfg_simplification_pass
+scalar_repl_aggregates_pass
+partially_inline_lib_calls_pass
+instruction_combining_pass
+reassociate_pass
+loop_reroll_pass
+partially_inline_lib_calls_pass
+aggressive_inst_combiner_pass
+loop_deletion_pass
+loop_unroll_pass
+aggressive_inst_combiner_pass
+instruction_combining_pass
+loop_rotate_pass
+merged_load_store_motion_pass
+loop_deletion_pass
+loop_unroll_pass
+function_inlining_pass
+loop_idiom_pass
+slp_vectorize_pass
+ipsccp_pass
+early_cse_pass
+early_cse_pass
+ind_var_simplify_pass
 '''
 
 
@@ -178,18 +163,14 @@ def get_all_passes():
 
 def write_source_file(passes):
     with open(SOURCE_FILE, 'w') as f:
-        f.write(HEADER)
-        f.write('\n')
         for p in passes:
-            f.write(ADD_PASS_FORMAT.format(p))
+            f.write(p)
             f.write('\n')
-        f.write(FOOTER)
-        f.write('\n')
 
 
 def run_benchmark(timeout=10):
     work_dir = "./benchmark/speedtest"
-    cp = subprocess.run(['cargo', 'run', '--', 'build'],
+    cp = subprocess.run(['cargo', 'run', '--', 'build', '--llvm-passes-file', SOURCE_FILE],
                         capture_output=True, text=True, cwd=work_dir)
     if cp.returncode != 0:
         print('build failed.')
@@ -222,9 +203,8 @@ def print_passes(passes):
 
 
 def add_log(phase, time, passes):
-    passes = [ADD_PASS_FORMAT.format(p) for p in passes]
     with open(LOG_FILE, 'a') as f:
-        f.write(f'{phase},{time},"{"".join(passes)}"\n')
+        f.write(f'{phase},{time},"{",".join(passes)}"\n')
 
 
 def optimize():
