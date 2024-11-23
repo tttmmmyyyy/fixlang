@@ -31,8 +31,21 @@ count_element = |elem, arr| (
     )
 );
 
+// Generated many random numbers and sum them up.
+sum_up_randoms : I64 -> U64;
+sum_up_randoms = |n| (
+    let init = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
+    let rng = init_by_array(init);
+    loop((0, 0_U64, rng), |(i, sum, rng)|
+        if n == i { break $ sum };
+        let (rng, x) = rng.generate_U64;
+        continue $ (i + 1, sum + x, rng)
+    )
+);
+
 main : IO ();
 main = (
-    assert_eq(|_|"count-primes", 1000000.prime_table.count_element(true), 78498);;
+    assert_eq(|_|"count-primes", prime_table(700000).count_element(true), 56543);;
+    assert_eq(|_|"sum-up-randoms", sum_up_randoms(700000), 12983264567312419866_U64);;
     pure()
 );
