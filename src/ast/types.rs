@@ -464,13 +464,13 @@ impl TypeNode {
         match &self.ty {
             Type::TyVar(_) => true,
             Type::TyCon(_) => true,
-            Type::TyApp(head, _) => head.is_assoc_ty_free(),
+            Type::TyApp(head, arg) => head.is_assoc_ty_free() && arg.is_assoc_ty_free(),
             Type::FunTy(src, dst) => src.is_assoc_ty_free() && dst.is_assoc_ty_free(),
             Type::AssocTy(_, _) => false,
         }
     }
 
-    // Is head of this type type constructor?
+    // Is the head a type constructor?
     fn is_head_tycon(&self) -> bool {
         match &self.ty {
             Type::TyVar(_) => false,
