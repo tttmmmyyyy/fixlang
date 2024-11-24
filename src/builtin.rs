@@ -12,6 +12,7 @@ use super::*;
 
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
+    // Primitive types
     ret.insert(
         TyCon::new(make_iostate_name()),
         TyConInfo {
@@ -169,8 +170,8 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             document: Some("The type of 64-bit floating point values.".to_string()),
         },
     );
-    // IO is defined in the source code of Std.
 
+    // Array
     ret.insert(
         make_array_tycon(),
         TyConInfo {
@@ -187,7 +188,23 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             document: Some("The type of variable length arrays. This is a boxed type.".to_string()),
         },
     );
-    // String is defined in the source code of Std.
+
+    // Arrow
+    ret.insert(
+        make_arrow_tycon(),
+        TyConInfo {
+            kind: kind_arrow(kind_star(), kind_arrow(kind_star(), kind_star())),
+            variant: TyConVariant::Arrow,
+            is_unbox: false,
+            tyvars: vec![
+                tyvar_from_name("a", &kind_star()),
+                tyvar_from_name("b", &kind_star()),
+            ],
+            fields: vec![],
+            source: None,
+            document: Some("`Arrow a b` represents the type of a function that takes a value of type `a` and returns a value of type `b`. Usually written as `a -> b`.".to_string()),
+        },
+    );
 
     // Function Pointers
     for arity in 1..=FUNPTR_ARGS_MAX {
@@ -206,6 +223,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             },
         );
     }
+
     // Dynamic object
     ret.insert(
         make_dynamic_object_tycon(),
@@ -221,6 +239,14 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     );
 
     ret
+}
+
+pub fn make_arrow_name() -> FullName {
+    FullName::from_strs(&[STD_NAME], ARROW_NAME)
+}
+
+pub fn make_arrow_tycon() -> TyCon {
+    TyCon::new(make_arrow_name())
 }
 
 pub fn make_dynamic_object_name() -> FullName {

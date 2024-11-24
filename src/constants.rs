@@ -18,6 +18,7 @@ pub const I64_NAME: &str = "I64";
 pub const U64_NAME: &str = "U64";
 pub const F32_NAME: &str = "F32";
 pub const F64_NAME: &str = "F64";
+pub const ARROW_NAME: &str = "Arrow";
 
 pub const C_CHAR_NAME: &str = "CChar";
 pub const C_UNSIGNED_CHAR_NAME: &str = "CUnsignedChar";

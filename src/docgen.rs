@@ -231,8 +231,9 @@ fn type_entries(
         }
 
         let def_rhs: &str = match &ty_info.variant {
-            TyConVariant::Primitive => "{ primitive }",
-            TyConVariant::Array => "{ primitive }",
+            TyConVariant::Primitive => "{ built-in }",
+            TyConVariant::Array => "{ built-in }",
+            TyConVariant::Arrow => "{ built-in }",
             TyConVariant::Struct => "struct { ...fields... }",
             TyConVariant::Union => "union { ...variants... }",
             TyConVariant::DynamicObject => {

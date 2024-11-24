@@ -1297,6 +1297,9 @@ pub fn ty_to_object_ty(
                         .push(ObjectFieldType::SubObject(cap.clone(), false));
                 }
             }
+            TyConVariant::Arrow => {
+                unreachable!() // Covered by `if ty.is_closure()` above.
+            }
         }
     }
     ret

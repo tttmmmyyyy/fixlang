@@ -88,6 +88,7 @@ impl Kind {
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub enum TyConVariant {
     Primitive,
+    Arrow,
     Array,
     Struct,
     Union,
@@ -106,13 +107,10 @@ impl TyCon {
     }
 
     pub fn to_string(&self) -> String {
-        match get_tuple_n(&self.name) {
-            Some(n) => {
-                if n == 0 {
-                    return "()".to_string();
-                }
+        if let Some(n) = get_tuple_n(&self.name) {
+            if n == 0 {
+                return "()".to_string();
             }
-            None => {}
         }
         self.name.to_string()
     }
@@ -352,13 +350,6 @@ impl TypeNode {
                 }
                 arc1.find_node_at(pos)
             }
-            Type::FunTy(arc, arc1) => {
-                let node = arc.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
-                arc1.find_node_at(pos)
-            }
             Type::AssocTy(_ty_assoc, vec) => {
                 for ty in vec {
                     let node = ty.find_node_at(pos);
@@ -382,10 +373,6 @@ impl TypeNode {
                 fun.define_modules_of_tycons(out_set);
                 arg.define_modules_of_tycons(out_set);
             }
-            Type::FunTy(src, dst) => {
-                src.define_modules_of_tycons(out_set);
-                dst.define_modules_of_tycons(out_set);
-            }
             Type::AssocTy(_, _) => panic!(
                 "Upto this function is called, all associated types should have been resolved."
             ),
@@ -398,7 +385,6 @@ impl TypeNode {
             Type::TyVar(tv2) => tv.name == tv2.name, // Ignore kind.
             Type::TyCon(_) => false,
             Type::TyApp(fun, arg) => fun.contains_tyvar(tv) || arg.contains_tyvar(tv),
-            Type::FunTy(src, dst) => src.contains_tyvar(tv) || dst.contains_tyvar(tv),
             Type::AssocTy(_, args) => {
                 // NOTE: The special `self` type variable should be resolved in parser.
                 for arg in args {
@@ -446,9 +432,6 @@ impl TypeNode {
             Type::TyApp(fun, arg) => self
                 .set_tyapp_fun(fun.set_kinds(tv_to_kind))
                 .set_tyapp_arg(arg.set_kinds(tv_to_kind)),
-            Type::FunTy(src, dst) => self
-                .set_funty_src(src.set_kinds(tv_to_kind))
-                .set_funty_dst(dst.set_kinds(tv_to_kind)),
             Type::AssocTy(_, args) => {
                 let args = args
                     .iter()
@@ -465,7 +448,6 @@ impl TypeNode {
             Type::TyVar(_) => true,
             Type::TyCon(_) => true,
             Type::TyApp(head, arg) => head.is_assoc_ty_free() && arg.is_assoc_ty_free(),
-            Type::FunTy(src, dst) => src.is_assoc_ty_free() && dst.is_assoc_ty_free(),
             Type::AssocTy(_, _) => false,
         }
     }
@@ -476,7 +458,6 @@ impl TypeNode {
             Type::TyVar(_) => false,
             Type::TyCon(_) => true,
             Type::TyApp(head, _) => head.is_head_tycon(),
-            Type::FunTy(_, _) => true,
             Type::AssocTy(_, _) => false,
         }
     }
@@ -507,12 +488,11 @@ impl TypeNode {
         }
     }
 
-    pub fn get_head_string(&self) -> String {
+    pub fn get_head_string(self: &Arc<TypeNode>) -> String {
         match &self.ty {
             Type::TyVar(_) => self.to_string(),
             Type::TyCon(_) => self.to_string(),
             Type::TyApp(head, _) => head.get_head_string(),
-            Type::FunTy(_, _) => "->".to_string(),
             Type::AssocTy(assoc_ty, _) => assoc_ty.name.to_string(),
         }
     }
@@ -546,15 +526,6 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    pub fn set_funty_src(&self, src: Arc<TypeNode>) -> Arc<TypeNode> {
-        let mut ret = self.clone();
-        match &self.ty {
-            Type::FunTy(_, dst) => ret.ty = Type::FunTy(src, dst.clone()),
-            _ => panic!(),
-        }
-        Arc::new(ret)
-    }
-
     pub fn set_assocty_name(&self, name: TyAssoc) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -573,41 +544,27 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    pub fn set_funty_dst(&self, dst: Arc<TypeNode>) -> Arc<TypeNode> {
-        let mut ret = self.clone();
-        match &self.ty {
-            Type::FunTy(src, _) => ret.ty = Type::FunTy(src.clone(), dst),
-            _ => panic!(),
+    // For a lambda type (i.e., a closure or a function pointer), return the source types.
+    // Returns an single element vector for a closure type.
+    pub fn get_lambda_srcs(self: &Arc<TypeNode>) -> Vec<Arc<TypeNode>> {
+        if self.is_funptr() || self.is_closure() {
+            let mut type_args = self.collect_type_argments();
+            type_args.pop(); // Discard the destination type.
+            return type_args;
         }
-        Arc::new(ret)
+        panic!(
+            "`get_lambda_srcs` called for non-lambda type: {}",
+            self.to_string()
+        );
     }
 
-    pub fn get_lambda_srcs(&self) -> Vec<Arc<TypeNode>> {
-        match &self.ty {
-            Type::FunTy(src, _dst) => vec![src.clone()],
-            _ => {
-                if self.is_funptr() {
-                    let mut type_args = self.collect_type_argments();
-                    type_args.pop();
-                    type_args
-                } else {
-                    panic!();
-                }
-            }
-        }
-    }
-
+    // For a lambda type (i.e., a closure or a function pointer), return the destination type.
     pub fn get_lambda_dst(&self) -> Arc<TypeNode> {
-        match &self.ty {
-            Type::FunTy(_src, dst) => dst.clone(),
-            _ => {
-                if self.is_funptr() {
-                    let mut type_args = self.collect_type_argments();
-                    type_args.pop().unwrap()
-                } else {
-                    panic!()
-                }
-            }
+        if self.is_funptr() || self.is_closure() {
+            let mut type_args = self.collect_type_argments();
+            type_args.pop().unwrap()
+        } else {
+            panic!()
         }
     }
 
@@ -676,9 +633,6 @@ impl TypeNode {
                     .set_tyapp_fun(fun.resolve_namespace(ctx)?)
                     .set_tyapp_arg(arg.resolve_namespace(ctx)?))
             }
-            Type::FunTy(src, dst) => Ok(self
-                .set_funty_src(src.resolve_namespace(ctx)?)
-                .set_funty_dst(dst.resolve_namespace(ctx)?)),
             Type::AssocTy(assoc_ty, args) => {
                 let mut assoc_ty = assoc_ty.clone();
                 assoc_ty.resolve_namespace(ctx, &self.info.source)?;
@@ -741,6 +695,7 @@ impl TypeNode {
         tys
     }
 
+    // For type `f a b c` where `f` is a type constructor returns `vec![a, b, c]`.
     pub fn collect_type_argments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match &self.ty {
@@ -754,8 +709,9 @@ impl TypeNode {
         ret
     }
 
-    // Convert a type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], C)`.
-    // - `vars_limit`: the maximum number of variables to be collected.
+    // Given a type `A1 -> A2 -> ... -> An -> B`, returns `([A1, A2, ..., An], B)`.
+    // n = 0 is allowed. In this case, returns `([], B)`.
+    // - `vars_limit`: limits the number of type variables to be collected.
     pub fn collect_app_src(
         self: &Arc<TypeNode>,
         vars_limit: usize,
@@ -765,26 +721,15 @@ impl TypeNode {
             vars: &mut Vec<Arc<TypeNode>>,
             vars_limit: usize,
         ) -> Arc<TypeNode> {
-            match &ty.ty {
-                Type::FunTy(var, val) => {
-                    vars.push(var.clone());
-                    if vars.len() >= vars_limit {
-                        return val.clone();
-                    }
-                    return collect_app_src_inner(&val, vars, vars_limit);
+            if ty.is_closure() || ty.is_funptr() {
+                let mut vs = ty.get_lambda_srcs();
+                if vars.len() + vs.len() > vars_limit {
+                    return ty.clone();
                 }
-                _ => {
-                    if ty.is_funptr() {
-                        let mut vs = ty.get_lambda_srcs();
-                        if vars.len() + vs.len() > vars_limit {
-                            return ty.clone();
-                        }
-                        vars.append(&mut vs);
-                        return collect_app_src_inner(&ty.get_lambda_dst(), vars, vars_limit);
-                    } else {
-                        ty.clone()
-                    }
-                }
+                vars.append(&mut vs);
+                return collect_app_src_inner(&ty.get_lambda_dst(), vars, vars_limit);
+            } else {
+                ty.clone()
             }
         }
 
@@ -870,17 +815,6 @@ impl TypeNode {
         // Treat other cases.
         match &self.ty {
             Type::TyVar(_) => Ok(self.clone()),
-            Type::FunTy(dom_ty, codom_ty) => Ok(self
-                .set_funty_src(dom_ty.resolve_type_aliases_inner(
-                    env,
-                    type_name_path.clone(),
-                    entry_type_src,
-                )?)
-                .set_funty_dst(codom_ty.resolve_type_aliases_inner(
-                    env,
-                    type_name_path,
-                    entry_type_src,
-                )?)),
             Type::TyCon(_) => Ok(self.clone()),
             Type::TyApp(fun_ty, arg_ty) => Ok(self
                 .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(
@@ -902,24 +836,12 @@ impl TypeNode {
         }
     }
 
-    // Is this type head normal form? i.e., begins with type variable.
-    pub fn is_funty(&self) -> bool {
-        match &self.ty {
-            Type::TyVar(_) => false,
-            Type::TyCon(_) => false,
-            Type::TyApp(_, _) => false,
-            Type::FunTy(_, _) => true,
-            Type::AssocTy(_, _) => false,
-        }
-    }
-
     // Get top-level type constructor of a type.
     pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
         match &self.ty {
             Type::TyVar(_) => None,
             Type::TyCon(tc) => Some(tc.clone()),
             Type::TyApp(fun, _) => fun.toplevel_tycon(),
-            Type::FunTy(_, _) => None,
             Type::AssocTy(_, _) => None,
         }
     }
@@ -932,9 +854,6 @@ impl TypeNode {
             }
             Type::TyCon(_) => type_tycon(&tycon),
             Type::TyApp(fun, arg) => type_tyapp(fun.set_toplevel_tycon(tycon), arg.clone()),
-            Type::FunTy(_, _) => {
-                panic!("`set_toplevel_tycon` reached to a function type.")
-            }
             Type::AssocTy(_, _) => {
                 panic!("`set_toplevel_tycon` reached to an associated type application.")
             }
@@ -942,10 +861,12 @@ impl TypeNode {
     }
 
     pub fn is_closure(&self) -> bool {
-        match self.ty {
-            Type::FunTy(_, _) => true,
-            _ => false,
+        let tc = self.toplevel_tycon();
+        if tc.is_none() {
+            return false;
         }
+        let tc = tc.unwrap();
+        tc.name == make_arrow_name()
     }
 
     pub fn is_funptr(&self) -> bool {
@@ -1124,33 +1045,6 @@ impl TypeNode {
                     }
                 }
             }
-            Type::FunTy(dom, codom) => {
-                let arg_kind = dom.kind(kind_env)?;
-                if arg_kind != kind_star() {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Cannot form function type `{}` since its domain type `{}` has kind `{}`.",
-                            self.to_string_normalize(),
-                            dom.to_string_normalize(),
-                            arg_kind.to_string()
-                        ),
-                        &[self.get_source()],
-                    ));
-                }
-                let ret_kind = codom.kind(kind_env)?;
-                if ret_kind != kind_star() {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Cannot form function type `{}` since its codomain type `{}` has kind `{}`.",
-                            self.to_string_normalize(),
-                            codom.to_string_normalize(),
-                            ret_kind.to_string()
-                        ),
-                        &[self.get_source()],
-                    ));
-                }
-                Ok(kind_star())
-            }
             Type::AssocTy(assoc_ty, args) => {
                 let kind_info = kind_env.assoc_tys.get(&assoc_ty).unwrap().clone();
                 assert_eq!(kind_info.param_kinds.len(), args.len());
@@ -1304,7 +1198,6 @@ pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
-    FunTy(Arc<TypeNode>, Arc<TypeNode>),
     AssocTy(TyAssoc, Vec<Arc<TypeNode>>),
 }
 
@@ -1350,7 +1243,7 @@ impl TypeNode {
     }
 
     // Stringify.
-    pub fn to_string(&self) -> String {
+    pub fn to_string(self: &Arc<TypeNode>) -> String {
         fn brace_needed_if_used_as_arg(arg: &Arc<TypeNode>) -> bool {
             match &arg.ty {
                 Type::TyVar(_) => false,
@@ -1360,7 +1253,6 @@ impl TypeNode {
                     let is_tuple = tycon.is_some() && get_tuple_n(&tycon.unwrap().name).is_some();
                     !is_tuple
                 }
-                Type::FunTy(_, _) => true,
                 Type::AssocTy(_, _) => true,
             }
         }
@@ -1369,29 +1261,45 @@ impl TypeNode {
             Type::TyVar(v) => v.name.clone(),
             Type::TyApp(fun, arg) => {
                 let tycon = self.toplevel_tycon();
-                if tycon.is_some() {
-                    match get_tuple_n(&tycon.unwrap().name) {
-                        Some(n) => {
-                            let args = self.collect_type_argments();
-                            let mut arg_strs =
-                                args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
+                if let Some(tycon) = tycon {
+                    if let Some(n) = get_tuple_n(&tycon.name) {
+                        // `Tuple{n}` case.
+                        let args = self.collect_type_argments();
+                        let mut arg_strs =
+                            args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
 
-                            // We cannot assume here even `args.len() <= n`
-                            // because this function is used for generating error messages where the user apply too many arguments to a type constructor!
-                            // assert!(args.len() <= n as usize);
+                        // We cannot assume here even `args.len() <= n`
+                        // because this function is used for generating error messages where the user apply too many arguments to a type constructor!
+                        // assert!(args.len() <= n as usize);
 
-                            // If args.len() < n, then `self` is a partial application to a tuple.
-                            // In this case, we show missing arguments by `*` (e.g., `(Std::I64, *)`).
-                            for _ in args.len()..n as usize {
-                                arg_strs.push(kind_star().to_string());
-                            }
-                            if n == 1 {
-                                return format!("({},)", arg_strs[0]);
-                            } else {
-                                return format!("({})", arg_strs.join(", "));
-                            }
+                        // If args.len() < n, then `self` is a partial application to a tuple.
+                        // In this case, we show missing arguments by `*` (e.g., `(Std::I64, *)`).
+                        for _ in args.len()..n as usize {
+                            arg_strs.push(kind_star().to_string());
                         }
-                        None => {}
+                        if n == 1 {
+                            return format!("({},)", arg_strs[0]);
+                        } else {
+                            return format!("({})", arg_strs.join(", "));
+                        }
+                    }
+                    if tycon.name == make_arrow_name() {
+                        // `->` case.
+                        let (args, dst) = self.collect_app_src(usize::MAX);
+                        let args = args
+                            .iter()
+                            .map(|arg| {
+                                if brace_needed_if_used_as_arg(arg) {
+                                    format!("({})", arg.to_string())
+                                } else {
+                                    arg.to_string()
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        let dst = dst.to_string();
+                        let mut subtys = args;
+                        subtys.push(dst);
+                        return subtys.join(" -> ");
                     }
                 }
                 let tyfun = fun.to_string();
@@ -1401,25 +1309,6 @@ impl TypeNode {
                 } else {
                     format!("{} {}", tyfun, arg_str)
                 }
-            }
-            Type::FunTy(src, dst) => {
-                let src_brace_needed = match src.ty {
-                    Type::FunTy(_, _) => true,
-                    _ => false,
-                };
-                let src = src.clone().to_string();
-                let dst = dst.clone().to_string();
-                let mut res: String = Default::default();
-                if src_brace_needed {
-                    res += "(";
-                    res += &src;
-                    res += ")";
-                } else {
-                    res += &src;
-                }
-                res += " -> ";
-                res += &dst;
-                res
             }
             Type::TyCon(tc) => tc.to_string(),
             Type::AssocTy(assoc_ty, args) => {
@@ -1485,7 +1374,8 @@ impl TypeNode {
         format!("{:x}", md5::compute(type_string))
     }
 
-    // See all associated type usages (e.g., `Elem c`) in this type and return the list of predicates required (e.g., `c : Collects`).
+    // Returns the list of predicates for this type to be well-formed.
+    // See all associated type usages (for example, `Elem c`) in this type and returns a preducate `c : Collects`.
     pub fn predicates_from_associated_types(&self) -> Vec<Predicate> {
         fn predicates_from_associated_types_inner(ty: &TypeNode, buf: &mut Vec<Predicate>) {
             match &ty.ty {
@@ -1494,10 +1384,6 @@ impl TypeNode {
                 Type::TyApp(fun, arg) => {
                     predicates_from_associated_types_inner(fun, buf);
                     predicates_from_associated_types_inner(arg, buf);
-                }
-                Type::FunTy(src, dst) => {
-                    predicates_from_associated_types_inner(src, buf);
-                    predicates_from_associated_types_inner(dst, buf);
                 }
                 Type::AssocTy(assoc_ty, args) => {
                     let pred = Predicate {
@@ -1546,7 +1432,7 @@ pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
 }
 
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
-    TypeNode::new_arc(Type::FunTy(src, dst))
+    type_tyapp(type_tyapp(type_tycon(&tycon(make_arrow_name())), src), dst)
 }
 
 pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
@@ -1592,10 +1478,6 @@ impl TypeNode {
                 free_vars.extend(tyfun.free_vars());
                 free_vars.extend(arg.free_vars());
             }
-            Type::FunTy(input, output) => {
-                free_vars.extend(input.free_vars());
-                free_vars.extend(output.free_vars());
-            }
             Type::TyCon(_) => {}
             Type::AssocTy(_, args) => {
                 for arg in args {
@@ -1618,10 +1500,6 @@ impl TypeNode {
             Type::TyApp(tyfun, arg) => {
                 tyfun.free_vars_to_vec(buf);
                 arg.free_vars_to_vec(buf);
-            }
-            Type::FunTy(input, output) => {
-                input.free_vars_to_vec(buf);
-                output.free_vars_to_vec(buf);
             }
             Type::TyCon(_) => {}
             Type::AssocTy(_, args) => {

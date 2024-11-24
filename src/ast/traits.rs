@@ -1234,11 +1234,7 @@ impl TraitEnv {
                 let instance_def_mod = &inst.define_module;
                 let trait_def_id = trait_id.name.module();
                 let ty = &inst.qual_pred.predicate.ty;
-                let type_def_id = if ty.is_funty() {
-                    STD_NAME.to_string()
-                } else {
-                    ty.toplevel_tycon().unwrap().name.module()
-                };
+                let type_def_id = ty.toplevel_tycon().unwrap().name.module();
                 if trait_def_id != *instance_def_mod && type_def_id != *instance_def_mod {
                     errors.append(Errors::from_msg_srcs(
                         format!(

@@ -154,9 +154,6 @@ impl Substitution {
             Type::TyApp(fun, arg) => ty
                 .set_tyapp_fun(self.substitute_type(fun))
                 .set_tyapp_arg(self.substitute_type(arg)),
-            Type::FunTy(src, dst) => ty
-                .set_funty_src(self.substitute_type(&src))
-                .set_funty_dst(self.substitute_type(&dst)),
             Type::AssocTy(_, args) => 
                 ty.set_assocty_args(args.iter().map(|arg| self.substitute_type(arg)).collect()),
         }
@@ -266,29 +263,6 @@ impl Substitution {
                         None => return Ok(None),
                     }
                     match Self::matching(arg1, arg2, fixed_tyvars, kind_env)? {
-                        Some(s) => {
-                            if !ret.merge_substitution(&s) {
-                                return Ok(None);
-                            }
-                        }
-                        None => return Ok(None),
-                    }
-                    return Ok(Some(ret))
-                }
-                _ => return Ok(None),
-            },
-            Type::FunTy(src1, dst1) => match &ty2.ty {
-                Type::FunTy(src2, dst2) => {
-                    let mut ret = Self::default();
-                    match Self::matching(src1, src2, fixed_tyvars, kind_env)? {
-                        Some(s) => {
-                            if !ret.merge_substitution(&s) {
-                                return Ok(None);
-                            }
-                        }
-                        None => return Ok(None),
-                    }
-                    match Self::matching(dst1, dst2, fixed_tyvars, kind_env)? {
                         Some(s) => {
                             if !ret.merge_substitution(&s) {
                                 return Ok(None);
@@ -1008,11 +982,6 @@ impl TypeCheckContext {
                 let tyarg = self.reduce_type_by_equality(tyarg.clone())?;
                 ty.set_tyapp_fun(tyfun).set_tyapp_arg(tyarg)
             },
-            Type::FunTy(tysrc, tydst) => {
-                let tysrc = self.reduce_type_by_equality(tysrc.clone())?;
-                let tydst = self.reduce_type_by_equality(tydst.clone())?;
-                ty.set_funty_src(tysrc).set_funty_dst(tydst)
-            },
             Type::AssocTy(assoc_ty, args) => {
                 // Reduce each arguments. 
                 let args = collect_results(args.iter().map(|arg| self.reduce_type_by_equality(arg.clone())))?;
@@ -1107,18 +1076,6 @@ impl TypeCheckContext {
                     let arg1 = self.substitute_type(arg1);
                     let arg2 = self.substitute_type(arg2);
                     self.unify(&arg1, &arg2)?;
-                    return Ok(());
-                }
-                _ => {
-                    return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()).into());
-                }
-            },
-            Type::FunTy(arg_ty1, ret_ty1) => match &ty2.ty {
-                Type::FunTy(arg_ty2, ret_ty2) => {
-                    self.unify(&arg_ty1, &arg_ty2)?;
-                    let ret_ty1 = self.substitute_type(ret_ty1);
-                    let ret_ty2 = self.substitute_type(ret_ty2);
-                    self.unify(&ret_ty1, &ret_ty2)?;
                     return Ok(());
                 }
                 _ => {
