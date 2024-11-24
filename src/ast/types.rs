@@ -770,63 +770,60 @@ impl TypeNode {
         // As an example, consider type alias `type Lazy a = () -> a`. Then `Lazy Bool` should be resolved to `() -> Bool`.
         let app_seq = self.flatten_type_application();
         let toplevel_ty = &app_seq[0];
-        match &toplevel_ty.ty {
-            Type::TyCon(tc) => {
-                if let Some(ta) = env.aliases.get(&tc) {
-                    // When the type alias is not fully applied, raise error.
-                    if app_seq.len() - 1 < ta.tyvars.len() {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Cannot resolve type alias `{}` in `{}` because it is not fully applied.",
-                                tc.to_string(),
-                                self.to_string_normalize()
-                            ),
-                            &[toplevel_ty.get_source()],
-                        ));
-                    }
-
-                    // Resolve alias and calculate type application.
-                    let mut s = Substitution::default();
-                    let mut src: Option<Span> = toplevel_ty.get_source().clone();
-                    for i in 0..ta.tyvars.len() {
-                        let param = &ta.tyvars[i].name;
-                        let arg = app_seq[i + 1].clone();
-                        src = Span::unite_opt(&src, arg.get_source());
-                        s.add_substitution(&Substitution::single(&param, arg));
-                    }
-                    let resolved = s.substitute_type(&ta.value);
-
-                    // Set source for `resolved`.
-                    let mut resolved = resolved.set_source(src);
-                    for i in (ta.tyvars.len() + 1)..app_seq.len() {
-                        let arg = app_seq[i].clone();
-                        let src = Span::unite_opt(resolved.get_source(), arg.get_source());
-                        resolved = type_tyapp(resolved, arg).set_source(src);
-                    }
-                    return resolved.resolve_type_aliases_inner(
-                        env,
-                        type_name_path,
-                        entry_type_src,
-                    );
+        if let Type::TyCon(tc) = &toplevel_ty.ty {
+            if let Some(ta) = env.aliases.get(&tc) {
+                // When the type alias is not fully applied, raise error.
+                if app_seq.len() - 1 < ta.tyvars.len() {
+                    return Err(Errors::from_msg_srcs(
+                        format!(
+                            "Cannot resolve type alias `{}` in `{}` because it is not fully applied.",
+                            tc.to_string(),
+                            self.to_string_normalize()
+                        ),
+                        &[toplevel_ty.get_source()],
+                    ));
                 }
+
+                // Resolve alias and calculate type application.
+                let mut s = Substitution::default();
+                let mut src: Option<Span> = toplevel_ty.get_source().clone();
+                for i in 0..ta.tyvars.len() {
+                    let param = &ta.tyvars[i].name;
+                    let arg = app_seq[i + 1].clone();
+                    src = Span::unite_opt(&src, arg.get_source());
+                    s.add_substitution(&Substitution::single(&param, arg));
+                }
+                let resolved = s.substitute_type(&ta.value);
+
+                // Set source for `resolved`.
+                let mut resolved = resolved.set_source(src);
+                for i in (ta.tyvars.len() + 1)..app_seq.len() {
+                    let arg = app_seq[i].clone();
+                    let src = Span::unite_opt(resolved.get_source(), arg.get_source());
+                    resolved = type_tyapp(resolved, arg).set_source(src);
+                }
+                return resolved.resolve_type_aliases_inner(env, type_name_path, entry_type_src);
             }
-            _ => {}
         }
         // Treat other cases.
         match &self.ty {
             Type::TyVar(_) => Ok(self.clone()),
             Type::TyCon(_) => Ok(self.clone()),
-            Type::TyApp(fun_ty, arg_ty) => Ok(self
-                .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(
-                    env,
-                    type_name_path.clone(),
-                    entry_type_src,
-                )?)
-                .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(
-                    env,
-                    type_name_path,
-                    entry_type_src,
-                )?)),
+            Type::TyApp(fun_ty, arg_ty) => {
+                let fun_ty_str = fun_ty.to_string();
+                let arg_ty_str = arg_ty.to_string();
+                Ok(self
+                    .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(
+                        env,
+                        type_name_path.clone(),
+                        entry_type_src,
+                    )?)
+                    .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(
+                        env,
+                        type_name_path,
+                        entry_type_src,
+                    )?))
+            }
             Type::AssocTy(_, args) => {
                 let args = collect_results(args.iter().map(|arg| {
                     arg.resolve_type_aliases_inner(env, type_name_path.clone(), entry_type_src)
@@ -1244,7 +1241,7 @@ impl TypeNode {
 
     // Stringify.
     pub fn to_string(self: &Arc<TypeNode>) -> String {
-        fn brace_needed_if_used_as_arg(arg: &Arc<TypeNode>) -> bool {
+        fn should_braced_as_arg(arg: &Arc<TypeNode>) -> bool {
             match &arg.ty {
                 Type::TyVar(_) => false,
                 Type::TyCon(_) => false,
@@ -1275,7 +1272,7 @@ impl TypeNode {
                         // If args.len() < n, then `self` is a partial application to a tuple.
                         // In this case, we show missing arguments by `*` (e.g., `(Std::I64, *)`).
                         for _ in args.len()..n as usize {
-                            arg_strs.push(kind_star().to_string());
+                            arg_strs.push("*".to_string());
                         }
                         if n == 1 {
                             return format!("({},)", arg_strs[0]);
@@ -1285,26 +1282,23 @@ impl TypeNode {
                     }
                     if tycon.name == make_arrow_name() {
                         // `->` case.
-                        let (args, dst) = self.collect_app_src(usize::MAX);
-                        let args = args
-                            .iter()
-                            .map(|arg| {
-                                if brace_needed_if_used_as_arg(arg) {
-                                    format!("({})", arg.to_string())
-                                } else {
-                                    arg.to_string()
-                                }
-                            })
-                            .collect::<Vec<_>>();
-                        let dst = dst.to_string();
-                        let mut subtys = args;
-                        subtys.push(dst);
-                        return subtys.join(" -> ");
+                        let args = self.collect_type_argments();
+                        let src_str = if should_braced_as_arg(&args[0]) {
+                            format!("({})", args[0].to_string())
+                        } else {
+                            args[0].to_string()
+                        };
+                        if args.len() == 1 {
+                            return format!("{} -> *", src_str);
+                        } else {
+                            assert!(args.len() == 2);
+                            return format!("{} -> {}", src_str, args[1].to_string());
+                        }
                     }
                 }
                 let tyfun = fun.to_string();
                 let arg_str = arg.to_string();
-                if brace_needed_if_used_as_arg(arg) {
+                if should_braced_as_arg(arg) {
                     format!("{} ({})", tyfun, arg_str)
                 } else {
                     format!("{} {}", tyfun, arg_str)
@@ -1318,7 +1312,7 @@ impl TypeNode {
                     args.iter()
                         .map(|arg| {
                             let arg_str = arg.to_string();
-                            if brace_needed_if_used_as_arg(arg) {
+                            if should_braced_as_arg(arg) {
                                 format!("({})", arg_str)
                             } else {
                                 arg_str
