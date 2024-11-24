@@ -195,7 +195,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         TyConInfo {
             kind: kind_arrow(kind_star(), kind_arrow(kind_star(), kind_star())),
             variant: TyConVariant::Arrow,
-            is_unbox: false,
+            is_unbox: true,
             tyvars: vec![
                 tyvar_from_name("a", &kind_star()),
                 tyvar_from_name("b", &kind_star()),

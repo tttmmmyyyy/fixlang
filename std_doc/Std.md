@@ -19,7 +19,7 @@ The document for `Std` module describes about them up to N=3, but you can use la
 
 The type of variable length arrays. This is a boxed type.
 
-### `type Arrow a b = box { built-in }`
+### `type Arrow a b = unbox { built-in }`
 
 `Arrow a b` represents the type of a function that takes a value of type `a` and returns a value of type `b`. Usually written as `a -> b`.
 
