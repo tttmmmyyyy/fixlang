@@ -809,21 +809,17 @@ impl TypeNode {
         match &self.ty {
             Type::TyVar(_) => Ok(self.clone()),
             Type::TyCon(_) => Ok(self.clone()),
-            Type::TyApp(fun_ty, arg_ty) => {
-                let fun_ty_str = fun_ty.to_string();
-                let arg_ty_str = arg_ty.to_string();
-                Ok(self
-                    .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(
-                        env,
-                        type_name_path.clone(),
-                        entry_type_src,
-                    )?)
-                    .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(
-                        env,
-                        type_name_path,
-                        entry_type_src,
-                    )?))
-            }
+            Type::TyApp(fun_ty, arg_ty) => Ok(self
+                .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(
+                    env,
+                    type_name_path.clone(),
+                    entry_type_src,
+                )?)
+                .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(
+                    env,
+                    type_name_path,
+                    entry_type_src,
+                )?)),
             Type::AssocTy(_, args) => {
                 let args = collect_results(args.iter().map(|arg| {
                     arg.resolve_type_aliases_inner(env, type_name_path.clone(), entry_type_src)
@@ -1283,17 +1279,19 @@ impl TypeNode {
                     if tycon.name == make_arrow_name() {
                         // `->` case.
                         let args = self.collect_type_argments();
-                        let src_str = if should_braced_as_arg(&args[0]) {
-                            format!("({})", args[0].to_string())
+                        assert!(args.len() == 1 || args.len() == 2);
+                        let src = &args[0];
+                        let src_str = if src.is_closure() {
+                            format!("({})", src.to_string())
                         } else {
-                            args[0].to_string()
+                            src.to_string()
                         };
-                        if args.len() == 1 {
-                            return format!("{} -> *", src_str);
+                        let dst_str = if args.len() == 2 {
+                            args[1].to_string()
                         } else {
-                            assert!(args.len() == 2);
-                            return format!("{} -> {}", src_str, args[1].to_string());
-                        }
+                            "*".to_string()
+                        };
+                        return format!("{} -> {}", src_str, dst_str);
                     }
                 }
                 let tyfun = fun.to_string();

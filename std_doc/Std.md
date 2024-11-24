@@ -15,11 +15,15 @@ The document for `Std` module describes about them up to N=3, but you can use la
 
 ## `namespace Std`
 
-### `type Array a = box { primitive }`
+### `type Array a = box { built-in }`
 
 The type of variable length arrays. This is a boxed type.
 
-### `type Bool = unbox { primitive }`
+### `type Arrow a b = box { built-in }`
+
+`Arrow a b` represents the type of a function that takes a value of type `a` and returns a value of type `b`. Usually written as `a -> b`.
+
+### `type Bool = unbox { built-in }`
 
 The type of boolean values.
 
@@ -33,27 +37,27 @@ Boxed wrapper for a type.
 
 A type (alias) for error message.
 
-### `type F32 = unbox { primitive }`
+### `type F32 = unbox { built-in }`
 
 The type of 32-bit floating point values.
 
-### `type F64 = unbox { primitive }`
+### `type F64 = unbox { built-in }`
 
 The type of 64-bit floating point values.
 
-### `type I16 = unbox { primitive }`
+### `type I16 = unbox { built-in }`
 
 The type of 16-bit signed integers.
 
-### `type I32 = unbox { primitive }`
+### `type I32 = unbox { built-in }`
 
 The type of 32-bit signed integers.
 
-### `type I64 = unbox { primitive }`
+### `type I64 = unbox { built-in }`
 
 The type of 64-bit signed integers.
 
-### `type I8 = unbox { primitive }`
+### `type I8 = unbox { built-in }`
 
 The type of 8-bit signed integers.
 
@@ -100,7 +104,7 @@ TODO: give better implementation.
 
 #### field `_data : Std::String`
 
-### `type Ptr = unbox { primitive }`
+### `type Ptr = unbox { built-in }`
 
 The type of pointers.
 
@@ -143,19 +147,19 @@ A type of result value for a computation that may fail.
 
 #### field `2 : t2`
 
-### `type U16 = unbox { primitive }`
+### `type U16 = unbox { built-in }`
 
 The type of 16-bit unsigned integers.
 
-### `type U32 = unbox { primitive }`
+### `type U32 = unbox { built-in }`
 
 The type of 32-bit unsigned integers.
 
-### `type U64 = unbox { primitive }`
+### `type U64 = unbox { built-in }`
 
 The type of 64-bit unsigned integers.
 
-### `type U8 = unbox { primitive }`
+### `type U8 = unbox { built-in }`
 
 The type of 8-bit unsinged integers.
 
@@ -228,7 +232,7 @@ You should explicitly close the file pointer by `IO::close_file`.
 
 #### field `_data : Std::FFI::Destructor Std::Ptr`
 
-### `type IOState = unbox { primitive }`
+### `type IOState = unbox { built-in }`
 
 The type of the "state"s modified by I/O operations. 
 
