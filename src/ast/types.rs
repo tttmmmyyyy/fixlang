@@ -1263,38 +1263,36 @@ impl TypeNode {
                 let tycon = self.toplevel_tycon();
                 if let Some(tycon) = tycon {
                     if let Some(n) = get_tuple_n(&tycon.name) {
-                        // `Tuple{n}` case.
+                        // Tuple case.
                         let args = self.collect_type_argments();
-                        let mut arg_strs =
-                            args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
+                        let arg_strs = args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
 
-                        // If args.len() < n, then `self` is a partial application to a tuple.
-                        // In this case, we show missing arguments by `*` (e.g., `(Std::I64, *)`).
-                        for _ in args.len()..n as usize {
-                            arg_strs.push("*".to_string());
-                        }
+                        // In this case, we use special notation when n = 1 or n = args.len().
                         if n == 1 {
                             return format!("({},)", arg_strs[0]);
-                        } else {
+                        }
+                        if n as usize == args.len() {
                             return format!("({})", arg_strs.join(", "));
                         }
                     }
                     if tycon.name == make_arrow_name() {
                         // `->` case.
+                        // In this case we use special notation when the `Arrow` type is fully applied.
                         let args = self.collect_type_argments();
-                        assert!(args.len() == 1 || args.len() == 2);
-                        let src = &args[0];
-                        let src_str = if src.is_closure() {
-                            format!("({})", src.to_string())
-                        } else {
-                            src.to_string()
-                        };
                         if args.len() == 2 {
-                            // Fully applied case.
-                            return format!("{} -> {}", src_str, args[1].to_string());
-                        } else {
-                            // Partially applied case.
-                            return format!("{} {}", tycon.name.to_string(), src_str);
+                            if args[0].is_closure() {
+                                return format!(
+                                    "({}) -> {}",
+                                    args[0].to_string(),
+                                    args[1].to_string()
+                                );
+                            } else {
+                                return format!(
+                                    "{} -> {}",
+                                    args[0].to_string(),
+                                    args[1].to_string()
+                                );
+                            }
                         }
                     }
                 }

@@ -373,8 +373,6 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 Returns "()".
 
-### `impl (t0, *) : Std::Functor`
-
 ### `impl [t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`
 
 ### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan] (t0, t1) : Std::LessThan`
@@ -382,8 +380,6 @@ Returns "()".
 ### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq] (t0, t1) : Std::LessThanOrEq`
 
 ### `impl [t0 : Std::ToString, t1 : Std::ToString] (t0, t1) : Std::ToString`
-
-### `impl (t0, t1, *) : Std::Functor`
 
 ### `impl [t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq] (t0, t1, t2) : Std::Eq`
 
@@ -640,6 +636,10 @@ Concatenates two strings.
 ### `impl Std::String : Std::LessThanOrEq`
 
 ### `impl Std::String : Std::ToString`
+
+### `impl Std::Tuple2 t0 : Std::Functor`
+
+### `impl Std::Tuple3 t0 t1 : Std::Functor`
 
 ### `impl Std::U16 : Std::Add`
 
