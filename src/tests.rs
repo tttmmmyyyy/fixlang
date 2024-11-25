@@ -7426,11 +7426,19 @@ pub fn test_arrow_functor() {
     let source = r##"
     module Main;
 
+    trait [f : * -> *] f : MyFunctor {
+        my_map : (a -> b) -> f a -> f b;
+    }
+
+    impl Arrow a : MyFunctor {
+        my_map = |f, g| g >> f;
+    }
+
     main: IO ();
     main = (
         let f = Array::to_iter;
         let g = Iterator::find_last;
-        let h = f.map(g);
+        let h = f.my_map(g);
         assert_eq(|_|"", h([1,2,3,4]).as_some, 4);;
 
         pure()

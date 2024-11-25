@@ -353,10 +353,6 @@ impl [a : ToString] Array a : ToString {
     to_string = |arr| ("[" + arr.to_iter.map(to_string).join(", ") + "]");
 }
 
-impl Arrow a : Functor {
-    map = |f, g| g >> f;
-}
-
 impl Bool : ToString {
     to_string = |lhs| (
         if lhs { "true" } else { "false" }
