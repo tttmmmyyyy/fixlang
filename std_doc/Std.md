@@ -415,6 +415,8 @@ Compares two arrays by lexicographic order.
 
 ### `impl [a : Std::ToString] Std::Array a : Std::ToString`
 
+### `impl Std::Arrow a : Std::Functor`
+
 ### `impl Std::Bool : Std::Eq`
 
 ### `impl Std::Bool : Std::Not`
@@ -750,8 +752,6 @@ Concatenates two strings.
 ### `impl Std::U8 : Std::ToString`
 
 ### `impl Std::U8 : Std::Zero`
-
-### `impl a -> * : Std::Functor`
 
 # Values
 

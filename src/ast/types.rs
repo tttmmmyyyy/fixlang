@@ -1243,8 +1243,15 @@ impl TypeNode {
                 Type::TyCon(_) => false,
                 Type::TyApp(fun, _) => {
                     let tycon = fun.toplevel_tycon();
-                    let is_tuple = tycon.is_some() && get_tuple_n(&tycon.unwrap().name).is_some();
-                    !is_tuple
+                    if let Some(tycon) = tycon {
+                        if let Some(tuple_n) = get_tuple_n(&tycon.name) {
+                            // Tuple case.
+                            // If the tuple is fully applied, then it is denoted as `(T1, T2, ..., TN)`, so no need to brace.
+                            // Otherwise, it is denoted as `Tuple{n} T1 T2 ... TN`, so need to brace.
+                            return tuple_n as usize != arg.collect_type_argments().len();
+                        }
+                    }
+                    return true;
                 }
                 Type::AssocTy(_, _) => true,
             }
@@ -1260,10 +1267,6 @@ impl TypeNode {
                         let args = self.collect_type_argments();
                         let mut arg_strs =
                             args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
-
-                        // We cannot assume here even `args.len() <= n`
-                        // because this function is used for generating error messages where the user apply too many arguments to a type constructor!
-                        // assert!(args.len() <= n as usize);
 
                         // If args.len() < n, then `self` is a partial application to a tuple.
                         // In this case, we show missing arguments by `*` (e.g., `(Std::I64, *)`).
@@ -1286,12 +1289,13 @@ impl TypeNode {
                         } else {
                             src.to_string()
                         };
-                        let dst_str = if args.len() == 2 {
-                            args[1].to_string()
+                        if args.len() == 2 {
+                            // Fully applied case.
+                            return format!("{} -> {}", src_str, args[1].to_string());
                         } else {
-                            "*".to_string()
-                        };
-                        return format!("{} -> {}", src_str, dst_str);
+                            // Partially applied case.
+                            return format!("{} {}", tycon.name.to_string(), src_str);
+                        }
                     }
                 }
                 let tyfun = fun.to_string();
