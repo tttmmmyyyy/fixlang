@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::error::Errors;
 use import::ImportStatement;
-use misc::{Map, Set};
+use misc::{number_to_varname, Map, Set};
 use name::{FullName, Name};
 use serde::{Deserialize, Serialize};
 
@@ -417,12 +417,54 @@ impl TraitInstance {
     // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
     // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
     pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
-        // Create qualtype. ex. `[] (a, b) -> String`.
-        let trait_tyvar = &trait_info.type_var.name; // ex. tyvar == `t`
-        let impl_type = self.impl_type(); // ex. impl_type == `(a, b)`
-        let s = Substitution::single(&trait_tyvar, impl_type);
-        let mut method_qualty = trait_info.method_ty(method_name); // ex. method_qualty == `[] t -> String`
-        s.substitute_qualtype(&mut method_qualty); // ex. method_qualty == `[] (a, b) -> String`
+        // First, see the trait definition.
+        // Let's consider `trait a : ToString { to_string : a -> String }`.
+        let tv = &trait_info.type_var.name; // `a` in the above example.
+        let mut method_qualty = trait_info.method_ty(method_name); // `a -> String` in the above example.
+
+        // Next, see the trait implementation to get the type for which the trait is implemented.
+        let impl_type = self.impl_type(); // `(a, b)` in the above example.
+
+        // We are going to substitute `tv` (e.g., `a`) in `method_qualty` (e.g., `a -> String`) with `impl_type` (e.g., `(a, b)`)
+        // This is OK if FV(method_qualty) \ {tv} is disjoint from FV(impl_type).
+        // Otherwise, we need to rename the type variables in `method_qualty` to avoid name collision.
+        // Example:
+        // Consider `impl Arrow a : Functor` for `trait f : Functor { map : (a -> b) -> f a -> f b }`.
+        // In this case, if we naively substitute `f` in `map : (a -> b) -> f a -> f b` with `Arrow a`, then we get `map : (a -> b) -> Arrow a a -> Arrow a b`, which is wrong.
+        // So we first rename `(a -> b) -> f a -> f b` to `(c -> b) -> f c -> f b`.
+        let mut fv_method_quality = vec![];
+        method_qualty.free_vars_vec(&mut fv_method_quality);
+        let fv_impl_type = impl_type.free_vars();
+        let mut s = Substitution::default();
+        let mut name_no = 0;
+        for fv in &fv_method_quality {
+            if &fv.name == tv {
+                continue;
+            }
+            if fv_impl_type.contains_key(&fv.name) {
+                // Search for a new name that is not in `fv_impl_type`.
+                loop {
+                    let new_name = number_to_varname(name_no);
+                    if !fv_impl_type.contains_key(&new_name)
+                        && fv_method_quality.iter().all(|x| x.name != new_name)
+                    {
+                        let new_fv = type_tyvar(&new_name, &fv.kind);
+                        let merge_succ =
+                            s.merge_substitution(&Substitution::single(&fv.name, new_fv));
+                        assert!(merge_succ);
+                        break;
+                    }
+                    name_no += 1;
+                }
+            }
+        }
+        // Rename type variables in `method_qualty`.
+        s.substitute_qualtype(&mut method_qualty);
+
+        // Then substitute `tv` with `impl_type`.
+        // Now we get `(a, b) -> String` or `(c -> b) -> Arrow a c -> Arrow a b` in the above examples.
+        let s = Substitution::single(&tv, impl_type);
+        s.substitute_qualtype(&mut method_qualty);
 
         // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
         let ty = method_qualty.ty.clone();

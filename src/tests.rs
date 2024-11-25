@@ -7422,6 +7422,24 @@ pub fn test_match_omit_parentheses() {
 }
 
 #[test]
+pub fn test_arrow_functor() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let f = Array::to_iter;
+        let g = Iterator::find_last;
+        let h = f.map(g);
+        assert_eq(|_|"", h([1,2,3,4]).as_some, 4);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",

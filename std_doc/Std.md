@@ -751,6 +751,8 @@ Concatenates two strings.
 
 ### `impl Std::U8 : Std::Zero`
 
+### `impl a -> * : Std::Functor`
+
 # Values
 
 ## `namespace Std`
