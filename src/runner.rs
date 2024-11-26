@@ -566,6 +566,9 @@ pub fn run_file(mut config: Configuration) -> i32 {
         com.arg(a_out_path.clone());
         com
     };
+    for arg in &config.run_program_args {
+        com.arg(arg);
+    }
     com.stdout(Stdio::inherit())
         .stdin(Stdio::inherit())
         .stderr(Stdio::inherit());

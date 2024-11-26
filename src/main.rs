@@ -107,7 +107,6 @@ fn main() {
         .long("file")
         .short('f')
         .action(clap::ArgAction::Append)
-        .multiple_values(true)
         .takes_value(true)
         .help("Source files to be compiled and linked.");
     let object_file = Arg::new("object-files")
@@ -194,6 +193,11 @@ fn main() {
         .help(
             "Path to a file which contains a list of LLVM passes. Used for compiler development.",
         );
+    let program_args = Arg::new("program-args")
+        .last(true)
+        .takes_value(true)
+        .allow_hyphen_values(true)
+        .help("Arguments passed to the Fix program.");
 
     // "fix build" subcommand
     let build_subc = App::new("build")
@@ -215,6 +219,7 @@ fn main() {
 
     // "fix run" subcommand
     let run_subc = App::new("run")
+        .trailing_var_arg(true)
         .about("Runs a Fix program. Executes \"Main::main\" of type `IO ()`.")
         .arg(source_file.clone())
         .arg(object_file.clone())
@@ -227,10 +232,12 @@ fn main() {
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
         .arg(verbose.clone())
-        .arg(max_cu_size.clone());
+        .arg(max_cu_size.clone())
+        .arg(program_args.clone());
 
     // "fix test" subcommand
     let test_subc = App::new("test")
+        .trailing_var_arg(true)
         .about("Tests a Fix program. Executes \"Test::test\" of type `IO ()`.")
         .arg(source_file.clone())
         .arg(object_file.clone())
@@ -243,7 +250,8 @@ fn main() {
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
         .arg(verbose.clone())
-        .arg(max_cu_size.clone());
+        .arg(max_cu_size.clone())
+        .arg(program_args.clone());
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
@@ -467,6 +475,14 @@ fn main() {
         if let Some(llvm_passes_file) = args.get_one::<String>("llvm-passes-file") {
             config.llvm_passes_file = Some(PathBuf::from(llvm_passes_file));
         }
+
+        // Set `run_program_args`.
+        let mut args = args
+            .get_many::<String>("program-args")
+            .unwrap_or_default()
+            .cloned()
+            .collect::<Vec<_>>();
+        config.run_program_args.append(&mut args);
 
         Ok(())
     }

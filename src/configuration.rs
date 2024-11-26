@@ -169,6 +169,8 @@ pub struct Configuration {
     pub num_worker_thread: usize,
     // File containing LLVM passes. Used only for compiler development.
     pub llvm_passes_file: Option<PathBuf>,
+    // The arguments which are passed to the program in `run` mode.
+    pub run_program_args: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -258,6 +260,7 @@ impl Configuration {
             type_check_cache: Arc::new(typecheckcache::FileCache::new()),
             num_worker_thread: 0,
             llvm_passes_file: None,
+            run_program_args: vec![],
         })
     }
 }
