@@ -1426,7 +1426,10 @@ pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
 }
 
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
-    type_tyapp(type_tyapp(type_tycon(&tycon(make_arrow_name())), src), dst)
+    let src_span = src.get_source().clone();
+    let partial =
+        type_tyapp(type_tycon(&tycon(make_arrow_name())), src).set_source_if_none(src_span);
+    type_tyapp(partial, dst)
 }
 
 pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
