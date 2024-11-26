@@ -95,6 +95,7 @@ use runtime::*;
 use sourcefile::*;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process;
 use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
@@ -493,10 +494,10 @@ fn main() {
             exit_if_err(build_file(&mut create_config(SubCommand::Build, args)));
         }
         Some(("run", args)) => {
-            run_file(create_config(SubCommand::Run, args));
+            process::exit(run_file(create_config(SubCommand::Run, args)));
         }
         Some(("test", args)) => {
-            run_file(create_config(SubCommand::Test, args));
+            process::exit(run_file(create_config(SubCommand::Test, args)));
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", _args)) => {

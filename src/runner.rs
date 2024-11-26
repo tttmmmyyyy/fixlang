@@ -569,12 +569,15 @@ pub fn run_file(mut config: Configuration) -> i32 {
     com.stdout(Stdio::inherit())
         .stdin(Stdio::inherit())
         .stderr(Stdio::inherit());
-    let output = com
-        .output()
-        .expect(&format!("Failed to run \"{}\".", a_out_path));
+    let output = com.output();
 
     // Remove the executable file.
-    fs::remove_file(a_out_path.clone()).expect(&format!("Failed to remove \"{}\".", a_out_path));
+    let _ = fs::remove_file(a_out_path.clone()); // Ignore the error.
+
+    if let Err(e) = output {
+        error_exit(&format!("Failed to run \"{}\": {}", a_out_path, e));
+    }
+    let output = output.unwrap();
 
     if let Some(code) = output.status.code() {
         code
