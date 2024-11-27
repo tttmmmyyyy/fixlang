@@ -353,6 +353,15 @@ impl [a : ToString] Array a : ToString {
     to_string = |arr| ("[" + arr.to_iter.map(to_string).join(", ") + "]");
 }
 
+impl Arrow a : Functor {
+    map = |f, a| a >> f;
+}
+
+impl Arrow a : Monad {
+    pure = |x| |_| x;
+    bind = |f, a| |x| f(a(x)) $ x;
+}
+
 impl Bool : ToString {
     to_string = |lhs| (
         if lhs { "true" } else { "false" }

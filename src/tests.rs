@@ -7426,22 +7426,36 @@ pub fn test_arrow_functor() {
     let source = r##"
     module Main;
 
-    trait [f : * -> *] f : MyFunctor {
-        my_map : (a -> b) -> f a -> f b;
-    }
-
-    impl Arrow a : MyFunctor {
-        my_map = |f, g| g >> f;
-    }
-
     main: IO ();
     main = (
         let f = Array::to_iter;
         let g = Iterator::find_last;
-        let h = f.my_map(g);
-        assert_eq(|_|"", h([1,2,3,4]).as_some, 4);;
+        let h = f.map(g);
+        assert_eq(|_|"", h([1,2,3,4]).as_some, 4)
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
 
-        pure()
+#[test]
+pub fn test_arrow_monad() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let x1 = |x| x;
+        let x2 = |x| x*x;
+        let x3 = |x| x*x*x;
+        let x4 = |x| x*x*x*x;
+
+        let p1 = do { pure $ 
+            x4(*x1 + 1)
+        };
+        let p2 = do { pure $ 
+            (*x4) + 4*(*x3) + 6*(*x2) + 4*(*x1) + 1
+        };
+        assert_eq(|_|"", p1(42), p2(42))
     );
     "##;
     test_source(&source, Configuration::develop_compiler_mode());

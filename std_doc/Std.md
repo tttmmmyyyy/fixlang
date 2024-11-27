@@ -411,6 +411,10 @@ Compares two arrays by lexicographic order.
 
 ### `impl [a : Std::ToString] Std::Array a : Std::ToString`
 
+### `impl Std::Arrow a : Std::Functor`
+
+### `impl Std::Arrow a : Std::Monad`
+
 ### `impl Std::Bool : Std::Eq`
 
 ### `impl Std::Bool : Std::Not`
