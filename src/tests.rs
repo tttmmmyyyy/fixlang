@@ -7462,6 +7462,29 @@ pub fn test_arrow_monad() {
 }
 
 #[test]
+pub fn test_kind_arrow_right_associative() {
+    let source = r##"
+    module Main;
+
+    trait [p: * -> * -> *] p: Profunctor {
+        dimap: (a -> b) -> (c -> d) -> p b c -> p a d; // If `* -> * -> *` is parsed as `(* -> *) -> * -> *`, this line will cause a type error.
+    }
+
+    impl Arrow: Profunctor {
+        dimap = |f, g, arr| f >> arr >> g;
+    }
+
+    main: IO ();
+    main = (
+        let arr: Arrow I64 String = |i| i.to_string;
+        let arr = arr.dimap(|i| i * 2, |s| "s=" + s);
+        assert_eq(|_|"", arr(42), "s=84")
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",

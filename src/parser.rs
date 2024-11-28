@@ -745,10 +745,14 @@ fn parse_capital_fullname(pair: Pair<Rule>) -> FullName {
 
 fn parse_kind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Kind> {
     assert_eq!(pair.as_rule(), Rule::kind);
-    let mut pairs = pair.into_inner();
-    let mut res: Arc<Kind> = parse_kind_nlr(pairs.next().unwrap(), ctx);
-    for pair in pairs {
-        res = kind_arrow(res, parse_kind_nlr(pair, ctx));
+    let pairs = pair.into_inner();
+    let mut kinds = pairs
+        .map(|pair| parse_kind_nlr(pair, ctx))
+        .collect::<Vec<_>>();
+    let mut res: Arc<Kind> = kinds.pop().unwrap();
+    while kinds.len() > 0 {
+        let pair = kinds.pop().unwrap();
+        res = kind_arrow(pair, res);
     }
     res
 }
