@@ -477,12 +477,17 @@ fn main() {
         }
 
         // Set `run_program_args`.
-        let mut args = args
-            .get_many::<String>("program-args")
-            .unwrap_or_default()
-            .cloned()
-            .collect::<Vec<_>>();
-        config.run_program_args.append(&mut args);
+        match config.subcommand {
+            SubCommand::Run | SubCommand::Test => {
+                let mut args = args
+                    .get_many::<String>("program-args")
+                    .unwrap_or_default()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                config.run_program_args.append(&mut args);
+            }
+            _ => {}
+        }
 
         Ok(())
     }
