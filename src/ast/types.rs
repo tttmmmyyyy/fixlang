@@ -1091,7 +1091,7 @@ impl TypeNode {
     // - where `{AssocTypeName}` is a local name,
     // - `ty1` is equal to the implemented type.
     // - type variables appears in the arguments are distinct.
-    // If ok, return the name and the array `[tv1, tv2, ..., tvN]`, where tv1 is a special type variable `%impl_type`.
+    // If ok, return the name and the array `[tv1, tv2, ..., tvN]`, where tv1 is a special type variable `#impl_type`.
     pub fn validate_as_associated_type_defn(
         &self,
         impl_type: &Arc<TypeNode>,
@@ -1138,7 +1138,7 @@ impl TypeNode {
         if app_seq[1].to_string() != impl_type.to_string() {
             return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
         }
-        let mut tyvars = vec![tyvar_from_name("%impl_type", &kind_star())];
+        let mut tyvars = vec![tyvar_from_name("#impl_type", &kind_star())];
         let impl_ty_tyvar_set: Set<Name> = impl_type
             .free_vars_vec()
             .iter()

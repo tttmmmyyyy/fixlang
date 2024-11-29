@@ -334,7 +334,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInf
                 &eqs.first().unwrap().source
             };
             return Err(Errors::from_msg_srcs(
-                "In the constraint of trait definition, only kind signature is allowed. Fix does not support \"super-trait\".".to_string(),
+                "In the constraint of trait definition, only kind signature is allowed. Fix does not support \"super-traits\".".to_string(),
                 &[one_src],
             ));
         }

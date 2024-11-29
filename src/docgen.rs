@@ -49,7 +49,7 @@ pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
 
     for mod_name in mod_names {
         println!(
-            "Generating documentation for module `{}`",
+            "Generating documentation for module `{}`.",
             mod_name.to_string()
         );
         generate_doc(&program, &mod_name)?;
@@ -95,7 +95,7 @@ fn generate_doc(program: &Program, mod_name: &Name) -> Result<(), Errors> {
     std::fs::write(&doc_file, doc)
         .map_err(|e| Errors::from_msg(format!("Failed to write file \"{}\": {:?}", doc_file, e)))?;
 
-    println!("Saved documentation to \"{}\"", doc_file);
+    println!("Saved documentation to \"{}\".", doc_file);
     Ok(())
 }
 
@@ -176,6 +176,15 @@ fn is_entry_should_be_documented(name: &FullName, mod_name: &Name) -> bool {
     true
 }
 
+// Creates string of kind signature with pre-space, e.e, " : * -> *".
+// If the kind is `*`, returns empty string.
+fn kind_sign_with_pre_space(kind: &Arc<Kind>) -> String {
+    if kind == &kind_star() {
+        return String::new();
+    }
+    format!(" : {}", kind.to_string())
+}
+
 fn type_entries(
     program: &Program,
     mod_name: &Name,
@@ -196,13 +205,6 @@ fn type_entries(
             return String::new();
         }
         format!("[{}] ", consts.join(", "))
-    }
-    #[allow(dead_code)]
-    fn kind_specification_with_pre_space(kind: &Arc<Kind>) -> String {
-        if kind == &kind_star() {
-            return String::new();
-        }
-        format!(" : {}", kind.to_string())
     }
     fn tyvars_with_pre_space(tyvars: &Vec<Arc<TyVar>>) -> String {
         if tyvars.is_empty() {
@@ -360,6 +362,29 @@ fn trait_entries(
             .unwrap_or_default();
         let docstring = docstring.trim();
         doc += docstring;
+        for (assoc_ty_name, assoc_ty_defn) in &info.assoc_types {
+            let mut params = vec![info.type_var.name.clone()];
+            for param in assoc_ty_defn.params.iter().skip(1) {
+                params.push(param.name.clone());
+            }
+            doc += &format!(
+                "\n\n#### associated type `{}{} {}{}`",
+                kind_constraints_with_post_space(&assoc_ty_defn.kind_signs),
+                assoc_ty_name,
+                params.join(" "),
+                kind_sign_with_pre_space(&assoc_ty_defn.kind_applied)
+            );
+            let docstring = assoc_ty_defn
+                .src
+                .as_ref()
+                .map(|src| src.get_document())
+                .transpose()?
+                .unwrap_or_default();
+            let docstring = docstring.trim();
+            if !docstring.is_empty() {
+                doc += &format!("\n\n{}", docstring);
+            }
+        }
         for method in &info.methods {
             doc += &format!(
                 "\n\n#### method `{} : {}`",
