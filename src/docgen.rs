@@ -7,7 +7,7 @@ use crate::{
     kind_star,
     misc::to_absolute_path,
     project_file::ProjectFile,
-    Configuration, Kind, KindSignature, Program, TyConVariant, TyVar,
+    Configuration, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
 };
 
 pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
@@ -391,13 +391,7 @@ fn trait_entries(
                 method.name,
                 method.qual_ty.to_string(),
             );
-            let docstring = method
-                .source
-                .as_ref()
-                .map(|src| src.get_document())
-                .transpose()?
-                .unwrap_or_default();
-            let docstring = docstring.trim();
+            let docstring = docstring_from_opt_span(&method.source)?;
             if !docstring.is_empty() {
                 doc += &format!("\n\n{}", docstring);
             }
@@ -433,14 +427,7 @@ fn trait_impl_entries(
             let title = format!("`impl {}`", impl_.qual_pred.to_string());
 
             let mut doc = String::new();
-            let docstring = impl_
-                .source
-                .as_ref()
-                .map(|src| src.get_document())
-                .transpose()?
-                .unwrap_or_default();
-            let docstring = docstring.trim();
-            doc += docstring;
+            doc += &docstring_from_opt_span(&impl_.source)?;
 
             let entry = Entry {
                 name: FullName::from_strs(&[], ""),
@@ -452,6 +439,16 @@ fn trait_impl_entries(
         }
     }
     Ok(())
+}
+
+fn docstring_from_opt_span(src: &Option<Span>) -> Result<String, Errors> {
+    Ok(src
+        .as_ref()
+        .map(|src| src.get_document())
+        .transpose()?
+        .unwrap_or_default()
+        .trim()
+        .to_string())
 }
 
 fn value_entries(
