@@ -1,6 +1,6 @@
 use std::{fmt::Display, path::PathBuf};
 
-use crate::misc::Map;
+use crate::misc::{Map, Set};
 use crate::{misc, sourcefile::Span};
 
 pub struct Errors {
@@ -68,10 +68,15 @@ impl Errors {
     }
 
     pub fn to_string(&self) -> String {
+        let mut msg_set = Set::default();
         let mut str = String::default();
         for err in &self.errs {
-            str += "- ";
-            str += &err.to_string();
+            let msg = err.to_string();
+            if msg_set.contains(&msg) {
+                continue;
+            }
+            msg_set.insert(msg.clone());
+            str += &msg;
             str += "\n";
         }
         str
@@ -120,6 +125,7 @@ impl Error {
 
     pub fn to_string(&self) -> String {
         let mut str = String::default();
+        str += "\x1b[31merror\x1b[0m: ";
         str += &self.msg;
         str += "\n";
         for src in &self.srcs {
@@ -130,14 +136,14 @@ impl Error {
     }
 }
 
-pub fn error_exit(msg: &str) -> ! {
+fn panic_notrace(msg: &str) -> ! {
     // Default panic hook shows message such as "thread 'main' panicked at " or "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace".
     // We replace it to empty.
     std::panic::set_hook(Box::new(move |info| {
         let msg = any_to_string(info.payload());
         eprintln!("{}", msg);
     }));
-    panic!("The following error(s) has occurred: \n\n{}", msg);
+    panic!("{}", msg);
 }
 
 pub fn any_to_string(any: &dyn std::any::Any) -> String {
@@ -150,20 +156,16 @@ pub fn any_to_string(any: &dyn std::any::Any) -> String {
     }
 }
 
-pub fn exit_if_err<T>(err: Result<T, Errors>) -> T {
-    err.unwrap_or_else(|errs| error_exit(&errs.to_string()))
+pub fn panic_with_err(msg: &str) -> ! {
+    let errs = Errors::from_msg(msg.to_string());
+    panic_notrace(&errs.to_string())
 }
 
-pub fn error_exit_with_src(msg: &str, src: &Option<Span>) -> ! {
-    let mut str: String = String::default();
-    str += msg;
-    str += "\n";
-    match src {
-        None => {}
-        Some(v) => {
-            str += "\n";
-            str += &v.to_string();
-        }
-    };
-    error_exit(&str)
+pub fn panic_with_err_src(msg: &str, src: &Option<Span>) -> ! {
+    let errs = Errors::from_msg_srcs(msg.to_string(), &[src]);
+    panic_notrace(&errs.to_string())
+}
+
+pub fn panic_if_err<T>(err: Result<T, Errors>) -> T {
+    err.unwrap_or_else(|errs| panic_notrace(&errs.to_string()))
 }

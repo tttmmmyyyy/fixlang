@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::error::error_exit;
+use crate::error::panic_with_err;
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
@@ -936,7 +936,7 @@ impl ObjectType {
         if self.is_unbox {
             if unboxed_path.contains(&self.name) {
                 // There is a loop of unboxed types.
-                error_exit(&format!("Cannot determine the layout of type `{}`. There are circular definitions by unboxed types. Please change some types to boxed.", &self.name));
+                panic_with_err(&format!("Cannot determine the layout of type `{}`. There are circular definitions by unboxed types. Please change some types to boxed.", &self.name));
             }
             unboxed_path.push(self.name.clone());
         } else {

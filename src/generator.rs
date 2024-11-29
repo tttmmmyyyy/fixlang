@@ -4,8 +4,8 @@
 
 use std::{cell::RefCell, env, sync::Arc};
 
-use crate::error::error_exit;
-use crate::error::error_exit_with_src;
+use crate::error::panic_with_err;
+use crate::error::panic_with_err_src;
 use ast::name::FullName;
 use ast::name::Name;
 use either::Either;
@@ -476,7 +476,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ty: Arc<TypeNode>,
     ) {
         if self.global.contains_key(&name) {
-            error_exit(&format!("Duplicate symbol: {}", name.to_string()));
+            panic_with_err(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
             let used_later = if ty.is_box(self.type_env()) {
                 // We do not need to retain global objects. Always move out it.
@@ -2321,7 +2321,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     .map(|param_ty| {
                         let c_type = param_ty.get_c_type(self.context);
                         if c_type.is_none() {
-                            error_exit_with_src(
+                            panic_with_err_src(
                                 "Cannot use `()` as a parameter type of C function.",
                                 &expr.source,
                             )

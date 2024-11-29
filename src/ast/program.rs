@@ -1986,7 +1986,7 @@ impl Program {
         for module in &mods {
             mod_to_hash.insert(
                 module.clone(),
-                exit_if_err(self.module_dependency_hash(&module)),
+                panic_if_err(self.module_dependency_hash(&module)),
             );
         }
         mod_to_hash

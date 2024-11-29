@@ -1,9 +1,9 @@
 use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::cpu_features::CpuFeatures;
-use crate::error::{exit_if_err, Errors};
+use crate::error::{panic_if_err, Errors};
 use crate::misc::{to_absolute_path, Finally};
 use crate::typecheckcache::{self, TypeCheckCache};
-use crate::{error::error_exit, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
+use crate::{error::panic_with_err, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
@@ -268,7 +268,7 @@ impl Configuration {
 impl Configuration {
     // Configuration for release build.
     pub fn release_mode(subcommand: SubCommand) -> Configuration {
-        let mut config = exit_if_err(Self::new(subcommand));
+        let mut config = panic_if_err(Self::new(subcommand));
         config.num_worker_thread = num_cpus::get();
         config
     }
@@ -277,7 +277,7 @@ impl Configuration {
     #[allow(dead_code)]
     pub fn develop_compiler_mode() -> Configuration {
         #[allow(unused_mut)]
-        let mut config = exit_if_err(Self::new(SubCommand::Run));
+        let mut config = panic_if_err(Self::new(SubCommand::Run));
         config.num_worker_thread = 0;
         config.set_valgrind(ValgrindTool::MemCheck);
         // config.fix_opt_level = FixOptimizationLevel::Separated;
@@ -325,7 +325,7 @@ impl Configuration {
             Some(out_file_path) => {
                 let file_name = out_file_path.file_name();
                 if file_name.is_none() {
-                    error_exit(&format!(
+                    panic_with_err(&format!(
                         "Invalid output file path: `{}`",
                         out_file_path.to_str().unwrap()
                     ))
@@ -439,7 +439,7 @@ impl Configuration {
         com.arg("--suppressions=valgrind.supp");
         match self.valgrind_tool {
             ValgrindTool::None => {
-                error_exit("Valgrind tool is not specified.");
+                panic_with_err("Valgrind tool is not specified.");
             }
             ValgrindTool::MemCheck => {
                 // Check memory leaks.

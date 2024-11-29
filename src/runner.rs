@@ -23,7 +23,7 @@ use std::{
 use crate::ast::export_statement::ExportStatement;
 use crate::compile_unit::CompileUnit;
 use crate::cpu_features::CpuFeatures;
-use crate::error::{any_to_string, error_exit, exit_if_err, Errors};
+use crate::error::{any_to_string, panic_if_err, panic_with_err, Errors};
 use crate::misc::{save_temporary_source, temporary_source_path};
 use crate::stopwatch::StopWatch;
 use crate::uncurry_optimization;
@@ -337,7 +337,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     let dir_path = obj_path.parent().unwrap();
     match fs::create_dir_all(dir_path) {
         Err(e) => {
-            error_exit(&format!(
+            panic_with_err(&format!(
                 "Failed to create directory \"{}\": {}",
                 dir_path.to_string_lossy().to_string(),
                 e
@@ -351,7 +351,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     target_machine
         .write_to_file(&module, inkwell::targets::FileType::Object, &tmp_file_path)
         .map_err(|e| {
-            error_exit(&format!(
+            panic_with_err(&format!(
                 "Failed to write to file \"{}\": {}",
                 obj_path.to_string_lossy().to_string(),
                 e
@@ -362,7 +362,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     // Rename the temporary file to the final file.
     match fs::rename(&tmp_file_path, obj_path) {
         Err(e) => {
-            error_exit(&format!(
+            panic_with_err(&format!(
                 "Failed to rename \"{}\" to \"{}\": {}",
                 tmp_file_path.to_string_lossy().to_string(),
                 obj_path.to_string_lossy().to_string(),
@@ -377,7 +377,7 @@ fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     let unit_name = module.get_name().to_str().unwrap();
     let path = config.get_output_llvm_ir_path(optimized, unit_name);
     if let Err(e) = module.print_to_file(path.clone()) {
-        error_exit(&format!("Failed to emit LLVM-IR: {}", e.to_string()));
+        panic_with_err(&format!("Failed to emit LLVM-IR: {}", e.to_string()));
     }
 }
 
@@ -556,7 +556,7 @@ pub fn run_file(mut config: Configuration) -> i32 {
     config.out_file_path = Some(PathBuf::from(a_out_path.clone()));
 
     // Build executable file.
-    exit_if_err(build_file(&mut config));
+    panic_if_err(build_file(&mut config));
 
     // Run the executable file.
     let mut com = if config.valgrind_tool == ValgrindTool::None {
@@ -578,25 +578,25 @@ pub fn run_file(mut config: Configuration) -> i32 {
     let _ = fs::remove_file(a_out_path.clone()); // Ignore the error.
 
     if let Err(e) = output {
-        error_exit(&format!("Failed to run \"{}\": {}", a_out_path, e));
+        panic_with_err(&format!("Failed to run \"{}\": {}", a_out_path, e));
     }
     let output = output.unwrap();
 
     if let Some(code) = output.status.code() {
         code
     } else {
-        error_exit("Program terminated abnormally.")
+        panic_with_err("Program terminated abnormally.")
     }
 }
 
 fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> TargetMachine {
     let _native = Target::initialize_native(&InitializationConfig::default())
-        .map_err(|e| error_exit(&format!("failed to initialize native: {}", e)))
+        .map_err(|e| panic_with_err(&format!("failed to initialize native: {}", e)))
         .unwrap();
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple)
         .map_err(|e| {
-            error_exit(&format!("failed to create target: {}", e));
+            panic_with_err(&format!("failed to create target: {}", e));
         })
         .unwrap();
     let cpu_name = TargetMachine::get_host_cpu_name();
@@ -617,7 +617,7 @@ fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> T
     );
     match target_machine {
         Some(tm) => tm,
-        None => error_exit("Failed to create target machine."),
+        None => panic_with_err("Failed to create target machine."),
     }
 }
 

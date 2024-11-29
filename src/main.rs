@@ -73,7 +73,7 @@ use config_file::ConfigFile;
 use configuration::*;
 use constants::*;
 use dependency_lockfile::DependecyLockFile;
-use error::exit_if_err;
+use error::panic_if_err;
 use generator::*;
 use graph::*;
 use inkwell::builder::Builder;
@@ -498,21 +498,21 @@ fn main() {
 
         // Set up configuration from the project file if it exists.
         if Path::new(PROJECT_FILE_PATH).exists() {
-            let proj_file = exit_if_err(ProjectFile::read_root_file());
-            exit_if_err(proj_file.set_config(&mut config, false));
-            exit_if_err(proj_file.install_dependencies(&mut config));
+            let proj_file = panic_if_err(ProjectFile::read_root_file());
+            panic_if_err(proj_file.set_config(&mut config, false));
+            panic_if_err(proj_file.install_dependencies(&mut config));
         }
 
         // Set up configuration from the command line arguments, to overwrite the configuration described in the project file.
-        exit_if_err(set_config_from_args(&mut config, args));
+        panic_if_err(set_config_from_args(&mut config, args));
         config
     }
 
-    let fix_config = exit_if_err(ConfigFile::load());
+    let fix_config = panic_if_err(ConfigFile::load());
 
     match app.get_matches().subcommand() {
         Some(("build", args)) => {
-            exit_if_err(build_file(&mut create_config(SubCommand::Build, args)));
+            panic_if_err(build_file(&mut create_config(SubCommand::Build, args)));
         }
         Some(("run", args)) => {
             process::exit(run_file(create_config(SubCommand::Run, args)));
@@ -522,17 +522,17 @@ fn main() {
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", _args)) => {
-                let proj_file = exit_if_err(ProjectFile::read_root_file());
-                exit_if_err(proj_file.open_lock_file().and_then(|lf| lf.install()));
+                let proj_file = panic_if_err(ProjectFile::read_root_file());
+                panic_if_err(proj_file.open_lock_file().and_then(|lf| lf.install()));
             }
             Some(("update", _args)) => {
-                exit_if_err(DependecyLockFile::update_and_install());
+                panic_if_err(DependecyLockFile::update_and_install());
             }
             Some(("add", args)) => {
                 let projects = read_projects_option(args);
-                let proj_file = exit_if_err(ProjectFile::read_root_file());
-                exit_if_err(proj_file.add_dependencies(&projects, &fix_config));
-                exit_if_err(DependecyLockFile::update_and_install());
+                let proj_file = panic_if_err(ProjectFile::read_root_file());
+                panic_if_err(proj_file.add_dependencies(&projects, &fix_config));
+                panic_if_err(DependecyLockFile::update_and_install());
             }
             _ => deps_subc.print_help().unwrap(),
         },
@@ -543,11 +543,11 @@ fn main() {
             clean_command();
         }
         Some(("docs", args)) => {
-            let modules = exit_if_err(read_modules_options(args));
-            exit_if_err(docgen::generate_docs_for_files(&modules));
+            let modules = panic_if_err(read_modules_options(args));
+            panic_if_err(docgen::generate_docs_for_files(&modules));
         }
         Some(("init", _args)) => {
-            exit_if_err(ProjectFile::create_example_file());
+            panic_if_err(ProjectFile::create_example_file());
         }
         _ => eprintln!("Unknown command. To show list of available commands, run `fix --help`."),
     }

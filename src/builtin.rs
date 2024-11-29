@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::error::error_exit;
+use crate::error::panic_with_err;
 use ast::name::{FullName, Name, NameSpace};
 use inkwell::module::Linkage;
 use misc::{make_map, Map};
@@ -4722,7 +4722,7 @@ impl InlineLLVMMarkThreadedFunctionBody {
     ) -> Object<'c> {
         // Check if the `threaded` compiler flag is true.
         if !gc.config.threaded {
-            error_exit(
+            panic_with_err(
                 "The `threaded` compiler flag must be set to true to use `Std::mark_threaded`.",
             );
         }
