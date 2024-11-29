@@ -1,5 +1,7 @@
 use std::{fmt::Display, path::PathBuf};
 
+use colored::Colorize;
+
 use crate::misc::{Map, Set};
 use crate::{misc, sourcefile::Span};
 
@@ -125,7 +127,8 @@ impl Error {
 
     pub fn to_string(&self) -> String {
         let mut str = String::default();
-        str += "\x1b[31merror\x1b[0m: ";
+        str += &"error".red().to_string();
+        str += ": ";
         str += &self.msg;
         str += "\n";
         for src in &self.srcs {

@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use colored::Colorize;
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 
@@ -190,19 +191,20 @@ impl Span {
             span.end_pos().line_col().1,
             self.input.file_path.to_str().unwrap().to_string()
         );
-        ret += &(" ".repeat(linenum_str_size) + " | " + "\n");
+        ret += &(" ".repeat(linenum_str_size) + &" | ".blue().to_string() + "\n");
         for line_span in span.lines_span() {
             let linenum_str = line_span.start_pos().line_col().0.to_string();
-            ret +=
-                &(linenum_str.clone() + &" ".repeat(linenum_str_size - linenum_str.len()) + " | ");
+            ret += &(linenum_str.clone().blue().to_string()
+                + &" ".repeat(linenum_str_size - linenum_str.len())
+                + &" | ".blue().to_string());
             ret += String::from(line_span.as_str()).trim_end();
             ret += "\n";
-            ret += &(" ".repeat(linenum_str_size) + " | ");
+            ret += &(" ".repeat(linenum_str_size) + &" | ".blue().to_string());
             let start_pos = span.start_pos().max(line_span.start_pos());
             let end_pos = span.end_pos().min(line_span.end_pos());
             let start_col = start_pos.line_col().1;
             let span_len = end_pos.pos() - start_pos.pos();
-            ret += &(" ".repeat(start_col - 1) + &"^".repeat(span_len));
+            ret += &(" ".repeat(start_col - 1) + &"^".repeat(span_len).red().to_string());
             ret += "\n";
         }
         ret
