@@ -939,7 +939,7 @@ impl Program {
                     let val_name_clone = val_name.clone();
                     let def_mod = val_name_clone.module();
                     let nrctx = get_nrctx(&def_mod);
-                    let ver_hash = self.module_dependency_hash(&def_mod);
+                    let ver_hash = self.module_dependency_hash(&def_mod)?;
                     let tc = tc.clone();
                     let task = Box::new(move || -> Result<TypedExpr, Errors> {
                         // Perform type-checking.
@@ -976,7 +976,7 @@ impl Program {
                         let val_name_clone = val_name.clone();
                         let def_mod = method.define_module.clone();
                         let nrctx = get_nrctx(&def_mod);
-                        let ver_hash = self.module_dependency_hash(&def_mod);
+                        let ver_hash = self.module_dependency_hash(&def_mod)?;
                         let tc = tc.clone();
                         let task = Box::new(move || -> Result<TypedExpr, Errors> {
                             // Perform type-checking.
@@ -1551,7 +1551,10 @@ impl Program {
     pub fn validate_type_defns(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for type_defn in &self.type_defns {
-            type_defn.check_tyvars();
+            errors.eat_err(type_defn.check_tyvars());
+            if errors.has_error() {
+                continue;
+            }
             let type_name = &type_defn.name;
             match &type_defn.value {
                 TypeDeclValue::Struct(str) => {
@@ -1954,29 +1957,25 @@ impl Program {
     }
 
     // Calculate a hash value of a module which is affected by source codes of all dependent modules.
-    pub fn module_dependency_hash(&self, module: &Name) -> String {
+    pub fn module_dependency_hash(&self, module: &Name) -> Result<String, Errors> {
         let mut dependent_module_names = self
             .dependent_modules(module)
             .iter()
             .cloned()
             .collect::<Vec<_>>();
         dependent_module_names.sort(); // To remove randomness introduced by HashSet, we sort it.
-        let concatenated_source_hashes = dependent_module_names
-            .iter()
-            .map(|mod_name| {
-                exit_if_err(
-                    self.modules
-                        .iter()
-                        .find(|mi| mi.name == *mod_name)
-                        .unwrap()
-                        .source
-                        .input
-                        .hash(),
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("");
-        format!("{:x}", md5::compute(concatenated_source_hashes))
+        let mut concatenated_source_hashes = String::default();
+        for mod_name in &dependent_module_names {
+            concatenated_source_hashes += &self
+                .modules
+                .iter()
+                .find(|mi| mi.name == *mod_name)
+                .unwrap()
+                .source
+                .input
+                .hash()?;
+        }
+        Ok(format!("{:x}", md5::compute(concatenated_source_hashes)))
     }
 
     // Calculate a map from a module to a hash value of the module which is affected by source codes of all dependent modules.
@@ -1985,7 +1984,10 @@ impl Program {
         let mods = self.linked_mods();
         let mut mod_to_hash = Map::default();
         for module in &mods {
-            mod_to_hash.insert(module.clone(), self.module_dependency_hash(&module));
+            mod_to_hash.insert(
+                module.clone(),
+                exit_if_err(self.module_dependency_hash(&module)),
+            );
         }
         mod_to_hash
     }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use misc::{Map, Set};
 use name::{FullName, Name};
 
-use crate::error::{error_exit_with_src, Errors};
+use crate::error::Errors;
 
 use super::*;
 
@@ -145,20 +145,21 @@ impl TypeDefn {
     }
 
     // Check if all of type variables in field types appear in lhs of type definition.
-    pub fn check_tyvars(&self) {
+    pub fn check_tyvars(&self) -> Result<(), Errors> {
         let tyvars = Set::<String>::from_iter(self.tyvars.iter().map(|tv| tv.name.clone()));
         for v in self.free_variables_in_definition() {
             if !tyvars.contains(&v.name) {
-                error_exit_with_src(
-                    &format!(
+                return Err(Errors::from_msg_srcs(
+                    format!(
                         "Unknown type variable `{}` in the definition of type `{}`.",
                         v.name,
                         self.name.to_string()
                     ),
-                    &self.source.as_ref().map(|s| s.to_head_character()),
-                )
+                    &[&self.source.as_ref().map(|s| s.to_head_character())],
+                ));
             }
         }
+        Ok(())
     }
 
     // Set kinds to type variables in `self.value` using kind information in `self.tyvars`.

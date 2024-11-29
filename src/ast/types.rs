@@ -1,7 +1,6 @@
 use core::panic;
 use std::sync::Arc;
 
-use crate::error::error_exit_with_src;
 use crate::error::Errors;
 use inkwell::types::BasicType;
 use misc::collect_results;
@@ -1098,47 +1097,46 @@ impl TypeNode {
         impl_type: &Arc<TypeNode>,
         src_for_err: &Option<Span>,
         err_msg_for_impl: bool,
-    ) -> (Name, Vec<Arc<TyVar>>) {
+    ) -> Result<(Name, Vec<Arc<TyVar>>), Errors> {
         fn general_err(
             for_implememtation: bool,
             imple_type: &Arc<TypeNode>,
             src_for_err: &Option<Span>,
-        ) -> ! {
+        ) -> Errors {
             if for_implememtation {
-                error_exit_with_src(
-                    &format!("The implementation of an associated type should be in the form `type {{AssocTyName}} {{impl_type}} {{type_var1}} ... {{type_varN}} = {{value_type}};`, where {{impl_type}} is `{}` here.", imple_type.to_string()),
-                    src_for_err,
-                );
+                Errors::from_msg_srcs(
+                    format!("The implementation of an associated type should be in the form `type {{AssocTyName}} {{impl_type}} {{type_var1}} ... {{type_varN}} = {{value_type}};`, where {{impl_type}} is `{}` here.", imple_type.to_string()),
+                    &[src_for_err],
+                )
             } else {
-                // for definition
-                error_exit_with_src(
-                    &format!("The definition of an associated type should be in the form `type {{AssocTyName}} {{impl_type}} {{type_var1}} ... {{type_varN}};`, where {{impl_type}} is `{}` here.", imple_type.to_string()),
-                    src_for_err,
-                );
+                Errors::from_msg_srcs(
+                    format!("The definition of an associated type should be in the form `type {{AssocTyName}} {{impl_type}} {{type_var1}} ... {{type_varN}};`, where {{impl_type}} is `{}` here.", imple_type.to_string()),
+                    &[src_for_err],
+                )
             }
         }
         // Validate the type application sequence.
         let app_seq = self.flatten_type_application();
         if app_seq.len() < 2 {
-            general_err(err_msg_for_impl, impl_type, src_for_err);
+            return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
         }
         let assoc_type_name: Name;
         match &app_seq[0].ty {
             Type::TyCon(tc) => {
                 if !tc.name.is_local() {
-                    error_exit_with_src(
-                        "Do not specify namespace of the associated type here; the namespace of an associated type is determined by the trait name.",
-                        src_for_err,
-                    );
+                    return Err(Errors::from_msg_srcs(
+                        "Do not specify namespace of the associated type here; the namespace of an associated type is determined by the trait name.".to_string(),
+                        &[src_for_err],
+                    ));
                 }
                 assoc_type_name = tc.name.to_string();
             }
             _ => {
-                general_err(err_msg_for_impl, impl_type, src_for_err);
+                return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
             }
         }
         if app_seq[1].to_string() != impl_type.to_string() {
-            general_err(err_msg_for_impl, impl_type, src_for_err);
+            return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
         }
         let mut tyvars = vec![tyvar_from_name("%impl_type", &kind_star())];
         let impl_ty_tyvar_set: Set<Name> = impl_type
@@ -1152,27 +1150,45 @@ impl TypeNode {
                 Type::TyVar(tv) => {
                     if impl_ty_tyvar_set.contains(&tv.name) {
                         if err_msg_for_impl {
-                            error_exit_with_src(&format!("In associated type implementation, each type variable should be free from the implemented type (`{}` here).", impl_type.to_string()), src_for_err);
+                            return Err(Errors::from_msg_srcs(
+                                format!(
+                                    "In associated type implementation, each type variable should be free from the implemented type (`{}` here).",
+                                    impl_type.to_string()
+                                ),
+                                &[src_for_err],
+                            ));
                         } else {
-                            error_exit_with_src(&format!("In associated type definition, each type variable should be free from the implemented type (`{}` here).", impl_type.to_string()), src_for_err);
+                            return Err(Errors::from_msg_srcs(
+                                format!(
+                                    "In associated type definition, each type variable should be free from the implemented type (`{}` here).",
+                                    impl_type.to_string()
+                                ),
+                                &[src_for_err],
+                            ));
                         }
                     }
                     if tyvars_set.contains(&tv.name) {
                         if err_msg_for_impl {
-                            error_exit_with_src("In associated type implementation, each type variable should be different.", src_for_err);
+                            return Err(Errors::from_msg_srcs(
+                                "In associated type implementation, each type variable should be different.".to_string(),
+                                &[src_for_err],
+                            ));
                         } else {
-                            error_exit_with_src("In associated type implementation, each type variable should be different.", src_for_err);
+                            return Err(Errors::from_msg_srcs(
+                                "In associated type definition, each type variable should be different.".to_string(),
+                                &[src_for_err],
+                            ));
                         }
                     }
                     tyvars.push(tv.clone());
                     tyvars_set.insert(tv.name.clone());
                 }
                 _ => {
-                    general_err(err_msg_for_impl, impl_type, src_for_err);
+                    return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
                 }
             }
         }
-        (assoc_type_name, tyvars)
+        Ok((assoc_type_name, tyvars))
     }
 }
 

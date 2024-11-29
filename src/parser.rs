@@ -446,7 +446,7 @@ fn parse_trait_member_type_defn(
     let assoc_type_defn = parse_type(pairs.next().unwrap(), ctx);
     // Validate form of `assoc_type_defn`
     let (assoc_type_name, assoc_type_params) =
-        assoc_type_defn.validate_as_associated_type_defn(impl_type, &Some(span.clone()), false);
+        assoc_type_defn.validate_as_associated_type_defn(impl_type, &Some(span.clone()), false)?;
     let kind_applied = if let Some(pair) = pairs.next() {
         if pair.as_rule() == Rule::kind {
             parse_kind(pair, ctx)
@@ -519,7 +519,7 @@ fn parse_trait_member_impl(
             Either::Left((name, expr))
         }
         Rule::trait_member_type_impl => {
-            Either::Right(parse_trait_member_type_impl(pair, impl_type, ctx))
+            Either::Right(parse_trait_member_type_impl(pair, impl_type, ctx)?)
         }
         _ => unreachable!(),
     })
@@ -540,7 +540,7 @@ fn parse_trait_member_type_impl(
     pair: Pair<Rule>,
     impl_type: &Arc<TypeNode>,
     ctx: &mut ParseContext,
-) -> AssocTypeImpl {
+) -> Result<AssocTypeImpl, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_member_type_impl);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -549,14 +549,14 @@ fn parse_trait_member_type_impl(
         impl_type,
         &Some(span.clone()),
         true,
-    );
+    )?;
     let type_value = parse_type(pairs.next().unwrap(), ctx);
-    AssocTypeImpl {
+    Ok(AssocTypeImpl {
         name: assoc_type_name,
         params,
         value: type_value,
         source: Some(span),
-    }
+    })
 }
 
 fn parse_export_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ExportStatement {
