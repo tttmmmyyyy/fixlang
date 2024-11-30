@@ -2,6 +2,7 @@ use crate::{
     config_file::ConfigFile,
     dependency_lockfile::{DependecyLockFile, ProjectSource},
     error::Errors,
+    misc::Set,
     registry_file::RegistryFile,
     Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, SourceFile, Span,
     LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
@@ -641,7 +642,7 @@ impl ProjectFile {
         let mut added = "".to_string();
 
         // Parse each element of `proj_vars` as the form `proj-name@ver_req`.
-        let mut projs: Vec<Option<(String, String)>> = vec![]; // (proj_name, version string)
+        let mut projs: Vec<(String, String)> = vec![]; // (proj_name, ver_str)
         for proj_ver in proj_vers {
             let proj_ver_split = proj_ver.split('@').collect::<Vec<&str>>();
             if proj_ver_split.len() == 0 || proj_ver_split.len() > 2 {
@@ -663,16 +664,16 @@ impl ProjectFile {
             } else {
                 "*".to_string()
             };
-            projs.push(Some((proj_name.to_string(), version)));
+            projs.push((proj_name.to_string(), version));
         }
 
         // Check if dependencies to the same project are specified multiple times.
         for i in 0..projs.len() {
             for j in i + 1..projs.len() {
-                if projs[i].as_ref().unwrap().0 == projs[j].as_ref().unwrap().0 {
+                if projs[i].0 == projs[j].0 {
                     return Err(Errors::from_msg(format!(
                         "The project \"{}\" is specified multiple times.",
-                        projs[i].as_ref().unwrap().0
+                        projs[i].0
                     )));
                 }
             }
@@ -680,7 +681,7 @@ impl ProjectFile {
 
         // Check if the project file already contains the dependencies.
         for prj_ver in &projs {
-            let proj_name = &prj_ver.as_ref().unwrap().0;
+            let proj_name = &prj_ver.0;
             if self.dependencies.iter().any(|dep| &dep.name == proj_name) {
                 return Err(Errors::from_msg(format!(
                     "The project file already contains a dependency on \"{}\".",
@@ -711,20 +712,16 @@ impl ProjectFile {
             })?;
 
             // For each project to be added, search it in the registry file.
-            let mut remove_index = vec![]; // The indices of the projects to be removed from `projs`.
+            let mut added_indices = Set::default();
             for (i, proj_var) in projs.iter().enumerate() {
-                if proj_var.is_none() {
-                    // This project has already been removed.
-                    continue;
-                }
-                let (proj_name, version) = proj_var.as_ref().unwrap();
+                let (proj_name, version) = proj_var;
                 if let Some(proj_info) = reg_file
                     .projects
                     .iter()
                     .find(|prj_info| &prj_info.name == proj_name)
                 {
                     println!(
-                        "Adding dependency on \"{}\" to the project file. (It was found in \"{}\".)",
+                        "Adding dependency on \"{}\". (It was found in \"{}\".)",
                         proj_name, reg_url
                     );
 
@@ -733,24 +730,30 @@ impl ProjectFile {
                     added += &format!("\nversion = \"{}\"", version);
                     added += &format!("\ngit = {{ url = \"{}\" }}", proj_info.git);
 
-                    remove_index.push(i);
+                    added_indices.insert(i);
                 }
             }
 
             // Remove the projects that have been added.
-            for i in remove_index.iter().rev() {
-                projs[*i] = None;
-            }
+            projs = projs
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    if added_indices.contains(&i) {
+                        None
+                    } else {
+                        Some(v)
+                    }
+                })
+                .collect();
         }
 
         // Check if all the projects have been added.
         for proj_var in projs {
-            if let Some(proj_var) = proj_var {
-                return Err(Errors::from_msg(format!(
-                    "The project \"{}\" is not found in the registries.",
-                    proj_var.0
-                )));
-            }
+            return Err(Errors::from_msg(format!(
+                "The project \"{}\" is not found in the registries.",
+                proj_var.0
+            )));
         }
 
         // Write the added dependencies to the project file.
