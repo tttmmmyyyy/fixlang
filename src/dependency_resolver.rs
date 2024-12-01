@@ -147,12 +147,27 @@ fn try_resolve_dependency<'a, 'b, 'c>(
 
     // Find the latest version which can be used.
     let vers = versions_retriever(&dependency.name)?;
-    let mut vers = vers
+    let mut vers_match = vers
         .iter()
         .filter(|v| dependency.requirement.matches(v))
         .collect::<Vec<_>>();
-    vers.sort();
-    for version in vers.iter().rev() {
+    vers_match.sort();
+
+    // If no versions matches the requirement, raise an error here to show better error message.
+    if vers_match.is_empty() {
+        println!(
+            "{}Found version(s) {}, but none satisfies the requirement \"{}\". Backtrack the process.",
+            " ".repeat(indent),
+            vers.iter()
+                .map(|v| format!("\"{}\"", v))
+                .collect::<Vec<_>>()
+                .join(", "),
+            dependency.requirement
+        );
+        return Ok(None);
+    }
+
+    for version in vers_match.iter().rev() {
         println!(
             "{}Trying \"{}@{}\".",
             " ".repeat(indent),
@@ -183,7 +198,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     }
     // We have tried all versions, but none of them worked.
     println!(
-        "{}No version of `{}` was available. Backtracking the process.",
+        "{}No version of `{}` was available. Backtrack the process.",
         " ".repeat(indent),
         dependency.name
     );
