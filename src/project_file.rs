@@ -747,7 +747,7 @@ impl ProjectFile {
                             if tagged_vers.is_empty() {
                                 warn_msg(&format!(
                                     "Adding version requirement \"*\" for \"{}\" since there are no tagged versions. \
-                                    This means that `fix deps update` may introduce breaking changes.",
+                                    This means that updating the lock file (which is done by `fix deps add` or `fix deps update`) may introduce breaking changes.",
                                     proj_name, 
                                 ));
                                 "*".to_string()
