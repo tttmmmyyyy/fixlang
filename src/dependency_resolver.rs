@@ -28,21 +28,16 @@ pub type PackageRetriever<'a> = &'a dyn Fn(&PackageName, &Version) -> Result<Pac
 // It takes a package name and returns a list of versions which exist.
 pub type VersionRetriever<'a> = &'a dyn Fn(&PackageName) -> Result<Vec<Version>, Errors>;
 
-// Logger function.
-pub type Logger<'a> = &'a dyn Fn(&str);
-
 pub fn resolve_dependency<'a, 'b, 'c>(
     root_proj: &ProjectFile,
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
-    logger: Logger<'c>,
 ) -> Result<Option<Vec<Package>>, Errors> {
     try_use_package(
         (&root_proj.general.name, &root_proj.general.version()),
         &[],
         package_retriever,
         versions_retriever,
-        logger,
         0,
     )
 }
@@ -56,7 +51,6 @@ fn try_use_package<'a, 'b, 'c>(
     fixed: &[Package],
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
-    logger: Logger<'c>,
     indent: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
     let (pkg_name, pkg_version) = pkg;
@@ -84,14 +78,9 @@ fn try_use_package<'a, 'b, 'c>(
     let deps = dep_range.iter().map(|(dep, _)| dep).collect::<Vec<_>>();
     let mut ok = true;
     for dep in deps {
-        if let Some(res) = try_resolve_dependency(
-            dep,
-            &fixed,
-            package_retriever,
-            versions_retriever,
-            logger,
-            indent,
-        )? {
+        if let Some(res) =
+            try_resolve_dependency(dep, &fixed, package_retriever, versions_retriever, indent)?
+        {
             fixed = res;
         } else {
             ok = false;
@@ -101,12 +90,12 @@ fn try_use_package<'a, 'b, 'c>(
 
     // If all dependecies are resolved, use this version.
     if ok {
-        logger(&format!(
+        println!(
             "{}Accept \"{}@{}\".",
             " ".repeat(indent),
             pkg_name,
-            pkg_version,
-        ));
+            pkg_version
+        );
         return Ok(Some(fixed));
     }
     return Ok(None);
@@ -121,15 +110,14 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     fixed: &[Package],
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
-    logger: Logger<'c>,
     indent: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
-    logger(&format!(
+    println!(
         "{}Resolving version requirement: \"{}@{}\".",
         " ".repeat(indent),
         dependency.name,
         dependency.requirement
-    ));
+    );
     let indent = indent + 1;
 
     // In case the dependent package is already resolved,
@@ -137,22 +125,22 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     // Otherwise, raise an error.
     if let Some(package) = fixed.iter().find(|p| p.name == dependency.name) {
         if dependency.requirement.matches(&package.version) {
-            logger(&format!(
+            println!(
                 "{}Already accepted \"{}@{}\" satisfies the requirement `{}`. OK.",
                 " ".repeat(indent),
                 dependency.name,
                 package.version,
                 dependency.requirement
-            ));
+            );
             return Ok(Some(fixed.to_vec()));
         } else {
-            logger(&format!(
-                "{}Already accpeted \"{}@{}\" conflicts with the requirement `{}`. Backtracking.",
+            println!(
+                "{}Already accpeted \"{}@{}\" conflicts with the requirement `{}`. Backtrack the process.",
                 " ".repeat(indent),
                 dependency.name,
                 package.version,
                 dependency.requirement
-            ));
+            );
             return Ok(None);
         }
     }
@@ -165,12 +153,12 @@ fn try_resolve_dependency<'a, 'b, 'c>(
         .collect::<Vec<_>>();
     vers.sort();
     for version in vers.iter().rev() {
-        logger(&format!(
+        println!(
             "{}Trying \"{}@{}\".",
             " ".repeat(indent),
             dependency.name,
-            version,
-        ));
+            version
+        );
         let indent = indent + 1;
 
         // Try to use this version.
@@ -179,7 +167,6 @@ fn try_resolve_dependency<'a, 'b, 'c>(
             fixed,
             package_retriever,
             versions_retriever,
-            logger,
             indent,
         )?;
         if fixed.is_some() {
@@ -187,18 +174,18 @@ fn try_resolve_dependency<'a, 'b, 'c>(
         }
 
         // Otherwise, try the next version.
-        logger(&format!(
-            "{}Reject version `{}` of `{}`.",
+        println!(
+            "{}Reject version \"{}\" of \"{}\".",
             " ".repeat(indent),
             version,
-            dependency.name,
-        ));
+            dependency.name
+        );
     }
     // We have tried all versions, but none of them worked.
-    logger(&format!(
-        "{}No version of project `{}` was accepted. Backtracking.",
+    println!(
+        "{}No version of `{}` was available. Backtracking the process.",
         " ".repeat(indent),
-        dependency.name,
-    ));
+        dependency.name
+    );
     Ok(None)
 }

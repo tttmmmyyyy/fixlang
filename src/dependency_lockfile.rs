@@ -13,7 +13,7 @@ use crate::{
     configuration::Configuration,
     dependency_resolver::{self, Dependency, Package, PackageName},
     error::Errors,
-    misc::to_absolute_path,
+    misc::{to_absolute_path, warn_msg},
     project_file::{ProjectFile, ProjectFileDependency, ProjectName},
     EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, PROJECT_FILE_PATH,
 };
@@ -43,16 +43,11 @@ impl DependecyLockFile {
         };
         let packages_retriever = create_package_retriever(prjs_info.clone());
         let versions_retriever = create_version_retriever(prjs_info.clone());
-        let logger = create_stdout_logger();
-        println!(
-            "Resolving dependency for project \"{}\"...",
-            proj_file.general.name
-        );
+        println!("Resolving dependency for \"{}\"...", proj_file.general.name);
         let res = dependency_resolver::resolve_dependency(
             proj_file,
             packages_retriever.as_ref(),
             versions_retriever.as_ref(),
-            logger.as_ref(),
         )?;
         if res.is_none() {
             return Err(Errors::from_msg(
@@ -77,7 +72,7 @@ impl DependecyLockFile {
             let prj_info = &prjs_info
                 .iter()
                 .find(|info| &info.name == &prj.name)
-                .expect(format!("Project \"{}\" not found in `projs_info`", prj.name).as_str());
+                .expect(format!("\"{}\" not found in `projs_info`", prj.name).as_str());
             let ver_info = prj_info
                 .versions
                 .as_ref()
@@ -85,6 +80,18 @@ impl DependecyLockFile {
                 .iter()
                 .find(|info| &info.version == &prj.version)
                 .unwrap();
+
+            // If the version is not tagged, then warn the user.
+            if prj_info.is_git() && !ver_info.tagged {
+                let short_commit = format!("{}", ver_info.rev)
+                    .chars()
+                    .take(7)
+                    .collect::<String>();
+                warn_msg(&format!(
+                    "No version tag is found for \"{}\", and using untagged version \"{}\" (commit {}).",
+                    prj.name, prj.version, short_commit
+                ));
+            }
 
             // Create a new entry for the lock file.
             let dep = DependencyLockFileEntry {
@@ -110,7 +117,7 @@ impl DependecyLockFile {
             lock_file.dependencies.push(dep);
         }
 
-        println!("Dependency resolved successfully.");
+        println!("Dependencies resolved successfully.");
         Ok(lock_file)
     }
 
@@ -175,7 +182,7 @@ impl DependecyLockFile {
                 dep.check_name_version_match_proj_file()?;
 
                 println!(
-                    "Dependent project \"{}\" v{} installed successfully at \"{}\".",
+                    "Dependency \"{}@{}\" installed successfully at \"{}\".",
                     dep.name,
                     dep.version,
                     dep.path.to_string_lossy().to_string()
@@ -185,7 +192,7 @@ impl DependecyLockFile {
                 // Check the path exists.
                 if !dep.path.exists() {
                     return Err(Errors::from_msg(format!(
-                        "Dependent project \"{}\" is not found at \"{}\" as required in \"{}\".",
+                        "Dependency \"{}\" is not found at \"{}\" as required in \"{}\".",
                         dep.name,
                         dep.path.to_string_lossy().to_string(),
                         LOCK_FILE_PATH,
@@ -230,13 +237,16 @@ impl DependencyLockFileEntry {
         let proj_file = self.project_file()?;
         if proj_file.general.name != self.name {
             return Err(Errors::from_msg(format!(
-                "Dependent project \"{}\" installed at \"{}\" is not named \"{}\" as required in \"{}\".",
-                self.name, self.path.to_string_lossy().to_string(), self.name, LOCK_FILE_PATH,
+                "Dependency \"{}\" installed at \"{}\" is not named \"{}\" as required in \"{}\".",
+                self.name,
+                self.path.to_string_lossy().to_string(),
+                self.name,
+                LOCK_FILE_PATH,
             )));
         }
         if proj_file.general.version() != Version::parse(&self.version).unwrap() {
             return Err(Errors::from_msg(format!(
-                "Dependent project \"{}\" installed at \"{}\" is not at version \"{}\" as required in \"{}\".",
+                "Dependency \"{}\" installed at \"{}\" is not at version \"{}\" as required in \"{}\".",
                 self.name, self.path.to_string_lossy().to_string(), self.version, LOCK_FILE_PATH,
             )));
         }
@@ -273,6 +283,10 @@ struct ProjectInfo {
 }
 
 impl ProjectInfo {
+    pub fn is_git(&self) -> bool {
+        matches!(self.source, ProjectSource::Git(_, _))
+    }
+
     fn from_project_file(proj_file: &ProjectFile) -> Self {
         ProjectInfo {
             name: proj_file.general.name.clone(),
@@ -280,6 +294,7 @@ impl ProjectInfo {
             versions: Some(vec![VersionInfo {
                 version: proj_file.general.version(),
                 rev: git2::Oid::zero(),
+                tagged: false,
             }]),
             proj_files: vec![proj_file.clone()],
         }
@@ -301,6 +316,7 @@ impl ProjectInfo {
                 self.versions = Some(vec![VersionInfo {
                     version: ver,
                     rev: git2::Oid::zero(),
+                    tagged: false,
                 }]);
             }
             ProjectSource::Git(_url, repo) => {
@@ -366,7 +382,7 @@ impl ProjectInfo {
 }
 
 // Get versions from a git repository.
-fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Errors> {
+pub fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Errors> {
     let mut versions: Vec<VersionInfo> = vec![];
 
     // First, look for tags.
@@ -390,7 +406,11 @@ fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Errors>
             return true; // Continue.
         }
         let version = parsed.unwrap();
-        versions.push(VersionInfo { version, rev: oid });
+        versions.push(VersionInfo {
+            version,
+            rev: oid,
+            tagged: true,
+        });
 
         return true;
     })
@@ -416,14 +436,16 @@ fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Errors>
     versions.push(VersionInfo {
         version: proj_file.general.version(),
         rev: head_oid,
+        tagged: false,
     });
 
     Ok(versions)
 }
 
-struct VersionInfo {
-    version: Version,
-    rev: git2::Oid, // Empty if source is `ProjectDir`.
+pub struct VersionInfo {
+    pub version: Version,
+    rev: git2::Oid,   // Empty if source is `ProjectDir`.
+    pub tagged: bool, // True if the version is tagged.
 }
 
 pub enum ProjectSource {
@@ -477,23 +499,27 @@ impl ProjectSource {
                     return Ok(());
                 }
 
-                // Create a temporary directory to clone the repository.
-                let temp_dir = tempfile::tempdir().map_err(|e| {
-                    Errors::from_msg_err("Failed to create a temporary directory", e)
-                })?;
-
                 // Clone the repository.
-                let cloned = Repository::clone(url, temp_dir.path()).map_err(|e| {
-                    Errors::from_msg_err(&format!("Failed to clone repository `{}`", url), e)
-                })?;
-
-                // Cache the repository.
-                *repo = Some((temp_dir, cloned));
+                *repo = Some(clone_git_repo(url)?);
 
                 Ok(())
             }
         }
     }
+}
+
+// Clones a git repository to a temporary directory.
+pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
+    // Create a temporary directory to clone the repository.
+    let temp_dir = tempfile::tempdir()
+        .map_err(|e| Errors::from_msg_err("Failed to create a temporary directory", e))?;
+
+    // Clone the repository.
+    let repo = Repository::clone(url, temp_dir.path()).map_err(|e| {
+        Errors::from_msg_err(&format!("Failed to clone the repository `{}`", url), e)
+    })?;
+
+    Ok((temp_dir, repo))
 }
 
 fn project_file_to_package(proj_file: &ProjectFile) -> Package {
@@ -521,7 +547,7 @@ fn create_package_retriever(
             .iter_mut()
             .find(|pkg_data| &pkg_data.name == prj_name)
             .ok_or_else(|| {
-                Errors::from_msg(format!("Source for project \"{}\" is not found.", prj_name))
+                Errors::from_msg(format!("Source for \"{}\" is not found.", prj_name))
             })?;
 
         // Get the project file of the package at the given version.
@@ -530,7 +556,7 @@ fn create_package_retriever(
         // Check that the project name is correct.
         if &proj_file.general.name != prj_name {
             return Err(Errors::from_msg(format!(
-                "The project \"{}\" found, but a different project name \"{}\" is specified in its project file.",
+                "\"{}\" is found, but a different project name \"{}\" is specified in its project file.",
                 prj_name,
                 proj_file.general.name
             )));
@@ -539,7 +565,7 @@ fn create_package_retriever(
         // Check that the project version is correct.
         if proj_file.general.version() != *ver {
             return Err(Errors::from_msg(format!(
-                "The project \"{}@{}\" is found, but a different version \"{}\" is specified in its project file.",
+                "\"{}@{}\" is found, but a different version \"{}\" is specified in its project file.",
                 prj_name,
                 ver,
                 proj_file.general.version()
@@ -555,7 +581,7 @@ fn create_package_retriever(
                     continue;
                 }
                 return Err(Errors::from_msg(format!(
-                    "Project \"{}\" is required twice with different sources: \"{}\" and \"{}\".",
+                    "\"{}\" is required twice with different sources: \"{}\" and \"{}\".",
                     dep.name,
                     prj.source.to_string(),
                     dep_src.to_string()
@@ -586,7 +612,7 @@ fn create_version_retriever(
             .iter_mut()
             .find(|pkg_data| &pkg_data.name == pkg_name)
             .ok_or_else(|| {
-                Errors::from_msg(format!("Source for project \"{}\" is not found.", pkg_name))
+                Errors::from_msg(format!("Source for \"{}\" is not found.", pkg_name))
             })?;
 
         prj.retrieve_versions()?;
@@ -598,24 +624,5 @@ fn create_version_retriever(
             .iter()
             .map(|info| info.version.clone())
             .collect())
-    })
-}
-
-#[derive(Clone, Default)]
-struct LogsBuffer {
-    lines: Arc<Mutex<Vec<String>>>,
-}
-
-// Creates a logger function which writes logs to the given LogBuffer.
-#[allow(dead_code)]
-fn create_logger(log_buf: LogsBuffer) -> Box<dyn Fn(&str)> {
-    Box::new(move |msg: &str| {
-        log_buf.lines.lock().unwrap().push(msg.to_string());
-    })
-}
-
-fn create_stdout_logger() -> Box<dyn Fn(&str)> {
-    Box::new(move |msg: &str| {
-        println!("{}", msg);
     })
 }

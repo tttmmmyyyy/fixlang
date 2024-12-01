@@ -62,8 +62,8 @@ files = ["main.fix"]
 # files = ["test.fix"]
 
 ## By "[[dependencies]]" array, you can add a Fix project as a dependency.
-## Each dependent project must have "fixproj.toml" file at the project root directory.
-## If a dependent project also has dependencies, "fix" will consider them recursively.
+## Each dependency must have "fixproj.toml" file at the project root directory.
+## If a dependency also has dependencies, "fix" will consider them recursively.
 ## NOTE: The syntax for version requirement is the same as in Cargo. See: https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html
 
 ## The following is an example of a dependency to a project in the local file system.

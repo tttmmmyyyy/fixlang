@@ -1,8 +1,8 @@
 use crate::{
     config_file::ConfigFile,
-    dependency_lockfile::{DependecyLockFile, ProjectSource},
+    dependency_lockfile::{self, DependecyLockFile, ProjectSource},
     error::Errors,
-    misc::Set,
+    misc::{info_msg, warn_msg, Set},
     registry_file::RegistryFile,
     Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, SourceFile, Span,
     LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
@@ -642,7 +642,7 @@ impl ProjectFile {
         let mut added = "".to_string();
 
         // Parse each element of `proj_vars` as the form `proj-name@ver_req`.
-        let mut projs: Vec<(String, String)> = vec![]; // (proj_name, ver_str)
+        let mut projs: Vec<(String, Option<String>)> = vec![]; // (proj_name, ver_str)
         for proj_ver in proj_vers {
             let proj_ver_split = proj_ver.split('@').collect::<Vec<&str>>();
             if proj_ver_split.len() == 0 || proj_ver_split.len() > 2 {
@@ -660,9 +660,9 @@ impl ProjectFile {
                         proj_ver, e
                     ))
                 })?;
-                proj_ver_split[1].to_string()
+                Some(proj_ver_split[1].to_string())
             } else {
-                "*".to_string()
+                None
             };
             projs.push((proj_name.to_string(), version));
         }
@@ -679,12 +679,12 @@ impl ProjectFile {
             }
         }
 
-        // Check if the project file already contains the dependencies.
+        // Check if the project file already has the dependencies.
         for prj_ver in &projs {
             let proj_name = &prj_ver.0;
             if self.dependencies.iter().any(|dep| &dep.name == proj_name) {
                 return Err(Errors::from_msg(format!(
-                    "The project file already contains a dependency on \"{}\".",
+                    "The project file already has a dependency on \"{}\".",
                     proj_name
                 )));
             }
@@ -720,10 +720,49 @@ impl ProjectFile {
                     .iter()
                     .find(|prj_info| &prj_info.name == proj_name)
                 {
+                    // If the project is found in the registry, add it to the project file.
                     println!(
-                        "Adding dependency on \"{}\". (It was found in \"{}\".)",
+                        "The project \"{}\" was found at \"{}\".",
                         proj_name, reg_url
                     );
+
+                    // When the version requirement is empty, try to use the latest tagged version.
+                    let version = match version {
+                        Some(v) => v.clone(),
+                        None => {
+                            let (_tmp_dir, repo) =
+                                dependency_lockfile::clone_git_repo(&proj_info.git)?;
+                            let vers = dependency_lockfile::get_versions_from_repo(&repo)?;
+                            let mut tagged_vers = vers
+                                .iter()
+                                .filter_map(|vi| {
+                                    if vi.tagged {
+                                        Some(vi.version.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>();
+                            tagged_vers.sort();
+                            if tagged_vers.is_empty() {
+                                warn_msg(&format!(
+                                    "Adding version requirement \"*\" for \"{}\" since there are no tagged versions. \
+                                    This means that `fix deps update` may introduce breaking changes.",
+                                    proj_name, 
+                                ));
+                                "*".to_string()
+                            } else {
+                                let latest = tagged_vers.pop().unwrap();
+                                let latest =
+                                    format!("{}.{}.{}", latest.major, latest.minor, latest.patch);
+                                info_msg(&format!(
+                                    "Adding version requirement \"{}\" for \"{}\" which is the latest tagged version.",
+                                    latest, proj_name
+                                ));
+                                latest
+                            }
+                        }
+                    };
 
                     added += "\n\n[[dependencies]]";
                     added += &format!("\nname = \"{}\"", proj_name);

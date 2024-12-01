@@ -115,6 +115,7 @@ macro_rules! function_name {
         }
     }};
 }
+use colored::Colorize;
 #[allow(unused_imports)]
 pub(crate) use function_name;
 
@@ -173,4 +174,12 @@ impl Drop for Finally {
             work();
         }
     }
+}
+
+pub fn info_msg(msg: &str) {
+    println!("{}: {}", "info".bright_blue(), msg);
+}
+
+pub fn warn_msg(msg: &str) {
+    println!("{}: {}", "warning".yellow(), msg);
 }
