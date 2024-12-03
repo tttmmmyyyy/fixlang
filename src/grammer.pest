@@ -113,7 +113,7 @@ expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_match |
 arg_list = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }
 
 // application sequence, e.g., `f(x,y)`. (left-associative)
-expr_app = { expr_nlr ~ (sep* ~ arg_list)? }
+expr_app = { expr_nlr ~ (sep* ~ arg_list)* }
 
 // left to right application sequence, e.g., `x.f.g`. (left-associative)
 combinator_dot = _{ "." }

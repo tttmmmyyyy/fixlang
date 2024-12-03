@@ -1403,17 +1403,18 @@ fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     let mut pairs = pair.into_inner();
     let head = parse_expr_nlr(pairs.next().unwrap(), ctx)?;
     let mut args = vec![];
-    if pairs.peek().is_some() {
+    while pairs.peek().is_some() {
         // If parentheses for arguments are given,
         let pair = pairs.next().unwrap();
         let args_span = Span::from_pair(&ctx.source, &pair);
-        args = parse_arg_list(pair, ctx)?;
-        if args.len() == 0 {
+        let mut args_local = parse_arg_list(pair, ctx)?;
+        if args_local.len() == 0 {
             // `f()` is interpreted as application to unit: `f $ ()`.
-            args.push(
+            args_local.push(
                 expr_make_struct(tycon(make_tuple_name(0)), vec![]).set_source(Some(args_span)),
             )
         }
+        args.append(&mut args_local);
     }
     let mut ret = head;
     for expr in args {
