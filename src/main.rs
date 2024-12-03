@@ -199,6 +199,10 @@ fn main() {
         .takes_value(true)
         .allow_hyphen_values(true)
         .help("Arguments passed to the Fix program.");
+    let project_name = Arg::new("project-name")
+        .index(1)
+        .takes_value(true)
+        .help("Name of this Fix project.");
 
     // "fix build" subcommand
     let build_subc = App::new("build")
@@ -303,7 +307,8 @@ fn main() {
 
     // "fix init" subcommand
     let init_subc = App::new("init")
-        .about("Generates a project file \"fixproj.toml\" in the current directory.");
+        .about("Generates a project file \"fixproj.toml\" in the current directory.")
+        .arg(project_name.clone());
 
     let app = App::new("Fix-lang")
         .bin_name("fix")
@@ -547,8 +552,13 @@ fn main() {
             let modules = panic_if_err(read_modules_options(args));
             panic_if_err(docgen::generate_docs_for_files(&modules));
         }
-        Some(("init", _args)) => {
-            panic_if_err(ProjectFile::create_example_file());
+        Some(("init", args)) => {
+            let prj_name = args
+                .value_of("project-name")
+                .unwrap_or("myproject")
+                .to_string();
+            panic_if_err(ProjectFile::validate_project_name(&prj_name, None));
+            panic_if_err(ProjectFile::create_example_file(prj_name));
         }
         _ => eprintln!("Unknown command. To show list of available commands, run `fix --help`."),
     }

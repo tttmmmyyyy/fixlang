@@ -204,7 +204,7 @@ impl ProjectFile {
         format!("{:x}", md5::compute(data))
     }
 
-    fn validate_project_name(name: &ProjectName, span: Option<Span>) -> Result<(), Errors> {
+    pub fn validate_project_name(name: &ProjectName, span: Option<Span>) -> Result<(), Errors> {
         // The project name should be non-empty, and can only contain alphanumeric characters, hyphens.
         if name.is_empty() {
             return Err(Errors::from_msg_srcs(
@@ -614,7 +614,7 @@ impl ProjectFile {
     }
 
     // Creates an example project file in the current directory.
-    pub fn create_example_file() -> Result<(), Errors> {
+    pub fn create_example_file(proj_name: String) -> Result<(), Errors> {
         // If the project file already exists, do not overwrite it.
         if Path::new(PROJECT_FILE_PATH).exists() {
             return Err(Errors::from_msg(format!(
@@ -624,6 +624,8 @@ impl ProjectFile {
         }
 
         let content = include_str!("docs/project_template.toml");
+        // Replace `{PLACEHOLDER_PROJECT_NAME}` to `proj_name`.
+        let content = content.replace("{PLACEHOLDER_PROJECT_NAME}", &proj_name);
         std::fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to create file \"{}\": {:?}.",
