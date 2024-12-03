@@ -650,8 +650,9 @@ impl ExprNode {
                 let cond = cond.resolve_type_aliases(type_env)?;
                 let mut pat_vals_res = vec![];
                 for (pat, val) in pat_vals {
+                    let pat = pat.resolve_type_aliases(type_env)?;
                     let val = val.resolve_type_aliases(type_env)?;
-                    pat_vals_res.push((pat.clone(), val));
+                    pat_vals_res.push((pat, val));
                 }
                 Ok(self
                     .clone()
