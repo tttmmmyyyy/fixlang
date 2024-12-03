@@ -7485,6 +7485,20 @@ pub fn test_kind_arrow_right_associative() {
 }
 
 #[test]
+pub fn test_arrow_associativity() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let app2 = |f| f(6)(7); // Should be parsed as `|f| (f(6)(7))`, not `|(f| f(6))(7)`.
+        assert_eq(|_|"", app2(|x, y| x + y), 42)
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
