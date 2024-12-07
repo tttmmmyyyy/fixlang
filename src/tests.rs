@@ -7492,7 +7492,13 @@ pub fn test_arrow_associativity() {
     main: IO ();
     main = (
         let app2 = |f| f(6)(7); // Should be parsed as `|f| (f(6)(7))`, not `|(f| f(6))(7)`.
-        assert_eq(|_|"", app2(|x, y| x * y), 42)
+        assert_eq(|_|"", app2(|x, y| x * y), 42);;
+
+        let arr = [1,2,3];
+        let arr2 = arr.set(1)(42); // Should be parsed as `arr.(set(1)(42))`, not `(arr.set(1))(42)`.
+        assert_eq(|_|"", arr2, [1,42,3]);;
+
+        pure()
     );
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
