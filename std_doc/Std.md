@@ -921,10 +921,9 @@ Try using `borrow_ptr` instead.
 @deprecated
 Use `Std::FFI::_get_boxed_ptr` instead.
 
-### `_get_sub_size_asif : Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
+### `_get_sub_size_with_length_and_additional_capacity : Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
 A function like `get_sub`, but behaves as if the size of the array is the specified value,
-
 and has a parameter to specify additional capacity of the returned `Array`.
 
 ### `_sort_range_using_buffer : Std::Array a -> Std::I64 -> Std::I64 -> ((a, a) -> Std::Bool) -> Std::Array a -> (Std::Array a, Std::Array a)`
@@ -1048,10 +1047,9 @@ Gets the length of an array.
 
 ### `get_sub : Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
-`arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`,
+`arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`.
 
-More precisely, let `N` denote the the size of the `arr`.
-Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
+`s` and `e` are clamped to the range `[0, arr.get_size]`.
 
 ### `is_empty : Std::Array a -> Std::Bool`
 
@@ -2425,6 +2423,7 @@ from_map(f) = [f(0), f(1), f(2), ...]
 ### `generate : s -> (s -> Std::Option (a, s)) -> Std::Iterator a`
 
 Generates an iterator from a state transition function.
+
 - if `f(s)` is none, `generate(s, f)` is empty.
 - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
 
@@ -2879,6 +2878,7 @@ Updates a value of `String` by applying a function to field `_data`.
 ### `pop_back_byte : Std::String -> Std::String`
 
 Removes the last byte.
+
 If the string is empty, this function does nothing.
 
 ### `set__data : Std::Array Std::U8 -> Std::String -> Std::String`
@@ -2888,6 +2888,7 @@ Updates a value of `String` by setting field `_data` to a specified one.
 ### `split : Std::String -> Std::String -> Std::Iterator Std::String`
 
 `str.split(sep)` splits `str` by `sep` into an iterator.
+
 - If `sep` is empty, this function returns an infinite sequence of ""s.
 - If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
 

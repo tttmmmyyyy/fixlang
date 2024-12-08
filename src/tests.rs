@@ -4073,23 +4073,27 @@ pub fn test_array_get_sub() {
     main = (
         // Unboxed case
         let arr = [0, 1, 2, 3, 4];
-        assert_eq(|_|"", arr.get_sub(2, 4), [2, 3]);;
-        assert_eq(|_|"", arr.get_sub(0, 0), []);;
-        assert_eq(|_|"", arr.get_sub(3, 1), [3, 4, 0]);;
-        assert_eq(|_|"", arr.get_sub(1, -1), [1, 2, 3]);;
+        let n = arr.get_size;
+        assert_eq(|_|"1", arr.get_sub(2, 4), [2, 3]);;
+        assert_eq(|_|"2", arr.get_sub(0, 0), []);;
+        assert_eq(|_|"3", arr.get_sub(3, n+1), [3, 4]);;
+        assert_eq(|_|"4", arr.get_sub(1, n-1), [1, 2, 3]);;
+        assert_eq(|_|"5", arr.get_sub(0, n), [0, 1, 2, 3, 4]);;
     
         let arr : Array I64 = [];
-        assert_eq(|_|"", arr.get_sub(2, 4), []);;
+        assert_eq(|_|"6", arr.get_sub(2, 4), []);;
     
         // Boxed case
         let arr = [[0], [1], [2], [3], [4]];
-        assert_eq(|_|"", arr.get_sub(2, 4), [[2], [3]]);;
-        assert_eq(|_|"", arr.get_sub(0, 0), []);;
-        assert_eq(|_|"", arr.get_sub(3, 1), [[3], [4], [0]]);;
-        assert_eq(|_|"", arr.get_sub(1, -1), [[1], [2], [3]]);;
+        let n = arr.get_size;
+        assert_eq(|_|"7", arr.get_sub(2, 4), [[2], [3]]);;
+        assert_eq(|_|"8", arr.get_sub(0, 0), []);;
+        assert_eq(|_|"9", arr.get_sub(3, n+1), [[3], [4]]);;
+        assert_eq(|_|"10", arr.get_sub(1, n-1), [[1], [2], [3]]);;
+        assert_eq(|_|"11", arr.get_sub(0, n), [[0], [1], [2], [3], [4]]);;
     
         let arr : Array (Array I64) = [];
-        assert_eq(|_|"", arr.get_sub(2, 4), []);;
+        assert_eq(|_|"12", arr.get_sub(2, 4), []);;
     
         pure()
     );
@@ -4105,10 +4109,11 @@ pub fn test_string_get_sub() {
     main : IO ();
     main = (
         let str = "Hello";
+        let n = str.get_size;
         assert_eq(|_|"", str.get_sub(2, 4), "ll");;
         assert_eq(|_|"", str.get_sub(0, 0), "");;
-        assert_eq(|_|"", str.get_sub(3, 1), "loH");;
-        assert_eq(|_|"", str.get_sub(1, -1), "ell");;
+        assert_eq(|_|"", str.get_sub(3, n+1), "lo");;
+        assert_eq(|_|"", str.get_sub(1, n-1), "ell");;
     
         assert_eq(|_|"", "".get_sub(2, 4), "");;
     
@@ -4249,7 +4254,8 @@ pub fn test_string_split() {
         assert_eq(|_|"3", "--ab---cde".split("--").to_array, ["", "ab", "-cde"]);;
         assert_eq(|_|"3", "ab---cde".split("--").to_array, ["ab", "-cde"]);;
         assert_eq(|_|"4", "--".split("--").to_array, ["", ""]);;
-        assert_eq(|_|"5", "".split("--").to_array, [""]);;
+        assert_eq(|_|"5", "a".split("--").to_array, ["a"]);;
+        assert_eq(|_|"6", "".split("--").to_array, [""]);;
 
         pure()
     );

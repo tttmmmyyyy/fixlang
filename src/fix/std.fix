@@ -18,23 +18,20 @@ type LoopResult s b = unbox union { continue : s, break : b };
 namespace Array {
 
     // A function like `get_sub`, but behaves as if the size of the array is the specified value, 
-    // 
     // and has a parameter to specify additional capacity of the returned `Array`.
-    _get_sub_size_asif : I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
-    _get_sub_size_asif = |len, additional_capacity, s, e, arr| (
-        if len == 0 { arr };
-        let s = (s % len + len) % len;
-        let e = (e % len + len) % len;
-        let n = if e >= s { e - s } else { e + len - s };
+    _get_sub_size_with_length_and_additional_capacity : I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
+    _get_sub_size_with_length_and_additional_capacity = |len, additional_capacity, s, e, arr| (
+        let s = max(0, s);
+        let e = min(len, e);
+        let n = if e > s { e - s } else { 0 };
         let res = Array::empty(n + additional_capacity);
+        if n == 0 || len == 0 { res };
         loop((s, res), |(i, res)| (
             if i == e { break $ res };
             let res = res.push_back(arr.@(i));
-            let i = i + 1;
-            let i = if i >= len { 0 } else { i };
-            continue $ (i, res)
+            continue $ (i + 1, res)
         ))
-    );
+    ); 
 
     // Sorts elements in a range of a vector by "less than" comparator.
     // 
@@ -189,12 +186,11 @@ namespace Array {
         Option::some $ arr.@(len - 1)
     );
 
-    // `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`, 
+    // `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`.
     // 
-    // More precisely, let `N` denote the the size of the `arr`. 
-    // Then `arr.get_sub(s, e)` returns `[ arr.@(s + i mod N) | i ∈ [0, n), n >= 0 is the minimum number such that s + n == e mod N ]`.
+    // `s` and `e` are clamped to the range `[0, arr.get_size]`.
     get_sub : I64 -> I64 -> Array a -> Array a;
-    get_sub = |s, e, arr| arr._get_sub_size_asif(arr.get_size, 0, s, e);
+    get_sub = |s, e, arr| arr._get_sub_size_with_length_and_additional_capacity(arr.get_size, 0, s, e);
 
     // Returns if the array is empty
     is_empty : Array a -> Bool;
@@ -1023,6 +1019,7 @@ namespace Iterator {
     from_map = |f| count_up(0).map(f);
 
     // Generates an iterator from a state transition function.
+    // 
     // - if `f(s)` is none, `generate(s, f)` is empty.
     // - if `f(s)` is some value `(e, s1)`, then `generate(s, f)` starts by `e` followed by `generate(s2, f)`.
     generate : s -> (s -> Option (a, s)) -> Iterator a;
@@ -1515,7 +1512,7 @@ namespace String {
     get_sub : I64 -> I64 -> String -> String;
     get_sub = |s, e, str| (
         let len = str.get_size;
-        String::_unsafe_from_c_str $ str.get_bytes._get_sub_size_asif(len, 1, s, e).push_back('\0')
+        String::_unsafe_from_c_str $ str.get_bytes._get_sub_size_with_length_and_additional_capacity(len, 1, s, e).push_back('\0')
     );
 
     // Returns if the string is empty or not.
@@ -1529,6 +1526,7 @@ namespace String {
     );
 
     // Removes the last byte.
+    // 
     // If the string is empty, this function does nothing.
     pop_back_byte : String -> String;
     pop_back_byte = |s| (
@@ -1537,6 +1535,7 @@ namespace String {
     );
 
     // `str.split(sep)` splits `str` by `sep` into an iterator.
+    // 
     // - If `sep` is empty, this function returns an infinite sequence of ""s.
     // - If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
     split : String -> String -> Iterator String;
@@ -1547,7 +1546,7 @@ namespace String {
             if idx == -1 { Option::none() };
             if idx == n { Option::some $ ("", -1) };
             let opt_idx = str.find(sep, idx);
-            if opt_idx.is_none { Option::some $ (str.get_sub(idx, 0), -1) };
+            if opt_idx.is_none { Option::some $ (str.get_sub(idx, n), -1) };
             let idx2 = opt_idx.as_some;
             Option::some $ (str.get_sub(idx, idx2), idx2 + m)
         ))
@@ -1563,7 +1562,7 @@ namespace String {
             if !cond(bytes.@(i)) { break $ i };
             continue $ i + 1
         ));
-        if n == 0 { str } else { str.get_sub(n, 0) }
+        str.get_sub(n, len)
     );
 
     // Removes leading whitespace characters.
