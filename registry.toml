@@ -37,3 +37,7 @@ git = "https://github.com/tttmmmyyyy/fixlang-subprocess.git"
 [[projects]]
 name = "time"
 git = "https://github.com/tttmmmyyyy/fixlang-time.git"
+
+[[projects]]
+name = "binary-heap"
+git = "https://github.com/tttmmmyyyy/fixlang-binary-heap.git"
