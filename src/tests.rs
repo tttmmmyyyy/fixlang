@@ -7511,6 +7511,24 @@ pub fn test_arrow_associativity() {
 }
 
 #[test]
+pub fn test_regression_issue_52() {
+    let source = r##"
+    module Main;
+
+    main: IO ();
+    main = (
+        let a : U64 = *pure();
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "6 |         let a : U64 = *pure();",
+    );
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
