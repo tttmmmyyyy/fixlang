@@ -68,7 +68,7 @@ pub enum SubCommand {
     Run,
     Test,
     Diagnostics(DiagnosticsConfig),
-    Docs,
+    Docs(DocsConfig),
 }
 
 impl SubCommand {
@@ -79,7 +79,7 @@ impl SubCommand {
             SubCommand::Run => true,
             SubCommand::Test => true,
             SubCommand::Diagnostics(_) => false,
-            SubCommand::Docs => false,
+            SubCommand::Docs(_) => false,
         }
     }
 
@@ -90,7 +90,7 @@ impl SubCommand {
             SubCommand::Run => true,
             SubCommand::Test => true,
             SubCommand::Diagnostics(_) => false,
-            SubCommand::Docs => false,
+            SubCommand::Docs(_) => false,
         }
     }
 
@@ -101,7 +101,7 @@ impl SubCommand {
             SubCommand::Run => false,
             SubCommand::Test => true,
             SubCommand::Diagnostics(_) => true,
-            SubCommand::Docs => true,
+            SubCommand::Docs(_) => true,
         }
     }
 
@@ -112,7 +112,7 @@ impl SubCommand {
             SubCommand::Run => true,
             SubCommand::Test => true,
             SubCommand::Diagnostics(_) => true,
-            SubCommand::Docs => false,
+            SubCommand::Docs(_) => false,
         }
     }
 }
@@ -122,6 +122,17 @@ impl SubCommand {
 pub struct DiagnosticsConfig {
     // Target source files.
     pub files: Vec<PathBuf>,
+}
+
+// Configuration for docs subcommand.
+#[derive(Clone, Default)]
+pub struct DocsConfig {
+    // Modules to be documented.
+    pub modules: Vec<String>,
+    // Include compiler-defined methods in the documentation.
+    pub include_compiler_defined_methods: bool,
+    // Output directory.
+    pub out_dir: PathBuf,
 }
 
 #[derive(Clone)]
@@ -289,7 +300,7 @@ impl Configuration {
 
     // Create configuration for documentation generation.
     pub fn docs_mode() -> Result<Configuration, Errors> {
-        let mut config = Self::new(SubCommand::Docs)?;
+        let mut config = Self::new(SubCommand::Docs(DocsConfig::default()))?;
         config.num_worker_thread = num_cpus::get();
         Ok(config)
     }

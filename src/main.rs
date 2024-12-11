@@ -303,6 +303,10 @@ fn main() {
                 .multiple_values(true)
                 .takes_value(true)
                 .help("Modules for which documents should be generated. If not specified, documents are generated for all modules."),
+        ).arg(
+            Arg::new("include-compiler-defined-methods").long("with-compiler-defined-methods").help("Include compiler-defined methods such as `@{field_name}` or `as_{variant_name}` in the documentation."),
+        ).arg(
+            Arg::new("out-dir").long("out-dir").short('o').takes_value(true).help("Output directory for generated documents."),
         );
 
     // "fix init" subcommand
@@ -355,17 +359,31 @@ fn main() {
         }
     }
 
-    fn read_modules_options(m: &ArgMatches) -> Result<Vec<Name>, Errors> {
-        let modules = m.get_many::<String>("modules");
-        if modules.is_none() {
-            return Ok(vec![]);
-        }
-        let modules = modules.unwrap();
-        let mut names = vec![];
-        for module in modules {
-            names.push(module.to_string());
-        }
-        Ok(names)
+    fn read_docs_options(m: &ArgMatches, config: &mut Configuration) -> Result<(), Errors> {
+        let docs_config = match &mut config.subcommand {
+            SubCommand::Docs(docs_config) => docs_config,
+            _ => panic!("Invalid subcommand."),
+        };
+
+        // `modules` option
+        let modules = m
+            .get_many::<String>("modules")
+            .unwrap_or_default()
+            .map(|f| f.to_string())
+            .collect::<Vec<_>>();
+        docs_config.modules = modules;
+
+        // `with-compiler-defined-methods` option
+        docs_config.include_compiler_defined_methods =
+            m.contains_id("include-compiler-defined-methods");
+
+        // `out-dir` option
+        let dir = m
+            .get_one::<String>("out-dir")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        docs_config.out_dir = PathBuf::from(dir);
+        Ok(())
     }
 
     fn read_output_file_option(m: &ArgMatches) -> Option<PathBuf> {
@@ -549,8 +567,10 @@ fn main() {
             clean_command();
         }
         Some(("docs", args)) => {
-            let modules = panic_if_err(read_modules_options(args));
-            panic_if_err(docgen::generate_docs_for_files(&modules));
+            // Create the configuration.
+            let mut config = panic_if_err(Configuration::docs_mode());
+            panic_if_err(read_docs_options(args, &mut config));
+            panic_if_err(docgen::generate_docs_for_files(config));
         }
         Some(("init", args)) => {
             let prj_name = args

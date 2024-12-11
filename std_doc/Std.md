@@ -1100,23 +1100,7 @@ Truncates an array, keeping the given number of first elements.
 
 ## `namespace Std::Box`
 
-### `@value : Std::Box a -> a`
-
-Retrieves the field `value` from a value of `Box`.
-
-### `act_value : [f : Std::Functor] (a -> f a) -> Std::Box a -> f (Std::Box a)`
-
-Updates a value of `Box` by applying a functorial action to field `value`.
-
 ### `make : a -> Std::Box a`
-
-### `mod_value : (a -> a) -> Std::Box a -> Std::Box a`
-
-Updates a value of `Box` by applying a function to field `value`.
-
-### `set_value : a -> Std::Box a -> Std::Box a`
-
-Updates a value of `Box` by setting field `value` to a specified one.
 
 ## `namespace Std::Debug`
 
@@ -1532,22 +1516,6 @@ Internal implementation of the `mutate_boxed_io` function.
 
 ## `namespace Std::FFI::Destructor`
 
-### `@_value : Std::FFI::Destructor a -> a`
-
-Retrieves the field `_value` from a value of `Destructor`.
-
-### `@dtor : Std::FFI::Destructor a -> a -> Std::IO a`
-
-Retrieves the field `dtor` from a value of `Destructor`.
-
-### `act__value : [f : Std::Functor] (a -> f a) -> Std::FFI::Destructor a -> f (Std::FFI::Destructor a)`
-
-Updates a value of `Destructor` by applying a functorial action to field `_value`.
-
-### `act_dtor : [f : Std::Functor] ((a -> Std::IO a) -> f (a -> Std::IO a)) -> Std::FFI::Destructor a -> f (Std::FFI::Destructor a)`
-
-Updates a value of `Destructor` by applying a functorial action to field `dtor`.
-
 ### `borrow : (a -> b) -> Std::FFI::Destructor a -> b`
 
 Borrow the contained value.
@@ -1565,14 +1533,6 @@ Performs an IO action borrowing the contained value.
 
 Make a destructor value.
 
-### `mod__value : (a -> a) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
-
-Updates a value of `Destructor` by applying a function to field `_value`.
-
-### `mod_dtor : ((a -> Std::IO a) -> a -> Std::IO a) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
-
-Updates a value of `Destructor` by applying a function to field `dtor`.
-
 ### `mutate_unique : (a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> (Std::FFI::Destructor a, b)`
 
 Apply an IO action which mutates the semantics of the value.
@@ -1588,14 +1548,6 @@ Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resou
 Apply an IO action which mutates the semantics of the value.
 
 This is similar to `mutate_unique`, but the `ctor` and `action` is executed in the context of the external `IO` context.
-
-### `set__value : a -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
-
-Updates a value of `Destructor` by setting field `_value` to a specified one.
-
-### `set_dtor : (a -> Std::IO a) -> Std::FFI::Destructor a -> Std::FFI::Destructor a`
-
-Updates a value of `Destructor` by setting field `dtor` to a specified one.
 
 ## `namespace Std::FromBytes`
 
@@ -2093,19 +2045,11 @@ Casts a value of `I8` into a value of `U8`.
 
 ## `namespace Std::IO`
 
-### `@runner : Std::IO a -> Std::IO::IOState -> (Std::IO::IOState, a)`
-
-Retrieves the field `runner` from a value of `IO`.
-
 ### `_read_line_inner : Std::Bool -> Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads characters from an IOHandle.
 
 If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
-
-### `act_runner : [f : Std::Functor] ((Std::IO::IOState -> (Std::IO::IOState, a)) -> f (Std::IO::IOState -> (Std::IO::IOState, a))) -> Std::IO a -> f (Std::IO a)`
-
-Updates a value of `IO` by applying a functorial action to field `runner`.
 
 ### `close_file : Std::IO::IOHandle -> Std::IO ()`
 
@@ -2175,10 +2119,6 @@ Loop on lines read from an `IOHandle`.
 
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
-### `mod_runner : ((Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a -> Std::IO a`
-
-Updates a value of `IO` by applying a function to field `runner`.
-
 ### `open_file : Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
 
 Openes a file. The second argument is a mode string for `fopen` C function.
@@ -2215,10 +2155,6 @@ Reads at most n bytes from an IOHandle.
 ### `read_string : Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads all characters from an IOHandle.
-
-### `set_runner : (Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a -> Std::IO a`
-
-Updates a value of `IO` by setting field `runner` to a specified one.
 
 ### `stderr : Std::IO::IOHandle`
 
@@ -2258,14 +2194,6 @@ Writes a string into an IOHandle.
 
 ## `namespace Std::IO::IOFail`
 
-### `@_data : Std::IO::IOFail a -> Std::IO (Std::Result Std::String a)`
-
-Retrieves the field `_data` from a value of `IOFail`.
-
-### `act__data : [f : Std::Functor] (Std::IO (Std::Result Std::String a) -> f (Std::IO (Std::Result Std::String a))) -> Std::IO::IOFail a -> f (Std::IO::IOFail a)`
-
-Updates a value of `IOFail` by applying a functorial action to field `_data`.
-
 ### `from_io_result : Std::IO (Std::Result Std::String a) -> Std::IO::IOFail a`
 
 Create from IO action of which returns `Result ErrMsg a`.
@@ -2277,14 +2205,6 @@ Creates an pure `IOFail` value from a `Result` value.
 ### `lift : Std::IO a -> Std::IO::IOFail a`
 
 Lifts an `IO` action to a successful `IOFail` action.
-
-### `mod__data : (Std::IO (Std::Result Std::String a) -> Std::IO (Std::Result Std::String a)) -> Std::IO::IOFail a -> Std::IO::IOFail a`
-
-Updates a value of `IOFail` by applying a function to field `_data`.
-
-### `set__data : Std::IO (Std::Result Std::String a) -> Std::IO::IOFail a -> Std::IO::IOFail a`
-
-Updates a value of `IOFail` by setting field `_data` to a specified one.
 
 ### `throw : Std::String -> Std::IO::IOFail a`
 
@@ -2300,10 +2220,6 @@ Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`
 
 ## `namespace Std::IO::IOHandle`
 
-### `@_data : Std::IO::IOHandle -> Std::FFI::Destructor Std::Ptr`
-
-Retrieves the field `_data` from a value of `IOHandle`.
-
 ### `_file_ptr : Std::IO::IOHandle -> Std::Ptr`
 
 Gets pointer to C's `FILE` value from an `IOHandle`.
@@ -2317,10 +2233,6 @@ Instead you should close `IOHandle` by `IO::close_file`.
 DEPRECATED:
 Use `get_file_ptr` instead.
 This function is deprecated because it has a pure function interface, but the value of `_file_ptr` changes by calling `IO::close_file`.
-
-### `act__data : [f : Std::Functor] (Std::FFI::Destructor Std::Ptr -> f (Std::FFI::Destructor Std::Ptr)) -> Std::IO::IOHandle -> f Std::IO::IOHandle`
-
-Updates a value of `IOHandle` by applying a functorial action to field `_data`.
 
 ### `from_file_ptr : Std::Ptr -> Std::IO::IOHandle`
 
@@ -2341,19 +2253,7 @@ Instead you should close `IOHandle` by `IO::close_file`.
 NOTE:
 If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
 
-### `mod__data : (Std::FFI::Destructor Std::Ptr -> Std::FFI::Destructor Std::Ptr) -> Std::IO::IOHandle -> Std::IO::IOHandle`
-
-Updates a value of `IOHandle` by applying a function to field `_data`.
-
-### `set__data : Std::FFI::Destructor Std::Ptr -> Std::IO::IOHandle -> Std::IO::IOHandle`
-
-Updates a value of `IOHandle` by setting field `_data` to a specified one.
-
 ## `namespace Std::Iterator`
-
-### `@next : Std::Iterator a -> () -> Std::Option (a, Std::Iterator a)`
-
-Retrieves the field `next` from a value of `Iterator`.
 
 ### `_flatten : Std::Iterator (Std::Iterator a) -> Std::Iterator a`
 
@@ -2363,10 +2263,6 @@ You should use `Monad::flatten` instead of this function.
 This function is used in the implementation of `Monad::bind` for `Iterator`.
 
 ### `_flatten_sub : Std::Iterator a -> Std::Iterator (Std::Iterator a) -> Std::Iterator a`
-
-### `act_next : [f : Std::Functor] ((() -> Std::Option (a, Std::Iterator a)) -> f (() -> Std::Option (a, Std::Iterator a))) -> Std::Iterator a -> f (Std::Iterator a)`
-
-Updates a value of `Iterator` by applying a functorial action to field `next`.
 
 ### `advance : Std::Iterator a -> Std::Option (a, Std::Iterator a)`
 
@@ -2464,10 +2360,6 @@ Loop along an iterator. At each iteration step, you can choose to continue or to
 
 Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
 
-### `mod_next : ((() -> Std::Option (a, Std::Iterator a)) -> () -> Std::Option (a, Std::Iterator a)) -> Std::Iterator a -> Std::Iterator a`
-
-Updates a value of `Iterator` by applying a function to field `next`.
-
 ### `product : Std::Iterator a -> Std::Iterator b -> Std::Iterator (b, a)`
 
 Generates the cartesian product of two iterators.
@@ -2485,10 +2377,6 @@ Creates a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`
 ### `reverse : Std::Iterator a -> Std::Iterator a`
 
 Reverses an iterator.
-
-### `set_next : (() -> Std::Option (a, Std::Iterator a)) -> Std::Iterator a -> Std::Iterator a`
-
-Updates a value of `Iterator` by setting field `next` to a specified one.
 
 ### `subsequences : Std::Iterator a -> Std::Iterator (Std::Iterator a)`
 
@@ -2535,51 +2423,17 @@ Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x,
 
 ## `namespace Std::LoopResult`
 
-### `as_break : Std::LoopResult s b -> b`
-
-Unwraps a union value of `LoopResult` as the variant `break`.
-If the value is not the variant `break`, this function aborts the program.
-
-### `as_continue : Std::LoopResult s b -> s`
-
-Unwraps a union value of `LoopResult` as the variant `continue`.
-If the value is not the variant `continue`, this function aborts the program.
-
-### `break : b -> Std::LoopResult s b`
-
-Constructs a value of union `LoopResult` taking the variant `break`.
-
 ### `break_m : [m : Std::Monad] r -> m (Std::LoopResult s r)`
 
 Make a break value wrapped in a monad.
 
 This is used with `loop_m` function.
 
-### `continue : s -> Std::LoopResult s b`
-
-Constructs a value of union `LoopResult` taking the variant `continue`.
-
 ### `continue_m : [m : Std::Monad] s -> m (Std::LoopResult s r)`
 
 Make a continue value wrapped in a monad.
 
 This is used with `loop_m` function.
-
-### `is_break : Std::LoopResult s b -> Std::Bool`
-
-Checks if a union value of `LoopResult` is the variant `break`.
-
-### `is_continue : Std::LoopResult s b -> Std::Bool`
-
-Checks if a union value of `LoopResult` is the variant `continue`.
-
-### `mod_break : (b -> b) -> Std::LoopResult s b -> Std::LoopResult s b`
-
-Updates a value of union `LoopResult` by applying a function if it is the variant `break`, or doing nothing otherwise.
-
-### `mod_continue : (s -> s) -> Std::LoopResult s b -> Std::LoopResult s b`
-
-Updates a value of union `LoopResult` by applying a function if it is the variant `continue`, or doing nothing otherwise.
 
 ## `namespace Std::Monad`
 
@@ -2619,69 +2473,19 @@ Logical NOT of a value. An expression `!x` is translated to `not(x)`.
 
 ## `namespace Std::Option`
 
-### `as_none : Std::Option a -> ()`
-
-Unwraps a union value of `Option` as the variant `none`.
-If the value is not the variant `none`, this function aborts the program.
-
-### `as_some : Std::Option a -> a`
-
-Unwraps a union value of `Option` as the variant `some`.
-If the value is not the variant `some`, this function aborts the program.
-
 ### `as_some_or : a -> Std::Option a -> a`
 
 Unwrap an option value if it is `some`, or returns given default value if it is `none`.
-
-### `is_none : Std::Option a -> Std::Bool`
-
-Checks if a union value of `Option` is the variant `none`.
-
-### `is_some : Std::Option a -> Std::Bool`
-
-Checks if a union value of `Option` is the variant `some`.
 
 ### `map_or : b -> (a -> b) -> Std::Option a -> b`
 
 Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
 
-### `mod_none : (() -> ()) -> Std::Option a -> Std::Option a`
-
-Updates a value of union `Option` by applying a function if it is the variant `none`, or doing nothing otherwise.
-
-### `mod_some : (a -> a) -> Std::Option a -> Std::Option a`
-
-Updates a value of union `Option` by applying a function if it is the variant `some`, or doing nothing otherwise.
-
-### `none : () -> Std::Option a`
-
-Constructs a value of union `Option` taking the variant `none`.
-
-### `some : a -> Std::Option a`
-
-Constructs a value of union `Option` taking the variant `some`.
-
 ## `namespace Std::Path`
-
-### `@_data : Std::Path -> Std::String`
-
-Retrieves the field `_data` from a value of `Path`.
-
-### `act__data : [f : Std::Functor] (Std::String -> f Std::String) -> Std::Path -> f Std::Path`
-
-Updates a value of `Path` by applying a functorial action to field `_data`.
-
-### `mod__data : (Std::String -> Std::String) -> Std::Path -> Std::Path`
-
-Updates a value of `Path` by applying a function to field `_data`.
 
 ### `parse : Std::String -> Std::Option Std::Path`
 
 Parse a string.
-
-### `set__data : Std::String -> Std::Path -> Std::Path`
-
-Updates a value of `Path` by setting field `_data` to a specified one.
 
 ## `namespace Std::Ptr`
 
@@ -2697,41 +2501,9 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 
 ## `namespace Std::PunchedArray`
 
-### `@_arr : Std::PunchedArray a -> Std::Array a`
-
-Retrieves the field `_arr` from a value of `PunchedArray`.
-
-### `@idx : Std::PunchedArray a -> Std::I64`
-
-Retrieves the field `idx` from a value of `PunchedArray`.
-
-### `act__arr : [f : Std::Functor] (Std::Array a -> f (Std::Array a)) -> Std::PunchedArray a -> f (Std::PunchedArray a)`
-
-Updates a value of `PunchedArray` by applying a functorial action to field `_arr`.
-
-### `act_idx : [f : Std::Functor] (Std::I64 -> f Std::I64) -> Std::PunchedArray a -> f (Std::PunchedArray a)`
-
-Updates a value of `PunchedArray` by applying a functorial action to field `idx`.
-
-### `mod__arr : (Std::Array a -> Std::Array a) -> Std::PunchedArray a -> Std::PunchedArray a`
-
-Updates a value of `PunchedArray` by applying a function to field `_arr`.
-
-### `mod_idx : (Std::I64 -> Std::I64) -> Std::PunchedArray a -> Std::PunchedArray a`
-
-Updates a value of `PunchedArray` by applying a function to field `idx`.
-
 ### `plug_in : a -> Std::PunchedArray a -> Std::Array a`
 
 Plug in an element to a punched array to get back an array.
-
-### `set__arr : Std::Array a -> Std::PunchedArray a -> Std::PunchedArray a`
-
-Updates a value of `PunchedArray` by setting field `_arr` to a specified one.
-
-### `set_idx : Std::I64 -> Std::PunchedArray a -> Std::PunchedArray a`
-
-Updates a value of `PunchedArray` by setting field `idx` to a specified one.
 
 ### `unsafe_punch : Std::I64 -> Std::Array a -> (Std::PunchedArray a, a)`
 
@@ -2748,49 +2520,11 @@ Calculate remainder of a value dividing another value. An expression `x % y` is 
 
 ## `namespace Std::Result`
 
-### `as_err : Std::Result e o -> e`
-
-Unwraps a union value of `Result` as the variant `err`.
-If the value is not the variant `err`, this function aborts the program.
-
-### `as_ok : Std::Result e o -> o`
-
-Unwraps a union value of `Result` as the variant `ok`.
-If the value is not the variant `ok`, this function aborts the program.
-
-### `err : e -> Std::Result e o`
-
-Constructs a value of union `Result` taking the variant `err`.
-
-### `is_err : Std::Result e o -> Std::Bool`
-
-Checks if a union value of `Result` is the variant `err`.
-
-### `is_ok : Std::Result e o -> Std::Bool`
-
-Checks if a union value of `Result` is the variant `ok`.
-
-### `mod_err : (e -> e) -> Std::Result e o -> Std::Result e o`
-
-Updates a value of union `Result` by applying a function if it is the variant `err`, or doing nothing otherwise.
-
-### `mod_ok : (o -> o) -> Std::Result e o -> Std::Result e o`
-
-Updates a value of union `Result` by applying a function if it is the variant `ok`, or doing nothing otherwise.
-
-### `ok : o -> Std::Result e o`
-
-Constructs a value of union `Result` taking the variant `ok`.
-
 ### `unwrap : Std::Result e o -> o`
 
 Returns the containing value if the value is ok, or otherwise aborts the program.
 
 ## `namespace Std::String`
-
-### `@_data : Std::String -> Std::Array Std::U8`
-
-Retrieves the field `_data` from a value of `String`.
 
 ### `_get_c_str : Std::String -> Std::Ptr`
 
@@ -2809,10 +2543,6 @@ If the byte array doesn't include `\0`, this function causes undefined behavior.
 Create a `String` from a pointer to null-terminated C string.
 
 If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
-
-### `act__data : [f : Std::Functor] (Std::Array Std::U8 -> f (Std::Array Std::U8)) -> Std::String -> f Std::String`
-
-Updates a value of `String` by applying a functorial action to field `_data`.
 
 ### `borrow_c_str : (Std::Ptr -> a) -> Std::String -> a`
 
@@ -2871,19 +2601,11 @@ Returns if the string is empty or not.
 
 Joins strings by a separator.
 
-### `mod__data : (Std::Array Std::U8 -> Std::Array Std::U8) -> Std::String -> Std::String`
-
-Updates a value of `String` by applying a function to field `_data`.
-
 ### `pop_back_byte : Std::String -> Std::String`
 
 Removes the last byte.
 
 If the string is empty, this function does nothing.
-
-### `set__data : Std::Array Std::U8 -> Std::String -> Std::String`
-
-Updates a value of `String` by setting field `_data` to a specified one.
 
 ### `split : Std::String -> Std::String -> Std::Iterator Std::String`
 
@@ -2929,90 +2651,6 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 ## `namespace Std::ToString`
 
 ### `to_string : [a : Std::ToString] a -> Std::String`
-
-## `namespace Std::Tuple2`
-
-### `@0 : (t0, t1) -> t0`
-
-Retrieves the field `0` from a value of `Tuple2`.
-
-### `@1 : (t0, t1) -> t1`
-
-Retrieves the field `1` from a value of `Tuple2`.
-
-### `act_0 : [f : Std::Functor] (t0 -> f t0) -> (t0, t1) -> f (t0, t1)`
-
-Updates a value of `Tuple2` by applying a functorial action to field `0`.
-
-### `act_1 : [f : Std::Functor] (t1 -> f t1) -> (t0, t1) -> f (t0, t1)`
-
-Updates a value of `Tuple2` by applying a functorial action to field `1`.
-
-### `mod_0 : (t0 -> t0) -> (t0, t1) -> (t0, t1)`
-
-Updates a value of `Tuple2` by applying a function to field `0`.
-
-### `mod_1 : (t1 -> t1) -> (t0, t1) -> (t0, t1)`
-
-Updates a value of `Tuple2` by applying a function to field `1`.
-
-### `set_0 : t0 -> (t0, t1) -> (t0, t1)`
-
-Updates a value of `Tuple2` by setting field `0` to a specified one.
-
-### `set_1 : t1 -> (t0, t1) -> (t0, t1)`
-
-Updates a value of `Tuple2` by setting field `1` to a specified one.
-
-## `namespace Std::Tuple3`
-
-### `@0 : (t0, t1, t2) -> t0`
-
-Retrieves the field `0` from a value of `Tuple3`.
-
-### `@1 : (t0, t1, t2) -> t1`
-
-Retrieves the field `1` from a value of `Tuple3`.
-
-### `@2 : (t0, t1, t2) -> t2`
-
-Retrieves the field `2` from a value of `Tuple3`.
-
-### `act_0 : [f : Std::Functor] (t0 -> f t0) -> (t0, t1, t2) -> f (t0, t1, t2)`
-
-Updates a value of `Tuple3` by applying a functorial action to field `0`.
-
-### `act_1 : [f : Std::Functor] (t1 -> f t1) -> (t0, t1, t2) -> f (t0, t1, t2)`
-
-Updates a value of `Tuple3` by applying a functorial action to field `1`.
-
-### `act_2 : [f : Std::Functor] (t2 -> f t2) -> (t0, t1, t2) -> f (t0, t1, t2)`
-
-Updates a value of `Tuple3` by applying a functorial action to field `2`.
-
-### `mod_0 : (t0 -> t0) -> (t0, t1, t2) -> (t0, t1, t2)`
-
-Updates a value of `Tuple3` by applying a function to field `0`.
-
-### `mod_1 : (t1 -> t1) -> (t0, t1, t2) -> (t0, t1, t2)`
-
-Updates a value of `Tuple3` by applying a function to field `1`.
-
-### `mod_2 : (t2 -> t2) -> (t0, t1, t2) -> (t0, t1, t2)`
-
-Updates a value of `Tuple3` by applying a function to field `2`.
-
-### `set_0 : t0 -> (t0, t1, t2) -> (t0, t1, t2)`
-
-Updates a value of `Tuple3` by setting field `0` to a specified one.
-
-### `set_1 : t1 -> (t0, t1, t2) -> (t0, t1, t2)`
-
-Updates a value of `Tuple3` by setting field `1` to a specified one.
-
-### `set_2 : t2 -> (t0, t1, t2) -> (t0, t1, t2)`
-
-Updates a value of `Tuple3` by setting field `2` to a specified one.
 
 ## `namespace Std::U16`
 

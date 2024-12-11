@@ -7,13 +7,11 @@ use crate::{
     kind_star,
     misc::to_absolute_path,
     project_file::ProjectFile,
-    Configuration, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
+    Configuration, DocsConfig, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
 };
 
-pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
+pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> {
     println!("Loading source files...");
-    // Create the configuration.
-    let mut config = Configuration::docs_mode()?;
 
     // Set up the configuration by the project file.
     let proj_file = ProjectFile::read_root_file()?;
@@ -26,10 +24,15 @@ pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
     let program = build_file(&mut config)?.program.unwrap();
     println!("Generating documentation...");
 
+    let docs_config = match &config.subcommand {
+        crate::SubCommand::Docs(docs_config) => docs_config,
+        _ => unreachable!(),
+    };
+
     // Determine modules to generate documentation.
-    let mod_names = if mod_names.len() > 0 {
+    let mod_names = if docs_config.modules.len() > 0 {
         // In case modules are given in the command line arguments, use them.
-        mod_names.to_vec()
+        docs_config.modules.clone()
     } else {
         let mut mod_names = vec![];
         // Use all modules defined in the root project file.
@@ -52,13 +55,13 @@ pub fn generate_docs_for_files(mod_names: &[Name]) -> Result<(), Errors> {
             "Generating documentation for module `{}`.",
             mod_name.to_string()
         );
-        generate_doc(&program, &mod_name)?;
+        generate_doc(&program, &mod_name, docs_config)?;
     }
     Ok(())
 }
 
 // Generate documentation for a Program consists of single module.
-fn generate_doc(program: &Program, mod_name: &Name) -> Result<(), Errors> {
+fn generate_doc(program: &Program, mod_name: &Name, config: &DocsConfig) -> Result<(), Errors> {
     // Check if the module exists in the program.
     if !program.modules.iter().any(|mi| mi.name == *mod_name) {
         return Err(Errors::from_msg(format!(
@@ -87,15 +90,21 @@ fn generate_doc(program: &Program, mod_name: &Name) -> Result<(), Errors> {
     write_entries(&mut entries, &mut doc);
 
     doc += "\n\n# Values";
-    value_entries(program, mod_name, &mut entries)?;
+    value_entries(program, mod_name, &mut entries, config)?;
     write_entries(&mut entries, &mut doc);
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
-    std::fs::write(&doc_file, doc)
-        .map_err(|e| Errors::from_msg(format!("Failed to write file \"{}\": {:?}", doc_file, e)))?;
+    let doc_path = config.out_dir.join(doc_file);
+    std::fs::write(&doc_path, doc).map_err(|e| {
+        Errors::from_msg(format!(
+            "Failed to write file \"{}\": {:?}",
+            doc_path.display(),
+            e
+        ))
+    })?;
 
-    println!("Saved documentation to \"{}\".", doc_file);
+    println!("Saved documentation to \"{}\".", doc_path.display());
     Ok(())
 }
 
@@ -455,9 +464,13 @@ fn value_entries(
     program: &Program,
     mod_name: &Name,
     entries: &mut Vec<Entry>,
+    config: &DocsConfig,
 ) -> Result<(), Errors> {
     for (name, gv) in &program.global_values {
         if !is_entry_should_be_documented(&name, mod_name) {
+            continue;
+        }
+        if gv.compiler_defined_method && !config.include_compiler_defined_methods {
             continue;
         }
 
