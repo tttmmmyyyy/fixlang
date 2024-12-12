@@ -1862,7 +1862,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate lambda abstraction.
     fn eval_lam(&mut self, lam: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
-        let (args, body) = lam.destructure_lam();
         let lam_ty = lam.ty.clone().unwrap();
 
         // Calculate captured variables.
@@ -1877,7 +1876,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.implement_lambda_function(lam, lam_fn, Some(cap_vars.clone()));
 
         // Allocate lambda
-        let name = expr_abs(args.clone(), body.clone(), None).expr.to_string();
+        let name = format!("lamda[{}]", lam_ty.to_string());
         let lam = if rvo.is_some() {
             rvo.unwrap()
         } else {
@@ -2397,18 +2396,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Allocate
         let array = allocate_obj(
-            array_ty,
+            array_ty.clone(),
             &vec![],
             Some(len),
             self,
-            Some(&format!(
-                "array_literal[{}]",
-                elems
-                    .iter()
-                    .map(|e| e.expr.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
+            Some(&format!("array_literal[{}]", array_ty.to_string())),
         );
         let buffer = array.ptr_to_field_nocap(self, ARRAY_BUF_IDX);
 

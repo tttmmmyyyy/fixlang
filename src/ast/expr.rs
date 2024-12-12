@@ -164,10 +164,7 @@ impl ExprNode {
     pub fn destructure_lam(&self) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
         match &*self.expr {
             Expr::Lam(args, body) => (args.clone(), body.clone()),
-            _ => panic!(
-                "Call destructure_lam for an expression which is not lambda! {}",
-                self.expr.to_string()
-            ),
+            _ => panic!("Call destructure_lam for an expression which is not lambda!"),
         }
     }
 
