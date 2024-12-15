@@ -169,14 +169,24 @@ fn build_object_files<'c>(
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
 
+    if config.output_symbols {
+        program.output_symbols("0");
+    }
+
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
         uncurry_optimization(&mut program);
+        if config.output_symbols {
+            program.output_symbols("1");
+        }
     }
 
     // Perform borrowing optimization.
     if config.perform_borrowing_optimization() {
         borrowing_optimization(&mut program);
+        if config.output_symbols {
+            program.output_symbols("2");
+        }
     }
 
     // Determine compilation units.

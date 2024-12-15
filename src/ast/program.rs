@@ -3,7 +3,10 @@ use crate::error::Errors;
 use import::{ImportItem, ImportStatement};
 use misc::{collect_results, to_absolute_path, Map, Set};
 use name::{FullName, Name};
+use printer::Text;
 use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::Write;
 use std::{sync::Arc, vec};
 
 use super::*;
@@ -2098,6 +2101,53 @@ impl Program {
             }
         }
         None
+    }
+
+    pub fn stringify_symbols(&self) -> Text {
+        let mut sym_texts: Vec<(String, Text)> = vec![];
+        for sym in self.instantiated_symbols.values() {
+            let mut sym_text = Text::empty();
+
+            let type_sgn_str = format!(
+                "{} : {};",
+                sym.instantiated_name.to_string(),
+                sym.ty.to_string()
+            );
+            let type_sgn = Text::from_str(&type_sgn_str);
+            sym_text = sym_text.append(type_sgn);
+
+            let code = Text::from_str(&format!("{} = ", sym.instantiated_name.to_string()))
+                .append_nobreak(
+                    sym.expr
+                        .as_ref()
+                        .unwrap()
+                        .expr
+                        .stringify()
+                        .brace_if_multiline(),
+                )
+                .append_to_last_line(";");
+            sym_text = sym_text.append(code);
+
+            sym_texts.push((type_sgn_str, sym_text));
+        }
+        sym_texts.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        let mut text = Text::empty();
+        for (_, sym_text) in sym_texts {
+            text = text.append(sym_text);
+            text = text.append(Text::from_str(""));
+        }
+
+        text
+    }
+
+    pub fn output_symbols(&self, step_name: &str) {
+        let file_name = format!("symbols_{}.fix", step_name);
+        let file_path = PathBuf::from(DOT_FIXLANG).join(file_name);
+
+        let text = self.stringify_symbols().to_string();
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(text.as_bytes()).unwrap();
     }
 }
 

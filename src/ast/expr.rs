@@ -1,11 +1,12 @@
 use crate::error::Errors;
 use misc::{collect_results, Set};
 use name::{FullName, Name, NameSpace};
+use printer::Text;
 use serde::{Deserialize, Serialize};
 
 use super::*;
 use core::panic;
-use std::sync::Arc;
+use std::{sync::Arc, vec};
 
 // The ways of apply a function to an argument in source code.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -835,94 +836,107 @@ impl Expr {
             released_params_indices: None,
         })
     }
-    pub fn to_string(&self) -> String {
-        match self {
-            Expr::Var(v) => v.name.to_string(),
-            Expr::LLVM(l) => l.name.clone(),
-            Expr::App(_, _) => {
-                let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_info(None));
-                let mut omit_brace_around_fun = false;
-                match *(fun.expr) {
-                    Expr::Var(_) => omit_brace_around_fun = true,
-                    Expr::LLVM(_) => omit_brace_around_fun = true,
-                    Expr::App(_, _) => omit_brace_around_fun = true,
-                    _ => {}
-                }
-                let fun_str = fun.expr.to_string();
 
-                let args_str = args
-                    .iter()
-                    .map(|arg| arg.expr.to_string())
-                    .collect::<Vec<_>>()
-                    .join(",");
-                if omit_brace_around_fun {
-                    format!("{}({})", fun_str, args_str)
-                } else {
-                    format!("({})({})", fun_str, args_str)
+    // Stringify expression.
+    // Returns the lines paired with the indent level.
+    pub fn stringify(&self) -> Text {
+        match self {
+            Expr::Var(v) => Text::from_string(v.name.to_string()),
+            Expr::LLVM(l) => Text::from_string(l.name.clone()),
+            Expr::App(_, _) => {
+                // Stringify the funciton.
+                let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_info(None));
+                let brace_fun = match *(fun.expr) {
+                    Expr::Var(_) => false,
+                    Expr::LLVM(_) => false,
+                    Expr::App(_, _) => false,
+                    _ => true,
+                };
+                let mut fun = fun.expr.stringify();
+                if brace_fun {
+                    fun = fun.brace()
+                };
+
+                // Stringify the arguments.
+                let mut arg_texts: Vec<Text> = vec![];
+                for arg in args {
+                    arg_texts.push(arg.expr.stringify());
                 }
+                let args = Text::join(arg_texts, ", ").brace();
+
+                fun.append_nobreak(args)
             }
             Expr::Lam(xs, fx) => {
-                format!(
-                    "|{}| {}",
+                let args = format!(
+                    "|{}| ",
                     xs.iter()
                         .map(|x| x.name.to_string())
                         .collect::<Vec<_>>()
-                        .join(", "),
-                    fx.expr.to_string()
-                )
-            }
-            Expr::Let(p, b, v) => format!(
-                "let {} = {} in {}",
-                p.pattern.to_string(),
-                b.expr.to_string(),
-                v.expr.to_string()
-            ),
-            Expr::If(c, t, e) => format!(
-                "if {} {{ {} }} else {{ {} }}",
-                c.expr.to_string(),
-                t.expr.to_string(),
-                e.expr.to_string()
-            ),
-            Expr::Match(cond, pat_vals) => {
-                let mut ret = format!("match {} {{", cond.expr.to_string());
-                for (pat, val) in pat_vals {
-                    ret += &format!("{} => ({});", pat.pattern.to_string(), val.expr.to_string());
-                }
-                ret += "}";
-                ret
-            }
-            Expr::TyAnno(e, t) => format!("{}: {}", e.expr.to_string(), t.to_string()),
-            Expr::MakeStruct(tc, fields) => {
-                format!(
-                    "{} {{{}}}",
-                    tc.to_string(),
-                    fields
-                        .iter()
-                        .map(|(name, expr)| format!("{}: {}", name, expr.expr.to_string()))
-                        .collect::<Vec<_>>()
                         .join(", ")
-                )
+                );
+                fx.expr
+                    .stringify()
+                    .brace_if_multiline()
+                    .insert_to_first_line(&args)
+            }
+            Expr::Let(p, b, v) => Text::from_str("let ")
+                .append_to_last_line(&p.pattern.to_string())
+                .append_to_last_line(" = ")
+                .append_nobreak(b.expr.stringify().brace_if_multiline())
+                .append_to_last_line(";")
+                .append(v.expr.stringify()),
+            Expr::If(c, t, e) => Text::from_str("if ")
+                .append_nobreak(c.expr.stringify().brace_if_multiline())
+                .append_nobreak(t.expr.stringify().curly_brace())
+                .append_to_last_line(" else ")
+                .append_nobreak(e.expr.stringify().curly_brace()),
+            Expr::Match(cond, pat_vals) => {
+                let mut branches = Text::empty();
+                for (pat, val) in pat_vals {
+                    let branch = Text::from_str(&pat.pattern.to_string())
+                        .append_to_last_line(" => ")
+                        .append_nobreak(val.expr.stringify().brace_if_multiline())
+                        .append_to_last_line(",");
+                    branches = branches.append(branch);
+                }
+                Text::from_str("match ")
+                    .append_nobreak(cond.expr.stringify().brace_if_multiline())
+                    .append_nobreak(branches.curly_brace())
+            }
+            Expr::TyAnno(e, t) => e
+                .expr
+                .stringify()
+                .brace_if_multiline()
+                .append_to_last_line(" : ")
+                .append_to_last_line(&t.to_string()),
+            Expr::MakeStruct(tc, fields) => {
+                let mut field_lines: Vec<Text> = vec![];
+                for (name, expr) in fields {
+                    let field = Text::from_str(&name)
+                        .append_to_last_line(" : ")
+                        .append_nobreak(expr.expr.stringify().brace_if_multiline());
+                    field_lines.push(field);
+                }
+                let fields = Text::join(field_lines, ", ").curly_brace();
+                Text::from_str(&tc.to_string()).append_nobreak(fields)
             }
             Expr::ArrayLit(elems) => {
-                format!(
-                    "[{}]",
-                    elems
-                        .iter()
-                        .map(|e| e.expr.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
+                let mut elem_lines: Vec<Text> = vec![];
+                for elem in elems {
+                    let elem = elem.expr.stringify();
+                    elem_lines.push(elem);
+                }
+                Text::join(elem_lines, ", ").square_brace()
             }
             Expr::FFICall(fun_name, _, _, args, is_io) => {
-                format!(
-                    "FFI_CALL{}[{}{}]",
-                    fun_name,
-                    if *is_io { "_IO " } else { "" },
-                    args.iter()
-                        .map(|e| ", ".to_string() + &e.expr.to_string())
-                        .collect::<Vec<_>>()
-                        .join("")
-                )
+                let mut arg_texts: Vec<Text> = vec![];
+                arg_texts.push(Text::from_str(&fun_name));
+                for arg in args {
+                    arg_texts.push(arg.expr.stringify());
+                }
+                let args = Text::join(arg_texts, ", ").square_brace();
+                Text::from_str(&format!("FFI_CALL{}", if *is_io { "_IO" } else { "" }))
+                    .append_nobreak(args)
             }
         }
     }

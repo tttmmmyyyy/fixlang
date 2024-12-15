@@ -43,6 +43,7 @@ mod lsp;
 mod misc;
 mod object;
 mod parser;
+mod printer;
 mod project_file;
 mod registry_file;
 mod runner;
@@ -192,8 +193,11 @@ fn main() {
         .long("llvm-passes-file")
         .takes_value(true)
         .help(
-            "Path to a file which contains a list of LLVM passes. Used for compiler development.",
+            "Path to a file which contains a list of LLVM passes. This option is used for compiler development, and normal users do not need to use this.",
         );
+    let output_symbols = Arg::new("output-symbols")
+        .long("output-symbols")
+        .help("Output symbols of the Fix program. This option is used for compiler development, and normal users do not need to use this.");
     let program_args = Arg::new("program-args")
         .last(true)
         .takes_value(true)
@@ -220,7 +224,8 @@ fn main() {
         .arg(threaded.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
-        .arg(llvm_passes_file.clone());
+        .arg(llvm_passes_file.clone())
+        .arg(output_symbols.clone());
 
     // "fix run" subcommand
     let run_subc = App::new("run")
@@ -238,6 +243,8 @@ fn main() {
         .arg(threaded.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
+        .arg(llvm_passes_file.clone())
+        .arg(output_symbols.clone())
         .arg(program_args.clone());
 
     // "fix test" subcommand
@@ -256,6 +263,8 @@ fn main() {
         .arg(threaded.clone())
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
+        .arg(llvm_passes_file.clone())
+        .arg(output_symbols.clone())
         .arg(program_args.clone());
 
     // "fix deps" subcommand
@@ -498,6 +507,11 @@ fn main() {
         // Set `llvm_passes_file`.
         if let Some(llvm_passes_file) = args.get_one::<String>("llvm-passes-file") {
             config.llvm_passes_file = Some(PathBuf::from(llvm_passes_file));
+        }
+
+        // Set `output_symbols`.
+        if args.contains_id("output-symbols") {
+            config.output_symbols = true;
         }
 
         // Set `run_program_args`.
