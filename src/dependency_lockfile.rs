@@ -178,6 +178,10 @@ impl DependecyLockFile {
                 repo.checkout_tree(&commit.into_object(), Some(&mut checkout_opts))
                     .map_err(|e| Errors::from_msg(format!("Failed to checkout commit: {:?}", e)))?;
 
+                // Set HEAD to the target revision.
+                repo.set_head_detached(target_rev)
+                    .map_err(|e| Errors::from_msg(format!("Failed to set head: {:?}", e)))?;
+
                 // Load the project file and validate whether it satisfies the dependency.
                 dep.check_name_version_match_proj_file()?;
 
