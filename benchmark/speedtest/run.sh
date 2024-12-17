@@ -43,3 +43,8 @@ if [ -z "$HAS_DIFF" ]; then
     git add graph.svg
     git commit -m "Add speedtest results"
 fi
+
+# If HAS_DIFF is not empty, print a message to the user
+if [ ! -z "$HAS_DIFF" ]; then
+    echo "Since there are changes in the repository, the speedtest results were not commited."
+fi
