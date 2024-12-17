@@ -17,9 +17,9 @@ use crate::builtin::*;
 use crate::generator::GenerationContext;
 use crate::generator::Object;
 use crate::sourcefile::Span;
-use crate::uncurry_optimization;
 
 use super::error::Errors;
+use super::optimization::uncurry_optimization::convert_to_funptr_name;
 
 #[derive(Clone)]
 pub struct ExportStatement {
@@ -114,7 +114,7 @@ impl ExportStatement {
         let mut fix_expr = self.instantiated_value_expr.clone().unwrap();
         if args.len() > 0 && gc.config.perform_uncurry_optimization() {
             let mut var = fix_expr.get_var().as_ref().clone();
-            uncurry_optimization::convert_to_funptr_name(&mut var.name.name, args.len());
+            convert_to_funptr_name(&mut var.name.name, args.len());
             if gc.global.contains_key(&var.name) {
                 let funptr_ty = self.exported_function_type.as_ref().unwrap().to_funptr_ty();
                 fix_expr = fix_expr

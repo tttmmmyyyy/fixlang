@@ -25,7 +25,6 @@ extern crate toml;
 extern crate urlencoding;
 
 mod ast;
-mod borrowing_optimization;
 mod builtin;
 mod compile_unit;
 mod config_file;
@@ -42,6 +41,7 @@ mod llvm_passes;
 mod lsp;
 mod misc;
 mod object;
+mod optimization;
 mod parser;
 mod printer;
 mod project_file;
@@ -55,7 +55,6 @@ mod stopwatch;
 mod tests;
 mod typecheck;
 mod typecheckcache;
-mod uncurry_optimization;
 
 use crate::error::Errors;
 use ast::expr::*;
@@ -66,7 +65,6 @@ use ast::program::*;
 use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
-use borrowing_optimization::*;
 use builtin::*;
 use clap::ArgMatches;
 use clap::PossibleValue;
@@ -101,7 +99,6 @@ use std::process;
 use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
-use uncurry_optimization::*;
 
 fn main() {
     // Options

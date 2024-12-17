@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use ast::name::FullName;
-use misc::{nonempty_subsequences, Map};
-
-use super::*;
+use crate::{
+    ast::name::FullName,
+    misc::{nonempty_subsequences, Map},
+    Expr, ExprNode, GenerationContext, InstantiatedSymbol, Program,
+};
 
 // Borrowing optimization.
 // Consider an application `f(x)`, where `f` is a function which takes the ownership of `x` but releases it in its body.

@@ -23,6 +23,7 @@ use inkwell::{
 use misc::flatten_opt;
 use misc::Map;
 use misc::Set;
+use optimization::borrowing_optimization::borrowing_optimization_evaluating_application;
 
 use super::*;
 

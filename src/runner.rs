@@ -25,8 +25,8 @@ use crate::compile_unit::CompileUnit;
 use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, panic_if_err, panic_with_err, Errors};
 use crate::misc::{save_temporary_source, temporary_source_path};
+use crate::optimization;
 use crate::stopwatch::StopWatch;
-use crate::uncurry_optimization;
 use crate::Configuration;
 use crate::ExprNode;
 use crate::FixOptimizationLevel;
@@ -34,13 +34,13 @@ use crate::GenerationContext;
 use crate::LinkType;
 use crate::OutputFileType;
 use crate::Program;
+use crate::SubCommand;
 use crate::TypeCheckContext;
 use crate::ValgrindTool;
 use crate::DOT_FIXLANG;
 use crate::GLOBAL_VAR_NAME_ARGC;
 use crate::GLOBAL_VAR_NAME_ARGV;
 use crate::INTERMEDIATE_PATH;
-use crate::{borrowing_optimization, SubCommand};
 use crate::{build_runtime, parse_file_path};
 use crate::{llvm_passes, run_io_value};
 use crate::{make_std_mod, runtime};
@@ -169,25 +169,7 @@ fn build_object_files<'c>(
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
 
-    if config.output_symbols {
-        program.output_symbols("0");
-    }
-
-    // Perform uncurrying optimization.
-    if config.perform_uncurry_optimization() {
-        uncurry_optimization(&mut program);
-        if config.output_symbols {
-            program.output_symbols("1");
-        }
-    }
-
-    // Perform borrowing optimization.
-    if config.perform_borrowing_optimization() {
-        borrowing_optimization(&mut program);
-        if config.output_symbols {
-            program.output_symbols("2");
-        }
-    }
+    optimization::root::optimize(&mut program, &config);
 
     // Determine compilation units.
     let mut units = vec![];

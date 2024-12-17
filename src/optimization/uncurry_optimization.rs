@@ -1,11 +1,14 @@
 use std::sync::Arc;
 
-use ast::name::FullName;
-use misc::Set;
-
-use crate::typecheck::Scope;
-
-use super::*;
+use crate::{
+    ast::name::{FullName, Name},
+    calculate_free_vars, collect_app, expr_abs, expr_app, expr_let, expr_var,
+    misc::Set,
+    type_funptr,
+    typecheck::Scope,
+    Expr, ExprNode, InstantiatedSymbol, Program, Var, FIX_NAME, FUNPTR_ARGS_MAX,
+    INSTANCIATED_NAME_SEPARATOR, STD_NAME,
+};
 
 // First-order uncurrying optimizaion:
 // Global closures are uncurried as long as possible, and converted to function pointers (= has no field for captured values).
