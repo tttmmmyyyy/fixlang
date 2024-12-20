@@ -436,7 +436,7 @@ impl TraitInstance {
         method_qualty.free_vars_vec(&mut fv_method_quality);
         let fv_impl_type = impl_type.free_vars();
         let mut s = Substitution::default();
-        let mut name_no = 0;
+        let mut name_no = -1;
         for fv in &fv_method_quality {
             if &fv.name == tv {
                 continue;
@@ -444,7 +444,8 @@ impl TraitInstance {
             if fv_impl_type.contains_key(&fv.name) {
                 // Search for a new name that is not in `fv_impl_type`.
                 loop {
-                    let new_name = number_to_varname(name_no);
+                    name_no += 1;
+                    let new_name = number_to_varname(name_no as usize);
                     if !fv_impl_type.contains_key(&new_name)
                         && fv_method_quality.iter().all(|x| x.name != new_name)
                     {
@@ -454,7 +455,6 @@ impl TraitInstance {
                         assert!(merge_succ);
                         break;
                     }
-                    name_no += 1;
                 }
             }
         }
