@@ -543,18 +543,21 @@ pub fn run_file(mut config: Configuration) -> i32 {
     fs::create_dir_all(DOT_FIXLANG).expect("Failed to create \".fixlang\" directory.");
 
     // For parallel execution, use different file name for each execution.
-    let a_out_path: String = format!("./{}/a{}.out", DOT_FIXLANG, rand::thread_rng().gen::<u64>());
-    config.out_file_path = Some(PathBuf::from(a_out_path.clone()));
+    let exec_path: String = format!("./{}/a{}.out", DOT_FIXLANG, rand::thread_rng().gen::<u64>());
+    let user_specified_out_path = std::mem::replace(
+        &mut config.out_file_path,
+        Some(PathBuf::from(exec_path.clone())),
+    );
 
     // Build executable file.
     panic_if_err(build_file(&mut config));
 
     // Run the executable file.
     let mut com = if config.valgrind_tool == ValgrindTool::None {
-        Command::new(a_out_path.clone())
+        Command::new(exec_path.clone())
     } else {
         let mut com = config.valgrind_command();
-        com.arg(a_out_path.clone());
+        com.arg(exec_path.clone());
         com
     };
     for arg in &config.run_program_args {
@@ -565,11 +568,28 @@ pub fn run_file(mut config: Configuration) -> i32 {
         .stderr(Stdio::inherit());
     let output = com.output();
 
-    // Remove the executable file.
-    let _ = fs::remove_file(a_out_path.clone()); // Ignore the error.
+    // Clean up the temporary executable file.
+    match user_specified_out_path {
+        Some(out_path) => {
+            // Move the temporary executable file to the specified output file.
+            if let Err(e) = fs::rename(exec_path.clone(), out_path.clone()) {
+                let _ = fs::remove_file(exec_path.clone()); // Ignore the error.
+                panic_with_err(&format!(
+                    "Failed to rename \"{}\" to \"{}\": {}",
+                    exec_path,
+                    out_path.display(),
+                    e
+                ));
+            }
+        }
+        None => {
+            // If the output file is not specified, remove the temporary executable file.
+            let _ = fs::remove_file(exec_path.clone()); // Ignore the error.
+        }
+    }
 
     if let Err(e) = output {
-        panic_with_err(&format!("Failed to run \"{}\": {}", a_out_path, e));
+        panic_with_err(&format!("Failed to run \"{}\": {}", exec_path, e));
     }
     let output = output.unwrap();
 
