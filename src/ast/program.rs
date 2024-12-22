@@ -1947,7 +1947,7 @@ impl Program {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
         for (importer, stmts) in &self.mod_to_import_stmts {
             for stmt in stmts {
-                graph.connect(
+                graph.connect_idx(
                     *elem_to_idx.get(importer).unwrap(),
                     *elem_to_idx.get(&stmt.module.0).unwrap(),
                 );
@@ -2148,6 +2148,24 @@ impl Program {
         let text = self.stringify_symbols().to_string();
         let mut file = File::create(&file_path).unwrap();
         file.write_all(text.as_bytes()).unwrap();
+    }
+
+    // Generate a call graph of instantiated symbols.
+    #[allow(dead_code)]
+    pub fn call_graph_inst_syms(&self) -> Graph<FullName> {
+        let syms = self
+            .instantiated_symbols
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut graph = Graph::new(syms);
+        for (callee, sym) in &self.instantiated_symbols {
+            let called = sym.expr.as_ref().unwrap().free_vars();
+            for called in called {
+                graph.connect(callee, called);
+            }
+        }
+        graph
     }
 }
 

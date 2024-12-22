@@ -24,4 +24,6 @@ pub fn optimize(prg: &mut Program, config: &Configuration) {
             prg.output_symbols("borrowing");
         }
     }
+
+    // Use call_graph_inst_syms.
 }

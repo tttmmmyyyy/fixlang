@@ -168,7 +168,7 @@ fn build_object_files<'c>(
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
 
-    optimization::root::optimize(&mut program, &config);
+    optimization::optimization::optimize(&mut program, &config);
 
     // Determine compilation units.
     let mut units = vec![];
