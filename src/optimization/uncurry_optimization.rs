@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     ast::name::{FullName, Name},
-    calculate_free_vars, collect_app, expr_abs, expr_app, expr_let, expr_var,
+    collect_app, expr_abs, expr_app, expr_let, expr_var,
     misc::Set,
     type_funptr,
     typecheck::Scope,
@@ -32,7 +32,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
             if expr.is_none() {
                 break;
             }
-            let expr = calculate_free_vars(expr.take().unwrap());
+            let expr = expr.take().unwrap().calculate_free_vars();
             let ty = expr.ty.clone().unwrap();
             let mut name = sym_name.clone();
             convert_to_funptr_name(name.name_as_mut(), arg_cnt as usize);
@@ -58,7 +58,7 @@ pub fn uncurry_optimization(fix_mod: &mut Program) {
     for (_name, sym) in &mut fix_mod.instantiated_symbols {
         let expr =
             replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
-        let expr = calculate_free_vars(expr);
+        let expr = expr.calculate_free_vars();
         sym.expr = Some(expr);
     }
 }
@@ -254,7 +254,7 @@ fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                     let ty = expr.ty.clone().unwrap();
 
                     // Replace lam_var and its appearance in lam_val to avoid confliction with free variables in let_bound.
-                    let let_bound = calculate_free_vars(let_bound.clone());
+                    let let_bound = let_bound.calculate_free_vars();
                     let let_bound_free_vars = let_bound.free_vars();
 
                     let mut lam_vars = lam_vars.clone();
@@ -278,9 +278,11 @@ fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                                 }
 
                                 // If new name is already appears freely in lam_val, it cannot be used.
-                                let lam_val_frees =
-                                    calculate_free_vars(lam_val.clone()).free_vars().clone();
-                                if lam_val_frees.contains(&lam_var_name) {
+                                if lam_val
+                                    .calculate_free_vars()
+                                    .free_vars()
+                                    .contains(&lam_var_name)
+                                {
                                     continue;
                                 }
 

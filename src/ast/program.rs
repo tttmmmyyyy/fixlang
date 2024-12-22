@@ -237,7 +237,7 @@ impl TypedExpr {
     }
 
     pub fn calculate_free_vars(&mut self) {
-        self.expr = calculate_free_vars(self.expr.clone());
+        self.expr = self.expr.calculate_free_vars();
     }
 
     // Find the minimum expression node which includes the specified source code position.
@@ -1358,7 +1358,7 @@ impl Program {
                 &[&ret.source],
             ));
         }
-        Ok(calculate_free_vars(ret))
+        Ok(ret.calculate_free_vars())
     }
 
     // Require instantiate generic symbol such that it has a specified type.

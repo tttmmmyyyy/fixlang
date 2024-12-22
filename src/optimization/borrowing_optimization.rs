@@ -24,7 +24,8 @@ pub fn borrowing_optimization(program: &mut Program) {
     for (name, sym) in instantiated_global_symbols {
         let expr = sym.expr.as_ref().unwrap();
         let expr = set_released_param_indices(expr, program);
-        program.instantiated_symbols.get_mut(&name).unwrap().expr = Some(expr);
+        program.instantiated_symbols.get_mut(&name).unwrap().expr =
+            Some(expr.calculate_free_vars());
     }
 
     // NOTE: Replacement of call expressions is handled in `borrowing_optimization_evaluating_application` which is called from `Generator::eval_app`.
