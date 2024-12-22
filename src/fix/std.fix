@@ -1104,14 +1104,13 @@ namespace Iterator {
     // Creates a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
     range : I64 -> I64 -> Iterator I64;
     range = |a, b| (
-        let next = |_| (
+        Iterator { next: |_| (
             if a == b {
                 Option::none()
             } else {
                 Option::some $ (a, Iterator::range(a+1, b))
             }
-        );
-        Iterator { next: next }
+        ) }
     );
 
     // Reverses an iterator.
