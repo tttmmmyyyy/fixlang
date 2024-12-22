@@ -1099,12 +1099,7 @@ namespace Iterator {
 
     // Pushes an element to an iterator.
     push_front : a -> Iterator a -> Iterator a;
-    push_front = |elem, iter| (
-        let next = |_| (
-            some $ (elem, iter)
-        );
-        Iterator { next: next }     
-    );
+    push_front = |elem, iter| Iterator { next: |_| some $ (elem, iter) };
 
     // Creates a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
     range : I64 -> I64 -> Iterator I64;
