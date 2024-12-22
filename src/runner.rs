@@ -26,7 +26,6 @@ use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, panic_if_err, panic_with_err, Errors};
 use crate::misc::{info_msg, save_temporary_source, temporary_source_path};
 use crate::stopwatch::StopWatch;
-use crate::Configuration;
 use crate::ExprNode;
 use crate::FixOptimizationLevel;
 use crate::GenerationContext;
@@ -44,6 +43,7 @@ use crate::{build_runtime, parse_file_path};
 use crate::{llvm_passes, run_io_value};
 use crate::{make_std_mod, runtime};
 use crate::{make_tuple_traits_mod, BuildMode};
+use crate::{optimization, Configuration};
 
 // The result of `build_object_files` function.
 pub struct BuildObjFilesResult {
