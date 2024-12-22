@@ -43,9 +43,14 @@ sum_up_randoms = |n| (
     )
 );
 
+// Benchmark for `Iterator::range(0, n).fold(...)`.
+sum_up_by_fold : I64 -> I64;
+sum_up_by_fold = |n| Iterator::range(0, n).fold(0, |i, sum| sum + i);
+
 main : IO ();
 main = (
     assert_eq(|_|"count-primes", prime_table(700000).count_element(true), 56543);;
     assert_eq(|_|"sum-up-randoms", sum_up_randoms(700000), 12983264567312419866_U64);;
+    assert_eq(|_|"sum_up_by_fold", sum_up_by_fold(1000000), 499999500000);;
     pure()
 );
