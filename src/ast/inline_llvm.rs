@@ -40,7 +40,7 @@ pub enum LLVMGenerator {
     UnionAsBody(InlineLLVMUnionAsBody),
     UnionIsBody(InlineLLVMUnionIsBody),
     UnionModBody(InlineLLVMUnionModBody),
-    LoopFunctionBody(InlineLLVMLoopFunctionBody),
+    // LoopFunctionBody(InlineLLVMLoopFunctionBody),
     UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody),
     IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody),
     IntNegBody(InlineLLVMIntNegBody),
@@ -82,16 +82,17 @@ impl LLVMGenerator {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
+
         bvs: &Vec<FullName>, // borrowed variables
     ) -> Object<'c> {
+        let rvo = None;
         match self {
-            LLVMGenerator::IntLit(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::IntLit(x) => x.generate(gc, ty, bvs),
             LLVMGenerator::FloatLit(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::NullPtrLit(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::BoolLit(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::StringLit(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::FixBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::FixBody(x) => x.generate(gc, ty, bvs),
             LLVMGenerator::CastIntegralBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::CastFloatBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::CastIntToFloatBody(x) => x.generate(gc, ty, rvo, bvs),
@@ -101,23 +102,23 @@ impl LLVMGenerator {
             LLVMGenerator::FillArrayBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::MakeEmptyArrayBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::ArrayUnsafeSetBody(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::ArrayUnsafeGetBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::ArrayUnsafeGetBody(x) => x.generate(gc, ty, bvs),
             LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::ArrayGetBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::ArrayGetBody(x) => x.generate(gc, ty, bvs),
             LLVMGenerator::ArraySetBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::ArrayModBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::ArrayForceUniqueBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::ArrayGetPtrBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::ArrayGetSizeBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::ArrayGetCapacityBody(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::StructGetBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::StructGetBody(x) => x.generate(gc, ty, bvs),
             LLVMGenerator::StructModBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::StructSetBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::MakeUnionBody(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::UnionAsBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::UnionAsBody(x) => x.generate(gc, ty, bvs),
             LLVMGenerator::UnionIsBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::UnionModBody(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::LoopFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
+            // LLVMGenerator::LoopFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::UndefinedFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::IsUniqueFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::IntNegBody(x) => x.generate(gc, ty, rvo, bvs),
@@ -155,13 +156,13 @@ impl LLVMGenerator {
             LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::StructPunchBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::StructPlugInBody(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::DoWithRetainedFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::DoWithRetainedFunctionBody(x) => x.generate(gc, ty, bvs),
             LLVMGenerator::UnsafeMutateBoxedDataFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
             LLVMGenerator::UnsafeMutateBoxedDataIOStateFunctionBody(x) => {
                 x.generate(gc, ty, rvo, bvs)
             }
             LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
-            LLVMGenerator::UnsafePerformFunctionBody(x) => x.generate(gc, ty, rvo, bvs),
+            LLVMGenerator::UnsafePerformFunctionBody(x) => x.generate(gc, ty, bvs),
         }
     }
 

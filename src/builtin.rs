@@ -400,10 +400,10 @@ pub fn make_string_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
 }
 
-// Get LoopResult type.
-pub fn make_loop_result_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
-}
+// // Get LoopResult type.
+// pub fn make_loop_result_ty() -> Arc<TypeNode> {
+//     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
+// }
 
 // Get integral types from its name.
 pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
@@ -567,20 +567,15 @@ impl InlineLLVMIntLit {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let obj = if rvo.is_none() {
-            allocate_obj(
-                ty.clone(),
-                &vec![],
-                None,
-                gc,
-                Some(&format!("int_lit_{}", self.val)),
-            )
-        } else {
-            rvo.unwrap()
-        };
+        let obj = create_obj(
+            ty.clone(),
+            &vec![],
+            None,
+            gc,
+            Some(&format!("int_lit_{}", self.val)),
+        );
         let int_ty = ty
             .get_struct_type(gc, &vec![])
             .get_field_type_at_index(0)
@@ -616,7 +611,7 @@ impl InlineLLVMFloatLit {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 ty.clone(),
                 &vec![],
                 None,
@@ -659,7 +654,7 @@ impl InlineLLVMNullPtrLit {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let obj = if rvo.is_none() {
-            allocate_obj(ty.clone(), &vec![], None, gc, Some("nullptr"))
+            create_obj(ty.clone(), &vec![], None, gc, Some("nullptr"))
         } else {
             rvo.unwrap()
         };
@@ -694,7 +689,7 @@ impl InlineLLVMBoolLit {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 ty.clone(),
                 &vec![],
                 None,
@@ -729,7 +724,7 @@ pub fn make_string_from_ptr<'c, 'm>(
 ) -> Object<'c> {
     // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let array = allocate_obj(
+    let array = create_obj(
         array_ty,
         &vec![],
         Some(len_with_null_terminator),
@@ -750,7 +745,7 @@ pub fn make_string_from_ptr<'c, 'm>(
 
     // Allocate String and store the array into it.
     let string = if rvo.is_none() {
-        allocate_obj(
+        create_obj(
             make_string_ty(),
             &vec![],
             None,
@@ -822,7 +817,6 @@ impl InlineLLVMFixBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
@@ -831,7 +825,7 @@ impl InlineLLVMFixBody {
 
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
-        let fixf = allocate_obj(fixf_ty.clone(), &vec![], None, gc, Some("fix(f)"));
+        let fixf = create_obj(fixf_ty.clone(), &vec![], None, gc, Some("fix(f)"));
         let fixf_funptr = gc
             .builder()
             .get_insert_block()
@@ -847,8 +841,8 @@ impl InlineLLVMFixBody {
         let cap_obj_ptr = cap_obj.ptr(gc);
         fixf.store_field_nocap(gc, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
 
-        let f_fixf = gc.apply_lambda(f, vec![fixf], None);
-        let f_fixf_x = gc.apply_lambda(f_fixf, vec![x], rvo);
+        let f_fixf = gc.apply_lambda(f, vec![fixf]);
+        let f_fixf_x = gc.apply_lambda(f_fixf, vec![x]);
         f_fixf_x
     }
 }
@@ -924,7 +918,7 @@ impl InlineLLVMCastIntegralBody {
         let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 to_ty.clone(),
                 &vec![],
                 None,
@@ -1011,7 +1005,7 @@ impl InlineLLVMCastFloatBody {
         let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 to_ty.clone(),
                 &vec![],
                 None,
@@ -1103,7 +1097,7 @@ impl InlineLLVMCastIntToFloatBody {
         let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 to_ty.clone(),
                 &vec![],
                 None,
@@ -1198,7 +1192,7 @@ impl InlineLLVMCastFloatToIntBody {
         let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 to_ty.clone(),
                 &vec![],
                 None,
@@ -1285,7 +1279,7 @@ impl InlineLLVMShiftBody {
         let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(ty.clone(), &vec![], None, gc, Some("alloca@shift_function"))
+            create_obj(ty.clone(), &vec![], None, gc, Some("alloca@shift_function"))
         };
         obj.store_field_nocap(gc, 0, to_val);
         obj
@@ -1391,7 +1385,7 @@ impl InlineLLVMBitwiseOperationBody {
         let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 ty.clone(),
                 &vec![],
                 None,
@@ -1458,7 +1452,7 @@ impl InlineLLVMFillArrayBody {
         gc.release(gc.get_var(&self.size_name).ptr.get(gc));
         let value = gc.get_var(&self.value_name).ptr.get(gc);
         assert!(rvo.is_none()); // Array is boxed, and we don't perform rvo for boxed values.
-        let array = allocate_obj(
+        let array = create_obj(
             ty.clone(),
             &vec![],
             Some(size),
@@ -1540,7 +1534,7 @@ impl InlineLLVMMakeEmptyArrayBody {
             .into_int_value();
 
         // Allocate
-        let array = allocate_obj(
+        let array = create_obj(
             arr_ty.clone(),
             &vec![],
             Some(cap),
@@ -1675,7 +1669,6 @@ impl InlineLLVMArrayUnsafeGetBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
         borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
@@ -1689,8 +1682,7 @@ impl InlineLLVMArrayUnsafeGetBody {
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
 
         // Get element
-        let elem =
-            ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx, rvo);
+        let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx);
 
         // Release the array.
         if !borrowed_vars.contains(&arr_name) {
@@ -1768,20 +1760,14 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
 
         // Get the element.
-        let elem = ObjectFieldType::read_from_array_buf_noretain(
-            gc,
-            None,
-            buf,
-            elem_ty.clone(),
-            idx,
-            None,
-        );
+        let elem =
+            ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty.clone(), idx);
 
         // Create the return value.
         let res = if let Some(rvo) = rvo {
             rvo
         } else {
-            allocate_obj(
+            create_obj(
                 ret_ty.clone(),
                 &vec![],
                 None,
@@ -1911,7 +1897,6 @@ impl InlineLLVMArrayGetBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
         borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
@@ -1920,7 +1905,7 @@ impl InlineLLVMArrayGetBody {
         let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
         let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
         gc.release(gc.get_var(&self.idx_name).ptr.get(gc));
-        let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx, rvo);
+        let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx);
         if !borrowed_vars.contains(&self.arr_name) {
             gc.release(array);
         }
@@ -2005,7 +1990,7 @@ fn make_array_unique<'c, 'm>(
     }
     // Allocate cloned array.
     let array_cap = array.load_field_nocap(gc, ARRAY_CAP_IDX).into_int_value();
-    let cloned_array = allocate_obj(
+    let cloned_array = create_obj(
         array.ty.clone(),
         &vec![],
         Some(array_cap),
@@ -2039,9 +2024,10 @@ fn make_array_unique<'c, 'm>(
         (&arr_ptr, unique_bb),
         (&cloned_array_ptr, succ_of_shared_bb),
     ]);
-    let array = Object::new(
+    let array = Object::new_boxed(
         array_phi.as_basic_value().into_pointer_value(),
         array.ty.clone(),
+        gc,
     );
 
     array
@@ -2177,11 +2163,10 @@ impl InlineLLVMArrayModBody {
             array_buf,
             elem_ty,
             idx,
-            None,
         );
 
         // Apply modifier to get a new value.
-        let elem = gc.apply_lambda(modifier, vec![elem], None);
+        let elem = gc.apply_lambda(modifier, vec![elem]);
 
         // Perform write and return.
         ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, elem, false);
@@ -2328,7 +2313,7 @@ impl InlineLLVMArrayGetPtrBody {
         let obj = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 make_ptr_ty(),
                 &vec![],
                 None,
@@ -2399,7 +2384,7 @@ impl InlineLLVMArrayGetSizeBody {
             gc.release(array_obj);
         }
         let int_obj = if rvo.is_none() {
-            allocate_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"))
+            create_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"))
         } else {
             rvo.unwrap()
         };
@@ -2460,7 +2445,7 @@ impl InlineLLVMArrayGetCapacityBody {
         }
 
         let int_obj = if rvo.is_none() {
-            allocate_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"))
+            create_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"))
         } else {
             rvo.unwrap()
         };
@@ -2506,12 +2491,11 @@ impl InlineLLVMStructGetBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get struct object.
         let str = gc.get_var(&self.var_name).ptr.get(gc);
-        ObjectFieldType::get_struct_fields(gc, &str, vec![(self.field_idx as u32, rvo)])[0].clone()
+        ObjectFieldType::get_struct_fields(gc, &str, vec![self.field_idx as u32])[0].clone()
     }
 }
 
@@ -2605,7 +2589,7 @@ impl InlineLLVMStructPunchBody {
 
         // Create the return value.
         let pair = if rvo.is_none() {
-            allocate_obj(ret_ty.clone(), &vec![], None, gc, Some("ret_of_punch"))
+            create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret_of_punch"))
         } else {
             rvo.unwrap()
         };
@@ -2774,7 +2758,7 @@ impl InlineLLVMStructModBody {
 
         // Modify field
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
-        let field = gc.apply_lambda(modfier, vec![field], None);
+        let field = gc.apply_lambda(modfier, vec![field]);
         ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &field);
 
         if rvo.is_some() {
@@ -3084,7 +3068,7 @@ fn make_struct_union_unique<'c, 'm>(
     gc.builder().position_at_end(shared_bb);
 
     // Create new object and clone fields.
-    let cloned_obj = allocate_obj(obj.ty.clone(), &vec![], None, gc, Some("cloned_obj"));
+    let cloned_obj = create_obj(obj.ty.clone(), &vec![], None, gc, Some("cloned_obj"));
     if obj.ty.is_struct(gc.type_env()) {
         ObjectFieldType::clone_struct(gc, &obj, &cloned_obj);
     } else if obj.ty.is_union(gc.type_env()) {
@@ -3111,9 +3095,10 @@ fn make_struct_union_unique<'c, 'm>(
     let obj_phi = gc.builder().build_phi(obj.ptr(gc).get_type(), "obj_phi");
     obj_phi.add_incoming(&[(&obj_ptr, unique_bb), (&cloned_obj_ptr, succ_of_shared_bb)]);
 
-    obj = Object::new(
+    obj = Object::new_boxed(
         obj_phi.as_basic_value().into_pointer_value(),
         obj.ty.clone(),
+        gc,
     );
 
     obj
@@ -3230,7 +3215,7 @@ impl InlineLLVMMakeUnionBody {
 
         // Create union object.
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 ty.clone(),
                 &vec![],
                 None,
@@ -3346,7 +3331,6 @@ impl InlineLLVMUnionAsBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
@@ -3367,7 +3351,7 @@ impl InlineLLVMUnionAsBody {
         ObjectFieldType::panic_if_union_tag_unmatch(gc, obj.clone(), specified_tag_value);
 
         // If tag match, return the field value.
-        ObjectFieldType::get_union_field(gc, obj, &elem_ty, rvo)
+        ObjectFieldType::get_union_field(gc, obj, &elem_ty)
     }
 }
 
@@ -3450,7 +3434,7 @@ impl InlineLLVMUnionIsBody {
 
         // Create returned value.
         let ret = if rvo.is_none() {
-            allocate_obj(make_bool_ty(), &vec![], None, gc, Some(&self.name_cloned))
+            create_obj(make_bool_ty(), &vec![], None, gc, Some(&self.name_cloned))
         } else {
             rvo.unwrap()
         };
@@ -3563,10 +3547,10 @@ impl InlineLLVMUnionModBody {
         // Implement match_bb
         gc.builder().position_at_end(match_bb);
         let field_ty = union_ty.field_types(gc.type_env())[self.field_idx as usize].clone();
-        let value = ObjectFieldType::get_union_field(gc, obj.clone(), &field_ty, None);
-        let value = gc.apply_lambda(modifier.clone(), vec![value], None);
+        let value = ObjectFieldType::get_union_field(gc, obj.clone(), &field_ty);
+        let value = gc.apply_lambda(modifier.clone(), vec![value]);
         // Prepare space for returned union object.
-        let ret_obj = allocate_obj(
+        let ret_obj = create_obj(
             union_ty.clone(),
             &vec![],
             None,
@@ -3597,7 +3581,8 @@ impl InlineLLVMUnionModBody {
             (&match_ret_obj_ptr, match_bb),
             (&unmatch_ret_obj_ptr, unmatch_bb),
         ]);
-        let ret_obj = Object::new(phi.as_basic_value().into_pointer_value(), union_ty.clone());
+        let ret_obj =
+            Object::new_boxed(phi.as_basic_value().into_pointer_value(), union_ty.clone());
         if rvo.is_some() {
             assert!(union_ty.is_unbox(gc.type_env()));
             let rvo = rvo.unwrap();
@@ -3651,137 +3636,137 @@ pub fn union_mod_function(
     (expr, scm)
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMLoopFunctionBody {
-    initial_state_name: String,
-    loop_body_name: String,
-}
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct InlineLLVMLoopFunctionBody {
+//     initial_state_name: String,
+//     loop_body_name: String,
+// }
 
-impl InlineLLVMLoopFunctionBody {
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut GenerationContext<'c, 'm>,
-        ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
-        _borrowed_vars: &Vec<FullName>,
-    ) -> Object<'c> {
-        let initial_state_name = FullName::local(&self.initial_state_name);
-        let loop_body_name = FullName::local(&self.loop_body_name);
+// impl InlineLLVMLoopFunctionBody {
+//     pub fn generate<'c, 'm, 'b>(
+//         &self,
+//         gc: &mut GenerationContext<'c, 'm>,
+//         ty: &Arc<TypeNode>,
+//         rvo: Option<Object<'c>>,
+//         _borrowed_vars: &Vec<FullName>,
+//     ) -> Object<'c> {
+//         let initial_state_name = FullName::local(&self.initial_state_name);
+//         let loop_body_name = FullName::local(&self.loop_body_name);
 
-        // Prepare constant.
-        let cont_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc, vec![])
-            .into_int_type()
-            .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
+//         // Prepare constant.
+//         let cont_tag_value = ObjectFieldType::UnionTag
+//             .to_basic_type(gc, vec![])
+//             .into_int_type()
+//             .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
 
-        // Get argments.
-        let init_state = gc.get_var(&initial_state_name).ptr.get(gc);
-        let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
+//         // Get argments.
+//         let init_state = gc.get_var(&initial_state_name).ptr.get(gc);
+//         let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
 
-        // Collect types.
-        let loop_state_ty = init_state.ty.clone();
-        let loop_res_ty = loop_body.ty.get_lambda_dst();
-        assert!(loop_res_ty.is_unbox(gc.type_env()));
+//         // Collect types.
+//         let loop_state_ty = init_state.ty.clone();
+//         let loop_res_ty = loop_body.ty.get_lambda_dst();
+//         assert!(loop_res_ty.is_unbox(gc.type_env()));
 
-        // Allocate a space to store LoopResult on stack.
-        let loop_res = allocate_obj(loop_res_ty, &vec![], None, gc, Some("LoopResult_in_loop"));
+//         // Allocate a space to store LoopResult on stack.
+//         let loop_res = allocate_obj(loop_res_ty, &vec![], None, gc, Some("LoopResult_in_loop"));
 
-        // If loop_state_ty is unboxed, allocate a space to store loop state on stack to avoid alloca in loop body.
-        let loop_state_buf = if loop_state_ty.is_unbox(gc.type_env()) {
-            let ty = loop_state_ty.get_embedded_type(gc, &vec![]);
-            Some(Object::new(
-                gc.build_alloca_at_entry(ty, "loop_state_in_loop"),
-                loop_state_ty.clone(),
-            ))
-        } else {
-            None
-        };
+//         // If loop_state_ty is unboxed, allocate a space to store loop state on stack to avoid alloca in loop body.
+//         let loop_state_buf = if loop_state_ty.is_unbox(gc.type_env()) {
+//             let ty = loop_state_ty.get_embedded_type(gc, &vec![]);
+//             Some(Object::new(
+//                 gc.build_alloca_at_entry(ty, "loop_state_in_loop"),
+//                 loop_state_ty.clone(),
+//             ))
+//         } else {
+//             None
+//         };
 
-        // Store the initial loop state to loop_res.
-        let buf = loop_res.ptr_to_field_nocap(gc, 1);
-        ObjectFieldType::set_value_to_union_buf(gc, buf, init_state.clone());
+//         // Store the initial loop state to loop_res.
+//         let buf = loop_res.ptr_to_field_nocap(gc, 1);
+//         ObjectFieldType::set_value_to_union_buf(gc, buf, init_state.clone());
 
-        // Create loop body bb and jump to it.
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let loop_bb = gc.context.append_basic_block(current_func, "loop_bb");
-        gc.builder().build_unconditional_branch(loop_bb);
+//         // Create loop body bb and jump to it.
+//         let current_bb = gc.builder().get_insert_block().unwrap();
+//         let current_func = current_bb.get_parent().unwrap();
+//         let loop_bb = gc.context.append_basic_block(current_func, "loop_bb");
+//         gc.builder().build_unconditional_branch(loop_bb);
 
-        // Implement loop body.
-        gc.builder().position_at_end(loop_bb);
+//         // Implement loop body.
+//         gc.builder().position_at_end(loop_bb);
 
-        // Run loop_body on loop state.
-        gc.retain(loop_body.clone());
-        let loop_state =
-            ObjectFieldType::get_union_field(gc, loop_res.clone(), &loop_state_ty, loop_state_buf);
-        let _ = gc.apply_lambda(loop_body.clone(), vec![loop_state], Some(loop_res.clone()));
+//         // Run loop_body on loop state.
+//         gc.retain(loop_body.clone());
+//         let loop_state =
+//             ObjectFieldType::get_union_field(gc, loop_res.clone(), &loop_state_ty, loop_state_buf);
+//         let _ = gc.apply_lambda(loop_body.clone(), vec![loop_state], Some(loop_res.clone()));
 
-        // Branch due to loop_res.
-        let tag_value = loop_res.load_field_nocap(gc, 0).into_int_value();
-        let is_continue = gc.builder().build_int_compare(
-            IntPredicate::EQ,
-            tag_value,
-            cont_tag_value,
-            "is_continue",
-        );
-        let break_bb = gc.context.append_basic_block(current_func, "break_bb");
-        gc.builder()
-            .build_conditional_branch(is_continue, loop_bb, break_bb);
+//         // Branch due to loop_res.
+//         let tag_value = loop_res.load_field_nocap(gc, 0).into_int_value();
+//         let is_continue = gc.builder().build_int_compare(
+//             IntPredicate::EQ,
+//             tag_value,
+//             cont_tag_value,
+//             "is_continue",
+//         );
+//         let break_bb = gc.context.append_basic_block(current_func, "break_bb");
+//         gc.builder()
+//             .build_conditional_branch(is_continue, loop_bb, break_bb);
 
-        // Implement break_bb.
-        gc.builder().position_at_end(break_bb);
-        gc.release(loop_body);
-        ObjectFieldType::get_union_field(gc, loop_res, ty, rvo)
-    }
-}
+//         // Implement break_bb.
+//         gc.builder().position_at_end(break_bb);
+//         gc.release(loop_body);
+//         ObjectFieldType::get_union_field(gc, loop_res, ty, rvo)
+//     }
+// }
 
 // `loop` built-in function.
 // loop : s -> (s -> LoopResult s b) -> b;
-pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const S_NAME: &str = "s";
-    const B_NAME: &str = "b";
-    const INITIAL_STATE_NAME: &str = "initial_state";
-    const LOOP_BODY_NAME: &str = "loop_body";
-    let tyvar_s = type_tyvar(S_NAME, &kind_star());
-    let tyvar_b = type_tyvar(B_NAME, &kind_star());
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(
-            tyvar_s.clone(),
-            type_fun(
-                type_fun(
-                    tyvar_s.clone(),
-                    type_tyapp(type_tyapp(make_loop_result_ty(), tyvar_s), tyvar_b.clone()),
-                ),
-                tyvar_b,
-            ),
-        ),
-    );
+// pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
+//     const S_NAME: &str = "s";
+//     const B_NAME: &str = "b";
+//     const INITIAL_STATE_NAME: &str = "initial_state";
+//     const LOOP_BODY_NAME: &str = "loop_body";
+//     let tyvar_s = type_tyvar(S_NAME, &kind_star());
+//     let tyvar_b = type_tyvar(B_NAME, &kind_star());
+//     let scm = Scheme::generalize(
+//         &[],
+//         vec![],
+//         vec![],
+//         type_fun(
+//             tyvar_s.clone(),
+//             type_fun(
+//                 type_fun(
+//                     tyvar_s.clone(),
+//                     type_tyapp(type_tyapp(make_loop_result_ty(), tyvar_s), tyvar_b.clone()),
+//                 ),
+//                 tyvar_b,
+//             ),
+//         ),
+//     );
 
-    let initial_state_name = FullName::local(INITIAL_STATE_NAME);
-    let loop_body_name = FullName::local(LOOP_BODY_NAME);
-    let expr = expr_abs(
-        vec![var_var(initial_state_name.clone())],
-        expr_abs(
-            vec![var_var(loop_body_name.clone())],
-            expr_llvm(
-                LLVMGenerator::LoopFunctionBody(InlineLLVMLoopFunctionBody {
-                    initial_state_name: INITIAL_STATE_NAME.to_string(),
-                    loop_body_name: LOOP_BODY_NAME.to_string(),
-                }),
-                vec![initial_state_name, loop_body_name],
-                format!("loop({}, {})", INITIAL_STATE_NAME, LOOP_BODY_NAME),
-                type_tyvar_star(B_NAME),
-                None,
-            ),
-            None,
-        ),
-        None,
-    );
-    (expr, scm)
-}
+//     let initial_state_name = FullName::local(INITIAL_STATE_NAME);
+//     let loop_body_name = FullName::local(LOOP_BODY_NAME);
+//     let expr = expr_abs(
+//         vec![var_var(initial_state_name.clone())],
+//         expr_abs(
+//             vec![var_var(loop_body_name.clone())],
+//             expr_llvm(
+//                 LLVMGenerator::LoopFunctionBody(InlineLLVMLoopFunctionBody {
+//                     initial_state_name: INITIAL_STATE_NAME.to_string(),
+//                     loop_body_name: LOOP_BODY_NAME.to_string(),
+//                 }),
+//                 vec![initial_state_name, loop_body_name],
+//                 format!("loop({}, {})", INITIAL_STATE_NAME, LOOP_BODY_NAME),
+//                 type_tyvar_star(B_NAME),
+//                 None,
+//             ),
+//             None,
+//         ),
+//         None,
+//     );
+//     (expr, scm)
+// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUndefinedFunctionBody {}
@@ -3811,7 +3796,7 @@ impl InlineLLVMUndefinedFunctionBody {
         gc.call_runtime(RUNTIME_ABORT, &[]);
 
         // Return undefined value.
-        Object::new(
+        Object::new_boxed(
             ty.get_struct_type(gc, &vec![])
                 .ptr_type(AddressSpace::from(0))
                 .const_null(),
@@ -3854,7 +3839,6 @@ impl InlineLLVMDoWithRetainedFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the argument "f".
@@ -3873,7 +3857,7 @@ impl InlineLLVMDoWithRetainedFunctionBody {
         gc.retain(x.clone());
 
         // Call "f" with "x".
-        let ret = gc.apply_lambda(f, vec![x.clone()], rvo);
+        let ret = gc.apply_lambda(f, vec![x.clone()]);
 
         // Release "x".
         gc.release(x);
@@ -3941,7 +3925,7 @@ impl InlineLLVMIsUniqueFunctionBody {
         let ret = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"))
+            create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"))
         };
 
         // Get whether argument is unique.
@@ -4039,7 +4023,7 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
         let ret = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 make_ptr_ty(),
                 &vec![],
                 None,
@@ -4101,7 +4085,7 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
         // Get argument.
         let ptr = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
         let ptr = ptr.load_field_nocap(gc, 0).into_pointer_value();
-        Object::new(ptr, ret_ty.clone())
+        Object::new_boxed(ptr, ret_ty.clone())
     }
 }
 
@@ -4181,7 +4165,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
                 .unwrap()
                 .into_pointer_value();
             // Create object.
-            let obj = Object::new(obj_ptr, target_ty.clone());
+            let obj = Object::new_boxed(obj_ptr, target_ty.clone());
             // Release object.
             gc.release(obj);
             // Return.
@@ -4195,7 +4179,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         let ret = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 make_ptr_ty(),
                 &vec![],
                 None,
@@ -4286,7 +4270,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
                 .unwrap()
                 .into_pointer_value();
             // Create object.
-            let obj = Object::new(obj_ptr, target_ty);
+            let obj = Object::new_boxed(obj_ptr, target_ty);
             // retain object.
             gc.retain(obj);
             // Return.
@@ -4300,7 +4284,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         let ret = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 make_ptr_ty(),
                 &vec![],
                 None,
@@ -4370,7 +4354,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         let ret = if rvo.is_some() {
             rvo.unwrap()
         } else {
-            allocate_obj(
+            create_obj(
                 make_ptr_ty(),
                 &vec![],
                 None,
@@ -4464,18 +4448,18 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-        let data_ptr_obj = allocate_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
         data_ptr_obj.store_field_nocap(gc, 0, data_ptr);
 
         // Run the IO action.
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], None);
-        let io_res = run_io_value(gc, &io_act, None);
+        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj]);
+        let io_res = run_io_value(gc, &io_act);
 
         // Construct the return value.
         let res = if let Some(rvo) = rvo {
             rvo
         } else {
-            allocate_obj(ret_ty.clone(), &vec![], None, gc, None)
+            create_obj(ret_ty.clone(), &vec![], None, gc, None)
         };
         ObjectFieldType::set_struct_field_norelease(gc, &res, 0, &val);
         ObjectFieldType::set_struct_field_norelease(gc, &res, 1, &io_res);
@@ -4558,15 +4542,15 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-        let data_ptr_obj = allocate_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
         data_ptr_obj.store_field_nocap(gc, 0, data_ptr);
 
         // Run the IO action.
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], None);
-        let io_res = run_io_value(gc, &io_act, None);
+        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj]);
+        let io_res = run_io_value(gc, &io_act);
 
         // Construct the return value.
-        let pair_ab = allocate_obj(
+        let pair_ab = create_obj(
             make_tuple_ty(vec![val.ty.clone(), io_res.ty.clone()]),
             &vec![],
             None,
@@ -4578,7 +4562,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         let res = if let Some(rvo) = rvo {
             rvo
         } else {
-            allocate_obj(ret_ty.clone(), &vec![], None, gc, None)
+            create_obj(ret_ty.clone(), &vec![], None, gc, None)
         };
         ObjectFieldType::set_struct_field_norelease(gc, &res, 0, &ios);
         ObjectFieldType::set_struct_field_norelease(gc, &res, 1, &pair_ab);
@@ -4647,20 +4631,14 @@ impl InlineLLVMUnsafePerformFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
+        _ret_ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_var(&FullName::local(&self.io_act_name)).ptr.get(gc);
 
         // Run the IO action.
-        let res = if let Some(rvo) = rvo {
-            rvo
-        } else {
-            allocate_obj(ret_ty.clone(), &vec![], None, gc, None)
-        };
-        run_io_value(gc, &io_act, Some(res))
+        run_io_value(gc, &io_act)
     }
 }
 
@@ -4687,11 +4665,7 @@ pub fn get_unsafe_perform() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Run an IO runner in the IO monad and return the result.
-pub fn run_io_value<'b, 'm, 'c>(
-    gc: &mut GenerationContext<'c, 'm>,
-    io: &Object<'c>,
-    rvo: Option<Object<'c>>,
-) -> Object<'c> {
+pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
     let runner = io.load_field_nocap(gc, 0);
     let runner_ty = type_fun(
@@ -4699,9 +4673,9 @@ pub fn run_io_value<'b, 'm, 'c>(
         make_tuple_ty(vec![make_iostate_ty(), res_ty.clone()]),
     );
     let runner_obj = Object::create_from_value(runner, runner_ty, gc);
-    let ios = allocate_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
-    let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios], None);
-    ObjectFieldType::get_struct_fields(gc, &ios_res_pair, vec![(1, rvo)])
+    let ios = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+    let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios]);
+    ObjectFieldType::get_struct_fields(gc, &ios_res_pair, vec![1])
         .into_iter()
         .next()
         .unwrap()
@@ -4920,7 +4894,7 @@ impl InlineLLVMIntEqBody {
             "eq",
         );
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 make_bool_ty(),
                 &vec![],
                 None,
@@ -4981,7 +4955,7 @@ impl InlineLLVMPtrEqBody {
             "eq_of_int",
         );
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 make_bool_ty(),
                 &vec![],
                 None,
@@ -5039,7 +5013,7 @@ impl InlineLLVMFloatEqBody {
             "eq_of_float",
         );
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 make_bool_ty(),
                 &vec![],
                 None,
@@ -5111,7 +5085,7 @@ impl InlineLLVMIntLessThanBody {
             LESS_THAN_TRAIT_LT_NAME,
         );
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 make_bool_ty(),
                 &vec![],
                 None,
@@ -5169,7 +5143,7 @@ impl InlineLLVMFloatLessThanBody {
             LESS_THAN_TRAIT_LT_NAME,
         );
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 make_bool_ty(),
                 &vec![],
                 None,
@@ -5242,7 +5216,7 @@ impl InlineLLVMIntLessThanOrEqBody {
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 make_bool_ty(),
                 &vec![],
                 None,
@@ -5300,7 +5274,7 @@ impl InlineLLVMFloatLessThanOrEqBody {
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 make_bool_ty(),
                 &vec![],
                 None,
@@ -5357,7 +5331,7 @@ impl InlineLLVMIntAddBody {
             .builder()
             .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5405,7 +5379,7 @@ impl InlineLLVMFloatAddBody {
             .builder()
             .build_float_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5462,7 +5436,7 @@ impl InlineLLVMIntSubBody {
             .builder()
             .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5510,7 +5484,7 @@ impl InlineLLVMFloatSubBody {
             .builder()
             .build_float_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5567,7 +5541,7 @@ impl InlineLLVMIntMulBody {
             .builder()
             .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5615,7 +5589,7 @@ impl InlineLLVMFloatMulBody {
             .builder()
             .build_float_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5678,7 +5652,7 @@ impl InlineLLVMIntDivBody {
                 .build_int_unsigned_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
         };
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5726,7 +5700,7 @@ impl InlineLLVMFloatDivBody {
             .builder()
             .build_float_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5789,7 +5763,7 @@ impl InlineLLVMIntRemBody {
                 .build_int_unsigned_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
         };
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 lhs.ty.clone(),
                 &vec![],
                 None,
@@ -5842,7 +5816,7 @@ impl InlineLLVMIntNegBody {
             .builder()
             .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 rhs.ty.clone(),
                 &vec![],
                 None,
@@ -5886,7 +5860,7 @@ impl InlineLLVMFloatNegBody {
             .builder()
             .build_float_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 rhs.ty.clone(),
                 &vec![],
                 None,
@@ -5946,7 +5920,7 @@ impl InlineLLVMBoolNegBody {
             .builder()
             .build_int_z_extend(value, bool_ty, NOT_TRAIT_OP_NAME);
         let obj = if rvo.is_none() {
-            allocate_obj(
+            create_obj(
                 make_bool_ty(),
                 &vec![],
                 None,
