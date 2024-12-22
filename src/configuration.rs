@@ -183,9 +183,9 @@ pub struct Configuration {
     // File containing LLVM passes.
     // Used only for compiler development.
     pub llvm_passes_file: Option<PathBuf>,
-    // Output symbols at each step of optimization.
+    // Emit symbols at each step of optimization.
     // Used only for compiler development.
-    pub output_symbols: bool,
+    pub emit_symbols: bool,
 }
 
 #[derive(Clone)]
@@ -276,7 +276,7 @@ impl Configuration {
             num_worker_thread: 0,
             llvm_passes_file: None,
             run_program_args: vec![],
-            output_symbols: false,
+            emit_symbols: false,
         })
     }
 }

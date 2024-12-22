@@ -192,8 +192,8 @@ fn main() {
         .help(
             "Path to a file which contains a list of LLVM passes. This option is used for compiler development, and normal users do not need to use this.",
         );
-    let output_symbols = Arg::new("output-symbols")
-        .long("output-symbols")
+    let emit_symbols = Arg::new("emit-symbols")
+        .long("emit-symbols")
         .help("Output symbols of the Fix program. This option is used for compiler development, and normal users do not need to use this.");
     let program_args = Arg::new("program-args")
         .last(true)
@@ -222,7 +222,7 @@ fn main() {
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
-        .arg(output_symbols.clone());
+        .arg(emit_symbols.clone());
 
     // "fix run" subcommand
     let run_subc = App::new("run")
@@ -241,7 +241,7 @@ fn main() {
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
-        .arg(output_symbols.clone())
+        .arg(emit_symbols.clone())
         .arg(program_args.clone());
 
     // "fix test" subcommand
@@ -261,7 +261,7 @@ fn main() {
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
-        .arg(output_symbols.clone())
+        .arg(emit_symbols.clone())
         .arg(program_args.clone());
 
     // "fix deps" subcommand
@@ -508,7 +508,7 @@ fn main() {
 
         // Set `output_symbols`.
         if args.contains_id("output-symbols") {
-            config.output_symbols = true;
+            config.emit_symbols = true;
         }
 
         // Set `run_program_args`.

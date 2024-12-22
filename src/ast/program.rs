@@ -2141,9 +2141,9 @@ impl Program {
         text
     }
 
-    pub fn output_symbols(&self, step_name: &str) {
+    pub fn emit_symbols(&self, step_name: &str) {
         let file_name = format!("symbols_{}.fix", step_name);
-        let file_path = PathBuf::from(DOT_FIXLANG).join(file_name);
+        let file_path = PathBuf::from(file_name);
 
         let text = self.stringify_symbols().to_string();
         let mut file = File::create(&file_path).unwrap();

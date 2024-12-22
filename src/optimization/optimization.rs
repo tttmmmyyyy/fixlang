@@ -5,23 +5,23 @@ use super::{
 };
 
 pub fn optimize(prg: &mut Program, config: &Configuration) {
-    if config.output_symbols {
-        prg.output_symbols("0");
+    if config.emit_symbols {
+        prg.emit_symbols("0");
     }
 
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
         uncurry_optimization(prg);
-        if config.output_symbols {
-            prg.output_symbols("uncurry");
+        if config.emit_symbols {
+            prg.emit_symbols("uncurry");
         }
     }
 
     // Perform borrowing optimization.
     if config.perform_borrowing_optimization() {
         borrowing_optimization(prg);
-        if config.output_symbols {
-            prg.output_symbols("borrowing");
+        if config.emit_symbols {
+            prg.emit_symbols("borrowing");
         }
     }
 
