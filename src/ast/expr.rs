@@ -1013,9 +1013,11 @@ impl Expr {
                 .append(v.expr.stringify()),
             Expr::If(c, t, e) => Text::from_str("if ")
                 .append_nobreak(c.expr.stringify().brace_if_multiline())
-                .append_nobreak(t.expr.stringify().curly_brace())
-                .append_to_last_line(" else ")
-                .append_nobreak(e.expr.stringify().curly_brace()),
+                .append_to_last_line(" {")
+                .append(t.expr.stringify().add_indent(1))
+                .append(Text::from_str("} else {"))
+                .append(e.expr.stringify().add_indent(1))
+                .append(Text::from_str("}")),
             Expr::Match(cond, pat_vals) => {
                 let mut branches = Text::empty();
                 for (pat, val) in pat_vals {
