@@ -200,8 +200,6 @@ def optimize():
             print('No improvement found.')
 
         # minimize passes
-        print(f'\nPhase {phase}:')
-        phase += 1
         passes = []
         removed_passes = []
         for p in optimum_passes:
@@ -209,6 +207,11 @@ def optimize():
                 passes.append(p)
             else:
                 removed_passes.append(p)
+        if removed_passes == []:
+            # If no passes are removed, skip the minimize phase.
+            continue
+        print(f'\nPhase {phase}:')
+        phase += 1
         print('Try removing passes:')
         print_passes(removed_passes)
         write_source_file(passes)
