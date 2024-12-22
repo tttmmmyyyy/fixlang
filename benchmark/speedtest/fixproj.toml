@@ -17,7 +17,7 @@ version = "0.1.0"
 [build]
 ## Fix source files to be compiled.
 ## Merged with files specified in the command line argument.
-files = ["main.fix"]
+files = ["speedtest.fix"]
 
 ## Object files to be linked.
 ## Merged with object files specified in the command line argument.
