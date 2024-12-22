@@ -4249,6 +4249,10 @@ pub fn test_string_split() {
         
     main : IO ();
     main = (
+        assert_eq(|_|"Ex. 1", "ab,c,".split(",").to_array, ["ab", "c", ""]);;
+        assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
+        assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
+
         assert_eq(|_|"1", "--ab---cde----".split("--").to_array, ["", "ab", "-cde", "", ""]);;
         assert_eq(|_|"2", "ab---cde----".split("--").to_array, ["ab", "-cde", "", ""]);;
         assert_eq(|_|"3", "--ab---cde".split("--").to_array, ["", "ab", "-cde"]);;
@@ -7564,6 +7568,21 @@ main = (
         Configuration::develop_compiler_mode(),
         "Program terminated abnormally.", // This implies that the compilation went well, and the program started running.
     );
+}
+
+#[test]
+pub fn test_string_from_u8() {
+    let source = r##"
+module Main;
+
+main: IO ();
+main = (
+    assert_eq(|_|"", String::from_U8('a'), "a");;
+    assert_eq(|_|"", String::from_U8('\x00'), "");;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
 }
 
 #[test]

@@ -2573,6 +2573,16 @@ Create an empty string, which is reserved for a length.
 Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
 `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
 
+### `from_U8 : Std::U8 -> Std::String`
+
+Creates a string from a byte.
+
+Example:
+```
+assert_eq(|_|"", String::from_U8('a'), "a");;
+assert_eq(|_|"", String::from_U8('\x00'), "");;
+```
+
 ### `get_bytes : Std::String -> Std::Array Std::U8`
 
 Gets the byte array of a string, containing null-terminator.
@@ -2611,8 +2621,12 @@ If the string is empty, this function does nothing.
 
 `str.split(sep)` splits `str` by `sep` into an iterator.
 
-- If `sep` is empty, this function returns an infinite sequence of ""s.
-- If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
+Example:
+```
+assert_eq(|_|"Ex. 1", "ab,c,".split(",").to_array, ["ab", "c", ""]);;
+assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
+assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
+```
 
 ### `strip_first_bytes : (Std::U8 -> Std::Bool) -> Std::String -> Std::String`
 

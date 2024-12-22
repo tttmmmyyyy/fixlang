@@ -1527,12 +1527,20 @@ namespace String {
 
     // `str.split(sep)` splits `str` by `sep` into an iterator.
     // 
-    // - If `sep` is empty, this function returns an infinite sequence of ""s.
-    // - If `sep` is non-empty and `str` is empty, this function returns an iterator with a single element "".
+    // Example:
+    // ```
+    // assert_eq(|_|"Ex. 1", "ab,c,".split(",").to_array, ["ab", "c", ""]);;
+    // assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
+    // assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
+    // ```
     split : String -> String -> Iterator String;
     split = |sep, str| (
-        let n = str.get_size;
         let m = sep.get_size;
+        if m == 0 {
+            // If the separator is empty, return the iterator of characters of `str`.
+            str.get_bytes.pop_back.to_iter.map(|c| String::from_U8(c))
+        };
+        let n = str.get_size;
         generate(0, |idx| (
             if idx == -1 { Option::none() };
             if idx == n { Option::some $ ("", -1) };
@@ -1542,6 +1550,16 @@ namespace String {
             Option::some $ (str.get_sub(idx, idx2), idx2 + m)
         ))
     );
+
+    // Creates a string from a byte.
+    // 
+    // Example:
+    // ```
+    // assert_eq(|_|"", String::from_U8('a'), "a");;
+    // assert_eq(|_|"", String::from_U8('\x00'), "");;
+    // ```
+    from_U8 : U8 -> String;
+    from_U8 = |b| String::_unsafe_from_c_str([b, '\x00']);
 
     // Removes the first byte of a string while it satisifies the specified condition.
     strip_first_bytes : (U8 -> Bool) -> String -> String;
