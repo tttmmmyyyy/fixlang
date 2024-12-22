@@ -986,12 +986,9 @@ namespace Iterator {
     fold : b -> (b -> a -> b) -> Iterator a -> b;
     fold = |init, op, iter| (
         loop((init, iter), |(accum, iter)|
-            let next = iter.advance;
-            if next.is_none {
-                break $ accum
-            } else {
-                let (next, iter) = next.as_some;
-                continue $ (op(accum, next), iter)
+            match iter.advance {
+                none() => break $ accum,
+                some((next, iter)) => continue $ (op(accum, next), iter)
             }
         )
     );
