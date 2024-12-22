@@ -9,3 +9,4 @@ before_opt.ll
 after_opt.ll
 benchmark/data_copied.csv
 cachegrind.out.*
+*.symbols.fix

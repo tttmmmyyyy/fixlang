@@ -506,8 +506,8 @@ fn main() {
             config.llvm_passes_file = Some(PathBuf::from(llvm_passes_file));
         }
 
-        // Set `output_symbols`.
-        if args.contains_id("output-symbols") {
+        // Set `emit_symbols`.
+        if args.contains_id("emit-symbols") {
             config.emit_symbols = true;
         }
 
