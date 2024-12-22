@@ -16,6 +16,7 @@ pub fn add_basic_optimization_passes<T: PassManagerSubType>(passmgr: &PassManage
     passmgr.add_scalar_repl_aggregates_pass_ssa();
     passmgr.add_promote_memory_to_register_pass();
     passmgr.add_cfg_simplification_pass();
+    passmgr.add_tail_call_elimination_pass();
     passmgr.add_instruction_combining_pass();
     passmgr.add_memcpy_optimize_pass();
     passmgr.add_loop_vectorize_pass();
