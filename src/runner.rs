@@ -24,8 +24,7 @@ use crate::ast::export_statement::ExportStatement;
 use crate::compile_unit::CompileUnit;
 use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, panic_if_err, panic_with_err, Errors};
-use crate::misc::{save_temporary_source, temporary_source_path};
-use crate::optimization;
+use crate::misc::{info_msg, save_temporary_source, temporary_source_path};
 use crate::stopwatch::StopWatch;
 use crate::Configuration;
 use crate::ExprNode;
@@ -662,7 +661,8 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
             }
         } else {
             if !warned_on_mac {
-                println!("INFO: on macOS, it is not possible to specify whether a library should be dynamically or statically linked. If a dynamic library and a static library with the same name exist, the unintended one may be used.");
+                info_msg("on macOS, it is not possible to specify whether a library should be dynamically or statically linked. \
+                If a dynamic library and a static library with the same name exist, the unintended one may be used.");
                 warned_on_mac = true;
             }
         }

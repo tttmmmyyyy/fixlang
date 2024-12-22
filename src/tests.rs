@@ -7529,6 +7529,44 @@ pub fn test_regression_issue_52() {
 }
 
 #[test]
+pub fn test_regression_issue_54() {
+    let source = r##"
+module Main;
+
+type Pipe a b r = box union {
+    ret: r,
+};
+
+namespace Pipe {
+    read: Pipe a b a;
+    read = undefined("");
+
+    write: b -> Pipe a b ();
+    write = undefined("");
+}
+
+impl Pipe a b: Monad {
+//impl Pipe x y: Monad {        // Ok if this line is used instead of the above line.
+    pure = undefined("");
+    bind = undefined("");
+}
+
+main: IO ();
+main = (
+    let pipe: Pipe I64 String () = do {
+        write((*read).to_string)
+    };
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Program terminated abnormally.", // This implies that the compilation went well, and the program started running.
+    );
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
