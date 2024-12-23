@@ -39,7 +39,7 @@ pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 pub const LAZY_NAME: &str = "Lazy";
 pub const FUNCTOR_NAME: &str = "Functor";
-pub const LOOP_RESULT_NAME: &str = "LoopResult";
+// pub const LOOP_RESULT_NAME: &str = "LoopResult";
 pub const TUPLE_NAME: &str = "Tuple";
 pub const DESTRUCTOR_OBJECT_NAME: &str = "Destructor";
 pub const DESTRUCTOR_OBJECT_VALUE_FIELD_IDX: u32 = 0;
@@ -74,7 +74,7 @@ pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 pub const CAP_NAME: &str = "#CAP";
 
-pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
+// pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 
 // Struct layout constants.
 pub const CONTROL_BLOCK_IDX: u32 = 0;

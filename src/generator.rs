@@ -158,12 +158,14 @@ impl<'c> Object<'c> {
             .into_struct_value()
     }
 
+    #[allow(dead_code)]
     pub fn store_value_unbox<'m, V>(&self, gc: &mut GenerationContext<'c, 'm>, value: V)
     where
         V: BasicValue<'c>,
     {
         assert!(!self.is_funptr());
-        // If applied to boxed value, the following code stores not only the value of the object but also the reference counter. So this function should not be applied to boxed value.
+        // If applied to boxed value, the following code stores not only the value of the object but also the reference counter.
+        // So this function should not be applied to boxed value.
         assert!(self.is_unbox(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
         let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
@@ -569,11 +571,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
-    pub fn get_var_retained_if_used_later(
-        &mut self,
-        var_name: &FullName,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
+    pub fn get_var_retained_if_used_later(&mut self, var_name: &FullName) -> Object<'c> {
         let var = self.get_var(var_name);
         let obj = var.ptr.get(self);
         if var.used_later > 0 {
@@ -583,30 +581,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // if unboxed, in addition to retain, we also need to store the value to another memory region other than obj,
                 // since all unboxed values are treated as like unique object (i.e., the object of refcnt = 1)
                 // in the sense that it will be modified by functions such as `set` function of struct.
-                if rvo.is_some() {
-                    let rvo = rvo.unwrap();
-                    let obj_val = obj.value(self);
-                    rvo.store_value_unbox(self, obj_val);
-                    rvo
-                } else {
-                    Object::create_from_value(obj.value(self), obj.ty, self)
-                }
+                Object::create_from_value(obj.value(self), obj.ty, self)
             } else {
-                assert!(rvo.is_none());
                 obj
             }
         } else {
-            // If this variable is not used later,
-            if rvo.is_some() {
-                // and if rvo is required, then "move" the ownership of the value to the rvo memory region.
-                assert!(obj.is_unbox(self.type_env()));
-                let rvo = rvo.unwrap();
-                let obj_val = obj.value(self);
-                rvo.store_value_unbox(self, obj_val);
-                rvo
-            } else {
-                obj
-            }
+            obj
         }
     }
 
@@ -838,12 +818,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Apply objects to a lambda.
-    pub fn apply_lambda(
-        &mut self,
-        fun: Object<'c>,
-        args: Vec<Object<'c>>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
+    pub fn apply_lambda(&mut self, fun: Object<'c>, args: Vec<Object<'c>>) -> Object<'c> {
         let src_tys = fun.ty.get_lambda_srcs();
         let ret_ty = fun.ty.get_lambda_dst();
 
@@ -853,9 +828,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         for i in 0..args.len() {
             assert_eq!(args[i].ty, src_tys[i])
         }
-        if rvo.is_some() {
-            assert_eq!(rvo.clone().unwrap().ty, ret_ty);
-        }
 
         // If argument is unboxed, load it.
         let args = args.iter().map(|arg| arg.value(self)).collect::<Vec<_>>();
@@ -864,55 +836,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr_to_func = self.get_lambda_func_ptr(fun.clone());
         let func = CallableValue::try_from(ptr_to_func).unwrap();
 
-        // Call function.
-        if ret_ty.is_unbox(self.type_env()) {
-            // If return type is unboxed, perform return value optimization.
-            let rvo = if rvo.is_none() {
-                // Allocate memory region for rvo here.
-                allocate_obj(
-                    ret_ty.clone(),
-                    &vec![],
-                    None,
-                    self,
-                    Some(&format!("alloca_rvo_{}", ret_ty.to_string())),
-                )
-            } else {
-                rvo.unwrap()
-            };
-            let rvo_ptr = rvo.ptr(self);
-            let rvo_ptr = self.cast_pointer(rvo_ptr, ptr_to_object_type(self.context));
-
-            // Call function pointer with arguments, CAP if closure, and rvo.
-            let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
-            for arg in args {
-                call_args.push(arg.into())
-            }
-            if fun.ty.is_closure() {
-                call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
-            }
-            call_args.push(rvo_ptr.into());
-
-            let ret = self.builder().build_call(func, &call_args, "call_lambda");
-            ret.set_tail_call(!self.has_di());
-            rvo
-        } else {
-            // If return type is boxed,
-            assert!(rvo.is_none());
-
-            // Call function pointer with arguments, CAP if closure.
-            let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
-            for arg in args {
-                call_args.push(arg.into())
-            }
-            if fun.ty.is_closure() {
-                call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
-            }
-
-            let ret = self.builder().build_call(func, &call_args, "call_lambda");
-            ret.set_tail_call(!self.has_di());
-            let ret = ret.try_as_basic_value().unwrap_left();
-            Object::create_from_value(ret, ret_ty, self)
+        // Call function pointer with arguments, CAP if closure.
+        let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
+        for arg in args {
+            call_args.push(arg.into())
         }
+        if fun.ty.is_closure() {
+            call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
+        }
+
+        let ret = self.builder().build_call(func, &call_args, "call_lambda");
+        ret.set_tail_call(!self.has_di());
+        let ret = ret.try_as_basic_value().unwrap_left();
+        Object::create_from_value(ret, ret_ty, self)
     }
 
     // Retain an object.
@@ -1096,8 +1032,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
             );
             self.build_retain(dtor.clone());
-            let io_act = self.apply_lambda(dtor, vec![value], None);
-            let res = run_io_value(self, &io_act, None);
+            let io_act = self.apply_lambda(dtor, vec![value]);
+            let res = run_io_value(self, &io_act);
             ObjectFieldType::set_struct_field_norelease(
                 self,
                 obj,
@@ -1522,7 +1458,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate expression.
-    pub fn eval_expr(&mut self, expr: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
+    pub fn eval_expr(&mut self, expr: Arc<ExprNode>) -> Object<'c> {
         assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
 
         if self.has_di() {
@@ -1530,23 +1466,23 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         };
 
         let mut ret = match &*expr.expr {
-            Expr::Var(var) => self.eval_var(var.clone(), rvo),
-            Expr::LLVM(lit) => self.eval_llvm(lit.clone(), expr.ty.clone().unwrap().clone(), rvo),
-            Expr::App(lambda, args) => self.eval_app(lambda.clone(), args.clone(), rvo),
-            Expr::Lam(_, _) => self.eval_lam(expr.clone(), rvo),
-            Expr::Let(pat, bound, expr) => self.eval_let(pat, bound.clone(), expr.clone(), rvo),
+            Expr::Var(var) => self.eval_var(var.clone()),
+            Expr::LLVM(lit) => self.eval_llvm(lit.clone(), expr.ty.clone().unwrap().clone()),
+            Expr::App(lambda, args) => self.eval_app(lambda.clone(), args.clone()),
+            Expr::Lam(_, _) => self.eval_lam(expr.clone()),
+            Expr::Let(pat, bound, expr) => self.eval_let(pat, bound.clone(), expr.clone()),
             Expr::If(cond_expr, then_expr, else_expr) => {
-                self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone(), rvo)
+                self.eval_if(cond_expr.clone(), then_expr.clone(), else_expr.clone())
             }
-            Expr::Match(cond, pat_vals) => self.eval_match(cond.clone(), pat_vals, rvo),
-            Expr::TyAnno(e, _) => self.eval_expr(e.clone(), rvo),
+            Expr::Match(cond, pat_vals) => self.eval_match(cond.clone(), pat_vals),
+            Expr::TyAnno(e, _) => self.eval_expr(e.clone()),
             Expr::MakeStruct(_, fields) => {
                 let struct_ty = expr.ty.clone().unwrap();
-                self.eval_make_struct(fields.clone(), struct_ty, rvo)
+                self.eval_make_struct(fields.clone(), struct_ty)
             }
-            Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.ty.clone().unwrap(), rvo),
+            Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.ty.clone().unwrap()),
             Expr::FFICall(fun_name, ret_ty, param_tys, args, is_io) => {
-                self.eval_ffi_call(&expr, fun_name, ret_ty, param_tys, args, *is_io, rvo)
+                self.eval_ffi_call(&expr, fun_name, ret_ty, param_tys, args, *is_io)
             }
         };
 
@@ -1559,17 +1495,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Evaluate variable.
-    fn eval_var(&mut self, var: Arc<Var>, rvo: Option<Object<'c>>) -> Object<'c> {
-        self.get_var_retained_if_used_later(&var.name, rvo)
+    fn eval_var(&mut self, var: Arc<Var>) -> Object<'c> {
+        self.get_var_retained_if_used_later(&var.name)
     }
 
     // Evaluate application
-    fn eval_app(
-        &mut self,
-        mut fun: Arc<ExprNode>,
-        args: Vec<Arc<ExprNode>>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
+    fn eval_app(&mut self, mut fun: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Object<'c> {
         // Prepare for borrowing optimization.
         let borrowing_optimization_data = if self.config.perform_borrowing_optimization() {
             borrowing_optimization_evaluating_application(self, fun.clone(), &args)
@@ -1588,7 +1519,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
 
         // Evaluate the function object.
-        let fun_obj = self.eval_expr(fun, None);
+        let fun_obj = self.eval_expr(fun);
 
         // Evaluate arguments.
         let mut arg_objs = vec![];
@@ -1604,23 +1535,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.get_var(var_name).ptr.get(self)
             } else {
                 // Evaluate the argument expression.
-                self.eval_expr(arg.clone(), None)
+                self.eval_expr(arg.clone())
             };
             arg_objs.push(arg_obj)
         }
 
         // Call the function.
-        self.apply_lambda(fun_obj, arg_objs, rvo)
+        self.apply_lambda(fun_obj, arg_objs)
     }
 
     // Evaluate llvm
-    fn eval_llvm(
-        &mut self,
-        llvm: Arc<InlineLLVM>,
-        ty: Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
-    ) -> Object<'c> {
-        llvm.generator.generate(self, &ty, rvo, &llvm.borrowed_vars)
+    fn eval_llvm(&mut self, llvm: Arc<InlineLLVM>, ty: Arc<TypeNode>) -> Object<'c> {
+        llvm.generator.generate(self, &ty, &llvm.borrowed_vars)
     }
 
     // Calculate captured variables and their types of lambda expression.
@@ -1787,19 +1713,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             arg_objs.push(arg_obj);
         }
 
-        // Get rvo field if return value is unboxed.
-        let ret_ty = lam_ty.get_lambda_dst();
-        let rvo = if ret_ty.is_unbox(self.type_env()) {
-            let rvo_idx = args.len() + if lam_ty.is_closure() { 1 } else { 0 };
-            let ptr = lam_fn
-                .get_nth_param(rvo_idx as u32)
-                .unwrap()
-                .into_pointer_value();
-            Some(Object::new(ptr, ret_ty))
-        } else {
-            None
-        };
-
         // Push CAP on scope if lambda is closure.
         let (cap_obj_ptr, cap_obj) = if lam_ty.is_closure() {
             let self_idx = args.len();
@@ -1851,18 +1764,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
 
         // Calculate body.
-        let val = self.eval_expr(body.clone(), rvo.clone());
+        let val = self.eval_expr(body.clone());
 
-        // Return lambda function.
-        if rvo.is_some() {
-            self.builder().build_return(None);
-        } else {
-            self.builder().build_return(Some(&val.value(self)));
-        }
+        // Build return statement of lambda function.
+        self.builder().build_return(Some(&val.value(self)));
     }
 
     // Evaluate lambda abstraction.
-    fn eval_lam(&mut self, lam: Arc<ExprNode>, rvo: Option<Object<'c>>) -> Object<'c> {
+    fn eval_lam(&mut self, lam: Arc<ExprNode>) -> Object<'c> {
         let lam_ty = lam.ty.clone().unwrap();
 
         // Calculate captured variables.
@@ -1878,11 +1787,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Allocate lambda
         let name = format!("lamda[{}]", lam_ty.to_string());
-        let lam = if rvo.is_some() {
-            rvo.unwrap()
-        } else {
-            allocate_obj(lam_ty.clone(), &vec![], None, self, Some(name.as_str()))
-        };
+        let lam = allocate_obj(lam_ty.clone(), &vec![], None, self, Some(name.as_str()));
 
         // Set function pointer to lambda.
         let funptr_idx = if lam_ty.is_closure() {
@@ -1919,7 +1824,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
                 // Set captured objects to cap_obj.
                 for (i, (cap_name, _cap_ty)) in cap_vars.iter().enumerate() {
-                    let cap_obj = self.get_var_retained_if_used_later(cap_name, None);
+                    let cap_obj = self.get_var_retained_if_used_later(cap_name);
                     let cap_val = cap_obj.value(self);
                     self.store_obj_field(
                         cap_obj_ptr,
@@ -1948,7 +1853,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         pat: &Arc<PatternNode>,
         bound: Arc<ExprNode>,
         val: Arc<ExprNode>,
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let vars = pat.pattern.vars();
         let mut used_in_val_except_pat = val.free_vars().clone();
@@ -1956,7 +1860,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             used_in_val_except_pat.remove(&v);
         }
         self.scope_lock_as_used_later(&used_in_val_except_pat);
-        let bound = self.eval_expr(bound.clone(), None);
+        let bound = self.eval_expr(bound.clone());
         self.scope_unlock_as_used_later(&used_in_val_except_pat);
         let subobjs = self.destructure_object_by_pattern(pat, &bound);
         for (var_name, obj) in &subobjs {
@@ -1970,7 +1874,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.create_debug_local_variable(&var_name.to_string(), &obj);
             }
         }
-        let val_obj = self.eval_expr(val.clone(), rvo);
+        let val_obj = self.eval_expr(val.clone());
         for (var_name, _) in &subobjs {
             if val.free_vars().contains(&var_name) {
                 self.scope_pop(var_name);
@@ -2009,11 +1913,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     .collect::<Map<_, _>>();
 
                 // Extract fields.
-                let field_indices_rvo = field_to_pat
+                let field_indices = field_to_pat
                     .iter()
-                    .map(|(name, _)| (field_to_idx[name], None))
+                    .map(|(name, _)| field_to_idx[name])
                     .collect::<Vec<_>>();
-                let fields = ObjectFieldType::get_struct_fields(self, obj, field_indices_rvo);
+                let fields = ObjectFieldType::get_struct_fields(self, obj, &field_indices);
 
                 // Match to subpatterns.
                 for (i, (_, pat)) in field_to_pat.iter().enumerate() {
@@ -2024,7 +1928,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let (variant_idx, _union_tycon, _union_ti) =
                     Pattern::get_variant_info(variant_name, self.type_env());
                 let variant_ty = obj.ty.field_types(self.type_env())[variant_idx].clone();
-                let value = ObjectFieldType::get_union_field(self, obj.clone(), &variant_ty, None);
+                let value = ObjectFieldType::get_union_field(self, obj.clone(), &variant_ty);
                 ret.append(&mut self.destructure_object_by_pattern(subpat, &value));
             }
         }
@@ -2037,12 +1941,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         cond_expr: Arc<ExprNode>,
         then_expr: Arc<ExprNode>,
         else_expr: Arc<ExprNode>,
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let mut used_then_or_else = then_expr.free_vars().clone();
         used_then_or_else.extend(else_expr.free_vars().clone());
         self.scope_lock_as_used_later(&used_then_or_else);
-        let ptr_to_cond_obj = self.eval_expr(cond_expr, None);
+        let ptr_to_cond_obj = self.eval_expr(cond_expr);
         self.scope_unlock_as_used_later(&used_then_or_else);
         let cond_val = ptr_to_cond_obj.load_field_nocap(self, 0).into_int_value();
         self.release(ptr_to_cond_obj);
@@ -2065,7 +1968,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.release(self.get_var(var_name).ptr.get(self));
             }
         }
-        let then_val = self.eval_expr(then_expr.clone(), rvo.clone());
+        let then_val = self.eval_expr(then_expr.clone());
         let then_val_ptr = then_val.ptr(self);
         let then_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
@@ -2078,36 +1981,31 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.release(self.get_var(var_name).ptr.get(self));
             }
         }
-        let else_val = self.eval_expr(else_expr, rvo.clone());
+        let else_val = self.eval_expr(else_expr);
         let else_val_ptr = else_val.ptr(self);
         let else_bb = self.builder().get_insert_block().unwrap();
         self.builder().build_unconditional_branch(cont_bb);
 
         self.builder().position_at_end(cont_bb);
-        if rvo.is_none() {
-            // If don't perform rvo, then return phi value.
-            let phi_ty = if then_val.is_box(self.type_env()) {
-                ptr_to_object_type(self.context)
-            } else {
-                ptr_type(then_val.struct_ty(self))
-            };
-            let phi = self.builder().build_phi(phi_ty, "phi");
-            phi.add_incoming(&[(&then_val_ptr, then_bb), (&else_val_ptr, else_bb)]);
-            Object::new(
-                phi.as_basic_value().into_pointer_value(),
-                then_val.ty.clone(),
-            )
+
+        // Return the phi value.
+        let phi_ty = if then_val.is_box(self.type_env()) {
+            ptr_to_object_type(self.context)
         } else {
-            // if perform rvo then return rvo
-            rvo.unwrap()
-        }
+            ptr_type(then_val.struct_ty(self))
+        };
+        let phi = self.builder().build_phi(phi_ty, "phi");
+        phi.add_incoming(&[(&then_val_ptr, then_bb), (&else_val_ptr, else_bb)]);
+        Object::new(
+            phi.as_basic_value().into_pointer_value(),
+            then_val.ty.clone(),
+        )
     }
 
     fn eval_match(
         &mut self,
         cond: Arc<ExprNode>,
         pat_vals: &[(Arc<PatternNode>, Arc<ExprNode>)],
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Calculate the set of free variables used in values.
         let mut vars_used_in_any_case = Set::default();
@@ -2117,7 +2015,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Evaluate the condition.
         self.scope_lock_as_used_later(&vars_used_in_any_case);
-        let cond = self.eval_expr(cond, None);
+        let cond = self.eval_expr(cond);
         self.scope_unlock_as_used_later(&vars_used_in_any_case);
 
         // Prepare basic blocks for each pattern.
@@ -2203,7 +2101,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             }
 
             // Evaluate the value.
-            let val_obj = self.eval_expr(val.clone(), rvo.clone());
+            let val_obj = self.eval_expr(val.clone());
             let bb = self.builder().get_insert_block().unwrap();
             val_objs.push((val_obj, bb));
 
@@ -2221,10 +2119,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().position_at_end(cont_bb);
 
         // Return value.
-        if let Some(rvo) = rvo {
-            // In case performing RVO, then the result value is already stored in `rvo`.
-            rvo
-        } else if val_objs.len() == 1 {
+        if val_objs.len() == 1 {
             // If there is only one case, then return the value directly.
             val_objs.pop().unwrap().0
         } else {
@@ -2246,20 +2141,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         &mut self,
         fields: Vec<(Name, Arc<ExprNode>)>,
         struct_ty: Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        let pair = if rvo.is_some() {
-            assert!(struct_ty.is_unbox(self.type_env()));
-            rvo.unwrap()
-        } else {
-            allocate_obj(
-                struct_ty.clone(),
-                &vec![],
-                None,
-                self,
-                Some("allocate_MakeStruct"),
-            )
-        };
+        let str_obj = allocate_obj(
+            struct_ty.clone(),
+            &vec![],
+            None,
+            self,
+            Some("allocate_MakeStruct"),
+        );
         let field_types = struct_ty.field_types(self.type_env());
         assert_eq!(field_types.len(), fields.len());
 
@@ -2268,24 +2157,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         for i in 0..fields.len() {
             self.scope_unlock_as_used_later(fields[i].1.free_vars());
-
             let field_expr = fields[i].1.clone();
-            let field_ty = field_types[i].clone();
-            if field_ty.is_unbox(self.type_env()) {
-                let rvo = ObjectFieldType::get_struct_field_noclone(self, &pair, i as u32);
-                self.eval_expr(field_expr, Some(rvo));
+            let field_obj = self.eval_expr(field_expr);
+            let field_val = field_obj.value(self);
+            let offset = if struct_ty.is_box(self.type_env()) {
+                1
             } else {
-                let field_obj = self.eval_expr(field_expr, None);
-                let field_val = field_obj.value(self);
-                let offset = if struct_ty.is_box(self.type_env()) {
-                    1
-                } else {
-                    0
-                };
-                pair.store_field_nocap(self, i as u32 + offset, field_val);
-            }
+                0
+            };
+            str_obj.store_field_nocap(self, i as u32 + offset, field_val);
         }
-        pair
+        str_obj
     }
 
     fn eval_ffi_call(
@@ -2296,12 +2178,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         param_tys: &Vec<Arc<TyCon>>,
         args: &Vec<Arc<ExprNode>>,
         is_io: bool,
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Prepare return object.
-        let obj = if rvo.is_some() {
-            rvo.unwrap()
-        } else {
+        let obj = {
             let ret_ty = type_tycon(ret_tycon);
             let ret_ty = if is_io {
                 make_tuple_ty(vec![make_iostate_ty(), ret_ty])
@@ -2351,7 +2230,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         for i in 0..args.len() {
             self.scope_unlock_as_used_later(args[i].free_vars());
-            arg_objs.push(self.eval_expr(args[i].clone(), None));
+            arg_objs.push(self.eval_expr(args[i].clone()));
         }
 
         // Get argment values
@@ -2388,10 +2267,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         &mut self,
         elems: &Vec<Arc<ExprNode>>,
         array_ty: Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        assert!(rvo.is_none());
-
         // Make length value
         let len = self.context.i64_type().const_int(elems.len() as u64, false);
 
@@ -2416,7 +2292,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.scope_unlock_as_used_later(elems[i].free_vars());
 
             // Evaluate element
-            let value = self.eval_expr(elems[i].clone(), None);
+            let value = self.eval_expr(elems[i].clone());
 
             // Store into the array.
             let idx = self.context.i64_type().const_int(i as u64, false);
@@ -2647,23 +2523,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // Evaluate object value and store it to the global variable.
                 self.builder().position_at_end(init_bb);
 
-                // Prepare memory space for rvo.
-                let rvo = if obj_ty.is_unbox(self.type_env()) {
-                    Some(Object::new(global_var, obj_ty.clone()))
-                } else {
-                    None
-                };
                 // Execute expression.
-                let obj = self.eval_expr(sym.expr.as_ref().unwrap().clone(), rvo.clone());
+                let obj = self.eval_expr(sym.expr.as_ref().unwrap().clone());
 
                 // Mark the object and all object reachable from it as global.
                 self.mark_global(obj.clone());
 
                 // If we didn't rvo, then store the result to global_ptr.
-                if rvo.is_none() {
-                    let obj_val = obj.value(self);
-                    self.builder().build_store(global_var, obj_val);
-                }
+                let obj_val = obj.value(self);
+                self.builder().build_store(global_var, obj_val);
             }
 
             // After initialization,

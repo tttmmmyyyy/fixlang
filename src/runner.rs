@@ -438,8 +438,8 @@ fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Ar
     }
 
     // Run main object.
-    let main_obj = gc.eval_expr(main_expr, None); // `IO ()`
-    run_io_value(gc, &main_obj, None);
+    let main_obj = gc.eval_expr(main_expr); // `IO ()`
+    run_io_value(gc, &main_obj);
 
     // Return main function.
     gc.builder()

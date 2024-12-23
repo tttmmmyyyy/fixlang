@@ -124,19 +124,19 @@ impl ExportStatement {
         }
 
         // Get the Fix value to be exported.
-        let mut fix_value = gc.eval_expr(fix_expr, None);
+        let mut fix_value = gc.eval_expr(fix_expr);
 
         // Pass the arguments to the Fix value.
         while args.len() > 0 {
             let arity = fix_value.ty.get_lambda_srcs().len();
             let rest = args.split_off(arity);
-            fix_value = gc.apply_lambda(fix_value, args, None);
+            fix_value = gc.apply_lambda(fix_value, args);
             args = rest;
         }
 
         // If the `fix_value` is `IO C`, then run it.
         if is_io {
-            fix_value = run_io_value(gc, &fix_value, None);
+            fix_value = run_io_value(gc, &fix_value);
         }
 
         // Return the result.

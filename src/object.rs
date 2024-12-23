@@ -7,7 +7,6 @@ use inkwell::{
     module::Linkage,
     types::{BasicMetadataTypeEnum, BasicType},
 };
-use misc::Set;
 
 use super::*;
 
@@ -475,7 +474,6 @@ impl ObjectFieldType {
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         // Panic if out_of_range.
         if len.is_some() {
@@ -492,14 +490,7 @@ impl ObjectFieldType {
         let elem_val = gc.builder().build_load(ptr_to_elem, "elem");
 
         // Return value
-        let elem_obj = if rvo.is_some() {
-            let rvo = rvo.unwrap();
-            rvo.store_value_unbox(gc, elem_val);
-            rvo
-        } else {
-            Object::create_from_value(elem_val, elem_ty, gc)
-        };
-        elem_obj
+        Object::create_from_value(elem_val, elem_ty, gc)
     }
 
     // Read an element of array.
@@ -510,10 +501,8 @@ impl ObjectFieldType {
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
         idx: IntValue<'c>,
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
-        let elem =
-            ObjectFieldType::read_from_array_buf_noretain(gc, len, buffer, elem_ty, idx, rvo);
+        let elem = ObjectFieldType::read_from_array_buf_noretain(gc, len, buffer, elem_ty, idx);
         gc.retain(elem.clone());
         elem
     }
@@ -775,20 +764,13 @@ impl ObjectFieldType {
         gc: &mut GenerationContext<'c, 'm>,
         union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
-        rvo: Option<Object<'c>>,
     ) -> Object<'c> {
         let buf = ObjectFieldType::get_union_buf(gc, &union);
 
         // Make return value by cloning the field in the union buffer,
         // because lifetime of returned value may be longer than that of union object itself.
         let field_val = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
-        let field = if rvo.is_none() {
-            Object::create_from_value(field_val, elem_ty.clone(), gc)
-        } else {
-            let rvo = rvo.unwrap();
-            rvo.store_value_unbox(gc, field_val);
-            rvo
-        };
+        let field = Object::create_from_value(field_val, elem_ty.clone(), gc);
         if union.is_box(gc.type_env()) {
             gc.retain(field.clone());
             gc.release(union);
@@ -861,24 +843,18 @@ impl ObjectFieldType {
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         str: &Object<'c>,
-        field_indices_rvo: Vec<(u32, Option<Object<'c>>)>,
+        field_indices: &[u32],
     ) -> Vec<Object<'c>> {
         // Collect unretained (but cloned) fields.
         // We need clone here since lifetime of returned fields may be longer than that of struct object.
         let mut ret = vec![];
-        for (field_idx, rvo) in &field_indices_rvo {
+        for field_idx in field_indices {
             // Get ptr to field.
             let field = ObjectFieldType::get_struct_field_noclone(gc, str, *field_idx);
 
             // Clone the field.
             let field_val = field.value(gc);
-            let field = if rvo.is_none() {
-                Object::create_from_value(field_val, field.ty, gc)
-            } else {
-                let rvo = rvo.as_ref().unwrap();
-                rvo.store_value_unbox(gc, field_val);
-                rvo.clone()
-            };
+            let field = Object::create_from_value(field_val, field.ty, gc);
             ret.push(field);
         }
 
@@ -891,11 +867,9 @@ impl ObjectFieldType {
         } else {
             // If the struct is unboxed, instead of retaining elements of `ret` and releasing the struct,
             // just release fields that are not not in `ret`.
-            let field_indices: Set<u32> =
-                Set::from_iter(field_indices_rvo.iter().map(|(i, _)| i.clone()));
             for field_idx in 0..str.ty.field_types(gc.type_env()).len() {
                 let field_idx = field_idx as u32;
-                if !field_indices.contains(&field_idx) {
+                if !field_indices.iter().any(|i| *i == field_idx) {
                     let field = ObjectFieldType::get_struct_field_noclone(gc, str, field_idx);
                     gc.release(field);
                 }
@@ -1161,13 +1135,8 @@ pub fn lambda_function_type<'c, 'm>(
     if ty.is_closure() {
         arg_tys.push(ptr_to_object_type(gc.context).into());
     }
-    if ty.get_lambda_dst().is_box(gc.type_env()) {
-        ptr_to_object_type(gc.context).fn_type(&arg_tys, false)
-    } else {
-        // Add ptr to rvo.
-        arg_tys.push(ptr_to_object_type(gc.context).into());
-        gc.context.void_type().fn_type(&arg_tys, false)
-    }
+
+    ty.get_embedded_type(gc, &vec![]).fn_type(&arg_tys, false)
 }
 
 // Opaque function pointer type used to handle type definition such as

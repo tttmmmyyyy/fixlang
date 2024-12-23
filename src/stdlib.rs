@@ -376,12 +376,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("./docs/std_fix.md").to_string()),
     ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "loop"),
-        state_loop(),
-        None,
-        Some(include_str!("./docs/std_loop.md").to_string()),
-    ));
+    // errors.eat_err(fix_module.add_global_value(
+    //     FullName::from_strs(&[STD_NAME], "loop"),
+    //     state_loop(),
+    //     None,
+    //     Some(include_str!("./docs/std_loop.md").to_string()),
+    // ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),
