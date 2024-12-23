@@ -82,7 +82,7 @@ impl<'c> Object<'c> {
     }
 
     // If boxed type, then create Object from pointer.
-    // If unboxed type, then store the value to stack and create Object.
+    // If unboxed type, then store the value to stack and create a new `Object`.
     pub fn create_from_value<'m>(
         val: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
@@ -2529,7 +2529,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // Mark the object and all object reachable from it as global.
                 self.mark_global(obj.clone());
 
-                // If we didn't rvo, then store the result to global_ptr.
+                // Store the result to global_ptr.
                 let obj_val = obj.value(self);
                 self.builder().build_store(global_var, obj_val);
             }

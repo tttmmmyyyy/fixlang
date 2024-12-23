@@ -1136,7 +1136,13 @@ pub fn lambda_function_type<'c, 'm>(
         arg_tys.push(ptr_to_object_type(gc.context).into());
     }
 
-    ty.get_embedded_type(gc, &vec![]).fn_type(&arg_tys, false)
+    let ret_ty = ty.get_lambda_dst();
+    let ret_ty = if ret_ty.is_box(gc.type_env()) {
+        ptr_to_object_type(&gc.context).as_basic_type_enum()
+    } else {
+        ret_ty.get_embedded_type(gc, &vec![])
+    };
+    ret_ty.fn_type(&arg_tys, false)
 }
 
 // Opaque function pointer type used to handle type definition such as
