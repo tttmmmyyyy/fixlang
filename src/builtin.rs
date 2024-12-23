@@ -4300,7 +4300,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         ObjectFieldType::set_struct_field_norelease(gc, &res, 0, &val);
         ObjectFieldType::set_struct_field_norelease(gc, &res, 1, &io_res);
 
-        val
+        res
     }
 }
 
