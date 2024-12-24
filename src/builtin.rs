@@ -754,7 +754,6 @@ impl InlineLLVMStringLit {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let string_ptr = gc
@@ -792,7 +791,8 @@ impl InlineLLVMFixBody {
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
-    ) -> Object<'c> {
+        tail: bool,
+    ) -> Option<Object<'c>> {
         // Get arguments
         let x = gc.get_var(&self.x_str).ptr.get(gc);
         let f = gc.get_var(&self.f_str).ptr.get(gc);
@@ -815,9 +815,8 @@ impl InlineLLVMFixBody {
         let cap_obj_ptr = cap_obj.ptr(gc);
         fixf.store_field_nocap(gc, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
 
-        let f_fixf = gc.apply_lambda(f, vec![fixf]);
-        let f_fixf_x = gc.apply_lambda(f_fixf, vec![x]);
-        f_fixf_x
+        let f_fixf = gc.apply_lambda(f, vec![fixf], false).unwrap();
+        gc.apply_lambda(f_fixf, vec![x], tail)
     }
 }
 
@@ -864,7 +863,6 @@ impl InlineLLVMCastIntegralBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         to_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
@@ -2095,7 +2093,7 @@ impl InlineLLVMArrayModBody {
         );
 
         // Apply modifier to get a new value.
-        let elem = gc.apply_lambda(modifier, vec![elem]);
+        let elem = gc.apply_lambda(modifier, vec![elem], false).unwrap();
 
         // Perform write and return.
         ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, elem, false);
@@ -2660,7 +2658,7 @@ impl InlineLLVMStructModBody {
 
         // Modify field
         let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
-        let field = gc.apply_lambda(modfier, vec![field]);
+        let field = gc.apply_lambda(modfier, vec![field], false).unwrap();
         ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &field);
 
         str
@@ -3420,7 +3418,9 @@ impl InlineLLVMUnionModBody {
         gc.builder().position_at_end(match_bb);
         let field_ty = union_ty.field_types(gc.type_env())[self.field_idx as usize].clone();
         let value = ObjectFieldType::get_union_field(gc, obj.clone(), &field_ty);
-        let value = gc.apply_lambda(modifier.clone(), vec![value]);
+        let value = gc
+            .apply_lambda(modifier.clone(), vec![value], false)
+            .unwrap();
         // Prepare space for returned union object.
         let ret_obj = allocate_obj(
             union_ty.clone(),
@@ -3719,7 +3719,7 @@ impl InlineLLVMDoWithRetainedFunctionBody {
         gc.retain(x.clone());
 
         // Call "f" with "x".
-        let ret = gc.apply_lambda(f, vec![x.clone()]);
+        let ret = gc.apply_lambda(f, vec![x.clone()], false).unwrap();
 
         // Release "x".
         gc.release(x);
@@ -4268,7 +4268,6 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
@@ -4292,7 +4291,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         data_ptr_obj.store_field_nocap(gc, 0, data_ptr);
 
         // Run the IO action.
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj]);
+        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
         let io_res = run_io_value(gc, &io_act);
 
         // Construct the return value.
@@ -4357,7 +4356,6 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
@@ -4382,7 +4380,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         data_ptr_obj.store_field_nocap(gc, 0, data_ptr);
 
         // Run the IO action.
-        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj]);
+        let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
         let io_res = run_io_value(gc, &io_act);
 
         // Construct the return value.
@@ -4506,7 +4504,7 @@ pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<
     );
     let runner_obj = Object::create_from_value(runner, runner_ty, gc);
     let ios = allocate_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
-    let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios]);
+    let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios], false).unwrap();
     ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[1])
         .into_iter()
         .next()

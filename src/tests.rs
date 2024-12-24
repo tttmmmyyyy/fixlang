@@ -379,11 +379,12 @@ pub fn test21() {
 
 #[test]
 pub fn test22() {
-    // Test recursion function defined by fix with two variables that is tail-call.
+    // Test recursion function defined by fix with two variables that is tail call.
     let n: i64 = 1000000;
     let source = format!(
         r#"
-            module Main;             main : IO ();
+            module Main;
+            main : IO ();
             main = (
                 let g = fix $ |loop, a, x|
                             if x == 0 {{ 
