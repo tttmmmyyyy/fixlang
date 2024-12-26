@@ -3328,9 +3328,6 @@ impl InlineLLVMUnionModBody {
             .ptr
             .get(gc);
 
-        let is_unbox = obj.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
-
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
             .to_basic_type(gc, vec![])
@@ -3338,7 +3335,7 @@ impl InlineLLVMUnionModBody {
             .const_int(self.field_idx as u64, false);
 
         // Get tag value.
-        let tag_value = obj.extract_field(gc, 0 + offset).into_int_value();
+        let tag_value = ObjectFieldType::get_union_tag(gc, &obj);
 
         // Branch and store result to ret_ptr.
         let is_tag_match = gc.builder().build_int_compare(
@@ -3371,8 +3368,8 @@ impl InlineLLVMUnionModBody {
             Some("create_obj@union_mod"),
         );
         // Set values of returned union object.
-        let ret_obj = ret_obj.insert_field(gc, offset + UNION_TAG_IDX, specified_tag_value);
-        let ret_obj = ret_obj.insert_field(gc, offset + UNION_DATA_IDX, value.value);
+        let ret_obj = ObjectFieldType::set_union_tag(gc, ret_obj, specified_tag_value);
+        let ret_obj = ObjectFieldType::set_union_value(gc, ret_obj, value);
         let match_val = ret_obj.value;
         match_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
