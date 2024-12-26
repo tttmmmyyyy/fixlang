@@ -711,11 +711,8 @@ impl ObjectFieldType {
         union: &Object<'c>,
     ) -> u32 {
         let is_unbox = union.is_unbox(gc.type_env());
-        if is_unbox {
-            0
-        } else {
-            BOXED_TYPE_DATA_IDX + UNION_DATA_IDX
-        }
+        let offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
+        offset + UNION_DATA_IDX
     }
 
     pub fn get_union_buf<'c, 'm>(
