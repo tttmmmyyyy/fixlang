@@ -1136,7 +1136,13 @@ pub fn lambda_function_type<'c, 'm>(
     } else {
         ret_ty.get_embedded_type(gc, &vec![])
     };
-    ret_ty.fn_type(&arg_tys, false)
+    if gc.sizeof(&ret_ty) == 0 {
+        // Avoid returning empty type.
+        // This is because such code cases an SEGV in LLVM. To reproduce this, use commit 9c75cd3a566950ab3781fe5eb45f80ec02e45dbd with function inlining optimization enabled.
+        gc.context.void_type().fn_type(&arg_tys, false)
+    } else {
+        ret_ty.fn_type(&arg_tys, false)
+    }
 }
 
 // Opaque function pointer type used to handle type definition such as

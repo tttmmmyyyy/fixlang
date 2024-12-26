@@ -9,6 +9,8 @@ use crate::error::panic_with_err_src;
 use ast::name::FullName;
 use ast::name::Name;
 use either::Either;
+use either::Either::Left;
+use either::Either::Right;
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{
@@ -48,11 +50,17 @@ impl<'c> VarValue<'c> {
                 let val = if ty.is_funptr() {
                     fun.as_global_value().as_basic_value_enum()
                 } else {
-                    gc.builder()
+                    let call = gc
+                        .builder()
                         .build_call(fun.clone(), &[], "get_global_obj")
-                        .try_as_basic_value()
-                        .left()
-                        .unwrap()
+                        .try_as_basic_value();
+                    match call {
+                        Left(val) => val,
+                        Right(_) => {
+                            let ty = ty.get_embedded_type(gc, &vec![]);
+                            GenerationContext::get_undef(&ty)
+                        }
+                    }
                 };
                 Object::new(val, ty.clone(), gc)
             }
@@ -885,9 +893,26 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         let ret = self.builder().build_call(func, &call_args, "call_lambda");
         ret.set_tail_call(!self.has_di());
-        let ret = ret.try_as_basic_value().unwrap_left();
+        let ret = match ret.try_as_basic_value() {
+            Left(ret) => ret,
+            Right(_) => {
+                let ty = ret_ty.get_embedded_type(self, &vec![]);
+                GenerationContext::get_undef(&ty)
+            }
+        };
         let obj = Object::new(ret, ret_ty, self);
         self.build_tail(obj, tail)
+    }
+
+    pub fn get_undef(ty: &BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
+        match ty {
+            BasicTypeEnum::IntType(ty) => ty.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::FloatType(ty) => ty.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::PointerType(ty) => ty.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::VectorType(ty) => ty.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::StructType(ty) => ty.get_undef().as_basic_value_enum(),
+            BasicTypeEnum::ArrayType(ty) => ty.get_undef().as_basic_value_enum(),
+        }
     }
 
     // Retain an object.
@@ -1509,7 +1534,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     pub fn build_tail(&mut self, obj: Object<'c>, tail: bool) -> Option<Object<'c>> {
         if tail {
             let ret = obj.value;
-            self.builder().build_return(Some(&ret));
+            if self.sizeof(&ret.get_type()) != 0 {
+                self.builder().build_return(Some(&ret));
+            } else {
+                self.builder().build_return(None);
+            }
             None
         } else {
             Some(obj)
@@ -2441,7 +2470,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Declare accessor function.
             let acc_fn_name = format!("Get#{}", name.to_string());
             let ty = obj_ty.get_embedded_type(self, &vec![]);
-            let acc_fn_type = ty.fn_type(&[], false);
+            let acc_fn_type = if self.sizeof(&ty) == 0 {
+                self.context.void_type().fn_type(&[], false)
+            } else {
+                ty.fn_type(&[], false)
+            };
             let acc_fn = self.module.add_function(
                 &acc_fn_name,
                 acc_fn_type,
@@ -2620,7 +2653,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // In the end of the accessor function, return the object.
             self.builder().position_at_end(end_bb);
             let global_var = self.builder().build_load(global_var_ptr, "load_global_var");
-            self.builder().build_return(Some(&global_var));
+
+            if self.sizeof(&global_var.get_type()) == 0 {
+                self.builder().build_return(None);
+            } else {
+                self.builder().build_return(Some(&global_var));
+            }
         }
     }
 
