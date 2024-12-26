@@ -2635,10 +2635,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if from_ty == to_ty {
             return val;
         }
+        // If the types are not equal, we need to use alloca to bit cast.
         let (from_bits, to_bits) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
-        if from_bits == to_bits {
-            return self.builder().build_bitcast(val, to_ty, "bitcast");
-        }
         let larger_ty = if from_bits > to_bits { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
         let from_ptr = self.cast_pointer(ptr, from_ty.ptr_type(AddressSpace::from(0)));
