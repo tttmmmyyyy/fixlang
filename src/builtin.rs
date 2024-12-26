@@ -569,7 +569,7 @@ impl InlineLLVMIntLit {
         ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let obj = allocate_obj(
+        let obj = create_obj(
             ty.clone(),
             &vec![],
             None,
@@ -582,8 +582,7 @@ impl InlineLLVMIntLit {
             .unwrap()
             .into_int_type();
         let value = int_ty.const_int(self.val as u64, false);
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -609,7 +608,7 @@ impl InlineLLVMFloatLit {
         ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let obj = allocate_obj(
+        let obj = create_obj(
             ty.clone(),
             &vec![],
             None,
@@ -622,8 +621,7 @@ impl InlineLLVMFloatLit {
             .unwrap()
             .into_float_type();
         let value = float_ty.const_float(self.val);
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -647,11 +645,10 @@ impl InlineLLVMNullPtrLit {
         ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let obj = allocate_obj(ty.clone(), &vec![], None, gc, Some("nullptr"));
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("nullptr"));
         let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
         let value = ptr_ty.const_null();
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -677,7 +674,7 @@ impl InlineLLVMBoolLit {
         ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let obj = allocate_obj(
+        let obj = create_obj(
             ty.clone(),
             &vec![],
             None,
@@ -685,8 +682,7 @@ impl InlineLLVMBoolLit {
             Some(&format!("bool_lit_{}", self.val)),
         );
         let value = gc.context.i8_type().const_int(self.val as u64, false);
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -708,27 +704,27 @@ pub fn make_string_from_ptr<'c, 'm>(
 ) -> Object<'c> {
     // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let array = allocate_obj(
+    let array = create_obj(
         array_ty,
         &vec![],
         Some(len_with_null_terminator),
         gc,
         Some("array@make_string_from_ptr"),
     );
-    array.store_field_nocap(gc, ARRAY_LEN_IDX, len_with_null_terminator);
-    let dst = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-    let len_ptr = gc.builder().build_int_cast(
+    let array = array.insert_field(gc, ARRAY_LEN_IDX, len_with_null_terminator);
+    let dst = array.gep_boxed(gc, ARRAY_BUF_IDX);
+    let len = gc.builder().build_int_cast(
         len_with_null_terminator,
         gc.context.ptr_sized_int_type(&gc.target_data, None),
         "len_ptr@make_string_from_ptr",
     );
     gc.builder()
-        .build_memcpy(dst, 1, buf_with_null_terminator, 1, len_ptr)
+        .build_memcpy(dst, 1, buf_with_null_terminator, 1, len)
         .ok()
         .unwrap();
 
     // Allocate String and store the array into it.
-    let string = allocate_obj(
+    let string = create_obj(
         make_string_ty(),
         &vec![],
         None,
@@ -738,10 +734,8 @@ pub fn make_string_from_ptr<'c, 'm>(
     assert!(string.is_unbox(gc.type_env()));
 
     // Store array to data.
-    let array_val = array.value(gc);
-    string.store_field_nocap(gc, 0, array_val);
-
-    string
+    let array_ptr = array.value;
+    string.insert_field(gc, 0, array_ptr)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -799,7 +793,7 @@ impl InlineLLVMFixBody {
 
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
-        let fixf = allocate_obj(fixf_ty.clone(), &vec![], None, gc, Some("fix(f)"));
+        let fixf = create_obj(fixf_ty.clone(), &vec![], None, gc, Some("fix(f)"));
         let fixf_funptr = gc
             .builder()
             .get_insert_block()
@@ -810,10 +804,10 @@ impl InlineLLVMFixBody {
             .as_pointer_value();
         let fixf_funptr =
             gc.cast_pointer(fixf_funptr, opaque_lambda_function_ptr_type(&gc.context));
-        fixf.store_field_nocap(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
+        let fixf = fixf.insert_field(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
         let cap_obj = gc.get_var(&FullName::local(CAP_NAME)).ptr.get(gc);
-        let cap_obj_ptr = cap_obj.ptr(gc);
-        fixf.store_field_nocap(gc, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
+        let cap_obj_ptr = cap_obj.value;
+        let fixf = fixf.insert_field(gc, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
 
         let f_fixf = gc.apply_lambda(f, vec![fixf], false).unwrap();
         gc.apply_lambda(f_fixf, vec![x], tail)
@@ -869,7 +863,6 @@ impl InlineLLVMCastIntegralBody {
         let from_val = gc
             .get_var_field(&FullName::local(&self.from_name), 0)
             .into_int_value();
-        gc.release(gc.get_var(&FullName::local(&self.from_name)).ptr.get(gc));
 
         // Get target type.
         let to_int = to_ty
@@ -887,15 +880,14 @@ impl InlineLLVMCastIntegralBody {
         );
 
         // Return result.
-        let obj = allocate_obj(
+        let obj = create_obj(
             to_ty.clone(),
             &vec![],
             None,
             gc,
             Some("alloca@cast_between_integral_function"),
         );
-        obj.store_field_nocap(gc, 0, to_val);
-        obj
+        obj.insert_field(gc, 0, to_val)
     }
 }
 
@@ -953,7 +945,6 @@ impl InlineLLVMCastFloatBody {
         let from_val = gc
             .get_var_field(&FullName::local(&self.from_name), 0)
             .into_float_value();
-        gc.release(gc.get_var(&FullName::local(&self.from_name)).ptr.get(gc));
 
         // Get target type.
         let to_float = to_ty
@@ -970,15 +961,14 @@ impl InlineLLVMCastFloatBody {
         );
 
         // Return result.
-        let obj = allocate_obj(
+        let obj = create_obj(
             to_ty.clone(),
             &vec![],
             None,
             gc,
             Some("alloca@cast_between_float_function"),
         );
-        obj.store_field_nocap(gc, 0, to_val);
-        obj
+        obj.insert_field(gc, 0, to_val)
     }
 }
 
@@ -1033,7 +1023,6 @@ impl InlineLLVMCastIntToFloatBody {
         let from_val = gc
             .get_var_field(&FullName::local(&self.from_name), 0)
             .into_int_value();
-        gc.release(gc.get_var(&FullName::local(&self.from_name)).ptr.get(gc));
 
         // Get target type.
         let to_float = to_ty
@@ -1058,15 +1047,14 @@ impl InlineLLVMCastIntToFloatBody {
         };
 
         // Return result.
-        let obj = allocate_obj(
+        let obj = create_obj(
             to_ty.clone(),
             &vec![],
             None,
             gc,
             Some("alloca@cast_int_to_float_function"),
         );
-        obj.store_field_nocap(gc, 0, to_val);
-        obj
+        obj.insert_field(gc, 0, to_val)
     }
 }
 
@@ -1124,7 +1112,6 @@ impl InlineLLVMCastFloatToIntBody {
         let from_val = gc
             .get_var_field(&FullName::local(&self.from_name), 0)
             .into_float_value();
-        gc.release(gc.get_var(&FullName::local(&self.from_name)).ptr.get(gc));
 
         // Get target type.
         let to_int = to_ty
@@ -1149,15 +1136,14 @@ impl InlineLLVMCastFloatToIntBody {
         };
 
         // Return result.
-        let obj = allocate_obj(
+        let obj = create_obj(
             to_ty.clone(),
             &vec![],
             None,
             gc,
             Some("alloca@cast_float_to_int_function"),
         );
-        obj.store_field_nocap(gc, 0, to_val);
-        obj
+        obj.insert_field(gc, 0, to_val)
     }
 }
 
@@ -1232,9 +1218,8 @@ impl InlineLLVMShiftBody {
         };
 
         // Return result.
-        let obj = allocate_obj(ty.clone(), &vec![], None, gc, Some("alloca@shift_function"));
-        obj.store_field_nocap(gc, 0, to_val);
-        obj
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@shift_function"));
+        obj.insert_field(gc, 0, to_val)
     }
 }
 
@@ -1334,15 +1319,14 @@ impl InlineLLVMBitwiseOperationBody {
         };
 
         // Return result.
-        let obj = allocate_obj(
+        let obj = create_obj(
             ty.clone(),
             &vec![],
             None,
             gc,
             Some("alloca@bitwise_operation_function"),
         );
-        obj.store_field_nocap(gc, 0, val);
-        obj
+        obj.insert_field(gc, 0, val)
     }
 }
 
@@ -1396,17 +1380,16 @@ impl InlineLLVMFillArrayBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let size = gc.get_var_field(&self.size_name, 0).into_int_value();
-        gc.release(gc.get_var(&self.size_name).ptr.get(gc));
         let value = gc.get_var(&self.value_name).ptr.get(gc);
-        let array = allocate_obj(
+        let array = create_obj(
             ty.clone(),
             &vec![],
             Some(size),
             gc,
             Some(&self.array_name.as_str()),
         );
-        array.store_field_nocap(gc, ARRAY_LEN_IDX, size);
-        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let array = array.insert_field(gc, ARRAY_LEN_IDX, size);
+        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
         ObjectFieldType::initialize_array_buf_by_value(gc, size, buf, value);
         array
     }
@@ -1477,7 +1460,7 @@ impl InlineLLVMMakeEmptyArrayBody {
             .into_int_value();
 
         // Allocate
-        let array = allocate_obj(
+        let array = create_obj(
             arr_ty.clone(),
             &vec![],
             Some(cap),
@@ -1487,9 +1470,7 @@ impl InlineLLVMMakeEmptyArrayBody {
 
         // Set size to zero.
         let cap = gc.context.i64_type().const_zero();
-        array.store_field_nocap(gc, ARRAY_LEN_IDX, cap);
-
-        array
+        array.insert_field(gc, ARRAY_LEN_IDX, cap)
     }
 }
 
@@ -1540,7 +1521,7 @@ impl InlineLLVMArrayUnsafeSetBody {
         let value = gc.get_var(&FullName::local(&self.value_name)).ptr.get(gc);
 
         // Get array cap and buffer.
-        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
 
         // Perform write and return.
         ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, value, false);
@@ -1620,7 +1601,7 @@ impl InlineLLVMArrayUnsafeGetBody {
             .into_int_value();
 
         // Get array buffer
-        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
 
         // Get element
         let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx);
@@ -1698,22 +1679,22 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
         let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
 
         // Get array buffer
-        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
 
         // Get the element.
         let elem =
             ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty.clone(), idx);
 
         // Create the return value.
-        let res = allocate_obj(
+        let res = create_obj(
             ret_ty.clone(),
             &vec![],
             None,
             gc,
             Some("alloca@array_unsafe_get_linear"),
         );
-        ObjectFieldType::set_struct_field_norelease(gc, &res, 0, &array);
-        ObjectFieldType::set_struct_field_norelease(gc, &res, 1, &elem);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &array);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &elem);
 
         res
     }
@@ -1774,12 +1755,7 @@ impl InlineLLVMArrayUnsafeSetSizeBody {
             .get_var_field(&FullName::local(&self.len_name), 0)
             .into_int_value();
 
-        // Get pointer to length field.
-        let ptr_to_length = array.ptr_to_field_nocap(gc, ARRAY_LEN_IDX);
-
-        // Perform write and return.
-        gc.builder().build_store(ptr_to_length, length);
-        array
+        array.insert_field(gc, ARRAY_LEN_IDX, length)
     }
 }
 
@@ -1835,10 +1811,9 @@ impl InlineLLVMArrayGetBody {
     ) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array = gc.get_var(&self.arr_name).ptr.get(gc);
-        let len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
-        let buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
         let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
-        gc.release(gc.get_var(&self.idx_name).ptr.get(gc));
         let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx);
         if !borrowed_vars.contains(&self.arr_name) {
             gc.release(array);
@@ -1907,7 +1882,7 @@ fn make_array_unique<'c, 'm>(
     assert!(array.ty.is_array());
 
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-    let arr_ptr = array.ptr(gc);
+    let arr_ptr = array.value.into_pointer_value();
     let current_bb = gc.builder().get_insert_block().unwrap();
     let current_func = current_bb.get_parent().unwrap();
 
@@ -1923,8 +1898,8 @@ fn make_array_unique<'c, 'm>(
         gc.panic("An array is asserted as unique but is shared!\n");
     }
     // Allocate cloned array.
-    let array_cap = array.load_field_nocap(gc, ARRAY_CAP_IDX).into_int_value();
-    let cloned_array = allocate_obj(
+    let array_cap = array.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
+    let cloned_array = create_obj(
         array.ty.clone(),
         &vec![],
         Some(array_cap),
@@ -1932,17 +1907,17 @@ fn make_array_unique<'c, 'm>(
         Some("cloned_array_for_uniqueness"),
     );
     // Set the length of the cloned array.
-    let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
-    cloned_array.store_field_nocap(gc, ARRAY_LEN_IDX, array_len);
+    let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+    let cloned_array = cloned_array.insert_field(gc, ARRAY_LEN_IDX, array_len);
     // Copy elements to the cloned array.
-    let cloned_array_buf = cloned_array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-    let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+    let cloned_array_buf = cloned_array.gep_boxed(gc, ARRAY_BUF_IDX);
+    let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
     ObjectFieldType::clone_array_buf(gc, array_len, array_buf, cloned_array_buf, elem_ty);
     gc.release(array.clone()); // Given array should be released here.
 
     // Jump to the end_bb.
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-    let cloned_array_ptr = cloned_array.ptr(gc);
+    let cloned_array_ptr = cloned_array.value.into_pointer_value();
     gc.builder().build_unconditional_branch(end_bb);
 
     // Implement unique_bb
@@ -1958,12 +1933,7 @@ fn make_array_unique<'c, 'm>(
         (&arr_ptr, unique_bb),
         (&cloned_array_ptr, succ_of_shared_bb),
     ]);
-    let array = Object::new(
-        array_phi.as_basic_value().into_pointer_value(),
-        array.ty.clone(),
-    );
-
-    array
+    Object::new(array_phi.as_basic_value(), array.ty.clone(), gc)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -1983,15 +1953,14 @@ impl InlineLLVMArraySetBody {
         // Get argments
         let array = gc.get_var(&self.array_name).ptr.get(gc);
         let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
-        gc.release(gc.get_var(&self.idx_name).ptr.get(gc));
         let value = gc.get_var(&self.value_name).ptr.get(gc);
 
         // Force array to be unique
         let array = make_array_unique(gc, array, false);
 
         // Perform write and return.
-        let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
-        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
         ObjectFieldType::write_to_array_buf(gc, Some(array_len), array_buf, idx, value, true);
         array
     }
@@ -2081,8 +2050,8 @@ impl InlineLLVMArrayModBody {
         let array = make_array_unique(gc, array, false);
 
         // Get old element without retain.
-        let array_len = array.load_field_nocap(gc, ARRAY_LEN_IDX).into_int_value();
-        let array_buf = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
         let elem = ObjectFieldType::read_from_array_buf_noretain(
             gc,
@@ -2222,7 +2191,7 @@ impl InlineLLVMArrayGetPtrBody {
         let array = gc.get_var(&arr_name).ptr.get(gc);
 
         // Get pointer
-        let ptr = array.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
+        let ptr = array.gep_boxed(gc, ARRAY_BUF_IDX);
         let ptr_ty = ObjectFieldType::Ptr
             .to_basic_type(gc, vec![])
             .into_pointer_type();
@@ -2234,16 +2203,14 @@ impl InlineLLVMArrayGetPtrBody {
         }
 
         // Make returned object
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_ptr_ty(),
             &vec![],
             None,
             gc,
             Some("alloca@get_ptr_array"),
         );
-        obj.store_field_nocap(gc, 0, ptr);
-
-        obj
+        obj.insert_field(gc, 0, ptr)
     }
 
     pub fn released_vars(&self) -> Vec<FullName> {
@@ -2297,15 +2264,12 @@ impl InlineLLVMArrayGetSizeBody {
         let arr_name = FullName::local(&self.arr_name);
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
-        let len = array_obj
-            .load_field_nocap(gc, ARRAY_LEN_IDX)
-            .into_int_value();
+        let len = array_obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
         if !borrowed_vars.contains(&arr_name) {
             gc.release(array_obj);
         }
-        let int_obj = allocate_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"));
-        int_obj.store_field_nocap(gc, 0, len);
-        int_obj
+        let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"));
+        int_obj.insert_field(gc, 0, len)
     }
 
     pub fn released_vars(&self) -> Vec<FullName> {
@@ -2352,17 +2316,14 @@ impl InlineLLVMArrayGetCapacityBody {
 
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_var(&arr_name).ptr.get(gc);
-        let len = array_obj
-            .load_field_nocap(gc, ARRAY_CAP_IDX)
-            .into_int_value();
+        let len = array_obj.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
 
         if !borrowed_vars.contains(&arr_name) {
             gc.release(array_obj);
         }
 
-        let int_obj = allocate_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"));
-        int_obj.store_field_nocap(gc, 0, len);
-        int_obj
+        let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"));
+        int_obj.insert_field(gc, 0, len)
     }
 
     pub fn released_vars(&self) -> Vec<FullName> {
@@ -2477,7 +2438,6 @@ impl InlineLLVMStructPunchBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the argument object (the struct value).
@@ -2497,14 +2457,12 @@ impl InlineLLVMStructPunchBody {
         */
 
         // Move out struct field value without releaseing the struct itself.
-        let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
+        let field = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
 
         // Create the return value.
-        let pair = allocate_obj(ret_ty.clone(), &vec![], None, gc, Some("ret_of_punch"));
-        let field_val = field.value(gc);
-        pair.store_field_nocap(gc, 0, field_val);
-        let str_val = str.value(gc);
-        pair.store_field_nocap(gc, 1, str_val);
+        let pair = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret_of_punch"));
+        let pair = pair.insert_field(gc, 0, field.value);
+        let pair = pair.insert_field(gc, 1, str.value);
 
         pair
     }
@@ -2562,7 +2520,6 @@ impl InlineLLVMStructPlugInBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         struct_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the first argument, a punched struct value, and the second argument, a field value.
@@ -2575,12 +2532,12 @@ impl InlineLLVMStructPlugInBody {
         // In the impelementation of `act_x`, we use `map(#plug_in_x(ps))`, and `map` can be call `#plug_in_x(ps)` multiple times, so the punched struct value `ps` can be shared.
         let punched_str = make_struct_unique(gc, punched_str);
 
-        // Convert punched_str into the struct type.
-        let punched_value = punched_str.value(gc);
-        let str = Object::create_from_value(punched_value, struct_ty.clone(), gc);
+        // Convert type of punched_str into the struct type.
+        let punched_value = punched_str.value;
+        let str = Object::new(punched_value, struct_ty.clone(), gc);
 
         // Move the field value into the struct value.
-        ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &field);
+        let str = ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &field);
 
         str
     }
@@ -2657,11 +2614,9 @@ impl InlineLLVMStructModBody {
         let str = make_struct_unique(gc, str);
 
         // Modify field
-        let field = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
+        let field = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
         let field = gc.apply_lambda(modfier, vec![field], false).unwrap();
-        ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &field);
-
-        str
+        ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &field)
     }
 }
 
@@ -2949,7 +2904,7 @@ fn make_struct_union_unique<'c, 'm>(
     // In boxed case, `obj` should be replaced to cloned object if it is shared.
 
     // Branch by if refcnt is one.
-    let obj_ptr = obj.ptr(gc);
+    let obj_ptr = obj.value.into_pointer_value();
     let (unique_bb, shared_bb) = gc.build_branch_by_is_unique(obj_ptr);
     let end_bb = gc
         .context
@@ -2959,19 +2914,19 @@ fn make_struct_union_unique<'c, 'm>(
     gc.builder().position_at_end(shared_bb);
 
     // Create new object and clone fields.
-    let cloned_obj = allocate_obj(obj.ty.clone(), &vec![], None, gc, Some("cloned_obj"));
-    if obj.ty.is_struct(gc.type_env()) {
-        ObjectFieldType::clone_struct(gc, &obj, &cloned_obj);
+    let cloned_obj = create_obj(obj.ty.clone(), &vec![], None, gc, Some("cloned_obj"));
+    let cloned_obj = if obj.ty.is_struct(gc.type_env()) {
+        ObjectFieldType::clone_struct(gc, &obj, cloned_obj)
     } else if obj.ty.is_union(gc.type_env()) {
-        ObjectFieldType::clone_union(gc, &obj, &cloned_obj);
+        ObjectFieldType::clone_union(gc, &obj, cloned_obj)
     } else {
         unreachable!()
-    }
+    };
 
     // Release the old object.
     gc.release(obj.clone());
 
-    let cloned_obj_ptr = cloned_obj.ptr(gc);
+    let cloned_obj_ptr = cloned_obj.value;
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
     gc.builder().build_unconditional_branch(end_bb);
 
@@ -2983,13 +2938,10 @@ fn make_struct_union_unique<'c, 'm>(
     // Implement end_bb.
     gc.builder().position_at_end(end_bb);
     // Build phi value.
-    let obj_phi = gc.builder().build_phi(obj.ptr(gc).get_type(), "obj_phi");
+    let obj_phi = gc.builder().build_phi(obj_ptr.get_type(), "obj_phi");
     obj_phi.add_incoming(&[(&obj_ptr, unique_bb), (&cloned_obj_ptr, succ_of_shared_bb)]);
 
-    obj = Object::new(
-        obj_phi.as_basic_value().into_pointer_value(),
-        obj.ty.clone(),
-    );
+    obj = Object::new(obj_phi.as_basic_value(), obj.ty.clone(), gc);
 
     obj
 }
@@ -3017,13 +2969,11 @@ impl InlineLLVMStructSetBody {
         let str = make_struct_unique(gc, str);
 
         // Release old value
-        let old_value = ObjectFieldType::get_struct_field_noclone(gc, &str, self.field_idx as u32);
+        let old_value = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
         gc.release(old_value);
 
         // Set new value
-        ObjectFieldType::set_struct_field_norelease(gc, &str, self.field_idx as u32, &value);
-
-        str
+        ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &value)
     }
 }
 
@@ -3083,17 +3033,13 @@ impl InlineLLVMMakeUnionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let is_unbox = ty.is_unbox(gc.type_env());
-        let offset: u32 = if is_unbox { 0 } else { 1 };
-
         // Get field values.
         let field = gc.get_var(&FullName::local(&self.field_name)).ptr.get(gc);
 
         // Create union object.
-        let obj = allocate_obj(
+        let obj = create_obj(
             ty.clone(),
             &vec![],
             None,
@@ -3106,13 +3052,10 @@ impl InlineLLVMMakeUnionBody {
             .to_basic_type(gc, vec![])
             .into_int_type()
             .const_int(self.field_idx as u64, false);
-        obj.store_field_nocap(gc, 0 + offset, tag_value);
+        let obj = ObjectFieldType::set_union_tag(gc, obj, tag_value);
 
         // Set value.
-        let buf = obj.ptr_to_field_nocap(gc, offset + 1);
-        ObjectFieldType::set_value_to_union_buf(gc, buf, field);
-
-        obj
+        ObjectFieldType::set_union_value(gc, obj, field)
     }
 }
 
@@ -3226,7 +3169,7 @@ impl InlineLLVMUnionAsBody {
         ObjectFieldType::panic_if_union_tag_unmatch(gc, obj.clone(), specified_tag_value);
 
         // If tag match, return the field value.
-        ObjectFieldType::get_union_field(gc, obj, &elem_ty)
+        ObjectFieldType::get_union_value(gc, obj, &elem_ty)
     }
 }
 
@@ -3289,7 +3232,6 @@ impl InlineLLVMUnionIsBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
@@ -3307,9 +3249,6 @@ impl InlineLLVMUnionIsBody {
         // Get tag value.
         let tag_value = ObjectFieldType::get_union_tag(gc, &obj);
 
-        // Create returned value.
-        let ret = allocate_obj(make_bool_ty(), &vec![], None, gc, Some(&self.name_cloned));
-
         // Branch and store result to ret_ptr.
         let is_tag_match = gc.builder().build_int_compare(
             IntPredicate::EQ,
@@ -3326,17 +3265,19 @@ impl InlineLLVMUnionIsBody {
             .build_conditional_branch(is_tag_match, match_bb, unmatch_bb);
 
         gc.builder().position_at_end(match_bb);
-        let value = gc.context.i8_type().const_int(1 as u64, false);
-        ret.store_field_nocap(gc, 0, value);
+        let one = gc.context.i8_type().const_int(1 as u64, false);
         gc.builder().build_unconditional_branch(cont_bb);
 
         gc.builder().position_at_end(unmatch_bb);
-        let value = gc.context.i8_type().const_int(0 as u64, false);
-        ret.store_field_nocap(gc, 0, value);
+        let zero = gc.context.i8_type().const_int(0 as u64, false);
         gc.builder().build_unconditional_branch(cont_bb);
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
+        let phi = gc.builder().build_phi(gc.context.i8_type(), "phi");
+        phi.add_incoming(&[(&one, match_bb), (&zero, unmatch_bb)]);
+        let ret = create_obj(make_bool_ty(), &vec![], None, gc, Some(&self.name_cloned));
+        let ret = ret.insert_field(gc, 0, phi.as_basic_value());
         gc.release(obj);
         ret
     }
@@ -3388,7 +3329,7 @@ impl InlineLLVMUnionModBody {
             .get(gc);
 
         let is_unbox = obj.is_unbox(gc.type_env());
-        let offset = if is_unbox { 0 } else { 1 };
+        let offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
@@ -3397,7 +3338,7 @@ impl InlineLLVMUnionModBody {
             .const_int(self.field_idx as u64, false);
 
         // Get tag value.
-        let tag_value = obj.load_field_nocap(gc, 0 + offset).into_int_value();
+        let tag_value = obj.extract_field(gc, 0 + offset).into_int_value();
 
         // Branch and store result to ret_ptr.
         let is_tag_match = gc.builder().build_int_compare(
@@ -3417,30 +3358,29 @@ impl InlineLLVMUnionModBody {
         // Implement match_bb
         gc.builder().position_at_end(match_bb);
         let field_ty = union_ty.field_types(gc.type_env())[self.field_idx as usize].clone();
-        let value = ObjectFieldType::get_union_field(gc, obj.clone(), &field_ty);
+        let value = ObjectFieldType::get_union_value(gc, obj.clone(), &field_ty);
         let value = gc
             .apply_lambda(modifier.clone(), vec![value], false)
             .unwrap();
         // Prepare space for returned union object.
-        let ret_obj = allocate_obj(
+        let ret_obj = create_obj(
             union_ty.clone(),
             &vec![],
             None,
             gc,
-            Some("alloca@union_mod_function"),
+            Some("create_obj@union_mod"),
         );
         // Set values of returned union object.
-        ret_obj.store_field_nocap(gc, 0 + offset, specified_tag_value);
-        let buf = ret_obj.ptr_to_field_nocap(gc, offset + 1);
-        ObjectFieldType::set_value_to_union_buf(gc, buf, value);
-        let match_ret_obj_ptr = ret_obj.ptr(gc);
+        let ret_obj = ret_obj.insert_field(gc, offset + UNION_TAG_IDX, specified_tag_value);
+        let ret_obj = ret_obj.insert_field(gc, offset + UNION_DATA_IDX, value.value);
+        let match_val = ret_obj.value;
         match_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
 
         // Implement unmatch_bb
         gc.builder().position_at_end(unmatch_bb);
         gc.release(modifier);
-        let unmatch_ret_obj_ptr = obj.ptr(gc);
+        let unmatch_val = obj.value;
         unmatch_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb);
 
@@ -3448,12 +3388,9 @@ impl InlineLLVMUnionModBody {
         gc.builder().position_at_end(cont_bb);
         let phi = gc
             .builder()
-            .build_phi(match_ret_obj_ptr.get_type(), "phi@union_mod_function");
-        phi.add_incoming(&[
-            (&match_ret_obj_ptr, match_bb),
-            (&unmatch_ret_obj_ptr, unmatch_bb),
-        ]);
-        Object::new(phi.as_basic_value().into_pointer_value(), union_ty.clone())
+            .build_phi(match_val.get_type(), "phi@union_mod_function");
+        phi.add_incoming(&[(&match_val, match_bb), (&unmatch_val, unmatch_bb)]);
+        Object::new(phi.as_basic_value(), union_ty.clone(), gc)
     }
 }
 
@@ -3499,138 +3436,6 @@ pub fn union_mod_function(
     (expr, scm)
 }
 
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct InlineLLVMLoopFunctionBody {
-//     initial_state_name: String,
-//     loop_body_name: String,
-// }
-
-// impl InlineLLVMLoopFunctionBody {
-//     pub fn generate<'c, 'm, 'b>(
-//         &self,
-//         gc: &mut GenerationContext<'c, 'm>,
-//         ty: &Arc<TypeNode>,
-//
-//         _borrowed_vars: &Vec<FullName>,
-//     ) -> Object<'c> {
-//         let initial_state_name = FullName::local(&self.initial_state_name);
-//         let loop_body_name = FullName::local(&self.loop_body_name);
-
-//         // Prepare constant.
-//         let cont_tag_value = ObjectFieldType::UnionTag
-//             .to_basic_type(gc, vec![])
-//             .into_int_type()
-//             .const_int(LOOP_RESULT_CONTINUE_IDX as u64, false);
-
-//         // Get argments.
-//         let init_state = gc.get_var(&initial_state_name).ptr.get(gc);
-//         let loop_body = gc.get_var(&loop_body_name).ptr.get(gc);
-
-//         // Collect types.
-//         let loop_state_ty = init_state.ty.clone();
-//         let loop_res_ty = loop_body.ty.get_lambda_dst();
-//         assert!(loop_res_ty.is_unbox(gc.type_env()));
-
-//         // Allocate a space to store LoopResult on stack.
-//         let loop_res = allocate_obj(loop_res_ty, &vec![], None, gc, Some("LoopResult_in_loop"));
-
-//         // If loop_state_ty is unboxed, allocate a space to store loop state on stack to avoid alloca in loop body.
-//         let loop_state_buf = if loop_state_ty.is_unbox(gc.type_env()) {
-//             let ty = loop_state_ty.get_embedded_type(gc, &vec![]);
-//             Some(Object::new(
-//                 gc.build_alloca_at_entry(ty, "loop_state_in_loop"),
-//                 loop_state_ty.clone(),
-//             ))
-//         } else {
-//             None
-//         };
-
-//         // Store the initial loop state to loop_res.
-//         let buf = loop_res.ptr_to_field_nocap(gc, 1);
-//         ObjectFieldType::set_value_to_union_buf(gc, buf, init_state.clone());
-
-//         // Create loop body bb and jump to it.
-//         let current_bb = gc.builder().get_insert_block().unwrap();
-//         let current_func = current_bb.get_parent().unwrap();
-//         let loop_bb = gc.context.append_basic_block(current_func, "loop_bb");
-//         gc.builder().build_unconditional_branch(loop_bb);
-
-//         // Implement loop body.
-//         gc.builder().position_at_end(loop_bb);
-
-//         // Run loop_body on loop state.
-//         gc.retain(loop_body.clone());
-//         let loop_state =
-//             ObjectFieldType::get_union_field(gc, loop_res.clone(), &loop_state_ty, loop_state_buf);
-//         let _ = gc.apply_lambda(loop_body.clone(), vec![loop_state], Some(loop_res.clone()));
-
-//         // Branch due to loop_res.
-//         let tag_value = loop_res.load_field_nocap(gc, 0).into_int_value();
-//         let is_continue = gc.builder().build_int_compare(
-//             IntPredicate::EQ,
-//             tag_value,
-//             cont_tag_value,
-//             "is_continue",
-//         );
-//         let break_bb = gc.context.append_basic_block(current_func, "break_bb");
-//         gc.builder()
-//             .build_conditional_branch(is_continue, loop_bb, break_bb);
-
-//         // Implement break_bb.
-//         gc.builder().position_at_end(break_bb);
-//         gc.release(loop_body);
-//         ObjectFieldType::get_union_field(gc, loop_res, ty, rvo)
-//     }
-// }
-
-// // `loop` built-in function.
-// // loop : s -> (s -> LoopResult s b) -> b;
-// pub fn state_loop() -> (Arc<ExprNode>, Arc<Scheme>) {
-//     const S_NAME: &str = "s";
-//     const B_NAME: &str = "b";
-//     const INITIAL_STATE_NAME: &str = "initial_state";
-//     const LOOP_BODY_NAME: &str = "loop_body";
-//     let tyvar_s = type_tyvar(S_NAME, &kind_star());
-//     let tyvar_b = type_tyvar(B_NAME, &kind_star());
-//     let scm = Scheme::generalize(
-//         &[],
-//         vec![],
-//         vec![],
-//         type_fun(
-//             tyvar_s.clone(),
-//             type_fun(
-//                 type_fun(
-//                     tyvar_s.clone(),
-//                     type_tyapp(type_tyapp(make_loop_result_ty(), tyvar_s), tyvar_b.clone()),
-//                 ),
-//                 tyvar_b,
-//             ),
-//         ),
-//     );
-
-//     let initial_state_name = FullName::local(INITIAL_STATE_NAME);
-//     let loop_body_name = FullName::local(LOOP_BODY_NAME);
-//     let expr = expr_abs(
-//         vec![var_var(initial_state_name.clone())],
-//         expr_abs(
-//             vec![var_var(loop_body_name.clone())],
-//             expr_llvm(
-//                 LLVMGenerator::LoopFunctionBody(InlineLLVMLoopFunctionBody {
-//                     initial_state_name: INITIAL_STATE_NAME.to_string(),
-//                     loop_body_name: LOOP_BODY_NAME.to_string(),
-//                 }),
-//                 vec![initial_state_name, loop_body_name],
-//                 format!("loop({}, {})", INITIAL_STATE_NAME, LOOP_BODY_NAME),
-//                 type_tyvar_star(B_NAME),
-//                 None,
-//             ),
-//             None,
-//         ),
-//         None,
-//     );
-//     (expr, scm)
-// }
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUndefinedFunctionBody {}
 
@@ -3647,23 +3452,28 @@ impl InlineLLVMUndefinedFunctionBody {
         let msg = gc.get_var(&FullName::local(UNDEFINED_ARG_NAME)).ptr.get(gc);
 
         // Get the pointer to the message.
-        let msg = ObjectFieldType::get_struct_field_noclone(gc, &msg, 0);
-        let msg = msg.ptr_to_field_nocap(gc, ARRAY_BUF_IDX);
-        let msg = gc.cast_pointer(msg, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
+        let str = ObjectFieldType::move_out_struct_field(gc, &msg, 0);
+        let c_str = str.gep_boxed(gc, ARRAY_BUF_IDX);
+        let c_str = gc.cast_pointer(c_str, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
 
         // Write it to stderr, and flush.
-        gc.call_runtime(RUNTIME_EPRINT, &[msg.into()]);
+        gc.call_runtime(RUNTIME_EPRINT, &[c_str.into()]);
 
         // Abort the program.
         gc.call_runtime(RUNTIME_ABORT, &[]);
 
         // Return undefined value.
-        Object::new(
+        let val = if ty.is_unbox(gc.type_env()) {
+            ty.get_struct_type(gc, &vec![])
+                .get_undef()
+                .as_basic_value_enum()
+        } else {
             ty.get_struct_type(gc, &vec![])
                 .ptr_type(AddressSpace::from(0))
-                .const_null(),
-            ty.clone(),
-        )
+                .get_undef()
+                .as_basic_value_enum()
+        };
+        Object::new(val, ty.clone(), gc)
     }
 }
 
@@ -3773,7 +3583,6 @@ impl InlineLLVMIsUniqueFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let bool_ty = ObjectFieldType::I8
@@ -3784,11 +3593,11 @@ impl InlineLLVMIsUniqueFunctionBody {
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
 
         // Prepare returned object.
-        let ret = allocate_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
+        let ret = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
 
         // Get whether argument is unique.
         let is_unique = if obj.is_box(gc.type_env()) {
-            let obj_ptr = obj.ptr(gc);
+            let obj_ptr = obj.value.into_pointer_value();
             let current_bb = gc.builder().get_insert_block().unwrap();
             let current_func = current_bb.get_parent().unwrap();
 
@@ -3824,9 +3633,9 @@ impl InlineLLVMIsUniqueFunctionBody {
             .unwrap();
 
         // Store the result
-        ret.store_field_nocap(gc, 0, bool_val);
-        let obj_val = obj.value(gc);
-        ret.store_field_nocap(gc, 1, obj_val);
+        let ret = ret.insert_field(gc, 0, bool_val);
+        let obj_val = obj.value;
+        let ret = ret.insert_field(gc, 1, obj_val);
 
         ret
     }
@@ -3870,23 +3679,21 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
         let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
         assert!(obj.is_box(gc.type_env()));
 
-        let ptr = obj.ptr(gc);
-        let ret = allocate_obj(
+        let ptr = obj.value;
+        let ret = create_obj(
             make_ptr_ty(),
             &vec![],
             None,
             gc,
             Some("ret_val@get_ptr_of_boxed_value"),
         );
-        ret.store_field_nocap(gc, 0, ptr);
-        ret
+        ret.insert_field(gc, 0, ptr)
         // Since the object should be retained by calling this function, we do not release `obj`.
     }
 }
@@ -3933,11 +3740,10 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         assert!(ret_ty.is_box(gc.type_env()));
-
         // Get argument.
         let ptr = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
-        let ptr = ptr.load_field_nocap(gc, 0).into_pointer_value();
-        Object::new(ptr, ret_ty.clone())
+        let ptr = ptr.extract_field(gc, 0);
+        Object::new(ptr, ret_ty.clone(), gc)
     }
 }
 
@@ -3980,7 +3786,6 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
@@ -4012,12 +3817,9 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
             gc.builder().position_at_end(bb);
 
             // Get pointer to object.
-            let obj_ptr = release_function
-                .get_nth_param(0)
-                .unwrap()
-                .into_pointer_value();
+            let obj_ptr = release_function.get_nth_param(0).unwrap();
             // Create object.
-            let obj = Object::new(obj_ptr, target_ty.clone());
+            let obj = Object::new(obj_ptr, target_ty.clone(), gc);
             // Release object.
             gc.release(obj);
             // Return.
@@ -4028,15 +3830,14 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         let func_ptr = func.as_global_value().as_pointer_value();
         let func_ptr = gc.cast_pointer(func_ptr, ptr_to_object_type(gc.context));
 
-        let ret = allocate_obj(
+        let ret = create_obj(
             make_ptr_ty(),
             &vec![],
             None,
             gc,
             Some("ret_val@get_funptr_release"),
         );
-        ret.store_field_nocap(gc, 0, func_ptr);
-        ret
+        ret.insert_field(gc, 0, func_ptr)
     }
 }
 
@@ -4081,7 +3882,6 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
@@ -4113,12 +3913,9 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
             gc.builder().position_at_end(bb);
 
             // Get pointer to object.
-            let obj_ptr = retain_function
-                .get_nth_param(0)
-                .unwrap()
-                .into_pointer_value();
+            let obj_ptr = retain_function.get_nth_param(0).unwrap();
             // Create object.
-            let obj = Object::new(obj_ptr, target_ty);
+            let obj = Object::new(obj_ptr, target_ty, gc);
             // retain object.
             gc.retain(obj);
             // Return.
@@ -4129,15 +3926,14 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         let func_ptr = func.as_global_value().as_pointer_value();
         let func_ptr = gc.cast_pointer(func_ptr, ptr_to_object_type(gc.context));
 
-        let ret = allocate_obj(
+        let ret = create_obj(
             make_ptr_ty(),
             &vec![],
             None,
             gc,
             Some("ret_val@get_funptr_retain"),
         );
-        ret.store_field_nocap(gc, 0, func_ptr);
-        ret
+        ret.insert_field(gc, 0, func_ptr)
     }
 }
 
@@ -4181,7 +3977,6 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument.
@@ -4195,16 +3990,14 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         gc.release(obj.clone());
 
         // Make returned object.
-        let ret = allocate_obj(
+        let ret = create_obj(
             make_ptr_ty(),
             &vec![],
             None,
             gc,
             Some("ret_val@_get_boxed_ptr"),
         );
-        ret.store_field_nocap(gc, 0, data_ptr);
-
-        ret
+        ret.insert_field(gc, 0, data_ptr)
     }
 }
 
@@ -4223,7 +4016,7 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
     };
 
     // Get pointer
-    let ptr = val.ptr_to_field_nocap(gc, data_field_idx);
+    let ptr = val.gep_boxed(gc, data_field_idx);
     let ptr_ty = ObjectFieldType::Ptr
         .to_basic_type(gc, vec![])
         .into_pointer_type();
@@ -4287,17 +4080,17 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-        let data_ptr_obj = allocate_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        data_ptr_obj.store_field_nocap(gc, 0, data_ptr);
+        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
 
         // Run the IO action.
         let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
         let io_res = run_io_value(gc, &io_act);
 
         // Construct the return value.
-        let res = allocate_obj(ret_ty.clone(), &vec![], None, gc, None);
-        ObjectFieldType::set_struct_field_norelease(gc, &res, 0, &val);
-        ObjectFieldType::set_struct_field_norelease(gc, &res, 1, &io_res);
+        let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &val);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &io_res);
 
         res
     }
@@ -4376,26 +4169,26 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-        let data_ptr_obj = allocate_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-        data_ptr_obj.store_field_nocap(gc, 0, data_ptr);
+        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
+        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
 
         // Run the IO action.
         let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
         let io_res = run_io_value(gc, &io_act);
 
         // Construct the return value.
-        let pair_ab = allocate_obj(
+        let pair_ab = create_obj(
             make_tuple_ty(vec![val.ty.clone(), io_res.ty.clone()]),
             &vec![],
             None,
             gc,
             Some("pair_ab"),
         );
-        ObjectFieldType::set_struct_field_norelease(gc, &pair_ab, 0, &val);
-        ObjectFieldType::set_struct_field_norelease(gc, &pair_ab, 1, &io_res);
-        let res = allocate_obj(ret_ty.clone(), &vec![], None, gc, None);
-        ObjectFieldType::set_struct_field_norelease(gc, &res, 0, &ios);
-        ObjectFieldType::set_struct_field_norelease(gc, &res, 1, &pair_ab);
+        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 0, &val);
+        let pair_ab = ObjectFieldType::move_into_struct_field(gc, pair_ab, 1, &io_res);
+        let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &pair_ab);
 
         res
     }
@@ -4497,13 +4290,13 @@ pub fn get_unsafe_perform() -> (Arc<ExprNode>, Arc<Scheme>) {
 // Run an IO runner in the IO monad and return the result.
 pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
-    let runner = io.load_field_nocap(gc, 0);
+    let runner = io.extract_field(gc, 0);
     let runner_ty = type_fun(
         make_iostate_ty(),
         make_tuple_ty(vec![make_iostate_ty(), res_ty.clone()]),
     );
-    let runner_obj = Object::create_from_value(runner, runner_ty, gc);
-    let ios = allocate_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+    let runner_obj = Object::new(runner, runner_ty, gc);
+    let ios = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
     let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios], false).unwrap();
     ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[1])
         .into_iter()
@@ -4692,16 +4485,15 @@ impl InlineLLVMIntEqBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
         let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs_obj.load_field_nocap(gc, 0).into_int_value();
+        let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         gc.release(lhs_obj);
-        let rhs_val = rhs_obj.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs_obj.extract_field(gc, 0).into_int_value();
         gc.release(rhs_obj);
         let value =
             gc.builder()
@@ -4713,15 +4505,14 @@ impl InlineLLVMIntEqBody {
                 .into_int_type(),
             "eq",
         );
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_bool_ty(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -4750,9 +4541,9 @@ impl InlineLLVMPtrEqBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
         let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs_obj.load_field_nocap(gc, 0).into_pointer_value();
+        let lhs_val = lhs_obj.extract_field(gc, 0).into_pointer_value();
         gc.release(lhs_obj);
-        let rhs_val = rhs_obj.load_field_nocap(gc, 0).into_pointer_value();
+        let rhs_val = rhs_obj.extract_field(gc, 0).into_pointer_value();
         gc.release(rhs_obj);
         let diff = gc
             .builder()
@@ -4770,15 +4561,14 @@ impl InlineLLVMPtrEqBody {
                 .into_int_type(),
             "eq_of_int",
         );
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_bool_ty(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -4807,9 +4597,9 @@ impl InlineLLVMFloatEqBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
         let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs_obj.load_field_nocap(gc, 0).into_float_value();
+        let lhs_val = lhs_obj.extract_field(gc, 0).into_float_value();
         gc.release(lhs_obj);
-        let rhs_val = rhs_obj.load_field_nocap(gc, 0).into_float_value();
+        let rhs_val = rhs_obj.extract_field(gc, 0).into_float_value();
         gc.release(rhs_obj);
         let value = gc.builder().build_float_compare(
             inkwell::FloatPredicate::OEQ,
@@ -4824,15 +4614,14 @@ impl InlineLLVMFloatEqBody {
                 .into_int_type(),
             "eq_of_float",
         );
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_bool_ty(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", EQ_TRAIT_EQ_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -4871,9 +4660,9 @@ impl InlineLLVMIntLessThanBody {
         let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
         let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
         let is_singed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
-        let lhs_val = lhs_obj.load_field_nocap(gc, 0).into_int_value();
+        let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         gc.release(lhs_obj);
-        let rhs_val: IntValue = rhs_obj.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val: IntValue = rhs_obj.extract_field(gc, 0).into_int_value();
         gc.release(rhs_obj);
         let value = gc.builder().build_int_compare(
             if is_singed {
@@ -4892,15 +4681,14 @@ impl InlineLLVMIntLessThanBody {
                 .into_int_type(),
             LESS_THAN_TRAIT_LT_NAME,
         );
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_bool_ty(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -4929,9 +4717,9 @@ impl InlineLLVMFloatLessThanBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         gc.release(rhs);
         let value = gc.builder().build_float_compare(
             inkwell::FloatPredicate::OLT,
@@ -4946,15 +4734,14 @@ impl InlineLLVMFloatLessThanBody {
                 .into_int_type(),
             LESS_THAN_TRAIT_LT_NAME,
         );
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_bool_ty(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", LESS_THAN_TRAIT_LT_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -4994,9 +4781,9 @@ impl InlineLLVMIntLessThanOrEqBody {
         let rhs = gc.get_var(&rhs).ptr.get(gc);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc.builder().build_int_compare(
             if is_singed {
@@ -5015,15 +4802,14 @@ impl InlineLLVMIntLessThanOrEqBody {
                 .into_int_type(),
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_bool_ty(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5052,9 +4838,9 @@ impl InlineLLVMFloatLessThanOrEqBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         gc.release(rhs);
         let value = gc.builder().build_float_compare(
             inkwell::FloatPredicate::OLE,
@@ -5069,15 +4855,14 @@ impl InlineLLVMFloatLessThanOrEqBody {
                 .into_int_type(),
             LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
         );
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_bool_ty(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5115,22 +4900,21 @@ impl InlineLLVMIntAddBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc
             .builder()
             .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5152,29 +4936,27 @@ impl InlineLLVMFloatAddBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         gc.release(rhs);
         let value = gc
             .builder()
             .build_float_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", ADD_TRAIT_ADD_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5212,22 +4994,21 @@ impl InlineLLVMIntSubBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc
             .builder()
             .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5256,22 +5037,21 @@ impl InlineLLVMFloatSubBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         gc.release(rhs);
         let value = gc
             .builder()
             .build_float_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", SUBTRACT_TRAIT_SUBTRACT_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5309,22 +5089,21 @@ impl InlineLLVMIntMulBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs);
         let value = gc
             .builder()
             .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5353,22 +5132,21 @@ impl InlineLLVMFloatMulBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         gc.release(rhs);
         let value = gc
             .builder()
             .build_float_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", MULTIPLY_TRAIT_MULTIPLY_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5408,9 +5186,9 @@ impl InlineLLVMIntDivBody {
         let rhs = gc.get_var(&rhs).ptr.get(gc);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs);
         let value = if is_singed {
             gc.builder()
@@ -5419,15 +5197,14 @@ impl InlineLLVMIntDivBody {
             gc.builder()
                 .build_int_unsigned_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
         };
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5456,22 +5233,21 @@ impl InlineLLVMFloatDivBody {
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&lhs).ptr.get(gc);
         let rhs = gc.get_var(&rhs).ptr.get(gc);
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_float_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         gc.release(rhs);
         let value = gc
             .builder()
             .build_float_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} lhs rhs", DIVIDE_TRAIT_DIVIDE_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5510,9 +5286,9 @@ impl InlineLLVMIntRemBody {
         let rhs = gc.get_var(&rhs).ptr.get(gc);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        let lhs_val = lhs.load_field_nocap(gc, 0).into_int_value();
+        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs.clone());
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs);
         let value = if is_singed {
             gc.builder()
@@ -5521,15 +5297,14 @@ impl InlineLLVMIntRemBody {
             gc.builder()
                 .build_int_unsigned_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
         };
-        let obj = allocate_obj(
+        let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{}(lhs, rhs)", REMAINDER_TRAIT_REMAINDER_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5565,20 +5340,19 @@ impl InlineLLVMIntNegBody {
     ) -> Object<'c> {
         let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs.clone());
         let value = gc
             .builder()
             .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             rhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5605,20 +5379,19 @@ impl InlineLLVMFloatNegBody {
     ) -> Object<'c> {
         let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_float_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         gc.release(rhs.clone());
         let value = gc
             .builder()
             .build_float_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             rhs.ty.clone(),
             &vec![],
             None,
             gc,
             Some(&format!("{} rhs", NEGATE_TRAIT_NEGATE_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 
@@ -5654,7 +5427,7 @@ impl InlineLLVMBoolNegBody {
     ) -> Object<'c> {
         let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
         let rhs = gc.get_var(&rhs_name).ptr.get(gc);
-        let rhs_val = rhs.load_field_nocap(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs);
         let bool_ty = ObjectFieldType::I8
             .to_basic_type(gc, vec![])
@@ -5666,15 +5439,14 @@ impl InlineLLVMBoolNegBody {
         let value = gc
             .builder()
             .build_int_z_extend(value, bool_ty, NOT_TRAIT_OP_NAME);
-        let obj = allocate_obj(
+        let obj = create_obj(
             make_bool_ty(),
             &vec![],
             None,
             gc,
             Some(&format!("{} rhs", NOT_TRAIT_OP_NAME)),
         );
-        obj.store_field_nocap(gc, 0, value);
-        obj
+        obj.insert_field(gc, 0, value)
     }
 }
 

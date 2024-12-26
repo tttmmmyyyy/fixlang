@@ -18,7 +18,7 @@ use inkwell::{
     module::Linkage,
     targets::{TargetData, TargetMachine},
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
-    values::{BasicMetadataValueEnum, CallSiteValue, StructValue},
+    values::{BasicMetadataValueEnum, CallSiteValue},
 };
 use misc::flatten_opt;
 use misc::Map;
@@ -40,22 +40,21 @@ pub enum VarValue<'c> {
 }
 
 impl<'c> VarValue<'c> {
-    // Get pointer.
-    pub fn get<'m>(&self, gc: &GenerationContext<'c, 'm>) -> Object<'c> {
+    // Get the object.
+    pub fn get<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> Object<'c> {
         match self {
             VarValue::Local(ptr) => ptr.clone(),
             VarValue::Global(fun, ty) => {
-                let ptr = if ty.is_funptr() {
-                    fun.as_global_value().as_pointer_value()
+                let val = if ty.is_funptr() {
+                    fun.as_global_value().as_basic_value_enum()
                 } else {
                     gc.builder()
-                        .build_call(fun.clone(), &[], "get_ptr")
+                        .build_call(fun.clone(), &[], "get_global_obj")
                         .try_as_basic_value()
                         .left()
                         .unwrap()
-                        .into_pointer_value()
                 };
-                Object::new(ptr, ty.clone())
+                Object::new(val, ty.clone(), gc)
             }
         }
     }
@@ -71,40 +70,37 @@ impl<'c> VarValue<'c> {
 
 #[derive(Clone)]
 pub struct Object<'c> {
-    ptr: PointerValue<'c>,
+    // The value of the object.
+    // For boxed type, this is a pointer to the object allocated on the heap.
+    // For funcptr type, this is the function pointer.
+    // For unboxed type, this is a value on the (virtual) register.
+    pub value: BasicValueEnum<'c>,
     pub ty: Arc<TypeNode>,
 }
 
 impl<'c> Object<'c> {
-    pub fn new(ptr: PointerValue<'c>, ty: Arc<TypeNode>) -> Self {
-        assert!(ty.free_vars().is_empty());
-        Object { ptr, ty }
-    }
-
-    // If boxed type, then create Object from pointer.
-    // If unboxed type, then store the value to stack and create a new `Object`.
-    pub fn create_from_value<'m>(
-        val: BasicValueEnum<'c>,
+    pub fn new<'m>(
+        value: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
         gc: &mut GenerationContext<'c, 'm>,
-    ) -> Object<'c> {
-        let ptr = if ty.is_box(gc.type_env()) || ty.is_funptr() {
-            val.into_pointer_value()
+    ) -> Self {
+        assert!(ty.free_vars().is_empty());
+        let value = if ty.is_box(gc.type_env()) {
+            gc.cast_pointer(value.into_pointer_value(), ptr_to_object_type(&gc.context))
+                .as_basic_value_enum()
+        } else if ty.is_funptr() {
+            gc.cast_pointer(
+                value.into_pointer_value(),
+                opaque_lambda_function_ptr_type(&gc.context),
+            )
+            .as_basic_value_enum()
         } else {
-            let str = ty.get_struct_type(gc, &vec![]);
-            let ptr = gc.build_alloca_at_entry(str, "alloca_for_unboxed_obj");
-            gc.builder().build_store(ptr, val);
-            ptr
+            // Unboxed case
+            let embed_ty = ty.get_embedded_type(gc, &vec![]);
+            assert_eq!(embed_ty, value.get_type());
+            value
         };
-        Object::new(ptr, ty)
-    }
-
-    pub fn value<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> BasicValueEnum<'c> {
-        if self.ty.is_box(gc.type_env()) || self.is_funptr() {
-            self.ptr(gc).as_basic_value_enum()
-        } else {
-            self.load_value_unbox(gc).as_basic_value_enum()
-        }
+        Object { value, ty }
     }
 
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
@@ -127,16 +123,28 @@ impl<'c> Object<'c> {
         self.ty.is_destructor_object()
     }
 
-    pub fn ptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
-        if self.is_box(gc.type_env()) {
-            gc.cast_pointer(self.ptr, ptr_to_object_type(gc.context))
-        } else if self.is_funptr() {
-            gc.cast_pointer(self.ptr, opaque_lambda_function_ptr_type(&gc.context))
-        } else {
-            let str_ty = self.struct_ty(gc);
-            gc.cast_pointer(self.ptr, ptr_type(str_ty))
-        }
-    }
+    // pub fn opaque_boxed_ptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
+    //     assert!(self.is_box(gc.type_env()));
+    //     gc.builder().build_pointer_cast(
+    //         self.value.into_pointer_value(),
+    //         ptr_to_object_type(gc.context),
+    //         "cast_boxed_to_opaq_ptr",
+    //     )
+    // }
+
+    // pub fn opaque_funptr<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> PointerValue<'c> {
+    //     assert!(self.is_funptr());
+    //     gc.builder().build_pointer_cast(
+    //         self.value.into_pointer_value(),
+    //         opaque_lambda_function_ptr_type(&gc.context),
+    //         "cast_funcptr_to_opaq_ptr",
+    //     )
+    // }
+
+    // pub fn unboxed_struct_value<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
+    //     assert!(self.is_unbox(gc.type_env()));
+    //     self.value.into_struct_value()
+    // }
 
     pub fn debug_embedded_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
         ty_to_debug_embedded_ty(self.ty.clone(), gc)
@@ -147,80 +155,150 @@ impl<'c> Object<'c> {
         ty_to_object_ty(&self.ty, &vec![], gc.type_env()).to_struct_type(gc, vec![])
     }
 
-    pub fn load_value_unbox<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructValue<'c> {
-        assert!(!self.is_funptr());
-        // If applied to boxed value, the following code loads not only the value of the object but also the reference counter. So this function should not be applied to boxed value.
-        assert!(self.is_unbox(gc.type_env()));
-        let struct_ty = self.struct_ty(gc);
-        let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
-        gc.builder()
-            .build_load(ptr, "load_value")
-            .into_struct_value()
-    }
-
-    #[allow(dead_code)]
-    pub fn store_value_unbox<'m, V>(&self, gc: &mut GenerationContext<'c, 'm>, value: V)
-    where
-        V: BasicValue<'c>,
-    {
-        assert!(!self.is_funptr());
-        // If applied to boxed value, the following code stores not only the value of the object but also the reference counter.
-        // So this function should not be applied to boxed value.
-        assert!(self.is_unbox(gc.type_env()));
-        let struct_ty = self.struct_ty(gc);
-        let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
-        gc.builder().build_store(ptr, value);
-    }
-
-    pub fn ptr_to_field_nocap<'m>(
+    // Get the pointer to the field of an boxed object.
+    pub fn gep_boxed<'m>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         field_idx: u32,
     ) -> PointerValue<'c> {
-        assert!(!self.is_funptr());
+        assert!(self.ty.is_box(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
-        let ptr = gc.cast_pointer(self.ptr, ptr_type(struct_ty));
+        let ptr = gc.cast_pointer(self.value.into_pointer_value(), ptr_type(struct_ty));
         gc.builder()
             .build_struct_gep(ptr, field_idx, "ptr_to_field_nocap")
             .unwrap()
     }
 
-    pub fn load_field_nocap<'m>(
+    // Extract a field value of an object.
+    // This cannot be used to get field of dynamic objects. Use `load_field_dynamic` instead.
+    // This function does not support funptr type since in that case the `value` is not a struct.
+    pub fn extract_field<'m>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         field_idx: u32,
     ) -> BasicValueEnum<'c> {
         assert!(!self.is_funptr());
-        let struct_ty = self.struct_ty(gc);
-        gc.load_obj_field(self.ptr, struct_ty, field_idx)
+        if self.is_unbox(&gc.type_env) {
+            // When the object is unboxed,
+            gc.builder()
+                .build_extract_value(
+                    self.value.into_struct_value(),
+                    field_idx,
+                    format!("field_{}", field_idx).as_str(),
+                )
+                .unwrap()
+        } else {
+            // When the object is boxed,
+            let struct_ty = self.struct_ty(gc);
+            self.extract_field_as(gc, struct_ty, field_idx)
+        }
     }
 
-    pub fn store_field_nocap<'m, V>(
+    // Extract a field value of an object.
+    // You can specify the struct type of the boxed object, ignoring the `ty` field of the object.
+    // Can be used only for boxed objects, because currently there is no use case of this function for unboxed objects.
+    pub fn extract_field_as<'m>(
         &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: StructType<'c>,
+        field_idx: u32,
+    ) -> BasicValueEnum<'c> {
+        assert!(self.is_box(&gc.type_env));
+        let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
+        gc.builder().build_load(ptr_to_field, "field")
+    }
+
+    // Insert a field value into an object.
+    // This cannot be used to set field of dynamic objects. Use `store_field_dynamic` instead.
+    // This function does not support funptr type since in that case the `value` is not a struct.
+    pub fn insert_field<'m, V>(
+        mut self,
         gc: &mut GenerationContext<'c, 'm>,
         field_idx: u32,
         val: V,
-    ) where
+    ) -> Object<'c>
+    where
         V: BasicValue<'c>,
     {
         assert!(!self.is_funptr());
-        let struct_ty = self.struct_ty(gc);
-        gc.store_obj_field(self.ptr, struct_ty, field_idx, val)
+        if self.is_unbox(&gc.type_env) {
+            // When the object is unboxed,
+            let struct_val = self.value.into_struct_value();
+            let struct_val = gc
+                .builder()
+                .build_insert_value(struct_val, val, field_idx, "insert_field")
+                .unwrap()
+                .as_basic_value_enum();
+            self.value = struct_val;
+        } else {
+            // When the object is boxed,
+            let struct_ty = self.struct_ty(gc);
+            self.insert_field_as(gc, struct_ty, field_idx, val);
+        }
+        self
+    }
+
+    // Insert a field value into an object.
+    // You can specify the struct type of the boxed object, ignoring the `ty` field of the object.
+    // Can be used only for boxed objects, because currently there is no use case of this function for unboxed objects.
+    pub fn insert_field_as<'m, V>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: StructType<'c>,
+        field_idx: u32,
+        value: V,
+    ) where
+        V: BasicValue<'c>,
+    {
+        assert!(self.is_box(&gc.type_env));
+        let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
+        gc.builder().build_store(ptr_to_field, value);
     }
 
     // Get the pointer to traverser function from a dynamic object.
-    pub fn get_traverser_from_dynamic<'m>(
+    pub fn extract_trav_from_dynamic<'m>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
     ) -> PointerValue<'c> {
         assert!(self.ty.is_dynamic());
-        self.load_field_nocap(gc, DYNAMIC_OBJ_TRAVARSER_IDX)
+        self.extract_field(gc, DYNAMIC_OBJ_TRAVARSER_IDX)
             .into_pointer_value()
     }
 
     // Check if the pointer is null.
+    // Can be used for boxed objects.
     pub fn is_null<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> IntValue<'c> {
-        gc.builder().build_is_null(self.ptr, "is_null")
+        assert!(self.is_box(gc.type_env()));
+        gc.builder()
+            .build_is_null(self.value.into_pointer_value(), "is_null")
+    }
+
+    // Get the pointer to the field of an boxed object.
+    // Can be used only for boxed objects.
+    pub fn ptr_to_field<'m>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        field_idx: u32,
+    ) -> PointerValue<'c> {
+        assert!(self.is_box(&gc.type_env));
+        let ty = self.struct_ty(gc);
+        self.ptr_to_field_as(gc, ty, field_idx)
+    }
+
+    // Get the pointer to the field of an boxed object.
+    // You can specify the struct type of the boxed object, ignoring the `ty` field of the object.
+    // Can be used only for boxed objects.
+    pub fn ptr_to_field_as<'m>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: StructType<'c>,
+        field_idx: u32,
+    ) -> PointerValue<'c> {
+        assert!(self.is_box(&gc.type_env));
+        let ptr = gc.cast_pointer(self.value.into_pointer_value(), ptr_type(ty));
+        gc.builder()
+            .build_struct_gep(ptr, field_idx, "gep2field")
+            .unwrap()
     }
 }
 
@@ -554,7 +632,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Get field of object in the scope.
     pub fn get_var_field(self: &mut Self, var: &FullName, field_idx: u32) -> BasicValueEnum<'c> {
         let obj = self.get_var(var).ptr.get(self);
-        obj.load_field_nocap(self, field_idx)
+        obj.extract_field(self, field_idx)
     }
 
     // Push scope.
@@ -577,17 +655,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if var.used_later > 0 {
             // If used later, clone object.
             self.build_retain(obj.clone());
-            if obj.is_unbox(self.type_env()) {
-                // if unboxed, in addition to retain, we also need to store the value to another memory region other than obj,
-                // since all unboxed values are treated as like unique object (i.e., the object of refcnt = 1)
-                // in the sense that it will be modified by functions such as `set` function of struct.
-                Object::create_from_value(obj.value(self), obj.ty, self)
-            } else {
-                obj
-            }
-        } else {
-            obj
         }
+        obj
     }
 
     pub fn cast_pointer(&self, from: PointerValue<'c>, to: PointerType<'c>) -> PointerValue<'c> {
@@ -767,47 +836,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .unwrap()
     }
 
-    // Take an pointer of struct and return the loaded value of a pointer field.
-    pub fn load_obj_field(
-        &self,
-        obj: PointerValue<'c>,
-        ty: StructType<'c>,
-        index: u32,
-    ) -> BasicValueEnum<'c> {
-        let ptr = self.cast_pointer(obj, ptr_type(ty));
-        let ptr_to_field = self
-            .builder()
-            .build_struct_gep(ptr, index, "ptr_to_field")
-            .unwrap();
-        self.builder().build_load(ptr_to_field, "field_value")
-    }
-
-    // Take an pointer of struct and store a value into a pointer field.
-    pub fn store_obj_field<V>(
-        &self,
-        obj: PointerValue<'c>,
-        ty: StructType<'c>,
-        index: u32,
-        value: V,
-    ) where
-        V: BasicValue<'c>,
-    {
-        let ptr = self.cast_pointer(obj, ptr_type(ty));
-        let ptr_to_field = self
-            .builder()
-            .build_struct_gep(ptr, index, "ptr_to_field")
-            .unwrap();
-        self.builder().build_store(ptr_to_field, value);
-    }
-
     // Take a lambda object and return function pointer.
     fn get_lambda_func_ptr(&mut self, obj: Object<'c>) -> PointerValue<'c> {
         // Get the pointer value.
         let ptr = if obj.ty.is_closure() {
-            obj.load_field_nocap(self, CLOSURE_FUNPTR_IDX)
+            obj.extract_field(self, CLOSURE_FUNPTR_IDX)
                 .into_pointer_value()
         } else if obj.ty.is_funptr() {
-            obj.ptr(self)
+            obj.value.into_pointer_value()
         } else {
             panic!()
         };
@@ -834,9 +870,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             assert_eq!(args[i].ty, src_tys[i])
         }
 
-        // If argument is unboxed, load it.
-        let args = args.iter().map(|arg| arg.value(self)).collect::<Vec<_>>();
-
         // Get function.
         let ptr_to_func = self.get_lambda_func_ptr(fun.clone());
         let func = CallableValue::try_from(ptr_to_func).unwrap();
@@ -844,16 +877,16 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Call function pointer with arguments, CAP if closure.
         let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
         for arg in args {
-            call_args.push(arg.into())
+            call_args.push(arg.value.into());
         }
         if fun.ty.is_closure() {
-            call_args.push(fun.load_field_nocap(self, CLOSURE_CAPTURE_IDX).into());
+            call_args.push(fun.extract_field(self, CLOSURE_CAPTURE_IDX).into());
         }
 
         let ret = self.builder().build_call(func, &call_args, "call_lambda");
         ret.set_tail_call(!self.has_di());
         let ret = ret.try_as_basic_value().unwrap_left();
-        let obj = Object::create_from_value(ret, ret_ty, self);
+        let obj = Object::new(ret, ret_ty, self);
         self.build_tail(obj, tail)
     }
 
@@ -868,24 +901,22 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 &func_name,
                 self.context
                     .void_type()
-                    .fn_type(&[ptr_to_object_type(&self.context).into()], false),
+                    .fn_type(&[obj.ty.get_embedded_type(self, &vec![]).into()], false),
                 Some(Linkage::Internal),
             );
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
             self.builder().position_at_end(bb);
-            let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
-            let obj = Object::new(obj_ptr, obj.ty.clone());
+            let obj_val = func.get_first_param().unwrap();
+            let obj = Object::new(obj_val, obj.ty.clone(), self);
             self.build_retain(obj);
             self.builder().build_return(None);
             func
         };
 
         // Call retain function.
-        let obj_ptr = obj.ptr(self);
-        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(&self.context));
         self.builder()
-            .build_call(func, &[obj_ptr.into()], "call_retain");
+            .build_call(func, &[obj.value.into()], "call_retain");
     }
 
     // Retain an object.
@@ -914,7 +945,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.builder().position_at_end(nonnull_bb);
             }
 
-            let obj_ptr = obj.ptr(self);
+            let obj_ptr = obj.value.into_pointer_value();
             // Branch by refcnt_state.
             let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
 
@@ -962,10 +993,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             // When the object is unboxed,
             let obj_type = ty_to_object_ty(&obj.ty, &vec![], self.type_env());
-            let struct_type = obj_type.to_struct_type(self, vec![]);
-            let ptr = obj.ptr(self);
-            let ptr = self.cast_pointer(ptr, ptr_type(struct_type));
-            let mut union_tag: Option<IntValue<'c>> = None;
             for (i, ft) in obj_type.field_types.iter().enumerate() {
                 match ft {
                     ObjectFieldType::ControlBlock => unreachable!(),
@@ -982,35 +1009,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     ObjectFieldType::U64 => {}
                     ObjectFieldType::F32 => {}
                     ObjectFieldType::F64 => {}
-                    ObjectFieldType::SubObject(ty, is_punched) => {
+                    ObjectFieldType::SubObject(subty, is_punched) => {
                         if *is_punched {
                             continue;
                         }
-                        let ptr = if ty.is_box(self.type_env()) {
-                            self.load_obj_field(ptr, struct_type, i as u32)
-                                .into_pointer_value()
-                        } else {
-                            self.builder()
-                                .build_struct_gep(ptr, i as u32, &format!("ptr_to_{}th_field", i))
-                                .unwrap()
-                        };
-                        self.retain(Object::new(ptr, ty.clone()));
+                        let subval = obj.extract_field(self, i as u32);
+                        let subobj = Object::new(subval, subty.clone(), self);
+                        self.retain(subobj);
                     }
                     ObjectFieldType::UnionBuf(_) => {
-                        let buf = obj.ptr_to_field_nocap(self, i as u32);
-                        ObjectFieldType::retain_union_buf(
-                            self,
-                            buf,
-                            union_tag.unwrap(),
-                            &obj.ty.field_types(self.type_env()),
-                        );
+                        ObjectFieldType::retain_union(self, obj.clone());
                     }
-                    ObjectFieldType::UnionTag => {
-                        union_tag = Some(
-                            self.load_obj_field(ptr, struct_type, i as u32)
-                                .into_int_value(),
-                        );
-                    }
+                    ObjectFieldType::UnionTag => {}
                     ObjectFieldType::Array(_) => unreachable!(),
                 }
             }
@@ -1022,27 +1032,24 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
         if work == TraverserWorkType::release() && obj.is_destructor_object() {
             // Branch by whether or not the reference counter is one.
-            let obj_ptr = obj.ptr(self);
+            let obj_ptr = obj.value.into_pointer_value();
             let (unique_bb, shared_bb) = self.build_branch_by_is_unique(obj_ptr);
 
             // If reference counter is one, call destructor.
             self.builder().position_at_end(unique_bb);
-            let value = ObjectFieldType::get_struct_field_noclone(
+            let value = ObjectFieldType::move_out_struct_field(
                 self,
                 obj,
                 DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
             );
-            let dtor = ObjectFieldType::get_struct_field_noclone(
-                self,
-                obj,
-                DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
-            );
+            let dtor =
+                ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
             self.build_retain(dtor.clone());
             let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
             let res = run_io_value(self, &io_act);
-            ObjectFieldType::set_struct_field_norelease(
+            ObjectFieldType::move_into_struct_field(
                 self,
-                obj,
+                obj.clone(), // Since `obj` is boxed, it is ok to clone it and discard the result of `move_into_struct_field`.
                 DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
                 &res,
             );
@@ -1101,12 +1108,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Unboxed case (inlude lambda object).
             match create_traverser(&obj.ty, &vec![], self, Some(work)) {
                 Some(trav) => {
-                    // Argument of traverser function is i8*, even when the object is unboxed.
-                    let ptr = obj.ptr(self);
-                    let ptr: PointerValue<'_> =
-                        self.cast_pointer(ptr, ptr_to_object_type(self.context));
-                    self.builder()
-                        .build_call(trav, &[ptr.into()], "call_traverser_of_unboxed");
+                    self.builder().build_call(
+                        trav,
+                        &[obj.value.into()],
+                        "call_traverser_of_unboxed",
+                    );
                 }
                 None => {}
             }
@@ -1116,8 +1122,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Release a boxed object.
     fn build_release_boxed(&mut self, obj: &Object<'c>) {
         // Get pointer to the object.
-        let obj_ptr = obj.ptr(self);
-        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(self.context));
+        let obj_ptr = obj.value.into_pointer_value();
 
         // Branch by refcnt_state.
         let current_func = self
@@ -1203,7 +1208,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Call dtor.
         if obj.is_dynamic_object() {
             // If the object is dynamic, extract the traverser from the object and call it.
-            let trav = obj.get_traverser_from_dynamic(self);
+            let trav = obj.extract_trav_from_dynamic(self);
             let trav = CallableValue::try_from(trav).unwrap();
             self.builder().build_call(
                 trav,
@@ -1247,12 +1252,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
 
         // Get pointer to the object.
-        let obj_ptr = obj.ptr(self);
-        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(self.context));
+        let obj_ptr = obj.value.into_pointer_value();
 
         // Get pointer to call the traverser function.
         if obj.is_dynamic_object() {
-            let trav = obj.get_traverser_from_dynamic(self);
+            let trav = obj.extract_trav_from_dynamic(self);
             let trav = CallableValue::try_from(trav).unwrap();
             self.builder().build_call(
                 trav,
@@ -1292,24 +1296,22 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 &func_name,
                 self.context
                     .void_type()
-                    .fn_type(&[ptr_to_object_type(&self.context).into()], false),
+                    .fn_type(&[obj.ty.get_embedded_type(self, &vec![]).into()], false),
                 Some(Linkage::Internal),
             );
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
             self.builder().position_at_end(bb);
-            let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
-            let obj = Object::new(obj_ptr, obj.ty.clone());
+            let obj_val = func.get_first_param().unwrap();
+            let obj = Object::new(obj_val, obj.ty.clone(), self);
             self.build_release_mark(obj, TraverserWorkType::release());
             self.builder().build_return(None);
             func
         };
 
         // Call release function.
-        let obj_ptr = obj.ptr(self);
-        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(&self.context));
         self.builder()
-            .build_call(func, &[obj_ptr.into()], "call_release");
+            .build_call(func, &[obj.value.into()], "call_release");
     }
 
     // Release nonnull boxed object.
@@ -1328,24 +1330,22 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 &func_name,
                 self.context
                     .void_type()
-                    .fn_type(&[ptr_to_object_type(&self.context).into()], false),
+                    .fn_type(&[obj.ty.get_embedded_type(self, &vec![]).into()], false),
                 Some(Linkage::Internal),
             );
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
             self.builder().position_at_end(bb);
-            let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
-            let obj = Object::new(obj_ptr, obj.ty.clone());
+            let obj_val = func.get_first_param().unwrap();
+            let obj = Object::new(obj_val, obj.ty.clone(), self);
             self.build_release_mark(obj, TraverserWorkType::mark_global());
             self.builder().build_return(None);
             func
         };
 
         // Call `mark_global` function.
-        let obj_ptr = obj.ptr(self);
-        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(&self.context));
         self.builder()
-            .build_call(func, &[obj_ptr.into()], "call_mark_global");
+            .build_call(func, &[obj.value.into()], "call_mark_global");
     }
 
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
@@ -1358,24 +1358,22 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 &func_name,
                 self.context
                     .void_type()
-                    .fn_type(&[ptr_to_object_type(&self.context).into()], false),
+                    .fn_type(&[obj.ty.get_embedded_type(self, &vec![]).into()], false),
                 Some(Linkage::Internal),
             );
             let bb = self.context.append_basic_block(func, "entry");
             let _builder_guard = self.push_builder();
             self.builder().position_at_end(bb);
-            let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
-            let obj = Object::new(obj_ptr, obj.ty.clone());
+            let obj_val = func.get_first_param().unwrap();
+            let obj = Object::new(obj_val, obj.ty.clone(), self);
             self.build_release_mark(obj, TraverserWorkType::mark_threaded());
             self.builder().build_return(None);
             func
         };
 
         // Call `mark_threaded` function.
-        let obj_ptr = obj.ptr(self);
-        let obj_ptr = self.cast_pointer(obj_ptr, ptr_to_object_type(&self.context));
         self.builder()
-            .build_call(func, &[obj_ptr.into()], "call_mark_threaded");
+            .build_call(func, &[obj.value.into()], "call_mark_threaded");
     }
 
     fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
@@ -1510,7 +1508,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Build return instruction if `tail` is true.
     pub fn build_tail(&mut self, obj: Object<'c>, tail: bool) -> Option<Object<'c>> {
         if tail {
-            let ret = obj.value(self);
+            let ret = obj.value;
             self.builder().build_return(Some(&ret));
             None
         } else {
@@ -1744,23 +1742,20 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let mut arg_objs = vec![];
         for ((i, arg), arg_ty) in args.iter().enumerate().zip(lam_ty.get_lambda_srcs().iter()) {
             let arg_val = lam_fn.get_nth_param(i as u32).unwrap();
-            let arg_obj = Object::create_from_value(arg_val, arg_ty.clone(), self);
+            let arg_obj = Object::new(arg_val, arg_ty.clone(), self);
             self.scope_push(&arg.name, &arg_obj);
             arg_objs.push(arg_obj);
         }
 
         // Push CAP on scope if lambda is closure.
-        let (cap_obj_ptr, cap_obj) = if lam_ty.is_closure() {
+        let cap_obj = if lam_ty.is_closure() {
             let self_idx = args.len();
-            let cap_obj_ptr = lam_fn
-                .get_nth_param(self_idx as u32)
-                .unwrap()
-                .into_pointer_value();
-            let cap_obj = Object::new(cap_obj_ptr, make_dynamic_object_ty());
+            let cap_obj_val = lam_fn.get_nth_param(self_idx as u32).unwrap();
+            let cap_obj = Object::new(cap_obj_val, make_dynamic_object_ty(), self);
             self.scope_push(&FullName::local(CAP_NAME), &cap_obj);
-            (Some(cap_obj_ptr), Some(cap_obj))
+            Some(cap_obj)
         } else {
-            (None, None)
+            None
         };
 
         // Push captured objects on scope.
@@ -1769,12 +1764,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let cap_obj_str_ty = cap_obj_ty.to_struct_type(self, vec![]);
 
             for (i, (cap_name, cap_ty)) in cap_vars.iter().enumerate() {
-                let cap_val = self.load_obj_field(
-                    cap_obj_ptr.unwrap(),
+                let cap_val = cap_obj.as_ref().unwrap().extract_field_as(
+                    self,
                     cap_obj_str_ty,
                     i as u32 + DYNAMIC_OBJ_CAP_IDX,
                 );
-                let cap_obj = Object::create_from_value(cap_val, cap_ty.clone(), self);
+                let cap_obj = Object::new(cap_val, cap_ty.clone(), self);
                 self.build_retain(cap_obj.clone());
                 self.scope_push(cap_name, &cap_obj);
                 // Create local variable for debug info.
@@ -1820,7 +1815,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Allocate lambda
         let name = format!("lamda[{}]", lam_ty.to_string());
-        let lam = allocate_obj(lam_ty.clone(), &vec![], None, self, Some(name.as_str()));
+        let mut lam = create_obj(lam_ty.clone(), &vec![], None, self, Some(name.as_str()));
 
         // Set function pointer to lambda.
         let funptr_idx = if lam_ty.is_closure() {
@@ -1831,24 +1826,22 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let lam_fn_ptr = lam_fn.as_global_value().as_pointer_value();
         let lam_fn_ptr =
             self.cast_pointer(lam_fn_ptr, opaque_lambda_function_ptr_type(&self.context));
-        lam.store_field_nocap(self, funptr_idx, lam_fn_ptr);
+        lam = lam.insert_field(self, funptr_idx, lam_fn_ptr);
 
         if lam_ty.is_closure() {
             // Set captured objects.
-
             let cap_obj_ptr = if cap_vars.len() > 0 {
                 // If some objects are captured,
 
                 // Allocate dynamic object to store captured objects.
                 let dynamic_obj_ty = make_dynamic_object_ty();
-                let cap_obj = allocate_obj(
+                let cap_obj = create_obj(
                     dynamic_obj_ty.clone(),
                     &cap_tys,
                     None,
                     self,
                     Some(&format!("captured_objects_of_{}", name)),
                 );
-                let cap_obj_ptr = cap_obj.ptr(self);
 
                 // Get struct type of cap_obj.
                 let cap_obj_str_ty = dynamic_obj_ty
@@ -1856,24 +1849,26 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     .to_struct_type(self, vec![]);
 
                 // Set captured objects to cap_obj.
-                for (i, (cap_name, _cap_ty)) in cap_vars.iter().enumerate() {
-                    let cap_obj = self.get_var_retained_if_used_later(cap_name);
-                    let cap_val = cap_obj.value(self);
-                    self.store_obj_field(
-                        cap_obj_ptr,
+                for (i, (name, _)) in cap_vars.iter().enumerate() {
+                    let obj = self.get_var_retained_if_used_later(name);
+                    let val = obj.value;
+                    cap_obj.insert_field_as(
+                        self,
                         cap_obj_str_ty,
                         i as u32 + DYNAMIC_OBJ_CAP_IDX,
-                        cap_val,
+                        val,
                     );
                 }
 
-                cap_obj.ptr(self)
+                cap_obj.value
             } else {
-                ptr_to_object_type(self.context).const_null()
+                ptr_to_object_type(self.context)
+                    .const_null()
+                    .as_basic_value_enum()
             };
 
             // Store cap_obj to lambda
-            lam.store_field_nocap(self, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
+            lam = lam.insert_field(self, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
         }
 
         // Return lambda object
@@ -1962,7 +1957,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let (variant_idx, _union_tycon, _union_ti) =
                     Pattern::get_variant_info(variant_name, self.type_env());
                 let variant_ty = obj.ty.field_types(self.type_env())[variant_idx].clone();
-                let value = ObjectFieldType::get_union_field(self, obj.clone(), &variant_ty);
+                let value = ObjectFieldType::get_union_value(self, obj.clone(), &variant_ty);
                 ret.append(&mut self.destructure_object_by_pattern(subpat, &value));
             }
         }
@@ -1984,7 +1979,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.scope_lock_as_used_later(&used_then_or_else);
         let cond_obj = self.eval_expr(cond_expr, false).unwrap();
         self.scope_unlock_as_used_later(&used_then_or_else);
-        let cond_val = cond_obj.load_field_nocap(self, 0).into_int_value();
+        let cond_val = cond_obj.extract_field(self, 0).into_int_value();
         self.release(cond_obj);
         let cond_val =
             self.builder()
@@ -2007,18 +2002,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         for var_name in &else_expr.free_vars_sorted() {
             // Here we use sorted free variables to fix the binary code.
             if !then_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
-                self.release(self.get_var(var_name).ptr.get(self));
+                let var = self.get_var(var_name).ptr.get(self);
+                self.release(var);
             }
         }
-        let then_val_ptr = if tail {
+        let then_val = if tail {
             self.eval_expr(then_expr.clone(), true);
             None
         } else {
             let then_val = self.eval_expr(then_expr.clone(), false).unwrap();
-            let then_val_ptr = then_val.ptr(self);
+            let then_val = then_val.value;
             then_bb = self.builder().get_insert_block().unwrap();
             self.builder().build_unconditional_branch(cont_bb.unwrap());
-            Some(then_val_ptr)
+            Some(then_val)
         };
 
         // Implement else block.
@@ -2027,18 +2023,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         for var_name in &then_expr.free_vars_sorted() {
             // Here we use sorted free variables to fix the binary code.
             if !else_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
-                self.release(self.get_var(var_name).ptr.get(self));
+                let var = self.get_var(var_name).ptr.get(self);
+                self.release(var);
             }
         }
-        let else_val_ptr = if tail {
+        let else_val = if tail {
             self.eval_expr(else_expr.clone(), true);
             None
         } else {
             let else_val = self.eval_expr(else_expr.clone(), false).unwrap();
-            let else_val_ptr = else_val.ptr(self);
+            let else_val = else_val.value;
             else_bb = self.builder().get_insert_block().unwrap();
             self.builder().build_unconditional_branch(cont_bb.unwrap());
-            Some(else_val_ptr)
+            Some(else_val)
         };
 
         // Return value.
@@ -2047,17 +2044,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         };
         // Implement cont block.
         let cont_bb = cont_bb.unwrap();
-        let then_val_ptr = then_val_ptr.unwrap();
-        let else_val_ptr = else_val_ptr.unwrap();
+        let then_val = then_val.unwrap();
+        let else_val = else_val.unwrap();
         self.builder().position_at_end(cont_bb);
         // Return the phi value.
-        let phi_ty = then_val_ptr.get_type();
+        let phi_ty = then_val.get_type();
         let phi = self.builder().build_phi(phi_ty, "phi");
-        phi.add_incoming(&[(&then_val_ptr, then_bb), (&else_val_ptr, else_bb)]);
-        Some(Object::new(
-            phi.as_basic_value().into_pointer_value(),
-            res_ty.clone(),
-        ))
+        phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]);
+        Some(Object::new(phi.as_basic_value(), res_ty.clone(), self))
     }
 
     fn eval_match(
@@ -2143,7 +2137,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let vars_used_only_in_others = vars_used_in_any_case.difference(&vars_used_in_later);
             for var in vars_used_only_in_others {
                 if self.get_var(var).used_later == 0 {
-                    self.release(self.get_var(var).ptr.get(self));
+                    let var = self.get_var(var).ptr.get(self);
+                    self.release(var);
                 }
             }
 
@@ -2194,14 +2189,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Some(val_objs.pop().unwrap().0)
         } else {
             // In this case, build phi node.
-            let phi_ty = val_objs[0].0.ptr(self).get_type();
+            let phi_ty = val_objs[0].0.value.get_type();
             let phi = self.builder().build_phi(phi_ty, "match_phi");
             for (val, bb) in &val_objs {
-                phi.add_incoming(&[(&val.ptr(self), bb.clone())]);
+                phi.add_incoming(&[(&val.value, bb.clone())]);
             }
             Some(Object::new(
-                phi.as_basic_value().into_pointer_value(),
+                phi.as_basic_value(),
                 val_objs[0].0.ty.clone(),
+                self,
             ))
         }
     }
@@ -2213,7 +2209,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         struct_ty: Arc<TypeNode>,
         tail: bool,
     ) -> Option<Object<'c>> {
-        let str_obj = allocate_obj(
+        let mut str_obj = create_obj(
             struct_ty.clone(),
             &vec![],
             None,
@@ -2230,13 +2226,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.scope_unlock_as_used_later(fields[i].1.free_vars());
             let field_expr = fields[i].1.clone();
             let field_obj = self.eval_expr(field_expr, false).unwrap();
-            let field_val = field_obj.value(self);
+            let field_val = field_obj.value;
             let offset = if struct_ty.is_box(self.type_env()) {
                 1
             } else {
                 0
             };
-            str_obj.store_field_nocap(self, i as u32 + offset, field_val);
+            str_obj = str_obj.insert_field(self, i as u32 + offset, field_val);
         }
         self.build_tail(str_obj, tail)
     }
@@ -2252,14 +2248,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         tail: bool,
     ) -> Option<Object<'c>> {
         // Prepare return object.
-        let obj = {
+        let mut obj = {
             let ret_ty = type_tycon(ret_tycon);
             let ret_ty = if is_io {
                 make_tuple_ty(vec![make_iostate_ty(), ret_ty])
             } else {
                 ret_ty
             };
-            allocate_obj(ret_ty.clone(), &vec![], None, self, Some("allocate_CallC"))
+            create_obj(ret_ty.clone(), &vec![], None, self, Some("allocate_CallC"))
         };
 
         // Get c function
@@ -2308,7 +2304,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Get argment values
         let args_vals = arg_objs
             .iter()
-            .map(|obj| obj.load_field_nocap(self, 0).into())
+            .map(|obj| obj.extract_field(self, 0).into())
             .collect::<Vec<_>>();
 
         // Call c function
@@ -2324,9 +2320,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                         .builder()
                         .build_insert_value(ret_str_val, ret_c_val, 0, "")
                         .unwrap();
-                    obj.store_field_nocap(self, 1, ret_str_val)
+                    obj = obj.insert_field(self, 1, ret_str_val);
                 } else {
-                    obj.store_field_nocap(self, 0, ret_c_val)
+                    obj = obj.insert_field(self, 0, ret_c_val);
                 }
             }
             Either::Right(_) => {}
@@ -2345,17 +2341,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let len = self.context.i64_type().const_int(elems.len() as u64, false);
 
         // Allocate
-        let array = allocate_obj(
+        let array = create_obj(
             array_ty.clone(),
             &vec![],
             Some(len),
             self,
             Some(&format!("array_literal[{}]", array_ty.to_string())),
         );
-        let buffer = array.ptr_to_field_nocap(self, ARRAY_BUF_IDX);
+        let buffer = array.gep_boxed(self, ARRAY_BUF_IDX);
 
         // Set length.
-        array.store_field_nocap(self, ARRAY_LEN_IDX, len);
+        let array = array.insert_field(self, ARRAY_LEN_IDX, len);
 
         // Evaluate each element and store to the array
         for i in 0..elems.len() {
@@ -2406,16 +2402,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     pub fn create_debug_local_variable(&mut self, name: &Name, obj: &Object<'c>) {
-        let storage = if obj.is_unbox(self.type_env()) {
-            obj.ptr(self)
-        } else {
-            // In boxed case, push ptr onto stack.
-            let ptr = obj.ptr(self);
-            let storage =
-                self.build_alloca_at_entry(ptr.get_type(), "alloca@create_debug_local_variable");
-            self.builder().build_store(storage, ptr);
-            storage
-        };
+        // Push the value on the stack.
+        let obj_val = obj.value;
+        let storage =
+            self.build_alloca_at_entry(obj_val.get_type(), "alloca@create_debug_local_variable");
 
         let embed_ty = obj.debug_embedded_ty(self);
         let loc_var = self.get_di_builder().create_auto_variable(
@@ -2450,7 +2440,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             // Declare accessor function.
             let acc_fn_name = format!("Get#{}", name.to_string());
-            let acc_fn_type = ptr_to_object_type(self.context).fn_type(&[], false);
+            let ty = obj_ty.get_embedded_type(self, &vec![]);
+            let acc_fn_type = ty.fn_type(&[], false);
             let acc_fn = self.module.add_function(
                 &acc_fn_name,
                 acc_fn_type,
@@ -2496,7 +2487,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let global_var = self.module.add_global(obj_embed_ty, None, &global_var_name);
             global_var.set_initializer(&obj_embed_ty.const_zero());
             global_var.set_linkage(Linkage::Internal);
-            let global_var = global_var.as_basic_value_enum().into_pointer_value();
+            let global_var_ptr = global_var.as_basic_value_enum().into_pointer_value();
 
             // Prepare initialized flag.
             let flag_name = format!("InitFlag#{}", name.to_string());
@@ -2605,8 +2596,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.mark_global(obj.clone());
 
                 // Store the result to global_ptr.
-                let obj_val = obj.value(self);
-                self.builder().build_store(global_var, obj_val);
+                let obj_val = obj.value;
+                self.builder().build_store(global_var_ptr, obj_val);
             }
 
             // After initialization,
@@ -2628,16 +2619,32 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // In the end of the accessor function, return the object.
             self.builder().position_at_end(end_bb);
-            let ret = if obj_ty.is_box(self.type_env()) {
-                self.builder()
-                    .build_load(global_var, "ptr_to_obj")
-                    .into_pointer_value()
-            } else {
-                global_var
-            };
-            let ret = self.cast_pointer(ret, ptr_to_object_type(self.context));
-            self.builder().build_return(Some(&ret));
+            let global_var = self.builder().build_load(global_var_ptr, "load_global_var");
+            self.builder().build_return(Some(&global_var));
         }
+    }
+
+    // Bit cast between two types.
+    // Allows bit cast between types with different sizes.
+    pub fn bit_cast(
+        &mut self,
+        val: BasicValueEnum<'c>,
+        to_ty: BasicTypeEnum<'c>,
+    ) -> BasicValueEnum<'c> {
+        let (from_ty, to_ty) = (val.get_type(), to_ty);
+        if from_ty == to_ty {
+            return val;
+        }
+        let (from_bits, to_bits) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
+        if from_bits == to_bits {
+            return self.builder().build_bitcast(val, to_ty, "bitcast");
+        }
+        let larger_ty = if from_bits > to_bits { from_ty } else { to_ty };
+        let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
+        let from_ptr = self.cast_pointer(ptr, from_ty.ptr_type(AddressSpace::from(0)));
+        self.builder().build_store(from_ptr, val);
+        let to_ptr = self.cast_pointer(ptr, to_ty.ptr_type(AddressSpace::from(0)));
+        self.builder().build_load(to_ptr, "bit_cast")
     }
 }
 

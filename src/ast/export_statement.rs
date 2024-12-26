@@ -105,8 +105,7 @@ impl ExportStatement {
             .enumerate()
             .map(|(i, arg)| {
                 let arg_ty = doms[i].clone();
-                let arg_obj = Object::create_from_value(*arg, arg_ty, gc);
-                arg_obj
+                Object::new(*arg, arg_ty, gc)
             })
             .collect::<Vec<_>>();
 
@@ -143,7 +142,7 @@ impl ExportStatement {
         if codom.to_string() == make_unit_ty().to_string() {
             gc.builder().build_return(None);
         } else {
-            gc.builder().build_return(Some(&fix_value.value(gc)));
+            gc.builder().build_return(Some(&fix_value.value));
         }
     }
 }

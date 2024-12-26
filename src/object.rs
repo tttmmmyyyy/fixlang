@@ -42,7 +42,9 @@ impl ObjectFieldType {
     ) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
-            ObjectFieldType::TraverseFunction => ptr_to_traverser_type(gc.context, true).into(),
+            ObjectFieldType::TraverseFunction => {
+                ptr_to_traverser_type(gc, &make_dynamic_object_ty(), true).into()
+            }
             ObjectFieldType::LambdaFunction(_ty) => {
                 opaque_lambda_function_ptr_type(&gc.context).into()
             }
@@ -74,7 +76,7 @@ impl ObjectFieldType {
                     .to_embedded_type(gc, unboxed_path.clone());
                     size = size.max(gc.sizeof(&struct_ty));
                 }
-                // Force align 8
+                // To force align 8, we represent the union buffer as an array of i64s.
                 let num_of_i64 = size / 8 + if size % 8 == 0 { 0 } else { 1 };
                 gc.context
                     .i64_type()
@@ -300,7 +302,7 @@ impl ObjectFieldType {
     ) where
         for<'c2, 'm2> F: Fn(
             &mut GenerationContext<'c, 'm>,
-            Object<'c>,       /* idx */
+            IntValue<'c>,     /* idx */
             IntValue<'c>,     /* size */
             PointerValue<'c>, /* buffer */
         ),
@@ -344,7 +346,8 @@ impl ObjectFieldType {
         gc.builder().position_at_end(loop_body_bb);
 
         // Generate code of loop body.
-        loop_body(gc, Object::new(counter_ptr, make_i64_ty()), size, buffer);
+        let idx = gc.builder().build_load(counter_ptr, "idx").into_int_value();
+        loop_body(gc, idx, size, buffer);
 
         // Increment counter.
         let incremented_counter_val = gc.builder().build_int_add(
@@ -372,23 +375,16 @@ impl ObjectFieldType {
     ) {
         // In loop body, release object of idx = counter_val.
         let loop_body = |gc: &mut GenerationContext<'c, 'm>,
-                         idx: Object<'c>,
+                         idx: IntValue<'c>,
                          _size: IntValue<'c>,
                          ptr_to_buffer: PointerValue<'c>| {
-            let idx = idx.load_field_nocap(gc, 0).into_int_value();
             let ptr = unsafe {
                 gc.builder()
                     .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
             };
-            let obj = if elem_ty.is_box(gc.type_env()) {
-                gc.builder()
-                    .build_load(ptr, "elem_of_array")
-                    .into_pointer_value()
-            } else {
-                ptr
-            };
+            let obj_val = gc.builder().build_load(ptr, "elem_of_array");
             // Perform release or mark global or mark threaded.
-            let obj = Object::new(obj, elem_ty.clone());
+            let obj = Object::new(obj_val, elem_ty.clone(), gc);
             gc.build_release_mark(obj, work_type);
         };
 
@@ -415,21 +411,15 @@ impl ObjectFieldType {
         {
             // In loop body, retain value and store it at idx.
             let loop_body = |gc: &mut GenerationContext<'c, 'm>,
-                             idx: Object<'c>,
+                             idx: IntValue<'c>,
                              _size: IntValue<'c>,
                              ptr_to_buffer: PointerValue<'c>| {
-                let idx = idx.load_field_nocap(gc, 0).into_int_value();
                 gc.retain(value.clone());
-                let ptr_to_obj_ptr = unsafe {
+                let ptr_to_elm = unsafe {
                     gc.builder()
                         .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
                 };
-                if value.is_box(gc.type_env()) {
-                    gc.builder().build_store(ptr_to_obj_ptr, value.ptr(gc));
-                } else {
-                    gc.builder()
-                        .build_store(ptr_to_obj_ptr, value.load_value_unbox(gc));
-                }
+                gc.builder().build_store(ptr_to_elm, value.value);
             };
 
             // After loop, release value.
@@ -490,7 +480,7 @@ impl ObjectFieldType {
         let elem_val = gc.builder().build_load(ptr_to_elem, "elem");
 
         // Return value
-        Object::create_from_value(elem_val, elem_ty, gc)
+        Object::new(elem_val, elem_ty, gc)
     }
 
     // Read an element of array.
@@ -524,27 +514,24 @@ impl ObjectFieldType {
         }
 
         // Get ptr to the place at idx.
-        let place = unsafe {
+        let ptr_to_elm = unsafe {
             gc.builder()
                 .build_gep(buffer, &[idx.into()], "ptr_to_elem_of_array")
         };
 
         // Release element that is already at the place (if required).
         if release_old_value {
-            let elem = if elem_ty.is_box(gc.type_env()) {
-                gc.builder().build_load(place, "elem").into_pointer_value()
-            } else {
-                place
-            };
-            let elem_obj = Object::new(elem, elem_ty);
+            let elm_val = gc.builder().build_load(ptr_to_elm, "elem");
+            let elem_obj = Object::new(elm_val, elem_ty, gc);
             gc.release(elem_obj);
         }
 
         // Insert the given value to the place.
-        gc.builder().build_store(place, value.value(gc));
+        gc.builder().build_store(ptr_to_elm, value.value);
     }
 
-    // Clone an array
+    // Clone an array.
+    // `dst` should be already allocated but not initialized.
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         len: IntValue<'c>,
@@ -556,10 +543,9 @@ impl ObjectFieldType {
         {
             // In loop body, retain value and store it at idx.
             let loop_body = |gc: &mut GenerationContext<'c, 'm>,
-                             idx: Object<'c>,
+                             idx: IntValue<'c>,
                              _len: IntValue<'c>,
                              _ptr_to_buffer: PointerValue<'c>| {
-                let idx = idx.load_field_nocap(gc, 0).into_int_value();
                 let ptr_to_src_elem = unsafe {
                     gc.builder()
                         .build_gep(src_buffer, &[idx.into()], "ptr_to_src_elem")
@@ -570,12 +556,7 @@ impl ObjectFieldType {
                 };
                 let src_elem = gc.builder().build_load(ptr_to_src_elem, "src_elem");
                 gc.builder().build_store(ptr_to_dst_elem, src_elem);
-                let src_elem = if elem_ty.is_box(gc.type_env()) {
-                    src_elem.into_pointer_value()
-                } else {
-                    ptr_to_dst_elem
-                };
-                let src_obj = Object::new(src_elem, elem_ty.clone());
+                let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
                 gc.retain(src_obj);
             };
 
@@ -594,8 +575,8 @@ impl ObjectFieldType {
     pub fn clone_struct<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         src: &Object<'c>,
-        dst: &Object<'c>,
-    ) {
+        mut dst: Object<'c>,
+    ) -> Object<'c> {
         for (i, field) in src.ty.fields(gc.type_env()).iter().enumerate() {
             // Skip the punched field.
             if field.is_punched {
@@ -603,12 +584,13 @@ impl ObjectFieldType {
             }
 
             // Retain the field.
-            let field = ObjectFieldType::get_struct_field_noclone(gc, src, i as u32);
+            let field = ObjectFieldType::move_out_struct_field(gc, src, i as u32);
             gc.retain(field.clone());
 
             // Clone the field.
-            ObjectFieldType::set_struct_field_norelease(gc, dst, i as u32, &field);
+            dst = ObjectFieldType::move_into_struct_field(gc, dst, i as u32, &field);
         }
+        dst
     }
 
     // Clone an union object `str` into `dst`.
@@ -617,11 +599,11 @@ impl ObjectFieldType {
     pub fn clone_union<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         src: &Object<'c>,
-        dst: &Object<'c>,
-    ) {
+        dst: Object<'c>,
+    ) -> Object<'c> {
         // Clone the tag.
         let tag = ObjectFieldType::get_union_tag(gc, &src);
-        ObjectFieldType::set_union_tag(gc, dst, tag);
+        let dst = ObjectFieldType::set_union_tag(gc, dst, tag);
 
         // Clone the value.
         let value_field_idx = if src.is_unbox(gc.type_env()) {
@@ -629,23 +611,22 @@ impl ObjectFieldType {
         } else {
             BOXED_TYPE_DATA_IDX
         } + UNION_DATA_IDX;
-        let value = src.load_field_nocap(gc, value_field_idx);
-        dst.store_field_nocap(gc, value_field_idx, value);
+        let value = src.extract_field(gc, value_field_idx);
+        let dst = dst.insert_field(gc, value_field_idx, value);
 
         // Retain the value.
-        let variants = src.ty.field_types(gc.type_env());
-        let buf = ObjectFieldType::get_union_buf(gc, &dst);
-        ObjectFieldType::retain_union_buf(gc, buf, tag, &variants);
+        ObjectFieldType::retain_union(gc, dst.clone());
+
+        dst
     }
 
     // Perform retain or release or mark global or mark threaded on an object included in a union buffer.
-    fn retain_release_mark_union_buf<'c, 'm>(
+    fn retain_release_mark_union<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        buf: PointerValue<'c>,
-        tag: IntValue<'c>,
-        field_types: &Vec<Arc<TypeNode>>,
+        union: Object<'c>,
         work_type: Option<TraverserWorkType>, // None for retain, and Some for release or mark global threaded.
     ) {
+        let variant_types = &union.ty.field_types(gc.type_env());
         // Retain or release field.
         let curr_func = gc
             .builder()
@@ -655,7 +636,8 @@ impl ObjectFieldType {
             .unwrap();
         let end_bb = gc.context.append_basic_block(curr_func, "end");
         let mut last_unmatch_bb: Option<BasicBlock> = None;
-        for (i, field_ty) in field_types.iter().enumerate() {
+        let tag = ObjectFieldType::get_union_tag(gc, &union);
+        for (i, variant_ty) in variant_types.iter().enumerate() {
             // Compare tag and jump.
             let match_bb = gc
                 .context
@@ -678,22 +660,12 @@ impl ObjectFieldType {
 
             // Implement the case tag is match.
             gc.builder().position_at_end(match_bb);
-            let value_ptr = if field_ty.is_box(gc.type_env()) {
-                let buf = gc.cast_pointer(
-                    buf,
-                    ptr_to_object_type(gc.context).ptr_type(AddressSpace::from(0)),
-                );
-                gc.builder()
-                    .build_load(buf, "load_boxed_buf")
-                    .into_pointer_value()
-            } else {
-                buf
-            };
-            let obj = Object::new(value_ptr, field_ty.clone());
+            let subobj =
+                ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), variant_ty);
             if work_type.is_none() {
-                gc.retain(obj);
+                gc.retain(subobj);
             } else {
-                gc.build_release_mark(obj, work_type.unwrap());
+                gc.build_release_mark(subobj, work_type.unwrap());
             }
             gc.builder().build_unconditional_branch(end_bb);
 
@@ -711,34 +683,8 @@ impl ObjectFieldType {
         gc.builder().position_at_end(end_bb);
     }
 
-    pub fn retain_union_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        buf: PointerValue<'c>,
-        tag: IntValue<'c>,
-        field_types: &Vec<Arc<TypeNode>>,
-    ) {
-        ObjectFieldType::retain_release_mark_union_buf(gc, buf, tag, field_types, None);
-    }
-
-    pub fn set_value_to_union_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        buf: PointerValue<'c>,
-        val: Object<'c>,
-    ) {
-        let val = val.value(gc);
-        let buf = gc.cast_pointer(buf, val.get_type().ptr_type(AddressSpace::from(0)));
-        gc.builder().build_store(buf, val);
-    }
-
-    #[allow(dead_code)]
-    pub fn set_union_tag<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        union: &Object<'c>,
-        tag: IntValue<'c>,
-    ) {
-        let is_unbox = union.is_unbox(gc.type_env());
-        let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
-        union.store_field_nocap(gc, union_tag_idx, tag);
+    pub fn retain_union<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, union: Object<'c>) {
+        ObjectFieldType::retain_release_mark_union(gc, union, None);
     }
 
     pub fn get_union_tag<'c, 'm>(
@@ -747,49 +693,93 @@ impl ObjectFieldType {
     ) -> IntValue<'c> {
         let is_unbox = union.is_unbox(gc.type_env());
         let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
-        union.load_field_nocap(gc, union_tag_idx).into_int_value()
+        union.extract_field(gc, union_tag_idx).into_int_value()
+    }
+
+    pub fn set_union_tag<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        union: Object<'c>,
+        tag: IntValue<'c>,
+    ) -> Object<'c> {
+        let is_unbox = union.is_unbox(gc.type_env());
+        let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
+        union.insert_field(gc, union_tag_idx, tag)
+    }
+
+    pub fn get_union_buf_idx<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        union: &Object<'c>,
+    ) -> u32 {
+        let is_unbox = union.is_unbox(gc.type_env());
+        if is_unbox {
+            0
+        } else {
+            BOXED_TYPE_DATA_IDX + UNION_DATA_IDX
+        }
     }
 
     pub fn get_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         union: &Object<'c>,
-    ) -> PointerValue<'c> {
-        let is_unbox = union.is_unbox(gc.type_env());
-        let union_buf_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_DATA_IDX;
-        union.ptr_to_field_nocap(gc, union_buf_idx)
+    ) -> BasicValueEnum<'c> {
+        let union_buf_idx = ObjectFieldType::get_union_buf_idx(gc, union);
+        union.extract_field(gc, union_buf_idx)
     }
 
-    // Get field of union (with refcnt managed).
-    pub fn get_union_field<'c, 'm>(
+    // Get the value of union.
+    // The return value is retained and the union is released.
+    pub fn get_union_value<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        union: Object<'c>,
+        elem_ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // let buf = ObjectFieldType::get_union_buf(gc, &union);
+        // let value = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
+        // let value = Object::new(value, elem_ty.clone());
+        let value = ObjectFieldType::get_union_value_noretain_norelease(gc, union.clone(), elem_ty);
+        if union.is_box(gc.type_env()) {
+            // If the union is boxed, retain the value and release the union.
+            gc.retain(value.clone());
+            gc.release(union);
+        } else {
+            // If the union is unbox, retaining and releasing cancel each other out, so does nothing.
+        }
+        value
+    }
+
+    // Get the value of union.
+    // None of the return value and the union is retained/released.
+    pub fn get_union_value_noretain_norelease<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let buf = ObjectFieldType::get_union_buf(gc, &union);
-
-        // Make return value by cloning the field in the union buffer,
-        // because lifetime of returned value may be longer than that of union object itself.
-        let field_val = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
-        let field = Object::create_from_value(field_val, elem_ty.clone(), gc);
-        if union.is_box(gc.type_env()) {
-            gc.retain(field.clone());
-            gc.release(union);
-        } else {
-            // If unbox, retaining and releasing cancel each other out, so do nothing.
-        }
-        field
+        let value: BasicValueEnum<'_> = ObjectFieldType::get_value_from_union_buf(gc, buf, elem_ty);
+        Object::new(value, elem_ty.clone(), gc)
     }
 
     pub fn get_value_from_union_buf<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
-        buf: PointerValue<'c>,
+        buf: BasicValueEnum<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> BasicValueEnum<'c> {
-        let elem_ptr_ty = elem_ty
-            .get_embedded_type(gc, &vec![])
-            .ptr_type(AddressSpace::from(0));
-        let buf = gc.cast_pointer(buf, elem_ptr_ty);
-        gc.builder().build_load(buf, "value_at_union_buf")
+        let elem_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        gc.bit_cast(buf, elem_ty)
+    }
+
+    pub fn set_union_value<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        union: Object<'c>,
+        value: Object<'c>,
+    ) -> Object<'c> {
+        let union_buf_idx = ObjectFieldType::get_union_buf_idx(gc, &union);
+        let union_struct_ty = union.ty.get_struct_type(gc, &vec![]);
+        let union_data_ty = union_struct_ty
+            .get_field_type_at_index(union_buf_idx)
+            .unwrap();
+        let value = gc.bit_cast(value.value, union_data_ty);
+        union.insert_field(gc, union_buf_idx, value)
     }
 
     pub fn panic_if_union_tag_unmatch<'c, 'm>(
@@ -801,7 +791,7 @@ impl ObjectFieldType {
         let offset = if is_unbox { 0 } else { 1 };
 
         // Get tag value.
-        let tag_value = union.load_field_nocap(gc, 0 + offset).into_int_value();
+        let tag_value = union.extract_field(gc, 0 + offset).into_int_value();
 
         // If tag unmatch, panic.
         let is_tag_unmatch = gc.builder().build_int_compare(
@@ -822,21 +812,30 @@ impl ObjectFieldType {
         gc.builder().position_at_end(match_bb);
     }
 
-    // Get field of struct as Object (no refcnt management and no cloned).
-    pub fn get_struct_field_noclone<'c, 'm>(
+    // Get field `Object` of a struct `Object`.
+    // This "moves out" the field; in other words, the returned object is not retained.
+    pub fn move_out_struct_field<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         str: &Object<'c>,
         field_idx: u32,
     ) -> Object<'c> {
         let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
         let field_ty = str.ty.field_types(gc.type_env())[field_idx as usize].clone();
-        let field_ptr = if field_ty.is_box(gc.type_env()) {
-            str.load_field_nocap(gc, field_idx + field_offset)
-                .into_pointer_value()
-        } else {
-            str.ptr_to_field_nocap(gc, field_idx + field_offset)
-        };
-        Object::new(field_ptr, field_ty)
+        let field = str.extract_field(gc, field_idx + field_offset);
+        Object::new(field, field_ty, gc)
+    }
+
+    // Set an `Object` into the field of a struct `Object`.
+    // This "moves into" the field; in other words, the old value isn't released.
+    pub fn move_into_struct_field<'c, 'm>(
+        gc: &mut GenerationContext<'c, 'm>,
+        str: Object<'c>,
+        field_idx: u32,
+        field: &Object<'c>,
+    ) -> Object<'c> {
+        let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
+        let field_val = field.value;
+        str.insert_field(gc, field_offset + field_idx, field_val)
     }
 
     // Get field of struct as Objects (with refcnt managed).
@@ -850,11 +849,11 @@ impl ObjectFieldType {
         let mut ret = vec![];
         for field_idx in field_indices {
             // Get ptr to field.
-            let field = ObjectFieldType::get_struct_field_noclone(gc, str, *field_idx);
+            let field = ObjectFieldType::move_out_struct_field(gc, str, *field_idx);
 
             // Clone the field.
-            let field_val = field.value(gc);
-            let field = Object::create_from_value(field_val, field.ty, gc);
+            let field_val = field.value;
+            let field = Object::new(field_val, field.ty, gc);
             ret.push(field);
         }
 
@@ -870,25 +869,13 @@ impl ObjectFieldType {
             for field_idx in 0..str.ty.field_types(gc.type_env()).len() {
                 let field_idx = field_idx as u32;
                 if !field_indices.iter().any(|i| *i == field_idx) {
-                    let field = ObjectFieldType::get_struct_field_noclone(gc, str, field_idx);
+                    let field = ObjectFieldType::move_out_struct_field(gc, str, field_idx);
                     gc.release(field);
                 }
             }
         }
 
         ret
-    }
-
-    // Set an Object to field of struct. The old value isn't released in this function.
-    pub fn set_struct_field_norelease<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
-        str: &Object<'c>,
-        field_idx: u32,
-        field: &Object<'c>,
-    ) {
-        let field_offset = struct_field_idx(str.ty.is_unbox(gc.type_env()));
-        let field_val = field.value(gc);
-        str.store_field_nocap(gc, field_offset + field_idx as u32, field_val);
     }
 }
 
@@ -1033,21 +1020,31 @@ pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
 
 // Type of traverser function.
 // - is_dynamic: If true, the traverser is dynamic and takes the work type as the second argument.
-fn traverser_type<'ctx>(context: &'ctx Context, is_dynamic: bool) -> FunctionType<'ctx> {
-    let mut arg_tys: Vec<BasicMetadataTypeEnum<'ctx>> = vec![];
-    arg_tys.push(ptr_to_object_type(context).into());
+fn traverser_type<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    ty: &Arc<TypeNode>,
+    is_dynamic: bool,
+) -> FunctionType<'c> {
+    let mut arg_tys: Vec<BasicMetadataTypeEnum<'c>> = vec![];
+    let arg_ty = ty.get_embedded_type(gc, &vec![]);
+    arg_tys.push(arg_ty.into());
     if is_dynamic {
-        arg_tys.push(context.i8_type().into());
+        // Add argument for work type.
+        arg_tys.push(gc.context.i8_type().into());
     }
-    context.void_type().fn_type(&arg_tys, false)
+    gc.context.void_type().fn_type(&arg_tys, false)
 }
 
 pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-fn ptr_to_traverser_type<'ctx>(context: &'ctx Context, is_dynamic: bool) -> PointerType<'ctx> {
-    traverser_type(context, is_dynamic).ptr_type(AddressSpace::from(0))
+fn ptr_to_traverser_type<'c, 'm>(
+    gc: &mut GenerationContext<'c, 'm>,
+    ty: &Arc<TypeNode>,
+    is_dynamic: bool,
+) -> PointerType<'c> {
+    traverser_type(gc, ty, is_dynamic).ptr_type(AddressSpace::from(0))
 }
 
 pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
@@ -1155,7 +1152,7 @@ pub fn struct_field_idx(is_unbox: bool) -> u32 {
     if is_unbox {
         0
     } else {
-        1
+        BOXED_TYPE_DATA_IDX
     }
 }
 
@@ -1280,36 +1277,51 @@ pub fn ty_to_object_ty(
     ret
 }
 
-// Allocate an object.
-pub fn allocate_obj<'c, 'm>(
+// Create an object.
+pub fn create_obj<'c, 'm>(
     ty: Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>,         // used in dynamic object
-    array_capacity: Option<IntValue<'c>>, // used in array
+    // Captured values. Used only for creating dynamic object.
+    capture: &Vec<Arc<TypeNode>>,
+    // Capacity of array. Used only for creating array object.
+    array_capacity: Option<IntValue<'c>>,
     gc: &mut GenerationContext<'c, 'm>,
     _name: Option<&str>,
 ) -> Object<'c> {
+    // Validate arguments.
     assert!(ty.free_vars().is_empty());
     assert!(ty.is_dynamic() || capture.is_empty());
     assert!(array_capacity.is_some() == ty.is_array());
+    assert!(!ty.is_funptr()); // Funptr type is not supported, Currently, there is no need to create an object for funptr.
+
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
 
     // Allocate object
-    let ptr_to_obj = if ty.is_array() {
+    let obj = if ty.is_array() {
+        // When the object is array,
         let sizeof = object_type.size_of(gc, array_capacity);
         let ptr = gc
             .builder()
-            .build_array_malloc(gc.context.i8_type(), sizeof, "malloc_array@allocate_obj")
+            .build_array_malloc(gc.context.i8_type(), sizeof, "malloc_array@create_obj")
             .unwrap();
-        gc.cast_pointer(ptr, ptr_type(struct_type))
+        let ptr = gc.cast_pointer(ptr, ptr_type(struct_type));
+        Object::new(ptr.as_basic_value_enum(), ty.clone(), gc)
     } else {
         if object_type.is_unbox {
-            gc.build_alloca_at_entry(struct_type, "alloca@allocate_obj")
+            // When the object is unboxed (not a funptr),
+            Object::new(
+                struct_type.get_undef().as_basic_value_enum(),
+                ty.clone(),
+                gc,
+            )
         } else {
-            gc.builder()
-                .build_malloc(struct_type, "malloc@allocate_obj")
-                .unwrap()
+            // When the object is boxed,
+            let ptr = gc
+                .builder()
+                .build_malloc(struct_type, "malloc@create_obj")
+                .unwrap();
+            Object::new(ptr.as_basic_value_enum(), ty.clone(), gc)
         }
     };
 
@@ -1317,17 +1329,15 @@ pub fn allocate_obj<'c, 'm>(
     for (i, ft) in object_type.field_types.iter().enumerate() {
         match ft {
             ObjectFieldType::ControlBlock => {
+                // Initialize the control block.
                 assert_eq!(i, 0);
                 // Get pointer to control block.
-                let ptr_to_control_block = gc
-                    .builder()
-                    .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_control_block")
-                    .unwrap();
+                let ptr_to_ctrl_blk = obj.gep_boxed(gc, i as u32);
 
                 // Initialize the reference counter 1.
                 let ptr_to_refcnt = gc
                     .builder()
-                    .build_struct_gep(ptr_to_control_block, 0, "ptr_to_refcnt")
+                    .build_struct_gep(ptr_to_ctrl_blk, 0, "ptr_to_refcnt")
                     .unwrap();
                 gc.builder()
                     .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
@@ -1335,7 +1345,7 @@ pub fn allocate_obj<'c, 'm>(
                 // Initialize the reference counter state to REFCNT_STATE_LOCAL.
                 let ptr_to_refcnt_state = gc
                     .builder()
-                    .build_struct_gep(ptr_to_control_block, 1, "ptr_to_refcnt_state")
+                    .build_struct_gep(ptr_to_ctrl_blk, 1, "ptr_to_refcnt_state")
                     .unwrap();
                 gc.builder().build_store(
                     ptr_to_refcnt_state,
@@ -1356,30 +1366,25 @@ pub fn allocate_obj<'c, 'm>(
             ObjectFieldType::SubObject(_, _) => {}
             ObjectFieldType::LambdaFunction(_) => {}
             ObjectFieldType::Array(_) => {
+                // Initialize the capacity of the array.
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
-                // Set array size.
-                let ptr_to_size_field = gc
-                    .builder()
-                    .build_struct_gep(ptr_to_obj, ARRAY_CAP_IDX, "ptr_to_size_field")
-                    .unwrap();
+                let ptr_to_size = obj.gep_boxed(gc, i as u32);
                 gc.builder()
-                    .build_store(ptr_to_size_field, array_capacity.unwrap());
+                    .build_store(ptr_to_size, array_capacity.unwrap());
             }
             ObjectFieldType::TraverseFunction => {
+                // Initialize the traverser function.
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
-                let ptr_to_dtor_field = gc
-                    .builder()
-                    .build_struct_gep(ptr_to_obj, i as u32, "ptr_to_dtor_field")
-                    .unwrap();
+                let ptr_to_trav = obj.gep_boxed(gc, i as u32);
                 let trav = get_traverser_ptr(&ty, capture, gc, None);
-                gc.builder().build_store(ptr_to_dtor_field, trav);
+                gc.builder().build_store(ptr_to_trav, trav);
             }
             ObjectFieldType::UnionBuf(_) => {}
             ObjectFieldType::UnionTag => {}
         }
     }
 
-    Object::new(ptr_to_obj, ty)
+    obj
 }
 
 pub fn get_traverser_ptr<'c, 'm>(
@@ -1402,7 +1407,7 @@ pub fn get_traverser_ptr<'c, 'm>(
             let fv = if let Some(fv) = gc.module.get_function(func_name) {
                 fv
             } else {
-                let func_type = traverser_type(gc.context, work.is_none());
+                let func_type = traverser_type(gc, ty, work.is_none());
                 let func = gc
                     .module
                     .add_function(func_name, func_type, Some(Linkage::Internal));
@@ -1448,7 +1453,7 @@ pub fn create_traverser<'c, 'm>(
     }
 
     // Define traverser function.
-    let func_type = traverser_type(gc.context, work.is_none());
+    let func_type = traverser_type(gc, ty, work.is_none());
     let func = gc
         .module
         .add_function(&trav_name, func_type, Some(Linkage::Internal));
@@ -1464,13 +1469,14 @@ pub fn create_traverser<'c, 'm>(
     let _builder_guard = gc.push_builder();
     gc.builder().position_at_end(bb);
 
-    // Get the pointer to the object.
-    let obj_ptr = func.get_first_param().unwrap().into_pointer_value();
+    // Create the object.
+    let obj_val = func.get_first_param().unwrap();
+    let obj = Object::new(obj_val, ty.clone(), gc);
 
     match work {
         Some(work) => {
             // Static traverser case.
-            build_traverse(ty, capture, obj_ptr, work, gc);
+            build_traverse(obj, capture, work, gc);
             gc.builder().build_return(None);
         }
         None => {
@@ -1505,7 +1511,7 @@ pub fn create_traverser<'c, 'm>(
             for (work, work_bb) in work_bbs.iter() {
                 let work = TraverserWorkType(*work);
                 gc.builder().position_at_end(*work_bb);
-                build_traverse(ty, capture, obj_ptr, work, gc);
+                build_traverse(obj.clone(), capture, work, gc);
                 gc.builder().build_return(None);
             }
         }
@@ -1515,42 +1521,28 @@ pub fn create_traverser<'c, 'm>(
 }
 
 fn build_traverse<'c, 'm>(
-    ty: &Arc<TypeNode>,
+    obj: Object<'c>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
-    obj_ptr: PointerValue<'c>,
     work: TraverserWorkType,
     gc: &mut GenerationContext<'c, 'm>,
 ) {
-    let object_type = ty_to_object_ty(ty, capture, gc.type_env());
+    // In this function, we need to access captured fields, which is not possible by `obj` only.
+    let object_type = ty_to_object_ty(&obj.ty, capture, gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
 
-    // In this function, we need to access captured fields, so fundamentally we cannot use Object's methods to access fields.
-    let ptr_to_field = |field_idx: u32, gc: &mut GenerationContext<'c, 'm>| -> PointerValue<'c> {
-        let ptr_to_struct = gc.cast_pointer(obj_ptr, ptr_type(struct_type));
-        gc.builder()
-            .build_struct_gep(
-                ptr_to_struct,
-                field_idx,
-                &format!("ptr_to_{}th_field", field_idx),
-            )
-            .unwrap()
-    };
-
-    let mut union_tag: Option<IntValue<'c>> = None;
     for (i, ft) in object_type.field_types.iter().enumerate() {
         match ft {
-            ObjectFieldType::SubObject(ty, is_punched) => {
+            ObjectFieldType::SubObject(subty, is_punched) => {
                 if *is_punched {
                     continue;
                 }
-                let ptr_to_subobj = if ty.is_unbox(gc.type_env()) {
-                    ptr_to_field(i as u32, gc)
+                let subval = if capture.is_empty() {
+                    obj.extract_field(gc, i as u32)
                 } else {
-                    gc.load_obj_field(obj_ptr, struct_type, i as u32)
-                        .into_pointer_value()
+                    obj.extract_field_as(gc, struct_type, i as u32)
                 };
-                let obj = Object::new(ptr_to_subobj, ty.clone());
-                gc.build_release_mark(obj, work);
+                let subobj = Object::new(subval, subty.clone(), gc);
+                gc.build_release_mark(subobj, work);
             }
             ObjectFieldType::ControlBlock => {}
             ObjectFieldType::LambdaFunction(_) => {}
@@ -1567,27 +1559,13 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::F64 => {}
             ObjectFieldType::Array(ty) => {
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
-                let size = gc
-                    .load_obj_field(obj_ptr, struct_type, ARRAY_LEN_IDX)
-                    .into_int_value();
-                let buffer = ptr_to_field(ARRAY_BUF_IDX, gc);
+                let size = obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+                let buffer = obj.ptr_to_field(gc, ARRAY_BUF_IDX);
                 ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, ty.clone(), work);
             }
-            ObjectFieldType::UnionTag => {
-                union_tag = Some(
-                    gc.load_obj_field(obj_ptr, struct_type, i as u32)
-                        .into_int_value(),
-                );
-            }
+            ObjectFieldType::UnionTag => {}
             ObjectFieldType::UnionBuf(_) => {
-                let buf = ptr_to_field(i as u32, gc);
-                ObjectFieldType::retain_release_mark_union_buf(
-                    gc,
-                    buf,
-                    union_tag.unwrap(),
-                    &ty.field_types(gc.type_env()),
-                    Some(work),
-                );
+                ObjectFieldType::retain_release_mark_union(gc, obj.clone(), Some(work));
             }
             ObjectFieldType::TraverseFunction => {}
         }
