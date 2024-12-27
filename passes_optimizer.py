@@ -20,12 +20,12 @@ ADDED_PASSES_NUM = 10
 #  internalize_pass (because requires parameter, and breaks program),
 #  strip_symbol_pass (because added by default),
 #  verifier_pass (because added by default),
-#  gvn_pass (segfaults),
-#  new_gvn_pass (breaks program)
-#  licm_pass (breaks program)
-#  early_cse_mem_ssa_pass (breaks program (Random module))
-#  merge_functions_pass (breaks program)
 PASSES = '''
+gvn_pass
+new_gvn_pass
+licm_pass
+early_cse_mem_ssa_pass
+merge_functions_pass
 aggressive_dce_pass
 aggressive_inst_combiner_pass
 alignment_from_assumptions_pass
