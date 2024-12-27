@@ -66,22 +66,29 @@ impl ObjectFieldType {
             ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
             ObjectFieldType::UnionTag => gc.context.i8_type().into(),
             ObjectFieldType::UnionBuf(field_tys) => {
-                let mut size = 0;
+                let mut max_size = 0;
+                let mut max_align = 1;
                 for field_ty in field_tys {
-                    let struct_ty = ty_to_object_ty(
-                        field_ty,
-                        &vec![], /* captured list desn't effect sizeof */
-                        gc.type_env(),
-                    )
-                    .to_embedded_type(gc, unboxed_path.clone());
-                    size = size.max(gc.sizeof(&struct_ty));
+                    let struct_ty = ty_to_object_ty(field_ty, &vec![], gc.type_env())
+                        .to_embedded_type(gc, unboxed_path.clone());
+                    max_size = max_size.max(gc.sizeof(&struct_ty));
+                    max_align = max_align.max(gc.alignment(&struct_ty));
                 }
-                // To force align 8, we represent the union buffer as an array of i64s.
-                let num_of_i64 = size / 8 + if size % 8 == 0 { 0 } else { 1 };
-                gc.context
-                    .i64_type()
-                    .array_type(num_of_i64 as u32)
-                    .as_basic_type_enum()
+                let max_align_int = if max_align == 1 {
+                    gc.context.i8_type()
+                } else if max_align == 2 {
+                    gc.context.i16_type()
+                } else if max_align == 4 {
+                    gc.context.i32_type()
+                } else if max_align == 8 {
+                    gc.context.i64_type()
+                } else if max_align == 16 {
+                    gc.context.i128_type()
+                } else {
+                    panic!("Unsupported alignment: {}", max_align);
+                };
+                let num_of_ints = (max_size as f32 / max_align as f32).ceil() as u32;
+                max_align_int.array_type(num_of_ints).into()
             }
         }
     }
