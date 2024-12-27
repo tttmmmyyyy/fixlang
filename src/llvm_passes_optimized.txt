@@ -23,3 +23,11 @@ alignment_from_assumptions_pass
 instruction_combining_pass
 instruction_simplify_pass
 correlated_value_propagation_pass
+early_cse_mem_ssa_pass
+licm_pass
+coroutine_split_pass
+loop_rotate_pass
+alignment_from_assumptions_pass
+coroutine_elide_pass
+memcpy_optimize_pass
+simplify_lib_calls_pass
