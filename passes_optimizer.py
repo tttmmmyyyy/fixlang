@@ -8,7 +8,7 @@ import random
 from statsmodels.stats.weightstats import ttest_ind
 import numpy as np
 
-SOURCE_FILE = './src/llvm_passes_optimized.txt'
+SOURCE_FILE = './src/llvm_passes.txt'
 
 LOG_FILE = './passes_optimizer.log'
 

@@ -2,16 +2,12 @@ use std::path::PathBuf;
 
 use inkwell::passes::{PassManager, PassManagerSubType};
 
-pub fn add_strip_passes<T: PassManagerSubType>(passmgr: &PassManager<T>) {
-    passmgr.add_strip_symbol_pass();
-}
-
-pub fn add_optimized_optimization_passes<T: PassManagerSubType>(
+pub fn add_passes<T: PassManagerSubType>(
     passmgr: &PassManager<T>,
     llvm_passes_file: &Option<PathBuf>,
 ) {
     let lines = match llvm_passes_file {
-        None => include_str!("llvm_passes_optimized.txt").to_string(),
+        None => include_str!("llvm_passes.txt").to_string(),
         Some(file) => std::fs::read_to_string(file).unwrap(),
     };
     for line in lines.lines() {

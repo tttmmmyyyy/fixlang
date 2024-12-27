@@ -383,11 +383,10 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
             passmgr.add_tail_call_elimination_pass();
         }
         FixOptimizationLevel::Separated => {
-            llvm_passes::add_optimized_optimization_passes(&passmgr, &config.llvm_passes_file);
+            llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
         }
         FixOptimizationLevel::Default => {
-            llvm_passes::add_optimized_optimization_passes(&passmgr, &config.llvm_passes_file);
-            llvm_passes::add_strip_passes(&passmgr);
+            llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
         }
     }
     passmgr.add_verifier_pass(); // Verification after optimization.
