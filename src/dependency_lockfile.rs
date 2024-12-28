@@ -241,17 +241,15 @@ impl DependencyLockFileEntry {
         let proj_file = self.project_file()?;
         if proj_file.general.name != self.name {
             return Err(Errors::from_msg(format!(
-                "Dependency \"{}\" installed at \"{}\" is not named \"{}\" as required in \"{}\".",
-                self.name,
+                "The name of the dependency installed at \"{}\" does not match the one specified in \"{}\". Try to run `fix deps update`.",
                 self.path.to_string_lossy().to_string(),
-                self.name,
                 LOCK_FILE_PATH,
             )));
         }
         if proj_file.general.version() != Version::parse(&self.version).unwrap() {
             return Err(Errors::from_msg(format!(
-                "Dependency \"{}\" installed at \"{}\" is not at version \"{}\" as required in \"{}\".",
-                self.name, self.path.to_string_lossy().to_string(), self.version, LOCK_FILE_PATH,
+                "The version of the dependency \"{}\" installed at \"{}\" does not match the one specified in \"{}\". Try to run `fix deps update`.",
+                self.name, self.path.to_string_lossy().to_string(), LOCK_FILE_PATH,
             )));
         }
         Ok(())
