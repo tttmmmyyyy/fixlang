@@ -1017,12 +1017,10 @@ namespace Iterator {
     // Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
     fold : b -> (b -> a -> b) -> Iterator a -> b;
     fold = |init, op, iter| (
-        loop((init, iter), |(accum, iter)|
-            match iter.advance {
-                none() => break $ accum,
-                some((next, iter)) => continue $ (op(accum, next), iter)
-            }
-        )
+        match iter.advance {
+            none() => init,
+            some((next, iter)) => iter.fold(op(init, next), op)
+        }
     );
 
     // Folds iterator from left to right by monadic action.
@@ -1130,7 +1128,7 @@ namespace Iterator {
     push_front : a -> Iterator a -> Iterator a;
     push_front = |elem, iter| Iterator { next: |_| some $ (elem, iter) };
 
-    // Creates a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
+    // Creates a range, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
     range : I64 -> I64 -> Iterator I64;
     range = |a, b| (
         Iterator { next: |_| (
