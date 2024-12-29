@@ -1014,7 +1014,7 @@ namespace Iterator {
 
     // Folds iterator from left to right.
     // 
-    // Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
+    // `[a0, a1, a2, ...].fold(s, op) = ...op(op(op(s, a0), a1), a2)...`
     fold : b -> (b -> a -> b) -> Iterator a -> b;
     fold = |init, op, iter| (
         match iter.advance {
@@ -1026,13 +1026,13 @@ namespace Iterator {
     // Folds iterator from left to right by monadic action.
     fold_m : [m : Monad] b -> (b -> a -> m b) -> Iterator a -> m b;
     fold_m = |init, op, iter| (
-        loop_m((init, iter), |(accum, iter)| (
-            let next = iter.advance;
-            if next.is_none { break_m $ accum };
-            let (next, iter) = next.as_some;
-            let accum = *op(accum, next);
-            continue_m $ (accum, iter)
-        ))
+        match iter.advance {
+            none() => pure(init),
+            some((next, iter)) => do {
+                let accum = *op(init, next);
+                iter.fold_m(accum, op)
+            }
+        }
     );
 
     // Creates iterator from an array.
@@ -1092,30 +1092,35 @@ namespace Iterator {
     is_empty : Iterator a -> Bool;
     is_empty = |iter| iter.advance.is_none;
 
-    // Loop along an iterator. At each iteration step, you can choose to continue or to break.
+    // Loop along an iterator. 
+    // 
+    // Unlike `fold`, you can break the loop by returning `break` at each iteration step.
     loop_iter : s -> (s -> a -> LoopState s s) -> Iterator a -> s;
-    loop_iter = |init, op, iter| (
-        loop((init, iter), |(accum, iter)|
-            let next = iter.advance;
-            if next.is_none { break $ accum };
-            let (next, iter) = next.as_some;
-            let loop_res = op(accum, next);
-            if loop_res.is_break { break $ loop_res.as_break };
-            continue $ (loop_res.as_continue, iter)
-        )
+    loop_iter = |s, body, iter| (
+        match iter.advance {
+            none() => s,
+            some((next, iter)) => match body(s, next) {
+                break(s) => s,
+                continue(s) => loop_iter(s, body, iter)
+            }
+        }
     );
 
-    // Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
+    // Loop by monadic action along an iterator. 
+    // 
+    // Unlike `fold_m`, you can break the loop by returning `break_m` at each iteration step.
     loop_iter_m : [m : Monad] s -> (s -> a -> m (LoopState s s)) -> Iterator a -> m s;
-    loop_iter_m = |init, op, iter| (
-        loop_m((init, iter), |(accum, iter)|
-            let next = iter.advance;
-            if next.is_none { break_m $ accum };
-            let (next, iter) = next.as_some;
-            let loop_res = *op(accum, next);
-            if loop_res.is_break { break_m $ loop_res.as_break };
-            continue_m $ (loop_res.as_continue, iter)
-        )
+    loop_iter_m = |s, body, iter| (
+        match iter.advance {
+            none() => pure(s),
+            some((next, iter)) => do {
+                let res = *body(s, next);
+                match res {
+                    break(s) => pure(s),
+                    continue(s) => loop_iter_m(s, body, iter)
+                }
+            }
+        }
     );
 
     // Generates the cartesian product of two iterators.

@@ -2300,7 +2300,7 @@ Finds the last element of an iterator.
 
 Folds iterator from left to right.
 
-Example: `fold(init, op, [a0, a1, a2, ...]) = ...op(op(op(init, a0), a1), a2)...`
+`[a0, a1, a2, ...].fold(s, op) = ...op(op(op(s, a0), a1), a2)...`
 
 ### `fold_m : [m : Std::Monad] b -> (b -> a -> m b) -> Std::Iterator a -> m b`
 
@@ -2354,11 +2354,15 @@ Check if the iterator is empty.
 
 ### `loop_iter : s -> (s -> a -> Std::LoopState s s) -> Std::Iterator a -> s`
 
-Loop along an iterator. At each iteration step, you can choose to continue or to break.
+Loop along an iterator.
+
+Unlike `fold`, you can break the loop by returning `break` at each iteration step.
 
 ### `loop_iter_m : [m : Std::Monad] s -> (s -> a -> m (Std::LoopState s s)) -> Std::Iterator a -> m s`
 
-Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
+Loop by monadic action along an iterator.
+
+Unlike `fold_m`, you can break the loop by returning `break_m` at each iteration step.
 
 ### `product : Std::Iterator a -> Std::Iterator b -> Std::Iterator (b, a)`
 
