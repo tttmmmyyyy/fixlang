@@ -1564,13 +1564,17 @@ pub fn test63() {
 }
 
 #[test]
-pub fn test64() {
+pub fn test_string_literal() {
     // Test escape sequence.
     let source = r#"
     module Main; 
     main : IO ();
     main = (
-        println $ "\u2764"
+        assert_eq(|_|"heart", "\u2764", "❤");;
+        assert_eq(|_|"tab", "あ\tいうえお", "あ	いうえお");;
+        assert_eq(|_|"tab", "あ\nいうえお", "あ
+いうえお");;
+        pure()
     );
     "#;
     test_source(source, Configuration::develop_compiler_mode());
@@ -2285,7 +2289,7 @@ pub fn test95() {
 }
 
 #[test]
-pub fn test96() {
+pub fn test_u8_literal() {
     // Test U8 literal
     let source = r#"
             module Main;             
