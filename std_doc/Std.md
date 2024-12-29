@@ -80,7 +80,7 @@ The type of lazily generated values.
 You can create a lazy value by `|_| (...an expression to generate the value...)`,
 and you can evaluate a lazy value `v` by `v()`.
 
-### `type LoopResult s b = unbox union { ...variants... }`
+### `type LoopState s r = unbox union { ...variants... }`
 
 A union type with variants `continue` and `break`.
 
@@ -88,7 +88,7 @@ This type is used to represent the result of a loop body function passed to `Std
 
 #### variant `continue : s`
 
-#### variant `break : b`
+#### variant `break : r`
 
 ### `type Option a = unbox union { ...variants... }`
 
@@ -787,12 +787,12 @@ main = (
 );
 ```
 
-### `loop : s -> (s -> Std::LoopResult s b) -> b`
+### `loop : s -> (s -> Std::LoopState s r) -> r`
 
-`loop` enables you to make a loop. `LoopResult` is a union type defined as follows:
+`loop` enables you to make a loop. `LoopState` is a union type defined as follows:
 
 ```
-type LoopResult s r = unbox union { continue : s, break : r };
+type LoopState s r = unbox union { continue : s, break : r };
 ```
 
 `loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`.
@@ -814,7 +814,7 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99
 ```
 
-### `loop_m : [m : Std::Monad] s -> (s -> m (Std::LoopResult s r)) -> m r`
+### `loop_m : [m : Std::Monad] s -> (s -> m (Std::LoopState s r)) -> m r`
 
 Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
 
@@ -2103,17 +2103,17 @@ If you want to handle errors, use `read_line(stdin)` instead.
 
 Checks if an `IOHandle` reached to the EOF.
 
-### `loop_lines : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::LoopResult s s) -> Std::IO::IOFail s`
+### `loop_lines : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::LoopState s s) -> Std::IO::IOFail s`
 
 Loop on lines read from an `IOHandle`.
 
 `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
-The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
+The function `worker` should return an updated state as `LoopState` value, i.e., a value created by `continue` or `break`.
 When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
 
 Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
-### `loop_lines_io : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::IO::IOFail (Std::LoopResult s s)) -> Std::IO::IOFail s`
+### `loop_lines_io : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::IO::IOFail (Std::LoopState s s)) -> Std::IO::IOFail s`
 
 Loop on lines read from an `IOHandle`.
 
@@ -2352,11 +2352,11 @@ Iterator::from_array([1,2,3]).intersperse(0) == Iterator::from_array([1,0,2,0,3]
 
 Check if the iterator is empty.
 
-### `loop_iter : b -> (b -> a -> Std::LoopResult b b) -> Std::Iterator a -> b`
+### `loop_iter : s -> (s -> a -> Std::LoopState s s) -> Std::Iterator a -> s`
 
 Loop along an iterator. At each iteration step, you can choose to continue or to break.
 
-### `loop_iter_m : [m : Std::Monad] b -> (b -> a -> m (Std::LoopResult b b)) -> Std::Iterator a -> m b`
+### `loop_iter_m : [m : Std::Monad] s -> (s -> a -> m (Std::LoopState s s)) -> Std::Iterator a -> m s`
 
 Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
 
@@ -2372,7 +2372,7 @@ Pushes an element to an iterator.
 
 ### `range : Std::I64 -> Std::I64 -> Std::Iterator Std::I64`
 
-Creates a range iterator, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
+Creates a range, i.e. an iterator of the form `[a, a+1, a+2, ..., b-1]`.
 
 ### `reverse : Std::Iterator a -> Std::Iterator a`
 
@@ -2421,15 +2421,15 @@ Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
 Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
-## `namespace Std::LoopResult`
+## `namespace Std::LoopState`
 
-### `break_m : [m : Std::Monad] r -> m (Std::LoopResult s r)`
+### `break_m : [m : Std::Monad] r -> m (Std::LoopState s r)`
 
 Make a break value wrapped in a monad.
 
 This is used with `loop_m` function.
 
-### `continue_m : [m : Std::Monad] s -> m (Std::LoopResult s r)`
+### `continue_m : [m : Std::Monad] s -> m (Std::LoopState s r)`
 
 Make a continue value wrapped in a monad.
 

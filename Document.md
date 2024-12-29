@@ -481,10 +481,10 @@ Don't confuse `|(x, y)| ...` with `|x, y| ...`. The former defines a function th
 
 ## `loop`, `continue` and `break` function
 
-The `loop` built-in function has type `s -> (s -> LoopResult s b) -> b`. The value of `LoopResult` type can be constructed from `continue` or `break` function.
+The `loop` built-in function has type `s -> (s -> LoopState s b) -> b`. The value of `LoopState` type can be constructed from `continue` or `break` function.
 
-- `continue : s -> LoopResult s b`
-- `break : b -> LoopResult s b`
+- `continue : s -> LoopState s b`
+- `break : b -> LoopState s b`
 
 The `loop` function takes two arguments: the initial state of the loop `s0` and the loop body function `body`. It first calls `body` on `s0`. If `body` returns a value `break(r)`, then the `loop` function ends and returns `r` as the result. If `body` returns `continue(s)`, then the `loop` function calls again `body` on `s`.
 
@@ -507,22 +507,22 @@ The initial value of this loop is `(2, arr)`. The loop body takes a tuple `(idx,
 
 ## Unions
 
-Then what is the type `LoopResult s b`? It is defined as an union with two type parameters `s` and `b`. It can be defined as follows:
+Then what is the type `LoopState s b`? It is defined as an union with two type parameters `s` and `b`. It can be defined as follows:
 
 ```
-type LoopResult s b = union { continue : s, break : b };
+type LoopState s b = union { continue : s, break : b };
 ```
 
-The above definition indicates that a `LoopResult s b` value contains either of a value of type `s` or a value of type `b`. If you write the set of values of a type as `|type|`, then `|LoopResult s b| = |s| ⨆ |b|`, where the symbol `⨆` is represents the disjoint union of sets.
+The above definition indicates that a `LoopState s b` value contains either of a value of type `s` or a value of type `b`. If you write the set of values of a type as `|type|`, then `|LoopState s b| = |s| ⨆ |b|`, where the symbol `⨆` is represents the disjoint union of sets.
 
-For each union type, some basic methods are automatically defined. For example, for `LoopResult` as above, the following functions are defined in the namespace `LoopResult`.
+For each union type, some basic methods are automatically defined. For example, for `LoopState` as above, the following functions are defined in the namespace `LoopState`.
 
-- `continue : s -> LoopResult s b`: converts an value of type `s` into a `LoopResult` value.
-- `break : b -> LoopResult s b`: converts an value of type `b` into a `LoopResult` value.
-- `is_continue : LoopResult s b -> Bool`: checks if the `LoopResult` value was created by `continue`.
-- `is_break : LoopResult s b -> Bool`: checks if the `LoopResult` value was created by `break`.
-- `as_continue : LoopResult s b -> s`: extracts a value of type `s` from a `LoopResult` value if it is created by `continue`. If not, this function aborts the program.
-- `as_break : LoopResult s b -> s`: extracts a value of type `b` from a `LoopResult` value if it is created by `break`. If not, this function aborts the program.
+- `continue : s -> LoopState s b`: converts an value of type `s` into a `LoopState` value.
+- `break : b -> LoopState s b`: converts an value of type `b` into a `LoopState` value.
+- `is_continue : LoopState s b -> Bool`: checks if the `LoopState` value was created by `continue`.
+- `is_break : LoopState s b -> Bool`: checks if the `LoopState` value was created by `break`.
+- `as_continue : LoopState s b -> s`: extracts a value of type `s` from a `LoopState` value if it is created by `continue`. If not, this function aborts the program.
+- `as_break : LoopState s b -> s`: extracts a value of type `b` from a `LoopState` value if it is created by `break`. If not, this function aborts the program.
 
 Another example of union is `Option` which is used to represent a value "which may not contain a value". It can be defined as follows: 
 

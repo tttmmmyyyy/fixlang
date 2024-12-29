@@ -48,6 +48,7 @@
 - Change `force_unique` to `_unsafe_force_unique`.
 - Change the semantics of the "eval" syntax. See the document for details.
 - Rename `Std::Boxed` type to `Std::Box`. 
+- Rename `Std::LoopResult` type to `Std::LoopState`.
 
 ### Fixed
 

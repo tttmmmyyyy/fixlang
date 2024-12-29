@@ -7299,7 +7299,7 @@ pub fn test_match_variant_with_bad_namespace() {
     main = (
         let x = Option::none();
         let v = match x {
-            LoopResult::some(v) => v,
+            LoopState::some(v) => v,
             Option::none(_) => 42
         };
         assert_eq(|_|"", v, 42);;
@@ -7310,7 +7310,7 @@ pub fn test_match_variant_with_bad_namespace() {
     test_source_fail(
         &source,
         Configuration::develop_compiler_mode(),
-        "`LoopResult::some` is not a variant of union `Std::Option`.",
+        "`LoopState::some` is not a variant of union `Std::Option`.",
     );
 }
 

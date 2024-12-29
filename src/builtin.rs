@@ -400,7 +400,7 @@ pub fn make_string_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
 }
 
-// // Get LoopResult type.
+// // Get LoopState type.
 // pub fn make_loop_result_ty() -> Arc<TypeNode> {
 //     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
 // }

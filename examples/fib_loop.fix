@@ -11,9 +11,9 @@ main = (
     let arr = arr.set(0, 0);
     let arr = arr.set(1, 1);
     // A way for loop is to use `loop`, `continue` and `break`.
-    // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body, and performs loop.
-    // continue : s -> LoopResult s r -- Takes the next state and continues the loop.
-    // break : r -> LoopResult s r -- Breaks the loop and returns the given value.
+    // loop : s -> LoopState s r -> r -- Takes the initial state and loop body, and performs loop.
+    // continue : s -> LoopState s r -- Takes the next state and continues the loop.
+    // break : r -> LoopState s r -- Breaks the loop and returns the given value.
     let arr = loop((2, arr), |(idx, arr)|
         if idx == arr.get_size {
             break $ arr

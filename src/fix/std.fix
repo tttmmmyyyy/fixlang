@@ -13,12 +13,12 @@ module Std;
 // A union type with variants `continue` and `break`.
 // 
 // This type is used to represent the result of a loop body function passed to `Std::loop` or other similar functions.
-type LoopResult s b = unbox union { continue : s, break : b };
+type LoopState s r = unbox union { continue : s, break : r };
 
-// `loop` enables you to make a loop. `LoopResult` is a union type defined as follows: 
+// `loop` enables you to make a loop. `LoopState` is a union type defined as follows: 
 // 
 // ```
-// type LoopResult s r = unbox union { continue : s, break : r };
+// type LoopState s r = unbox union { continue : s, break : r };
 // ```
 // 
 // `loop` takes two arguments: the initial state of the loop `s0` and the loop body function `body`. 
@@ -39,7 +39,7 @@ type LoopResult s b = unbox union { continue : s, break : b };
 //     println $ sum.to_string
 // ); // evaluates to 0 + 1 + ... + 99 
 // ```
-loop : s -> (s -> Std::LoopResult s b) -> b;
+loop : s -> (s -> LoopState s r) -> r;
 loop = |s, body| (
     match body(s) {
         continue(s) => loop(s, body),
@@ -625,11 +625,11 @@ namespace IO {
     // Loop on lines read from an `IOHandle`.
     // 
     // `loop_lines(handle, initial_state, worker)` calls `worker` on the pair of current state and a line string read from `handle`.
-    // The function `worker` should return an updated state as `LoopResult` value, i.e., a value created by `continue` or `break`.
+    // The function `worker` should return an updated state as `LoopState` value, i.e., a value created by `continue` or `break`.
     // When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
     // 
     // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
-    loop_lines : IOHandle -> s -> (s -> String -> LoopResult s s) -> IOFail s;
+    loop_lines : IOHandle -> s -> (s -> String -> LoopState s s) -> IOFail s;
     loop_lines = |handle, state, worker| (
         if *is_eof(handle).lift {
             pure $ state
@@ -646,7 +646,7 @@ namespace IO {
     // Loop on lines read from an `IOHandle`.
     // 
     // Similar to `loop_lines`, but the worker function can perform an IO action.
-    loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopResult s s)) -> IOFail s;
+    loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopState s s)) -> IOFail s;
     loop_lines_io = |handle, state, worker| (
         if *is_eof(handle).lift {
             pure $ state
@@ -1093,7 +1093,7 @@ namespace Iterator {
     is_empty = |iter| iter.advance.is_none;
 
     // Loop along an iterator. At each iteration step, you can choose to continue or to break.
-    loop_iter : b -> (b -> a -> LoopResult b b) -> Iterator a -> b;
+    loop_iter : s -> (s -> a -> LoopState s s) -> Iterator a -> s;
     loop_iter = |init, op, iter| (
         loop((init, iter), |(accum, iter)|
             let next = iter.advance;
@@ -1106,7 +1106,7 @@ namespace Iterator {
     );
 
     // Loop by monadic action along an iterator. At each iteration step, you can choose to continue or to break.
-    loop_iter_m : [m : Monad] b -> (b -> a -> m (LoopResult b b)) -> Iterator a -> m b;
+    loop_iter_m : [m : Monad] s -> (s -> a -> m (LoopState s s)) -> Iterator a -> m s;
     loop_iter_m = |init, op, iter| (
         loop_m((init, iter), |(accum, iter)|
             let next = iter.advance;
@@ -1253,18 +1253,18 @@ impl Iterator : Monad {
 // and you can evaluate a lazy value `v` by `v()`.
 type Lazy a = () -> a;
 
-namespace LoopResult {
+namespace LoopState {
 
     // Make a break value wrapped in a monad.
     // 
     // This is used with `loop_m` function.
-    break_m : [m : Monad] r -> m (LoopResult s r);
+    break_m : [m : Monad] r -> m (LoopState s r);
     break_m = break >> pure;
 
     // Make a continue value wrapped in a monad.
     // 
     // This is used with `loop_m` function.
-    continue_m : [m : Monad] s -> m (LoopResult s r);
+    continue_m : [m : Monad] s -> m (LoopState s r);
     continue_m = continue >> pure;
 
 }
@@ -1683,7 +1683,7 @@ compose = |f, g, a| g(f(a));
 //     ))
 // );
 // ```
-loop_m : [m : Monad] s -> (s -> m (LoopResult s r)) -> m r;
+loop_m : [m : Monad] s -> (s -> m (LoopState s r)) -> m r;
 loop_m = |s, f| (
     let res = *f(s);
     if res.is_break { pure $ res.as_break };

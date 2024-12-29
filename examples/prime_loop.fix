@@ -7,9 +7,9 @@ is_prime = |n| (
     let arr = arr.set(0, false);
     let arr = arr.set(1, false);
     // A way for loop is to use `loop`, `continue` and `break`.
-    // loop : s -> LoopResult s r -> r -- Takes the initial state and loop body.
-    // continue : s -> LoopResult s r -- Take the next state and continues the loop.
-    // break : r -> LoopResult s r -- Break the loop and `loop` returns the value given to `break`.
+    // loop : s -> LoopState s r -> r -- Takes the initial state and loop body.
+    // continue : s -> LoopState s r -- Take the next state and continues the loop.
+    // break : r -> LoopState s r -- Break the loop and `loop` returns the value given to `break`.
     loop((2, arr), |(i, arr)|
         if i*i > n { break $ arr };
         let next_arr = (
