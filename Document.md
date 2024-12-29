@@ -27,7 +27,7 @@
   - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
   - [A bit on IO (or monads)](#a-bit-on-io-or-monads)
 - [More on language](#more-on-language)
-  - [Boolean values and literals](#boolean-values-and-literals)
+  - [Booleans and literals](#booleans-and-literals)
   - [Numbers and literals](#numbers-and-literals)
   - [Strings and literals](#strings-and-literals)
   - [Arrays and literals](#arrays-and-literals)
@@ -737,36 +737,42 @@ How to combine IO actions and more generally, how to combine monads to create mo
 
 # More on language
 
-## Boolean values and literals
+## Booleans and literals
 
-The boolean type is `Bool` and its literals are `true` and `false`.
+The type for booleans is `Bool`, and literals for booleans are `true` and `false`.
 
 ## Numbers and literals
 
 Types for numbers are `I8`, `I16`, `I32`, `I64` (signed integers), `U8`, `U16`, `U32`, `U64` (unsigned integers) and `F32`, `F64` (floating point values).
 
-Syntax for number literals is: 
-```
-"-"? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ( "e" ~ ("+" | "-")? ~ ASCII_DIGIT+ )?
-```
+A number literal is interpreted as a floating point literal if it contains a decimal point, and as an integer literal otherwise.
+For example, `42` is an `I64` type number literal, and `3.14` is an `F64` type number literal.
 
-Integer literals can also be written with a hexadecimal (`0x`), octal (`0o`), or binary (`0b`) prefix.
-Syntax for these number literal is:
-```
-"-"? ~ "0x" ~ ASCII_HEX_DIGIT+
-"-"? ~ "0o" ~ ('0'..'7')+
-"-"? ~ "0b" ~ ('0'..'1')+
-```
+To write a number literal of a type other than `I64` and `F64`, write an underscore and the type name after the literal.
+For example, `42_I32` is an `I32` type number literal, and `3.14_F32` is an `F32` type number literal.
 
-Note that literals for floating point values requires at least one digit before and after the decimal point. 
-For example, `1.` or `.1` is not valid float literal (where it is valid in C) and you need to write `1.0` or `0.1` instead.
+Integer literals are represented in decimal by default, and can be represented in hexadecimal with a `0x` prefix, in octal with a `0o` prefix, and in binary with a `0b` prefix.
+For example, `0x2A` represents 42, and `0o52` also represents 42.
 
-The defaut type for integer liteal is `I64`, and the one for floating point value literal is `F64`.
-For other types of numbers, you need to specify its type explicitl, such as `127_U8` or `3.14_F32` .
+In integer literals in decimal, you can use "e" to represent the power of 10.
+For example, `4e2` represents 400.
+
+Characters enclosed in single quotes are interpreted as `U8` type number literals.
+For example, `'A'` represents 65.
+
+Additionally, `\n`, `\r`, `\t`, `\0`, `\\`, `\'` are interpreted as `U8` type number literals representing the character codes of newline, carriage return, tab, null character, backslash, and single quote, respectively.
+
+Note that floating point literals must have at least one digit before and after the decimal point.
+For example, `1.` and `.1` are not valid floating point literals (while they are valid in C).
 
 ## Strings and literals
 
-The type for strings is `String`. String literals are enclosed in double quotation marks, such as `"Hello World!"`
+`String` is a type representing a string. Internally, it is represented as a null-terminated array of `U8`.
+
+A string literal is a string enclosed in double quotes.
+For example, `"Hello, world!"` is a string literal of type `String`.
+
+In a string literal, `\n`, `\r`, `\t`, `\\`, `\"` are interpreted as newline, carriage return, tab, backslash, and double quote, respectively.
 
 ## Arrays and literals
 
