@@ -988,13 +988,7 @@ impl TypeCheckContext {
             self.unify(&eq.lhs(), &eq.value)?;
             return Ok(());
         }
-
-        // If the rhs of the equality is a type variable, call unify.
-        if eq.value.is_tyvar() {
-            self.unify(&eq.lhs(), &eq.value)?;
-            return Ok(());
-        }
-
+        
         // Avoid adding trivial equality.
         if eq.lhs().to_string() == eq.value.to_string() {
             return Ok(());
@@ -1030,7 +1024,6 @@ impl TypeCheckContext {
                     subst.substitute_equality(&mut equality);
 
                     // Try to match lhs of `equality` to `ty`.
-                    let equality = &assumed_eq.equality;
                     let subst: Option<Substitution> = Substitution::matching(&equality.lhs(), &ty, &self.fixed_tyvars, &self.kind_env)?;
                     if subst.is_none() {
                         continue;
