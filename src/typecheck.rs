@@ -959,16 +959,48 @@ impl TypeCheckContext {
     }
 
     fn add_equality(&mut self, mut eq: Equality) -> Result<(), UnifOrOtherErr> {
+        // We add only equalities that are not trivial, and cannot be simplified further. 
+        // If the equation can be simplified in some way, then unify lhs and rhs of the equation, instead of adding it to `equalities`.
+        // `unify` may be recursively call this function again.
+        // To avoid infinite loop, we use `unify` only when the equality can be simplified.
+
+        let eq_org = eq.to_string();
+        let lhs_org = eq.lhs().to_string();
+        let rhs_org = eq.value.to_string();
+
+        // If the equality can be simplified by substitution, call unify.
         self.substitute_equality(&mut eq);
-        let red_lhs = self.reduce_type_by_equality(eq.lhs())?;
-        if red_lhs.to_string() != eq.lhs().to_string() {
-            self.unify(&red_lhs, &eq.value)?;
-        } else {
-            eq.value = self.reduce_type_by_equality(eq.value.clone())?;
-            if eq.lhs().to_string() != eq.value.to_string() {
-                self.equalities.push(eq);
-            }
+        if eq.to_string() != eq_org {
+            self.unify(&eq.lhs(), &eq.value)?;
+            return Ok(());
         }
+
+        // If the lhs of the equality is reducible, call unify.
+        let red_lhs = self.reduce_type_by_equality(eq.lhs())?;
+        if red_lhs.to_string() != lhs_org {
+            self.unify(&red_lhs, &eq.value)?;
+            return Ok(());
+        }
+        
+        // If the rhs of the equality is reducible, call unify.
+        eq.value = self.reduce_type_by_equality(eq.value.clone())?;
+        if eq.value.to_string() != rhs_org {
+            self.unify(&eq.lhs(), &eq.value)?;
+            return Ok(());
+        }
+
+        // If the rhs of the equality is a type variable, call unify.
+        if eq.value.is_tyvar() {
+            self.unify(&eq.lhs(), &eq.value)?;
+            return Ok(());
+        }
+
+        // Avoid adding trivial equality.
+        if eq.lhs().to_string() == eq.value.to_string() {
+            return Ok(());
+        }
+        
+        self.equalities.push(eq);
         Ok(())
     }
 
