@@ -41,3 +41,7 @@ git = "https://github.com/tttmmmyyyy/fixlang-time.git"
 [[projects]]
 name = "binary-heap"
 git = "https://github.com/tttmmmyyyy/fixlang-binary-heap.git"
+
+[[projects]]
+name = "fast-iter"
+git = "https://github.com/tttmmmyyyy/fixlang-fast-iter.git"
