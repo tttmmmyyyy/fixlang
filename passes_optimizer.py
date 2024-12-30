@@ -202,7 +202,7 @@ def optimize():
         # minimize passes
         passes = []
         # Remove one pass randomly
-        remove_idx = random.randint(0, len(optimum_passes))
+        remove_idx = random.randint(0, len(optimum_passes) - 1)
         removed_passes = [optimum_passes[remove_idx]]
         # for p in optimum_passes:
         #     if random.randint(0, int(ceil(len(optimum_passes) / ADDED_PASSES_NUM))) != 0:
