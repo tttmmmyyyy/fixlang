@@ -49,6 +49,7 @@
 - Change the semantics of the "eval" syntax. See the document for details.
 - Rename `Std::Boxed` type to `Std::Box`. 
 - Rename `Std::LoopResult` type to `Std::LoopState`.
+- Allow trait implementations to be placed in any namespace. Previously, they could only be written at the top level of a module. However, it does not matter in which namespace you define them.
 
 ### Fixed
 

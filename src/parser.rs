@@ -176,11 +176,9 @@ fn parse_module(
                 &mut type_defns,
                 &mut trait_infos,
                 &mut trait_aliases,
+                &mut trait_impls,
                 &mut export_statements,
             )),
-            Rule::trait_impl => {
-                errors.eat_err_or(parse_trait_impl(pair, &mut ctx), |ti| trait_impls.push(ti));
-            }
             Rule::import_statement => {
                 import_statements.push(parse_import_statement(pair, &mut ctx));
             }
@@ -206,6 +204,7 @@ fn parse_global_defns(
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
     trait_aliases: &mut Vec<TraitAlias>,
+    trait_impls: &mut Vec<TraitInstance>,
     export_statements: &mut Vec<ExportStatement>,
 ) -> Result<(), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_defns);
@@ -223,6 +222,7 @@ fn parse_global_defns(
                     type_defns,
                     trait_infos,
                     trait_aliases,
+                    trait_impls,
                     export_statements,
                 ));
             }
@@ -245,6 +245,9 @@ fn parse_global_defns(
             Rule::trait_alias_defn => {
                 trait_aliases.push(parse_trait_alias(pair, ctx));
             }
+            Rule::trait_impl => {
+                errors.eat_err_or(parse_trait_impl(pair, ctx), |ti| trait_impls.push(ti));
+            }
             Rule::export_statement => {
                 export_statements.push(parse_export_statement(pair, ctx));
             }
@@ -262,6 +265,7 @@ fn parse_global_defns_in_namespace(
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitInfo>,
     trait_aliases: &mut Vec<TraitAlias>,
+    trait_impls: &mut Vec<TraitInstance>,
     export_statements: &mut Vec<ExportStatement>,
 ) -> Result<(), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
@@ -288,6 +292,7 @@ fn parse_global_defns_in_namespace(
             type_defns,
             trait_infos,
             trait_aliases,
+            trait_impls,
             export_statements,
         )?;
     }
