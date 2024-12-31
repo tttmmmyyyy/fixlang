@@ -7,12 +7,7 @@ gcd = |n, m| (
     if n == 0 { m } else { gcd(m % n, n) }
 );
 
-// Iterator, a.k.a. lazy list, is defined as follows.
-// `type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };`
-
-// Instead of containing "the next value", a non-empty iterator has a function to generate a pair of
-// - the next value and 
-// - the iterator to generate rest values.
+// Iterator is a type to represent a sequence different from Array, which contains state and function needed to calculate the next element.
 
 // Iterators are important to write program in a functional manner. 
 // The following example illustrates the power of iterators.
@@ -23,16 +18,16 @@ gcd = |n, m| (
 // So `count_divs(100) == 2 + 2 + 2 + 2 + 1`. 
 count_divs : I64 -> I64;
 count_divs = |n| (
-    Iterator::count_up(1) // Generate an infinite iterator `1, 2, 3, ...` which are candidates for divisors of `n`.
+    Iterator::count_up(1) // Generate an infinite sequence `1, 2, 3, ...` which are candidates for divisors of `n`.
         .take_while(|d| d*d <= n) // Take elements less than or equal to root of `n`.
         .filter(|d| n%d == 0) // Take only divisors.
         .map(|d| if d*d == n { 1 } else { 2 }) // Convert a divisor into the size of the group it belongs to.
-        .fold(0, Add::add) // Sum up the iterator. `fold` folds an iterator by an operator (two-variable function). 
+        .fold(0, Add::add) // Sum up the sequence. `fold` folds an iterator by an operator (two-variable function). 
         // `Add::add : I64 -> I64 -> I64` adds two integers.
 );
 
 // Infinite iterator of positive rational numbers less than 1.
-rationals : Iterator (I64, I64); // Pair of numerator and denominator.
+rationals : DynIterator (I64, I64); // Pair of numerator and denominator.
 rationals = (
     Iterator::count_up(1) // Iterator of denominators
         .map(|d| (
@@ -40,7 +35,8 @@ rationals = (
                 .filter(|n| gcd(n, d) == 1) // Filter out numerators which has common factor with the denominator.
                 .map(|n| (n, d)) // Make pair of numerator and denominator.
         ))
-        .flatten // `flatten : Iterator (Iterator a) -> Iterator a`
+        .flatten // `flatten` converts a "iterator of iterators" into an iterator.
+        .to_dyn // The iterator constructed upto here has quite a complex type. `to_dyn` converts it into a simple type (but adds overhead when iterating).
 );
 
 stringify_rational : (I64, I64) -> String;

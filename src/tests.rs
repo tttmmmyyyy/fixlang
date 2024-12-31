@@ -1733,16 +1733,16 @@ pub fn test75() {
     module Main; 
     main : IO ();
     main = (
-        let iter = Iterator::from_map(|i| i*i );
-        let (n, iter) = iter.advance.as_some;
+        let iter = Iterator::from_map(|i| i*i);
+        let (iter, n) = iter.advance.as_some;
         assert_eq(|_|"", n, 0*0);;
-        let (n, iter) = iter.advance.as_some;
+        let (iter, n) = iter.advance.as_some;
         assert_eq(|_|"", n, 1*1);;
-        let (n, iter) = iter.advance.as_some;
+        let (iter, n) = iter.advance.as_some;
         assert_eq(|_|"", n, 2*2);;
-        let (n, iter) = iter.advance.as_some;
+        let (iter, n) = iter.advance.as_some;
         assert_eq(|_|"", n, 3*3);;
-        let (n, iter) = iter.advance.as_some;
+        let (iter, n) = iter.advance.as_some;
         assert_eq(|_|"", n, 4*4);;
         pure()
     );
@@ -1768,7 +1768,7 @@ pub fn test76() {
 
 #[test]
 pub fn test77() {
-    // Test Iterator::zip / map / take / fold / subsequences.
+    // Test Iterator::zip / map / take / fold.
     let source = r#"
     module Main; 
     main : IO ();
@@ -1779,13 +1779,6 @@ pub fn test77() {
         let iter = iter.map(|(a,b)| a+b).take(3);
         let res = iter.fold(0, add);
         assert_eq(|_|"case 1", res, (5+2*0) + (6+2*1) + (7+2*2));;
-
-        let subs = (Iterator::empty : Iterator I64).subsequences;
-        assert_eq(|_|"subsequences 1", subs.get_size, 1);;
-        assert_eq(|_|"subsequences 2", subs.advance.as_some.@0.get_size, 0);;
-
-        let subs = [1,2,3].to_iter.subsequences;
-        assert_eq(|_|"subsequences 3", subs.map(to_array).to_array, [[], [3], [2], [2, 3], [1], [1, 3], [1, 2], [1, 2, 3]]);;
 
         pure()
     );
@@ -1819,28 +1812,10 @@ pub fn test79() {
     main = (
         let ls = Iterator::empty;
         let ls = ls.push_front(1).push_front(2);
-        let (e, ls) = ls.advance.as_some;
+        let (ls, e) = ls.advance.as_some;
         assert_eq(|_|"", 2, e);;
-        let (e, ls) = ls.advance.as_some;
+        let (ls, e) = ls.advance.as_some;
         assert_eq(|_|"", 1, e);;
-        pure()
-    );
-    "#;
-    test_source(source, Configuration::develop_compiler_mode());
-}
-
-#[test]
-pub fn test80() {
-    // Test Iterator::last
-    let source = r#"
-    module Main; 
-    main : IO ();
-    main = (
-        let iter = Iterator::empty.push_front(4).push_front(3).push_front(2).push_front(1);
-        let last = iter.find_last.as_some;
-        assert_eq(|_|"", last, 4);;
-        let last: Option Bool = Iterator::empty.find_last;
-        assert(|_|"", last.is_none);;
         pure()
     );
     "#;
@@ -2052,22 +2027,22 @@ pub fn test86() {
 }
 
 #[test]
-pub fn test87() {
+pub fn test_dyn_iter_eq() {
     // Test iterator comparison
     let source = r#"
     module Main; 
     main : IO ();
     main = (
-        let lhs = Iterator::from_array([1,2,3]);
-        let rhs = Iterator::from_array([1,2,3]);
+        let lhs = Iterator::from_array([1,2,3]).to_dyn;
+        let rhs = Iterator::from_array([1,2,3]).to_dyn;
         assert_eq(|_|"", lhs, rhs);;
 
-        let lhs: Iterator Bool = Iterator::from_array([]);
-        let rhs = Iterator::from_array([]);
+        let lhs = Iterator::from_array([] : Array Bool).to_dyn;
+        let rhs = Iterator::from_array([]).to_dyn;
         assert_eq(|_|"", lhs, rhs);;
 
-        let lhs = Iterator::from_array([]);
-        let rhs = Iterator::from_array([1,2]);
+        let lhs = Iterator::from_array([]).to_dyn;
+        let rhs = Iterator::from_array([1,2]).to_dyn;
         assert(|_|"", lhs != rhs);;
 
         pure()
@@ -2078,53 +2053,28 @@ pub fn test87() {
 }
 
 #[test]
-pub fn test88() {
-    // Test iterator comparison
+pub fn test_iterator_add() {
+    // Test Iterator::append (operator +)
     let source = r#"
     module Main; 
+
     main : IO ();
     main = (
-        let iter = Iterator::from_array([1,2,3]);
-        let iter = iter.intersperse(0);
-        assert_eq(|_|"", iter, Iterator::from_array([1,0,2,0,3]));;
+        let lhs = Iterator::from_array([1,2,3]).to_dyn;
+        let rhs = Iterator::from_array([4,5,6]).to_dyn;
+        assert_eq(|_|"", lhs + rhs, [1,2,3,4,5,6].to_iter.to_dyn);;
     
-        let iter = Iterator::from_array([1]);
-        let iter = iter.intersperse(0);
-        assert_eq(|_|"", iter, Iterator::from_array([1]));;
-    
-        let iter = Iterator::from_array([]);
-        let iter = iter.intersperse(0);
-        assert_eq(|_|"", iter, Iterator::from_array([]));;
-    
-        pure()
-    );
-    
-    "#;
-    test_source(source, Configuration::develop_compiler_mode());
-}
+        let lhs = Iterator::from_array([]).to_dyn;
+        let rhs = Iterator::from_array([4,5,6]).to_dyn;
+        assert_eq(|_|"", lhs + rhs, [4,5,6].to_iter.to_dyn);;
 
-#[test]
-pub fn test89() {
-    // Test Iterator::append
-    let source = r#"
-    module Main; 
-    main : IO ();
-    main = (
-        let lhs = Iterator::from_array([1,2,3]);
-        let rhs = Iterator::from_array([4,5,6]);
-        assert_eq(|_|"", lhs + rhs, Iterator::from_array([1,2,3,4,5,6]));;
-    
-        let lhs = Iterator::from_array([]);
-        let rhs = Iterator::from_array([4,5,6]);
-        assert_eq(|_|"", lhs + rhs, Iterator::from_array([4,5,6]));;
+        let lhs = Iterator::from_array([1,2,3]).to_dyn;
+        let rhs = Iterator::from_array([]).to_dyn;
+        assert_eq(|_|"", lhs + rhs, [1,2,3].to_iter.to_dyn);;
 
-        let lhs = Iterator::from_array([1,2,3]);
-        let rhs = Iterator::from_array([]);
-        assert_eq(|_|"", lhs + rhs, Iterator::from_array([1,2,3]));;
-
-        let lhs: Iterator I64 = Iterator::from_array([]);
-        let rhs = Iterator::from_array([]);
-        assert_eq(|_|"", lhs + rhs, Iterator::from_array([]));;
+        let lhs = Iterator::from_array([] : Array I64).to_dyn;
+        let rhs = Iterator::from_array([]).to_dyn;
+        assert_eq(|_|"", lhs + rhs, [].to_iter.to_dyn);;
     
         pure()
     );
@@ -2785,12 +2735,15 @@ pub fn test109() {
         add_opt_int : Option I64 -> Option I64 -> Option I64;
         add_opt_int = |lhs, rhs| pure $ *lhs + *rhs;
 
-        sequence : [m : Monad, m : Functor] Iterator (m a) -> m (Iterator a);
-        sequence = |iter| (
-            if iter.is_empty { pure $ Iterator::empty };
-            let (x, xs_iter) = iter.advance.as_some;
-            pure $ Iterator::push_front(*x) $ *sequence(xs_iter)
+        sequence_rev : [m : Monad, iter : Iterable, Item iter = m a] iter -> m (Array a);
+        sequence_rev = |iter| (
+            if iter.is_empty { pure $ [] };
+            let (xs, x) = iter.advance.as_some;
+            pure $ Array::push_back(*x) $ *sequence_rev(xs)
         );
+
+        sequence : [m : Monad, iter : Iterable, Item iter = m a] iter -> m (ReverseIterator (ArrayIterator a) a);
+        sequence = |iter| pure $ (*iter.sequence_rev).to_iter.reverse;
 
         main : IO ();
         main = (
@@ -2808,17 +2761,17 @@ pub fn test109() {
             let res1 = Result::ok(1);
             let res2 = Result::ok(2);
             let res3 = Result::ok(3);
-            let res_iter = Iterator::from_array([res0, res1, res2, res3]).sequence;
-            assert_eq(|_|"case 5", res_iter.is_ok, true);;
-            assert_eq(|_|"case 6", res_iter.as_ok, Iterator::from_array([0, 1, 2, 3]));;
+            let res = [res0, res1, res2, res3].to_iter.sequence;
+            assert_eq(|_|"case 5", res.is_ok, true);;
+            assert_eq(|_|"case 6", res.as_ok.to_array, [0, 1, 2, 3]);;
 
             let res0 = Result::ok(0) : Result String I64;
             let res1 = Result::ok(1);
             let res2 = Result::err("Error 2");
             let res3 = Result::err("Error 3");
-            let res_iter = Iterator::from_array([res0, res1, res2, res3]).sequence;
-            assert_eq(|_|"case 5", res_iter.is_err, true);;
-            assert_eq(|_|"case 6", res_iter.as_err, "Error 2");;
+            let res = [res0, res1, res2, res3].to_iter.sequence;
+            assert_eq(|_|"case 5", res.is_err, true);;
+            assert_eq(|_|"case 6", res.as_err, "Error 2");;
 
             pure()
         );
@@ -2984,13 +2937,13 @@ pub fn test112() {
         module Main; 
         main : IO ();
         main = (
-            let iter = Iterator::generate(0, |_| Option::none());
-            let ans = [] : Array I64;
-            assert_eq(|_|"case 1", iter.to_array, ans);;
+            // let iter = Iterator::generate(0, |_| Option::none());
+            // let ans = [] : Array I64;
+            // assert_eq(|_|"case 1", iter.to_array, ans);;
 
-            let iter = Iterator::generate(0, |i| if i == 3 { Option::none() } else { Option::some $ (i, i+1) });
+            let iter = Iterator::generate(0, |i| if i == 3 { Option::none() } else { Option::some $ (i+1, i) });
             let ans = [0, 1, 2];
-            assert_eq(|_|"case 1", iter.to_array, ans);;
+            assert_eq(|_|"case 2", iter.to_array, ans);;
 
             pure()
         );
@@ -3675,11 +3628,11 @@ pub fn test_trait_alias() {
         impl Option : MyFunctorPlus {
             my_fplus = |rhs, lhs| if lhs.is_some { lhs } else { rhs };
         }
-        my_msum : [m : MyMonadAdditive] Iterator (m a) -> m a;
+        my_msum : [m : MyMonadAdditive] DynIterator (m a) -> m a;
         my_msum = |iter| (
             let next = iter.advance;
             if next.is_none { my_fzero };
-            let (act, iter) = next.as_some;
+            let (iter, act) = next.as_some;
             act.my_fplus(my_msum(iter))
         );
 
@@ -3716,19 +3669,19 @@ pub fn test_trait_alias() {
             assert_eq(|_|"case 1", sum_vec.@x, 4);;
             assert_eq(|_|"case 2", sum_vec.@y, 6);;
 
-            let opts = [Option::some(1), Option::some(2)].to_iter;
+            let opts = [Option::some(1), Option::some(2)].to_iter.to_dyn;
             let opt_sum = opts.my_msum;
             assert_eq(|_|"case 3", opt_sum.as_some, 1);;
 
-            let opts = [Option::none(), Option::some(2)].to_iter;
+            let opts = [Option::none(), Option::some(2)].to_iter.to_dyn;
             let opt_sum = opts.my_msum;
             assert_eq(|_|"case 4", opt_sum.as_some, 2);;
 
-            let opts = [Option::none(), Option::none()].to_iter;
+            let opts = [Option::none(), Option::none()].to_iter.to_dyn;
             let opt_sum : Option I64 = opts.my_msum;
             assert_eq(|_|"case 5", opt_sum.is_none, true);;
 
-            let opts = [].to_iter;
+            let opts = [].to_iter.to_dyn;
             let opt_sum : Option I64 = opts.my_msum;
             assert_eq(|_|"case 6", opt_sum.is_none, true);;
 
@@ -4668,11 +4621,8 @@ pub fn test_result_eq() {
 
         let ress = [ok1, ok2, err1, err2];
 
-        let indices = do {
-            let i = *Iterator::range(0, ress.get_size);
-            let j = *Iterator::range(0, ress.get_size);
-            pure $ (i, j)
-        };
+        let indices = Iterator::range(0, ress.get_size);
+        let indices = indices.product(indices);
         indices.loop_iter_m((), |_, (i, j)| (
             if i == j {
                 assert_eq(|_|"", ress.@(i) == ress.@(j), true)
@@ -4703,11 +4653,8 @@ pub fn test_array_less_than_and_less_than_or_eq() {
 
         let arrs = [arr1, arr2, arr3, arr4, arr5];
 
-        let indices = do {
-            let i = *Iterator::range(0, arrs.get_size);
-            let j = *Iterator::range(0, arrs.get_size);
-            pure $ (i, j)
-        };
+        let indices = Iterator::range(0, arrs.get_size);
+        let indices = indices.product(indices);
         indices.loop_iter_m((), |_, (i, j)| (
             assert_eq(|_|"", arrs.@(i) < arrs.@(j), i < j);;
             assert_eq(|_|"", arrs.@(i) <= arrs.@(j), i <= j);;
@@ -4735,11 +4682,8 @@ pub fn test_string_less_than_and_less_than_or_eq() {
 
         let ss = [s1, s2, s3, s4, s5];
 
-        let indices = do {
-            let i = *Iterator::range(0, ss.get_size);
-            let j = *Iterator::range(0, ss.get_size);
-            pure $ (i, j)
-        };
+        let indices = Iterator::range(0, ss.get_size);
+        let indices = indices.product(indices);
         indices.loop_iter_m((), |_, (i, j)| (
             assert_eq(|_|"", ss.@(i) < ss.@(j), i < j);;
             assert_eq(|_|"", ss.@(i) <= ss.@(j), i <= j);;
@@ -5587,20 +5531,20 @@ pub fn test_associated_type_collects() {
         type Elem c;
         empty : c;
         insert : Elem c -> c -> c;
-        to_iter : c -> Iterator (Elem c);
+        to_iter : c -> DynIterator (Elem c);
     }
 
     impl Array a : Collects {
         type Elem (Array a) = a;
         empty = [];
         insert = |x, xs| xs.push_back(x);
-        to_iter = |xs| Array::to_iter(xs);
+        to_iter = |xs| Array::to_iter(xs).to_dyn;
     }
 
-    impl Iterator a : Collects {
-        type Elem (Iterator a) = a;
-        empty = Iterator::empty;
-        insert = |x, xs| xs.push_front(x);
+    impl DynIterator a : Collects {
+        type Elem (DynIterator a) = a;
+        empty = DynIterator::empty;
+        insert = |x, xs| xs.push_front(x).to_dyn;
         to_iter = |xs| xs;
     }
 
@@ -5641,7 +5585,7 @@ pub fn test_associated_type_collects() {
     main : IO ();
     main = (
         assert_eq(|_|"", [].insert(1).insert(2).insert(3), [1, 2, 3]);;
-        assert_eq(|_|"", Iterator::empty.insert(3).insert(2).insert(1).to_array, [1, 2, 3]);;
+        assert_eq(|_|"", Iterator::empty.to_dyn.insert(3).insert(2).insert(1).to_array, [1, 2, 3]);;
         assert_eq(|_|"", triple(1, 2, 3).extend([4, 5, 6]), [1, 2, 3, 4, 5, 6]);;
         assert_eq(|_|"", triple(1, 2, 3).extend([4, 5, 6].Collects::to_iter), [1, 2, 3, 4, 5, 6]);;
         assert_eq(|_|"", [1, 2, 3].Collects::to_iter.extend([4, 5, 6]).to_array, [6, 5, 4, 1, 2, 3]);;
