@@ -11,19 +11,21 @@ in_of_let = { "in" | semicolon }
 
 eq_of_let = { "=" }
 
-// Characters that can be used in value names, field names.
+// Strings that can be used as names of values, fields or variants.
 // - "@" is used for getter function ("@x" for getter of field x)
-// - "!" is used for uniqueness. Cannot appear at head because "!false" should be parsed as prefix operator "!" for boolean value.
-var_head = _{ ASCII_ALPHA_LOWER | "_" | "@" }
-var_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
-var = { !keywords ~ (var_head ~ var_char*) }
+name_head = _{ ASCII_ALPHA_LOWER | "_" | "@" }
+name_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
+name = { !keywords ~ (name_head ~ name_char*) }
+fullname = { (namespace_item ~ "::")* ~ name }
 
+// Strings that can be used of types, traits, modules or namespaces.
 capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
+capital_fullname = { (namespace_item ~ "::")* ~ capital_name }
 
+// Namespace.
 // Though period is allowed in namespace item in grammer, the parser raisse an error if a user tries to define a namespace with period.
 // It is ok for using period in module name.
 namespace_item = { capital_name ~ ("." ~ capital_name)* }
-capital_fullname = { (namespace_item ~ "::")* ~ capital_name }
 namespace = { namespace_item ~ ("::" ~ namespace_item)* }
 
 // === Expressions ===
@@ -39,10 +41,10 @@ number_lit_body = { number_lit_body_hex | number_lit_body_oct | number_lit_body_
 number_lit_type = { "I8" | "U8" | "I16" | "U16" | "I32" | "U32" | "I64" | "U64" | "F32" | "F64" }
 
 // Since "nullptr_val" should be parsed as a variable name, not as literal, "~ !var_char" is necessary.
-expr_nullptr_lit = { "nullptr" ~ !var_char }
+expr_nullptr_lit = { "nullptr" ~ !name_char }
 
 // Since "nullptr_val" should be parsed as a variable name, not as literal, "~ !var_char" is necessary.
-expr_bool_lit = { ("true" | "false") ~ !var_char }
+expr_bool_lit = { ("true" | "false") ~ !name_char }
 
 expr_array_lit = { "[" ~ (sep* ~ expr ~ sep* ~ ("," ~ sep* ~ expr)*)? ~ sep* ~ ("," ~ sep*)? ~ "]" }
 
@@ -66,7 +68,7 @@ u8_lit_char = {
 
 expr_lit = { expr_number_lit | expr_bool_lit | expr_string_lit | expr_array_lit | expr_nullptr_lit | expr_u8_lit }
 
-expr_var = { (namespace ~ "::")? ~ var }
+expr_var = { fullname }
 
 expr_let = { "let" ~ sep+ ~ pattern_nounion ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
 
@@ -170,7 +172,7 @@ pattern_nounion = { pattern_var | pattern_tuple | pattern_struct }
 
 pattern_case = { pattern_union | pattern_var | pattern_tuple | pattern_struct }
 
-pattern_var = { var ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
+pattern_var = { name ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ (sep* ~ ",")? ~ sep* ~ ")" }
 
@@ -219,7 +221,7 @@ kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 // === Type definitions ===
 type_name = { capital_name }
 
-type_field_name = { !keywords ~ (var_head ~ !"@") ~ var_char* }
+type_field_name = { !keywords ~ (name_head ~ !"@") ~ name_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 
@@ -249,7 +251,7 @@ trait_member_defn = { trait_member_value_defn | trait_member_type_defn }
 
 trait_member_value_defn = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
 
-trait_member_value_name = _{ var }
+trait_member_value_name = _{ name }
 
 trait_member_type_defn = { "type" ~ (sep+ ~ constraints)? ~ sep+ ~ type_expr ~ (sep* ~ ":" ~ sep* ~ kind)? ~ sep* ~ semicolon }
 
@@ -266,9 +268,9 @@ trait_member_type_impl = { "type" ~ sep+ ~ type_expr ~ sep* ~ "=" ~ sep* ~ type_
 trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ semicolon }
 
 // === Global names === 
-global_name_type_sign = { var ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
+global_name_type_sign = { name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
 
-global_name_defn = { var ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
+global_name_defn = { name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
 
 // === Import statements === 
 import_statement = { "import" ~ sep+ ~ importee ~ sep* ~ semicolon }
@@ -285,7 +287,7 @@ import_item_node = { import_item_any | import_item_symbol | import_item_capital_
 
 import_item_any = { "*" }
 
-import_item_symbol = { var }
+import_item_symbol = { name }
 
 import_item_capital_item = { namespace_item ~ (sep* ~ "::" ~ sep* ~ import_items)? } // Type name and trait name also matches to `namespace_item`.
 
@@ -327,7 +329,7 @@ exported_c_function_char = _{ !"]" ~ ANY }
 
 exported_c_function_name = { exported_c_function_char+ }
 
-export_statement = { export_symbol ~ sep* ~ "[" ~ sep* ~ var ~ sep* ~ "," ~ sep* ~ exported_c_function_name ~ sep* ~ "]" ~ sep* ~ semicolon }
+export_statement = { export_symbol ~ sep* ~ "[" ~ sep* ~ name ~ sep* ~ "," ~ sep* ~ exported_c_function_name ~ sep* ~ "]" ~ sep* ~ semicolon }
 
 // === Comments ===
 block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }

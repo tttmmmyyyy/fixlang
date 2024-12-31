@@ -732,22 +732,6 @@ fn parse_trait_fullname(pair: Pair<Rule>, _ctx: &mut ParseContext) -> Trait {
     Trait { name: fullname }
 }
 
-fn parse_capital_fullname(pair: Pair<Rule>) -> FullName {
-    assert_eq!(pair.as_rule(), Rule::capital_fullname);
-    let mut pairs = pair.into_inner();
-    let mut fullname = FullName::local("");
-    while pairs.peek().unwrap().as_rule() == Rule::namespace_item {
-        fullname
-            .namespace
-            .names
-            .push(pairs.next().unwrap().as_str().to_string());
-    }
-    let pair = pairs.next().unwrap();
-    assert_eq!(pair.as_rule(), Rule::capital_name);
-    fullname.name = pair.as_str().to_string();
-    fullname
-}
-
 fn parse_kind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Kind> {
     assert_eq!(pair.as_rule(), Rule::kind);
     let pairs = pair.into_inner();
@@ -1457,18 +1441,37 @@ fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
 fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_var);
     let span = Span::from_pair(&ctx.source, &pair);
-    let mut pairs = pair.into_inner();
-    let namespace = if pairs.peek().unwrap().as_rule() == Rule::namespace {
-        parse_namespace(pairs.next().unwrap(), ctx)
-    } else {
-        NameSpace::local()
-    };
-    let var = pairs.next().unwrap().as_str().to_string();
-    let name = FullName {
-        namespace,
-        name: var,
-    };
+    let pair = pair.into_inner().next().unwrap();
+    let name = parse_fullname(pair);
     expr_var(name, Some(span))
+}
+
+fn parse_fullname(pair: Pair<Rule>) -> FullName {
+    assert_eq!(pair.as_rule(), Rule::fullname);
+    parse_fullname_or_capital_fullname(pair)
+}
+
+fn parse_capital_fullname(pair: Pair<Rule>) -> FullName {
+    assert_eq!(pair.as_rule(), Rule::capital_fullname);
+    parse_fullname_or_capital_fullname(pair)
+}
+
+fn parse_fullname_or_capital_fullname(pair: Pair<Rule>) -> FullName {
+    assert!(pair.as_rule() == Rule::fullname || pair.as_rule() == Rule::capital_fullname);
+    let mut pairs = pair.into_inner();
+    let mut fullname = FullName::local("");
+    while pairs.peek().unwrap().as_rule() == Rule::namespace_item {
+        fullname
+            .namespace
+            .names
+            .push(pairs.next().unwrap().as_str().to_string());
+    }
+    let pair = pairs.next().unwrap();
+    if pair.as_rule() == Rule::capital_fullname {
+        assert_eq!(pair.as_rule(), Rule::capital_name);
+    }
+    fullname.name = pair.as_str().to_string();
+    fullname
 }
 
 fn parse_namespace(pair: Pair<Rule>, _ctx: &mut ParseContext) -> NameSpace {
@@ -2252,7 +2255,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::expr_bool_lit => "boolean".to_string(),
         Rule::expr_nlr => "expression".to_string(),
         Rule::expr_unary => "expression".to_string(),
-        Rule::var => "variable".to_string(),
+        Rule::name => "name".to_string(),
         Rule::in_of_let => "`in` or `;`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
         Rule::type_expr => "type".to_string(),
