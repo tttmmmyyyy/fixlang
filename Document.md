@@ -147,7 +147,7 @@ main : IO ();
 main = (
     let fib = calc_fib(30);
     println("The first 30 numbers of Fibonacci sequence are: ");;
-    println $ Iterator::from_array(fib).map(to_string).join(", ")
+    println $ fib.to_iter.map(to_string).join(", ")
 );
 ```
 
@@ -218,7 +218,7 @@ In Fix, you have to specify the type of a global value explicitly.
 
 ## Namespaces
 
-The `Array` in `Array::fill` or `Iterator` in `Iterator::from_array` are namespaces. Namespace is the "address" of a name and used to distinguish two values (or types or traits, anything you define globally) with the same name.
+The `Array` in `Array::fill` is the namespace. Namespace is the "address" of a name and used to distinguish two values (or types or traits, anything you define globally) with the same name.
 
 Namespaces of a name can be omitted if the value specified by the name is unique, or can be inferred from the context. In fact, you can write simply `fill(n, 0)` instead of `Array::fill(n, 0)` because there is only one function named `fill` at the current version of standard library. The reasons I wrote `Array::fill(n, 0)` here are:
 
@@ -441,7 +441,7 @@ We sometimes call a function of type `Param0 -> ... -> ParamN -> Obj -> Result` 
 Another way of function application is operator `$`: `f $ x = f(x)`. This operator is right associative: `f $ g $ x = f(g(x))`. This operator is useful for reducing parenthes. In the program of Fibonacci sequence, the followings are examples of use of operator `$`:
 
 - `continue $ (idx+1, arr)`: the application of the `continue` function to the tuple value `(idx+1, arr)`. In Fix, `continue` and `break` are usual functions, not syntaxes. So you can write this expression as `continue((idx+1, arr))` or `(idx+1, arr).continue`, but I prefer to write `continue $ (idx+1, arr)`. More explanation of `continue` and `break` functions will be given later. 
-- `println $ Iterator::from_array(fib).map(to_string).join(", ")`: the application of the `println` function to the string expressed by `Iterator::from_array(fib).map(to_string).join(", ")`. The `println` function has type `String -> IO ()`, so applying to `println` to a string produces a value of `IO ()`, which is equal to the type of `main` function. This expression can also be written as `println(Iterator::from_array(fib).map(to_string).join(", "))`, but using operator `$` you can reduce parenthes around the long string expression.
+- `println $ fib.to_iter.map(to_string).join(", ")`: the application of the `println` function to the string expressed by `fib.to_iter.map(to_string).join(", ")`. The `println` function has type `String -> IO ()`, so applying to `println` to a string produces a value of `IO ()`, which is equal to the type of `main` function. This expression can also be written as `println(fib.to_iter.map(to_string).join(", "))`, but using operator `$` you can reduce parenthes around the long string expression.
 
 The precedence between three ways of function application is `f(x)` > `x.f` > `f $ x`. By this, it is illegal to write `obj.method $ arg`. It is equivalent to `method(obj) $ arg" == method(obj, arg)`, which is trying to call `method` on two arguments in the wrong ordering. It is ok to write `method(arg) $ obj`, which can be read as "apply `method` to `arg` to obtain a function of type `Obj -> Result`, and apply it to `obj`" to get a result.
 
@@ -576,13 +576,15 @@ get_price = |Product { price: price, sold: sold }| price;
 
 ## Iterators
 
-Now I explain about the expression `Iterator::from_array(fib).map(to_string).join(", ")`, where `fib : Array I64` is the array of Fibonacci sequence. This expression 
+Now I explain about the expression `fib.to_iter.map(to_string).join(", ")`, where `fib : Array I64` is the array of Fibonacci sequence. This expression 
 - converts a Fibonacci array into an iterator of integers, 
 - apply `to_string : I64 -> String` to each element to obtain the iterator of strings, and
 - concatenates these strings separated by `", "`,
 - results in a string "1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040".
 
-Like array, iterator (a.k.a. "lazy list") is a way to represent sequences. Whereas an array stores the values of all elements in memory at the same time, an iterator only has a function to compute the next element and the next iterator. In fact, iterator in Fix is defined as follows:
+Like array, iterator (a.k.a. "lazy list") is a way to represent sequences. 
+Whereas an array stores the values of all elements in memory at the same time, an iterator only has a function to compute the next element and the next iterator. 
+In fact, iterator in Fix is defined as follows:
 
 ```
 type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };
@@ -636,12 +638,17 @@ map = |f, iter| (
 
 Going back to the Fibonacci program, there are more two functions related to `Iterator` used:
 
-- `from_array : Array a -> Iterator a`: converts an array into an iterator.
-- `join : String -> Iterator String -> String`: concatenates strings in an iterator separated by a specified string. NOTE: this is defined in `Std::String` namespace, not in `Std::Iterator`.
+- `to_iter : Array a -> Iterator a`: converts an array into an iterator.
+- `join : String -> Iterator String -> String`: concatenates strings in an iterator separated by a specified string. (This is defined in `Std::String` namespace, not in `Std::Iterator`.)
 
-For example, `Iterator::from_array(["Hello", "World!"]).join(" ") == "Hello World!"`.
+For example, `["Hello", "World!"].to_iter.join(" ") == "Hello World!"`.
 
 In the last, `to_string : I64 -> String` is a function that converts an integer to a decimal string.
+
+NOTE:
+There is more efficient implementation of iterators than one in `Std::Iterator`. 
+It will be improved in a future, but currently it is provided as an library -- `fast-iter`, https://github.com/tttmmmyyyy/fixlang-fast-iter.
+If you are going to use iterators in your program, I recommend to use `fast-iter` instead of `Std::Iterator`.
 
 ## Mutation in Fix and reference counter
 
@@ -726,7 +733,7 @@ main : IO ();
 main = (
     let fib = calc_fib(30);
     println("The first 30 numbers of Fibonacci sequence are: ");;
-    println $ Iterator::from_array(fib).map(to_string).join(", ")
+    println $ fib.to_iter.map(to_string).join(", ")
 );
 ```
 
