@@ -30,13 +30,6 @@ impl TypeDefn {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
-        assert!(
-            self.name
-                == ctx
-                    .resolve(&self.name, &[NameResolutionType::TyCon], &None)
-                    .ok()
-                    .unwrap()
-        );
         self.value.resolve_namespace(ctx)?;
         Ok(())
     }

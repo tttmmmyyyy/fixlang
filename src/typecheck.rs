@@ -576,23 +576,16 @@ impl TypeCheckContext {
                         &[&ei.source],
                     ));
                 } else if ok_count >= 2 {
-                    let candidates_str = overload_res
+                    // FullName of candidates.
+                    let candidates = overload_res
                         .iter()
                         .filter_map(|cand| cand.as_ref().ok())
                         .map(|(_, ns)| {
-                            let fullname = FullName::new(&ns, &var.name.name);
-                            "`".to_string() + &fullname.to_string() + "`"
+                            FullName::new(&ns, &var.name.name)
                         })
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Name `{}` is ambiguous: there are {}. Maybe you need to write (suffix of) its namespace or type annotation to help overloading resolution.",
-                            var.name.to_string(),
-                            candidates_str
-                        ),
-                        &[&ei.source],
-                    ));
+                        .collect::<Vec<_>>();
+                    let msg = NameResolutionContext::create_ambiguous_message(&var.name.to_string(), candidates,true);                  
+                    return Err(Errors::from_msg_srcs(msg,&[&ei.source]));
                 } else {
                     // candidates.len() == 1
                     let (tc, ns) = overload_res

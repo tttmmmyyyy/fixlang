@@ -18,11 +18,11 @@ double_colon = { "::" }
 name_head = _{ ASCII_ALPHA_LOWER | "_" | "@" }
 name_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 name = { !keywords ~ (name_head ~ name_char*) }
-fullname = { (namespace_item ~ double_colon)* ~ name }
+fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ name }
 
 // Strings that can be used of types, traits, modules or namespaces.
 capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
-capital_fullname = { (namespace_item ~ double_colon)* ~ capital_name }
+capital_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ capital_name }
 
 // Namespace.
 // Though period is allowed in namespace item in grammer, the parser raisse an error if a user tries to define a namespace with period.

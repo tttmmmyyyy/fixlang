@@ -1464,7 +1464,10 @@ fn parse_fullname_or_capital_fullname(pair: Pair<Rule>) -> FullName {
         if pair.as_rule() == Rule::namespace_item {
             fullname.namespace.names.push(pair.as_str().to_string());
         } else if pair.as_rule() == Rule::double_colon {
-            // Skip `::`.
+            if fullname.namespace.names.is_empty() {
+                // If the namespace starts with `::`, it is an absolute namespace.
+                fullname.namespace.set_absolute();
+            }
         } else {
             assert!(pair.as_rule() == Rule::name || pair.as_rule() == Rule::capital_name);
             fullname.name = pair.as_str().to_string();

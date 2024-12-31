@@ -4,10 +4,25 @@ use super::*;
 
 pub type Name = String;
 
-#[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Hash, Clone, Serialize, Deserialize)]
 pub struct NameSpace {
-    pub names: Vec<String>, // Empty implies it is local.
+    // Items in the namespace.
+    pub names: Vec<String>,
+    // Is this FullName is given as an absolute path?
+    // For example, `Main::x` has a relative namespace, but `::Main::x` has an absolute namespace.
+    // The latter expresses that `Main` is a module name and cannot be a namespace.
+    pub is_absolute: bool,
 }
+
+impl PartialEq for NameSpace {
+    fn eq(&self, other: &Self) -> bool {
+        // Ignore `is_absolute` field.
+        self.names == other.names
+    }
+}
+
+impl Eq for NameSpace {}
+
 impl PartialOrd for NameSpace {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.to_string().cmp(&other.to_string()))
@@ -22,11 +37,21 @@ impl Ord for NameSpace {
 
 impl NameSpace {
     pub fn local() -> Self {
-        Self { names: vec![] }
+        Self {
+            names: vec![],
+            is_absolute: false,
+        }
     }
 
     pub fn new(names: Vec<String>) -> Self {
-        Self { names }
+        Self {
+            names,
+            is_absolute: false,
+        }
+    }
+
+    pub fn set_absolute(&mut self) {
+        self.is_absolute = true;
     }
 
     pub fn new_str(names: &[&str]) -> Self {
@@ -67,6 +92,10 @@ impl NameSpace {
         }
         let lhs = to_components(self);
         let rhs = to_components(rhs);
+        if self.is_absolute {
+            // If `lhs` is absolute, then `lhs` is a suffix of `rhs` iff components of `lhs` and `rhs` are completely same.
+            return lhs == rhs;
+        }
         let n = lhs.len();
         let m = rhs.len();
         if n > m {
@@ -184,7 +213,13 @@ impl FullName {
         }
         let name = names.pop().unwrap();
         if names.len() > 0 {
-            Some(FullName::new(&NameSpace { names }, &name))
+            Some(FullName::new(
+                &NameSpace {
+                    names,
+                    is_absolute: false,
+                },
+                &name,
+            ))
         } else {
             Some(FullName::local(&name))
         }
@@ -197,7 +232,10 @@ impl FullName {
     pub fn to_namespace(&self) -> NameSpace {
         let mut names = self.namespace.names.clone();
         names.push(self.name.clone());
-        NameSpace { names }
+        NameSpace {
+            names,
+            is_absolute: self.namespace.is_absolute,
+        }
     }
 
     pub fn module(&self) -> Name {

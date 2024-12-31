@@ -372,19 +372,68 @@ impl<'a> NameResolutionContext {
             Ok(candidates[0].clone())
         } else {
             // candidates.len() >= 2
-            let mut candidates = candidates
-                .iter()
-                .map(|id| "`".to_string() + &id.to_string() + "`")
-                .collect::<Vec<_>>();
-            candidates.sort(); // Sort for deterministic error message.
-            let candidates = candidates.join(", ");
-            let msg = format!(
-                "Name `{}` is ambiguous. There are {}.",
-                short_name.to_string(),
-                candidates
+            let msg = NameResolutionContext::create_ambiguous_message(
+                &short_name.to_string(),
+                candidates,
+                false,
             );
             Err(Errors::from_msg_srcs(msg, &[span]))
         }
+    }
+
+    pub fn create_ambiguous_message(
+        short_name: &str,
+        mut candidates: Vec<FullName>,
+        add_type_annotation: bool,
+    ) -> String {
+        candidates.sort(); // Sort for deterministic error message.
+
+        // Join the candidates with ", ".
+        let candidates_str = candidates
+            .iter()
+            .map(|fullname| "`".to_string() + &fullname.to_string() + "`")
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        // The Error message.
+        let mut msg = format!(
+            "Name `{}` is ambiguous: there are {}. Add (a suffix of) its namespace{} to help overloading resolution.",
+            short_name,
+            candidates_str,
+            if add_type_annotation { " or type annotation" } else { "" }
+        );
+
+        // Check if there is candidates (x, y) such that x is a suffix of y.
+        let mut suffixes = vec![];
+        for i in 0..candidates.len() {
+            for j in 0..candidates.len() {
+                if i != j
+                    && candidates[i]
+                        .namespace
+                        .is_suffix_of(&candidates[j].namespace)
+                {
+                    suffixes.push(candidates[i].clone());
+                }
+            }
+        }
+        // If there are suffixes, notify the user that they can use absolute namespace.
+        if suffixes.len() > 0 {
+            msg += &format!(
+                " Here, you need to use absolute namespaces to specify {}; i.e., write as {}.",
+                suffixes
+                    .iter()
+                    .map(|fullname| format!("`{}`", fullname.to_string()))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                suffixes
+                    .iter()
+                    .map(|fullname| format!("`::{}`", fullname.to_string()))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+        }
+
+        msg
     }
 }
 

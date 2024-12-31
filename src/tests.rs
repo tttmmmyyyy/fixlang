@@ -5326,7 +5326,7 @@ pub fn test_ambiguous_trait_name() {
     test_source_fail(
         &source,
         Configuration::develop_compiler_mode(),
-        "Name `Hoge` is ambiguous. There are `Main::A::Hoge`, `Main::B::Hoge`.",
+        "Name `Hoge` is ambiguous: there are `Main::A::Hoge`, `Main::B::Hoge`.",
     );
 }
 
@@ -7588,6 +7588,104 @@ main = (
 );
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_absolute_namespace_value() {
+    let source = r##"
+module Main;
+
+x : I64;
+x = 0;
+
+namespace Main {
+    x : I64;
+    x = 1;
+}
+
+main: IO ();
+main = (
+    // assert_eq(|_|"", Main::x, 0);; // ambiguous
+    assert_eq(|_|"", ::Main::x, 0);; // top-level `x`
+    assert_eq(|_|"", Main::Main::x, 1);; // `Main::x` in `Main` namespace
+    assert_eq(|_|"", ::Main::Main::x, 1);; // `Main::x` in `Main` namespace
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_ambiguous_namespace_value() {
+    let source = r##"
+module Main;
+
+x : I64;
+x = 0;
+
+namespace Main {
+    x : I64;
+    x = 1;
+}
+
+main: IO ();
+main = (
+    assert_eq(|_|"", Main::x, 0);; // ambiguous
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Name `Main::x` is ambiguous",
+    );
+}
+
+#[test]
+pub fn test_absolute_namespace_type() {
+    let source = r##"
+module Main;
+
+type X = I64;
+
+namespace Main {
+    type X = I64;
+}
+
+main: IO ();
+main = (
+    // assert_eq(|_|"", 0 : X, 0);; // ambiguous
+    assert_eq(|_|"", 0 : ::Main::X, 0);; // top-level `X`
+    assert_eq(|_|"", 0 : Main::Main::X, 0);; // `Main::X` in `Main` namespace
+    assert_eq(|_|"", 0 : ::Main::Main::X, 0);; // `Main::X` in `Main` namespace
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_ambiguous_namespace_type() {
+    let source = r##"
+module Main;
+
+type X = I64;
+
+namespace Main {
+    type X = I64;
+}
+
+main: IO ();
+main = (
+    assert_eq(|_|"", 0 : X, 0);; // ambiguous
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Name `X` is ambiguous",
+    );
 }
 
 #[test]
