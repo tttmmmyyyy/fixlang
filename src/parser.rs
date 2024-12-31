@@ -1460,17 +1460,17 @@ fn parse_fullname_or_capital_fullname(pair: Pair<Rule>) -> FullName {
     assert!(pair.as_rule() == Rule::fullname || pair.as_rule() == Rule::capital_fullname);
     let mut pairs = pair.into_inner();
     let mut fullname = FullName::local("");
-    while pairs.peek().unwrap().as_rule() == Rule::namespace_item {
-        fullname
-            .namespace
-            .names
-            .push(pairs.next().unwrap().as_str().to_string());
+    while let Some(pair) = pairs.next() {
+        if pair.as_rule() == Rule::namespace_item {
+            fullname.namespace.names.push(pair.as_str().to_string());
+        } else if pair.as_rule() == Rule::double_colon {
+            // Skip `::`.
+        } else {
+            assert!(pair.as_rule() == Rule::name || pair.as_rule() == Rule::capital_name);
+            fullname.name = pair.as_str().to_string();
+            break;
+        }
     }
-    let pair = pairs.next().unwrap();
-    if pair.as_rule() == Rule::capital_fullname {
-        assert_eq!(pair.as_rule(), Rule::capital_name);
-    }
-    fullname.name = pair.as_str().to_string();
     fullname
 }
 
@@ -2279,6 +2279,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::exported_c_function_name => "C function name".to_string(),
         Rule::operator_and_then => "`;;`".to_string(),
         Rule::match_arrow => "`=>`".to_string(),
+        Rule::double_colon => "`::`".to_string(),
         _ => format!("{:?}", r),
     }
 }
