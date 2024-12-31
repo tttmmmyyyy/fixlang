@@ -5270,7 +5270,7 @@ pub fn test_ambiguous_struct_name() {
     test_source_fail(
         &source,
         Configuration::develop_compiler_mode(),
-        "Name `Hoge` is ambiguous. There are `Main::A::Hoge`, `Main::B::Hoge`.",
+        "Name `Hoge` is ambiguous: there are `Main::A::Hoge`, `Main::B::Hoge`.",
     );
 }
 
