@@ -75,14 +75,14 @@ main = (
 
 - See [the tutorial](./Document.md#tutorial) for instructions on how to install and use Fix compiler.
 
-## Document
+## Documents
 
-* [Tutorial and document](/Document.md)
-* [Document for the standard library](/std_doc/Std.md)
+* [Tutorial and language specification](/Document.md)
+* [Document of the `Std` module](/std_doc/Std.md)
 * [Change log](/CHANGELOG.md)
 * 紹介（日本語）：[HaskellとRustを足して2で割ったような関数型言語Fixを作っている話](https://qiita.com/tttmmmyyyy/items/ddb1c44efd81e3fc2370)
 
-## Discord 
+## Discord
 
 * https://discord.gg/ad4GakEA7R
 * Mostly Japanese speakers here, but English is also welcome!
