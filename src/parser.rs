@@ -1479,7 +1479,11 @@ fn parse_namespace(pair: Pair<Rule>, _ctx: &mut ParseContext) -> NameSpace {
     let pairs = pair.into_inner();
     let mut ret: Vec<String> = Vec::new();
     for pair in pairs {
-        ret.push(pair.as_str().to_string());
+        if pair.as_rule() == Rule::namespace_item {
+            ret.push(pair.as_str().to_string());
+        } else {
+            assert_eq!(pair.as_rule(), Rule::double_colon);
+        }
     }
     NameSpace::new(ret)
 }
