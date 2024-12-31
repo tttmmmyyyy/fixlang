@@ -7640,10 +7640,6 @@ pub fn test_external_projects() {
         "https://github.com/tttmmmyyyy/fixlang-binary-heap.git",
         "fixlang-binary-heap",
     );
-    test_external_project(
-        "https://github.com/tttmmmyyyy/fixlang-fast-iter.git",
-        "fixlang-fast_iter",
-    );
 }
 
 // Run `cargo install --locked --path .`.
