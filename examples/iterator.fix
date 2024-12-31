@@ -10,6 +10,9 @@ gcd = |n, m| (
 // Iterator, a.k.a. lazy list, is defined as follows.
 // `type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };`
 
+// NOTE: there is an iterator library written in Fix which is faster than one in `Std`.
+// See https://github.com/tttmmmyyyy/fixlang-fast-iter
+
 // Instead of containing "the next value", a non-empty iterator has a function to generate a pair of
 // - the next value and 
 // - the iterator to generate rest values.
