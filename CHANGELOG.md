@@ -27,6 +27,7 @@
 - Add `match` syntax.
 - Change the bit width of reference counter from 64 to 32.
 - Add `Std::Arrow`, which is a higher-kinded type for functions.
+- Add absolute namespace syntax: you can `::Main::X` instead of `Main::X` to refer to `X` in the top level namespace of the `Main` module.
 
 ### Changed
 
