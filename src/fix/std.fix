@@ -427,7 +427,7 @@ namespace FFI {
     // 
     // For the details of the pointer, see the document of `_get_boxed_ptr`.
     borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b;
-    borrow_boxed = |act, val| val.do_with_retained(|val| act(val._get_boxed_ptr));
+    borrow_boxed = |act, val| val.with_retained(|val| act(val._get_boxed_ptr));
 
     // Performs an IO action borrowing a pointer to the data of a boxed value.
     // 
@@ -462,7 +462,7 @@ namespace FFI {
         // It is guaranteed that the `dtor` is alive during the call of `worker`.
         // In other words, the `worker` receives the contained value for which the destructor is not called yet.
         borrow : (a -> b) -> Destructor a -> b;
-        borrow = |worker, dtor| dtor.do_with_retained(|dtor| worker(dtor.@_value));
+        borrow = |worker, dtor| dtor.with_retained(|dtor| worker(dtor.@_value));
 
         // Performs an IO action borrowing the contained value.
         borrow_io : (a -> IO b) -> Destructor a -> IO b;

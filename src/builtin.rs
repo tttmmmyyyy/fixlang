@@ -3498,12 +3498,12 @@ pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMDoWithRetainedFunctionBody {}
+pub struct InlineLLVMWithRetainedFunctionBody {}
 
-const DO_WITH_RETAINED_F_ARG_NAME: &str = "f";
-const DO_WITH_RETAINED_X_ARG_NAME: &str = "x";
+const WITH_RETAINED_F_ARG_NAME: &str = "f";
+const WITH_RETAINED_X_ARG_NAME: &str = "x";
 
-impl InlineLLVMDoWithRetainedFunctionBody {
+impl InlineLLVMWithRetainedFunctionBody {
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3512,13 +3512,13 @@ impl InlineLLVMDoWithRetainedFunctionBody {
     ) -> Object<'c> {
         // Get the argument "f".
         let f = gc
-            .get_var(&FullName::local(DO_WITH_RETAINED_F_ARG_NAME))
+            .get_var(&FullName::local(WITH_RETAINED_F_ARG_NAME))
             .ptr
             .get(gc);
 
         // Get the argument "x".
         let x = gc
-            .get_var(&FullName::local(DO_WITH_RETAINED_X_ARG_NAME))
+            .get_var(&FullName::local(WITH_RETAINED_X_ARG_NAME))
             .ptr
             .get(gc);
 
@@ -3536,21 +3536,21 @@ impl InlineLLVMDoWithRetainedFunctionBody {
     }
 }
 
-// `do_with_retained : (a -> b) -> a -> b` built-in function
-pub fn do_with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+// `with_retained : (a -> b) -> a -> b` built-in function
+pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
     const B_NAME: &str = "b";
     let expr = expr_abs(
-        vec![var_local(DO_WITH_RETAINED_F_ARG_NAME)],
+        vec![var_local(WITH_RETAINED_F_ARG_NAME)],
         expr_abs(
-            vec![var_local(DO_WITH_RETAINED_X_ARG_NAME)],
+            vec![var_local(WITH_RETAINED_X_ARG_NAME)],
             expr_llvm(
-                LLVMGenerator::DoWithRetainedFunctionBody(InlineLLVMDoWithRetainedFunctionBody {}),
+                LLVMGenerator::WithRetainedFunctionBody(InlineLLVMWithRetainedFunctionBody {}),
                 vec![
-                    FullName::local(DO_WITH_RETAINED_F_ARG_NAME),
-                    FullName::local(DO_WITH_RETAINED_X_ARG_NAME),
+                    FullName::local(WITH_RETAINED_F_ARG_NAME),
+                    FullName::local(WITH_RETAINED_X_ARG_NAME),
                 ],
-                "do_with_retained(f, x)".to_string(),
+                "with_retained(f, x)".to_string(),
                 type_tyvar_star(B_NAME),
                 None,
             ),

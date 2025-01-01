@@ -763,13 +763,6 @@ Concatenates two strings.
 
 Composes two functions. Composition operators `<<` and `>>` is translated to use of `compose`.
 
-### `do_with_retained : (a -> b) -> a -> b`
-
-`x.do_with_retained(f)` runs `f` with retained `x`. 
-It is guaranteed that `x` is keep alive until `do_with_retained` is finished, even after `f` has finished using `x` in it. 
-
-A typical use case of this function is the implementation of `Std::Array::borrow_ptr`.
-
 ### `fix : ((a -> b) -> a -> b) -> a -> b`
 
 `fix` enables you to make a recursive function locally.
@@ -898,6 +891,13 @@ main = (
     pure()
 );
 ```
+
+### `with_retained : (a -> b) -> a -> b`
+
+`x.with_retained(f)` runs `f` with retained `x`. 
+It is guaranteed that `x` is keep alive until `with_retained` is finished, even after `f` has finished using `x` in it. 
+
+A typical use case of this function is the implementation of `Std::Array::borrow_ptr`.
 
 ## `namespace Std::Add`
 

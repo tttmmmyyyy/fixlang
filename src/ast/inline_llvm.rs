@@ -70,7 +70,7 @@ pub enum LLVMGenerator {
     ),
     GetRetainFunctionOfBoxedValueFunctionBody(InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody),
     GetBoxedDataPtrFunctionBody(InlineLLVMGetBoxedDataPtrFunctionBody),
-    DoWithRetainedFunctionBody(InlineLLVMDoWithRetainedFunctionBody),
+    WithRetainedFunctionBody(InlineLLVMWithRetainedFunctionBody),
     UnsafeMutateBoxedDataFunctionBody(InlineLLVMUnsafeMutateBoxedDataFunctionBody),
     UnsafeMutateBoxedDataIOStateFunctionBody(InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody),
     ArrayUnsafeGetLinearFunctionBody(InlineLLVMArrayUnsafeGetLinearFunctionBody),
@@ -155,7 +155,7 @@ impl LLVMGenerator {
             LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::StructPunchBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::StructPlugInBody(x) => Some(x.generate(gc, ty, bvs)),
-            LLVMGenerator::DoWithRetainedFunctionBody(x) => Some(x.generate(gc, ty, bvs)),
+            LLVMGenerator::WithRetainedFunctionBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::UnsafeMutateBoxedDataFunctionBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::UnsafeMutateBoxedDataIOStateFunctionBody(x) => {
                 Some(x.generate(gc, ty, bvs))

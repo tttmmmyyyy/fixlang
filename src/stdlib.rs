@@ -481,10 +481,10 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_undefined.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "do_with_retained"),
-        do_with_retained_function(),
+        FullName::from_strs(&[STD_NAME], "with_retained"),
+        with_retained_function(),
         None,
-        Some(include_str!("./docs/std_do_with_retained.md").to_string()),
+        Some(include_str!("./docs/std_with_retained.md").to_string()),
     ));
 
     // Numeric constants

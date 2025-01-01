@@ -20,7 +20,7 @@
 - Add `-O (--object)` option to specify object files to be linked.
 - Add `fix init` subcommand, which generates a template project file.
 - Add `FFI_CALL_IO` and `FFI_CALL_IOS` syntax, which is similar to `FFI_CALL` but suitable for foregin functions which have side effects.
-- Add `Std::do_with_retained`.
+- Add `Std::with_retained`.
 - Add `{monad_expr};; {expr}` syntax, which is equivalent to `let _ = *{monad_expr}; {expr}`.
 - Add `Std::Box::make` function.
 - Support building dynamic libraries (use `--output-type dylib`).

@@ -6713,7 +6713,7 @@ pub fn test_get_boxed_data_ptr_for_union() {
         main: IO ();
         main = (
             let instance = MyUnion::a(42);
-            let val = instance.do_with_retained(|instance|
+            let val = instance.with_retained(|instance|
                 let ptr = instance._get_boxed_ptr;
                 FFI_CALL[I64 deref(Ptr), ptr]
             );
