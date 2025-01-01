@@ -106,6 +106,7 @@ fn main() {
         .long("file")
         .short('f')
         .action(clap::ArgAction::Append)
+        .multiple_values(true)
         .takes_value(true)
         .help("Source files to be compiled and linked.");
     let object_file = Arg::new("object-files")
