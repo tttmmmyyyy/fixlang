@@ -112,7 +112,7 @@ pub fn define_borrowing_functions(program: &mut Program) {
     program.instantiated_symbols.extend(new_functions);
 }
 
-pub fn borrowing_optimization_evaluating_application(
+pub fn run(
     gc: &mut GenerationContext,
     fun: Arc<ExprNode>,
     args: &Vec<Arc<ExprNode>>,

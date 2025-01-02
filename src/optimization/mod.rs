@@ -1,3 +1,3 @@
-pub mod borrowing_optimization;
+pub mod borrowing;
 pub mod optimization;
-pub mod uncurry_optimization;
+pub mod uncurry;

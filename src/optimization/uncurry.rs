@@ -14,7 +14,7 @@ use crate::{
 // Global closures are uncurried as long as possible, and converted to function pointers (= has no field for captured values).
 // NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
 
-pub fn uncurry_optimization(fix_mod: &mut Program) {
+pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
     let syms = std::mem::replace(&mut fix_mod.instantiated_symbols, Default::default());
     for (sym_name, sym) in syms {

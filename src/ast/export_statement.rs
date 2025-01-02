@@ -19,7 +19,7 @@ use crate::generator::Object;
 use crate::sourcefile::Span;
 
 use super::error::Errors;
-use super::optimization::uncurry_optimization::convert_to_funptr_name;
+use super::optimization::uncurry::convert_to_funptr_name;
 
 #[derive(Clone)]
 pub struct ExportStatement {

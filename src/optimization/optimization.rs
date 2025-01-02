@@ -1,8 +1,6 @@
 use crate::{Configuration, Program};
 
-use super::{
-    borrowing_optimization::borrowing_optimization, uncurry_optimization::uncurry_optimization,
-};
+use super::{borrowing, uncurry};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     if config.emit_symbols {
@@ -11,7 +9,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
-        uncurry_optimization(prg);
+        uncurry::run(prg);
         if config.emit_symbols {
             prg.emit_symbols("uncurry");
         }
@@ -19,7 +17,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 
     // Perform borrowing optimization.
     if config.perform_borrowing_optimization() {
-        borrowing_optimization(prg);
+        borrowing::borrowing_optimization(prg);
         if config.emit_symbols {
             prg.emit_symbols("borrowing");
         }

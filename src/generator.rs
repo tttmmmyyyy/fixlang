@@ -25,7 +25,7 @@ use inkwell::{
 use misc::flatten_opt;
 use misc::Map;
 use misc::Set;
-use optimization::borrowing_optimization::borrowing_optimization_evaluating_application;
+use optimization::borrowing::run;
 
 use super::*;
 
@@ -1564,7 +1564,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     ) -> Option<Object<'c>> {
         // Prepare for borrowing optimization.
         let borrowing_optimization_data = if self.config.perform_borrowing_optimization() {
-            borrowing_optimization_evaluating_application(self, fun.clone(), &args)
+            run(self, fun.clone(), &args)
         } else {
             None
         };
