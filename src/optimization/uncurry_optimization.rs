@@ -367,7 +367,7 @@ fn replace_free_var(
         }
         Expr::Lam(vs, val) => {
             let val = if vs.iter().any(|v| v.name == *from) {
-                // then, the from-name is shadowed in val, so we should not replace val.
+                // This implies that the `from` is shadowed in `val`, so we should not replace val.
                 val.clone()
             } else {
                 for v in vs {
@@ -384,7 +384,7 @@ fn replace_free_var(
         Expr::Let(pat, bound, val) => {
             let bound = replace_free_var(bound, from, to, scope)?;
             let val = if pat.pattern.vars().contains(from) {
-                // then, the from-name is shadowed in val, so we should not replace val.
+                // This implies that the `from` is shadowed in `val`, so we should not replace val.
                 val.clone()
             } else {
                 for v in pat.pattern.vars() {
@@ -398,20 +398,25 @@ fn replace_free_var(
             };
             Ok(expr.set_let_bound(bound).set_let_value(val))
         }
+        Expr::Match(cond, pat_vals) => {
+            let cond = replace_free_var(cond, from, to, scope)?;
+            let mut new_pat_vals = vec![];
+            for (pat, val) in pat_vals {
+                if pat.pattern.vars().contains(from) {
+                    // This implies that the `from` is shadowed in `val`, so we should not replace val.
+                    new_pat_vals.push((pat.clone(), val.clone()));
+                    continue;
+                }
+                let val = replace_free_var(val, from, to, scope)?;
+                new_pat_vals.push((pat.clone(), val));
+            }
+            Ok(expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
+        }
         Expr::If(c, t, e) => {
             let c = replace_free_var(c, from, to, scope)?;
             let t = replace_free_var(t, from, to, scope)?;
             let e = replace_free_var(e, from, to, scope)?;
             Ok(expr.set_if_cond(c).set_if_then(t).set_if_else(e))
-        }
-        Expr::Match(cond, pat_vals) => {
-            let cond = replace_free_var(cond, from, to, scope)?;
-            let mut new_pat_vals = vec![];
-            for (pat, val) in pat_vals {
-                let val = replace_free_var(val, from, to, scope)?;
-                new_pat_vals.push((pat.clone(), val));
-            }
-            Ok(expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
         }
         Expr::TyAnno(e, _) => {
             let e = replace_free_var(e, from, to, scope)?;
@@ -443,46 +448,3 @@ fn replace_free_var(
         }
     }
 }
-
-// fn replace_travarsally(
-//     expr: Arc<ExprNode>,
-//     replace: &impl Fn(Arc<ExprNode>) -> Arc<ExprNode>,
-// ) -> Arc<ExprNode> {
-//     match &*expr.expr {
-//         Expr::Var(_) => replace(expr.clone()),
-//         Expr::Lit(_) => replace(expr.clone()),
-//         Expr::App(fun, arg) => {
-//             let expr = expr
-//                 .set_app_func(replace_travarsally(fun.clone(), replace))
-//                 .set_app_arg(replace_travarsally(arg.clone(), replace));
-//             replace(expr)
-//         }
-//         Expr::Lam(_, val) => {
-//             let expr = expr.set_lam_body(replace_travarsally(val.clone(), replace));
-//             replace(expr)
-//         }
-//         Expr::Let(_, bound, val) => {
-//             let expr = expr
-//                 .set_let_bound(replace_travarsally(bound.clone(), replace))
-//                 .set_let_value(replace_travarsally(val.clone(), replace));
-//             replace(expr)
-//         }
-//         Expr::If(c, t, e) => {
-//             let expr = expr
-//                 .set_if_cond(replace_travarsally(c.clone(), replace))
-//                 .set_if_then(replace_travarsally(t.clone(), replace))
-//                 .set_if_else(replace_travarsally(e.clone(), replace));
-//             replace(expr)
-//         }
-//         Expr::TyAnno(e, _) => {
-//             let expr = expr.set_tyanno_expr(replace_travarsally(e.clone(), replace));
-//             replace(expr)
-//         }
-//         Expr::MakePair(lhs, rhs) => {
-//             let expr = expr
-//                 .set_make_pair_lhs(replace_travarsally(lhs.clone(), replace))
-//                 .set_make_pair_rhs(replace_travarsally(rhs.clone(), replace));
-//             replace(expr)
-//         }
-//     }
-// }
