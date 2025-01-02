@@ -40,7 +40,6 @@ pub enum LLVMGenerator {
     UnionAsBody(InlineLLVMUnionAsBody),
     UnionIsBody(InlineLLVMUnionIsBody),
     UnionModBody(InlineLLVMUnionModBody),
-    // LoopFunctionBody(InlineLLVMLoopFunctionBody),
     UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody),
     IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody),
     IntNegBody(InlineLLVMIntNegBody),
