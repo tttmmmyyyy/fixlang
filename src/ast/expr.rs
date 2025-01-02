@@ -99,6 +99,7 @@ impl ExprNode {
     }
 
     // Check if the expression is a function application.
+    #[allow(dead_code)]
     pub fn is_app(&self) -> bool {
         matches!(self.expr.as_ref(), Expr::App(_, _))
     }
@@ -170,6 +171,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn get_app_func(&self) -> Arc<ExprNode> {
         match &*self.expr {
             Expr::App(func, _) => func.clone(),
@@ -179,6 +181,7 @@ impl ExprNode {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_app_args(&self) -> Vec<Arc<ExprNode>> {
         match &*self.expr {
             Expr::App(_, args) => args.clone(),
