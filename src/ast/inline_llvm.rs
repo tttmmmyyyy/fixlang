@@ -117,7 +117,6 @@ impl LLVMGenerator {
             LLVMGenerator::UnionAsBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::UnionIsBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::UnionModBody(x) => Some(x.generate(gc, ty, bvs)),
-            // LLVMGenerator::LoopFunctionBody(x) => x.generate(gc, ty,  bvs),
             LLVMGenerator::UndefinedFunctionBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::IsUniqueFunctionBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::IntNegBody(x) => Some(x.generate(gc, ty, bvs)),

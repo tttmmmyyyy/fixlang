@@ -98,6 +98,11 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    // Check if the expression is a function application.
+    pub fn is_app(&self) -> bool {
+        matches!(self.expr.as_ref(), Expr::App(_, _))
+    }
+
     pub fn set_var_namespace(&self, ns: NameSpace) -> Arc<Self> {
         let mut ret = self.clone_without_fvs();
         match &*self.expr {
@@ -165,7 +170,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn get_app_func(&self) -> Arc<ExprNode> {
         match &*self.expr {
             Expr::App(func, _) => func.clone(),
@@ -175,7 +179,6 @@ impl ExprNode {
         }
     }
 
-    #[allow(dead_code)]
     pub fn get_app_args(&self) -> Vec<Arc<ExprNode>> {
         match &*self.expr {
             Expr::App(_, args) => args.clone(),

@@ -39,7 +39,6 @@ pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
 pub const LAZY_NAME: &str = "Lazy";
 pub const FUNCTOR_NAME: &str = "Functor";
-// pub const LOOP_RESULT_NAME: &str = "LoopState";
 pub const TUPLE_NAME: &str = "Tuple";
 pub const DESTRUCTOR_OBJECT_NAME: &str = "Destructor";
 pub const DESTRUCTOR_OBJECT_VALUE_FIELD_IDX: u32 = 0;
@@ -53,6 +52,7 @@ pub const MAIN_MODULE_NAME: &str = "Main";
 pub const TEST_FUNCTION_NAME: &str = "test";
 pub const TEST_MODULE_NAME: &str = "Test";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";
+pub const WITH_RETAINED_NAME: &str = "with_retained";
 
 // Array methods.
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";

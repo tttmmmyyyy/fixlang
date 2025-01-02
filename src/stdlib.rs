@@ -481,7 +481,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_undefined.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "with_retained"),
+        make_with_retained_name(),
         with_retained_function(),
         None,
         Some(include_str!("./docs/std_with_retained.md").to_string()),
@@ -753,4 +753,9 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
 pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Result<Program, Errors> {
     let src = make_tuple_traits_source(sizes);
     parse_and_save_to_temporary_file(&src, "std_tuple_traits", config)
+}
+
+// Make full name of `Std::with_retained` function.
+pub fn make_with_retained_name() -> FullName {
+    FullName::from_strs(&[STD_NAME], WITH_RETAINED_NAME)
 }

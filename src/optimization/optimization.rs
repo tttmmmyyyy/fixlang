@@ -1,12 +1,21 @@
 use crate::{Configuration, Program};
 
 use super::{
-    borrowing_optimization::borrowing_optimization, uncurry_optimization::uncurry_optimization,
+    borrowing_optimization::borrowing_optimization, builtin_inline,
+    uncurry_optimization::uncurry_optimization,
 };
 
-pub fn optimize(prg: &mut Program, config: &Configuration) {
+pub fn run(prg: &mut Program, config: &Configuration) {
     if config.emit_symbols {
         prg.emit_symbols("0");
+    }
+
+    // Perform inline builtin optimization.
+    if config.perform_inline_builtin_optimization() {
+        builtin_inline::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols("inline_builtin");
+        }
     }
 
     // Perform uncurrying optimization.
