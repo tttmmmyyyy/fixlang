@@ -407,7 +407,13 @@ fn replace_free_var(
                     new_pat_vals.push((pat.clone(), val.clone()));
                     continue;
                 }
+                for v in pat.pattern.vars() {
+                    scope.push(&v.name, ());
+                }
                 let val = replace_free_var(val, from, to, scope)?;
+                for v in pat.pattern.vars() {
+                    scope.pop(&v.name);
+                }
                 new_pat_vals.push((pat.clone(), val));
             }
             Ok(expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
