@@ -1,12 +1,21 @@
 use crate::{Configuration, Program};
 
-use super::{borrowing, contract_app, eta_expand, uncurry};
+use super::{borrowing, contract_app, eta_expand, remove_tyanno, uncurry};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     let mut step = 0;
 
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}", step));
+    }
+
+    // Perform type annotation removal optimization.
+    if config.perform_remove_tyanno_optimization() {
+        remove_tyanno::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.remove_tyanno", step));
+            step += 1;
+        }
     }
 
     // Perform eta expand optimization.

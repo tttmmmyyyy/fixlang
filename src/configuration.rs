@@ -445,6 +445,16 @@ impl Configuration {
         }
     }
 
+    pub fn perform_remove_tyanno_optimization(&self) -> bool {
+        match self.fix_opt_level {
+            FixOptimizationLevel::None => false,
+            FixOptimizationLevel::Minimum => false,
+            FixOptimizationLevel::Separated => true,
+            FixOptimizationLevel::Default => true,
+            FixOptimizationLevel::Unstable => true,
+        }
+    }
+
     // Get hash value of the configurations that affect the object file generation.
     pub fn object_generation_hash(&self) -> String {
         let mut data = String::new();
