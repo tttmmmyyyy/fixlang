@@ -199,6 +199,18 @@ impl ExprNode {
         }
     }
 
+    // If the expression is a sequence of lambda construction, i.e., |args0| |args1| |args0| {body}, then this function returns (vec![args0, args1, args2], {body}).
+    pub fn destructure_lam_sequence(self: &Arc<ExprNode>) -> (Vec<Vec<Arc<Var>>>, Arc<ExprNode>) {
+        let mut args = vec![];
+        let mut body = self.clone();
+        while body.is_lam() {
+            let (args_loc, body_loc) = body.destructure_lam();
+            args.push(args_loc);
+            body = body_loc;
+        }
+        (args, body)
+    }
+
     #[allow(dead_code)]
     pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
         let mut ret = self.clone_without_fvs();
@@ -1144,8 +1156,21 @@ pub fn expr_abs_many(mut vars: Vec<Arc<Var>>, mut val: Arc<ExprNode>) -> Arc<Exp
     val
 }
 
+// Create abstract expression `|{var}| {val}`, and set the inferred type.
+pub fn expr_abs_typed(var: Arc<Var>, var_ty: Arc<TypeNode>, val: Arc<ExprNode>) -> Arc<ExprNode> {
+    let expr = expr_abs(vec![var], val.clone(), None);
+    let abs_ty = type_fun(var_ty, val.ty.as_ref().unwrap().clone());
+    expr.set_inferred_type(abs_ty)
+}
+
 pub fn expr_app(lam: Arc<ExprNode>, args: Vec<Arc<ExprNode>>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::App(lam, args)).into_expr_info(src)
+}
+
+// Create application expression `{lam}({args})`, and set the inferred type.
+pub fn expr_app_typed(lam: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
+    let dst_ty = lam.ty.as_ref().unwrap().get_lambda_dst();
+    expr_app(lam, args, None).set_inferred_type(dst_ty)
 }
 
 // Make variable expression.

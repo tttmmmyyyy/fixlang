@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use super::{Expr, ExprNode};
+use super::{typecheck::Scope, Expr, ExprNode};
 
 pub enum StartVisitResult {
     VisitChildren,
@@ -39,6 +39,10 @@ impl EndVisitResult {
         self.replaced |= replaced;
         self
     }
+}
+
+pub struct VisitState {
+    scope: Scope<()>,
 }
 
 pub trait ExprVisitor {
@@ -119,7 +123,7 @@ pub trait ExprVisitor {
         EndVisitResult::noreplace(expr)
     }
 
-    fn visit_expr(&mut self, expr: &Arc<ExprNode>) -> EndVisitResult {
+    fn visit_expr(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
         match &*expr.expr {
             Expr::Var(_var) => {
                 let res = self.start_visit_var(expr);
@@ -146,10 +150,10 @@ pub trait ExprVisitor {
                 let res = self.start_visit_app(&expr);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        let func = self.visit_expr(func).unwrap(&mut replaced);
+                        let func = self.visit_expr(func, state).unwrap(&mut replaced);
                         let mut args_new = vec![];
                         for arg in args {
-                            let arg = self.visit_expr(&arg).unwrap(&mut replaced);
+                            let arg = self.visit_expr(&arg, state).unwrap(&mut replaced);
                             args_new.push(arg);
                         }
                         if replaced {
@@ -159,13 +163,19 @@ pub trait ExprVisitor {
                 }
                 self.end_visit_app(&expr).add_replaced(replaced)
             }
-            Expr::Lam(_args, body) => {
+            Expr::Lam(args, body) => {
                 let mut replaced = false;
                 let mut expr = expr.clone();
                 let res = self.start_visit_lam(&expr);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        let body = self.visit_expr(body).unwrap(&mut replaced);
+                        for arg in args {
+                            state.scope.push(&arg.name.name, ());
+                        }
+                        let body = self.visit_expr(body, state).unwrap(&mut replaced);
+                        for arg in args {
+                            state.scope.pop(&arg.name.name);
+                        }
                         if replaced {
                             expr = expr.set_lam_body(body);
                         }
@@ -173,14 +183,20 @@ pub trait ExprVisitor {
                 }
                 self.end_visit_lam(&expr).add_replaced(replaced)
             }
-            Expr::Let(_pat, bound, val) => {
+            Expr::Let(pat, bound, val) => {
                 let mut replaced = false;
                 let mut expr = expr.clone();
                 let res = self.start_visit_let(&expr);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        let bound = self.visit_expr(bound).unwrap(&mut replaced);
-                        let val = self.visit_expr(val).unwrap(&mut replaced);
+                        let bound = self.visit_expr(bound, state).unwrap(&mut replaced);
+                        for v in pat.pattern.vars() {
+                            state.scope.push(&v.name, ());
+                        }
+                        let val = self.visit_expr(val, state).unwrap(&mut replaced);
+                        for v in pat.pattern.vars() {
+                            state.scope.pop(&v.name);
+                        }
                         if replaced {
                             expr = expr.set_let_bound(bound).set_let_value(val);
                         }
@@ -194,9 +210,9 @@ pub trait ExprVisitor {
                 let res = self.start_visit_if(&expr);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        let cond = self.visit_expr(cond).unwrap(&mut replaced);
-                        let then_expr = self.visit_expr(then_expr).unwrap(&mut replaced);
-                        let else_expr = self.visit_expr(else_expr).unwrap(&mut replaced);
+                        let cond = self.visit_expr(cond, state).unwrap(&mut replaced);
+                        let then_expr = self.visit_expr(then_expr, state).unwrap(&mut replaced);
+                        let else_expr = self.visit_expr(else_expr, state).unwrap(&mut replaced);
                         if replaced {
                             expr = expr
                                 .set_if_cond(cond)
@@ -213,10 +229,16 @@ pub trait ExprVisitor {
                 let res = self.start_visit_match(&expr);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        let cond = self.visit_expr(cond).unwrap(&mut replaced);
+                        let cond = self.visit_expr(cond, state).unwrap(&mut replaced);
                         let mut new_pat_vals = vec![];
                         for (pat, val) in pat_vals {
-                            let val = self.visit_expr(&val).unwrap(&mut replaced);
+                            for v in pat.pattern.vars() {
+                                state.scope.push(&v.name, ());
+                            }
+                            let val = self.visit_expr(&val, state).unwrap(&mut replaced);
+                            for v in pat.pattern.vars() {
+                                state.scope.pop(&v.name);
+                            }
                             new_pat_vals.push((pat.clone(), val));
                         }
                         if replaced {
@@ -232,7 +254,7 @@ pub trait ExprVisitor {
                 let res = self.start_visit_tyanno(&expr);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        let e = self.visit_expr(e).unwrap(&mut replaced);
+                        let e = self.visit_expr(e, state).unwrap(&mut replaced);
                         if replaced {
                             expr = expr.set_tyanno_expr(e);
                         }
@@ -248,7 +270,7 @@ pub trait ExprVisitor {
                     StartVisitResult::VisitChildren => {
                         let mut new_fields = vec![];
                         for (name, val) in fields {
-                            let val = self.visit_expr(&val).unwrap(&mut replaced);
+                            let val = self.visit_expr(&val, state).unwrap(&mut replaced);
                             new_fields.push((name.clone(), val));
                         }
                         if replaced {
@@ -266,7 +288,7 @@ pub trait ExprVisitor {
                     StartVisitResult::VisitChildren => {
                         let mut new_elems = vec![];
                         for elem in elems {
-                            let elem = self.visit_expr(&elem).unwrap(&mut replaced);
+                            let elem = self.visit_expr(&elem, state).unwrap(&mut replaced);
                             new_elems.push(elem);
                         }
                         if replaced {
@@ -284,7 +306,7 @@ pub trait ExprVisitor {
                     StartVisitResult::VisitChildren => {
                         let mut new_args = vec![];
                         for arg in args {
-                            let arg = self.visit_expr(&arg).unwrap(&mut replaced);
+                            let arg = self.visit_expr(&arg, state).unwrap(&mut replaced);
                             new_args.push(arg);
                         }
                         if replaced {

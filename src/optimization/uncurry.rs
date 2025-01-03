@@ -63,16 +63,11 @@ pub fn run(fix_mod: &mut Program) {
     }
 }
 
-// Global functions that cannot be uncurried.
-pub fn exclude(name: &FullName) -> bool {
+// Is this symbol a Std::fix or its instance?
+pub fn is_std_fix(name: &FullName) -> bool {
     let fix_name = FullName::from_strs(&[STD_NAME], FIX_NAME);
-    if *name == fix_name
+    *name == fix_name
         || (name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
-    {
-        // fix cannot be function ptr, because it calculates "fixf" in its implementation.
-        return true;
-    }
-    return false;
 }
 
 pub fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
@@ -85,7 +80,7 @@ fn funptr_lambda(
     expr: &Arc<ExprNode>,
     vars_count: usize,
 ) -> Option<Arc<ExprNode>> {
-    if exclude(generic_name) {
+    if is_std_fix(generic_name) {
         return None;
     }
 

@@ -10,3 +10,5 @@ after_opt.ll
 benchmark/data_copied.csv
 cachegrind.out.*
 *.symbols.fix
+test.fix
+test.log

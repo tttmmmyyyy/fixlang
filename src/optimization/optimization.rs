@@ -7,6 +7,14 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         prg.emit_symbols("0");
     }
 
+    // Perform eta expand optimization.
+    // if config.perform_eta_expand_optimization() {
+    //     eta_expand::run(prg);
+    //     if config.emit_symbols {
+    //         prg.emit_symbols("eta_expand");
+    //     }
+    // }
+
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
         uncurry::run(prg);

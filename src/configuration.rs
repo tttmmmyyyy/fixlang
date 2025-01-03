@@ -300,6 +300,7 @@ impl Configuration {
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;
+        // config.emit_symbols = true;
         config
     }
 
@@ -420,6 +421,16 @@ impl Configuration {
     }
 
     pub fn perform_borrowing_optimization(&self) -> bool {
+        match self.fix_opt_level {
+            FixOptimizationLevel::None => false,
+            FixOptimizationLevel::Minimum => false,
+            FixOptimizationLevel::Separated => true,
+            FixOptimizationLevel::Default => true,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn perform_eta_expand_optimization(&self) -> bool {
         match self.fix_opt_level {
             FixOptimizationLevel::None => false,
             FixOptimizationLevel::Minimum => false,
