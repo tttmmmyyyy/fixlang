@@ -11,7 +11,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.perform_eta_expand_optimization() {
         eta_expand::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols("eta_expand");
+            prg.emit_symbols("1.eta_expand");
         }
     }
 
@@ -19,7 +19,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.perform_uncurry_optimization() {
         uncurry::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols("uncurry");
+            prg.emit_symbols("2.uncurry");
         }
     }
 
@@ -27,7 +27,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.perform_borrowing_optimization() {
         borrowing::borrowing_optimization(prg);
         if config.emit_symbols {
-            prg.emit_symbols("borrowing");
+            prg.emit_symbols("3.borrowing");
         }
     }
 
