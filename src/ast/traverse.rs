@@ -19,31 +19,31 @@ pub enum StartVisitResult {
 
 pub struct EndVisitResult {
     pub expr: Arc<ExprNode>,
-    pub replaced: bool,
+    pub changed: bool,
 }
 
 impl EndVisitResult {
-    pub fn unwrap(self, replaced: &mut bool) -> Arc<ExprNode> {
-        *replaced |= self.replaced;
+    pub fn unwrap(self, changed: &mut bool) -> Arc<ExprNode> {
+        *changed |= self.changed;
         self.expr
     }
 
-    pub fn noreplace(expr: &Arc<ExprNode>) -> EndVisitResult {
+    pub fn unchanged(expr: &Arc<ExprNode>) -> EndVisitResult {
         EndVisitResult {
             expr: expr.clone(),
-            replaced: false,
+            changed: false,
         }
     }
 
-    pub fn replace(expr: Arc<ExprNode>) -> EndVisitResult {
+    pub fn changed(expr: Arc<ExprNode>) -> EndVisitResult {
         EndVisitResult {
             expr,
-            replaced: true,
+            changed: true,
         }
     }
 
-    fn add_replaced(mut self: EndVisitResult, replaced: bool) -> EndVisitResult {
-        self.replaced |= replaced;
+    fn add_changed(mut self: EndVisitResult, changed: bool) -> EndVisitResult {
+        self.changed |= changed;
         self
     }
 }
@@ -69,7 +69,7 @@ pub trait ExprVisitor {
         StartVisitResult::VisitChildren
     }
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_llvm(
@@ -80,7 +80,7 @@ pub trait ExprVisitor {
         StartVisitResult::VisitChildren
     }
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_app(
@@ -91,7 +91,7 @@ pub trait ExprVisitor {
         StartVisitResult::VisitChildren
     }
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_lam(
@@ -102,7 +102,7 @@ pub trait ExprVisitor {
         StartVisitResult::VisitChildren
     }
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_let(
@@ -113,7 +113,7 @@ pub trait ExprVisitor {
         StartVisitResult::VisitChildren
     }
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_if(
@@ -124,7 +124,7 @@ pub trait ExprVisitor {
         StartVisitResult::VisitChildren
     }
     fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_match(
@@ -135,7 +135,7 @@ pub trait ExprVisitor {
         StartVisitResult::VisitChildren
     }
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_tyanno(
@@ -150,7 +150,7 @@ pub trait ExprVisitor {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_make_struct(
@@ -165,7 +165,7 @@ pub trait ExprVisitor {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_array_lit(
@@ -180,7 +180,7 @@ pub trait ExprVisitor {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_ffi_call(
@@ -195,7 +195,7 @@ pub trait ExprVisitor {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        EndVisitResult::noreplace(expr)
+        EndVisitResult::unchanged(expr)
     }
 
     fn traverse(&mut self, expr: &Arc<ExprNode>) -> EndVisitResult {
@@ -241,7 +241,7 @@ pub trait ExprVisitor {
                         }
                     }
                 }
-                self.end_visit_app(&expr, state).add_replaced(replaced)
+                self.end_visit_app(&expr, state).add_changed(replaced)
             }
             Expr::Lam(args, body) => {
                 let mut replaced = false;
@@ -261,7 +261,7 @@ pub trait ExprVisitor {
                         }
                     }
                 }
-                self.end_visit_lam(&expr, state).add_replaced(replaced)
+                self.end_visit_lam(&expr, state).add_changed(replaced)
             }
             Expr::Let(pat, bound, val) => {
                 let mut replaced = false;
@@ -282,7 +282,7 @@ pub trait ExprVisitor {
                         }
                     }
                 }
-                self.end_visit_let(&expr, state).add_replaced(replaced)
+                self.end_visit_let(&expr, state).add_changed(replaced)
             }
             Expr::If(cond, then_expr, else_expr) => {
                 let mut replaced = false;
@@ -301,7 +301,7 @@ pub trait ExprVisitor {
                         }
                     }
                 }
-                self.end_visit_if(&expr, state).add_replaced(replaced)
+                self.end_visit_if(&expr, state).add_changed(replaced)
             }
             Expr::Match(cond, pat_vals) => {
                 let mut replaced = false;
@@ -326,7 +326,7 @@ pub trait ExprVisitor {
                         }
                     }
                 }
-                self.end_visit_match(&expr, state).add_replaced(replaced)
+                self.end_visit_match(&expr, state).add_changed(replaced)
             }
             Expr::TyAnno(e, _) => {
                 let mut replaced = false;
@@ -340,7 +340,7 @@ pub trait ExprVisitor {
                         }
                     }
                 }
-                self.end_visit_tyanno(&expr, state).add_replaced(replaced)
+                self.end_visit_tyanno(&expr, state).add_changed(replaced)
             }
             Expr::MakeStruct(_, fields) => {
                 let mut replaced = false;
@@ -359,7 +359,7 @@ pub trait ExprVisitor {
                     }
                 }
                 self.end_visit_make_struct(&expr, state)
-                    .add_replaced(replaced)
+                    .add_changed(replaced)
             }
             Expr::ArrayLit(elems) => {
                 let mut replaced = false;
@@ -377,8 +377,7 @@ pub trait ExprVisitor {
                         }
                     }
                 }
-                self.end_visit_array_lit(&expr, state)
-                    .add_replaced(replaced)
+                self.end_visit_array_lit(&expr, state).add_changed(replaced)
             }
             Expr::FFICall(_, _, _, args, _) => {
                 let mut replaced = false;
@@ -396,7 +395,7 @@ pub trait ExprVisitor {
                         }
                     }
                 }
-                self.end_visit_ffi_call(&expr, state).add_replaced(replaced)
+                self.end_visit_ffi_call(&expr, state).add_changed(replaced)
             }
         }
     }

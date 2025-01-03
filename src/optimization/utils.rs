@@ -38,19 +38,19 @@ impl ExprVisitor for FreeVarReplacer {
         let var = expr.get_var().clone();
         // If the visited variable is not equal to `from`, do nothing.
         if var.name != self.from {
-            return EndVisitResult::noreplace(expr);
+            return EndVisitResult::unchanged(expr);
         }
         let local_names = state.scope.local_names();
         // If `from` is shadowed, do nothing.
         if local_names.contains(&self.from.to_string()) {
-            return EndVisitResult::noreplace(expr);
+            return EndVisitResult::unchanged(expr);
         }
         // If the `to` is shadowed, raise an error.
         if state.scope.local_names().contains(&self.to.name) {
             self.fail = true;
-            return EndVisitResult::noreplace(expr);
+            return EndVisitResult::unchanged(expr);
         }
         let expr = expr.set_var_var(var.set_name(self.to.clone()));
-        EndVisitResult::replace(expr)
+        EndVisitResult::changed(expr)
     }
 }
