@@ -122,6 +122,7 @@ pub const OPTIMIZATION_LEVEL_NONE: &str = "none";
 pub const OPTIMIZATION_LEVEL_MINIMUM: &str = "minimum";
 pub const OPTIMIZATION_LEVEL_SEPARATED: &str = "separated";
 pub const OPTIMIZATION_LEVEL_DEFAULT: &str = "default";
+pub const OPTIMIZATION_LEVEL_UNSTABLE: &str = "unstable";
 
 // Messages
 pub const TRY_FIX_RESOLVE: &str = "Try `fix deps update` to update the lock file.";

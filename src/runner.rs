@@ -388,6 +388,9 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
         FixOptimizationLevel::Default => {
             llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
         }
+        FixOptimizationLevel::Unstable => {
+            llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
+        }
     }
     passmgr.add_verifier_pass(); // Verification after optimization.
     passmgr.run_on(module);

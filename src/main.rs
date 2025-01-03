@@ -147,10 +147,11 @@ fn main() {
         .long("opt-level")
         .short('O')
         .takes_value(true)
-        .possible_value(PossibleValue::new("none").help("No optimizations are performed. Good for debugging, but tail call recursion is not optimized and may cause stack overflow."))
-        .possible_value(PossibleValue::new("minimum").help("Perform only few optimizations for fast compilation. Tail call recursion is optimized."))
-        .possible_value(PossibleValue::new("separated").help("Perform optimizations which can be done under separate compilation."))
-        .possible_value(PossibleValue::new("default").help("Perform all optimizations to minimize runtime. Separate compilation is disabled."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations are performed. Good for debugging, but tail call recursion is not optimized and may cause stack overflow."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MINIMUM).help("Perform only few optimizations for fast compilation. Tail call recursion is optimized."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_SEPARATED).help("Perform optimizations which can be done under separate compilation."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_DEFAULT).help("Perform all optimizations to minimize runtime. Separate compilation is disabled."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_UNSTABLE).help("Perform all optimizations including unstable ones. Used for compiler development."))
         // .default_value("default") // we do not set default value because we want to check if this option is specified by user.
         .help("Optimization level.");
     let emit_llvm = Arg::new("emit-llvm")
@@ -487,6 +488,9 @@ fn main() {
                 }
                 OPTIMIZATION_LEVEL_DEFAULT => {
                     config.set_fix_opt_level(FixOptimizationLevel::Default)
+                }
+                OPTIMIZATION_LEVEL_UNSTABLE => {
+                    config.set_fix_opt_level(FixOptimizationLevel::Unstable)
                 }
                 _ => panic!("Unknown optimization level: {}", opt_level),
             }

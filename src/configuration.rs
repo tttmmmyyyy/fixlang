@@ -9,7 +9,7 @@ use crate::{
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
     OPTIMIZATION_LEVEL_DEFAULT, OPTIMIZATION_LEVEL_MINIMUM, OPTIMIZATION_LEVEL_NONE,
-    OPTIMIZATION_LEVEL_SEPARATED,
+    OPTIMIZATION_LEVEL_SEPARATED, OPTIMIZATION_LEVEL_UNSTABLE,
 };
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
@@ -226,6 +226,7 @@ pub enum FixOptimizationLevel {
     Minimum,   // For fast compilation.
     Separated, // Perform almost all of the optimizations except for LLVM-level LTO.
     Default,   // For fast execution.
+    Unstable,  // Performs optimizations that are still unstable.
 }
 
 impl std::fmt::Display for FixOptimizationLevel {
@@ -235,6 +236,7 @@ impl std::fmt::Display for FixOptimizationLevel {
             FixOptimizationLevel::Minimum => write!(f, "{}", OPTIMIZATION_LEVEL_MINIMUM),
             FixOptimizationLevel::Separated => write!(f, "{}", OPTIMIZATION_LEVEL_SEPARATED),
             FixOptimizationLevel::Default => write!(f, "{}", OPTIMIZATION_LEVEL_DEFAULT),
+            FixOptimizationLevel::Unstable => write!(f, "{}", OPTIMIZATION_LEVEL_UNSTABLE),
         }
     }
 }
@@ -246,6 +248,7 @@ impl FixOptimizationLevel {
             OPTIMIZATION_LEVEL_MINIMUM => Some(FixOptimizationLevel::Minimum),
             OPTIMIZATION_LEVEL_SEPARATED => Some(FixOptimizationLevel::Separated),
             OPTIMIZATION_LEVEL_DEFAULT => Some(FixOptimizationLevel::Default),
+            OPTIMIZATION_LEVEL_UNSTABLE => Some(FixOptimizationLevel::Unstable),
             _ => None,
         }
     }
@@ -408,6 +411,7 @@ impl Configuration {
             FixOptimizationLevel::Minimum => OptimizationLevel::Less,
             FixOptimizationLevel::Separated => OptimizationLevel::Default,
             FixOptimizationLevel::Default => OptimizationLevel::Default,
+            FixOptimizationLevel::Unstable => OptimizationLevel::Default,
         }
     }
 
@@ -417,6 +421,7 @@ impl Configuration {
             FixOptimizationLevel::Minimum => false,
             FixOptimizationLevel::Separated => true,
             FixOptimizationLevel::Default => true,
+            FixOptimizationLevel::Unstable => true,
         }
     }
 
@@ -426,16 +431,17 @@ impl Configuration {
             FixOptimizationLevel::Minimum => false,
             FixOptimizationLevel::Separated => true,
             FixOptimizationLevel::Default => true,
+            FixOptimizationLevel::Unstable => true,
         }
     }
 
-    #[allow(dead_code)]
     pub fn perform_eta_expand_optimization(&self) -> bool {
         match self.fix_opt_level {
             FixOptimizationLevel::None => false,
             FixOptimizationLevel::Minimum => false,
-            FixOptimizationLevel::Separated => true,
-            FixOptimizationLevel::Default => true,
+            FixOptimizationLevel::Separated => false,
+            FixOptimizationLevel::Default => false,
+            FixOptimizationLevel::Unstable => true,
         }
     }
 

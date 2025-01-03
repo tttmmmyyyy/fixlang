@@ -1,6 +1,6 @@
 use crate::{Configuration, Program};
 
-use super::{borrowing, uncurry};
+use super::{borrowing, eta_expand, uncurry};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     if config.emit_symbols {
@@ -8,12 +8,12 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Perform eta expand optimization.
-    // if config.perform_eta_expand_optimization() {
-    //     eta_expand::run(prg);
-    //     if config.emit_symbols {
-    //         prg.emit_symbols("eta_expand");
-    //     }
-    // }
+    if config.perform_eta_expand_optimization() {
+        eta_expand::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols("eta_expand");
+        }
+    }
 
     // Perform uncurrying optimization.
     if config.perform_uncurry_optimization() {
