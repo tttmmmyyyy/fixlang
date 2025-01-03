@@ -1,17 +1,27 @@
 use crate::{Configuration, Program};
 
-use super::{borrowing, eta_expand, uncurry};
+use super::{borrowing, contract_app, eta_expand, uncurry};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
+    let mut step = 0;
+
     if config.emit_symbols {
-        prg.emit_symbols("0");
+        prg.emit_symbols(&format!("{}", step));
     }
 
     // Perform eta expand optimization.
     if config.perform_eta_expand_optimization() {
         eta_expand::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols("1.eta_expand");
+            prg.emit_symbols(&format!("{}.eta_expand", step));
+            step += 1;
+        }
+
+        // If we perform eta expand optimization, we need to perform contract application optimization.
+        contract_app::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.eta_expand_contract_app", step));
+            step += 1;
         }
     }
 
@@ -19,7 +29,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.perform_uncurry_optimization() {
         uncurry::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols("2.uncurry");
+            prg.emit_symbols(&format!("{}.uncurry", step));
+            step += 1;
         }
     }
 
@@ -27,7 +38,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.perform_borrowing_optimization() {
         borrowing::borrowing_optimization(prg);
         if config.emit_symbols {
-            prg.emit_symbols("3.borrowing");
+            prg.emit_symbols(&format!("{}.borrowing", step));
+            // step += 1;
         }
     }
 

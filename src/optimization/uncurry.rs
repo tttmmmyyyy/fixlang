@@ -331,7 +331,7 @@ fn move_abs_front_let_all(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     }
 }
 
-// Replace the name of a free variable in an expression.
+// Replace a free variable of an expression to another name.
 // If the name `to` is bound at the place `from` appears, returns Err.
 fn replace_free_var(
     expr: &Arc<ExprNode>,

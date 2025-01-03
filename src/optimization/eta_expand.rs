@@ -35,7 +35,6 @@ pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.instantiated_symbols {
         run_on_symbol(sym);
     }
-    todo!("We need to implement `reduce application optimization`.");
 }
 
 // Run the optimization on a symbol.
