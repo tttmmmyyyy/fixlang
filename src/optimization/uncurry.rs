@@ -4,11 +4,11 @@ use crate::{
     ast::name::{FullName, Name},
     collect_app, expr_abs, expr_app, expr_let, expr_var,
     misc::Set,
-    type_funptr,
-    typecheck::Scope,
-    Expr, ExprNode, InstantiatedSymbol, Program, Var, FIX_NAME, FUNPTR_ARGS_MAX,
+    type_funptr, Expr, ExprNode, InstantiatedSymbol, Program, Var, FIX_NAME, FUNPTR_ARGS_MAX,
     INSTANCIATED_NAME_SEPARATOR, STD_NAME,
 };
+
+use super::utils::replace_free_var_of_expr;
 
 // First-order uncurrying optimizaion:
 // Global closures are uncurried as long as possible, and converted to function pointers (= has no field for captured values).
@@ -282,11 +282,10 @@ fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                                 }
 
                                 // Replace original_name in lam_val.
-                                let replaced = replace_free_var(
+                                let replaced = replace_free_var_of_expr(
                                     &lam_val,
                                     &original_name,
                                     &lam_var_name,
-                                    &mut Scope::default(),
                                 );
                                 // If replacement to lam_var_name fails, try another name.
                                 if replaced.is_err() {
@@ -328,124 +327,5 @@ fn move_abs_front_let_all(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
             }
         }
         _ => expr.clone(),
-    }
-}
-
-// Replace a free variable of an expression to another name.
-// If the name `to` is bound at the place `from` appears, returns Err.
-fn replace_free_var(
-    expr: &Arc<ExprNode>,
-    from: &FullName,
-    to: &FullName,
-    scope: &mut Scope<()>,
-) -> Result<Arc<ExprNode>, ()> {
-    match &*expr.expr {
-        Expr::Var(v) => {
-            if v.name == *from {
-                if scope.local_names().contains(&to.name) {
-                    Err(())
-                } else {
-                    Ok(expr.clone().set_var_var(v.set_name(to.clone())))
-                }
-            } else {
-                Ok(expr.clone())
-            }
-        }
-        Expr::LLVM(_) => Ok(expr.clone()),
-        Expr::App(func, args) => {
-            let func = replace_free_var(func, from, to, scope)?;
-            let args = args
-                .iter()
-                .map(|arg| replace_free_var(arg, from, to, scope))
-                .collect::<Result<_, ()>>()?;
-            Ok(expr.set_app_func(func).set_app_args(args))
-        }
-        Expr::Lam(vs, val) => {
-            let val = if vs.iter().any(|v| v.name == *from) {
-                // This implies that the `from` is shadowed in `val`, so we should not replace val.
-                val.clone()
-            } else {
-                for v in vs {
-                    scope.push(&v.name.name, ());
-                }
-                let res = replace_free_var(val, from, to, scope)?;
-                for v in vs {
-                    scope.pop(&v.name.name);
-                }
-                res
-            };
-            Ok(expr.set_lam_body(val))
-        }
-        Expr::Let(pat, bound, val) => {
-            let bound = replace_free_var(bound, from, to, scope)?;
-            let val = if pat.pattern.vars().contains(from) {
-                // This implies that the `from` is shadowed in `val`, so we should not replace val.
-                val.clone()
-            } else {
-                for v in pat.pattern.vars() {
-                    scope.push(&v.name, ());
-                }
-                let res = replace_free_var(val, from, to, scope)?;
-                for v in pat.pattern.vars() {
-                    scope.pop(&v.name);
-                }
-                res
-            };
-            Ok(expr.set_let_bound(bound).set_let_value(val))
-        }
-        Expr::Match(cond, pat_vals) => {
-            let cond = replace_free_var(cond, from, to, scope)?;
-            let mut new_pat_vals = vec![];
-            for (pat, val) in pat_vals {
-                if pat.pattern.vars().contains(from) {
-                    // This implies that the `from` is shadowed in `val`, so we should not replace val.
-                    new_pat_vals.push((pat.clone(), val.clone()));
-                    continue;
-                }
-                for v in pat.pattern.vars() {
-                    scope.push(&v.name, ());
-                }
-                let val = replace_free_var(val, from, to, scope)?;
-                for v in pat.pattern.vars() {
-                    scope.pop(&v.name);
-                }
-                new_pat_vals.push((pat.clone(), val));
-            }
-            Ok(expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
-        }
-        Expr::If(c, t, e) => {
-            let c = replace_free_var(c, from, to, scope)?;
-            let t = replace_free_var(t, from, to, scope)?;
-            let e = replace_free_var(e, from, to, scope)?;
-            Ok(expr.set_if_cond(c).set_if_then(t).set_if_else(e))
-        }
-        Expr::TyAnno(e, _) => {
-            let e = replace_free_var(e, from, to, scope)?;
-            Ok(expr.set_tyanno_expr(e))
-        }
-        Expr::MakeStruct(_, fields) => {
-            let mut expr = expr.clone();
-            for (field_name, field_expr) in fields {
-                let field_expr = replace_free_var(field_expr, from, to, scope)?;
-                expr = expr.set_make_struct_field(field_name, field_expr);
-            }
-            Ok(expr)
-        }
-        Expr::ArrayLit(elems) => {
-            let mut expr = expr.clone();
-            for (i, e) in elems.iter().enumerate() {
-                let e = replace_free_var(e, from, to, scope)?;
-                expr = expr.set_array_lit_elem(e, i);
-            }
-            Ok(expr)
-        }
-        Expr::FFICall(_, _, _, elems, _) => {
-            let mut expr = expr.clone();
-            for (i, e) in elems.iter().enumerate() {
-                let e = replace_free_var(e, from, to, scope)?;
-                expr = expr.set_ffi_call_arg(e, i);
-            }
-            Ok(expr)
-        }
     }
 }

@@ -6,7 +6,6 @@ pub mod name;
 pub mod pattern;
 pub mod program;
 pub mod traits;
-#[allow(unused)]
 pub mod traverse;
 pub mod typedecl;
 pub mod types;
