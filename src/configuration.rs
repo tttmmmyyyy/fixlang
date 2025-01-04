@@ -299,7 +299,7 @@ impl Configuration {
         let mut config = panic_if_err(Self::new(SubCommand::Run));
         config.num_worker_thread = 0;
         config.set_valgrind(ValgrindTool::MemCheck);
-        // config.fix_opt_level = FixOptimizationLevel::Separated;
+        config.fix_opt_level = FixOptimizationLevel::Unstable;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;

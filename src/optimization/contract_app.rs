@@ -37,7 +37,7 @@ use std::sync::Arc;
 
 use crate::{
     ast::traverse::{EndVisitResult, ExprVisitor, VisitState},
-    expr_app_typed,
+    expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed,
     optimization::utils::replace_free_var_of_expr,
     Expr, ExprNode, InstantiatedSymbol, Program,
 };
@@ -101,21 +101,18 @@ impl ExprVisitor for ContractAppOptimizer {
                 );
 
                 let value = expr_app_typed(value.clone(), vec![arg]);
-                let expr = expr
-                    .set_let_pat(pattern)
-                    .set_let_bound(bound.clone())
-                    .set_let_value_typed(value);
+                let expr = expr_let_typed(pattern, bound.clone(), value);
                 return EndVisitResult::changed(expr).revisit();
             }
-            Expr::If(_, then, else_) => {
+            Expr::If(cond, then, else_) => {
                 // The expression is of the form `(if {cond} then {then} else {else})(v)`.
                 // Replace it with `if {cond} then {then}(v) else {else}(v)`.
                 let then = expr_app_typed(then.clone(), vec![arg.clone()]);
                 let else_ = expr_app_typed(else_.clone(), vec![arg.clone()]);
-                let expr = expr.set_if_then_else_typed(then, else_);
+                let expr = expr_if_typed(cond.clone(), then, else_);
                 return EndVisitResult::changed(expr).revisit();
             }
-            Expr::Match(_, pats_vals) => {
+            Expr::Match(cond, pats_vals) => {
                 // As with `let`, we need to rename `v` in each pattern and value to a fresh variable.
                 let mut new_pats_vals = vec![];
                 for (pat, val) in pats_vals {
@@ -127,7 +124,7 @@ impl ExprVisitor for ContractAppOptimizer {
                     let val = expr_app_typed(val, vec![arg.clone()]);
                     new_pats_vals.push((pat, val));
                 }
-                let expr = expr.set_match_pat_vals_typed(new_pats_vals);
+                let expr = expr_match_typed(cond.clone(), new_pats_vals);
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::App(_, _) => {

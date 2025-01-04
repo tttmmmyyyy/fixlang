@@ -303,6 +303,7 @@ impl ExprNode {
     }
 
     // Set the value of let expression, and update the type of the let expression to the type of the value.
+    #[allow(dead_code)]
     pub fn set_let_value_typed(&self, value: Arc<ExprNode>) -> Arc<Self> {
         let value_ty = value.ty.as_ref().unwrap().clone();
         self.set_let_value(value).set_inferred_type(value_ty)
@@ -357,6 +358,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_if_then_else(&self, then: Arc<ExprNode>, else_: Arc<ExprNode>) -> Arc<ExprNode> {
         let mut ret = self.clone_without_fvs();
         match &*self.expr {
@@ -370,6 +372,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_if_then_else_typed(
         &self,
         then: Arc<ExprNode>,
@@ -411,6 +414,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn set_match_pat_vals_typed(
         &self,
         pat_vals: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
@@ -1201,6 +1205,15 @@ pub fn expr_let(
     Arc::new(Expr::Let(pat, bound, expr)).into_expr_info(src)
 }
 
+pub fn expr_let_typed(
+    pat: Arc<PatternNode>,
+    bound: Arc<ExprNode>,
+    value: Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    let ty = value.ty.as_ref().unwrap().clone();
+    expr_let(pat, bound, value, None).set_inferred_type(ty)
+}
+
 pub fn expr_abs(vars: Vec<Arc<Var>>, val: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Lam(vars, val)).into_expr_info(src)
 }
@@ -1243,12 +1256,38 @@ pub fn expr_if(
     Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
 }
 
+pub fn expr_if_typed(
+    cond: Arc<ExprNode>,
+    then_expr: Arc<ExprNode>,
+    else_expr: Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    let then_ty = then_expr.ty.as_ref().unwrap().clone();
+    let else_ty = else_expr.ty.as_ref().unwrap().clone();
+    assert_eq!(then_ty.to_string(), else_ty.to_string());
+    expr_if(cond, then_expr, else_expr, None).set_inferred_type(then_ty)
+}
+
 pub fn expr_match(
     cond: Arc<ExprNode>,
     cases: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
     Arc::new(Expr::Match(cond, cases)).into_expr_info(src)
+}
+
+pub fn expr_match_typed(
+    cond: Arc<ExprNode>,
+    cases: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
+) -> Arc<ExprNode> {
+    let vals_tys = cases
+        .iter()
+        .map(|(_, val)| val.ty.as_ref().unwrap().clone())
+        .collect::<Vec<_>>();
+    if vals_tys.len() > 0 {
+        let ty = vals_tys[0].clone();
+        assert!(vals_tys.iter().all(|t| t.to_string() == ty.to_string()));
+    }
+    expr_match(cond, cases, None).set_inferred_type(vals_tys[0].clone())
 }
 
 pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
