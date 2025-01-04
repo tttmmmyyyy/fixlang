@@ -119,7 +119,6 @@ pub const DEFAULT_REGISTRY: &str =
 
 // Optimization levels
 pub const OPTIMIZATION_LEVEL_NONE: &str = "none";
-pub const OPTIMIZATION_LEVEL_MINIMUM: &str = "minimum";
 pub const OPTIMIZATION_LEVEL_SEPARATED: &str = "separated";
 pub const OPTIMIZATION_LEVEL_DEFAULT: &str = "default";
 pub const OPTIMIZATION_LEVEL_UNSTABLE: &str = "unstable";

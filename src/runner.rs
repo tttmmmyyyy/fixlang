@@ -379,9 +379,6 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
     passmgr.add_verifier_pass(); // Verification before optimization.
     match config.fix_opt_level {
         FixOptimizationLevel::None => {}
-        FixOptimizationLevel::Minimum => {
-            passmgr.add_tail_call_elimination_pass();
-        }
         FixOptimizationLevel::Separated => {
             llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
         }

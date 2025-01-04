@@ -148,7 +148,6 @@ fn main() {
         .short('O')
         .takes_value(true)
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations are performed. Good for debugging, but tail call recursion is not optimized and may cause stack overflow."))
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MINIMUM).help("Perform only few optimizations for fast compilation. Tail call recursion is optimized."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_SEPARATED).help("Perform optimizations which can be done under separate compilation."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_DEFAULT).help("Perform all optimizations to minimize runtime. Separate compilation is disabled."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_UNSTABLE).help("Perform all optimizations including unstable ones. Used for compiler development."))
@@ -480,9 +479,6 @@ fn main() {
             let opt_level = args.get_one::<String>("opt-level").unwrap();
             match opt_level.as_str() {
                 OPTIMIZATION_LEVEL_NONE => config.set_fix_opt_level(FixOptimizationLevel::None),
-                OPTIMIZATION_LEVEL_MINIMUM => {
-                    config.set_fix_opt_level(FixOptimizationLevel::Minimum)
-                }
                 OPTIMIZATION_LEVEL_SEPARATED => {
                     config.set_fix_opt_level(FixOptimizationLevel::Separated)
                 }
