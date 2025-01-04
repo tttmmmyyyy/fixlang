@@ -9,6 +9,12 @@ pub struct Errors {
     errs: Vec<Error>,
 }
 
+impl Display for Errors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
 impl Errors {
     pub fn empty() -> Errors {
         Errors { errs: vec![] }

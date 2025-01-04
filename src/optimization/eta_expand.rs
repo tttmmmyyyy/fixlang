@@ -79,10 +79,12 @@ fn run_on_symbol(sym: &mut InstantiatedSymbol) {
         .collect::<std::collections::HashSet<_>>();
     let num_additional_params = doms_tys.len() - params.len();
     let mut additional_params = vec![];
+
+    // TODO: refactor this part to use `generate_new_names` function.
     let mut var_name_no = 0;
     for _ in 0..num_additional_params {
         let var_name = loop {
-            let var_name = format!("#p{}", var_name_no);
+            let var_name = format!("#v{}", var_name_no);
             if !names_set.contains(&var_name) {
                 break var_name;
             }

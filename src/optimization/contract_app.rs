@@ -37,8 +37,12 @@ use std::sync::Arc;
 
 use crate::{
     ast::traverse::{EndVisitResult, ExprVisitor, VisitState},
+    expr_app_typed,
+    optimization::utils::replace_free_var_of_expr,
     Expr, ExprNode, InstantiatedSymbol, Program,
 };
+
+use super::utils::rename_pattern_value_names;
 
 pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.instantiated_symbols {
@@ -47,14 +51,10 @@ pub fn run(prg: &mut Program) {
 }
 
 fn run_on_symbol(sym: &mut InstantiatedSymbol) {
-    loop {
-        let mut optimizer = ContractAppOptimizer {};
-        let res = optimizer.traverse(&sym.expr.as_ref().unwrap());
-        if res.changed {
-            sym.expr = Some(res.expr);
-        } else {
-            break;
-        }
+    let mut optimizer = ContractAppOptimizer {};
+    let res = optimizer.traverse(&sym.expr.as_ref().unwrap());
+    if res.changed {
+        sym.expr = Some(res.expr.calculate_free_vars());
     }
 }
 
@@ -72,32 +72,84 @@ impl ExprVisitor for ContractAppOptimizer {
         if !arg.is_var() {
             return EndVisitResult::unchanged(expr);
         }
+        let arg_var = arg.get_var();
+        let arg_name = &arg_var.name;
 
         // Get the function applied to the argument.
         let func = expr.get_app_func();
         match &*func.expr {
-            Expr::App(_expr_node, _vec) => todo!(),
-            Expr::Lam(_vec, _expr_node) => todo!(),
-            Expr::Let(_pattern_node, _expr_node, _expr_node1) => todo!(),
-            Expr::If(_expr_node, _expr_node1, _expr_node2) => todo!(),
-            Expr::Match(_expr_node, _vec) => todo!(),
-            Expr::Var(_var) => {
+            Expr::Lam(params, body) => {
+                // The expression is of the form `(|x| {expr})(v)`.
+                // Replace it with `{expr}[v/x]`.
+                if params.len() != 1 {
+                    // This optimization does not support multi-parameter lambdas.
+                    return EndVisitResult::unchanged(expr);
+                }
+                let param_name = &params[0].name;
+                let body = replace_free_var_of_expr(body, param_name, arg_name).unwrap();
+                return EndVisitResult::changed(body).revisit();
+            }
+            Expr::Let(pattern, bound, value) => {
+                // The expression is of the form `(let {pat} = {bound} in {value})(v)`.
+                // Replace it with `let {pat} = {bound} in ({value}(v))`.
+
+                // If `v` is in FV({pat}), we first rename `v` in `{pattern}` and `{value}` to a fresh variable.
+                let (pattern, value) = rename_pattern_value_names(
+                    &[arg_name.clone()].into_iter().collect(),
+                    pattern.clone(),
+                    value.clone(),
+                );
+
+                let value = expr_app_typed(value.clone(), vec![arg]);
+                let expr = expr
+                    .set_let_pat(pattern)
+                    .set_let_bound(bound.clone())
+                    .set_let_value_typed(value);
+                return EndVisitResult::changed(expr).revisit();
+            }
+            Expr::If(_, then, else_) => {
+                // The expression is of the form `(if {cond} then {then} else {else})(v)`.
+                // Replace it with `if {cond} then {then}(v) else {else}(v)`.
+                let then = expr_app_typed(then.clone(), vec![arg.clone()]);
+                let else_ = expr_app_typed(else_.clone(), vec![arg.clone()]);
+                let expr = expr.set_if_then_else_typed(then, else_);
+                return EndVisitResult::changed(expr).revisit();
+            }
+            Expr::Match(_, pats_vals) => {
+                // As with `let`, we need to rename `v` in each pattern and value to a fresh variable.
+                let mut new_pats_vals = vec![];
+                for (pat, val) in pats_vals {
+                    let (pat, val) = rename_pattern_value_names(
+                        &[arg_name.clone()].into_iter().collect(),
+                        pat.clone(),
+                        val.clone(),
+                    );
+                    let val = expr_app_typed(val, vec![arg.clone()]);
+                    new_pats_vals.push((pat, val));
+                }
+                let expr = expr.set_match_pat_vals_typed(new_pats_vals);
+                return EndVisitResult::changed(expr).revisit();
+            }
+            Expr::App(_, _) => {
                 return EndVisitResult::unchanged(expr);
             }
-            Expr::LLVM(_inline_llvm) => {
+            Expr::Var(_) => {
                 return EndVisitResult::unchanged(expr);
             }
-            Expr::TyAnno(_expr_node, _type_node) => {
+            Expr::LLVM(_) => {
+                return EndVisitResult::unchanged(expr);
+            }
+            Expr::TyAnno(_, _) => {
                 // If remove tyanno optimization is done, this case should not happen.
                 return EndVisitResult::unchanged(expr);
             }
-            Expr::ArrayLit(_vec) => {
+            Expr::ArrayLit(_) => {
                 return EndVisitResult::unchanged(expr);
             }
-            Expr::MakeStruct(_ty_con, _vec) => {
+            Expr::MakeStruct(_, _) => {
                 return EndVisitResult::unchanged(expr);
             }
-            Expr::FFICall(_, _ty_con, _vec, _vec1, _) => {
+            Expr::FFICall(_, _, _, _, _) => {
                 return EndVisitResult::unchanged(expr);
             }
         }

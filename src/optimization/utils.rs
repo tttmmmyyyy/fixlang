@@ -5,7 +5,8 @@ use crate::{
         name::FullName,
         traverse::{EndVisitResult, ExprVisitor, VisitState},
     },
-    ExprNode,
+    misc::Set,
+    ExprNode, PatternNode,
 };
 
 // Replace a free variable of an expression to another name.
@@ -53,4 +54,45 @@ impl ExprVisitor for FreeVarReplacer {
         let expr = expr.set_var_var(var.set_name(self.to.clone()));
         EndVisitResult::changed(expr)
     }
+}
+
+// Generate new names that is not in the set `names_set`.
+pub fn generate_new_names(names_set: &Set<FullName>, n: usize) -> Vec<FullName> {
+    let mut names = vec![];
+    for _ in 0..n {
+        let mut var_name_no = 0;
+        let var_name = loop {
+            let var_name = format!("#v{}", var_name_no);
+            let var_name = FullName::local(&var_name);
+            if !names_set.contains(&var_name) {
+                break var_name;
+            }
+            var_name_no += 1;
+        };
+        names.push(var_name);
+    }
+    names
+}
+
+// Rename the names in the pattern to disjoint with the set `names_set`.
+// Also, apply the same renaming to the given expression `value`.
+pub fn rename_pattern_value_names(
+    names_set: &Set<FullName>,
+    mut pattern: Arc<PatternNode>,
+    mut value: Arc<ExprNode>,
+) -> (Arc<PatternNode>, Arc<ExprNode>) {
+    let pattern_vars = pattern.pattern.vars();
+    let all_names = pattern_vars.union(names_set).cloned().collect::<Set<_>>();
+    let mut renamed: Vec<FullName> = vec![];
+    for name in names_set.iter() {
+        if pattern_vars.contains(name) {
+            renamed.push(name.clone());
+        }
+    }
+    let new_names = generate_new_names(&all_names, renamed.len());
+    for (old, new) in renamed.into_iter().zip(new_names.into_iter()) {
+        pattern = pattern.rename_var(&old, &new);
+        value = replace_free_var_of_expr(&value, &old, &new).unwrap();
+    }
+    (pattern, value)
 }

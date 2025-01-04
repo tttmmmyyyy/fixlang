@@ -302,6 +302,12 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    // Set the value of let expression, and update the type of the let expression to the type of the value.
+    pub fn set_let_value_typed(&self, value: Arc<ExprNode>) -> Arc<Self> {
+        let value_ty = value.ty.as_ref().unwrap().clone();
+        self.set_let_value(value).set_inferred_type(value_ty)
+    }
+
     #[allow(dead_code)]
     pub fn get_let_value(&self) -> Arc<Self> {
         match &*self.expr {
@@ -351,6 +357,31 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_if_then_else(&self, then: Arc<ExprNode>, else_: Arc<ExprNode>) -> Arc<ExprNode> {
+        let mut ret = self.clone_without_fvs();
+        match &*self.expr {
+            Expr::If(cond, _, _) => {
+                ret.expr = Arc::new(Expr::If(cond.clone(), then, else_));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_if_then_else_typed(
+        &self,
+        then: Arc<ExprNode>,
+        else_: Arc<ExprNode>,
+    ) -> Arc<ExprNode> {
+        let then_ty = then.ty.as_ref().unwrap().clone();
+        let else_ty = else_.ty.as_ref().unwrap().clone();
+        assert_eq!(then_ty.to_string(), else_ty.to_string());
+        self.set_if_then_else(then, else_)
+            .set_inferred_type(then_ty)
+    }
+
     pub fn set_match_cond(&self, cond_expr: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone_without_fvs();
         match &*self.expr {
@@ -378,6 +409,22 @@ impl ExprNode {
             }
         }
         Arc::new(ret)
+    }
+
+    pub fn set_match_pat_vals_typed(
+        &self,
+        pat_vals: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
+    ) -> Arc<ExprNode> {
+        let vals_tys = pat_vals
+            .iter()
+            .map(|(_, val)| val.ty.as_ref().unwrap().clone())
+            .collect::<Vec<_>>();
+        if vals_tys.len() > 0 {
+            let ty = vals_tys[0].clone();
+            assert!(vals_tys.iter().all(|t| t.to_string() == ty.to_string()));
+        }
+        self.set_match_pat_vals(pat_vals)
+            .set_inferred_type(vals_tys[0].clone())
     }
 
     pub fn get_tyanno_expr(&self) -> Arc<ExprNode> {

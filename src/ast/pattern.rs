@@ -389,6 +389,35 @@ impl PatternNode {
             _ => panic!(),
         }
     }
+
+    // Rename a variable name in the pattern.
+    pub fn rename_var(&self, from: &FullName, to: &FullName) -> Arc<PatternNode> {
+        let mut node = self.clone();
+        match &mut node.pattern {
+            Pattern::Var(v, _) => {
+                if &v.name == from {
+                    let new_v = v.set_name(to.clone());
+                    *v = new_v;
+                }
+            }
+            Pattern::Struct(_, fields) => {
+                for (_, pat) in fields {
+                    *pat = pat.rename_var(from, to);
+                }
+            }
+            Pattern::Union(_, pat) => {
+                *pat = pat.rename_var(from, to);
+            }
+        }
+        let ret = Arc::new(node);
+        if ret.pattern.has_duplicate_vars() {
+            panic!(
+                "Duplicate variable names in pattern: {}",
+                ret.pattern.to_string()
+            );
+        }
+        ret
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]

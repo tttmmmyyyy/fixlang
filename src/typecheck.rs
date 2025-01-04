@@ -669,6 +669,7 @@ impl TypeCheckContext {
                 // Validate each cases.
                 let mut new_pat_vals = vec![];
                 for (pat, val) in pat_vals {
+                    pat.validate(&self.type_env)?;
                     let pat = if pat.is_union() {
                         // Check if the union variant name is valid.
 
