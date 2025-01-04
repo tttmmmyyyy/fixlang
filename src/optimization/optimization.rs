@@ -7,6 +7,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}", step));
+        step += 1;
     }
 
     // Perform type annotation removal optimization.

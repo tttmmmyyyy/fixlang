@@ -467,7 +467,9 @@ impl Configuration {
     }
 
     pub fn separate_compilation(&self) -> bool {
-        self.fix_opt_level != FixOptimizationLevel::Default
+        self.fix_opt_level == FixOptimizationLevel::None
+            || self.fix_opt_level == FixOptimizationLevel::Minimum
+            || self.fix_opt_level == FixOptimizationLevel::Separated
     }
 
     pub fn edit_features(&self, features: &mut CpuFeatures) {
