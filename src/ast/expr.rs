@@ -263,6 +263,15 @@ impl ExprNode {
         }
     }
 
+    pub fn get_let_pat(&self) -> Arc<PatternNode> {
+        match &*self.expr {
+            Expr::Let(pat, _, _) => pat.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
     pub fn set_let_pat(&self, pat: Arc<PatternNode>) -> Arc<Self> {
         let mut ret = self.clone_without_fvs();
         match &*self.expr {
@@ -385,6 +394,15 @@ impl ExprNode {
             .set_inferred_type(then_ty)
     }
 
+    pub fn get_match_cond(&self) -> Arc<ExprNode> {
+        match &*self.expr {
+            Expr::Match(cond, _) => cond.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
     pub fn set_match_cond(&self, cond_expr: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone_without_fvs();
         match &*self.expr {
@@ -396,6 +414,15 @@ impl ExprNode {
             }
         }
         Arc::new(ret)
+    }
+
+    pub fn get_match_pat_vals(&self) -> Vec<(Arc<PatternNode>, Arc<ExprNode>)> {
+        match &*self.expr {
+            Expr::Match(_, pat_vals) => pat_vals.clone(),
+            _ => {
+                panic!()
+            }
+        }
     }
 
     pub fn set_match_pat_vals(
@@ -1072,11 +1099,13 @@ impl Expr {
             }
             Expr::Lam(xs, fx) => {
                 let args = format!(
-                    "|{}| ",
+                    "|{}{}{}| ",
+                    if xs.len() > 1 { "{{" } else { "" },
                     xs.iter()
                         .map(|x| x.name.to_string())
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join(", "),
+                    if xs.len() > 1 { "}}" } else { "" }
                 );
                 fx.expr
                     .stringify()

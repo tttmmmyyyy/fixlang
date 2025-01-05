@@ -1,6 +1,6 @@
 use crate::{Configuration, Program};
 
-use super::{borrowing, contract_app, eta_expand, inline, remove_tyanno, uncurry};
+use super::{borrowing, inline, remove_tyanno, uncurry};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     let mut step = 0;
@@ -8,15 +8,6 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}", step));
         step += 1;
-    }
-
-    // Perform inlining optimization.
-    if config.perform_inline_optimization() {
-        inline::run(prg);
-        if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.inline", step));
-            step += 1;
-        }
     }
 
     // Perform type annotation removal optimization.
@@ -28,18 +19,11 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         }
     }
 
-    // Perform eta expand optimization.
-    if config.perform_eta_expand_optimization() {
-        eta_expand::run(prg);
+    // Perform inlining optimization.
+    if config.perform_inline_optimization() {
+        inline::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.eta_expand", step));
-            step += 1;
-        }
-
-        // If we perform eta expand optimization, we need to perform contract application optimization.
-        contract_app::run(prg);
-        if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.eta_expand_contract_app", step));
+            prg.emit_symbols(&format!("{}.inline", step));
             step += 1;
         }
     }

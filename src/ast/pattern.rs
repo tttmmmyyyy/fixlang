@@ -319,6 +319,17 @@ impl PatternNode {
         matches!(&self.pattern, Pattern::Union(_, _))
     }
 
+    pub fn is_var(&self) -> bool {
+        matches!(&self.pattern, Pattern::Var(_, _))
+    }
+
+    pub fn get_var(&self) -> Arc<Var> {
+        match &self.pattern {
+            Pattern::Var(v, _) => v.clone(),
+            _ => panic!(),
+        }
+    }
+
     pub fn set_source(self: &PatternNode, src: Span) -> Arc<PatternNode> {
         let mut node = self.clone();
         node.info.source = Some(src);

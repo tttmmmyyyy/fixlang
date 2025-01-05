@@ -1,5 +1,6 @@
+pub mod beta_reduction;
 pub mod borrowing;
-pub mod contract_app;
+#[allow(dead_code)]
 pub mod eta_expand;
 mod inline;
 pub mod optimization;

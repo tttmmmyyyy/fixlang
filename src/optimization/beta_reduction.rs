@@ -1,5 +1,5 @@
 /*
-Contract application optimization.
+Beta reduction optimization.
 
 This optimization tries to reduce cost of "create lambda and apply" expressions.
 
@@ -36,7 +36,7 @@ Do the above transformations only if `v` is a variable, because if not, `v` is c
 use std::sync::Arc;
 
 use crate::{
-    ast::traverse::{EndVisitResult, ExprVisitor, VisitState},
+    ast::traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed,
     optimization::utils::replace_free_var_of_expr,
     Expr, ExprNode, InstantiatedSymbol, Program,
@@ -44,13 +44,14 @@ use crate::{
 
 use super::utils::rename_pattern_value_names;
 
+#[allow(dead_code)]
 pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.instantiated_symbols {
         run_on_symbol(sym);
     }
 }
 
-fn run_on_symbol(sym: &mut InstantiatedSymbol) {
+pub fn run_on_symbol(sym: &mut InstantiatedSymbol) {
     let mut optimizer = ContractAppOptimizer {};
     let res = optimizer.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
@@ -150,5 +151,149 @@ impl ExprVisitor for ContractAppOptimizer {
                 return EndVisitResult::unchanged(expr);
             }
         }
+    }
+
+    fn start_visit_var(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_llvm(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_app(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn start_visit_lam(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_let(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_if(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_match(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_tyanno(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_make_struct(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_make_struct(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_array_lit(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_array_lit(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_ffi_call(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> crate::ast::traverse::StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_ffi_call(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
     }
 }

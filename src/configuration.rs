@@ -419,10 +419,6 @@ impl Configuration {
         self.fix_opt_level >= FixOptimizationLevel::Separated
     }
 
-    pub fn perform_eta_expand_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Unstable
-    }
-
     pub fn perform_remove_tyanno_optimization(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Separated
     }
