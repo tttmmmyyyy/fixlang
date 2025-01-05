@@ -32,9 +32,10 @@ pub fn run_one(prg: &mut Program) {
         symbols: symbols.clone(),
     };
     let mut new_symbols: Map<FullName, InstantiatedSymbol> = Map::default();
+    let root_value_names = prg.root_value_names();
     for (name, mut sym) in symbols {
-        // If call count of the symbol is 0, discard the symbol.
-        if costs.get_call_count(&name) == 0 {
+        // If call count of the symbol is 0, and neither of entry point or exported, discard the symbol.
+        if costs.get_call_count(&name) == 0 && !root_value_names.contains(&name) {
             continue;
         }
 

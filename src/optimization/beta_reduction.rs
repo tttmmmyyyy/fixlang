@@ -42,7 +42,7 @@ use crate::{
     Expr, ExprNode, InstantiatedSymbol, Program,
 };
 
-use super::utils::rename_pattern_value_names;
+use super::utils::rename_pattern_value_avoiding;
 
 #[allow(dead_code)]
 pub fn run(prg: &mut Program) {
@@ -87,7 +87,7 @@ impl ExprVisitor for BetaReduction {
                     return EndVisitResult::unchanged(expr);
                 }
                 let param_name = &params[0].name;
-                let body = replace_free_var_of_expr(body, param_name, arg_name).unwrap();
+                let body = replace_free_var_of_expr(body, param_name, arg_name);
                 return EndVisitResult::changed(body).revisit();
             }
             Expr::Let(pattern, bound, value) => {
@@ -95,7 +95,7 @@ impl ExprVisitor for BetaReduction {
                 // Replace it with `let {pat} = {bound} in ({value}(v))`.
 
                 // If `v` is in FV({pat}), we first rename `v` in `{pattern}` and `{value}` to a fresh variable.
-                let (pattern, value) = rename_pattern_value_names(
+                let (pattern, value) = rename_pattern_value_avoiding(
                     &[arg_name.clone()].into_iter().collect(),
                     pattern.clone(),
                     value.clone(),
@@ -117,7 +117,7 @@ impl ExprVisitor for BetaReduction {
                 // As with `let`, we need to rename `v` in each pattern and value to a fresh variable.
                 let mut new_pats_vals = vec![];
                 for (pat, val) in pats_vals {
-                    let (pat, val) = rename_pattern_value_names(
+                    let (pat, val) = rename_pattern_value_avoiding(
                         &[arg_name.clone()].into_iter().collect(),
                         pat.clone(),
                         val.clone(),

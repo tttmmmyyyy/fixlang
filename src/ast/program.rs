@@ -501,6 +501,20 @@ pub struct Program {
 }
 
 impl Program {
+    // Get the names of entry pointes / exported functions.
+    pub fn root_value_names(&self) -> Vec<FullName> {
+        let mut res = vec![];
+        if let Some(entry) = self.entry_io_value.as_ref() {
+            res.push(entry.get_var().name.clone());
+        }
+        for stmt in &self.export_statements {
+            if let Some(exported) = stmt.instantiated_value_expr.as_ref() {
+                res.push(exported.get_var().name.clone());
+            }
+        }
+        res
+    }
+
     // Get the list of module names from a list of files.
     pub fn modules_from_files(&self, files: &[PathBuf]) -> Vec<Name> {
         let mut mod_names = vec![];

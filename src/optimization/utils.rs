@@ -5,36 +5,30 @@ use crate::{
         name::FullName,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
-    misc::Set,
+    misc::{Map, Set},
     ExprNode, PatternNode,
 };
 
 // Replace a free variable of an expression to another name.
-// If the name `to` is bound at the place `from` appears, returns Err.
 pub fn replace_free_var_of_expr(
     expr: &Arc<ExprNode>,
     from: &FullName,
     to: &FullName,
-) -> Result<Arc<ExprNode>, ()> {
+) -> Arc<ExprNode> {
     if from == to {
-        return Ok(expr.clone());
+        return expr.clone();
     }
     let mut replacer = FreeVarReplacer {
         from: from.clone(),
         to: to.clone(),
-        fail: false,
     };
     let res = replacer.traverse(expr);
-    if replacer.fail {
-        return Err(());
-    }
-    Ok(res.expr)
+    res.expr.calculate_free_vars()
 }
 
 pub struct FreeVarReplacer {
     from: FullName,
     to: FullName,
-    fail: bool,
 }
 
 impl FreeVarReplacer {
@@ -48,11 +42,9 @@ impl FreeVarReplacer {
         if local_names.contains(&self.from.to_string()) {
             return false;
         }
-        // If the `to` is shadowed, raise an error.
-        if state.scope.local_names().contains(&self.to.name) {
-            self.fail = true;
-            return false;
-        }
+
+        // `to` should be free from shadowing.
+        assert!(!state.scope.local_names().contains(&self.to.name));
         true
     }
 }
@@ -95,23 +87,16 @@ impl ExprVisitor for FreeVarReplacer {
         }
 
         let mut llvm = expr.get_llvm().as_ref().clone();
+
         let generator = &mut llvm.generator;
         for llvm_fv in generator.free_vars_mut() {
-            // If `to` appears in the free variables of the InlineLLVM, we should not replace it to avoid name conflict.
-            if *llvm_fv == self.to {
-                self.fail = true;
-                return EndVisitResult::unchanged(expr);
-            }
-
             // Replace `from` to `to`.
             if *llvm_fv == self.from {
                 *llvm_fv = self.to.clone();
             }
         }
-
         let expr = expr.set_llvm(llvm);
-
-        EndVisitResult::unchanged(&expr)
+        EndVisitResult::changed(expr)
     }
 
     fn start_visit_app(
@@ -128,10 +113,26 @@ impl ExprVisitor for FreeVarReplacer {
 
     fn start_visit_lam(
         &mut self,
-        _expr: &Arc<ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
+        // Check if `to` is going to be shadowed here.
+        let lam_params = expr.get_lam_params();
+        assert_eq!(
+            lam_params.len(),
+            1,
+            "This function does not support multi-parameter lambdas."
+        );
+        let lam_param = &lam_params[0].clone();
+        if lam_param.name != self.to {
+            return StartVisitResult::VisitChildren;
+        }
+
+        // If `to` is going to be shadowed here, we need to avoid shadowing by renaming parameter of the lambda.
+        let mut black_list = Set::default();
+        black_list.insert(self.to.clone());
+        let expr = rename_lam_param_avoiding(&black_list, expr.clone());
+        StartVisitResult::ReplaceAndRevisit(expr)
     }
 
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -140,10 +141,20 @@ impl ExprVisitor for FreeVarReplacer {
 
     fn start_visit_let(
         &mut self,
-        _expr: &Arc<ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
+        // Check if `to` is going to be shadowed here.
+        let pattern_vars = expr.get_let_pat().pattern.vars();
+        if !pattern_vars.contains(&self.to) {
+            return StartVisitResult::VisitChildren;
+        }
+
+        // If `to` is going to be shadowed here, we need to avoid shadowing by renaming the pattern.
+        let mut black_list = Set::default();
+        black_list.insert(self.to.clone());
+        let expr = rename_let_pattern_avoiding(&black_list, expr.clone());
+        StartVisitResult::ReplaceAndRevisit(expr)
     }
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -164,10 +175,23 @@ impl ExprVisitor for FreeVarReplacer {
 
     fn start_visit_match(
         &mut self,
-        _expr: &Arc<ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
+        // Check if `to` is going to be shadowed here.
+        let shadowed = expr.get_match_pat_vals().iter().any(|(pat, _)| {
+            let pattern_vars = pat.pattern.vars();
+            pattern_vars.contains(&self.to)
+        });
+        if !shadowed {
+            return StartVisitResult::VisitChildren;
+        }
+
+        // If `to` is going to be shadowed here, we need to avoid shadowing by renaming the pattern.
+        let mut black_list = Set::default();
+        black_list.insert(self.to.clone());
+        let expr = rename_match_pattern_avoiding(&black_list, expr.clone());
+        StartVisitResult::ReplaceAndRevisit(expr)
     }
 
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -239,15 +263,15 @@ impl ExprVisitor for FreeVarReplacer {
     }
 }
 
-// Generate new names that is not in the set `names_set`.
-pub fn generate_new_names(names_set: &Set<FullName>, n: usize) -> Vec<FullName> {
+// Generate new names that is not in the set `black_list`.
+pub fn generate_new_names(black_list: &Set<FullName>, n: usize) -> Vec<FullName> {
     let mut names = vec![];
     for _ in 0..n {
         let mut var_name_no = 0;
         let var_name = loop {
             let var_name = format!("#v{}", var_name_no);
             let var_name = FullName::local(&var_name);
-            if !names_set.contains(&var_name) {
+            if !black_list.contains(&var_name) {
                 break var_name;
             }
             var_name_no += 1;
@@ -257,25 +281,110 @@ pub fn generate_new_names(names_set: &Set<FullName>, n: usize) -> Vec<FullName> 
     names
 }
 
-// Rename the names in the pattern to disjoint with the set `names_set`.
-// Also, apply the same renaming to the given expression `value`.
-pub fn rename_pattern_value_names(
-    names_set: &Set<FullName>,
+// Rename the names in the pattern so that they will be disjoint from the set `black_list`.
+// Also, apply the same renaming to the value expression.
+pub fn rename_pattern_value_avoiding(
+    black_list: &Set<FullName>,
     mut pattern: Arc<PatternNode>,
     mut value: Arc<ExprNode>,
 ) -> (Arc<PatternNode>, Arc<ExprNode>) {
-    let pattern_vars = pattern.pattern.vars();
-    let all_names = pattern_vars.union(names_set).cloned().collect::<Set<_>>();
+    let renaming = calculate_renaming_bound_vars_avoiding(
+        black_list,
+        pattern.pattern.vars().into_iter().collect(),
+        value.clone(),
+    );
+    for (old, new) in renaming.iter() {
+        pattern = pattern.rename_var(old, new);
+        value = replace_free_var_of_expr(&value, old, new);
+    }
+
+    (pattern, value)
+}
+
+pub fn rename_let_pattern_avoiding(
+    black_list: &Set<FullName>,
+    let_expr: Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    let pattern = let_expr.get_let_pat().clone();
+    let value = let_expr.get_let_value().clone();
+    let (pattern, value) = rename_pattern_value_avoiding(black_list, pattern, value);
+    let_expr.set_let_pat(pattern).set_let_value(value)
+}
+
+pub fn rename_match_pattern_avoiding(
+    black_list: &Set<FullName>,
+    match_expr: Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    let match_expr = match_expr.clone();
+    let mut pat_vals = match_expr.get_match_pat_vals();
+    for (pat, val) in pat_vals.iter_mut() {
+        let (new_pat, new_val) =
+            rename_pattern_value_avoiding(black_list, pat.clone(), val.clone());
+        *pat = new_pat;
+        *val = new_val;
+    }
+    match_expr.set_match_pat_vals(pat_vals)
+}
+
+pub fn rename_lam_param_avoiding(
+    black_list: &Set<FullName>,
+    lam_expr: Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    if lam_expr.get_lam_params().len() > 1 {
+        panic!("This function does not support multi-parameter lambdas.");
+    }
+    let old_params = lam_expr.get_lam_params();
+    let old_param = old_params[0].clone();
+    let old_value = lam_expr.get_lam_body().clone();
+    let renaming = calculate_renaming_bound_vars_avoiding(
+        black_list,
+        vec![old_param.name.clone()],
+        old_value.clone(),
+    );
+
+    let new_param = if let Some(new_name) = renaming.get(&old_param.name) {
+        old_param.set_name(new_name.clone())
+    } else {
+        old_param.clone()
+    };
+    let new_value = replace_free_var_of_expr(&old_value, &old_param.name, &new_param.name);
+    lam_expr
+        .set_lam_params(vec![new_param])
+        .set_lam_body(new_value)
+}
+
+// Consider the situation that let, match or lam expression binds variables `bound_vars` and evaluates the expression `expr`.
+// This function calculates how to rename bound variables so that they are disjoint from `black_list`.
+fn calculate_renaming_bound_vars_avoiding(
+    black_list: &Set<FullName>,
+    bound_vars: Vec<FullName>,
+    value: Arc<ExprNode>,
+) -> Map<FullName, FullName> {
+    // Calculate the set of names that should be renamed.
     let mut renamed: Vec<FullName> = vec![];
-    for name in names_set.iter() {
-        if pattern_vars.contains(name) {
+    for name in black_list.iter() {
+        if black_list.contains(name) {
             renamed.push(name.clone());
         }
     }
-    let new_names = generate_new_names(&all_names, renamed.len());
-    for (old, new) in renamed.into_iter().zip(new_names.into_iter()) {
-        pattern = pattern.rename_var(&old, &new);
-        value = replace_free_var_of_expr(&value, &old, &new).unwrap();
+
+    // Calculate the set of names that should be avoided when we decide new names.
+    let mut black_list = black_list.clone();
+    let value = value.calculate_free_vars();
+    for var in value.free_vars() {
+        black_list.insert(var.clone()); // Avoid shadowing free variables by bound variables.
     }
-    (pattern, value)
+    for var in bound_vars.iter() {
+        black_list.insert(var.clone()); // Avoid conflicts with other bound variables.
+    }
+
+    // Decide new names.
+    let new_names = generate_new_names(&black_list, renamed.len());
+
+    // Create the renaming map.
+    let mut renaming: Map<FullName, FullName> = Map::default();
+    for (old, new) in renamed.into_iter().zip(new_names.into_iter()) {
+        renaming.insert(old, new);
+    }
+    renaming
 }

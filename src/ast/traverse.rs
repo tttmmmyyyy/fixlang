@@ -6,6 +6,7 @@ use super::{typecheck::Scope, Expr, ExprNode};
 
 pub enum StartVisitResult {
     VisitChildren,
+    ReplaceAndRevisit(Arc<ExprNode>),
     // Skip, // to be implemented
     // ReplaceAndSkipChildren(Arc<ExprNode>), // to be implemented
     // ReplaceAndVisitChildren(Arc<ExprNode>), // to be implemented
@@ -184,6 +185,9 @@ pub trait ExprVisitor {
                     StartVisitResult::VisitChildren => {
                         // Has no children
                     }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
+                    }
                 }
                 let res = self.end_visit_var(expr, state);
                 self.revisit_if_changed(res, state)
@@ -193,6 +197,9 @@ pub trait ExprVisitor {
                 match res {
                     StartVisitResult::VisitChildren => {
                         // Has no children
+                    }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
                     }
                 }
                 let res = self.end_visit_llvm(expr, state);
@@ -215,6 +222,9 @@ pub trait ExprVisitor {
                             expr = expr.set_app_func(func).set_app_args(args_new);
                         }
                     }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
+                    }
                 }
                 let res = self.end_visit_app(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
@@ -235,6 +245,9 @@ pub trait ExprVisitor {
                         if changed {
                             expr = expr.set_lam_body(body);
                         }
+                    }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
                     }
                 }
                 let res = self.end_visit_lam(&expr, state).add_changed(changed);
@@ -258,6 +271,9 @@ pub trait ExprVisitor {
                             expr = expr.set_let_bound(bound).set_let_value(val);
                         }
                     }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
+                    }
                 }
                 let res = self.end_visit_let(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
@@ -277,6 +293,9 @@ pub trait ExprVisitor {
                                 .set_if_then(then_expr)
                                 .set_if_else(else_expr);
                         }
+                    }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
                     }
                 }
                 let res = self.end_visit_if(&expr, state).add_changed(changed);
@@ -304,6 +323,9 @@ pub trait ExprVisitor {
                             expr = expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals);
                         }
                     }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
+                    }
                 }
                 let res = self.end_visit_match(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
@@ -318,6 +340,9 @@ pub trait ExprVisitor {
                         if changed {
                             expr = expr.set_tyanno_expr(e);
                         }
+                    }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
                     }
                 }
                 let res = self.end_visit_tyanno(&expr, state).add_changed(changed);
@@ -337,6 +362,9 @@ pub trait ExprVisitor {
                         if changed {
                             expr = expr.set_make_struct_fields(new_fields);
                         }
+                    }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
                     }
                 }
                 let res = self
@@ -359,6 +387,9 @@ pub trait ExprVisitor {
                             expr = expr.set_array_lit_elems(new_elems);
                         }
                     }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
+                    }
                 }
                 let res = self.end_visit_array_lit(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
@@ -377,6 +408,9 @@ pub trait ExprVisitor {
                         if changed {
                             expr = expr.set_ffi_call_args(new_args);
                         }
+                    }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
                     }
                 }
                 let res = self.end_visit_ffi_call(&expr, state).add_changed(changed);

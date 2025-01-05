@@ -287,13 +287,9 @@ fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
                                     &original_name,
                                     &lam_var_name,
                                 );
-                                // If replacement to lam_var_name fails, try another name.
-                                if replaced.is_err() {
-                                    continue;
-                                }
 
                                 *lam_var = lam_var.set_name(lam_var_name.clone());
-                                lam_val = replaced.unwrap();
+                                lam_val = replaced;
                                 break;
                             }
                         }
