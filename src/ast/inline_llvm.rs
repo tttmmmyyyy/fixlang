@@ -180,6 +180,76 @@ impl LLVMGenerator {
         }
     }
 
+    pub fn free_vars(&self) -> Vec<FullName> {
+        match self {
+            LLVMGenerator::IntLit(x) => x.free_vars(),
+            LLVMGenerator::FloatLit(x) => x.free_vars(),
+            LLVMGenerator::NullPtrLit(x) => x.free_vars(),
+            LLVMGenerator::BoolLit(x) => x.free_vars(),
+            LLVMGenerator::StringLit(x) => x.free_vars(),
+            LLVMGenerator::FixBody(x) => x.free_vars(),
+            LLVMGenerator::CastIntegralBody(x) => x.free_vars(),
+            LLVMGenerator::CastFloatBody(x) => x.free_vars(),
+            LLVMGenerator::CastIntToFloatBody(x) => x.free_vars(),
+            LLVMGenerator::CastFloatToIntBody(x) => x.free_vars(),
+            LLVMGenerator::ShiftBody(x) => x.free_vars(),
+            LLVMGenerator::BitwiseOperationBody(x) => x.free_vars(),
+            LLVMGenerator::FillArrayBody(x) => x.free_vars(),
+            LLVMGenerator::MakeEmptyArrayBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeSetBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeGetBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayGetBody(x) => x.free_vars(),
+            LLVMGenerator::ArraySetBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayModBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayForceUniqueBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayGetPtrBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayGetSizeBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayGetCapacityBody(x) => x.free_vars(),
+            LLVMGenerator::StructGetBody(x) => x.free_vars(),
+            LLVMGenerator::StructModBody(x) => x.free_vars(),
+            LLVMGenerator::StructSetBody(x) => x.free_vars(),
+            LLVMGenerator::StructPunchBody(x) => x.free_vars(),
+            LLVMGenerator::StructPlugInBody(x) => x.free_vars(),
+            LLVMGenerator::MakeUnionBody(x) => x.free_vars(),
+            LLVMGenerator::UnionAsBody(x) => x.free_vars(),
+            LLVMGenerator::UnionIsBody(x) => x.free_vars(),
+            LLVMGenerator::UnionModBody(x) => x.free_vars(),
+            LLVMGenerator::UndefinedFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::IsUniqueFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::IntNegBody(x) => x.free_vars(),
+            LLVMGenerator::FloatNegBody(x) => x.free_vars(),
+            LLVMGenerator::BoolNegBody(x) => x.free_vars(),
+            LLVMGenerator::IntEqBody(x) => x.free_vars(),
+            LLVMGenerator::PtrEqBody(x) => x.free_vars(),
+            LLVMGenerator::FloatEqBody(x) => x.free_vars(),
+            LLVMGenerator::IntLessThanBody(x) => x.free_vars(),
+            LLVMGenerator::FloatLessThanBody(x) => x.free_vars(),
+            LLVMGenerator::IntLessThanOrEqBody(x) => x.free_vars(),
+            LLVMGenerator::FloatLessThanOrEqBody(x) => x.free_vars(),
+            LLVMGenerator::IntAddBody(x) => x.free_vars(),
+            LLVMGenerator::FloatAddBody(x) => x.free_vars(),
+            LLVMGenerator::IntSubBody(x) => x.free_vars(),
+            LLVMGenerator::FloatSubBody(x) => x.free_vars(),
+            LLVMGenerator::IntMulBody(x) => x.free_vars(),
+            LLVMGenerator::FloatMulBody(x) => x.free_vars(),
+            LLVMGenerator::IntDivBody(x) => x.free_vars(),
+            LLVMGenerator::FloatDivBody(x) => x.free_vars(),
+            LLVMGenerator::IntRemBody(x) => x.free_vars(),
+            LLVMGenerator::MarkThreadedFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::GetRetainedPtrOfBoxedValueFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::GetBoxedValueFromRetainedPtrFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::WithRetainedFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::UnsafeMutateBoxedDataFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::UnsafeMutateBoxedDataIOStateFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::UnsafePerformFunctionBody(x) => x.free_vars(),
+        }
+    }
+
     // Returns a list of variables which is released by this generator.
     // None if the generator does not support this interface.
     // This is used for the borrowing optimization.
@@ -198,7 +268,6 @@ impl LLVMGenerator {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVM {
     pub generator: LLVMGenerator,
-    pub free_vars: Vec<FullName>, // e.g. "+" literal has two free variables.
     // Set of variables which is contained in the list `released_vars()` but should not be released.
     pub borrowed_vars: Vec<FullName>,
     pub name: String,

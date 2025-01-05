@@ -563,6 +563,10 @@ pub struct InlineLLVMIntLit {
 }
 
 impl InlineLLVMIntLit {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -574,7 +578,7 @@ impl InlineLLVMIntLit {
             &vec![],
             None,
             gc,
-            Some(&format!("int_lit_{}", self.val)),
+            Some(&format!("LLVM<int_lit_{}>", self.val)),
         );
         let int_ty = ty
             .get_struct_type(gc, &vec![])
@@ -589,7 +593,6 @@ impl InlineLLVMIntLit {
 pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::IntLit(InlineLLVMIntLit { val: val as i64 }),
-        vec![],
         val.to_string(),
         ty,
         source,
@@ -602,6 +605,10 @@ pub struct InlineLLVMFloatLit {
 }
 
 impl InlineLLVMFloatLit {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -628,7 +635,6 @@ impl InlineLLVMFloatLit {
 pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val }),
-        vec![],
         val.to_string(),
         ty,
         source,
@@ -639,6 +645,10 @@ pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<
 pub struct InlineLLVMNullPtrLit {}
 
 impl InlineLLVMNullPtrLit {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -655,7 +665,6 @@ impl InlineLLVMNullPtrLit {
 pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::NullPtrLit(InlineLLVMNullPtrLit {}),
-        vec![],
         "nullptr_literal".to_string(),
         make_ptr_ty(),
         source,
@@ -668,6 +677,9 @@ pub struct InlineLLVMBoolLit {
 }
 
 impl InlineLLVMBoolLit {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![]
+    }
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -689,7 +701,6 @@ impl InlineLLVMBoolLit {
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::BoolLit(InlineLLVMBoolLit { val }),
-        vec![],
         val.to_string(),
         make_bool_ty(),
         source,
@@ -744,6 +755,10 @@ pub struct InlineLLVMStringLit {
 }
 
 impl InlineLLVMStringLit {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -766,7 +781,6 @@ impl InlineLLVMStringLit {
 pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::StringLit(InlineLLVMStringLit { string }),
-        vec![],
         "string_literal".to_string(),
         make_string_ty(),
         source,
@@ -780,6 +794,14 @@ pub struct InlineLLVMFixBody {
 }
 
 impl InlineLLVMFixBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![
+            self.x_str.clone(),
+            self.f_str.clone(),
+            FullName::local(CAP_NAME),
+        ]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -818,10 +840,8 @@ fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
     let name = format!("LLVM<fix({}, {})>", f_str.to_string(), x_str.to_string());
-    let free_vars = vec![FullName::local(CAP_NAME), f_str.clone(), x_str.clone()];
     expr_llvm(
         LLVMGenerator::FixBody(InlineLLVMFixBody { x_str, f_str }),
-        free_vars,
         name,
         type_tyvar_star(b),
         None,
@@ -847,12 +867,16 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastIntegralBody {
-    from_name: String,
+    from_name: FullName,
     is_source_signed: bool,
     is_target_signed: bool,
 }
 
 impl InlineLLVMCastIntegralBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.from_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -860,9 +884,7 @@ impl InlineLLVMCastIntegralBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let from_val = gc
-            .get_var_field(&FullName::local(&self.from_name), 0)
-            .into_int_value();
+        let from_val = gc.get_var_field(&self.from_name, 0).into_int_value();
 
         // Get target type.
         let to_int = to_ty
@@ -897,6 +919,8 @@ pub fn cast_between_integral_function(
     to: Arc<TypeNode>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
+    let from_name = FullName::local(FROM_NAME);
+
     let is_source_signed = from.toplevel_tycon().unwrap().is_singned_intger();
     let is_target_signed = to.toplevel_tycon().unwrap().is_singned_intger();
     let scm = Scheme::generalize(
@@ -909,13 +933,12 @@ pub fn cast_between_integral_function(
         vec![var_local(FROM_NAME)],
         expr_llvm(
             LLVMGenerator::CastIntegralBody(InlineLLVMCastIntegralBody {
-                from_name: FROM_NAME.to_string(),
+                from_name,
                 is_target_signed,
                 is_source_signed,
             }),
-            vec![FullName::local(FROM_NAME)],
             format!(
-                "cast_{}_to_{}({})",
+                "LLVM<cast({}, {}, {}>",
                 from.to_string(),
                 to.to_string(),
                 FROM_NAME
@@ -930,10 +953,14 @@ pub fn cast_between_integral_function(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastFloatBody {
-    from_name: String,
+    from_name: FullName,
 }
 
 impl InlineLLVMCastFloatBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.from_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -942,9 +969,7 @@ impl InlineLLVMCastFloatBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let from_val = gc
-            .get_var_field(&FullName::local(&self.from_name), 0)
-            .into_float_value();
+        let from_val = gc.get_var_field(&self.from_name, 0).into_float_value();
 
         // Get target type.
         let to_float = to_ty
@@ -988,11 +1013,10 @@ pub fn cast_between_float_function(
         vec![var_local(FROM_NAME)],
         expr_llvm(
             LLVMGenerator::CastFloatBody(InlineLLVMCastFloatBody {
-                from_name: FROM_NAME.to_string(),
+                from_name: FullName::local(FROM_NAME),
             }),
-            vec![FullName::local(FROM_NAME)],
             format!(
-                "cast_{}_to_{}({})",
+                "LLVM<cast({}, {}, {})>",
                 from.to_string(),
                 to.to_string(),
                 FROM_NAME
@@ -1007,22 +1031,23 @@ pub fn cast_between_float_function(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastIntToFloatBody {
-    from_name: String,
+    from_name: FullName,
     is_signed: bool,
 }
 
 impl InlineLLVMCastIntToFloatBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.from_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         to_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let from_val = gc
-            .get_var_field(&FullName::local(&self.from_name), 0)
-            .into_int_value();
+        let from_val = gc.get_var_field(&self.from_name, 0).into_int_value();
 
         // Get target type.
         let to_float = to_ty
@@ -1076,12 +1101,11 @@ pub fn cast_int_to_float_function(
         vec![var_local(FROM_NAME)],
         expr_llvm(
             LLVMGenerator::CastIntToFloatBody(InlineLLVMCastIntToFloatBody {
-                from_name: FROM_NAME.to_string(),
+                from_name: FullName::local(FROM_NAME),
                 is_signed,
             }),
-            vec![FullName::local(FROM_NAME)],
             format!(
-                "cast_{}_to_{}({})",
+                "LLVM<cast({}, {}, {}))",
                 from.to_string(),
                 to.to_string(),
                 FROM_NAME
@@ -1096,11 +1120,15 @@ pub fn cast_int_to_float_function(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastFloatToIntBody {
-    from_name: String,
+    from_name: FullName,
     is_signed: bool,
 }
 
 impl InlineLLVMCastFloatToIntBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.from_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1109,9 +1137,7 @@ impl InlineLLVMCastFloatToIntBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let from_val = gc
-            .get_var_field(&FullName::local(&self.from_name), 0)
-            .into_float_value();
+        let from_val = gc.get_var_field(&self.from_name, 0).into_float_value();
 
         // Get target type.
         let to_int = to_ty
@@ -1165,12 +1191,11 @@ pub fn cast_float_to_int_function(
         vec![var_local(FROM_NAME)],
         expr_llvm(
             LLVMGenerator::CastFloatToIntBody(InlineLLVMCastFloatToIntBody {
-                from_name: FROM_NAME.to_string(),
+                from_name: FullName::local(FROM_NAME),
                 is_signed,
             }),
-            vec![FullName::local(FROM_NAME)],
             format!(
-                "cast_{}_to_{}({})",
+                "cast<{}, {}, {}>",
                 from.to_string(),
                 to.to_string(),
                 FROM_NAME
@@ -1185,12 +1210,16 @@ pub fn cast_float_to_int_function(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMShiftBody {
-    value_name: String,
-    n_name: String,
+    value_name: FullName,
+    n_name: FullName,
     is_left: bool,
 }
 
 impl InlineLLVMShiftBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.value_name.clone(), self.n_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1199,12 +1228,8 @@ impl InlineLLVMShiftBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let val = gc
-            .get_var_field(&FullName::local(&self.value_name), 0)
-            .into_int_value();
-        let n = gc
-            .get_var_field(&FullName::local(&self.n_name), 0)
-            .into_int_value();
+        let val = gc.get_var_field(&self.value_name, 0).into_int_value();
+        let n = gc.get_var_field(&self.n_name, 0).into_int_value();
 
         let is_signed = ty.toplevel_tycon().unwrap().is_singned_intger();
 
@@ -1240,11 +1265,10 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
             vec![var_local(VALUE_NAME)],
             expr_llvm(
                 LLVMGenerator::ShiftBody(InlineLLVMShiftBody {
-                    value_name: VALUE_NAME.to_string(),
-                    n_name: N_NAME.to_string(),
+                    value_name: FullName::local(VALUE_NAME),
+                    n_name: FullName::local(N_NAME),
                     is_left,
                 }),
-                vec![FullName::local(VALUE_NAME), FullName::local(N_NAME)],
                 format!(
                     "shift_{}({},{})",
                     if is_left { "left" } else { "right" },
@@ -1281,26 +1305,25 @@ impl BitOperationType {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBitwiseOperationBody {
-    lhs_name: String,
-    rhs_name: String,
+    lhs_name: FullName,
+    rhs_name: FullName,
     op_type: BitOperationType,
 }
 
 impl InlineLLVMBitwiseOperationBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let lhs = gc
-            .get_var_field(&FullName::local(&self.lhs_name), 0)
-            .into_int_value();
-        let rhs = gc
-            .get_var_field(&FullName::local(&self.rhs_name), 0)
-            .into_int_value();
+        let lhs = gc.get_var_field(&self.lhs_name, 0).into_int_value();
+        let rhs = gc.get_var_field(&self.rhs_name, 0).into_int_value();
 
         // Perform cast.
         let val = match self.op_type {
@@ -1349,11 +1372,10 @@ pub fn bitwise_operation_function(
             vec![var_local(RHS_NAME)],
             expr_llvm(
                 LLVMGenerator::BitwiseOperationBody(InlineLLVMBitwiseOperationBody {
-                    lhs_name: LHS_NAME.to_string(),
-                    rhs_name: RHS_NAME.to_string(),
+                    lhs_name: FullName::local(LHS_NAME),
+                    rhs_name: FullName::local(RHS_NAME),
                     op_type,
                 }),
-                vec![FullName::local(LHS_NAME), FullName::local(RHS_NAME)],
                 format!("bit_{}({},{})", op_type.to_string(), LHS_NAME, RHS_NAME),
                 ty,
                 None,
@@ -1373,6 +1395,10 @@ pub struct InlineLLVMFillArrayBody {
 }
 
 impl InlineLLVMFillArrayBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.size_name.clone(), self.value_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1408,7 +1434,6 @@ fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
             value_name,
             array_name: name_cloned,
         }),
-        free_vars,
         name,
         type_tyapp(make_array_ty(), type_tyvar_star(a)),
         None,
@@ -1444,10 +1469,14 @@ pub fn fill_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeEmptyArrayBody {
-    cap_name: String,
+    capacity_name: FullName,
 }
 
 impl InlineLLVMMakeEmptyArrayBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.capacity_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1455,9 +1484,7 @@ impl InlineLLVMMakeEmptyArrayBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get capacity
-        let cap = gc
-            .get_var_field(&FullName::local(&self.cap_name), 0)
-            .into_int_value();
+        let cap = gc.get_var_field(&self.capacity_name, 0).into_int_value();
 
         // Allocate
         let array = create_obj(
@@ -1465,7 +1492,7 @@ impl InlineLLVMMakeEmptyArrayBody {
             &vec![],
             Some(cap),
             gc,
-            Some(&format!("Array::empty({})", self.cap_name)),
+            Some(&format!("Array::empty({})", self.capacity_name.to_string())),
         );
 
         // Set size to zero.
@@ -1476,20 +1503,19 @@ impl InlineLLVMMakeEmptyArrayBody {
 
 // Make an empty array.
 pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const CAP_NAME: &str = "cap";
+    const CAPACITY_NAME: &str = "capacity";
     const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar);
 
     let expr = expr_abs(
-        vec![var_local(CAP_NAME)],
+        vec![var_local(CAPACITY_NAME)],
         expr_llvm(
             LLVMGenerator::MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody {
-                cap_name: CAP_NAME.to_string(),
+                capacity_name: FullName::local(CAPACITY_NAME),
             }),
-            vec![FullName::local(CAP_NAME)],
-            format!("make_empty({})", CAP_NAME),
+            format!("make_empty({})", CAPACITY_NAME),
             array_ty.clone(),
             None,
         ),
@@ -1501,12 +1527,20 @@ pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeSetBody {
-    arr_name: String,
-    idx_name: String,
-    value_name: String,
+    arr_name: FullName,
+    idx_name: FullName,
+    value_name: FullName,
 }
 
 impl InlineLLVMArrayUnsafeSetBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![
+            self.arr_name.clone(),
+            self.idx_name.clone(),
+            self.value_name.clone(),
+        ]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1514,11 +1548,9 @@ impl InlineLLVMArrayUnsafeSetBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
-        let idx = gc
-            .get_var_field(&FullName::local(&self.idx_name), 0)
-            .into_int_value();
-        let value = gc.get_var(&FullName::local(&self.value_name)).ptr.get(gc);
+        let array = gc.get_var(&self.arr_name).ptr.get(gc);
+        let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
+        let value = gc.get_var(&self.value_name).ptr.get(gc);
 
         // Get array cap and buffer.
         let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
@@ -1547,15 +1579,10 @@ pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
                 vec![var_local(ARR_NAME)],
                 expr_llvm(
                     LLVMGenerator::ArrayUnsafeSetBody(InlineLLVMArrayUnsafeSetBody {
-                        arr_name: ARR_NAME.to_string(),
-                        idx_name: IDX_NAME.to_string(),
-                        value_name: VALUE_NAME.to_string(),
+                        arr_name: FullName::local(ARR_NAME),
+                        idx_name: FullName::local(IDX_NAME),
+                        value_name: FullName::local(VALUE_NAME),
                     }),
-                    vec![
-                        FullName::local(IDX_NAME),
-                        FullName::local(VALUE_NAME),
-                        FullName::local(ARR_NAME),
-                    ],
                     format!("{}.unsafe_set({}, {})", ARR_NAME, IDX_NAME, VALUE_NAME),
                     array_ty.clone(),
                     None,
@@ -1581,24 +1608,24 @@ pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeGetBody {
-    arr_name: String,
-    idx_name: String,
+    arr_name: FullName,
+    idx_name: FullName,
 }
 
 impl InlineLLVMArrayUnsafeGetBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.arr_name.clone(), self.idx_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-
         borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let arr_name = FullName::local(&self.arr_name);
-        let array = gc.get_var(&arr_name).ptr.get(gc);
-        let idx = gc
-            .get_var_field(&FullName::local(&self.idx_name), 0)
-            .into_int_value();
+        let array = gc.get_var(&self.arr_name).ptr.get(gc);
+        let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
 
         // Get array buffer
         let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
@@ -1607,7 +1634,7 @@ impl InlineLLVMArrayUnsafeGetBody {
         let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx);
 
         // Release the array.
-        if !borrowed_vars.contains(&arr_name) {
+        if !borrowed_vars.contains(&self.arr_name) {
             gc.release(array);
         }
 
@@ -1615,7 +1642,7 @@ impl InlineLLVMArrayUnsafeGetBody {
     }
 
     pub fn released_vars(&self) -> Vec<FullName> {
-        vec![FullName::local(&self.arr_name)]
+        vec![self.arr_name.clone()]
     }
 }
 
@@ -1634,10 +1661,9 @@ pub fn array_unsafe_get_function() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 LLVMGenerator::ArrayUnsafeGetBody(InlineLLVMArrayUnsafeGetBody {
-                    arr_name: ARR_NAME.to_string(),
-                    idx_name: IDX_NAME.to_string(),
+                    arr_name: FullName::local(ARR_NAME),
+                    idx_name: FullName::local(IDX_NAME),
                 }),
-                vec![FullName::local(IDX_NAME), FullName::local(ARR_NAME)],
                 format!("{}.get_array_noretain({})", ARR_NAME, IDX_NAME),
                 elem_tyvar.clone(),
                 None,
@@ -1658,23 +1684,24 @@ pub fn array_unsafe_get_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeGetLinearFunctionBody {
-    arr_name: String,
-    idx_name: String,
+    arr_name: FullName,
+    idx_name: FullName,
 }
 
 impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.arr_name.clone(), self.idx_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
-        let idx = gc
-            .get_var_field(&FullName::local(&self.idx_name), 0)
-            .into_int_value();
+        let array = gc.get_var(&self.arr_name).ptr.get(gc);
+        let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
 
         let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
 
@@ -1716,11 +1743,10 @@ pub fn array_unsafe_get_linear_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_llvm(
             LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(
                 InlineLLVMArrayUnsafeGetLinearFunctionBody {
-                    arr_name: ARR_NAME.to_string(),
-                    idx_name: IDX_NAME.to_string(),
+                    arr_name: FullName::local(ARR_NAME),
+                    idx_name: FullName::local(IDX_NAME),
                 },
             ),
-            vec![FullName::local(IDX_NAME), FullName::local(ARR_NAME)],
             format!("{}.unsafe_get_linear({})", ARR_NAME, IDX_NAME),
             res_ty.clone(),
             None,
@@ -1738,11 +1764,15 @@ pub fn array_unsafe_get_linear_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeSetSizeBody {
-    arr_name: String,
-    len_name: String,
+    arr_name: FullName,
+    len_name: FullName,
 }
 
 impl InlineLLVMArrayUnsafeSetSizeBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.arr_name.clone(), self.len_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1750,10 +1780,8 @@ impl InlineLLVMArrayUnsafeSetSizeBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
-        let length = gc
-            .get_var_field(&FullName::local(&self.len_name), 0)
-            .into_int_value();
+        let array = gc.get_var(&self.arr_name).ptr.get(gc);
+        let length = gc.get_var_field(&self.len_name, 0).into_int_value();
 
         array.insert_field(gc, ARRAY_LEN_IDX, length)
     }
@@ -1765,6 +1793,9 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const LENGTH_NAME: &str = "length";
     const ELEM_TYPE: &str = "a";
 
+    let arr_name = FullName::local(ARR_NAME);
+    let len_name = FullName::local(LENGTH_NAME);
+
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
@@ -1774,11 +1805,10 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(ARR_NAME)],
             expr_llvm(
                 LLVMGenerator::ArrayUnsafeSetSizeBody(InlineLLVMArrayUnsafeSetSizeBody {
-                    arr_name: ARR_NAME.to_string(),
-                    len_name: LENGTH_NAME.to_string(),
+                    arr_name,
+                    len_name,
                 }),
-                vec![FullName::local(LENGTH_NAME), FullName::local(ARR_NAME)],
-                format!("LLVM<{}.unsafe_set_length({})>", ARR_NAME, LENGTH_NAME),
+                format!("LLVM<{}.unsafe_set_size({})>", ARR_NAME, LENGTH_NAME),
                 array_ty.clone(),
                 None,
             ),
@@ -1803,6 +1833,10 @@ pub struct InlineLLVMArrayGetBody {
 }
 
 impl InlineLLVMArrayGetBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.arr_name.clone(), self.idx_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1829,16 +1863,13 @@ impl InlineLLVMArrayGetBody {
 // Implementation of Array::get built-in function.
 fn get_array_body(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
-    let array_str = FullName::local(array);
-    let idx_str = FullName::local(idx);
-    let name = format!("Array::@({}, {})", idx, array);
-    let free_vars = vec![array_str.clone(), idx_str.clone()];
+
+    let arr_name = FullName::local(array);
+    let idx_name = FullName::local(idx);
+
+    let name = format!("LLVM<Array::@({}, {})>", idx, array);
     expr_llvm(
-        LLVMGenerator::ArrayGetBody(InlineLLVMArrayGetBody {
-            arr_name: array_str.clone(),
-            idx_name: idx_str.clone(),
-        }),
-        free_vars,
+        LLVMGenerator::ArrayGetBody(InlineLLVMArrayGetBody { arr_name, idx_name }),
         name,
         elem_ty,
         None,
@@ -1944,6 +1975,14 @@ pub struct InlineLLVMArraySetBody {
 }
 
 impl InlineLLVMArraySetBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![
+            self.array_name.clone(),
+            self.idx_name.clone(),
+            self.value_name.clone(),
+        ]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -1970,19 +2009,20 @@ impl InlineLLVMArraySetBody {
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
 fn set_array_body(a: &str, array: &str, idx: &str, value: &str) -> Arc<ExprNode> {
     let elem_ty = type_tyvar_star(a);
+
     let array_str = FullName::local(array);
     let idx_str = FullName::local(idx);
     let value_str = FullName::local(value);
+
     let func_name = "set";
-    let name = format!("{} {} {} {}", func_name, idx, value, array);
-    let free_vars = vec![array_str.clone(), idx_str.clone(), value_str.clone()];
+    let name = format!("LLVM<{}({}, {}, {})>", func_name, idx, value, array);
+
     expr_llvm(
         LLVMGenerator::ArraySetBody(InlineLLVMArraySetBody {
             array_name: array_str,
             idx_name: idx_str,
             value_name: value_str,
         }),
-        free_vars,
         name,
         type_tyapp(make_array_ty(), elem_ty),
         None,
@@ -2024,12 +2064,20 @@ pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayModBody {
-    array_name: String,
-    idx_name: String,
-    modifier_name: String,
+    array_name: FullName,
+    idx_name: FullName,
+    modifier_name: FullName,
 }
 
 impl InlineLLVMArrayModBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![
+            self.array_name.clone(),
+            self.idx_name.clone(),
+            self.modifier_name.clone(),
+        ]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -2037,14 +2085,9 @@ impl InlineLLVMArrayModBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var(&FullName::local(&self.array_name)).ptr.get(gc);
-        let idx = gc
-            .get_var_field(&FullName::local(&self.idx_name), 0)
-            .into_int_value();
-        let modifier = gc
-            .get_var(&FullName::local(&self.modifier_name))
-            .ptr
-            .get(gc);
+        let array = gc.get_var(&self.array_name).ptr.get(gc);
+        let idx = gc.get_var_field(&self.idx_name, 0).into_int_value();
+        let modifier = gc.get_var(&self.modifier_name).ptr.get(gc);
 
         // Make array unique
         let array = make_array_unique(gc, array, false);
@@ -2087,17 +2130,12 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
                 vec![var_local(MODIFIED_ARRAY_NAME)],
                 expr_llvm(
                     LLVMGenerator::ArrayModBody(InlineLLVMArrayModBody {
-                        array_name: MODIFIED_ARRAY_NAME.to_string(),
-                        idx_name: INDEX_NAME.to_string(),
-                        modifier_name: MODIFIER_NAME.to_string(),
+                        array_name: FullName::local(MODIFIED_ARRAY_NAME),
+                        idx_name: FullName::local(INDEX_NAME),
+                        modifier_name: FullName::local(MODIFIER_NAME),
                     }),
-                    vec![
-                        FullName::local(INDEX_NAME),
-                        FullName::local(MODIFIER_NAME),
-                        FullName::local(MODIFIED_ARRAY_NAME),
-                    ],
                     format!(
-                        "{}.mod{}({}, {})",
+                        "LLVM<{}.mod{}({}, {})>",
                         MODIFIED_ARRAY_NAME,
                         if is_unique_version { "!" } else { "" },
                         INDEX_NAME,
@@ -2129,10 +2167,14 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayForceUniqueBody {
-    arr_name: String,
+    arr_name: FullName,
 }
 
 impl InlineLLVMArrayForceUniqueBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.arr_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -2140,7 +2182,7 @@ impl InlineLLVMArrayForceUniqueBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var(&FullName::local(&self.arr_name)).ptr.get(gc);
+        let array = gc.get_var(&self.arr_name).ptr.get(gc);
 
         // Make array unique
         let array = make_array_unique(gc, array, false);
@@ -2160,9 +2202,8 @@ pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ARR_NAME)],
         expr_llvm(
             LLVMGenerator::ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody {
-                arr_name: ARR_NAME.to_string(),
+                arr_name: FullName::local(ARR_NAME),
             }),
-            vec![FullName::local(ARR_NAME)],
             format!("{}.force_unique", ARR_NAME,),
             array_ty.clone(),
             None,
@@ -2175,20 +2216,22 @@ pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGetPtrBody {
-    arr_name: String,
+    arr_name: FullName,
 }
 
 impl InlineLLVMArrayGetPtrBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.arr_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argment
-        let arr_name = FullName::local(&self.arr_name);
-        let array = gc.get_var(&arr_name).ptr.get(gc);
+        let array = gc.get_var(&self.arr_name).ptr.get(gc);
 
         // Get pointer
         let ptr = array.gep_boxed(gc, ARRAY_BUF_IDX);
@@ -2198,7 +2241,7 @@ impl InlineLLVMArrayGetPtrBody {
         let ptr = gc.cast_pointer(ptr, ptr_ty);
 
         // Release array
-        if !borrowed_vars.contains(&arr_name) {
+        if !borrowed_vars.contains(&self.arr_name) {
             gc.release(array);
         }
 
@@ -2214,7 +2257,7 @@ impl InlineLLVMArrayGetPtrBody {
     }
 
     pub fn released_vars(&self) -> Vec<FullName> {
-        vec![FullName::local(&self.arr_name)]
+        vec![self.arr_name.clone()]
     }
 }
 
@@ -2230,9 +2273,8 @@ pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ARR_NAME)],
         expr_llvm(
             LLVMGenerator::ArrayGetPtrBody(InlineLLVMArrayGetPtrBody {
-                arr_name: ARR_NAME.to_string(),
+                arr_name: FullName::local(ARR_NAME),
             }),
-            vec![FullName::local(ARR_NAME)],
             format!("{}.get_ptr", ARR_NAME,),
             make_ptr_ty(),
             None,
@@ -2250,22 +2292,24 @@ pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGetSizeBody {
-    arr_name: String,
+    arr_name: FullName,
 }
 
 impl InlineLLVMArrayGetSizeBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.arr_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let arr_name = FullName::local(&self.arr_name);
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
-        let array_obj = gc.get_var(&arr_name).ptr.get(gc);
+        let array_obj = gc.get_var(&self.arr_name).ptr.get(gc);
         let len = array_obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        if !borrowed_vars.contains(&arr_name) {
+        if !borrowed_vars.contains(&self.arr_name) {
             gc.release(array_obj);
         }
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"));
@@ -2273,7 +2317,7 @@ impl InlineLLVMArrayGetSizeBody {
     }
 
     pub fn released_vars(&self) -> Vec<FullName> {
-        vec![FullName::local(&self.arr_name)]
+        vec![self.arr_name.clone()]
     }
 }
 
@@ -2285,9 +2329,8 @@ pub fn get_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ARR_NAME)],
         expr_llvm(
             LLVMGenerator::ArrayGetSizeBody(InlineLLVMArrayGetSizeBody {
-                arr_name: ARR_NAME.to_string(),
+                arr_name: FullName::local(ARR_NAME),
             }),
-            vec![FullName::local(ARR_NAME)],
             "len arr".to_string(),
             make_i64_ty(),
             None,
@@ -2301,24 +2344,25 @@ pub fn get_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGetCapacityBody {
-    arr_name: String,
+    arr_name: FullName,
 }
 
 impl InlineLLVMArrayGetCapacityBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.arr_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let arr_name = FullName::local(&self.arr_name);
-
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
-        let array_obj = gc.get_var(&arr_name).ptr.get(gc);
+        let array_obj = gc.get_var(&self.arr_name).ptr.get(gc);
         let len = array_obj.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
 
-        if !borrowed_vars.contains(&arr_name) {
+        if !borrowed_vars.contains(&self.arr_name) {
             gc.release(array_obj);
         }
 
@@ -2327,7 +2371,7 @@ impl InlineLLVMArrayGetCapacityBody {
     }
 
     pub fn released_vars(&self) -> Vec<FullName> {
-        vec![FullName::local(&self.arr_name)]
+        vec![self.arr_name.clone()]
     }
 }
 
@@ -2339,9 +2383,8 @@ pub fn get_capacity_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ARR_NAME)],
         expr_llvm(
             LLVMGenerator::ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody {
-                arr_name: ARR_NAME.to_string(),
+                arr_name: FullName::local(ARR_NAME),
             }),
-            vec![FullName::local(ARR_NAME)],
             "arr.get_capacity".to_string(),
             make_i64_ty(),
             None,
@@ -2360,6 +2403,10 @@ pub struct InlineLLVMStructGetBody {
 }
 
 impl InlineLLVMStructGetBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -2381,7 +2428,6 @@ pub fn struct_get_body(
     field_name: &str,
 ) -> Arc<ExprNode> {
     let var_name_clone = FullName::local(var_name);
-    let free_vars = vec![FullName::local(var_name)];
     let name = format!(
         "LLVM<{}::@{}({})>",
         struct_name.to_string(),
@@ -2393,7 +2439,6 @@ pub fn struct_get_body(
             var_name: var_name_clone,
             field_idx,
         }),
-        free_vars,
         name,
         field_ty,
         None,
@@ -2434,6 +2479,10 @@ pub struct InlineLLVMStructPunchBody {
 }
 
 impl InlineLLVMStructPunchBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -2492,7 +2541,6 @@ pub fn struct_punch(
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
             }),
-            vec![FullName::local(VAR_NAME)],
             format!(
                 "{}::{}{}({})",
                 struct_name.to_string(),
@@ -2516,6 +2564,10 @@ pub struct InlineLLVMStructPlugInBody {
 }
 
 impl InlineLLVMStructPlugInBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.punched_str_name.clone(), self.field_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -2570,10 +2622,6 @@ pub fn struct_plug_in(
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
                 }),
-                vec![
-                    FullName::local(PUNCHED_STR_NAME),
-                    FullName::local(FIELD_NAME),
-                ],
                 format!(
                     "{}::{}{}({}, {})",
                     struct_name.to_string(),
@@ -2601,6 +2649,10 @@ pub struct InlineLLVMStructModBody {
 }
 
 impl InlineLLVMStructModBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.f_name.clone(), self.x_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -2647,7 +2699,6 @@ pub fn struct_mod_body(
             field_idx,
             field_count,
         }),
-        free_vars,
         name,
         struct_defn.applied_type(),
         None,
@@ -2948,13 +2999,17 @@ fn make_struct_union_unique<'c, 'm>(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructSetBody {
-    value_name: String,
-    struct_name: String,
+    value_name: FullName,
+    struct_name: FullName,
     field_count: u32,
     field_idx: u32,
 }
 
 impl InlineLLVMStructSetBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.value_name.clone(), self.struct_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -2962,8 +3017,8 @@ impl InlineLLVMStructSetBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
-        let value = gc.get_var(&FullName::local(&self.value_name)).ptr.get(gc);
-        let str = gc.get_var(&FullName::local(&self.struct_name)).ptr.get(gc);
+        let value = gc.get_var(&self.value_name).ptr.get(gc);
+        let str = gc.get_var(&self.struct_name).ptr.get(gc);
 
         // Make struct object unique.
         let str = make_struct_unique(gc, str);
@@ -2997,12 +3052,11 @@ pub fn struct_set(
             vec![var_local(STRUCT_NAME)],
             expr_llvm(
                 LLVMGenerator::StructSetBody(InlineLLVMStructSetBody {
-                    value_name: VALUE_NAME.to_string(),
-                    struct_name: STRUCT_NAME.to_string(),
+                    value_name: FullName::local(VALUE_NAME),
+                    struct_name: FullName::local(STRUCT_NAME),
                     field_count,
                     field_idx,
                 }),
-                vec![FullName::local(VALUE_NAME), FullName::local(STRUCT_NAME)],
                 format!(
                     "{}.{}{}({})",
                     STRUCT_NAME, STRUCT_SETTER_SYMBOL, field_name, VALUE_NAME
@@ -3023,12 +3077,16 @@ pub fn struct_set(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMakeUnionBody {
-    field_name: String,
+    field_name: FullName,
     generated_union_name: String,
     field_idx: usize,
 }
 
 impl InlineLLVMMakeUnionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.field_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3036,7 +3094,7 @@ impl InlineLLVMMakeUnionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get field values.
-        let field = gc.get_var(&FullName::local(&self.field_name)).ptr.get(gc);
+        let field = gc.get_var(&self.field_name).ptr.get(gc);
 
         // Create union object.
         let obj = create_obj(
@@ -3066,17 +3124,15 @@ pub fn union_new_body(
     field_name: &Name,
     field_idx: usize,
 ) -> Arc<ExprNode> {
-    let free_vars = vec![FullName::local(field_name)];
     let name = format!("{}.new_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
-    let field_name_cloned = field_name.clone();
+    let field_name_cloned = FullName::local(field_name);
     expr_llvm(
         LLVMGenerator::MakeUnionBody(InlineLLVMMakeUnionBody {
             field_name: field_name_cloned,
             generated_union_name: name_cloned,
             field_idx,
         }),
-        free_vars,
         name,
         union_defn.applied_type(),
         None,
@@ -3140,11 +3196,15 @@ pub fn union_as(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionAsBody {
-    union_arg_name: String,
+    union_arg_name: FullName,
     field_idx: usize,
 }
 
 impl InlineLLVMUnionAsBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.union_arg_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3152,10 +3212,7 @@ impl InlineLLVMUnionAsBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
-        let obj = gc
-            .get_var(&FullName::local(&self.union_arg_name))
-            .ptr
-            .get(gc);
+        let obj = gc.get_var(&self.union_arg_name).ptr.get(gc);
 
         let elem_ty = ty.clone();
 
@@ -3182,14 +3239,12 @@ pub fn union_as_body(
     field_ty: Arc<TypeNode>,
 ) -> Arc<ExprNode> {
     let name = format!("{}.as_{}", union_name.to_string(), field_name);
-    let free_vars = vec![FullName::local(union_arg_name)];
-    let union_arg_name = union_arg_name.clone();
+    let union_arg_name = FullName::local(union_arg_name);
     expr_llvm(
         LLVMGenerator::UnionAsBody(InlineLLVMUnionAsBody {
             union_arg_name,
             field_idx,
         }),
-        free_vars,
         name,
         field_ty,
         None,
@@ -3222,12 +3277,16 @@ pub fn union_is(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionIsBody {
-    union_arg_name: String,
+    union_arg_name: FullName,
     field_idx: usize,
     name_cloned: String,
 }
 
 impl InlineLLVMUnionIsBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.union_arg_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3235,10 +3294,7 @@ impl InlineLLVMUnionIsBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
-        let obj = gc
-            .get_var(&FullName::local(&self.union_arg_name))
-            .ptr
-            .get(gc);
+        let obj = gc.get_var(&self.union_arg_name).ptr.get(gc);
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
@@ -3292,15 +3348,12 @@ pub fn union_is_body(
 ) -> Arc<ExprNode> {
     let name = format!("{}.is_{}", union_name.to_string(), field_name);
     let name_cloned = name.clone();
-    let free_vars = vec![FullName::local(union_arg_name)];
-    let union_arg_name = union_arg_name.clone();
     expr_llvm(
         LLVMGenerator::UnionIsBody(InlineLLVMUnionIsBody {
-            union_arg_name,
+            union_arg_name: FullName::local(union_arg_name),
             field_idx,
             name_cloned,
         }),
-        free_vars,
         name,
         make_bool_ty(),
         None,
@@ -3309,12 +3362,16 @@ pub fn union_is_body(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnionModBody {
-    union_name: String,
-    modifier_name: String,
+    union_name: FullName,
+    modifier_name: FullName,
     field_idx: u32,
 }
 
 impl InlineLLVMUnionModBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.union_name.clone(), self.modifier_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3322,11 +3379,8 @@ impl InlineLLVMUnionModBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
-        let obj = gc.get_var(&FullName::local(&self.union_name)).ptr.get(gc);
-        let modifier = gc
-            .get_var(&FullName::local(&self.modifier_name))
-            .ptr
-            .get(gc);
+        let obj = gc.get_var(&self.union_name).ptr.get(gc);
+        let modifier = gc.get_var(&self.modifier_name).ptr.get(gc);
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
@@ -3410,11 +3464,10 @@ pub fn union_mod_function(
             vec![var_local(UNION_NAME)],
             expr_llvm(
                 LLVMGenerator::UnionModBody(InlineLLVMUnionModBody {
-                    union_name: UNION_NAME.to_string(),
-                    modifier_name: MODIFIER_NAME.to_string(),
+                    union_name: FullName::local(UNION_NAME),
+                    modifier_name: FullName::local(MODIFIER_NAME),
                     field_idx,
                 }),
-                vec![FullName::local(MODIFIER_NAME), FullName::local(UNION_NAME)],
                 format!("mod_{}({}, {})", field_name, MODIFIER_NAME, UNION_NAME),
                 union_ty.clone(),
                 None,
@@ -3434,11 +3487,15 @@ pub fn union_mod_function(
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUndefinedFunctionBody {}
-
-const UNDEFINED_ARG_NAME: &str = "msg";
+pub struct InlineLLVMUndefinedFunctionBody {
+    msg_name: FullName,
+}
 
 impl InlineLLVMUndefinedFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.msg_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3446,7 +3503,7 @@ impl InlineLLVMUndefinedFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the first argument.
-        let msg = gc.get_var(&FullName::local(UNDEFINED_ARG_NAME)).ptr.get(gc);
+        let msg = gc.get_var(&self.msg_name).ptr.get(gc);
 
         // Get the pointer to the message.
         let str = ObjectFieldType::move_out_struct_field(gc, &msg, 0);
@@ -3477,11 +3534,14 @@ impl InlineLLVMUndefinedFunctionBody {
 // `undefined` built-in function
 pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
+    const UNDEFINED_ARG_NAME: &str = "msg";
+
     let expr = expr_abs(
         vec![var_local(UNDEFINED_ARG_NAME)],
         expr_llvm(
-            LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody {}),
-            vec![FullName::local(UNDEFINED_ARG_NAME)],
+            LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody {
+                msg_name: FullName::local(UNDEFINED_ARG_NAME),
+            }),
             "undefined(msg)".to_string(),
             type_tyvar_star(A_NAME),
             None,
@@ -3498,12 +3558,16 @@ pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMWithRetainedFunctionBody {}
-
-const WITH_RETAINED_F_ARG_NAME: &str = "f";
-const WITH_RETAINED_X_ARG_NAME: &str = "x";
+pub struct InlineLLVMWithRetainedFunctionBody {
+    f_name: FullName,
+    x_name: FullName,
+}
 
 impl InlineLLVMWithRetainedFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.f_name.clone(), self.x_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3511,16 +3575,10 @@ impl InlineLLVMWithRetainedFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the argument "f".
-        let f = gc
-            .get_var(&FullName::local(WITH_RETAINED_F_ARG_NAME))
-            .ptr
-            .get(gc);
+        let f = gc.get_var(&self.f_name).ptr.get(gc);
 
         // Get the argument "x".
-        let x = gc
-            .get_var(&FullName::local(WITH_RETAINED_X_ARG_NAME))
-            .ptr
-            .get(gc);
+        let x = gc.get_var(&self.x_name).ptr.get(gc);
 
         // Retain "x".
         gc.retain(x.clone());
@@ -3540,16 +3598,19 @@ impl InlineLLVMWithRetainedFunctionBody {
 pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
     const B_NAME: &str = "b";
+
+    const WITH_RETAINED_F_ARG_NAME: &str = "f";
+    const WITH_RETAINED_X_ARG_NAME: &str = "x";
+
     let expr = expr_abs(
         vec![var_local(WITH_RETAINED_F_ARG_NAME)],
         expr_abs(
             vec![var_local(WITH_RETAINED_X_ARG_NAME)],
             expr_llvm(
-                LLVMGenerator::WithRetainedFunctionBody(InlineLLVMWithRetainedFunctionBody {}),
-                vec![
-                    FullName::local(WITH_RETAINED_F_ARG_NAME),
-                    FullName::local(WITH_RETAINED_X_ARG_NAME),
-                ],
+                LLVMGenerator::WithRetainedFunctionBody(InlineLLVMWithRetainedFunctionBody {
+                    f_name: FullName::local(WITH_RETAINED_F_ARG_NAME),
+                    x_name: FullName::local(WITH_RETAINED_X_ARG_NAME),
+                }),
                 "with_retained(f, x)".to_string(),
                 type_tyvar_star(B_NAME),
                 None,
@@ -3572,10 +3633,14 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIsUniqueFunctionBody {
-    var_name: String,
+    var_name: FullName,
 }
 
 impl InlineLLVMIsUniqueFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3587,7 +3652,7 @@ impl InlineLLVMIsUniqueFunctionBody {
             .into_int_type();
 
         // Get argument
-        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        let obj = gc.get_var(&self.var_name).ptr.get(gc);
 
         // Prepare returned object.
         let ret = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
@@ -3654,9 +3719,8 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_llvm(
             LLVMGenerator::IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody {
-                var_name: VAR_NAME.to_string(),
+                var_name: FullName::local(VAR_NAME),
             }),
-            vec![FullName::local(VAR_NAME)],
             format!("is_unique({})", VAR_NAME),
             ret_type,
             None,
@@ -3668,10 +3732,14 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
-    var_name: String,
+    var_name: FullName,
 }
 
 impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3679,7 +3747,7 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        let obj = gc.get_var(&self.var_name).ptr.get(gc);
         assert!(obj.is_box(gc.type_env()));
 
         let ptr = obj.value;
@@ -3711,10 +3779,9 @@ pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>
         expr_llvm(
             LLVMGenerator::GetRetainedPtrOfBoxedValueFunctionBody(
                 InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
-                    var_name: VAR_NAME.to_string(),
+                    var_name: FullName::local(VAR_NAME),
                 },
             ),
-            vec![FullName::local(VAR_NAME)],
             format!("boxed_to_retained_ptr({})", VAR_NAME),
             ret_type,
             None,
@@ -3726,10 +3793,14 @@ pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
-    var_name: String,
+    var_name: FullName,
 }
 
 impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3738,7 +3809,7 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
     ) -> Object<'c> {
         assert!(ret_ty.is_box(gc.type_env()));
         // Get argument.
-        let ptr = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        let ptr = gc.get_var(&self.var_name).ptr.get(gc);
         let ptr = ptr.extract_field(gc, 0);
         Object::new(ptr, ret_ty.clone(), gc)
     }
@@ -3760,10 +3831,9 @@ pub fn get_boxed_value_from_retained_ptr_function() -> (Arc<ExprNode>, Arc<Schem
         expr_llvm(
             LLVMGenerator::GetBoxedValueFromRetainedPtrFunctionBody(
                 InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
-                    var_name: VAR_NAME.to_string(),
+                    var_name: FullName::local(VAR_NAME),
                 },
             ),
-            vec![FullName::local(VAR_NAME)],
             format!("boxed_from_retained_ptr_function({})", VAR_NAME),
             obj_type,
             None,
@@ -3775,10 +3845,14 @@ pub fn get_boxed_value_from_retained_ptr_function() -> (Arc<ExprNode>, Arc<Schem
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
-    var_name: String,
+    var_name: FullName,
 }
 
 impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3786,7 +3860,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let arg = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        let arg = gc.get_var(&self.var_name).ptr.get(gc);
         gc.release(arg.clone());
 
         // Get the target type.
@@ -3856,10 +3930,9 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_llvm(
             LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(
                 InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
-                    var_name: VAR_NAME.to_string(),
+                    var_name: FullName::local(VAR_NAME),
                 },
             ),
-            vec![FullName::local(VAR_NAME)],
             format!("get_funptr_release({})", VAR_NAME),
             ret_type,
             None,
@@ -3871,10 +3944,14 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
-    var_name: String,
+    var_name: FullName,
 }
 
 impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3882,7 +3959,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let arg = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        let arg = gc.get_var(&self.var_name).ptr.get(gc);
         gc.release(arg.clone());
 
         // Get the target type.
@@ -3951,10 +4028,9 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_llvm(
             LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(
                 InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
-                    var_name: VAR_NAME.to_string(),
+                    var_name: FullName::local(VAR_NAME),
                 },
             ),
-            vec![FullName::local(VAR_NAME)],
             format!("get_funptr_retain({})", VAR_NAME),
             ret_type,
             None,
@@ -3966,10 +4042,14 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
-    var_name: String,
+    var_name: FullName,
 }
 
 impl InlineLLVMGetBoxedDataPtrFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -3977,7 +4057,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument.
-        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        let obj = gc.get_var(&self.var_name).ptr.get(gc);
         assert!(obj.ty.is_box(gc.type_env()));
 
         // Get data pointer.
@@ -4035,9 +4115,8 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_llvm(
             LLVMGenerator::GetBoxedDataPtrFunctionBody(InlineLLVMGetBoxedDataPtrFunctionBody {
-                var_name: VAR_NAME.to_string(),
+                var_name: FullName::local(VAR_NAME),
             }),
-            vec![FullName::local(VAR_NAME)],
             format!("_get_boxed_ptr({})", VAR_NAME),
             ret_type,
             None,
@@ -4049,11 +4128,15 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedDataFunctionBody {
-    val_name: String,
-    io_act_name: String,
+    val_name: FullName,
+    io_act_name: FullName,
 }
 
 impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.val_name.clone(), self.io_act_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -4061,8 +4144,8 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
-        let io_act = gc.get_var(&FullName::local(&self.io_act_name)).ptr.get(gc);
-        let val = gc.get_var(&FullName::local(&self.val_name)).ptr.get(gc);
+        let io_act = gc.get_var(&self.io_act_name).ptr.get(gc);
+        let val = gc.get_var(&self.val_name).ptr.get(gc);
 
         // If `val` is not boxed, error.
         assert!(val.is_box(gc.type_env()));
@@ -4118,11 +4201,10 @@ pub fn get_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
             expr_llvm(
                 LLVMGenerator::UnsafeMutateBoxedDataFunctionBody(
                     InlineLLVMUnsafeMutateBoxedDataFunctionBody {
-                        val_name: VAL_NAME.to_string(),
-                        io_act_name: IO_ACT_NAME.to_string(),
+                        val_name: FullName::local(VAL_NAME),
+                        io_act_name: FullName::local(IO_ACT_NAME),
                     },
                 ),
-                vec![FullName::local(VAL_NAME), FullName::local(IO_ACT_NAME)],
                 format!("mutate_boxed({})", VAL_NAME),
                 res_ty,
                 None,
@@ -4136,12 +4218,20 @@ pub fn get_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
-    val_name: String,
-    io_act_name: String,
-    iostate_name: String,
+    val_name: FullName,
+    io_act_name: FullName,
+    iostate_name: FullName,
 }
 
 impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![
+            self.val_name.clone(),
+            self.io_act_name.clone(),
+            self.iostate_name.clone(),
+        ]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -4149,9 +4239,9 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
-        let io_act = gc.get_var(&FullName::local(&self.io_act_name)).ptr.get(gc);
-        let val = gc.get_var(&FullName::local(&self.val_name)).ptr.get(gc);
-        let ios = gc.get_var(&FullName::local(&self.iostate_name)).ptr.get(gc);
+        let io_act = gc.get_var(&self.io_act_name).ptr.get(gc);
+        let val = gc.get_var(&self.val_name).ptr.get(gc);
+        let ios = gc.get_var(&self.iostate_name).ptr.get(gc);
 
         // If `val` is not boxed, error.
         assert!(val.is_box(gc.type_env()));
@@ -4221,16 +4311,11 @@ pub fn get_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_llvm(
             LLVMGenerator::UnsafeMutateBoxedDataIOStateFunctionBody(
                 InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
-                    io_act_name: IO_ACT_NAME.to_string(),
-                    val_name: VAL_NAME.to_string(),
-                    iostate_name: IOSTATE_NAME.to_string(),
+                    io_act_name: FullName::local(IO_ACT_NAME),
+                    val_name: FullName::local(VAL_NAME),
+                    iostate_name: FullName::local(IOSTATE_NAME),
                 },
             ),
-            vec![
-                FullName::local(IO_ACT_NAME),
-                FullName::local(VAL_NAME),
-                FullName::local(IOSTATE_NAME),
-            ],
             format!(
                 "mutate_boxed_ios({}, {}, {})",
                 IO_ACT_NAME, VAL_NAME, IOSTATE_NAME
@@ -4244,10 +4329,14 @@ pub fn get_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMUnsafePerformFunctionBody {
-    io_act_name: String,
+    io_act_name: FullName,
 }
 
 impl InlineLLVMUnsafePerformFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.io_act_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -4255,7 +4344,7 @@ impl InlineLLVMUnsafePerformFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
-        let io_act = gc.get_var(&FullName::local(&self.io_act_name)).ptr.get(gc);
+        let io_act = gc.get_var(&self.io_act_name).ptr.get(gc);
 
         // Run the IO action.
         run_io_value(gc, &io_act)
@@ -4273,9 +4362,8 @@ pub fn get_unsafe_perform() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(IO_ACT_NAME)],
         expr_llvm(
             LLVMGenerator::UnsafePerformFunctionBody(InlineLLVMUnsafePerformFunctionBody {
-                io_act_name: IO_ACT_NAME.to_string(),
+                io_act_name: FullName::local(IO_ACT_NAME),
             }),
-            vec![FullName::local(IO_ACT_NAME)],
             format!("unsafe_perform({})", IO_ACT_NAME,),
             val_ty,
             None,
@@ -4303,10 +4391,14 @@ pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMarkThreadedFunctionBody {
-    var_name: String,
+    var_name: FullName,
 }
 
 impl InlineLLVMMarkThreadedFunctionBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.var_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -4320,7 +4412,7 @@ impl InlineLLVMMarkThreadedFunctionBody {
             );
         }
 
-        let obj = gc.get_var(&FullName::local(&self.var_name)).ptr.get(gc);
+        let obj = gc.get_var(&self.var_name).ptr.get(gc);
         gc.mark_threaded(obj.clone());
         obj
     }
@@ -4340,9 +4432,8 @@ pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(VAR_NAME)],
         expr_llvm(
             LLVMGenerator::MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody {
-                var_name: VAR_NAME.to_string(),
+                var_name: FullName::local(VAR_NAME),
             }),
-            vec![FullName::local(VAR_NAME)],
             format!("mark_threaded({})", VAR_NAME),
             obj_type,
             None,
@@ -4357,7 +4448,6 @@ pub fn infinity_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let ty = make_floating_ty(type_name).unwrap();
     let expr = expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: f64::INFINITY }),
-        vec![],
         format!("infinity_{}", type_name),
         ty.clone(),
         None,
@@ -4374,7 +4464,6 @@ pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let ty = make_floating_ty(type_name).unwrap();
     let expr = expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: nan_val }),
-        vec![],
         format!("quiet_nan_{}", type_name),
         ty.clone(),
         None,
@@ -4403,13 +4492,7 @@ pub fn unary_opeartor_instance(
             method_name.to_string(),
             expr_abs(
                 vec![var_local(UNARY_OPERATOR_RHS_NAME)],
-                expr_llvm(
-                    generator,
-                    vec![FullName::local(UNARY_OPERATOR_RHS_NAME)],
-                    method_name.to_string(),
-                    result_ty,
-                    None,
-                ),
+                expr_llvm(generator, method_name.to_string(), result_ty, None),
                 None,
             ),
         )]),
@@ -4443,16 +4526,7 @@ pub fn binary_opeartor_instance(
                 vec![var_local(BINARY_OPERATOR_LHS_NAME)],
                 expr_abs(
                     vec![var_local(BINARY_OPERATOR_RHS_NAME)],
-                    expr_llvm(
-                        generator,
-                        vec![
-                            FullName::local(BINARY_OPERATOR_LHS_NAME),
-                            FullName::local(BINARY_OPERATOR_RHS_NAME),
-                        ],
-                        method_name.to_string(),
-                        result_ty,
-                        None,
-                    ),
+                    expr_llvm(generator, method_name.to_string(), result_ty, None),
                     None,
                 ),
                 None,
@@ -4475,19 +4549,24 @@ pub fn eq_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntEqBody {}
+pub struct InlineLLVMIntEqBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntEqBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
-        let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_obj = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs_obj = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         gc.release(lhs_obj);
         let rhs_val = rhs_obj.extract_field(gc, 0).into_int_value();
@@ -4519,25 +4598,32 @@ pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::IntEqBody(InlineLLVMIntEqBody {}),
+        LLVMGenerator::IntEqBody(InlineLLVMIntEqBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMPtrEqBody {}
+pub struct InlineLLVMPtrEqBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMPtrEqBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
-        let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_obj = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs_obj = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_pointer_value();
         gc.release(lhs_obj);
         let rhs_val = rhs_obj.extract_field(gc, 0).into_pointer_value();
@@ -4575,25 +4661,32 @@ pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitInstance {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::PtrEqBody(InlineLLVMPtrEqBody {}),
+        LLVMGenerator::PtrEqBody(InlineLLVMPtrEqBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatEqBody {}
+pub struct InlineLLVMFloatEqBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMFloatEqBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
-        let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_obj = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs_obj = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_float_value();
         gc.release(lhs_obj);
         let rhs_val = rhs_obj.extract_field(gc, 0).into_float_value();
@@ -4628,7 +4721,10 @@ pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::FloatEqBody(InlineLLVMFloatEqBody {}),
+        LLVMGenerator::FloatEqBody(InlineLLVMFloatEqBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -4642,20 +4738,24 @@ pub fn less_than_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntLessThanBody {}
+pub struct InlineLLVMIntLessThanBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntLessThanBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs_obj = gc.get_var(&lhs).ptr.get(gc);
-        let rhs_obj = gc.get_var(&rhs).ptr.get(gc);
+        let lhs_obj = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs_obj = gc.get_var(&self.rhs_name).ptr.get(gc);
         let is_singed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         gc.release(lhs_obj);
@@ -4695,14 +4795,24 @@ pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::IntLessThanBody(InlineLLVMIntLessThanBody {}),
+        LLVMGenerator::IntLessThanBody(InlineLLVMIntLessThanBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatLessThanBody {}
+pub struct InlineLLVMFloatLessThanBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMFloatLessThanBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -4710,10 +4820,8 @@ impl InlineLLVMFloatLessThanBody {
 
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
@@ -4748,7 +4856,10 @@ pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::FloatLessThanBody(InlineLLVMFloatLessThanBody {}),
+        LLVMGenerator::FloatLessThanBody(InlineLLVMFloatLessThanBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -4762,20 +4873,24 @@ pub fn less_than_or_equal_to_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntLessThanOrEqBody {}
+pub struct InlineLLVMIntLessThanOrEqBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntLessThanOrEqBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -4816,25 +4931,32 @@ pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitInsta
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::IntLessThanOrEqBody(InlineLLVMIntLessThanOrEqBody {}),
+        LLVMGenerator::IntLessThanOrEqBody(InlineLLVMIntLessThanOrEqBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatLessThanOrEqBody {}
+pub struct InlineLLVMFloatLessThanOrEqBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMFloatLessThanOrEqBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
@@ -4869,7 +4991,10 @@ pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitIns
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::FloatLessThanOrEqBody(InlineLLVMFloatLessThanOrEqBody {}),
+        LLVMGenerator::FloatLessThanOrEqBody(InlineLLVMFloatLessThanOrEqBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -4883,20 +5008,24 @@ pub fn add_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntAddBody {}
+pub struct InlineLLVMIntAddBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntAddBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
@@ -4921,24 +5050,32 @@ pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
         &ADD_TRAIT_ADD_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntAddBody(InlineLLVMIntAddBody {}),
+        LLVMGenerator::IntAddBody(InlineLLVMIntAddBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatAddBody {}
+pub struct InlineLLVMFloatAddBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMFloatAddBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
@@ -4963,7 +5100,10 @@ pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
         &ADD_TRAIT_ADD_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatAddBody(InlineLLVMFloatAddBody {}),
+        LLVMGenerator::FloatAddBody(InlineLLVMFloatAddBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -4977,20 +5117,24 @@ pub fn subtract_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntSubBody {}
+pub struct InlineLLVMIntSubBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntSubBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
@@ -5015,25 +5159,32 @@ pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntSubBody(InlineLLVMIntSubBody {}),
+        LLVMGenerator::IntSubBody(InlineLLVMIntSubBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatSubBody {}
+pub struct InlineLLVMFloatSubBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMFloatSubBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
@@ -5058,7 +5209,10 @@ pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatSubBody(InlineLLVMFloatSubBody {}),
+        LLVMGenerator::FloatSubBody(InlineLLVMFloatSubBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -5072,20 +5226,26 @@ pub fn multiply_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntMulBody {}
+pub struct InlineLLVMIntMulBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntMulBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
         let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
@@ -5110,25 +5270,32 @@ pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntMulBody(InlineLLVMIntMulBody {}),
+        LLVMGenerator::IntMulBody(InlineLLVMIntMulBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatMulBody {}
+pub struct InlineLLVMFloatMulBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMFloatMulBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
@@ -5153,7 +5320,10 @@ pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatMulBody(InlineLLVMFloatMulBody {}),
+        LLVMGenerator::FloatMulBody(InlineLLVMFloatMulBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -5167,20 +5337,24 @@ pub fn divide_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntDivBody {}
+pub struct InlineLLVMIntDivBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntDivBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -5211,25 +5385,32 @@ pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntDivBody(InlineLLVMIntDivBody {}),
+        LLVMGenerator::IntDivBody(InlineLLVMIntDivBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatDivBody {}
+pub struct InlineLLVMFloatDivBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMFloatDivBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
@@ -5254,7 +5435,10 @@ pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatDivBody(InlineLLVMFloatDivBody {}),
+        LLVMGenerator::FloatDivBody(InlineLLVMFloatDivBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -5268,19 +5452,24 @@ pub fn remainder_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntRemBody {}
+pub struct InlineLLVMIntRemBody {
+    lhs_name: FullName,
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntRemBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
-        let lhs = gc.get_var(&lhs).ptr.get(gc);
-        let rhs = gc.get_var(&rhs).ptr.get(gc);
+        let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -5311,7 +5500,10 @@ pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntRemBody(InlineLLVMIntRemBody {}),
+        LLVMGenerator::IntRemBody(InlineLLVMIntRemBody {
+            lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
+            rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -5325,18 +5517,22 @@ pub fn negate_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntNegBody {}
+pub struct InlineLLVMIntNegBody {
+    rhs_name: FullName,
+}
 
 impl InlineLLVMIntNegBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
-        let rhs = gc.get_var(&rhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs.clone());
         let value = gc
@@ -5359,23 +5555,29 @@ pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntNegBody(InlineLLVMIntNegBody {}),
+        LLVMGenerator::IntNegBody(InlineLLVMIntNegBody {
+            rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatNegBody {}
+pub struct InlineLLVMFloatNegBody {
+    rhs_name: FullName,
+}
 
 impl InlineLLVMFloatNegBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
-        let rhs = gc.get_var(&rhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         gc.release(rhs.clone());
         let value = gc
@@ -5398,7 +5600,9 @@ pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatNegBody(InlineLLVMFloatNegBody {}),
+        LLVMGenerator::FloatNegBody(InlineLLVMFloatNegBody {
+            rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 
@@ -5412,9 +5616,15 @@ pub fn not_trait_id() -> Trait {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBoolNegBody {}
+pub struct InlineLLVMBoolNegBody {
+    rhs_name: FullName,
+}
 
 impl InlineLLVMBoolNegBody {
+    pub fn free_vars(&self) -> Vec<FullName> {
+        vec![self.rhs_name.clone()]
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -5422,8 +5632,7 @@ impl InlineLLVMBoolNegBody {
 
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let rhs_name = FullName::local(UNARY_OPERATOR_RHS_NAME);
-        let rhs = gc.get_var(&rhs_name).ptr.get(gc);
+        let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         gc.release(rhs);
         let bool_ty = ObjectFieldType::I8
@@ -5453,7 +5662,9 @@ pub fn not_trait_instance_bool() -> TraitInstance {
         &NOT_TRAIT_OP_NAME.to_string(),
         make_bool_ty(),
         make_bool_ty(),
-        LLVMGenerator::BoolNegBody(InlineLLVMBoolNegBody {}),
+        LLVMGenerator::BoolNegBody(InlineLLVMBoolNegBody {
+            rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
+        }),
     )
 }
 

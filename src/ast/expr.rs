@@ -924,7 +924,7 @@ impl ExprNode {
                 self.set_free_vars(free_vars)
             }
             Expr::LLVM(llvm) => {
-                let free_vars = llvm.free_vars.clone().into_iter().collect();
+                let free_vars = llvm.generator.free_vars().into_iter().collect();
                 self.set_free_vars(free_vars)
             }
             Expr::App(func, args) => {
@@ -1210,14 +1210,12 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
 
 pub fn expr_llvm(
     generator: LLVMGenerator,
-    free_vars: Vec<FullName>,
     name: String,
     ty: Arc<TypeNode>,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
     Arc::new(Expr::LLVM(Arc::new(InlineLLVM {
         generator,
-        free_vars,
         name,
         ty,
         borrowed_vars: vec![],
