@@ -817,7 +817,7 @@ impl InlineLLVMFixBody {
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
-    let name = format!("LLVM[fix({}, {})]", f_str.to_string(), x_str.to_string());
+    let name = format!("LLVM<fix({}, {})>", f_str.to_string(), x_str.to_string());
     let free_vars = vec![FullName::local(CAP_NAME), f_str.clone(), x_str.clone()];
     expr_llvm(
         LLVMGenerator::FixBody(InlineLLVMFixBody { x_str, f_str }),
@@ -1778,7 +1778,7 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
                     len_name: LENGTH_NAME.to_string(),
                 }),
                 vec![FullName::local(LENGTH_NAME), FullName::local(ARR_NAME)],
-                format!("{}.unsafe_set_length({})", ARR_NAME, LENGTH_NAME),
+                format!("LLVM<{}.unsafe_set_length({})>", ARR_NAME, LENGTH_NAME),
                 array_ty.clone(),
                 None,
             ),
@@ -2383,7 +2383,7 @@ pub fn struct_get_body(
     let var_name_clone = FullName::local(var_name);
     let free_vars = vec![FullName::local(var_name)];
     let name = format!(
-        "LLVM[{}::@{}({})]",
+        "LLVM<{}::@{}({})>",
         struct_name.to_string(),
         field_name,
         var_name
