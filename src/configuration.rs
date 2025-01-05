@@ -427,6 +427,10 @@ impl Configuration {
         self.fix_opt_level >= FixOptimizationLevel::Unstable
     }
 
+    pub fn perform_simplify_global_names(&self) -> bool {
+        self.fix_opt_level >= FixOptimizationLevel::Unstable
+    }
+
     // Get hash value of the configurations that affect the object file generation.
     pub fn object_generation_hash(&self) -> String {
         let mut data = String::new();

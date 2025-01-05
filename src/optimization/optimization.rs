@@ -1,6 +1,6 @@
 use crate::{Configuration, Program};
 
-use super::{borrowing, inline, remove_tyanno, uncurry};
+use super::{borrowing, inline, remove_tyanno, simplify_global_names, uncurry};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     let mut step = 0;
@@ -8,6 +8,15 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}", step));
         step += 1;
+    }
+
+    // Perform simplification of global names.
+    if config.perform_simplify_global_names() {
+        simplify_global_names::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.simplify_global_names", step));
+            step += 1;
+        }
     }
 
     // Perform type annotation removal optimization.

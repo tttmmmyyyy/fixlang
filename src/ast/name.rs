@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -155,6 +157,12 @@ impl NameSpace {
 pub struct FullName {
     pub namespace: NameSpace,
     pub name: String,
+}
+
+impl Debug for FullName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
 }
 
 impl PartialOrd for FullName {
