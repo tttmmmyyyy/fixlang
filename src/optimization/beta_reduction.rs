@@ -3,46 +3,44 @@ Beta reduction optimization.
 
 This optimization tries to reduce cost of "create lambda and apply" expressions.
 
-1. Moves application of variable into inner expression.
+1. Moves application into inner.
 
-For example, if `v` is a variable,
-
-```
-(if c {{expr0}} else {{expr1}})(v)
-```
-
-is transformed into
+For example, in case of `if` expression,
 
 ```
-if c {{expr0}(v)} else {{expr1}(v)}
-```
-
-2. Replaces application of lambda expression to a variable expression with substitution.
-
-For example, if `v` is a variable,
-```
-(|x| {expr})(v)
+(if c {{expr0}} else {{expr1}})({expr2})
 ```
 
 is transformed into
 
 ```
-{expr}[v/x]
+let v = {expr2} in if c {{expr0}(v)} else {{expr1}(v)}
 ```
 
-Do the above transformations only if `v` is a variable, because if not, `v` is calculated many times and the optimization may increase the cost.
+2. Replaces application of lambda expression to an expression with let binding.
+
+The expression
+
+```
+(|x| {expr0})({expr1})
+```
+
+is transformed into
+
+```
+let x = {expr1} in {expr0}
+```
 */
 
 use std::sync::Arc;
 
 use crate::{
     ast::traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-    expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed,
-    optimization::utils::replace_free_var_of_expr,
-    Expr, ExprNode, InstantiatedSymbol, Program,
+    expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var, Expr,
+    ExprNode, InstantiatedSymbol, PatternNode, Program,
 };
 
-use super::utils::rename_pattern_value_avoiding;
+use super::utils::generate_new_names;
 
 #[allow(dead_code)]
 pub fn run(prg: &mut Program) {
@@ -70,62 +68,84 @@ impl ExprVisitor for BetaReduction {
             return EndVisitResult::unchanged(expr);
         }
         let arg = args[0].clone();
-        if !arg.is_var() {
-            return EndVisitResult::unchanged(expr);
-        }
-        let arg_var = arg.get_var();
-        let arg_name = &arg_var.name;
 
         // Get the function applied to the argument.
         let func = expr.get_app_func();
         match &*func.expr {
             Expr::Lam(params, body) => {
-                // The expression is of the form `(|x| {expr})(v)`.
-                // Replace it with `{expr}[v/x]`.
+                // The expression is of the form `(|x| {expr})({a})`.
+                // Replace it with `let x = {a} in {expr}`.
                 if params.len() != 1 {
                     // This optimization does not support multi-parameter lambdas.
                     return EndVisitResult::unchanged(expr);
                 }
-                let param_name = &params[0].name;
-                let body = replace_free_var_of_expr(body, param_name, arg_name);
-                return EndVisitResult::changed(body).revisit();
+                let param = &params[0];
+                let pat = PatternNode::make_var(param.clone(), None);
+                let expr = expr_let_typed(pat, arg, body.clone());
+                return EndVisitResult::changed(expr).revisit();
             }
             Expr::Let(pattern, bound, value) => {
-                // The expression is of the form `(let {pat} = {bound} in {value})(v)`.
-                // Replace it with `let {pat} = {bound} in ({value}(v))`.
+                // The expression is of the form `(let {pat} = {bound} in {value})({a})`.
+                // Replace it with `let x = {a} in let {pat} = {bound} in {value}(x)`.
 
-                // If `v` is in FV({pat}), we first rename `v` in `{pattern}` and `{value}` to a fresh variable.
-                let (pattern, value) = rename_pattern_value_avoiding(
-                    &[arg_name.clone()].into_iter().collect(),
-                    pattern.clone(),
-                    value.clone(),
-                );
+                let bound = bound.calculate_free_vars();
+                let value = value.calculate_free_vars();
+                let mut black_list = pattern.pattern.vars();
+                black_list.extend(bound.free_vars().iter().cloned());
+                black_list.extend(value.free_vars().iter().cloned());
 
-                let value = expr_app_typed(value.clone(), vec![arg]);
-                let expr = expr_let_typed(pattern, bound.clone(), value);
+                let x_name = generate_new_names(&black_list, 1)[0].clone();
+                let x_pat = PatternNode::make_var(var_var(x_name.clone()), None);
+                let x = expr_var(x_name, None).set_inferred_type(arg.ty.as_ref().unwrap().clone());
+
+                let expr = expr_app_typed(value.clone(), vec![x]); // {value}(x)
+                let expr = expr_let_typed(pattern.clone(), bound, expr); // let {pat} = {bound} in {value}(x)
+                let expr = expr_let_typed(x_pat, arg.clone(), expr); // let x = {a} in let {pat} = {bound} in {value}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::If(cond, then, else_) => {
-                // The expression is of the form `(if {cond} then {then} else {else})(v)`.
-                // Replace it with `if {cond} then {then}(v) else {else}(v)`.
-                let then = expr_app_typed(then.clone(), vec![arg.clone()]);
-                let else_ = expr_app_typed(else_.clone(), vec![arg.clone()]);
-                let expr = expr_if_typed(cond.clone(), then, else_);
+                // The expression is of the form `(if {cond} then {then} else {else})({a})`.
+                // Replace it with `let x = {a} in if {cond} then {then}(x) else {else}(x)`.
+                let cond = cond.calculate_free_vars();
+                let then = then.calculate_free_vars();
+                let else_ = else_.calculate_free_vars();
+                let mut black_list = cond.free_vars().clone();
+                black_list.extend(then.free_vars().iter().cloned());
+                black_list.extend(else_.free_vars().iter().cloned());
+
+                let x_name = generate_new_names(&black_list, 1)[0].clone();
+                let x_pat = PatternNode::make_var(var_var(x_name.clone()), None);
+                let x = expr_var(x_name, None).set_inferred_type(arg.ty.as_ref().unwrap().clone());
+
+                let then = expr_app_typed(then.clone(), vec![x.clone()]); // {then}(x)
+                let else_ = expr_app_typed(else_.clone(), vec![x.clone()]); // {else}(x)
+                let expr = expr_if_typed(cond.clone(), then, else_); // if {cond} then {then}(x) else {else}(x)
+                let expr = expr_let_typed(x_pat, arg.clone(), expr); // let x = {a} in if {cond} then {then}(x) else {else}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::Match(cond, pats_vals) => {
-                // As with `let`, we need to rename `v` in each pattern and value to a fresh variable.
+                // Similar to `if` and `let` cases.
+                let cond = cond.calculate_free_vars();
+                let mut black_list = cond.free_vars().clone();
                 let mut new_pats_vals = vec![];
                 for (pat, val) in pats_vals {
-                    let (pat, val) = rename_pattern_value_avoiding(
-                        &[arg_name.clone()].into_iter().collect(),
-                        pat.clone(),
-                        val.clone(),
-                    );
-                    let val = expr_app_typed(val, vec![arg.clone()]);
-                    new_pats_vals.push((pat, val));
+                    let val = val.calculate_free_vars();
+                    black_list.extend(pat.pattern.vars());
+                    black_list.extend(val.free_vars().iter().cloned());
+                    new_pats_vals.push((pat.clone(), val));
                 }
-                let expr = expr_match_typed(cond.clone(), new_pats_vals);
+                let mut pats_vals = new_pats_vals;
+
+                let x_name = generate_new_names(&black_list, 1)[0].clone();
+                let x_pat = PatternNode::make_var(var_var(x_name.clone()), None);
+                let x = expr_var(x_name, None).set_inferred_type(arg.ty.as_ref().unwrap().clone());
+
+                for (_pat, val) in &mut pats_vals {
+                    let new_val = expr_app_typed(val.clone(), vec![x.clone()]);
+                    *val = new_val;
+                }
+                let expr = expr_match_typed(cond, pats_vals);
+                let expr = expr_let_typed(x_pat, arg.clone(), expr);
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::App(_, _) => {
