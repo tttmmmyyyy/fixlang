@@ -289,7 +289,7 @@ impl Configuration {
         config
     }
 
-    // Usual configuration for compiler development
+    // Configuration for compiler development
     #[allow(dead_code)]
     pub fn develop_compiler_mode() -> Configuration {
         #[allow(unused_mut)]
@@ -304,7 +304,7 @@ impl Configuration {
         config
     }
 
-    // Create configuration for documentation generation.
+    // Create configuration for document generation.
     pub fn docs_mode() -> Result<Configuration, Errors> {
         let mut config = Self::new(SubCommand::Docs(DocsConfig::default()))?;
         config.num_worker_thread = num_cpus::get();
