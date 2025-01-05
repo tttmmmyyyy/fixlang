@@ -181,6 +181,14 @@ impl LLVMGenerator {
     }
 
     pub fn free_vars(&self) -> Vec<FullName> {
+        self.clone()
+            .free_vars_mut()
+            .into_iter()
+            .map(|name| (*name).clone())
+            .collect()
+    }
+
+    pub fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         match self {
             LLVMGenerator::IntLit(x) => x.free_vars(),
             LLVMGenerator::FloatLit(x) => x.free_vars(),

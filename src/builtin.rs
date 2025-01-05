@@ -563,7 +563,7 @@ pub struct InlineLLVMIntLit {
 }
 
 impl InlineLLVMIntLit {
-    pub fn free_vars(&self) -> Vec<FullName> {
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
 
@@ -605,7 +605,7 @@ pub struct InlineLLVMFloatLit {
 }
 
 impl InlineLLVMFloatLit {
-    pub fn free_vars(&self) -> Vec<FullName> {
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
 
@@ -645,7 +645,7 @@ pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<
 pub struct InlineLLVMNullPtrLit {}
 
 impl InlineLLVMNullPtrLit {
-    pub fn free_vars(&self) -> Vec<FullName> {
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
 
@@ -677,7 +677,7 @@ pub struct InlineLLVMBoolLit {
 }
 
 impl InlineLLVMBoolLit {
-    pub fn free_vars(&self) -> Vec<FullName> {
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
     pub fn generate<'c, 'm, 'b>(
@@ -755,7 +755,7 @@ pub struct InlineLLVMStringLit {
 }
 
 impl InlineLLVMStringLit {
-    pub fn free_vars(&self) -> Vec<FullName> {
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
 
@@ -791,15 +791,12 @@ pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc
 pub struct InlineLLVMFixBody {
     x_str: FullName,
     f_str: FullName,
+    cap_name: FullName,
 }
 
 impl InlineLLVMFixBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![
-            self.x_str.clone(),
-            self.f_str.clone(),
-            FullName::local(CAP_NAME),
-        ]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.x_str, &mut self.f_str, &mut self.cap_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -827,7 +824,7 @@ impl InlineLLVMFixBody {
         let fixf_funptr =
             gc.cast_pointer(fixf_funptr, opaque_lambda_function_ptr_type(&gc.context));
         let fixf = fixf.insert_field(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
-        let cap_obj = gc.get_var(&FullName::local(CAP_NAME)).ptr.get(gc);
+        let cap_obj = gc.get_var(&self.cap_name).ptr.get(gc);
         let cap_obj_ptr = cap_obj.value;
         let fixf = fixf.insert_field(gc, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
 
@@ -839,9 +836,14 @@ impl InlineLLVMFixBody {
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
+    let cap_name = FullName::local(CAP_NAME);
     let name = format!("LLVM<fix({}, {})>", f_str.to_string(), x_str.to_string());
     expr_llvm(
-        LLVMGenerator::FixBody(InlineLLVMFixBody { x_str, f_str }),
+        LLVMGenerator::FixBody(InlineLLVMFixBody {
+            x_str,
+            f_str,
+            cap_name,
+        }),
         name,
         type_tyvar_star(b),
         None,
@@ -873,8 +875,8 @@ pub struct InlineLLVMCastIntegralBody {
 }
 
 impl InlineLLVMCastIntegralBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.from_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.from_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -957,8 +959,8 @@ pub struct InlineLLVMCastFloatBody {
 }
 
 impl InlineLLVMCastFloatBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.from_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.from_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1036,8 +1038,8 @@ pub struct InlineLLVMCastIntToFloatBody {
 }
 
 impl InlineLLVMCastIntToFloatBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.from_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.from_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1125,8 +1127,8 @@ pub struct InlineLLVMCastFloatToIntBody {
 }
 
 impl InlineLLVMCastFloatToIntBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.from_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.from_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1216,8 +1218,8 @@ pub struct InlineLLVMShiftBody {
 }
 
 impl InlineLLVMShiftBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.value_name.clone(), self.n_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.value_name, &mut self.n_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1311,8 +1313,8 @@ pub struct InlineLLVMBitwiseOperationBody {
 }
 
 impl InlineLLVMBitwiseOperationBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1395,8 +1397,8 @@ pub struct InlineLLVMFillArrayBody {
 }
 
 impl InlineLLVMFillArrayBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.size_name.clone(), self.value_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.size_name, &mut self.value_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1427,7 +1429,6 @@ fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let value_name = FullName::local(value);
     let name = format!("Array::fill({}, {})", size, value);
     let name_cloned = name.clone();
-    let free_vars = vec![size_name.clone(), value_name.clone()];
     expr_llvm(
         LLVMGenerator::FillArrayBody(InlineLLVMFillArrayBody {
             size_name,
@@ -1473,8 +1474,8 @@ pub struct InlineLLVMMakeEmptyArrayBody {
 }
 
 impl InlineLLVMMakeEmptyArrayBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.capacity_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.capacity_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1533,12 +1534,8 @@ pub struct InlineLLVMArrayUnsafeSetBody {
 }
 
 impl InlineLLVMArrayUnsafeSetBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![
-            self.arr_name.clone(),
-            self.idx_name.clone(),
-            self.value_name.clone(),
-        ]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name, &mut self.value_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1613,8 +1610,8 @@ pub struct InlineLLVMArrayUnsafeGetBody {
 }
 
 impl InlineLLVMArrayUnsafeGetBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.arr_name.clone(), self.idx_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1689,8 +1686,8 @@ pub struct InlineLLVMArrayUnsafeGetLinearFunctionBody {
 }
 
 impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.arr_name.clone(), self.idx_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1769,8 +1766,8 @@ pub struct InlineLLVMArrayUnsafeSetSizeBody {
 }
 
 impl InlineLLVMArrayUnsafeSetSizeBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.arr_name.clone(), self.len_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.len_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1833,8 +1830,8 @@ pub struct InlineLLVMArrayGetBody {
 }
 
 impl InlineLLVMArrayGetBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.arr_name.clone(), self.idx_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -1975,11 +1972,11 @@ pub struct InlineLLVMArraySetBody {
 }
 
 impl InlineLLVMArraySetBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![
-            self.array_name.clone(),
-            self.idx_name.clone(),
-            self.value_name.clone(),
+            &mut self.array_name,
+            &mut self.idx_name,
+            &mut self.value_name,
         ]
     }
 
@@ -2070,11 +2067,11 @@ pub struct InlineLLVMArrayModBody {
 }
 
 impl InlineLLVMArrayModBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![
-            self.array_name.clone(),
-            self.idx_name.clone(),
-            self.modifier_name.clone(),
+            &mut self.array_name,
+            &mut self.idx_name,
+            &mut self.modifier_name,
         ]
     }
 
@@ -2171,8 +2168,8 @@ pub struct InlineLLVMArrayForceUniqueBody {
 }
 
 impl InlineLLVMArrayForceUniqueBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.arr_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2220,8 +2217,8 @@ pub struct InlineLLVMArrayGetPtrBody {
 }
 
 impl InlineLLVMArrayGetPtrBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.arr_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2296,8 +2293,8 @@ pub struct InlineLLVMArrayGetSizeBody {
 }
 
 impl InlineLLVMArrayGetSizeBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.arr_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2348,8 +2345,8 @@ pub struct InlineLLVMArrayGetCapacityBody {
 }
 
 impl InlineLLVMArrayGetCapacityBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.arr_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2403,8 +2400,8 @@ pub struct InlineLLVMStructGetBody {
 }
 
 impl InlineLLVMStructGetBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2479,8 +2476,8 @@ pub struct InlineLLVMStructPunchBody {
 }
 
 impl InlineLLVMStructPunchBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2564,8 +2561,8 @@ pub struct InlineLLVMStructPlugInBody {
 }
 
 impl InlineLLVMStructPlugInBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.punched_str_name.clone(), self.field_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.punched_str_name, &mut self.field_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2649,8 +2646,8 @@ pub struct InlineLLVMStructModBody {
 }
 
 impl InlineLLVMStructModBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.f_name.clone(), self.x_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.f_name, &mut self.x_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2691,7 +2688,6 @@ pub fn struct_mod_body(
     );
     let f_name = FullName::local(f_name);
     let x_name = FullName::local(x_name);
-    let free_vars = vec![f_name.clone(), x_name.clone()];
     expr_llvm(
         LLVMGenerator::StructModBody(InlineLLVMStructModBody {
             f_name,
@@ -3006,8 +3002,8 @@ pub struct InlineLLVMStructSetBody {
 }
 
 impl InlineLLVMStructSetBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.value_name.clone(), self.struct_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.value_name, &mut self.struct_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3083,8 +3079,8 @@ pub struct InlineLLVMMakeUnionBody {
 }
 
 impl InlineLLVMMakeUnionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.field_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.field_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3201,8 +3197,8 @@ pub struct InlineLLVMUnionAsBody {
 }
 
 impl InlineLLVMUnionAsBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.union_arg_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.union_arg_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3283,8 +3279,8 @@ pub struct InlineLLVMUnionIsBody {
 }
 
 impl InlineLLVMUnionIsBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.union_arg_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.union_arg_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3368,8 +3364,8 @@ pub struct InlineLLVMUnionModBody {
 }
 
 impl InlineLLVMUnionModBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.union_name.clone(), self.modifier_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.union_name, &mut self.modifier_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3492,8 +3488,8 @@ pub struct InlineLLVMUndefinedFunctionBody {
 }
 
 impl InlineLLVMUndefinedFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.msg_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.msg_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3564,8 +3560,8 @@ pub struct InlineLLVMWithRetainedFunctionBody {
 }
 
 impl InlineLLVMWithRetainedFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.f_name.clone(), self.x_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.f_name, &mut self.x_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3637,8 +3633,8 @@ pub struct InlineLLVMIsUniqueFunctionBody {
 }
 
 impl InlineLLVMIsUniqueFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3736,8 +3732,8 @@ pub struct InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
 }
 
 impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3797,8 +3793,8 @@ pub struct InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
 }
 
 impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3849,8 +3845,8 @@ pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 }
 
 impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3948,8 +3944,8 @@ pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 }
 
 impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4046,8 +4042,8 @@ pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
 }
 
 impl InlineLLVMGetBoxedDataPtrFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4133,8 +4129,8 @@ pub struct InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 }
 
 impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.val_name.clone(), self.io_act_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.val_name, &mut self.io_act_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4224,11 +4220,11 @@ pub struct InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
 }
 
 impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![
-            self.val_name.clone(),
-            self.io_act_name.clone(),
-            self.iostate_name.clone(),
+            &mut self.val_name,
+            &mut self.io_act_name,
+            &mut self.iostate_name,
         ]
     }
 
@@ -4333,8 +4329,8 @@ pub struct InlineLLVMUnsafePerformFunctionBody {
 }
 
 impl InlineLLVMUnsafePerformFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.io_act_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.io_act_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4395,8 +4391,8 @@ pub struct InlineLLVMMarkThreadedFunctionBody {
 }
 
 impl InlineLLVMMarkThreadedFunctionBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.var_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4555,8 +4551,8 @@ pub struct InlineLLVMIntEqBody {
 }
 
 impl InlineLLVMIntEqBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4612,8 +4608,8 @@ pub struct InlineLLVMPtrEqBody {
 }
 
 impl InlineLLVMPtrEqBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4675,8 +4671,8 @@ pub struct InlineLLVMFloatEqBody {
 }
 
 impl InlineLLVMFloatEqBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4744,8 +4740,8 @@ pub struct InlineLLVMIntLessThanBody {
 }
 
 impl InlineLLVMIntLessThanBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4809,8 +4805,8 @@ pub struct InlineLLVMFloatLessThanBody {
 }
 
 impl InlineLLVMFloatLessThanBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4879,8 +4875,8 @@ pub struct InlineLLVMIntLessThanOrEqBody {
 }
 
 impl InlineLLVMIntLessThanOrEqBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4945,8 +4941,8 @@ pub struct InlineLLVMFloatLessThanOrEqBody {
 }
 
 impl InlineLLVMFloatLessThanOrEqBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5014,8 +5010,8 @@ pub struct InlineLLVMIntAddBody {
 }
 
 impl InlineLLVMIntAddBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5064,8 +5060,8 @@ pub struct InlineLLVMFloatAddBody {
 }
 
 impl InlineLLVMFloatAddBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5123,8 +5119,8 @@ pub struct InlineLLVMIntSubBody {
 }
 
 impl InlineLLVMIntSubBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5173,8 +5169,8 @@ pub struct InlineLLVMFloatSubBody {
 }
 
 impl InlineLLVMFloatSubBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5232,8 +5228,8 @@ pub struct InlineLLVMIntMulBody {
 }
 
 impl InlineLLVMIntMulBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5242,8 +5238,6 @@ impl InlineLLVMIntMulBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = FullName::local(BINARY_OPERATOR_LHS_NAME);
-        let rhs = FullName::local(BINARY_OPERATOR_RHS_NAME);
         let lhs = gc.get_var(&self.lhs_name).ptr.get(gc);
         let rhs = gc.get_var(&self.rhs_name).ptr.get(gc);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -5284,8 +5278,8 @@ pub struct InlineLLVMFloatMulBody {
 }
 
 impl InlineLLVMFloatMulBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5343,8 +5337,8 @@ pub struct InlineLLVMIntDivBody {
 }
 
 impl InlineLLVMIntDivBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5399,8 +5393,8 @@ pub struct InlineLLVMFloatDivBody {
 }
 
 impl InlineLLVMFloatDivBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5458,8 +5452,8 @@ pub struct InlineLLVMIntRemBody {
 }
 
 impl InlineLLVMIntRemBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.lhs_name.clone(), self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5522,8 +5516,8 @@ pub struct InlineLLVMIntNegBody {
 }
 
 impl InlineLLVMIntNegBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5567,8 +5561,8 @@ pub struct InlineLLVMFloatNegBody {
 }
 
 impl InlineLLVMFloatNegBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5621,8 +5615,8 @@ pub struct InlineLLVMBoolNegBody {
 }
 
 impl InlineLLVMBoolNegBody {
-    pub fn free_vars(&self) -> Vec<FullName> {
-        vec![self.rhs_name.clone()]
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.rhs_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
