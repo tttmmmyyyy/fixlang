@@ -923,8 +923,8 @@ impl ExprNode {
                 let free_vars = vec![var.name.clone()].into_iter().collect();
                 self.set_free_vars(free_vars)
             }
-            Expr::LLVM(lit) => {
-                let free_vars = lit.free_vars.clone().into_iter().collect();
+            Expr::LLVM(llvm) => {
+                let free_vars = llvm.free_vars.clone().into_iter().collect();
                 self.set_free_vars(free_vars)
             }
             Expr::App(func, args) => {
