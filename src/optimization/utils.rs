@@ -16,6 +16,9 @@ pub fn replace_free_var_of_expr(
     from: &FullName,
     to: &FullName,
 ) -> Result<Arc<ExprNode>, ()> {
+    if from == to {
+        return Ok(expr.clone());
+    }
     let mut replacer = FreeVarReplacer {
         from: from.clone(),
         to: to.clone(),

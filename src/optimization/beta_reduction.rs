@@ -52,16 +52,16 @@ pub fn run(prg: &mut Program) {
 }
 
 pub fn run_on_symbol(sym: &mut InstantiatedSymbol) {
-    let mut optimizer = ContractAppOptimizer {};
+    let mut optimizer = BetaReduction {};
     let res = optimizer.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
         sym.expr = Some(res.expr.calculate_free_vars());
     }
 }
 
-struct ContractAppOptimizer {}
+struct BetaReduction {}
 
-impl ExprVisitor for ContractAppOptimizer {
+impl ExprVisitor for BetaReduction {
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application.
         let args = expr.get_app_args();
