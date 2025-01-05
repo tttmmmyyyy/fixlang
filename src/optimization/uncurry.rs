@@ -240,6 +240,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
 
 // Convert `let a = x in |b| y` to `|b| let a = x in y` if possible.
 // NOTE: if name `b` is contained in x, then first we need to replace `b` to another name.
+// TODO: Refactor this using `rename_lam_param_avoiding`.
 fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Let(let_var, let_bound, let_val) => {
