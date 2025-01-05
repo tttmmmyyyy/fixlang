@@ -154,15 +154,12 @@ fn build_object_files<'c>(
     }
 
     // Instantiate Main::main (or Test::test).
-    let main_expr = match config.output_file_type {
-        OutputFileType::Executable => {
-            let main_expr = program.instantiate_main_function(
-                &typechecker,
-                matches!(config.subcommand, SubCommand::Test),
-            )?;
-            Some(main_expr)
-        }
-        OutputFileType::DynamicLibrary => None,
+    match config.output_file_type {
+        OutputFileType::Executable => program.instantiate_entry_io_value(
+            &typechecker,
+            matches!(config.subcommand, SubCommand::Test),
+        )?,
+        OutputFileType::DynamicLibrary => {}
     };
 
     // Instantiate all exported values and values called from them.
@@ -238,7 +235,7 @@ fn build_object_files<'c>(
             vec![]
         };
 
-        let entry_expr = main_expr.clone();
+        let entry_io_value = program.entry_io_value.clone();
         threads.push(std::thread::spawn(move || {
             // Create GenerationContext.
             let context = Context::create();
@@ -285,7 +282,7 @@ fn build_object_files<'c>(
                 build_exported_c_functions(&mut gc, &export_statements);
 
                 // Implement the `main()` function.
-                if let Some(main_expr) = entry_expr {
+                if let Some(main_expr) = entry_io_value {
                     build_main_function(&mut gc, main_expr.clone());
                 }
             }

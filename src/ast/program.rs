@@ -475,6 +475,11 @@ pub struct Program {
     pub type_env: TypeEnv,
     // Trait environment.
     pub trait_env: TraitEnv,
+    // Entry point value of the program.
+    // - Instantiation of `Main::main` if run or build mode.
+    // - Instantiation of `Main::test` if test mode.
+    // - None if library mode.
+    pub entry_io_value: Option<Arc<ExprNode>>,
     // Export statements.
     pub export_statements: Vec<ExportStatement>,
     // List of tuple sizes used in this program.
@@ -522,6 +527,7 @@ impl Program {
             type_env: Default::default(),
             used_tuple_sizes: (0..=TUPLE_SIZE_BASE).filter(|i| *i != 1).collect(),
             modules: Default::default(),
+            entry_io_value: None,
             export_statements: vec![],
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
@@ -1234,11 +1240,11 @@ impl Program {
     }
 
     // Instantiate `Main::main` (or `Test::test` if `fix test` is running).
-    pub fn instantiate_main_function(
+    pub fn instantiate_entry_io_value(
         &mut self,
         tc: &TypeCheckContext,
         test_mode: bool,
-    ) -> Result<Arc<ExprNode>, Errors> {
+    ) -> Result<(), Errors> {
         let main_func_name = if test_mode {
             FullName::from_strs(&[TEST_MODULE_NAME], TEST_FUNCTION_NAME)
         } else {
@@ -1247,7 +1253,8 @@ impl Program {
         let main_ty = make_io_unit_ty();
         let (expr, _ty) =
             self.instantiate_exported_value(&main_func_name, Some(main_ty), &None, tc)?;
-        Ok(expr)
+        self.entry_io_value = Some(expr);
+        Ok(())
     }
 
     // Instantiate exported values.

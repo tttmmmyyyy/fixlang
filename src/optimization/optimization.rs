@@ -54,6 +54,4 @@ pub fn run(prg: &mut Program, config: &Configuration) {
             // step += 1;
         }
     }
-
-    // Use call_graph_inst_syms.
 }

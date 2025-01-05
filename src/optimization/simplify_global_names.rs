@@ -58,9 +58,30 @@ pub fn run(prg: &mut Program) {
             sym.expr = Some(res.expr.calculate_free_vars());
         }
         let new_name = old_to_new_names.get(&old_name).unwrap();
+        sym.instantiated_name = new_name.clone();
         new_symbols.insert(new_name.clone(), sym);
     }
     prg.instantiated_symbols = new_symbols;
+
+    // Rename exported values.
+    if let Some(entry_io) = &mut prg.entry_io_value {
+        *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names);
+    }
+    for export_stmt in &mut prg.export_statements {
+        if let Some(entry_io) = &mut export_stmt.instantiated_value_expr {
+            *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names);
+        }
+    }
+}
+
+fn rename_var_expr(
+    expr: Arc<ExprNode>,
+    old_to_new_names: &Map<FullName, FullName>,
+) -> Arc<ExprNode> {
+    let var = &expr.get_var();
+    let new_name = old_to_new_names.get(&var.name).unwrap();
+    let new_expr = expr.set_var_var(var.set_name(new_name.clone()));
+    new_expr
 }
 
 fn get_base_name(full_name: &FullName) -> FullName {
@@ -69,7 +90,7 @@ fn get_base_name(full_name: &FullName) -> FullName {
         // To avoid the name becomes empty, remove after second '#' if exists.
         let second_sharp = name[1..].find("#");
         match second_sharp {
-            Some(pos) => name[0..pos].to_string(),
+            Some(pos) => name[0..pos + 1].to_string(),
             None => name.clone(),
         }
     } else {
