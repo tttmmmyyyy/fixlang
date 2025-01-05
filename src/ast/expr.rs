@@ -1073,7 +1073,7 @@ impl Expr {
     pub fn stringify(&self) -> Text {
         match self {
             Expr::Var(v) => Text::from_string(v.name.to_string()),
-            Expr::LLVM(l) => Text::from_string(l.name.clone()),
+            Expr::LLVM(l) => Text::from_string(l.generator.name()),
             Expr::App(_, _) => {
                 // Stringify the funciton.
                 let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_info(None));
@@ -1208,15 +1208,9 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
     var_var(FullName::local(var_name))
 }
 
-pub fn expr_llvm(
-    generator: LLVMGenerator,
-    name: String,
-    ty: Arc<TypeNode>,
-    src: Option<Span>,
-) -> Arc<ExprNode> {
+pub fn expr_llvm(generator: LLVMGenerator, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::LLVM(Arc::new(InlineLLVM {
         generator,
-        name,
         ty,
         borrowed_vars: vec![],
     })))

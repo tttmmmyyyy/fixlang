@@ -1777,7 +1777,7 @@ impl Program {
                                 &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_GETTER_SYMBOL, &field.name),
                             ),
-                            struct_get(&struct_name, defn, &field.name),
+                            struct_get(defn, &field.name),
                             Some(format!(
                                 "Retrieves the field `{}` from a value of `{}`.",
                                 &field.name, struct_name.name
@@ -1801,7 +1801,7 @@ impl Program {
                                 &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_MODIFIER_SYMBOL, &field.name,),
                             ),
-                            struct_mod(&struct_name, defn, &field.name),
+                            struct_mod(defn, &field.name),
                             Some(format!(
                                 "Updates a value of `{}` by applying a function to field `{}`.",
                                 struct_name.name, &field.name,
@@ -1825,7 +1825,7 @@ impl Program {
                                 &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
                             ),
-                            struct_punch(&struct_name, defn, &field.name),
+                            struct_punch(defn, &field.name),
                             None,
                         ));
                         // Add plug-in functions.
@@ -1834,7 +1834,7 @@ impl Program {
                                 &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
                             ),
-                            struct_plug_in(&struct_name, defn, &field.name),
+                            struct_plug_in(defn, &field.name),
                             None,
                         ));
                     }
@@ -1852,7 +1852,7 @@ impl Program {
                         ));
                         errors.eat_err(self.add_compiler_defined_method(
                             FullName::new(&defn.name.to_namespace(), &format!("as_{}", field.name)),
-                            union_as(&union_name, &field.name, defn),
+                            union_as(&field.name, defn),
                             Some(format!(
                                 "Unwraps a union value of `{}` as the variant `{}`.\nIf the value is not the variant `{}`, this function aborts the program.",
                                 union_name.name, &field.name, &field.name,
@@ -1860,7 +1860,7 @@ impl Program {
                         ));
                         errors.eat_err(self.add_compiler_defined_method(
                             FullName::new(&defn.name.to_namespace(), &format!("is_{}", field.name)),
-                            union_is(&union_name, &field.name, defn),
+                            union_is(&field.name, defn),
                             Some(format!(
                                 "Checks if a union value of `{}` is the variant `{}`.",
                                 union_name.name, &field.name,

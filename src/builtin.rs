@@ -567,6 +567,10 @@ impl InlineLLVMIntLit {
         vec![]
     }
 
+    pub fn name(&self) -> String {
+        format!("int({})", self.val)
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
@@ -593,7 +597,6 @@ impl InlineLLVMIntLit {
 pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::IntLit(InlineLLVMIntLit { val: val as i64 }),
-        val.to_string(),
         ty,
         source,
     )
@@ -605,6 +608,10 @@ pub struct InlineLLVMFloatLit {
 }
 
 impl InlineLLVMFloatLit {
+    pub fn name(&self) -> String {
+        format!("float({})", self.val)
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
@@ -635,7 +642,6 @@ impl InlineLLVMFloatLit {
 pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val }),
-        val.to_string(),
         ty,
         source,
     )
@@ -645,6 +651,10 @@ pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<
 pub struct InlineLLVMNullPtrLit {}
 
 impl InlineLLVMNullPtrLit {
+    pub fn name(&self) -> String {
+        "nullptr".to_string()
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
@@ -665,7 +675,6 @@ impl InlineLLVMNullPtrLit {
 pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::NullPtrLit(InlineLLVMNullPtrLit {}),
-        "nullptr_literal".to_string(),
         make_ptr_ty(),
         source,
     )
@@ -677,6 +686,10 @@ pub struct InlineLLVMBoolLit {
 }
 
 impl InlineLLVMBoolLit {
+    pub fn name(&self) -> String {
+        format!("bool({})", self.val)
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
@@ -701,7 +714,6 @@ impl InlineLLVMBoolLit {
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::BoolLit(InlineLLVMBoolLit { val }),
-        val.to_string(),
         make_bool_ty(),
         source,
     )
@@ -755,6 +767,10 @@ pub struct InlineLLVMStringLit {
 }
 
 impl InlineLLVMStringLit {
+    pub fn name(&self) -> String {
+        format!("string(\"{}\")", self.string)
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
@@ -781,7 +797,6 @@ impl InlineLLVMStringLit {
 pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::StringLit(InlineLLVMStringLit { string }),
-        "string_literal".to_string(),
         make_string_ty(),
         source,
     )
@@ -795,6 +810,14 @@ pub struct InlineLLVMFixBody {
 }
 
 impl InlineLLVMFixBody {
+    pub fn name(&self) -> String {
+        format!(
+            "fix({}, {})",
+            self.f_str.to_string(),
+            self.x_str.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.x_str, &mut self.f_str, &mut self.cap_name]
     }
@@ -837,14 +860,12 @@ fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
     let cap_name = FullName::local(CAP_NAME);
-    let name = format!("LLVM<fix({}, {})>", f_str.to_string(), x_str.to_string());
     expr_llvm(
         LLVMGenerator::FixBody(InlineLLVMFixBody {
             x_str,
             f_str,
             cap_name,
         }),
-        name,
         type_tyvar_star(b),
         None,
     )
@@ -875,6 +896,15 @@ pub struct InlineLLVMCastIntegralBody {
 }
 
 impl InlineLLVMCastIntegralBody {
+    pub fn name(&self) -> String {
+        format!(
+            "cast_int({}, {}, {})",
+            self.from_name.to_string(),
+            self.is_source_signed,
+            self.is_target_signed
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.from_name]
     }
@@ -939,12 +969,6 @@ pub fn cast_between_integral_function(
                 is_target_signed,
                 is_source_signed,
             }),
-            format!(
-                "LLVM<cast({}, {}, {}>",
-                from.to_string(),
-                to.to_string(),
-                FROM_NAME
-            ),
             to,
             None,
         ),
@@ -959,6 +983,10 @@ pub struct InlineLLVMCastFloatBody {
 }
 
 impl InlineLLVMCastFloatBody {
+    pub fn name(&self) -> String {
+        format!("cast_float({})", self.from_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.from_name]
     }
@@ -1017,12 +1045,6 @@ pub fn cast_between_float_function(
             LLVMGenerator::CastFloatBody(InlineLLVMCastFloatBody {
                 from_name: FullName::local(FROM_NAME),
             }),
-            format!(
-                "LLVM<cast({}, {}, {})>",
-                from.to_string(),
-                to.to_string(),
-                FROM_NAME
-            ),
             to,
             None,
         ),
@@ -1038,6 +1060,14 @@ pub struct InlineLLVMCastIntToFloatBody {
 }
 
 impl InlineLLVMCastIntToFloatBody {
+    pub fn name(&self) -> String {
+        format!(
+            "cast_int_to_float({}, {})",
+            self.from_name.to_string(),
+            self.is_signed
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.from_name]
     }
@@ -1106,12 +1136,6 @@ pub fn cast_int_to_float_function(
                 from_name: FullName::local(FROM_NAME),
                 is_signed,
             }),
-            format!(
-                "LLVM<cast({}, {}, {}))",
-                from.to_string(),
-                to.to_string(),
-                FROM_NAME
-            ),
             to,
             None,
         ),
@@ -1127,6 +1151,14 @@ pub struct InlineLLVMCastFloatToIntBody {
 }
 
 impl InlineLLVMCastFloatToIntBody {
+    pub fn name(&self) -> String {
+        format!(
+            "cast_float_to_int({}, {})",
+            self.from_name.to_string(),
+            self.is_signed
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.from_name]
     }
@@ -1196,12 +1228,6 @@ pub fn cast_float_to_int_function(
                 from_name: FullName::local(FROM_NAME),
                 is_signed,
             }),
-            format!(
-                "cast<{}, {}, {}>",
-                from.to_string(),
-                to.to_string(),
-                FROM_NAME
-            ),
             to,
             None,
         ),
@@ -1218,6 +1244,15 @@ pub struct InlineLLVMShiftBody {
 }
 
 impl InlineLLVMShiftBody {
+    pub fn name(&self) -> String {
+        format!(
+            "shift_{}({}, {})",
+            if self.is_left { "left" } else { "right" },
+            self.value_name.to_string(),
+            self.n_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.value_name, &mut self.n_name]
     }
@@ -1271,12 +1306,6 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
                     n_name: FullName::local(N_NAME),
                     is_left,
                 }),
-                format!(
-                    "shift_{}({},{})",
-                    if is_left { "left" } else { "right" },
-                    N_NAME,
-                    VALUE_NAME
-                ),
                 ty,
                 None,
             ),
@@ -1313,6 +1342,15 @@ pub struct InlineLLVMBitwiseOperationBody {
 }
 
 impl InlineLLVMBitwiseOperationBody {
+    pub fn name(&self) -> String {
+        format!(
+            "bit_{}({}, {})",
+            self.op_type.to_string(),
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -1378,7 +1416,6 @@ pub fn bitwise_operation_function(
                     rhs_name: FullName::local(RHS_NAME),
                     op_type,
                 }),
-                format!("bit_{}({},{})", op_type.to_string(), LHS_NAME, RHS_NAME),
                 ty,
                 None,
             ),
@@ -1397,6 +1434,14 @@ pub struct InlineLLVMFillArrayBody {
 }
 
 impl InlineLLVMFillArrayBody {
+    pub fn name(&self) -> String {
+        format!(
+            "Array::fill({}, {})",
+            self.size_name.to_string(),
+            self.value_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.size_name, &mut self.value_name]
     }
@@ -1435,7 +1480,6 @@ fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
             value_name,
             array_name: name_cloned,
         }),
-        name,
         type_tyapp(make_array_ty(), type_tyvar_star(a)),
         None,
     )
@@ -1474,6 +1518,10 @@ pub struct InlineLLVMMakeEmptyArrayBody {
 }
 
 impl InlineLLVMMakeEmptyArrayBody {
+    pub fn name(&self) -> String {
+        format!("Array::empty({})", self.capacity_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.capacity_name]
     }
@@ -1516,7 +1564,6 @@ pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody {
                 capacity_name: FullName::local(CAPACITY_NAME),
             }),
-            format!("make_empty({})", CAPACITY_NAME),
             array_ty.clone(),
             None,
         ),
@@ -1534,6 +1581,15 @@ pub struct InlineLLVMArrayUnsafeSetBody {
 }
 
 impl InlineLLVMArrayUnsafeSetBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.Array::unsafe_set({}, {})",
+            self.arr_name.to_string(),
+            self.idx_name.to_string(),
+            self.value_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.idx_name, &mut self.value_name]
     }
@@ -1580,7 +1636,6 @@ pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
                         idx_name: FullName::local(IDX_NAME),
                         value_name: FullName::local(VALUE_NAME),
                     }),
-                    format!("{}.unsafe_set({}, {})", ARR_NAME, IDX_NAME, VALUE_NAME),
                     array_ty.clone(),
                     None,
                 ),
@@ -1610,6 +1665,14 @@ pub struct InlineLLVMArrayUnsafeGetBody {
 }
 
 impl InlineLLVMArrayUnsafeGetBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.Array::unsafe_get({})",
+            self.arr_name.to_string(),
+            self.idx_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
@@ -1661,7 +1724,6 @@ pub fn array_unsafe_get_function() -> (Arc<ExprNode>, Arc<Scheme>) {
                     arr_name: FullName::local(ARR_NAME),
                     idx_name: FullName::local(IDX_NAME),
                 }),
-                format!("{}.get_array_noretain({})", ARR_NAME, IDX_NAME),
                 elem_tyvar.clone(),
                 None,
             ),
@@ -1686,6 +1748,14 @@ pub struct InlineLLVMArrayUnsafeGetLinearFunctionBody {
 }
 
 impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.Array::unsafe_get_linear({})",
+            self.arr_name.to_string(),
+            self.idx_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
@@ -1744,7 +1814,6 @@ pub fn array_unsafe_get_linear_function() -> (Arc<ExprNode>, Arc<Scheme>) {
                     idx_name: FullName::local(IDX_NAME),
                 },
             ),
-            format!("{}.unsafe_get_linear({})", ARR_NAME, IDX_NAME),
             res_ty.clone(),
             None,
         ),
@@ -1766,6 +1835,14 @@ pub struct InlineLLVMArrayUnsafeSetSizeBody {
 }
 
 impl InlineLLVMArrayUnsafeSetSizeBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.Array::unsafe_set_size({})",
+            self.arr_name.to_string(),
+            self.len_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.len_name]
     }
@@ -1805,7 +1882,6 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
                     arr_name,
                     len_name,
                 }),
-                format!("LLVM<{}.unsafe_set_size({})>", ARR_NAME, LENGTH_NAME),
                 array_ty.clone(),
                 None,
             ),
@@ -1830,6 +1906,14 @@ pub struct InlineLLVMArrayGetBody {
 }
 
 impl InlineLLVMArrayGetBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.Array::@({})",
+            self.arr_name.to_string(),
+            self.idx_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
@@ -1864,10 +1948,8 @@ fn get_array_body(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
     let arr_name = FullName::local(array);
     let idx_name = FullName::local(idx);
 
-    let name = format!("LLVM<Array::@({}, {})>", idx, array);
     expr_llvm(
         LLVMGenerator::ArrayGetBody(InlineLLVMArrayGetBody { arr_name, idx_name }),
-        name,
         elem_ty,
         None,
     )
@@ -1972,6 +2054,15 @@ pub struct InlineLLVMArraySetBody {
 }
 
 impl InlineLLVMArraySetBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.Array::set({}, {})",
+            self.array_name.to_string(),
+            self.idx_name.to_string(),
+            self.value_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![
             &mut self.array_name,
@@ -2011,16 +2102,12 @@ fn set_array_body(a: &str, array: &str, idx: &str, value: &str) -> Arc<ExprNode>
     let idx_str = FullName::local(idx);
     let value_str = FullName::local(value);
 
-    let func_name = "set";
-    let name = format!("LLVM<{}({}, {}, {})>", func_name, idx, value, array);
-
     expr_llvm(
         LLVMGenerator::ArraySetBody(InlineLLVMArraySetBody {
             array_name: array_str,
             idx_name: idx_str,
             value_name: value_str,
         }),
-        name,
         type_tyapp(make_array_ty(), elem_ty),
         None,
     )
@@ -2067,6 +2154,15 @@ pub struct InlineLLVMArrayModBody {
 }
 
 impl InlineLLVMArrayModBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.Array::mod({}, {})",
+            self.array_name.to_string(),
+            self.idx_name.to_string(),
+            self.modifier_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![
             &mut self.array_name,
@@ -2110,7 +2206,7 @@ impl InlineLLVMArrayModBody {
     }
 }
 
-pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn mod_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const MODIFIED_ARRAY_NAME: &str = "arr";
     const MODIFIER_NAME: &str = "f";
     const INDEX_NAME: &str = "idx";
@@ -2131,13 +2227,6 @@ pub fn mod_array(is_unique_version: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
                         idx_name: FullName::local(INDEX_NAME),
                         modifier_name: FullName::local(MODIFIER_NAME),
                     }),
-                    format!(
-                        "LLVM<{}.mod{}({}, {})>",
-                        MODIFIED_ARRAY_NAME,
-                        if is_unique_version { "!" } else { "" },
-                        INDEX_NAME,
-                        MODIFIER_NAME
-                    ),
                     array_ty.clone(),
                     None,
                 ),
@@ -2168,6 +2257,10 @@ pub struct InlineLLVMArrayForceUniqueBody {
 }
 
 impl InlineLLVMArrayForceUniqueBody {
+    pub fn name(&self) -> String {
+        format!("{}.Array::force_unique", self.arr_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name]
     }
@@ -2201,7 +2294,6 @@ pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
-            format!("{}.force_unique", ARR_NAME,),
             array_ty.clone(),
             None,
         ),
@@ -2217,6 +2309,10 @@ pub struct InlineLLVMArrayGetPtrBody {
 }
 
 impl InlineLLVMArrayGetPtrBody {
+    pub fn name(&self) -> String {
+        format!("{}.Array::get_data_ptr", self.arr_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name]
     }
@@ -2272,7 +2368,6 @@ pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::ArrayGetPtrBody(InlineLLVMArrayGetPtrBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
-            format!("{}.get_ptr", ARR_NAME,),
             make_ptr_ty(),
             None,
         ),
@@ -2293,6 +2388,10 @@ pub struct InlineLLVMArrayGetSizeBody {
 }
 
 impl InlineLLVMArrayGetSizeBody {
+    pub fn name(&self) -> String {
+        format!("{}.Array::get_size", self.arr_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name]
     }
@@ -2328,7 +2427,6 @@ pub fn get_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::ArrayGetSizeBody(InlineLLVMArrayGetSizeBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
-            "len arr".to_string(),
             make_i64_ty(),
             None,
         ),
@@ -2345,6 +2443,10 @@ pub struct InlineLLVMArrayGetCapacityBody {
 }
 
 impl InlineLLVMArrayGetCapacityBody {
+    pub fn name(&self) -> String {
+        format!("{}.Array::get_capacity", self.arr_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name]
     }
@@ -2382,7 +2484,6 @@ pub fn get_capacity_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
-            "arr.get_capacity".to_string(),
             make_i64_ty(),
             None,
         ),
@@ -2400,6 +2501,10 @@ pub struct InlineLLVMStructGetBody {
 }
 
 impl InlineLLVMStructGetBody {
+    pub fn name(&self) -> String {
+        format!("{}.Struct::@{}", self.var_name.to_string(), self.field_idx)
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -2417,37 +2522,20 @@ impl InlineLLVMStructGetBody {
 }
 
 // `get` built-in function for a given struct.
-pub fn struct_get_body(
-    var_name: &str,
-    field_idx: usize,
-    field_ty: Arc<TypeNode>,
-    struct_name: &FullName,
-    field_name: &str,
-) -> Arc<ExprNode> {
+pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>) -> Arc<ExprNode> {
     let var_name_clone = FullName::local(var_name);
-    let name = format!(
-        "LLVM<{}::@{}({})>",
-        struct_name.to_string(),
-        field_name,
-        var_name
-    );
     expr_llvm(
         LLVMGenerator::StructGetBody(InlineLLVMStructGetBody {
             var_name: var_name_clone,
             field_idx,
         }),
-        name,
         field_ty,
         None,
     )
 }
 
 // field getter function for a given struct.
-pub fn struct_get(
-    struct_name: &FullName,
-    definition: &TypeDefn,
-    field_name: &str,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
@@ -2455,13 +2543,7 @@ pub fn struct_get(
     const VAR_NAME: &str = "str_obj";
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        struct_get_body(
-            VAR_NAME,
-            field_idx as usize,
-            field.ty.clone(),
-            struct_name,
-            field_name,
-        ),
+        struct_get_body(VAR_NAME, field_idx as usize, field.ty.clone()),
         None,
     );
     let ty = type_fun(str_ty, field.ty.clone());
@@ -2476,6 +2558,10 @@ pub struct InlineLLVMStructPunchBody {
 }
 
 impl InlineLLVMStructPunchBody {
+    pub fn name(&self) -> String {
+        format!("{}.#punch_{}", self.var_name.to_string(), self.field_idx)
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -2516,11 +2602,7 @@ impl InlineLLVMStructPunchBody {
 
 // Field punching function for a given struct.
 // If the struct is `S` and the field is `F`, then the function has the type `S -> (F, PS)` where `PS` is the punched struct type.
-pub fn struct_punch(
-    struct_name: &FullName,
-    definition: &TypeDefn,
-    field_name: &str,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn struct_punch(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
@@ -2538,13 +2620,6 @@ pub fn struct_punch(
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
             }),
-            format!(
-                "{}::{}{}({})",
-                struct_name.to_string(),
-                STRUCT_PUNCH_SYMBOL,
-                field_name,
-                VAR_NAME
-            ),
             dst_ty,
             None,
         ),
@@ -2561,6 +2636,15 @@ pub struct InlineLLVMStructPlugInBody {
 }
 
 impl InlineLLVMStructPlugInBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.#plug_in_{}({})",
+            self.punched_str_name.to_string(),
+            self.field_idx,
+            self.field_name.to_string(),
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.punched_str_name, &mut self.field_name]
     }
@@ -2594,11 +2678,7 @@ impl InlineLLVMStructPlugInBody {
 
 // Field plugging-in function for a given struct.
 // If the struct is `S` and the field is `F`, then the function has the type `PS -> F -> S` where `PS` is the punched struct type.
-pub fn struct_plug_in(
-    struct_name: &FullName,
-    definition: &TypeDefn,
-    field_name: &str,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn struct_plug_in(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
@@ -2619,14 +2699,6 @@ pub fn struct_plug_in(
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
                 }),
-                format!(
-                    "{}::{}{}({}, {})",
-                    struct_name.to_string(),
-                    STRUCT_PLUG_IN_SYMBOL,
-                    field_name,
-                    PUNCHED_STR_NAME,
-                    FIELD_NAME
-                ),
                 str_ty.clone(),
                 None,
             ),
@@ -2646,6 +2718,15 @@ pub struct InlineLLVMStructModBody {
 }
 
 impl InlineLLVMStructModBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.mod_{}({})",
+            self.x_name.to_string(),
+            self.field_idx,
+            self.f_name.to_string(),
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.f_name, &mut self.x_name]
     }
@@ -2675,17 +2756,8 @@ pub fn struct_mod_body(
     x_name: &str,
     field_count: usize, // number of fields in this struct
     field_idx: usize,
-    struct_name: &FullName,
     struct_defn: &TypeDefn,
-    field_name: &str,
 ) -> Arc<ExprNode> {
-    let name = format!(
-        "{}.mod_{}({}, {})",
-        struct_name.to_string(),
-        field_name,
-        f_name,
-        x_name
-    );
     let f_name = FullName::local(f_name);
     let x_name = FullName::local(x_name);
     expr_llvm(
@@ -2695,18 +2767,13 @@ pub fn struct_mod_body(
             field_idx,
             field_count,
         }),
-        name,
         struct_defn.applied_type(),
         None,
     )
 }
 
 // `mod` built-in function for a given struct.
-pub fn struct_mod(
-    struct_name: &FullName,
-    definition: &TypeDefn,
-    field_name: &str,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
@@ -2716,15 +2783,7 @@ pub fn struct_mod(
         vec![var_local("f")],
         expr_abs(
             vec![var_local("x")],
-            struct_mod_body(
-                "f",
-                "x",
-                field_count,
-                field_idx as usize,
-                struct_name,
-                definition,
-                field_name,
-            ),
+            struct_mod_body("f", "x", field_count, field_idx as usize, definition),
             None,
         ),
         None,
@@ -3002,6 +3061,15 @@ pub struct InlineLLVMStructSetBody {
 }
 
 impl InlineLLVMStructSetBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.set_{}({})",
+            self.struct_name.to_string(),
+            self.field_idx,
+            self.value_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.value_name, &mut self.struct_name]
     }
@@ -3053,10 +3121,6 @@ pub fn struct_set(
                     field_count,
                     field_idx,
                 }),
-                format!(
-                    "{}.{}{}({})",
-                    STRUCT_NAME, STRUCT_SETTER_SYMBOL, field_name, VALUE_NAME
-                ),
                 str_ty.clone(),
                 None,
             ),
@@ -3079,6 +3143,10 @@ pub struct InlineLLVMMakeUnionBody {
 }
 
 impl InlineLLVMMakeUnionBody {
+    pub fn name(&self) -> String {
+        format!("union_{}({})", self.field_idx, self.field_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.field_name]
     }
@@ -3129,7 +3197,6 @@ pub fn union_new_body(
             generated_union_name: name_cloned,
             field_idx,
         }),
-        name,
         union_defn.applied_type(),
         None,
     )
@@ -3160,11 +3227,7 @@ pub fn union_new(
 }
 
 // `as_{field}` built-in function for a given union.
-pub fn union_as(
-    union_name: &FullName,
-    field_name: &Name,
-    union: &TypeDefn,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let (field_idx, _) = union.get_field_by_name(field_name).unwrap();
     let field_idx = field_idx as usize;
@@ -3173,9 +3236,7 @@ pub fn union_as(
     let expr = expr_abs(
         vec![var_local(&union_arg_name)],
         union_as_body(
-            union_name,
             &union_arg_name,
-            field_name,
             field_idx,
             union.fields()[field_idx].ty.clone(),
         ),
@@ -3197,6 +3258,10 @@ pub struct InlineLLVMUnionAsBody {
 }
 
 impl InlineLLVMUnionAsBody {
+    pub fn name(&self) -> String {
+        format!("{}.as_{}", self.union_arg_name.to_string(), self.field_idx)
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.union_arg_name]
     }
@@ -3228,31 +3293,23 @@ impl InlineLLVMUnionAsBody {
 
 // `as_{field}` built-in function for a given union.
 pub fn union_as_body(
-    union_name: &FullName,
     union_arg_name: &Name,
-    field_name: &Name,
     field_idx: usize,
     field_ty: Arc<TypeNode>,
 ) -> Arc<ExprNode> {
-    let name = format!("{}.as_{}", union_name.to_string(), field_name);
     let union_arg_name = FullName::local(union_arg_name);
     expr_llvm(
         LLVMGenerator::UnionAsBody(InlineLLVMUnionAsBody {
             union_arg_name,
             field_idx,
         }),
-        name,
         field_ty,
         None,
     )
 }
 
 // `is_{field}` built-in function for a given union.
-pub fn union_is(
-    union_name: &FullName,
-    field_name: &Name,
-    union: &TypeDefn,
-) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn union_is(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Get field index.
     let (field_idx, _) = union.get_field_by_name(field_name).unwrap();
     let field_idx = field_idx as usize;
@@ -3260,7 +3317,7 @@ pub fn union_is(
     let union_arg_name = "union".to_string();
     let expr = expr_abs(
         vec![var_local(&union_arg_name)],
-        union_is_body(union_name, &union_arg_name, field_name, field_idx),
+        union_is_body(&union_arg_name, field_idx),
         None,
     );
     let union_ty = union.applied_type();
@@ -3275,10 +3332,13 @@ pub fn union_is(
 pub struct InlineLLVMUnionIsBody {
     union_arg_name: FullName,
     field_idx: usize,
-    name_cloned: String,
 }
 
 impl InlineLLVMUnionIsBody {
+    pub fn name(&self) -> String {
+        format!("{}.is_{}", self.union_arg_name.to_string(), self.field_idx)
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.union_arg_name]
     }
@@ -3328,7 +3388,13 @@ impl InlineLLVMUnionIsBody {
         gc.builder().position_at_end(cont_bb);
         let phi = gc.builder().build_phi(gc.context.i8_type(), "phi");
         phi.add_incoming(&[(&one, match_bb), (&zero, unmatch_bb)]);
-        let ret = create_obj(make_bool_ty(), &vec![], None, gc, Some(&self.name_cloned));
+        let ret = create_obj(
+            make_bool_ty(),
+            &vec![],
+            None,
+            gc,
+            Some(format!("is_union_{}", self.field_idx).as_str()),
+        );
         let ret = ret.insert_field(gc, 0, phi.as_basic_value());
         gc.release(obj);
         ret
@@ -3336,21 +3402,12 @@ impl InlineLLVMUnionIsBody {
 }
 
 // `is_{field}` built-in function for a given union.
-pub fn union_is_body(
-    union_name: &FullName,
-    union_arg_name: &Name,
-    field_name: &Name,
-    field_idx: usize,
-) -> Arc<ExprNode> {
-    let name = format!("{}.is_{}", union_name.to_string(), field_name);
-    let name_cloned = name.clone();
+pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::UnionIsBody(InlineLLVMUnionIsBody {
             union_arg_name: FullName::local(union_arg_name),
             field_idx,
-            name_cloned,
         }),
-        name,
         make_bool_ty(),
         None,
     )
@@ -3364,6 +3421,15 @@ pub struct InlineLLVMUnionModBody {
 }
 
 impl InlineLLVMUnionModBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.mod_{}({})",
+            self.union_name.to_string(),
+            self.field_idx,
+            self.modifier_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.union_name, &mut self.modifier_name]
     }
@@ -3464,7 +3530,6 @@ pub fn union_mod_function(
                     modifier_name: FullName::local(MODIFIER_NAME),
                     field_idx,
                 }),
-                format!("mod_{}({}, {})", field_name, MODIFIER_NAME, UNION_NAME),
                 union_ty.clone(),
                 None,
             ),
@@ -3488,6 +3553,10 @@ pub struct InlineLLVMUndefinedFunctionBody {
 }
 
 impl InlineLLVMUndefinedFunctionBody {
+    pub fn name(&self) -> String {
+        format!("undefined({})", self.msg_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.msg_name]
     }
@@ -3538,7 +3607,6 @@ pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody {
                 msg_name: FullName::local(UNDEFINED_ARG_NAME),
             }),
-            "undefined(msg)".to_string(),
             type_tyvar_star(A_NAME),
             None,
         ),
@@ -3560,6 +3628,14 @@ pub struct InlineLLVMWithRetainedFunctionBody {
 }
 
 impl InlineLLVMWithRetainedFunctionBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.with_retained({})",
+            self.f_name.to_string(),
+            self.x_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.f_name, &mut self.x_name]
     }
@@ -3607,7 +3683,6 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
                     f_name: FullName::local(WITH_RETAINED_F_ARG_NAME),
                     x_name: FullName::local(WITH_RETAINED_X_ARG_NAME),
                 }),
-                "with_retained(f, x)".to_string(),
                 type_tyvar_star(B_NAME),
                 None,
             ),
@@ -3633,6 +3708,10 @@ pub struct InlineLLVMIsUniqueFunctionBody {
 }
 
 impl InlineLLVMIsUniqueFunctionBody {
+    pub fn name(&self) -> String {
+        format!("{}.is_unique", self.var_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -3717,7 +3796,6 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody {
                 var_name: FullName::local(VAR_NAME),
             }),
-            format!("is_unique({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -3732,6 +3810,10 @@ pub struct InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
 }
 
 impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
+    pub fn name(&self) -> String {
+        format!("{}.get_retained_ptr", self.var_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -3778,7 +3860,6 @@ pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>
                     var_name: FullName::local(VAR_NAME),
                 },
             ),
-            format!("boxed_to_retained_ptr({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -3793,6 +3874,10 @@ pub struct InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
 }
 
 impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
+    pub fn name(&self) -> String {
+        format!("boxed_from_retained_ptr({})", self.var_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -3830,7 +3915,6 @@ pub fn get_boxed_value_from_retained_ptr_function() -> (Arc<ExprNode>, Arc<Schem
                     var_name: FullName::local(VAR_NAME),
                 },
             ),
-            format!("boxed_from_retained_ptr_function({})", VAR_NAME),
             obj_type,
             None,
         ),
@@ -3845,6 +3929,10 @@ pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 }
 
 impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+    pub fn name(&self) -> String {
+        format!("{}.get_ptr_to_release_func", self.var_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -3929,7 +4017,6 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
                     var_name: FullName::local(VAR_NAME),
                 },
             ),
-            format!("get_funptr_release({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -3944,6 +4031,10 @@ pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 }
 
 impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+    pub fn name(&self) -> String {
+        format!("{}.get_ptr_to_retain_func", self.var_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -4027,7 +4118,6 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
                     var_name: FullName::local(VAR_NAME),
                 },
             ),
-            format!("get_funptr_retain({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -4042,6 +4132,10 @@ pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
 }
 
 impl InlineLLVMGetBoxedDataPtrFunctionBody {
+    pub fn name(&self) -> String {
+        format!("{}.get_data_ptr", self.var_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -4113,7 +4207,6 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::GetBoxedDataPtrFunctionBody(InlineLLVMGetBoxedDataPtrFunctionBody {
                 var_name: FullName::local(VAR_NAME),
             }),
-            format!("_get_boxed_ptr({})", VAR_NAME),
             ret_type,
             None,
         ),
@@ -4129,6 +4222,14 @@ pub struct InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 }
 
 impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
+    pub fn name(&self) -> String {
+        format!(
+            "{}.mutate_boxed({})",
+            self.val_name.to_string(),
+            self.io_act_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.val_name, &mut self.io_act_name]
     }
@@ -4201,7 +4302,6 @@ pub fn get_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
                         io_act_name: FullName::local(IO_ACT_NAME),
                     },
                 ),
-                format!("mutate_boxed({})", VAL_NAME),
                 res_ty,
                 None,
             ),
@@ -4220,6 +4320,15 @@ pub struct InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
 }
 
 impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
+    pub fn name(&self) -> String {
+        format!(
+            "mutate_boxed_ios({}, {}, {})",
+            self.io_act_name.to_string(),
+            self.val_name.to_string(),
+            self.iostate_name.to_string(),
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![
             &mut self.val_name,
@@ -4312,10 +4421,6 @@ pub fn get_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
                     iostate_name: FullName::local(IOSTATE_NAME),
                 },
             ),
-            format!(
-                "mutate_boxed_ios({}, {}, {})",
-                IO_ACT_NAME, VAL_NAME, IOSTATE_NAME
-            ),
             ret_ty,
             None,
         ),
@@ -4329,6 +4434,10 @@ pub struct InlineLLVMUnsafePerformFunctionBody {
 }
 
 impl InlineLLVMUnsafePerformFunctionBody {
+    pub fn name(&self) -> String {
+        format!("{}.unsafe_perform", self.io_act_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.io_act_name]
     }
@@ -4360,7 +4469,6 @@ pub fn get_unsafe_perform() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::UnsafePerformFunctionBody(InlineLLVMUnsafePerformFunctionBody {
                 io_act_name: FullName::local(IO_ACT_NAME),
             }),
-            format!("unsafe_perform({})", IO_ACT_NAME,),
             val_ty,
             None,
         ),
@@ -4391,6 +4499,10 @@ pub struct InlineLLVMMarkThreadedFunctionBody {
 }
 
 impl InlineLLVMMarkThreadedFunctionBody {
+    pub fn name(&self) -> String {
+        format!("{}.mark_threaded", self.var_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -4430,7 +4542,6 @@ pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
             LLVMGenerator::MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody {
                 var_name: FullName::local(VAR_NAME),
             }),
-            format!("mark_threaded({})", VAR_NAME),
             obj_type,
             None,
         ),
@@ -4444,7 +4555,6 @@ pub fn infinity_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let ty = make_floating_ty(type_name).unwrap();
     let expr = expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: f64::INFINITY }),
-        format!("infinity_{}", type_name),
         ty.clone(),
         None,
     );
@@ -4460,7 +4570,6 @@ pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let ty = make_floating_ty(type_name).unwrap();
     let expr = expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: nan_val }),
-        format!("quiet_nan_{}", type_name),
         ty.clone(),
         None,
     );
@@ -4488,7 +4597,7 @@ pub fn unary_opeartor_instance(
             method_name.to_string(),
             expr_abs(
                 vec![var_local(UNARY_OPERATOR_RHS_NAME)],
-                expr_llvm(generator, method_name.to_string(), result_ty, None),
+                expr_llvm(generator, result_ty, None),
                 None,
             ),
         )]),
@@ -4522,7 +4631,7 @@ pub fn binary_opeartor_instance(
                 vec![var_local(BINARY_OPERATOR_LHS_NAME)],
                 expr_abs(
                     vec![var_local(BINARY_OPERATOR_RHS_NAME)],
-                    expr_llvm(generator, method_name.to_string(), result_ty, None),
+                    expr_llvm(generator, result_ty, None),
                     None,
                 ),
                 None,
@@ -4551,6 +4660,14 @@ pub struct InlineLLVMIntEqBody {
 }
 
 impl InlineLLVMIntEqBody {
+    pub fn name(&self) -> String {
+        format!(
+            "int_eq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -4608,6 +4725,14 @@ pub struct InlineLLVMPtrEqBody {
 }
 
 impl InlineLLVMPtrEqBody {
+    pub fn name(&self) -> String {
+        format!(
+            "ptr_eq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -4671,6 +4796,14 @@ pub struct InlineLLVMFloatEqBody {
 }
 
 impl InlineLLVMFloatEqBody {
+    pub fn name(&self) -> String {
+        format!(
+            "float_eq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -4740,6 +4873,14 @@ pub struct InlineLLVMIntLessThanBody {
 }
 
 impl InlineLLVMIntLessThanBody {
+    pub fn name(&self) -> String {
+        format!(
+            "int_lt({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -4805,6 +4946,14 @@ pub struct InlineLLVMFloatLessThanBody {
 }
 
 impl InlineLLVMFloatLessThanBody {
+    pub fn name(&self) -> String {
+        format!(
+            "float_lt({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -4875,6 +5024,14 @@ pub struct InlineLLVMIntLessThanOrEqBody {
 }
 
 impl InlineLLVMIntLessThanOrEqBody {
+    pub fn name(&self) -> String {
+        format!(
+            "int_leq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -4941,6 +5098,14 @@ pub struct InlineLLVMFloatLessThanOrEqBody {
 }
 
 impl InlineLLVMFloatLessThanOrEqBody {
+    pub fn name(&self) -> String {
+        format!(
+            "float_leq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5010,6 +5175,14 @@ pub struct InlineLLVMIntAddBody {
 }
 
 impl InlineLLVMIntAddBody {
+    pub fn name(&self) -> String {
+        format!(
+            "int_add({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5060,6 +5233,14 @@ pub struct InlineLLVMFloatAddBody {
 }
 
 impl InlineLLVMFloatAddBody {
+    pub fn name(&self) -> String {
+        format!(
+            "float_add({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5119,6 +5300,14 @@ pub struct InlineLLVMIntSubBody {
 }
 
 impl InlineLLVMIntSubBody {
+    pub fn name(&self) -> String {
+        format!(
+            "int_sub({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5169,6 +5358,14 @@ pub struct InlineLLVMFloatSubBody {
 }
 
 impl InlineLLVMFloatSubBody {
+    pub fn name(&self) -> String {
+        format!(
+            "float_sub({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5228,6 +5425,14 @@ pub struct InlineLLVMIntMulBody {
 }
 
 impl InlineLLVMIntMulBody {
+    pub fn name(&self) -> String {
+        format!(
+            "int_mul({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5278,6 +5483,14 @@ pub struct InlineLLVMFloatMulBody {
 }
 
 impl InlineLLVMFloatMulBody {
+    pub fn name(&self) -> String {
+        format!(
+            "float_mul({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5337,6 +5550,14 @@ pub struct InlineLLVMIntDivBody {
 }
 
 impl InlineLLVMIntDivBody {
+    pub fn name(&self) -> String {
+        format!(
+            "int_div({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5393,6 +5614,14 @@ pub struct InlineLLVMFloatDivBody {
 }
 
 impl InlineLLVMFloatDivBody {
+    pub fn name(&self) -> String {
+        format!(
+            "float_div({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5452,6 +5681,14 @@ pub struct InlineLLVMIntRemBody {
 }
 
 impl InlineLLVMIntRemBody {
+    pub fn name(&self) -> String {
+        format!(
+            "int_rem({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.lhs_name, &mut self.rhs_name]
     }
@@ -5516,6 +5753,10 @@ pub struct InlineLLVMIntNegBody {
 }
 
 impl InlineLLVMIntNegBody {
+    pub fn name(&self) -> String {
+        format!("int_neg({})", self.rhs_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.rhs_name]
     }
@@ -5561,6 +5802,10 @@ pub struct InlineLLVMFloatNegBody {
 }
 
 impl InlineLLVMFloatNegBody {
+    pub fn name(&self) -> String {
+        format!("float_neg({})", self.rhs_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.rhs_name]
     }
@@ -5615,6 +5860,10 @@ pub struct InlineLLVMBoolNegBody {
 }
 
 impl InlineLLVMBoolNegBody {
+    pub fn name(&self) -> String {
+        format!("bool_neg({})", self.rhs_name.to_string())
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.rhs_name]
     }

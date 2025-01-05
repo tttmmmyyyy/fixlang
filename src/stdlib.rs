@@ -440,7 +440,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
-        mod_array(false),
+        mod_array(),
         None,
         Some(include_str!("./docs/std_array_mod.md").to_string()),
     ));

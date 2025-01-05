@@ -258,6 +258,77 @@ impl LLVMGenerator {
         }
     }
 
+    pub fn name(&self) -> String {
+        let raw_name = match self {
+            LLVMGenerator::IsUniqueFunctionBody(x) => x.name(),
+            LLVMGenerator::IntNegBody(x) => x.name(),
+            LLVMGenerator::FloatNegBody(x) => x.name(),
+            LLVMGenerator::BoolNegBody(x) => x.name(),
+            LLVMGenerator::IntEqBody(x) => x.name(),
+            LLVMGenerator::PtrEqBody(x) => x.name(),
+            LLVMGenerator::FloatEqBody(x) => x.name(),
+            LLVMGenerator::IntLessThanBody(x) => x.name(),
+            LLVMGenerator::FloatLessThanBody(x) => x.name(),
+            LLVMGenerator::IntLessThanOrEqBody(x) => x.name(),
+            LLVMGenerator::FloatLessThanOrEqBody(x) => x.name(),
+            LLVMGenerator::IntAddBody(x) => x.name(),
+            LLVMGenerator::FloatAddBody(x) => x.name(),
+            LLVMGenerator::IntSubBody(x) => x.name(),
+            LLVMGenerator::FloatSubBody(x) => x.name(),
+            LLVMGenerator::IntMulBody(x) => x.name(),
+            LLVMGenerator::FloatMulBody(x) => x.name(),
+            LLVMGenerator::IntDivBody(x) => x.name(),
+            LLVMGenerator::FloatDivBody(x) => x.name(),
+            LLVMGenerator::IntRemBody(x) => x.name(),
+            LLVMGenerator::MarkThreadedFunctionBody(x) => x.name(),
+            LLVMGenerator::GetRetainedPtrOfBoxedValueFunctionBody(x) => x.name(),
+            LLVMGenerator::GetBoxedValueFromRetainedPtrFunctionBody(x) => x.name(),
+            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.name(),
+            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.name(),
+            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.name(),
+            LLVMGenerator::WithRetainedFunctionBody(x) => x.name(),
+            LLVMGenerator::UnsafeMutateBoxedDataFunctionBody(x) => x.name(),
+            LLVMGenerator::UnsafeMutateBoxedDataIOStateFunctionBody(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.name(),
+            LLVMGenerator::UnsafePerformFunctionBody(x) => x.name(),
+            LLVMGenerator::IntLit(x) => x.name(),
+            LLVMGenerator::FloatLit(x) => x.name(),
+            LLVMGenerator::NullPtrLit(x) => x.name(),
+            LLVMGenerator::BoolLit(x) => x.name(),
+            LLVMGenerator::StringLit(x) => x.name(),
+            LLVMGenerator::FixBody(x) => x.name(),
+            LLVMGenerator::CastIntegralBody(x) => x.name(),
+            LLVMGenerator::CastFloatBody(x) => x.name(),
+            LLVMGenerator::CastIntToFloatBody(x) => x.name(),
+            LLVMGenerator::CastFloatToIntBody(x) => x.name(),
+            LLVMGenerator::ShiftBody(x) => x.name(),
+            LLVMGenerator::BitwiseOperationBody(x) => x.name(),
+            LLVMGenerator::FillArrayBody(x) => x.name(),
+            LLVMGenerator::MakeEmptyArrayBody(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeSetBody(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeGetBody(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.name(),
+            LLVMGenerator::ArrayGetBody(x) => x.name(),
+            LLVMGenerator::ArraySetBody(x) => x.name(),
+            LLVMGenerator::ArrayModBody(x) => x.name(),
+            LLVMGenerator::ArrayForceUniqueBody(x) => x.name(),
+            LLVMGenerator::ArrayGetPtrBody(x) => x.name(),
+            LLVMGenerator::ArrayGetSizeBody(x) => x.name(),
+            LLVMGenerator::ArrayGetCapacityBody(x) => x.name(),
+            LLVMGenerator::StructGetBody(x) => x.name(),
+            LLVMGenerator::StructModBody(x) => x.name(),
+            LLVMGenerator::StructSetBody(x) => x.name(),
+            LLVMGenerator::StructPunchBody(x) => x.name(),
+            LLVMGenerator::StructPlugInBody(x) => x.name(),
+            LLVMGenerator::MakeUnionBody(x) => x.name(),
+            LLVMGenerator::UnionAsBody(x) => x.name(),
+            LLVMGenerator::UnionIsBody(x) => x.name(),
+            LLVMGenerator::UnionModBody(x) => x.name(),
+            LLVMGenerator::UndefinedFunctionBody(x) => x.name(),
+        };
+        format!("LLVM<{}>", raw_name)
+    }
+
     // Returns a list of variables which is released by this generator.
     // None if the generator does not support this interface.
     // This is used for the borrowing optimization.
@@ -276,8 +347,7 @@ impl LLVMGenerator {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVM {
     pub generator: LLVMGenerator,
+    pub ty: Arc<TypeNode>,
     // Set of variables which is contained in the list `released_vars()` but should not be released.
     pub borrowed_vars: Vec<FullName>,
-    pub name: String,
-    pub ty: Arc<TypeNode>,
 }
