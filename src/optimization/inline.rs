@@ -60,6 +60,12 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         let mut cost_calculator = InlineCostCalculator::new(name.clone());
         cost_calculator.traverse(&sym.expr.as_ref().unwrap());
         costs.add_cost_calculation_result(name, cost_calculator);
+
+        // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`.
+        let expr = sym.expr.as_ref().unwrap();
+        let (_params, body) = expr.destructure_lam_sequence();
+        let is_llvm_lam = body.is_llvm();
+        costs.costs.get_mut(name).unwrap().is_llvm_lam = is_llvm_lam;
     }
     costs
 }
@@ -74,6 +80,8 @@ struct InlineCost {
     is_self_recursive: bool,
     // Is the top-level construct a lambda expression?
     is_lambda: bool,
+    // Is the expression of the form `|x, y, ...| {llvm}`?
+    is_llvm_lam: bool,
 }
 
 impl InlineCost {
@@ -81,6 +89,9 @@ impl InlineCost {
     fn inline_at_non_call_site(&self) -> bool {
         if self.is_self_recursive {
             return false;
+        }
+        if self.is_llvm_lam {
+            return true;
         }
         self.call_count == 1
         // TODO: we should allow constants to be inlined even if they are called more than once.
@@ -90,6 +101,9 @@ impl InlineCost {
     fn inline_at_call_site(&self) -> bool {
         if self.is_self_recursive {
             return false;
+        }
+        if self.is_llvm_lam {
+            return true;
         }
         if !self.is_lambda {
             return false;
@@ -127,6 +141,7 @@ impl InlineCosts {
                         complexity: 0,
                         is_self_recursive: false,
                         is_lambda: false,
+                        is_llvm_lam: false,
                     },
                 );
             }
@@ -145,6 +160,7 @@ impl InlineCosts {
                     complexity: cost.complexity,
                     is_self_recursive: cost.is_call_self,
                     is_lambda: cost.is_lambda,
+                    is_llvm_lam: false,
                 },
             );
         }
