@@ -9,22 +9,29 @@ use crate::{
         name::FullName,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
-    misc::Map,
+    misc::{Map, Set},
     ExprNode, InstantiatedSymbol, Program,
 };
 
-use super::beta_reduction;
+use super::{beta_reduction, remove_renaming};
 
-pub const INLINE_ITERATION: usize = 1;
 pub const INLINE_COST_THRESHOLD: usize = 30;
 
 pub fn run(prg: &mut Program) {
-    for _ in 0..INLINE_ITERATION {
-        run_one(prg);
+    // Calculate free variables of all symbols.
+    for (_name, sym) in &mut prg.instantiated_symbols {
+        sym.expr = Some(sym.expr.as_ref().unwrap().calculate_free_vars());
     }
+
+    let mut skip_symbols = Set::default();
+    while run_one(prg, &mut skip_symbols) {}
+    remove_renaming::run(prg);
 }
 
-pub fn run_one(prg: &mut Program) {
+// Run inlining optimization once.
+pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
+    let mut changed = false;
+
     let costs = calculate_inline_costs(prg);
     let symbols = mem::take(&mut prg.instantiated_symbols);
     let mut inliner = Inliner {
@@ -33,25 +40,51 @@ pub fn run_one(prg: &mut Program) {
     };
     let mut new_symbols: Map<FullName, InstantiatedSymbol> = Map::default();
     let root_value_names = prg.root_value_names();
+
     for (name, mut sym) in symbols {
-        // If call count of the symbol is 0, and neither of entry point or exported, discard the symbol.
+        // If call count of the symbol is 0, and it is neither of entry point nor exported value, discard it.
         if costs.get_call_count(&name) == 0 && !root_value_names.contains(&name) {
+            changed = true;
+            continue;
+        }
+
+        // If the symbol is known to be stable, skip it.
+        if stable_symbols.contains(&name) {
+            new_symbols.insert(name, sym);
+            continue;
+        }
+
+        // If the new symbol has no free variables, it cannot be inlined furthermore.
+        if sym.expr.as_ref().unwrap().free_vars().is_empty() {
+            stable_symbols.insert(name.clone());
+            new_symbols.insert(name.clone(), sym);
             continue;
         }
 
         // Traverse the expression and inline the symbol.
         let res = inliner.traverse(&sym.expr.as_ref().unwrap());
 
-        // If some name is inlined, run beta reduction.
         if res.changed {
+            // If inlining was done, run beta reduction.
+            changed = true;
             sym.expr = Some(res.expr.calculate_free_vars());
             beta_reduction::run_on_symbol(&mut sym);
+        } else {
+            // If inlining was not done, it cannot be inlined furthermore.
+            stable_symbols.insert(name.clone());
+        }
+
+        // If the new symbol has no free variables, it cannot be inlined furthermore.
+        if sym.expr.as_ref().unwrap().free_vars().is_empty() {
+            stable_symbols.insert(name.clone());
         }
 
         new_symbols.insert(name, sym);
     }
 
     prg.instantiated_symbols = new_symbols;
+
+    changed
 }
 
 fn calculate_inline_costs(prg: &Program) -> InlineCosts {

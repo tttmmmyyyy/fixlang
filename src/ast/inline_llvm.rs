@@ -100,15 +100,15 @@ impl LLVMGenerator {
             LLVMGenerator::FillArrayBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::MakeEmptyArrayBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::ArrayUnsafeSetBody(x) => Some(x.generate(gc, ty, bvs)),
-            LLVMGenerator::ArrayUnsafeGetBody(x) => Some(x.generate(gc, ty, bvs)),
+            LLVMGenerator::ArrayUnsafeGetBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::ArrayUnsafeSetSizeBody(x) => Some(x.generate(gc, ty, bvs)),
-            LLVMGenerator::ArrayGetBody(x) => Some(x.generate(gc, ty, bvs)),
+            LLVMGenerator::ArrayGetBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::ArraySetBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::ArrayModBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::ArrayForceUniqueBody(x) => Some(x.generate(gc, ty, bvs)),
-            LLVMGenerator::ArrayGetPtrBody(x) => Some(x.generate(gc, ty, bvs)),
-            LLVMGenerator::ArrayGetSizeBody(x) => Some(x.generate(gc, ty, bvs)),
-            LLVMGenerator::ArrayGetCapacityBody(x) => Some(x.generate(gc, ty, bvs)),
+            LLVMGenerator::ArrayGetPtrBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayGetSizeBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayGetCapacityBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::StructGetBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::StructModBody(x) => Some(x.generate(gc, ty, bvs)),
             LLVMGenerator::StructSetBody(x) => Some(x.generate(gc, ty, bvs)),
@@ -327,20 +327,6 @@ impl LLVMGenerator {
             LLVMGenerator::UndefinedFunctionBody(x) => x.name(),
         };
         format!("LLVM<{}>", raw_name)
-    }
-
-    // Returns a list of variables which is released by this generator.
-    // None if the generator does not support this interface.
-    // This is used for the borrowing optimization.
-    pub fn released_vars(&self) -> Option<Vec<FullName>> {
-        match self {
-            LLVMGenerator::ArrayGetBody(x) => Some(x.released_vars()),
-            LLVMGenerator::ArrayGetSizeBody(x) => Some(x.released_vars()),
-            LLVMGenerator::ArrayUnsafeGetBody(x) => Some(x.released_vars()),
-            LLVMGenerator::ArrayGetPtrBody(x) => Some(x.released_vars()),
-            LLVMGenerator::ArrayGetCapacityBody(x) => Some(x.released_vars()),
-            _ => None,
-        }
     }
 }
 

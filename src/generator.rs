@@ -25,7 +25,6 @@ use inkwell::{
 use misc::flatten_opt;
 use misc::Map;
 use misc::Set;
-use optimization::borrowing::run;
 
 use super::*;
 
@@ -609,13 +608,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         flatten_opt(self.debug_scope.borrow().last().cloned())
     }
 
-    // Get the value of a variable.
+    // Get a variable.
     pub fn get_var(&self, var: &FullName) -> Variable<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
         } else {
             self.global.get(var).unwrap().clone()
         }
+    }
+
+    pub fn get_var_value(&mut self, name: &FullName) -> Object<'c> {
+        self.get_var(name).ptr.get(self)
     }
 
     // Lock variables in scope to avoid being moved out.
@@ -642,8 +645,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get field of object in the scope.
-    pub fn get_var_field(self: &mut Self, var: &FullName, field_idx: u32) -> BasicValueEnum<'c> {
-        let obj = self.get_var(var).ptr.get(self);
+    pub fn get_var_field_retained_if_used_later(
+        self: &mut Self,
+        var: &FullName,
+        field_idx: u32,
+    ) -> BasicValueEnum<'c> {
+        let obj = self.get_var_retained_if_used_later(var);
         obj.extract_field(self, field_idx)
     }
 
@@ -1558,22 +1565,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Evaluate application
     fn eval_app(
         &mut self,
-        mut fun: Arc<ExprNode>,
+        fun: Arc<ExprNode>,
         args: Vec<Arc<ExprNode>>,
         tail: bool,
     ) -> Option<Object<'c>> {
-        // Prepare for borrowing optimization.
-        let borrowing_optimization_data = if self.config.perform_borrowing_optimization() {
-            run(self, fun.clone(), &args)
-        } else {
-            None
-        };
-
-        // Replace fun to the borrowing one.
-        if borrowing_optimization_data.is_some() {
-            fun = borrowing_optimization_data.as_ref().unwrap().0.clone();
-        }
-
         // Before evaluating `fun`, we lock all variables in arguments as used later.
         for arg in &args {
             self.scope_lock_as_used_later(arg.free_vars());
@@ -1584,20 +1579,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Evaluate arguments.
         let mut arg_objs = vec![];
-        for (i, arg) in args.iter().enumerate() {
+        for arg in args.iter() {
             self.scope_unlock_as_used_later(arg.free_vars());
 
-            // Check whether or not the argument should be borrowed.
-            let borrow_arg_var = borrowing_optimization_data.is_some()
-                && borrowing_optimization_data.as_ref().unwrap().1.contains(&i);
-            let arg_obj = if borrow_arg_var {
-                // Borrow the argument (which is also a variable expression).
-                let var_name = &arg.get_var().name;
-                self.get_var(var_name).ptr.get(self)
-            } else {
-                // Evaluate the argument expression.
-                self.eval_expr(arg.clone(), false).unwrap()
-            };
+            // Evaluate the argument expression.
+            let arg_obj = self.eval_expr(arg.clone(), false).unwrap();
             arg_objs.push(arg_obj)
         }
 
@@ -1636,7 +1622,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let mut cap_vars = cap_names
             .into_iter()
             .filter(|name| name.is_local())
-            .map(|name| (name.clone(), self.get_var(&name).ptr.get(self).ty))
+            .map(|name| (name.clone(), self.get_var_value(&name).ty))
             .collect::<Vec<_>>();
         cap_vars.sort_by_key(|(name, _)| name.to_string());
 
@@ -2035,7 +2021,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         for var_name in &else_expr.free_vars_sorted() {
             // Here we use sorted free variables to fix the binary code.
             if !then_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
-                let var = self.get_var(var_name).ptr.get(self);
+                let var = self.get_var_value(var_name);
                 self.release(var);
             }
         }
@@ -2056,7 +2042,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         for var_name in &then_expr.free_vars_sorted() {
             // Here we use sorted free variables to fix the binary code.
             if !else_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
-                let var = self.get_var(var_name).ptr.get(self);
+                let var = self.get_var_value(var_name);
                 self.release(var);
             }
         }
@@ -2170,7 +2156,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let vars_used_only_in_others = vars_used_in_any_case.difference(&vars_used_in_later);
             for var in vars_used_only_in_others {
                 if self.get_var(var).used_later == 0 {
-                    let var = self.get_var(var).ptr.get(self);
+                    let var = self.get_var_value(var);
                     self.release(var);
                 }
             }

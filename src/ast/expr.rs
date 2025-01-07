@@ -58,13 +58,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    // Set `released_params_indices`.
-    pub fn set_released_params_indices(&self, indices: Vec<usize>) -> Arc<Self> {
-        let mut ret = self.clone_all();
-        ret.released_params_indices = Some(indices);
-        Arc::new(ret)
-    }
-
     // Get free vars.
     pub fn free_vars(self: &Self) -> &Set<FullName> {
         self.free_vars.as_ref().unwrap()
@@ -285,6 +278,15 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn get_let_bound(&self) -> Arc<ExprNode> {
+        match &*self.expr {
+            Expr::Let(_, bound, _) => bound.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
     pub fn set_let_bound(&self, bound: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone_without_fvs();
         match &*self.expr {
@@ -296,6 +298,15 @@ impl ExprNode {
             }
         }
         Arc::new(ret)
+    }
+
+    pub fn get_let_value(&self) -> Arc<Self> {
+        match &*self.expr {
+            Expr::Let(_, _, val) => val.clone(),
+            _ => {
+                panic!()
+            }
+        }
     }
 
     pub fn set_let_value(&self, value: Arc<ExprNode>) -> Arc<Self> {
@@ -316,16 +327,6 @@ impl ExprNode {
     pub fn set_let_value_typed(&self, value: Arc<ExprNode>) -> Arc<Self> {
         let value_ty = value.ty.as_ref().unwrap().clone();
         self.set_let_value(value).set_inferred_type(value_ty)
-    }
-
-    #[allow(dead_code)]
-    pub fn get_let_value(&self) -> Arc<Self> {
-        match &*self.expr {
-            Expr::Let(_, _, val) => val.clone(),
-            _ => {
-                panic!()
-            }
-        }
     }
 
     pub fn set_if_cond(&self, cond: Arc<ExprNode>) -> Arc<Self> {
@@ -632,22 +633,6 @@ impl ExprNode {
         match &*self.expr {
             Expr::LLVM(_) => true,
             _ => false,
-        }
-    }
-
-    pub fn set_llvm_borrowed_vars(&self, vars: Vec<FullName>) -> Arc<ExprNode> {
-        let llvm = self.get_llvm();
-        let mut llvm: InlineLLVM = llvm.as_ref().clone();
-        llvm.borrowed_vars = vars;
-        self.set_llvm(llvm)
-    }
-
-    // Returns a list of variables which is released by evaluating this expression.
-    // None if the expression does not support this interface yet.
-    pub fn released_vars(&self) -> Option<Vec<FullName>> {
-        match &*self.expr {
-            Expr::LLVM(llvm) => llvm.generator.released_vars(),
-            _ => None,
         }
     }
 

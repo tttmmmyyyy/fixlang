@@ -65,11 +65,11 @@ pub fn run(prg: &mut Program) {
 
     // Rename exported values.
     if let Some(entry_io) = &mut prg.entry_io_value {
-        *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names);
+        *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names).calculate_free_vars();
     }
     for export_stmt in &mut prg.export_statements {
         if let Some(entry_io) = &mut export_stmt.instantiated_value_expr {
-            *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names);
+            *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names).calculate_free_vars();
         }
     }
 }

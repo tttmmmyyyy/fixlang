@@ -300,7 +300,7 @@ impl Configuration {
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;
-        // config.emit_symbols = true;
+        config.emit_symbols = true;
         config
     }
 
@@ -412,10 +412,6 @@ impl Configuration {
     }
 
     pub fn perform_uncurry_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Separated
-    }
-
-    pub fn perform_borrowing_optimization(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Separated
     }
 
