@@ -46,12 +46,12 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         }
     }
 
-    // Perform borrowing optimization.
-    if config.perform_borrowing_optimization() {
-        borrowing::borrowing_optimization(prg);
-        if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.borrowing", step));
-            // step += 1;
-        }
-    }
+    // // Perform borrowing optimization.
+    // if config.perform_borrowing_optimization() {
+    //     borrowing::borrowing_optimization(prg);
+    //     if config.emit_symbols {
+    //         prg.emit_symbols(&format!("{}.borrowing", step));
+    //         // step += 1;
+    //     }
+    // }
 }
