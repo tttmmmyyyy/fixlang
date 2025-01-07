@@ -641,6 +641,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Is a variable used later?
     pub fn is_var_used_later(&self, var: &FullName) -> bool {
+        if var.is_global() {
+            return true;
+        }
         self.scope.borrow().last().unwrap().is_used_later(var)
     }
 
