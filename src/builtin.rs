@@ -1998,12 +1998,9 @@ fn make_array_unique<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, array: Object<'
     let end_bb = gc.context.append_basic_block(current_func, "end_bb");
 
     // Implement shared_bb.
+    // In this block, create new array and clone array field.
     gc.builder().position_at_end(shared_bb);
-    // Create new array and clone array field.
-    if panic_if_shared {
-        // In case of unique version, panic in this case.
-        gc.panic("An array is asserted as unique but is shared!\n");
-    }
+
     // Allocate cloned array.
     let array_cap = array.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
     let cloned_array = create_obj(
