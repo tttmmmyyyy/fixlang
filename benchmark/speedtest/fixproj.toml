@@ -40,7 +40,7 @@ files = ["speedtest.fix"]
 # debug = true
 
 ## Optimization level.
-## One of "none", "minimum", "separated", "default".
+## One of "none", "separated", "default".
 ## Overwritten by the command line argument.
 # opt_level = "default"
 
