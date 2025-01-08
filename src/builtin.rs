@@ -830,8 +830,8 @@ impl InlineLLVMFixBody {
         tail: bool,
     ) -> Option<Object<'c>> {
         // Get arguments
-        let x = gc.get_var_retained_if_used_later(&self.x_str);
-        let f = gc.get_var_retained_if_used_later(&self.f_str);
+        let x = gc.get_scoped_obj(&self.x_str);
+        let f = gc.get_scoped_obj(&self.f_str);
 
         // Create "fix(f)" closure.
         let fixf_ty = f.ty.get_lambda_dst();
@@ -847,7 +847,7 @@ impl InlineLLVMFixBody {
         let fixf_funptr =
             gc.cast_pointer(fixf_funptr, opaque_lambda_function_ptr_type(&gc.context));
         let fixf = fixf.insert_field(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
-        let cap_obj = gc.get_var_retained_if_used_later(&self.cap_name);
+        let cap_obj = gc.get_scoped_obj(&self.cap_name);
         let cap_obj_ptr = cap_obj.value;
         let fixf = fixf.insert_field(gc, CLOSURE_CAPTURE_IDX, cap_obj_ptr);
 
@@ -916,9 +916,7 @@ impl InlineLLVMCastIntegralBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let from_val = gc
-            .get_var_field_retained_if_used_later(&self.from_name, 0)
-            .into_int_value();
+        let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
 
         // Get target type.
         let to_int = to_ty
@@ -1002,7 +1000,7 @@ impl InlineLLVMCastFloatBody {
     ) -> Object<'c> {
         // Get value
         let from_val = gc
-            .get_var_field_retained_if_used_later(&self.from_name, 0)
+            .get_scoped_obj_field(&self.from_name, 0)
             .into_float_value();
 
         // Get target type.
@@ -1083,9 +1081,7 @@ impl InlineLLVMCastIntToFloatBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let from_val = gc
-            .get_var_field_retained_if_used_later(&self.from_name, 0)
-            .into_int_value();
+        let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
 
         // Get target type.
         let to_float = to_ty
@@ -1178,7 +1174,7 @@ impl InlineLLVMCastFloatToIntBody {
     ) -> Object<'c> {
         // Get value
         let from_val = gc
-            .get_var_field_retained_if_used_later(&self.from_name, 0)
+            .get_scoped_obj_field(&self.from_name, 0)
             .into_float_value();
 
         // Get target type.
@@ -1274,11 +1270,9 @@ impl InlineLLVMShiftBody {
     ) -> Object<'c> {
         // Get value
         let val = gc
-            .get_var_field_retained_if_used_later(&self.value_name, 0)
+            .get_scoped_obj_field(&self.value_name, 0)
             .into_int_value();
-        let n = gc
-            .get_var_field_retained_if_used_later(&self.n_name, 0)
-            .into_int_value();
+        let n = gc.get_scoped_obj_field(&self.n_name, 0).into_int_value();
 
         let is_signed = ty.toplevel_tycon().unwrap().is_singned_intger();
 
@@ -1374,12 +1368,8 @@ impl InlineLLVMBitwiseOperationBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
-        let lhs = gc
-            .get_var_field_retained_if_used_later(&self.lhs_name, 0)
-            .into_int_value();
-        let rhs = gc
-            .get_var_field_retained_if_used_later(&self.rhs_name, 0)
-            .into_int_value();
+        let lhs = gc.get_scoped_obj_field(&self.lhs_name, 0).into_int_value();
+        let rhs = gc.get_scoped_obj_field(&self.rhs_name, 0).into_int_value();
 
         // Perform cast.
         let val = match self.op_type {
@@ -1468,10 +1458,8 @@ impl InlineLLVMFillArrayBody {
         ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let size = gc
-            .get_var_field_retained_if_used_later(&self.size_name, 0)
-            .into_int_value();
-        let value = gc.get_var_retained_if_used_later(&self.value_name);
+        let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
+        let value = gc.get_scoped_obj(&self.value_name);
         let array = create_obj(
             ty.clone(),
             &vec![],
@@ -1552,7 +1540,7 @@ impl InlineLLVMMakeEmptyArrayBody {
     ) -> Object<'c> {
         // Get capacity
         let cap = gc
-            .get_var_field_retained_if_used_later(&self.capacity_name, 0)
+            .get_scoped_obj_field(&self.capacity_name, 0)
             .into_int_value();
 
         // Allocate
@@ -1621,11 +1609,9 @@ impl InlineLLVMArrayUnsafeSetBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var_retained_if_used_later(&self.arr_name);
-        let idx = gc
-            .get_var_field_retained_if_used_later(&self.idx_name, 0)
-            .into_int_value();
-        let value = gc.get_var_retained_if_used_later(&self.value_name);
+        let array = gc.get_scoped_obj(&self.arr_name);
+        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
+        let value = gc.get_scoped_obj(&self.value_name);
 
         // Get array cap and buffer.
         let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
@@ -1705,10 +1691,8 @@ impl InlineLLVMArrayUnsafeGetBody {
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var_value(&self.arr_name);
-        let idx = gc
-            .get_var_field_retained_if_used_later(&self.idx_name, 0)
-            .into_int_value();
+        let array = gc.get_scoped_obj_noretain(&self.arr_name);
+        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
 
         // Get array buffer
         let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
@@ -1786,10 +1770,8 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var_retained_if_used_later(&self.arr_name);
-        let idx = gc
-            .get_var_field_retained_if_used_later(&self.idx_name, 0)
-            .into_int_value();
+        let array = gc.get_scoped_obj(&self.arr_name);
+        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
 
         let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
 
@@ -1875,10 +1857,8 @@ impl InlineLLVMArrayUnsafeSetSizeBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var_retained_if_used_later(&self.arr_name);
-        let length = gc
-            .get_var_field_retained_if_used_later(&self.len_name, 0)
-            .into_int_value();
+        let array = gc.get_scoped_obj(&self.arr_name);
+        let length = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
 
         array.insert_field(gc, ARRAY_LEN_IDX, length)
     }
@@ -1948,13 +1928,11 @@ impl InlineLLVMArrayGetBody {
     ) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         // let array = gc.get_var_retained_if_used_later(&self.arr_name);
-        let array = gc.get_var_value(&self.arr_name);
+        let array = gc.get_scoped_obj_noretain(&self.arr_name);
 
         let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
         let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        let idx = gc
-            .get_var_field_retained_if_used_later(&self.idx_name, 0)
-            .into_int_value();
+        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
         let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx);
 
         if !gc.is_var_used_later(&self.arr_name) {
@@ -2101,11 +2079,9 @@ impl InlineLLVMArraySetBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var_retained_if_used_later(&self.array_name);
-        let idx = gc
-            .get_var_field_retained_if_used_later(&self.idx_name, 0)
-            .into_int_value();
-        let value = gc.get_var_retained_if_used_later(&self.value_name);
+        let array = gc.get_scoped_obj(&self.array_name);
+        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
+        let value = gc.get_scoped_obj(&self.value_name);
 
         // Force array to be unique
         let array = make_array_unique(gc, array, false);
@@ -2203,11 +2179,9 @@ impl InlineLLVMArrayModBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var_retained_if_used_later(&self.array_name);
-        let idx = gc
-            .get_var_field_retained_if_used_later(&self.idx_name, 0)
-            .into_int_value();
-        let modifier = gc.get_var_retained_if_used_later(&self.modifier_name);
+        let array = gc.get_scoped_obj(&self.array_name);
+        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
+        let modifier = gc.get_scoped_obj(&self.modifier_name);
 
         // Make array unique
         let array = make_array_unique(gc, array, false);
@@ -2299,7 +2273,7 @@ impl InlineLLVMArrayForceUniqueBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_var_retained_if_used_later(&self.arr_name);
+        let array = gc.get_scoped_obj(&self.arr_name);
 
         // Make array unique
         let array = make_array_unique(gc, array, false);
@@ -2350,7 +2324,7 @@ impl InlineLLVMArrayGetPtrBody {
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argment
-        let array = gc.get_var_value(&self.arr_name);
+        let array = gc.get_scoped_obj_noretain(&self.arr_name);
 
         // Get pointer
         let ptr = array.gep_boxed(gc, ARRAY_BUF_IDX);
@@ -2424,7 +2398,7 @@ impl InlineLLVMArrayGetSizeBody {
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
-        let array_obj = gc.get_var_value(&self.arr_name);
+        let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
         let len = array_obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
 
         if !gc.is_var_used_later(&self.arr_name) {
@@ -2475,7 +2449,7 @@ impl InlineLLVMArrayGetCapacityBody {
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
-        let array_obj = gc.get_var_value(&self.arr_name);
+        let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
         let len = array_obj.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
 
         if !gc.is_var_used_later(&self.arr_name) {
@@ -2529,7 +2503,7 @@ impl InlineLLVMStructGetBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get struct object.
-        let str = gc.get_var_retained_if_used_later(&self.var_name);
+        let str = gc.get_scoped_obj(&self.var_name);
         ObjectFieldType::get_struct_fields(gc, &str, &[self.field_idx as u32])[0].clone()
     }
 }
@@ -2586,7 +2560,7 @@ impl InlineLLVMStructPunchBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the argument object (the struct value).
-        let str = gc.get_var_retained_if_used_later(&self.var_name);
+        let str = gc.get_scoped_obj(&self.var_name);
 
         // We should force the uniqueness of the struct here.
         // Actually we omit it because we do uniqueness checking in the `act_x` function.
@@ -2669,8 +2643,8 @@ impl InlineLLVMStructPlugInBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the first argument, a punched struct value, and the second argument, a field value.
-        let punched_str = gc.get_var_retained_if_used_later(&self.punched_str_name);
-        let field = gc.get_var_retained_if_used_later(&self.field_name);
+        let punched_str = gc.get_scoped_obj(&self.punched_str_name);
+        let field = gc.get_scoped_obj(&self.field_name);
 
         // Make the punched struct unique before plugging-in the field value.
         //
@@ -2751,8 +2725,8 @@ impl InlineLLVMStructModBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
-        let modfier = gc.get_var_retained_if_used_later(&self.f_name);
-        let str = gc.get_var_retained_if_used_later(&self.x_name);
+        let modfier = gc.get_scoped_obj(&self.f_name);
+        let str = gc.get_scoped_obj(&self.x_name);
 
         let str = make_struct_unique(gc, str);
 
@@ -3094,8 +3068,8 @@ impl InlineLLVMStructSetBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
-        let value = gc.get_var_retained_if_used_later(&self.value_name);
-        let str = gc.get_var_retained_if_used_later(&self.struct_name);
+        let value = gc.get_scoped_obj(&self.value_name);
+        let str = gc.get_scoped_obj(&self.struct_name);
 
         // Make struct object unique.
         let str = make_struct_unique(gc, str);
@@ -3171,7 +3145,7 @@ impl InlineLLVMMakeUnionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get field values.
-        let field = gc.get_var_retained_if_used_later(&self.field_name);
+        let field = gc.get_scoped_obj(&self.field_name);
 
         // Create union object.
         let obj = create_obj(
@@ -3286,7 +3260,7 @@ impl InlineLLVMUnionAsBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
-        let obj = gc.get_var_retained_if_used_later(&self.union_arg_name);
+        let obj = gc.get_scoped_obj(&self.union_arg_name);
 
         let elem_ty = ty.clone();
 
@@ -3363,7 +3337,7 @@ impl InlineLLVMUnionIsBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
-        let obj = gc.get_var_value(&self.union_arg_name);
+        let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
@@ -3456,8 +3430,8 @@ impl InlineLLVMUnionModBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
-        let obj = gc.get_var_retained_if_used_later(&self.union_name);
-        let modifier = gc.get_var_retained_if_used_later(&self.modifier_name);
+        let obj = gc.get_scoped_obj(&self.union_name);
+        let modifier = gc.get_scoped_obj(&self.modifier_name);
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
@@ -3583,7 +3557,7 @@ impl InlineLLVMUndefinedFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the first argument.
-        let msg = gc.get_var_retained_if_used_later(&self.msg_name);
+        let msg = gc.get_scoped_obj(&self.msg_name);
 
         // Get the pointer to the message.
         let str = ObjectFieldType::move_out_struct_field(gc, &msg, 0);
@@ -3662,10 +3636,10 @@ impl InlineLLVMWithRetainedFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the argument "f".
-        let f = gc.get_var_retained_if_used_later(&self.f_name);
+        let f = gc.get_scoped_obj(&self.f_name);
 
         // Get the argument "x".
-        let x = gc.get_var_retained_if_used_later(&self.x_name);
+        let x = gc.get_scoped_obj(&self.x_name);
 
         // Retain "x".
         if !gc.is_var_used_later(&self.x_name) {
@@ -3746,7 +3720,7 @@ impl InlineLLVMIsUniqueFunctionBody {
             .into_int_type();
 
         // Get argument
-        let obj = gc.get_var_retained_if_used_later(&self.var_name);
+        let obj = gc.get_scoped_obj(&self.var_name);
 
         // Prepare returned object.
         let ret = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
@@ -3844,7 +3818,7 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let obj = gc.get_var_retained_if_used_later(&self.var_name);
+        let obj = gc.get_scoped_obj(&self.var_name);
         assert!(obj.is_box(gc.type_env()));
 
         let ptr = obj.value;
@@ -3909,7 +3883,7 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
     ) -> Object<'c> {
         assert!(ret_ty.is_box(gc.type_env()));
         // Get argument.
-        let ptr = gc.get_var_retained_if_used_later(&self.var_name);
+        let ptr = gc.get_scoped_obj(&self.var_name);
         let ptr = ptr.extract_field(gc, 0);
         Object::new(ptr, ret_ty.clone(), gc)
     }
@@ -3963,7 +3937,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let arg = gc.get_var_value(&self.var_name);
+        let arg = gc.get_scoped_obj_noretain(&self.var_name);
         if !gc.is_var_used_later(&self.var_name) {
             gc.release(arg.clone());
         }
@@ -4067,7 +4041,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let arg = gc.get_var_value(&self.var_name);
+        let arg = gc.get_scoped_obj_noretain(&self.var_name);
         if !gc.is_var_used_later(&self.var_name) {
             gc.release(arg.clone());
         }
@@ -4170,7 +4144,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument.
-        let obj = gc.get_var_value(&self.var_name);
+        let obj = gc.get_scoped_obj_noretain(&self.var_name);
         assert!(obj.ty.is_box(gc.type_env()));
 
         // Get data pointer.
@@ -4266,8 +4240,8 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
-        let io_act = gc.get_var_retained_if_used_later(&self.io_act_name);
-        let val = gc.get_var_retained_if_used_later(&self.val_name);
+        let io_act = gc.get_scoped_obj(&self.io_act_name);
+        let val = gc.get_scoped_obj(&self.val_name);
 
         // If `val` is not boxed, error.
         assert!(val.is_box(gc.type_env()));
@@ -4369,9 +4343,9 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
-        let io_act = gc.get_var_retained_if_used_later(&self.io_act_name);
-        let val = gc.get_var_retained_if_used_later(&self.val_name);
-        let ios = gc.get_var_retained_if_used_later(&self.iostate_name);
+        let io_act = gc.get_scoped_obj(&self.io_act_name);
+        let val = gc.get_scoped_obj(&self.val_name);
+        let ios = gc.get_scoped_obj(&self.iostate_name);
 
         // If `val` is not boxed, error.
         assert!(val.is_box(gc.type_env()));
@@ -4474,7 +4448,7 @@ impl InlineLLVMUnsafePerformFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
-        let io_act = gc.get_var_retained_if_used_later(&self.io_act_name);
+        let io_act = gc.get_scoped_obj(&self.io_act_name);
 
         // Run the IO action.
         run_io_value(gc, &io_act)
@@ -4545,7 +4519,7 @@ impl InlineLLVMMarkThreadedFunctionBody {
             );
         }
 
-        let obj = gc.get_var_retained_if_used_later(&self.var_name);
+        let obj = gc.get_scoped_obj(&self.var_name);
         gc.mark_threaded(obj.clone());
         obj
     }
@@ -4703,8 +4677,8 @@ impl InlineLLVMIntEqBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs_obj = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs_obj = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
+        let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs_obj.extract_field(gc, 0).into_int_value();
         let value =
@@ -4766,8 +4740,8 @@ impl InlineLLVMPtrEqBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs_obj = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs_obj = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
+        let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_pointer_value();
         let rhs_val = rhs_obj.extract_field(gc, 0).into_pointer_value();
         let diff = gc
@@ -4835,8 +4809,8 @@ impl InlineLLVMFloatEqBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs_obj = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs_obj = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
+        let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs_obj.extract_field(gc, 0).into_float_value();
         let value = gc.builder().build_float_compare(
@@ -4910,8 +4884,8 @@ impl InlineLLVMIntLessThanBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs_obj = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs_obj = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
+        let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         let rhs_val: IntValue = rhs_obj.extract_field(gc, 0).into_int_value();
 
@@ -4984,8 +4958,8 @@ impl InlineLLVMFloatLessThanBody {
 
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc.builder().build_float_compare(
@@ -5059,8 +5033,8 @@ impl InlineLLVMIntLessThanOrEqBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
@@ -5130,8 +5104,8 @@ impl InlineLLVMFloatLessThanOrEqBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc.builder().build_float_compare(
@@ -5205,8 +5179,8 @@ impl InlineLLVMIntAddBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
@@ -5261,8 +5235,8 @@ impl InlineLLVMFloatAddBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc
@@ -5326,8 +5300,8 @@ impl InlineLLVMIntSubBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
@@ -5382,8 +5356,8 @@ impl InlineLLVMFloatSubBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc
@@ -5447,8 +5421,8 @@ impl InlineLLVMIntMulBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
@@ -5503,8 +5477,8 @@ impl InlineLLVMFloatMulBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc
@@ -5568,8 +5542,8 @@ impl InlineLLVMIntDivBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
@@ -5631,8 +5605,8 @@ impl InlineLLVMFloatDivBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc
@@ -5696,8 +5670,8 @@ impl InlineLLVMIntRemBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs = gc.get_scoped_obj(&self.lhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
@@ -5763,7 +5737,7 @@ impl InlineLLVMIntNegBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
             .builder()
@@ -5811,7 +5785,7 @@ impl InlineLLVMFloatNegBody {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
 
         let value = gc
@@ -5870,7 +5844,7 @@ impl InlineLLVMBoolNegBody {
 
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
         let bool_ty = ObjectFieldType::I8

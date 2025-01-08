@@ -29,23 +29,23 @@ use misc::Set;
 use super::*;
 
 #[derive(Clone)]
-pub struct Variable<'c> {
-    pub ptr: VarValue<'c>,
+pub struct ScopedValue<'c> {
+    accessor: ValueAccessor<'c>,
     used_later: u32,
 }
 
 #[derive(Clone)]
-pub enum VarValue<'c> {
+pub enum ValueAccessor<'c> {
     Local(Object<'c>),
     Global(FunctionValue<'c>, Arc<TypeNode>),
 }
 
-impl<'c> VarValue<'c> {
+impl<'c> ValueAccessor<'c> {
     // Get the object.
     pub fn get<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> Object<'c> {
         match self {
-            VarValue::Local(ptr) => ptr.clone(),
-            VarValue::Global(fun, ty) => {
+            ValueAccessor::Local(ptr) => ptr.clone(),
+            ValueAccessor::Global(fun, ty) => {
                 let val = if ty.is_funptr() {
                     fun.as_global_value().as_basic_value_enum()
                 } else {
@@ -69,8 +69,8 @@ impl<'c> VarValue<'c> {
     // Get global object's function value.
     pub fn get_global_fun(&self) -> FunctionValue<'c> {
         match self {
-            VarValue::Local(_) => panic!("`\"get_global_fun\"` called for local variable."),
-            VarValue::Global(fun, _) => *fun,
+            ValueAccessor::Local(_) => panic!("`\"get_global_fun\"` called for local variable."),
+            ValueAccessor::Global(fun, _) => *fun,
         }
     }
 }
@@ -311,7 +311,7 @@ impl<'c> Object<'c> {
 
 #[derive(Default)]
 pub struct Scope<'c> {
-    data: Map<FullName, Vec<Variable<'c>>>,
+    data: Map<FullName, Vec<ScopedValue<'c>>>,
 }
 
 impl<'c> Scope<'c> {
@@ -320,8 +320,8 @@ impl<'c> Scope<'c> {
         if !self.data.contains_key(var) {
             self.data.insert(var.clone(), Default::default());
         }
-        self.data.get_mut(var).unwrap().push(Variable {
-            ptr: VarValue::Local(obj.clone()),
+        self.data.get_mut(var).unwrap().push(ScopedValue {
+            accessor: ValueAccessor::Local(obj.clone()),
             used_later: 0,
         });
     }
@@ -334,7 +334,7 @@ impl<'c> Scope<'c> {
         }
     }
 
-    pub fn get(&self, var: &FullName) -> Variable<'c> {
+    pub fn get(&self, var: &FullName) -> ScopedValue<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
 
@@ -380,7 +380,7 @@ pub struct GenerationContext<'c, 'm> {
     debug_info: Option<(DebugInfoBuilder<'c>, DICompileUnit<'c>)>,
     debug_scope: Arc<RefCell<Vec<Option<DIScope<'c>>>>>, // None implies that currently generating codes for function whose source is unknown.
     debug_location: Vec<Option<Span>>, // None implies that currently generating codes for function whose source is unknown.
-    pub global: Map<FullName, Variable<'c>>,
+    pub global: Map<FullName, ScopedValue<'c>>,
     type_env: TypeEnv,
     pub target_data: TargetData,
     pub config: Configuration,
@@ -578,8 +578,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             };
             self.global.insert(
                 name.clone(),
-                Variable {
-                    ptr: VarValue::Global(function, ty),
+                ScopedValue {
+                    accessor: ValueAccessor::Global(function, ty),
                     used_later,
                 },
             );
@@ -609,7 +609,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Get a variable.
-    pub fn get_var(&self, var: &FullName) -> Variable<'c> {
+    pub fn get_scoped_value(&self, var: &FullName) -> ScopedValue<'c> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
         } else {
@@ -617,8 +617,33 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    pub fn get_var_value(&mut self, name: &FullName) -> Object<'c> {
-        self.get_var(name).ptr.get(self)
+    // Get an object on the scope (or global).
+    // This function does not retain the object.
+    pub fn get_scoped_obj_noretain(&mut self, name: &FullName) -> Object<'c> {
+        self.get_scoped_value(name).accessor.get(self)
+    }
+
+    // Get an object on the scope (or global).
+    // This function retains the object if it will be used later.
+    pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
+        let val = self.get_scoped_value(var_name);
+        let obj = val.accessor.get(self);
+        if val.used_later > 0 {
+            // If used later, clone object.
+            self.build_retain(obj.clone());
+        }
+        obj
+    }
+
+    // Get field of object on the scope.
+    // This function retains the object if it will be used later.
+    pub fn get_scoped_obj_field(
+        self: &mut Self,
+        var: &FullName,
+        field_idx: u32,
+    ) -> BasicValueEnum<'c> {
+        let obj = self.get_scoped_obj(var);
+        obj.extract_field(self, field_idx)
     }
 
     // Lock variables in scope to avoid being moved out.
@@ -647,16 +672,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.scope.borrow().last().unwrap().is_used_later(var)
     }
 
-    // Get field of object in the scope.
-    pub fn get_var_field_retained_if_used_later(
-        self: &mut Self,
-        var: &FullName,
-        field_idx: u32,
-    ) -> BasicValueEnum<'c> {
-        let obj = self.get_var_retained_if_used_later(var);
-        obj.extract_field(self, field_idx)
-    }
-
     // Push scope.
     fn scope_push(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         self.scope
@@ -669,16 +684,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Pop scope.
     fn scope_pop(self: &mut Self, var: &FullName) {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
-    }
-
-    pub fn get_var_retained_if_used_later(&mut self, var_name: &FullName) -> Object<'c> {
-        let var = self.get_var(var_name);
-        let obj = var.ptr.get(self);
-        if var.used_later > 0 {
-            // If used later, clone object.
-            self.build_retain(obj.clone());
-        }
-        obj
     }
 
     pub fn cast_pointer(&self, from: PointerValue<'c>, to: PointerType<'c>) -> PointerValue<'c> {
@@ -1561,7 +1566,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate variable.
     fn eval_var(&mut self, var: Arc<Var>, tail: bool) -> Option<Object<'c>> {
-        let obj = self.get_var_retained_if_used_later(&var.name);
+        let obj = self.get_scoped_obj(&var.name);
         self.build_tail(obj, tail)
     }
 
@@ -1625,7 +1630,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let mut cap_vars = cap_names
             .into_iter()
             .filter(|name| name.is_local())
-            .map(|name| (name.clone(), self.get_var_value(&name).ty))
+            .map(|name| (name.clone(), self.get_scoped_obj_noretain(&name).ty))
             .collect::<Vec<_>>();
         cap_vars.sort_by_key(|(name, _)| name.to_string());
 
@@ -1872,7 +1877,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
                 // Set captured objects to cap_obj.
                 for (i, (name, _)) in cap_vars.iter().enumerate() {
-                    let obj = self.get_var_retained_if_used_later(name);
+                    let obj = self.get_scoped_obj(name);
                     let val = obj.value;
                     cap_obj.insert_field_as(
                         self,
@@ -2023,8 +2028,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Release variables used only in the else block.
         for var_name in &else_expr.free_vars_sorted() {
             // Here we use sorted free variables to fix the binary code.
-            if !then_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
-                let var = self.get_var_value(var_name);
+            if !then_expr.free_vars().contains(var_name)
+                && self.get_scoped_value(var_name).used_later == 0
+            {
+                let var = self.get_scoped_obj_noretain(var_name);
                 self.release(var);
             }
         }
@@ -2044,8 +2051,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Release variables used only in the then block.
         for var_name in &then_expr.free_vars_sorted() {
             // Here we use sorted free variables to fix the binary code.
-            if !else_expr.free_vars().contains(var_name) && self.get_var(var_name).used_later == 0 {
-                let var = self.get_var_value(var_name);
+            if !else_expr.free_vars().contains(var_name)
+                && self.get_scoped_value(var_name).used_later == 0
+            {
+                let var = self.get_scoped_obj_noretain(var_name);
                 self.release(var);
             }
         }
@@ -2158,8 +2167,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let vars_used_in_later = val.free_vars_shadowed_by(&pat.pattern.vars());
             let vars_used_only_in_others = vars_used_in_any_case.difference(&vars_used_in_later);
             for var in vars_used_only_in_others {
-                if self.get_var(var).used_later == 0 {
-                    let var = self.get_var_value(var);
+                if self.get_scoped_value(var).used_later == 0 {
+                    let var = self.get_scoped_obj_noretain(var);
                     self.release(var);
                 }
             }
@@ -2487,7 +2496,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Get the function to implement.
         let global_obj = self.global.get(name);
         let sym_fn = match global_obj {
-            Some(var) => var.ptr.get_global_fun(),
+            Some(var) => var.accessor.get_global_fun(),
             None => self.declare_symbol(sym),
         };
 
