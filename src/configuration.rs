@@ -416,11 +416,11 @@ impl Configuration {
     }
 
     pub fn perform_remove_tyanno_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Separated
+        self.fix_opt_level >= FixOptimizationLevel::Default
     }
 
     pub fn perform_inline_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Unstable
+        self.fix_opt_level >= FixOptimizationLevel::Default
     }
 
     pub fn perform_simplify_global_names(&self) -> bool {
