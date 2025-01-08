@@ -296,7 +296,7 @@ impl Configuration {
         let mut config = panic_if_err(Self::new(SubCommand::Run));
         config.num_worker_thread = 0;
         config.set_valgrind(ValgrindTool::MemCheck);
-        config.fix_opt_level = FixOptimizationLevel::Unstable;
+        // config.fix_opt_level = FixOptimizationLevel::Unstable;
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;
@@ -424,7 +424,11 @@ impl Configuration {
     }
 
     pub fn perform_simplify_global_names(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Unstable
+        self.fix_opt_level >= FixOptimizationLevel::Unstable // Since this is only useful for compiler development, we set it to unstable.
+    }
+
+    pub fn separate_compilation(&self) -> bool {
+        self.fix_opt_level <= FixOptimizationLevel::Separated
     }
 
     // Get hash value of the configurations that affect the object file generation.
@@ -436,10 +440,6 @@ impl Configuration {
         data.push_str(&self.c_type_sizes.to_string());
         data.push_str(build_time_utc!()); // Also add build time of the compiler.
         format!("{:x}", md5::compute(data))
-    }
-
-    pub fn separate_compilation(&self) -> bool {
-        self.fix_opt_level <= FixOptimizationLevel::Separated
     }
 
     pub fn edit_features(&self, features: &mut CpuFeatures) {
