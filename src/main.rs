@@ -147,7 +147,7 @@ fn main() {
         .long("opt-level")
         .short('O')
         .takes_value(true)
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations are performed. Good for debugging, but tail call recursion is not optimized and may cause stack overflow."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations are performed. Good for debugging, but even tail recursion can cause stack overflow."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_SEPARATED).help("Perform optimizations which can be done under separate compilation."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_DEFAULT).help("Perform all optimizations to minimize runtime. Separate compilation is disabled."))
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_UNSTABLE).help("Perform all optimizations including unstable ones. Used for compiler development."))
