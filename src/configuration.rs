@@ -300,7 +300,7 @@ impl Configuration {
         // config.set_sanitize_memory();
         // config.emit_llvm = true;
         // config.debug_info = true;
-        config.emit_symbols = true;
+        // config.emit_symbols = true;
         config
     }
 
