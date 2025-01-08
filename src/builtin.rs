@@ -3363,7 +3363,7 @@ impl InlineLLVMUnionIsBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
-        let obj = gc.get_var_retained_if_used_later(&self.union_arg_name);
+        let obj = gc.get_var_value(&self.union_arg_name);
 
         // Create specified tag value.
         let specified_tag_value = ObjectFieldType::UnionTag
@@ -3409,7 +3409,9 @@ impl InlineLLVMUnionIsBody {
             Some(format!("is_union_{}", self.field_idx).as_str()),
         );
         let ret = ret.insert_field(gc, 0, phi.as_basic_value());
-        gc.release(obj);
+        if !gc.is_var_used_later(&self.union_arg_name) {
+            gc.release(obj);
+        }
         ret
     }
 }
@@ -3666,13 +3668,17 @@ impl InlineLLVMWithRetainedFunctionBody {
         let x = gc.get_var_retained_if_used_later(&self.x_name);
 
         // Retain "x".
-        gc.retain(x.clone());
+        if !gc.is_var_used_later(&self.x_name) {
+            gc.retain(x.clone());
+        }
 
         // Call "f" with "x".
         let ret = gc.apply_lambda(f, vec![x.clone()], false).unwrap();
 
         // Release "x".
-        gc.release(x);
+        if !gc.is_var_used_later(&self.x_name) {
+            gc.release(x);
+        }
 
         // Return the result.
         ret
@@ -3957,8 +3963,10 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let arg = gc.get_var_retained_if_used_later(&self.var_name);
-        gc.release(arg.clone());
+        let arg = gc.get_var_value(&self.var_name);
+        if !gc.is_var_used_later(&self.var_name) {
+            gc.release(arg.clone());
+        }
 
         // Get the target type.
         let arg_ty = arg.ty.clone();
@@ -4059,8 +4067,10 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
-        let arg = gc.get_var_retained_if_used_later(&self.var_name);
-        gc.release(arg.clone());
+        let arg = gc.get_var_value(&self.var_name);
+        if !gc.is_var_used_later(&self.var_name) {
+            gc.release(arg.clone());
+        }
 
         // Get the target type.
         let arg_ty = arg.ty.clone();
@@ -4160,14 +4170,16 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument.
-        let obj = gc.get_var_retained_if_used_later(&self.var_name);
+        let obj = gc.get_var_value(&self.var_name);
         assert!(obj.ty.is_box(gc.type_env()));
 
         // Get data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &obj);
 
         // Relase the argument object.
-        gc.release(obj.clone());
+        if !gc.is_var_used_later(&self.var_name) {
+            gc.release(obj.clone());
+        }
 
         // Make returned object.
         let ret = create_obj(
@@ -4694,9 +4706,7 @@ impl InlineLLVMIntEqBody {
         let lhs_obj = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs_obj = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
-        gc.release(lhs_obj);
         let rhs_val = rhs_obj.extract_field(gc, 0).into_int_value();
-        gc.release(rhs_obj);
         let value =
             gc.builder()
                 .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
@@ -4759,9 +4769,7 @@ impl InlineLLVMPtrEqBody {
         let lhs_obj = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs_obj = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_pointer_value();
-        gc.release(lhs_obj);
         let rhs_val = rhs_obj.extract_field(gc, 0).into_pointer_value();
-        gc.release(rhs_obj);
         let diff = gc
             .builder()
             .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr");
@@ -4830,9 +4838,7 @@ impl InlineLLVMFloatEqBody {
         let lhs_obj = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs_obj = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_float_value();
-        gc.release(lhs_obj);
         let rhs_val = rhs_obj.extract_field(gc, 0).into_float_value();
-        gc.release(rhs_obj);
         let value = gc.builder().build_float_compare(
             inkwell::FloatPredicate::OEQ,
             lhs_val,
@@ -4906,11 +4912,11 @@ impl InlineLLVMIntLessThanBody {
     ) -> Object<'c> {
         let lhs_obj = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs_obj = gc.get_var_retained_if_used_later(&self.rhs_name);
-        let is_singed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
-        gc.release(lhs_obj);
         let rhs_val: IntValue = rhs_obj.extract_field(gc, 0).into_int_value();
-        gc.release(rhs_obj);
+
+        let is_singed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
+
         let value = gc.builder().build_int_compare(
             if is_singed {
                 IntPredicate::SLT
@@ -4981,9 +4987,7 @@ impl InlineLLVMFloatLessThanBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
-        gc.release(lhs);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        gc.release(rhs);
         let value = gc.builder().build_float_compare(
             inkwell::FloatPredicate::OLT,
             lhs_val,
@@ -5058,11 +5062,8 @@ impl InlineLLVMIntLessThanOrEqBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
-
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
-        gc.release(lhs);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        gc.release(rhs);
         let value = gc.builder().build_int_compare(
             if is_singed {
                 IntPredicate::SLE
@@ -5132,9 +5133,7 @@ impl InlineLLVMFloatLessThanOrEqBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
-        gc.release(lhs);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        gc.release(rhs);
         let value = gc.builder().build_float_compare(
             inkwell::FloatPredicate::OLE,
             lhs_val,
@@ -5209,9 +5208,7 @@ impl InlineLLVMIntAddBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
-        gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        gc.release(rhs);
         let value = gc
             .builder()
             .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
@@ -5267,9 +5264,7 @@ impl InlineLLVMFloatAddBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
-        gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        gc.release(rhs);
         let value = gc
             .builder()
             .build_float_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
@@ -5334,9 +5329,7 @@ impl InlineLLVMIntSubBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
-        gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        gc.release(rhs);
         let value = gc
             .builder()
             .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
@@ -5392,9 +5385,7 @@ impl InlineLLVMFloatSubBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
-        gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        gc.release(rhs);
         let value = gc
             .builder()
             .build_float_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
@@ -5459,9 +5450,7 @@ impl InlineLLVMIntMulBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
-        gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        gc.release(rhs);
         let value = gc
             .builder()
             .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
@@ -5517,9 +5506,7 @@ impl InlineLLVMFloatMulBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
-        gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        gc.release(rhs);
         let value = gc
             .builder()
             .build_float_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
@@ -5583,12 +5570,11 @@ impl InlineLLVMIntDivBody {
     ) -> Object<'c> {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
+
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        gc.release(rhs);
         let value = if is_singed {
             gc.builder()
                 .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
@@ -5648,9 +5634,7 @@ impl InlineLLVMFloatDivBody {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
-        gc.release(lhs.clone());
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        gc.release(rhs);
         let value = gc
             .builder()
             .build_float_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
@@ -5714,12 +5698,11 @@ impl InlineLLVMIntRemBody {
     ) -> Object<'c> {
         let lhs = gc.get_var_retained_if_used_later(&self.lhs_name);
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
+        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
+        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
+
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        let lhs_val = lhs.extract_field(gc, 0).into_int_value();
-        gc.release(lhs.clone());
-        let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        gc.release(rhs);
         let value = if is_singed {
             gc.builder()
                 .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
@@ -5782,7 +5765,6 @@ impl InlineLLVMIntNegBody {
     ) -> Object<'c> {
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        gc.release(rhs.clone());
         let value = gc
             .builder()
             .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
@@ -5831,7 +5813,7 @@ impl InlineLLVMFloatNegBody {
     ) -> Object<'c> {
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        gc.release(rhs.clone());
+
         let value = gc
             .builder()
             .build_float_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
@@ -5890,7 +5872,7 @@ impl InlineLLVMBoolNegBody {
     ) -> Object<'c> {
         let rhs = gc.get_var_retained_if_used_later(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        gc.release(rhs);
+
         let bool_ty = ObjectFieldType::I8
             .to_basic_type(gc, vec![])
             .into_int_type();
