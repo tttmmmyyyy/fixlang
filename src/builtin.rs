@@ -1985,11 +1985,7 @@ pub fn get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // Force array object to be unique.
 // If it is unique, do nothing.
 // If it is shared, clone the object.
-fn make_array_unique<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
-    array: Object<'c>,
-    panic_if_shared: bool,
-) -> Object<'c> {
+fn make_array_unique<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, array: Object<'c>) -> Object<'c> {
     assert!(array.ty.is_array());
 
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
@@ -2084,7 +2080,7 @@ impl InlineLLVMArraySetBody {
         let value = gc.get_scoped_obj(&self.value_name);
 
         // Force array to be unique
-        let array = make_array_unique(gc, array, false);
+        let array = make_array_unique(gc, array);
 
         // Perform write and return.
         let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
@@ -2184,7 +2180,7 @@ impl InlineLLVMArrayModBody {
         let modifier = gc.get_scoped_obj(&self.modifier_name);
 
         // Make array unique
-        let array = make_array_unique(gc, array, false);
+        let array = make_array_unique(gc, array);
 
         // Get old element without retain.
         let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
@@ -2276,7 +2272,7 @@ impl InlineLLVMArrayForceUniqueBody {
         let array = gc.get_scoped_obj(&self.arr_name);
 
         // Make array unique
-        let array = make_array_unique(gc, array, false);
+        let array = make_array_unique(gc, array);
 
         array
     }
@@ -4249,7 +4245,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         // Before mutating the value, force uniqueness of the value.
         let is_array = val.ty.is_array();
         let val = if is_array {
-            make_array_unique(gc, val, false)
+            make_array_unique(gc, val)
         } else {
             make_struct_union_unique(gc, val)
         };
@@ -4353,7 +4349,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         // Before mutating the value, force uniqueness of the value.
         let is_array = val.ty.is_array();
         let val = if is_array {
-            make_array_unique(gc, val, false)
+            make_array_unique(gc, val)
         } else {
             make_struct_union_unique(gc, val)
         };
