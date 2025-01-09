@@ -28,6 +28,7 @@
 - Change the bit width of reference counter from 64 to 32.
 - Add `Std::Arrow`, which is a higher-kinded type for functions.
 - Add absolute namespace syntax: you can `::Main::X` instead of `Main::X` to refer to `X` in the top level namespace of the `Main` module.
+- Implement `Zero` for `Array a`, `Iterator a`, `String`. Implement `Add` for `String`, `Array a`.
 
 ### Changed
 
@@ -51,6 +52,7 @@
 - Rename `Std::Boxed` type to `Std::Box`. 
 - Rename `Std::LoopResult` type to `Std::LoopState`.
 - Allow trait implementations to be placed in any namespace. Previously, they could only be written at the top level of a module. However, it does not matter in which namespace you define them.
+- Rename optimization lavels from `none`, `separated`, `default` to `none`, `basic`, `max`.
 
 ### Fixed
 

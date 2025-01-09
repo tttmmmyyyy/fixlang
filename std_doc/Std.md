@@ -393,6 +393,10 @@ Returns "()".
 
 ### `impl Std::Array : Std::Monad`
 
+### `impl Std::Array a : Std::Add`
+
+Concatenates two arrays.
+
 ### `impl Std::Array a : Std::Boxed`
 
 ### `impl [a : Std::Eq] Std::Array a : Std::Eq`
@@ -410,6 +414,10 @@ Compares two arrays by lexicographic order.
 Compares two arrays by lexicographic order.
 
 ### `impl [a : Std::ToString] Std::Array a : Std::ToString`
+
+### `impl Std::Array a : Std::Zero`
+
+The empty array with zero capacity.
 
 ### `impl Std::Arrow a : Std::Functor`
 
@@ -603,7 +611,13 @@ Compares two arrays by lexicographic order.
 
 ### `impl Std::Iterator a : Std::Add`
 
+Concatenates two iterators.
+
 ### `impl [a : Std::Eq] Std::Iterator a : Std::Eq`
+
+### `impl Std::Iterator a : Std::Zero`
+
+The empty iterator.
 
 ### `impl Std::Option : Std::Functor`
 
@@ -638,6 +652,10 @@ Concatenates two strings.
 ### `impl Std::String : Std::LessThanOrEq`
 
 ### `impl Std::String : Std::ToString`
+
+### `impl Std::String : Std::Zero`
+
+The empty string.
 
 ### `impl Std::Tuple2 t0 : Std::Functor`
 

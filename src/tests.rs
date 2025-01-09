@@ -635,7 +635,8 @@ pub fn test32() {
 pub fn test33() {
     // Test struct declaration and new, mod.
     let source = r#"
-        module Main;         type I64Bool = box struct {x: I64, y: Bool};
+        module Main;
+        type I64Bool = box struct {x: I64, y: Bool};
 
         main : IO ();
         main = (
@@ -3634,17 +3635,30 @@ pub fn test125() {
 }
 
 #[test]
-pub fn test126() {
+pub fn test_iterator_sum() {
     // Test Iterator::sum.
     let source = r#"
         module Main; 
-
         
         main : IO ();
         main = (
             let n = 100;
+
+            // Integer
             let v = Iterator::range(0, n+1).sum;
             assert_eq(|_|"", v, n*(n+1)/2);;
+
+            // String
+            let v = ["Hello", " ", "World!"].to_iter.sum;
+            assert_eq(|_|"", v, "Hello World!");;
+
+            // Array
+            let v = [[1,2,3], [4,5,6]].to_iter.sum;
+            assert_eq(|_|"", v, [1,2,3,4,5,6]);;
+
+            // Iterator
+            let v = [range(0, 3), range(3, 6)].to_iter.sum;
+            assert_eq(|_|"", v.to_array, [0,1,2,3,4,5]);;
 
             pure()
         );
