@@ -424,10 +424,10 @@ impl Configuration {
     }
 
     pub fn perform_simplify_global_names(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Unstable // Since this is only useful for compiler development, we set it to unstable.
+        self.fix_opt_level >= FixOptimizationLevel::Unstable
     }
 
-    pub fn separate_compilation(&self) -> bool {
+    pub fn perform_separated_compilation(&self) -> bool {
         self.fix_opt_level <= FixOptimizationLevel::Separated
     }
 
@@ -466,7 +466,7 @@ impl Configuration {
     }
 
     pub fn external_if_separated(&self) -> Linkage {
-        if self.separate_compilation() {
+        if self.perform_separated_compilation() {
             Linkage::External
         } else {
             Linkage::Internal
