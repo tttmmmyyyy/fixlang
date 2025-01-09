@@ -3642,9 +3642,8 @@ pub fn test_iterator_sum() {
         
         main : IO ();
         main = (
-            let n = 100;
-
             // Integer
+            let n = 100;
             let v = Iterator::range(0, n+1).sum;
             assert_eq(|_|"", v, n*(n+1)/2);;
 
