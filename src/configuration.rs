@@ -411,23 +411,23 @@ impl Configuration {
         }
     }
 
-    pub fn perform_uncurry_optimization(&self) -> bool {
+    pub fn enable_uncurry_optimization(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Basic
     }
 
-    pub fn perform_remove_tyanno_optimization(&self) -> bool {
+    pub fn enable_remove_tyanno_optimization(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn perform_inline_optimization(&self) -> bool {
+    pub fn enable_inline_optimization(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn perform_simplify_global_names(&self) -> bool {
+    pub fn enable_simplify_global_names(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
-    pub fn perform_separated_compilation(&self) -> bool {
+    pub fn enable_separated_compilation(&self) -> bool {
         self.fix_opt_level <= FixOptimizationLevel::Basic
     }
 
@@ -466,7 +466,7 @@ impl Configuration {
     }
 
     pub fn external_if_separated(&self) -> Linkage {
-        if self.perform_separated_compilation() {
+        if self.enable_separated_compilation() {
             Linkage::External
         } else {
             Linkage::Internal

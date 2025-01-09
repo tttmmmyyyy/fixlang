@@ -179,7 +179,7 @@ fn build_object_files<'c>(
     {
         let module_dependency_hash = program.module_dependency_hash_map();
         let module_dependency_map = program.module_dependency_map();
-        if config.perform_separated_compilation() {
+        if config.enable_separated_compilation() {
             units = CompileUnit::split_symbols(
                 instantiated_symbols,
                 &module_dependency_hash,

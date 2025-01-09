@@ -111,7 +111,7 @@ impl ExportStatement {
 
         // If the exported Fix value is a function, then try to use the uncurried version.
         let mut fix_expr = self.instantiated_value_expr.clone().unwrap();
-        if args.len() > 0 && gc.config.perform_uncurry_optimization() {
+        if args.len() > 0 && gc.config.enable_uncurry_optimization() {
             let mut var = fix_expr.get_var().as_ref().clone();
             convert_to_funptr_name(&mut var.name.name, args.len());
             if gc.global.contains_key(&var.name) {
