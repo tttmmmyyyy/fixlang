@@ -8,7 +8,7 @@ pushd $SCRIPT_DIR
 trap 'popd' EXIT
 
 # Run the benchmarking script
-cargo run -- build -O unstable --emit-symbols
+cargo run -- build -O experimental --emit-symbols
 OUTPUT=$(python3 ./cachegrind-benchmarking/cachegrind.py ./a.out)
 
 # Get the last line of the output

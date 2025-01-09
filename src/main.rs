@@ -147,11 +147,11 @@ fn main() {
         .long("opt-level")
         .short('O')
         .takes_value(true)
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations are performed. Good for debugging, but even tail recursion can cause stack overflow."))
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_SEPARATED).help("Perform optimizations which can be done under separate compilation."))
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_DEFAULT).help("Perform all optimizations to minimize runtime. Separate compilation is disabled."))
-        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_UNSTABLE).help("Perform all optimizations including unstable ones. Used for compiler development."))
-        // .default_value("default") // we do not set default value because we want to check if this option is specified by user.
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_NONE).help("No optimizations (tail recursion may lead to stack overflow); suitable for debugging."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_BASIC).help("Enables basic optimizations, providing a good balance between performance and compilation time."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_MAX).help("Enables all optimizations for maximum performance. This is the default optimization level."))
+        .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_EXPERIMENTAL).help("Enables all optimizations, including experimental ones (intended for compiler development)."))
+        // .default_value(OPTIMIZATION_LEVEL_MAX) // we do not set default value because we want to check whether this option is specified by user explicitly.
         .help("Optimization level.");
     let emit_llvm = Arg::new("emit-llvm")
         .long("emit-llvm")
@@ -191,11 +191,11 @@ fn main() {
         .long("llvm-passes-file")
         .takes_value(true)
         .help(
-            "Path to a file which contains a list of LLVM passes. This option is used for compiler development, and normal users do not need to use this.",
+            "Path to a file which contains a list of LLVM passes (intended for compiler development).",
         );
     let emit_symbols = Arg::new("emit-symbols")
         .long("emit-symbols")
-        .help("Output symbols of the Fix program. This option is used for compiler development, and normal users do not need to use this.");
+        .help("Output symbols of the Fix program (intended for compiler development).");
     let program_args = Arg::new("program-args")
         .last(true)
         .takes_value(true)
@@ -479,14 +479,10 @@ fn main() {
             let opt_level = args.get_one::<String>("opt-level").unwrap();
             match opt_level.as_str() {
                 OPTIMIZATION_LEVEL_NONE => config.set_fix_opt_level(FixOptimizationLevel::None),
-                OPTIMIZATION_LEVEL_SEPARATED => {
-                    config.set_fix_opt_level(FixOptimizationLevel::Separated)
-                }
-                OPTIMIZATION_LEVEL_DEFAULT => {
-                    config.set_fix_opt_level(FixOptimizationLevel::Default)
-                }
-                OPTIMIZATION_LEVEL_UNSTABLE => {
-                    config.set_fix_opt_level(FixOptimizationLevel::Unstable)
+                OPTIMIZATION_LEVEL_BASIC => config.set_fix_opt_level(FixOptimizationLevel::Basic),
+                OPTIMIZATION_LEVEL_MAX => config.set_fix_opt_level(FixOptimizationLevel::Max),
+                OPTIMIZATION_LEVEL_EXPERIMENTAL => {
+                    config.set_fix_opt_level(FixOptimizationLevel::Experimental)
                 }
                 _ => panic!("Unknown optimization level: {}", opt_level),
             }

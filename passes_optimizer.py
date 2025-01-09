@@ -104,7 +104,7 @@ def install_fix():
 
 def run_benchmark(timeout=10):
     work_dir = "./benchmark/speedtest"
-    cp = subprocess.run(['fix', 'build', '-O', 'unstable', '--llvm-passes-file', '../../' + SOURCE_FILE],
+    cp = subprocess.run(['fix', 'build', '-O', 'experimental', '--llvm-passes-file', '../../' + SOURCE_FILE],
                         capture_output=True, text=True, cwd=work_dir)
     if cp.returncode != 0:
         print('build failed.')
