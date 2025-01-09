@@ -179,7 +179,7 @@ fn build_object_files<'c>(
     {
         let module_dependency_hash = program.module_dependency_hash_map();
         let module_dependency_map = program.module_dependency_map();
-        if config.separate_compilation() {
+        if config.enable_separated_compilation() {
             units = CompileUnit::split_symbols(
                 instantiated_symbols,
                 &module_dependency_hash,
@@ -376,13 +376,13 @@ fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
     passmgr.add_verifier_pass(); // Verification before optimization.
     match config.fix_opt_level {
         FixOptimizationLevel::None => {}
-        FixOptimizationLevel::Separated => {
+        FixOptimizationLevel::Basic => {
             llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
         }
-        FixOptimizationLevel::Default => {
+        FixOptimizationLevel::Max => {
             llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
         }
-        FixOptimizationLevel::Unstable => {
+        FixOptimizationLevel::Experimental => {
             llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
         }
     }

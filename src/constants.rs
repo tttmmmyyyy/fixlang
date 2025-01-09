@@ -119,9 +119,9 @@ pub const DEFAULT_REGISTRY: &str =
 
 // Optimization levels
 pub const OPTIMIZATION_LEVEL_NONE: &str = "none";
-pub const OPTIMIZATION_LEVEL_SEPARATED: &str = "separated";
-pub const OPTIMIZATION_LEVEL_DEFAULT: &str = "default";
-pub const OPTIMIZATION_LEVEL_UNSTABLE: &str = "unstable";
+pub const OPTIMIZATION_LEVEL_BASIC: &str = "basic";
+pub const OPTIMIZATION_LEVEL_MAX: &str = "max";
+pub const OPTIMIZATION_LEVEL_EXPERIMENTAL: &str = "experimental";
 
 // Messages
 pub const TRY_FIX_RESOLVE: &str = "Try `fix deps update` to update the lock file.";

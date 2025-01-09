@@ -11,7 +11,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Perform simplification of global names.
-    if config.perform_simplify_global_names() {
+    if config.enable_simplify_global_names() {
         simplify_global_names::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.simplify_global_names", step));
@@ -20,7 +20,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Perform type annotation removal optimization.
-    if config.perform_remove_tyanno_optimization() {
+    if config.enable_remove_tyanno_optimization() {
         remove_tyanno::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.remove_tyanno", step));
@@ -29,7 +29,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Perform inlining optimization.
-    if config.perform_inline_optimization() {
+    if config.enable_inline_optimization() {
         inline::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.inline", step));
@@ -38,7 +38,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Perform uncurrying optimization.
-    if config.perform_uncurry_optimization() {
+    if config.enable_uncurry_optimization() {
         uncurry::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.uncurry", step));

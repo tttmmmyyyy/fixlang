@@ -1654,7 +1654,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             format!("closure[{}]", lam_ty.to_string_normalize())
         };
-        let linkage = if lam_ty.is_funptr() && self.config.separate_compilation() {
+        let linkage = if lam_ty.is_funptr() && self.config.enable_separated_compilation() {
             Linkage::External
         } else {
             Linkage::Internal // For closure function, we specify `Internal` so that LLVM avoids name collision automatically.

@@ -8,8 +8,8 @@ use crate::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
-    OPTIMIZATION_LEVEL_DEFAULT, OPTIMIZATION_LEVEL_NONE, OPTIMIZATION_LEVEL_SEPARATED,
-    OPTIMIZATION_LEVEL_UNSTABLE,
+    OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
+    OPTIMIZATION_LEVEL_NONE,
 };
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
@@ -222,19 +222,19 @@ impl ExtraCommand {
 
 #[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum FixOptimizationLevel {
-    None,      // For debugging; skip even tail call optimization.
-    Separated, // Perform almost all of the optimizations except for LLVM-level LTO.
-    Default,   // For fast execution.
-    Unstable,  // Performs optimizations that are still unstable.
+    None,         // For debugging; skip even tail call optimization.
+    Basic,        // Perform almost all of the optimizations except for LLVM-level LTO.
+    Max,          // For fast execution.
+    Experimental, // Performs optimizations that are still unstable.
 }
 
 impl std::fmt::Display for FixOptimizationLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FixOptimizationLevel::None => write!(f, "{}", OPTIMIZATION_LEVEL_NONE),
-            FixOptimizationLevel::Separated => write!(f, "{}", OPTIMIZATION_LEVEL_SEPARATED),
-            FixOptimizationLevel::Default => write!(f, "{}", OPTIMIZATION_LEVEL_DEFAULT),
-            FixOptimizationLevel::Unstable => write!(f, "{}", OPTIMIZATION_LEVEL_UNSTABLE),
+            FixOptimizationLevel::Basic => write!(f, "{}", OPTIMIZATION_LEVEL_BASIC),
+            FixOptimizationLevel::Max => write!(f, "{}", OPTIMIZATION_LEVEL_MAX),
+            FixOptimizationLevel::Experimental => write!(f, "{}", OPTIMIZATION_LEVEL_EXPERIMENTAL),
         }
     }
 }
@@ -243,9 +243,9 @@ impl FixOptimizationLevel {
     pub fn from_str(opt_level: &str) -> Option<Self> {
         match opt_level {
             OPTIMIZATION_LEVEL_NONE => Some(FixOptimizationLevel::None),
-            OPTIMIZATION_LEVEL_SEPARATED => Some(FixOptimizationLevel::Separated),
-            OPTIMIZATION_LEVEL_DEFAULT => Some(FixOptimizationLevel::Default),
-            OPTIMIZATION_LEVEL_UNSTABLE => Some(FixOptimizationLevel::Unstable),
+            OPTIMIZATION_LEVEL_BASIC => Some(FixOptimizationLevel::Basic),
+            OPTIMIZATION_LEVEL_MAX => Some(FixOptimizationLevel::Max),
+            OPTIMIZATION_LEVEL_EXPERIMENTAL => Some(FixOptimizationLevel::Experimental),
             _ => None,
         }
     }
@@ -257,7 +257,7 @@ impl Configuration {
             subcommand,
             source_files: vec![],
             object_files: vec![],
-            fix_opt_level: FixOptimizationLevel::Default, // Fix's optimization level.
+            fix_opt_level: FixOptimizationLevel::Max, // Fix's optimization level.
             linked_libraries: vec![],
             debug_info: false,
             emit_llvm: false,
@@ -405,30 +405,30 @@ impl Configuration {
     pub fn get_llvm_opt_level(&self) -> OptimizationLevel {
         match self.fix_opt_level {
             FixOptimizationLevel::None => OptimizationLevel::None,
-            FixOptimizationLevel::Separated => OptimizationLevel::Default,
-            FixOptimizationLevel::Default => OptimizationLevel::Default,
-            FixOptimizationLevel::Unstable => OptimizationLevel::Default,
+            FixOptimizationLevel::Basic => OptimizationLevel::Default,
+            FixOptimizationLevel::Max => OptimizationLevel::Default,
+            FixOptimizationLevel::Experimental => OptimizationLevel::Default,
         }
     }
 
-    pub fn perform_uncurry_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Separated
+    pub fn enable_uncurry_optimization(&self) -> bool {
+        self.fix_opt_level >= FixOptimizationLevel::Basic
     }
 
-    pub fn perform_remove_tyanno_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Default
+    pub fn enable_remove_tyanno_optimization(&self) -> bool {
+        self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn perform_inline_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Default
+    pub fn enable_inline_optimization(&self) -> bool {
+        self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn perform_simplify_global_names(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Unstable // Since this is only useful for compiler development, we set it to unstable.
+    pub fn enable_simplify_global_names(&self) -> bool {
+        self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
-    pub fn separate_compilation(&self) -> bool {
-        self.fix_opt_level <= FixOptimizationLevel::Separated
+    pub fn enable_separated_compilation(&self) -> bool {
+        self.fix_opt_level <= FixOptimizationLevel::Basic
     }
 
     // Get hash value of the configurations that affect the object file generation.
@@ -466,7 +466,7 @@ impl Configuration {
     }
 
     pub fn external_if_separated(&self) -> Linkage {
-        if self.separate_compilation() {
+        if self.enable_separated_compilation() {
             Linkage::External
         } else {
             Linkage::Internal
