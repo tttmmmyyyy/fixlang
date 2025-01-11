@@ -1,6 +1,6 @@
 use crate::{Configuration, Program};
 
-use super::{inline, remove_tyanno, simplify_global_names, uncurry};
+use super::{dead_symbol_elimination, inline, remove_tyanno, simplify_global_names, uncurry};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     let mut step = 0;
@@ -42,6 +42,15 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         uncurry::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.uncurry", step));
+            step += 1;
+        }
+    }
+
+    // Perform dead symbol elimination.
+    if config.enable_dead_symbol_elimination() {
+        dead_symbol_elimination::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.dead_symbol_elimination", step));
             // step += 1;
         }
     }

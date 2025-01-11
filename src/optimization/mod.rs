@@ -1,10 +1,11 @@
-pub mod beta_reduction;
+mod beta_reduction;
+mod dead_symbol_elimination;
 #[allow(dead_code)]
-pub mod eta_expand;
+mod eta_expand;
 mod inline;
 pub mod optimization;
 mod remove_renaming;
 mod remove_tyanno;
 mod simplify_global_names;
-pub mod uncurry;
+mod uncurry;
 mod utils;

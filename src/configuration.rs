@@ -411,6 +411,10 @@ impl Configuration {
         }
     }
 
+    pub fn enable_separated_compilation(&self) -> bool {
+        self.fix_opt_level <= FixOptimizationLevel::Basic
+    }
+
     pub fn enable_uncurry_optimization(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Basic
     }
@@ -427,8 +431,8 @@ impl Configuration {
         self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
-    pub fn enable_separated_compilation(&self) -> bool {
-        self.fix_opt_level <= FixOptimizationLevel::Basic
+    pub fn enable_dead_symbol_elimination(&self) -> bool {
+        self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
     // Get hash value of the configurations that affect the object file generation.
