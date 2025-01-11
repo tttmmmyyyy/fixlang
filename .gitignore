@@ -12,3 +12,4 @@ cachegrind.out.*
 *.symbols.fix
 test.fix
 test.log
+llvm_passes_tmp.txt
