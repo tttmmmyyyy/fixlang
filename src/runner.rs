@@ -165,6 +165,7 @@ fn build_object_files<'c>(
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
 
+    // Run optimizations.
     optimization::optimization::run(&mut program, &config);
 
     // Determine compilation units.

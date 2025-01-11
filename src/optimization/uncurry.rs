@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, usize};
 
 use crate::{
     ast::name::{FullName, Name},
@@ -61,6 +61,37 @@ pub fn run(fix_mod: &mut Program) {
         let expr = expr.calculate_free_vars();
         sym.expr = Some(expr);
     }
+
+    // Replace export statements so that they use uncurried functions.
+    for export in &mut fix_mod.export_statements {
+        let exported_value = export.instantiated_value_expr.as_ref().unwrap();
+        let exported_value_name = &exported_value.get_var().name;
+        let exported_value_ty = exported_value.ty.as_ref().unwrap();
+        if !exported_value_ty.is_closure() {
+            continue;
+        }
+        let mut n_args = exported_value_ty.collect_app_src(usize::MAX).0.len();
+        let uncurried_value = loop {
+            if n_args == 0 {
+                break None;
+            }
+            let mut name = exported_value_name.clone();
+            convert_to_funptr_name(name.name_as_mut(), n_args);
+            if let Some(sym) = fix_mod.instantiated_symbols.get(&name) {
+                break Some(sym);
+            }
+            n_args -= 1;
+        };
+        if let None = uncurried_value {
+            continue;
+        }
+        let uncurried_value = uncurried_value.unwrap();
+        export.fix_value_name = uncurried_value.instantiated_name.clone();
+        export.instantiated_value_expr = Some(
+            expr_var(uncurried_value.instantiated_name.clone(), None)
+                .set_inferred_type(uncurried_value.ty.clone()),
+        );
+    }
 }
 
 // Is this symbol a Std::fix or its instance?
@@ -70,7 +101,7 @@ pub fn is_std_fix(name: &FullName) -> bool {
         || (name.to_string() + INSTANCIATED_NAME_SEPARATOR).starts_with(&fix_name.to_string())
 }
 
-pub fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
+fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
     *name += &format!("#funptr{}", var_count);
 }
 

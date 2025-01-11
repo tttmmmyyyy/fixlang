@@ -476,9 +476,9 @@ pub struct Program {
     // Trait environment.
     pub trait_env: TraitEnv,
     // Entry point value of the program.
-    // - Instantiation of `Main::main` if run or build mode.
-    // - Instantiation of `Main::test` if test mode.
-    // - None if library mode.
+    // - Instantiation of `Main::main` when run or build mode.
+    // - Instantiation of `Main::test` when test mode.
+    // - None when library mode.
     pub entry_io_value: Option<Arc<ExprNode>>,
     // Export statements.
     pub export_statements: Vec<ExportStatement>,

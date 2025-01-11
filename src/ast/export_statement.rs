@@ -8,8 +8,6 @@ use inkwell::types::BasicType;
 use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
-use crate::ast::type_funptr;
-use crate::ast::type_tyapp;
 use crate::ast::types::Scheme;
 use crate::ast::types::TypeNode;
 use crate::ast::Type;
@@ -19,15 +17,22 @@ use crate::generator::Object;
 use crate::sourcefile::Span;
 
 use super::error::Errors;
-use super::optimization::uncurry::convert_to_funptr_name;
 
+// The export statement.
 #[derive(Clone)]
 pub struct ExportStatement {
+    // The name of the Fix value to be exported.
+    // This is the name of the Fix value in the source code, and not the name of the instantiated Fix value.
+    // To get the name of the instantiated Fix value, use `self.instantiated_value_expr`.
     pub fix_value_name: FullName,
     pub c_function_name: String,
     pub src: Option<Span>,
-    pub exported_function_type: Option<ExportedFunctionType>, // `None` at first, and set by `ExportedFunctionType::validate`.
-    pub instantiated_value_expr: Option<Arc<ExprNode>>, // `None` at first, and set after the fix value is instantiated.
+    // The instantiated value expression of the Fix value to be exported.
+    // `None` at first, and set after the fix value is instantiated.
+    pub instantiated_value_expr: Option<Arc<ExprNode>>,
+    // The type of the exported C function.
+    // `None` at first, and set by `ExportedFunctionType::validate`.
+    pub exported_function_type: Option<ExportedFunctionType>,
 }
 
 impl ExportStatement {
@@ -109,20 +114,8 @@ impl ExportStatement {
             })
             .collect::<Vec<_>>();
 
-        // If the exported Fix value is a function, then try to use the uncurried version.
-        let mut fix_expr = self.instantiated_value_expr.clone().unwrap();
-        if args.len() > 0 && gc.config.enable_uncurry_optimization() {
-            let mut var = fix_expr.get_var().as_ref().clone();
-            convert_to_funptr_name(&mut var.name.name, args.len());
-            if gc.global.contains_key(&var.name) {
-                let funptr_ty = self.exported_function_type.as_ref().unwrap().to_funptr_ty();
-                fix_expr = fix_expr
-                    .set_var_var(Arc::new(var))
-                    .set_inferred_type(funptr_ty);
-            }
-        }
-
         // Get the Fix value to be exported.
+        let fix_expr = self.instantiated_value_expr.clone().unwrap();
         let mut fix_value = gc.eval_expr(fix_expr, false).unwrap();
 
         // Pass the arguments to the Fix value.
@@ -147,7 +140,7 @@ impl ExportStatement {
     }
 }
 
-// A type to represent the type of a Fix value which is exported to C.
+// A type to represent the type of an exported Fix value.
 // This struct value reresents a type `{doms} -> {codom}` if `is_io` is `false`,
 // and a type `{doms} -> IO {codom}` if `is_io` is `true`.
 #[derive(Clone)]
@@ -158,16 +151,6 @@ pub struct ExportedFunctionType {
 }
 
 impl ExportedFunctionType {
-    // Create the uncurried function pointer type of the exported Fix value.
-    pub fn to_funptr_ty(&self) -> Arc<TypeNode> {
-        assert!(self.doms.len() > 0); // The exported value should be a function.
-        let mut ty = self.codom.clone();
-        if self.is_io {
-            ty = type_tyapp(make_io_ty(), ty);
-        }
-        type_funptr(self.doms.clone(), ty)
-    }
-
     // Check if a type is valid for a value which is exported.
     // - src: Used for error messages.
     pub fn validate(
