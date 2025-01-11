@@ -8,7 +8,8 @@ import random
 from statsmodels.stats.weightstats import ttest_ind
 import numpy as np
 
-SOURCE_FILE = './src/llvm_passes.txt'
+LLVM_PASSES_MAIN_FILE = './src/llvm_passes.txt'
+LLVM_PASSES_TMP_FILE = './llvm_passes_tmp.txt'
 
 LOG_FILE = './passes_optimizer.log'
 
@@ -90,8 +91,18 @@ def get_all_passes():
     return passes
 
 
-def write_source_file(passes):
-    with open(SOURCE_FILE, 'w') as f:
+def write_llvm_passes_file(passes, file_type):
+    if file_type == 'main':
+        path = LLVM_PASSES_MAIN_FILE
+    elif file_type == 'tmp':
+        path = LLVM_PASSES_TMP_FILE
+    else:
+        # Print error message
+        print('Invalid file type: {}'.format(file_type))
+        exit(1)
+
+    print('Writing passes to {}'.format(path))
+    with open(path, 'w') as f:
         for p in passes:
             f.write(p)
             f.write('\n')
@@ -104,7 +115,7 @@ def install_fix():
 
 def run_benchmark(timeout=10):
     work_dir = "./benchmark/speedtest"
-    cp = subprocess.run(['fix', 'build', '-O', 'experimental', '--llvm-passes-file', '../../' + SOURCE_FILE],
+    cp = subprocess.run(['fix', 'build', '-O', 'experimental', '--llvm-passes-file', '../../' + LLVM_PASSES_TMP_FILE],
                         capture_output=True, text=True, cwd=work_dir)
     if cp.returncode != 0:
         print('build failed.')
@@ -147,7 +158,7 @@ def optimize():
     all_passes = get_all_passes()
 
     # Read the initial passes from the source file
-    with open(SOURCE_FILE, 'r') as f:
+    with open(LLVM_PASSES_MAIN_FILE, 'r') as f:
         initial_passes = f.readlines()
         initial_passes = [line.strip() for line in initial_passes]
 
@@ -160,7 +171,7 @@ def optimize():
     print('Initial passes:')
     print_passes(optimum_passes)
 
-    write_source_file(optimum_passes)
+    write_llvm_passes_file(optimum_passes, 'tmp')
     optimum_time = run_benchmark()
     if optimum_time is None:
         print('Initial benchmark failed.')
@@ -189,13 +200,15 @@ def optimize():
         passes = optimum_passes.copy()
         for p in added_passes:
             passes.append(p)
-        write_source_file(passes)
+        write_llvm_passes_file(passes, 'tmp')
         time = run_benchmark()
         if time is not None and time < optimum_time:
             optimum_passes = passes
             optimum_time = time
             print('New optimum passes found!')
             add_log(phase, time, passes)
+            # Write the optimum passes to the main file
+            write_llvm_passes_file(passes, 'main')
         else:
             print('No improvement found.')
 
@@ -215,13 +228,15 @@ def optimize():
         phase += 1
         print('Try removing passes:')
         print_passes(removed_passes)
-        write_source_file(passes)
+        write_llvm_passes_file(passes, 'tmp')
         time = run_benchmark()
         if time is not None and time <= optimum_time:
             optimum_passes = passes
             optimum_time = time
             print('Minimize success!')
             add_log(phase, time, passes)
+            # Write the optimum passes to the main file
+            write_llvm_passes_file(passes, 'main')
         else:
             print('Minimize failed.')
 
@@ -229,9 +244,6 @@ def optimize():
         print('Current optimum passes:')
         print_passes(optimum_passes)
         print('Current optimum time: {}'.format(optimum_time))
-
-    # Write the final optimum passes to the source file
-    write_source_file(optimum_passes)
 
 
 if __name__ == '__main__':
