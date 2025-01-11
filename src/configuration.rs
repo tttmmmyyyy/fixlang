@@ -432,7 +432,7 @@ impl Configuration {
     }
 
     pub fn enable_dead_symbol_elimination(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Experimental
+        self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     // Get hash value of the configurations that affect the object file generation.
