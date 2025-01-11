@@ -200,18 +200,17 @@ def optimize():
             print('No improvement found.')
 
         # minimize passes
-        passes = []
+
         # Remove one pass randomly
         remove_idx = random.randint(0, len(optimum_passes) - 1)
         removed_passes = [optimum_passes[remove_idx]]
-        # for p in optimum_passes:
-        #     if random.randint(0, int(ceil(len(optimum_passes) / ADDED_PASSES_NUM))) != 0:
-        #         passes.append(p)
-        #     else:
-        #         removed_passes.append(p)
+        passes = [optimum_passes[i]
+                  for i in range(len(optimum_passes)) if i != remove_idx]
+
+        # If no passes are removed, skip the minimize phase.
         if removed_passes == []:
-            # If no passes are removed, skip the minimize phase.
             continue
+
         print(f'\nPhase {phase}:')
         phase += 1
         print('Try removing passes:')
