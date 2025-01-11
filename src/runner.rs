@@ -170,19 +170,15 @@ fn build_object_files<'c>(
 
     // Determine compilation units.
     let mut units = vec![];
-    let mut instantiated_symbols = program
-        .instantiated_symbols
-        .values()
-        .cloned()
-        .collect::<Vec<_>>();
-    instantiated_symbols.sort_by(|a, b| a.instantiated_name.cmp(&b.instantiated_name));
-    let all_symbols = instantiated_symbols.clone();
+    let mut symbols = program.symbols.values().cloned().collect::<Vec<_>>();
+    symbols.sort_by(|a, b| a.name.cmp(&b.name));
+    let all_symbols = symbols.clone();
     {
         let module_dependency_hash = program.module_dependency_hash_map();
         let module_dependency_map = program.module_dependency_map();
         if config.enable_separated_compilation() {
             units = CompileUnit::split_symbols(
-                instantiated_symbols,
+                symbols,
                 &module_dependency_hash,
                 &module_dependency_map,
                 &config,
@@ -194,7 +190,7 @@ fn build_object_files<'c>(
         } else {
             // Add main compilation unit, which includes all symbols.
             let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
-            let mut main_unit = CompileUnit::new(instantiated_symbols, modules);
+            let mut main_unit = CompileUnit::new(symbols, modules);
             main_unit.set_random_unit_hash(); // Recompile main unit every time.
             units.push(main_unit);
         }

@@ -4,7 +4,7 @@ use crate::{
     ast::name::{FullName, Name},
     collect_app, expr_abs, expr_app, expr_let, expr_var,
     misc::Set,
-    type_funptr, Expr, ExprNode, InstantiatedSymbol, Program, Var, FIX_NAME, FUNPTR_ARGS_MAX,
+    type_funptr, Expr, ExprNode, Program, Symbol, Var, FIX_NAME, FUNPTR_ARGS_MAX,
     INSTANCIATED_NAME_SEPARATOR, STD_NAME,
 };
 
@@ -16,11 +16,9 @@ use super::utils::replace_free_var_of_expr;
 
 pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
-    let syms = std::mem::replace(&mut fix_mod.instantiated_symbols, Default::default());
+    let syms = std::mem::replace(&mut fix_mod.symbols, Default::default());
     for (sym_name, sym) in syms {
-        fix_mod
-            .instantiated_symbols
-            .insert(sym_name.clone(), sym.clone());
+        fix_mod.symbols.insert(sym_name.clone(), sym.clone());
 
         // Add function pointer version as long as possible.
         for arg_cnt in 1..(FUNPTR_ARGS_MAX + 1) {
@@ -38,10 +36,10 @@ pub fn run(fix_mod: &mut Program) {
             convert_to_funptr_name(name.name_as_mut(), arg_cnt as usize);
             let mut generic_name = sym.generic_name.clone();
             convert_to_funptr_name(generic_name.name_as_mut(), arg_cnt as usize);
-            fix_mod.instantiated_symbols.insert(
+            fix_mod.symbols.insert(
                 name.clone(),
-                InstantiatedSymbol {
-                    instantiated_name: name.clone(),
+                Symbol {
+                    name: name.clone(),
                     generic_name: generic_name,
                     ty,
                     expr: Some(expr.clone()),
@@ -52,10 +50,10 @@ pub fn run(fix_mod: &mut Program) {
 
     // Replace application expressions so that they use uncurried pointers.
     let mut symbol_names: Set<FullName> = Default::default();
-    for (name, _sym) in &fix_mod.instantiated_symbols {
+    for (name, _sym) in &fix_mod.symbols {
         symbol_names.insert(name.clone());
     }
-    for (_name, sym) in &mut fix_mod.instantiated_symbols {
+    for (_name, sym) in &mut fix_mod.symbols {
         let expr =
             replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
         let expr = expr.calculate_free_vars();
@@ -64,7 +62,7 @@ pub fn run(fix_mod: &mut Program) {
 
     // Replace export statements so that they use uncurried functions.
     for export in &mut fix_mod.export_statements {
-        let exported_value = export.instantiated_value_expr.as_ref().unwrap();
+        let exported_value = export.value_expr.as_ref().unwrap();
         let exported_value_name = &exported_value.get_var().name;
         let exported_value_ty = exported_value.ty.as_ref().unwrap();
         if !exported_value_ty.is_closure() {
@@ -77,7 +75,7 @@ pub fn run(fix_mod: &mut Program) {
             }
             let mut name = exported_value_name.clone();
             convert_to_funptr_name(name.name_as_mut(), n_args);
-            if let Some(sym) = fix_mod.instantiated_symbols.get(&name) {
+            if let Some(sym) = fix_mod.symbols.get(&name) {
                 break Some(sym);
             }
             n_args -= 1;
@@ -86,9 +84,9 @@ pub fn run(fix_mod: &mut Program) {
             continue;
         }
         let uncurried_value = uncurried_value.unwrap();
-        export.fix_value_name = uncurried_value.instantiated_name.clone();
-        export.instantiated_value_expr = Some(
-            expr_var(uncurried_value.instantiated_name.clone(), None)
+        export.value_name = uncurried_value.name.clone();
+        export.value_expr = Some(
+            expr_var(uncurried_value.name.clone(), None)
                 .set_inferred_type(uncurried_value.ty.clone()),
         );
     }

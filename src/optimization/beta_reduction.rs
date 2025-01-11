@@ -37,19 +37,19 @@ use std::sync::Arc;
 use crate::{
     ast::traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var, Expr,
-    ExprNode, InstantiatedSymbol, PatternNode, Program,
+    ExprNode, Symbol, PatternNode, Program,
 };
 
 use super::utils::generate_new_names;
 
 #[allow(dead_code)]
 pub fn run(prg: &mut Program) {
-    for (_name, sym) in &mut prg.instantiated_symbols {
+    for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym);
     }
 }
 
-pub fn run_on_symbol(sym: &mut InstantiatedSymbol) {
+pub fn run_on_symbol(sym: &mut Symbol) {
     let mut optimizer = BetaReduction {};
     let res = optimizer.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {

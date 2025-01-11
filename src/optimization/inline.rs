@@ -10,7 +10,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    ExprNode, InstantiatedSymbol, Program,
+    ExprNode, Symbol, Program,
 };
 
 use super::{beta_reduction, remove_renaming};
@@ -19,7 +19,7 @@ pub const INLINE_COST_THRESHOLD: usize = 30;
 
 pub fn run(prg: &mut Program) {
     // Calculate free variables of all symbols.
-    for (_name, sym) in &mut prg.instantiated_symbols {
+    for (_name, sym) in &mut prg.symbols {
         sym.expr = Some(sym.expr.as_ref().unwrap().calculate_free_vars());
     }
 
@@ -33,12 +33,12 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     let mut changed = false;
 
     let costs = calculate_inline_costs(prg);
-    let symbols = mem::take(&mut prg.instantiated_symbols);
+    let symbols = mem::take(&mut prg.symbols);
     let mut inliner = Inliner {
         costs: &costs,
         symbols: symbols.clone(),
     };
-    let mut new_symbols: Map<FullName, InstantiatedSymbol> = Map::default();
+    let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let root_value_names = prg.root_value_names();
 
     for (name, mut sym) in symbols {
@@ -82,14 +82,14 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         new_symbols.insert(name, sym);
     }
 
-    prg.instantiated_symbols = new_symbols;
+    prg.symbols = new_symbols;
 
     changed
 }
 
 fn calculate_inline_costs(prg: &Program) -> InlineCosts {
     let mut costs = InlineCosts::new();
-    for (name, sym) in &prg.instantiated_symbols {
+    for (name, sym) in &prg.symbols {
         let mut cost_calculator = InlineCostCalculator::new(name.clone());
         cost_calculator.traverse(&sym.expr.as_ref().unwrap());
         costs.add_cost_calculation_result(name, cost_calculator);
@@ -436,7 +436,7 @@ struct Inliner<'c> {
     // The cost of inlining.
     costs: &'c InlineCosts,
     // All symbols.
-    symbols: Map<FullName, InstantiatedSymbol>,
+    symbols: Map<FullName, Symbol>,
 }
 
 impl<'c> ExprVisitor for Inliner<'c> {

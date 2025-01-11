@@ -20,7 +20,7 @@ use crate::{
 pub fn run(prg: &mut Program) {
     // Get all names and unique them.
     let mut all_names = vec![];
-    for (name, _sym) in &mut prg.instantiated_symbols {
+    for (name, _sym) in &mut prg.symbols {
         all_names.push(name.clone());
     }
     all_names.sort();
@@ -50,7 +50,7 @@ pub fn run(prg: &mut Program) {
     let mut visitor = SimplifyName {
         old_to_new_names: old_to_new_names.clone(),
     };
-    let old_symbols = mem::take(&mut prg.instantiated_symbols);
+    let old_symbols = mem::take(&mut prg.symbols);
     let mut new_symbols = Map::default();
     for (old_name, mut sym) in old_symbols {
         let res = visitor.traverse(sym.expr.as_ref().unwrap());
@@ -58,17 +58,17 @@ pub fn run(prg: &mut Program) {
             sym.expr = Some(res.expr.calculate_free_vars());
         }
         let new_name = old_to_new_names.get(&old_name).unwrap();
-        sym.instantiated_name = new_name.clone();
+        sym.name = new_name.clone();
         new_symbols.insert(new_name.clone(), sym);
     }
-    prg.instantiated_symbols = new_symbols;
+    prg.symbols = new_symbols;
 
     // Rename exported values.
     if let Some(entry_io) = &mut prg.entry_io_value {
         *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names).calculate_free_vars();
     }
     for export_stmt in &mut prg.export_statements {
-        if let Some(entry_io) = &mut export_stmt.instantiated_value_expr {
+        if let Some(entry_io) = &mut export_stmt.value_expr {
             *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names).calculate_free_vars();
         }
     }

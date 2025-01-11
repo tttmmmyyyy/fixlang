@@ -48,21 +48,23 @@ impl TypeEnv {
     }
 }
 
+// Symbols are Fix values that are instantiated:
+// their types are fixed to concrete types, and given unique names.
 #[derive(Clone)]
-pub struct InstantiatedSymbol {
-    pub instantiated_name: FullName,
+pub struct Symbol {
+    pub name: FullName,
     pub generic_name: FullName,
     pub ty: Arc<TypeNode>,
     pub expr: Option<Arc<ExprNode>>,
 }
 
-impl InstantiatedSymbol {
+impl Symbol {
     // The set of modules that this symbol depends on.
     // If any of these modules, or any of their importee are changed, then they are required to be re-compiled.
     // Note that this set may not be fully spanned in the importing graph.
     pub fn dependent_modules(&self) -> Set<Name> {
         let mut dep_mods = Set::default();
-        dep_mods.insert(self.instantiated_name.module());
+        dep_mods.insert(self.name.module());
         self.ty.define_modules_of_tycons(&mut dep_mods);
         dep_mods
         // Even for implemented trait methods, it is enough to add the module where the trait is defined and the modules where the types of the symbol are defined.
@@ -490,11 +492,12 @@ pub struct Program {
     // This is used to namespace resolution and overloading resolution.
     pub mod_to_import_stmts: Map<Name, Vec<ImportStatement>>,
 
-    /* Instantiation */
+    /* Instantiated symbols */
     // Instantiated symbols.
-    pub instantiated_symbols: Map<FullName, InstantiatedSymbol>,
-    // Deferred instantiation, which is a state variable for the instantiation process.
-    pub deferred_instantiation: Vec<InstantiatedSymbol>,
+    pub symbols: Map<FullName, Symbol>,
+    // Deferred instantiations.
+    // This is a state variable for the instantiation process.
+    pub deferred_instantiation: Vec<Symbol>,
 
     /* Dependency information */
     pub modules: Vec<ModuleInfo>,
@@ -508,7 +511,7 @@ impl Program {
             res.push(entry.get_var().name.clone());
         }
         for stmt in &self.export_statements {
-            if let Some(exported) = stmt.instantiated_value_expr.as_ref() {
+            if let Some(exported) = stmt.value_expr.as_ref() {
                 res.push(exported.get_var().name.clone());
             }
         }
@@ -535,7 +538,7 @@ impl Program {
             mod_to_import_stmts: Default::default(),
             type_defns: Default::default(),
             global_values: Default::default(),
-            instantiated_symbols: Default::default(),
+            symbols: Default::default(),
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
             type_env: Default::default(),
@@ -1178,7 +1181,7 @@ impl Program {
     // Instantiate symbol.
     fn instantiate_symbol(
         &mut self,
-        sym: &mut InstantiatedSymbol,
+        sym: &mut Symbol,
         tc: &TypeCheckContext,
     ) -> Result<(), Errors> {
         assert!(sym.expr.is_none());
@@ -1245,10 +1248,10 @@ impl Program {
         let mut errors = Errors::empty();
         while !self.deferred_instantiation.is_empty() {
             let sym = self.deferred_instantiation.pop().unwrap();
-            let name = sym.instantiated_name.clone();
+            let name = sym.name.clone();
             let mut sym = sym.clone();
             errors.eat_err(self.instantiate_symbol(&mut sym, tc));
-            self.instantiated_symbols.insert(name, sym);
+            self.symbols.insert(name, sym);
         }
         errors.to_result()
     }
@@ -1278,10 +1281,10 @@ impl Program {
         let mut export_stmts = std::mem::replace(&mut self.export_statements, vec![]);
         for stmt in &mut export_stmts {
             errors.eat_err_or(
-                self.instantiate_exported_value(&stmt.fix_value_name, None, &stmt.src, tc),
+                self.instantiate_exported_value(&stmt.value_name, None, &stmt.src, tc),
                 |(instantiated_expr, eft)| {
-                    stmt.exported_function_type = Some(eft);
-                    stmt.instantiated_value_expr = Some(instantiated_expr);
+                    stmt.function_type = Some(eft);
+                    stmt.value_expr = Some(instantiated_expr);
                 },
             );
         }
@@ -1344,9 +1347,9 @@ impl Program {
             )?;
             (gv.scm.ty.clone(), eft)
         };
-        let inst_name = self.require_instantiated_symbol(&value_name, &required_ty)?;
+        let symbol_name = self.require_instantiation(&value_name, &required_ty)?;
         self.instantiate_symbols(tc)?;
-        let expr = expr_var(inst_name, None).set_inferred_type(required_ty);
+        let expr = expr_var(symbol_name, None).set_inferred_type(required_ty);
         Ok((expr, eft))
     }
 
@@ -1358,7 +1361,7 @@ impl Program {
                     expr.clone()
                 } else {
                     let instance =
-                        self.require_instantiated_symbol(&v.name, &expr.ty.as_ref().unwrap())?;
+                        self.require_instantiation(&v.name, &expr.ty.as_ref().unwrap())?;
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
                 }
@@ -1431,21 +1434,21 @@ impl Program {
         Ok(ret.calculate_free_vars())
     }
 
-    // Require instantiate generic symbol such that it has a specified type.
-    pub fn require_instantiated_symbol(
+    // Require instantiating a generic value such to a specified type.
+    pub fn require_instantiation(
         &mut self,
         name: &FullName,
         ty: &Arc<TypeNode>,
     ) -> Result<FullName, Errors> {
-        let inst_name = self.determine_instantiated_symbol_name(name, ty)?;
-        if !self.instantiated_symbols.contains_key(&inst_name)
+        let inst_name = self.determine_symbol_name(name, ty)?;
+        if !self.symbols.contains_key(&inst_name)
             && self
                 .deferred_instantiation
                 .iter()
-                .all(|symbol| symbol.instantiated_name != inst_name)
+                .all(|symbol| symbol.name != inst_name)
         {
-            self.deferred_instantiation.push(InstantiatedSymbol {
-                instantiated_name: inst_name.clone(),
+            self.deferred_instantiation.push(Symbol {
+                name: inst_name.clone(),
                 generic_name: name.clone(),
                 ty: ty.clone(),
                 expr: None,
@@ -1454,9 +1457,9 @@ impl Program {
         Ok(inst_name)
     }
 
-    // Determine the name of instantiated generic symbol so that it has a specified type.
+    // Determine the name of instantiated generic value so that it has a specified type.
     // tc: a typechecker (substituion) under which ty should be interpreted.
-    fn determine_instantiated_symbol_name(
+    fn determine_symbol_name(
         &self,
         name: &FullName,
         ty: &Arc<TypeNode>,
@@ -1538,18 +1541,18 @@ impl Program {
         for stmt in &self.export_statements {
             if let Some((_, span)) = c_function_names
                 .iter()
-                .find(|(name, _)| *name == stmt.c_function_name)
+                .find(|(name, _)| *name == stmt.function_name)
             {
                 errors.append(Errors::from_msg_srcs(
                     format!(
                         "Multiple export statements have the same C function name `{}`.",
-                        stmt.c_function_name
+                        stmt.function_name
                     ),
                     &[&stmt.src, span],
                 ));
                 continue;
             }
-            c_function_names.push((stmt.c_function_name.clone(), stmt.src.clone()));
+            c_function_names.push((stmt.function_name.clone(), stmt.src.clone()));
         }
 
         errors.to_result()?;
@@ -2175,18 +2178,14 @@ impl Program {
 
     pub fn stringify_symbols(&self) -> Text {
         let mut sym_texts: Vec<(String, Text)> = vec![];
-        for sym in self.instantiated_symbols.values() {
+        for sym in self.symbols.values() {
             let mut sym_text = Text::empty();
 
-            let type_sgn_str = format!(
-                "{} : {};",
-                sym.instantiated_name.to_string(),
-                sym.ty.to_string()
-            );
+            let type_sgn_str = format!("{} : {};", sym.name.to_string(), sym.ty.to_string());
             let type_sgn = Text::from_str(&type_sgn_str);
             sym_text = sym_text.append(type_sgn);
 
-            let code = Text::from_str(&format!("{} = ", sym.instantiated_name.to_string()))
+            let code = Text::from_str(&format!("{} = ", sym.name.to_string()))
                 .append_nobreak(
                     sym.expr
                         .as_ref()
@@ -2223,13 +2222,9 @@ impl Program {
     // Generate a call graph of instantiated symbols.
     #[allow(dead_code)]
     pub fn call_graph_inst_syms(&self) -> Graph<FullName> {
-        let syms = self
-            .instantiated_symbols
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
+        let syms = self.symbols.keys().cloned().collect::<Vec<_>>();
         let mut graph = Graph::new(syms);
-        for (callee, sym) in &self.instantiated_symbols {
+        for (callee, sym) in &self.symbols {
             let called = sym.expr.as_ref().unwrap().free_vars();
             for called in called {
                 graph.connect(callee, called);

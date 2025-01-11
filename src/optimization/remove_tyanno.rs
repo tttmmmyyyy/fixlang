@@ -8,16 +8,16 @@ use std::sync::Arc;
 
 use crate::{
     ast::traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-    ExprNode, InstantiatedSymbol, Program,
+    ExprNode, Symbol, Program,
 };
 
 pub fn run(prg: &mut Program) {
-    for (_name, sym) in &mut prg.instantiated_symbols {
+    for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym);
     }
 }
 
-fn run_on_symbol(sym: &mut InstantiatedSymbol) {
+fn run_on_symbol(sym: &mut Symbol) {
     let mut remover = TyAnnoRemover {};
     let res = remover.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {

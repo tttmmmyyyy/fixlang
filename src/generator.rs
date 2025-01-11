@@ -2458,8 +2458,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         );
     }
 
-    pub fn declare_symbol(&mut self, sym: &InstantiatedSymbol) -> FunctionValue<'c> {
-        let name = &sym.instantiated_name;
+    pub fn declare_symbol(&mut self, sym: &Symbol) -> FunctionValue<'c> {
+        let name = &sym.name;
         let obj_ty = &sym.ty;
         if obj_ty.is_funptr() {
             // Declare lambda function.
@@ -2491,8 +2491,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
     }
 
-    pub fn implement_symbol(&mut self, sym: &InstantiatedSymbol) {
-        let name = &sym.instantiated_name;
+    pub fn implement_symbol(&mut self, sym: &Symbol) {
+        let name = &sym.name;
         // Get the function to implement.
         let global_obj = self.global.get(name);
         let sym_fn = match global_obj {

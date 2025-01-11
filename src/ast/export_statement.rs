@@ -22,17 +22,19 @@ use super::error::Errors;
 #[derive(Clone)]
 pub struct ExportStatement {
     // The name of the Fix value to be exported.
-    // This is the name of the Fix value in the source code, and not the name of the instantiated Fix value.
+    // This is the name of the Fix value in the source code, and not the name of the symbol.
     // To get the name of the instantiated Fix value, use `self.instantiated_value_expr`.
-    pub fix_value_name: FullName,
-    pub c_function_name: String,
-    pub src: Option<Span>,
-    // The instantiated value expression of the Fix value to be exported.
-    // `None` at first, and set after the fix value is instantiated.
-    pub instantiated_value_expr: Option<Arc<ExprNode>>,
-    // The type of the exported C function.
+    pub value_name: FullName,
+    // The expression (symbol) to be exported.
+    // `None` at first, and set after the fix value is instantiated to a symbol.
+    pub value_expr: Option<Arc<ExprNode>>,
+    // The name of the exported function.
+    pub function_name: String,
+    // The type of the exported function.
     // `None` at first, and set by `ExportedFunctionType::validate`.
-    pub exported_function_type: Option<ExportedFunctionType>,
+    pub function_type: Option<ExportedFunctionType>,
+    // The source of the export statement.
+    pub src: Option<Span>,
 }
 
 impl ExportStatement {
@@ -42,11 +44,11 @@ impl ExportStatement {
         src: Option<Span>,
     ) -> ExportStatement {
         ExportStatement {
-            fix_value_name,
-            c_function_name,
+            value_name: fix_value_name,
+            function_name: c_function_name,
             src,
-            exported_function_type: None,
-            instantiated_value_expr: None,
+            function_type: None,
+            value_expr: None,
         }
     }
 
@@ -56,20 +58,20 @@ impl ExportStatement {
         // If `c_function_name` is not a valid C function name, exit with error
         // The first character should be a letter or an underscore
         // The rest of the characters should be a letter, a digit or an underscore
-        if !self.c_function_name.chars().next().unwrap().is_alphabetic()
-            && self.c_function_name.chars().next().unwrap() != '_'
+        if !self.function_name.chars().next().unwrap().is_alphabetic()
+            && self.function_name.chars().next().unwrap() != '_'
         {
             let msg = format!(
                 "`{}` is not a valid C function name. The first character should be a letter or an underscore.",
-                &self.c_function_name
+                &self.function_name
             );
             return Err(Errors::from_msg_srcs(msg, &vec![src]));
         }
-        for c in self.c_function_name.chars() {
+        for c in self.function_name.chars() {
             if !c.is_alphanumeric() && c != '_' {
                 let msg = format!(
                     "`{}` is not a valid C function name. The rest of the characters should be a letter, a digit or an underscore.",
-                    &self.c_function_name
+                    &self.function_name
                 );
                 return Err(Errors::from_msg_srcs(msg, &vec![src]));
             }
@@ -80,8 +82,7 @@ impl ExportStatement {
     // Implement the exported c function.
     // This function requires `self.exported_function_type` and `self.instantiated_value_expr` to already be set.
     pub fn implement<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) {
-        let ExportedFunctionType { doms, codom, is_io } =
-            self.exported_function_type.clone().unwrap();
+        let ExportedFunctionType { doms, codom, is_io } = self.function_type.clone().unwrap();
 
         // Create the LLVM type of the exported C function.
         let dom_llvm_tys = doms
@@ -97,7 +98,7 @@ impl ExportStatement {
         };
 
         // Declare the function.
-        let func = gc.module.add_function(&self.c_function_name, func_ty, None);
+        let func = gc.module.add_function(&self.function_name, func_ty, None);
 
         // Implement the function.
         let bb = gc.context.append_basic_block(func, "entry");
@@ -115,7 +116,7 @@ impl ExportStatement {
             .collect::<Vec<_>>();
 
         // Get the Fix value to be exported.
-        let fix_expr = self.instantiated_value_expr.clone().unwrap();
+        let fix_expr = self.value_expr.clone().unwrap();
         let mut fix_value = gc.eval_expr(fix_expr, false).unwrap();
 
         // Pass the arguments to the Fix value.
