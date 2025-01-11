@@ -1,7 +1,7 @@
 /*
-Simplify global names.
+Simplify symbol names.
 
-This pass simplifies global names such as "Std::func#{something_added_by_compiler}#{another_thing_added_by_compiler}" to "Std::func#{a-number}".
+This pass simplifies symbol names such as "Std::func#{something_added_by_compiler}#{another_thing_added_by_compiler}" to "Std::func#{a-number}".
 
 Used to make the symbol file more readable.
 */

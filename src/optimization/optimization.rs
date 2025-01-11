@@ -1,6 +1,6 @@
 use crate::{Configuration, Program};
 
-use super::{dead_symbol_elimination, inline, remove_tyanno, simplify_global_names, uncurry};
+use super::{dead_symbol_elimination, inline, remove_tyanno, simplify_symbol_names, uncurry};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     let mut step = 0;
@@ -11,10 +11,10 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Perform simplification of global names.
-    if config.enable_simplify_global_names() {
-        simplify_global_names::run(prg);
+    if config.enable_simplify_symbol_names() {
+        simplify_symbol_names::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.simplify_global_names", step));
+            prg.emit_symbols(&format!("{}.simplify_symbol_names", step));
             step += 1;
         }
     }

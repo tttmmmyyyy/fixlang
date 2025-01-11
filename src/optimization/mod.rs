@@ -6,6 +6,6 @@ mod inline;
 pub mod optimization;
 mod remove_renaming;
 mod remove_tyanno;
-mod simplify_global_names;
+mod simplify_symbol_names;
 mod uncurry;
 mod utils;

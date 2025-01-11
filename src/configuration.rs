@@ -427,7 +427,7 @@ impl Configuration {
         self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn enable_simplify_global_names(&self) -> bool {
+    pub fn enable_simplify_symbol_names(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
