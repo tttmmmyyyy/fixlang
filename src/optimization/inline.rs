@@ -10,7 +10,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    ExprNode, Symbol, Program,
+    ExprNode, Program, Symbol,
 };
 
 use super::{beta_reduction, remove_renaming};
