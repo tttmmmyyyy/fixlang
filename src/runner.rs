@@ -672,7 +672,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
             }
         } else {
             if !warned_on_mac {
-                info_msg("on macOS, it is not possible to specify whether a library should be dynamically or statically linked. \
+                info_msg("On MacOS, it is not possible to specify whether a library should be dynamically or statically linked. \
                 If a dynamic library and a static library with the same name exist, the unintended one may be used.");
                 warned_on_mac = true;
             }
