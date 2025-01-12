@@ -43,9 +43,9 @@ files = ["main.fix"]
 # debug = true
 
 ## Optimization level.
-## One of "none", "separated", "default".
+## One of "none", "basic", "max".
 ## Overwritten by the command line argument.
-# opt_level = "default"
+# opt_level = "max"
 
 ## Output file name.
 ## Overwritten by the command line argument.
