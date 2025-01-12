@@ -59,7 +59,8 @@ files = ["main.fix"]
 ## This is useful when you need to compile a object files / library before compiling the Fix program.
 ## (Experimental) Furthermore, you can change the Fix compiler options by outputting lines with specific formats in the preliminary commands.
 ## At the moment, the following formats are supported.
-## - `fix.ld_flags=(...)`: Specify flags to pass to the linker. Specify flags separated by spaces in `...`. Example: `fix.ld_flags=-L/path/to/lib -lmylib`
+## - `fix.ld_flags=(...)`: Specify flags to pass to the linker. Specify flags separated by spaces in `...`. Example: `fix.ld_flags=-L/path/to/lib -lmylib`.
+## This is useful when you need to get the path to the library dynamically, e.g., using pkg-config.
 # preliminary_commands = [["make", "lib.o"]]
 
 ## Additional build options when running `fix test`.
