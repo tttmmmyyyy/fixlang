@@ -679,6 +679,9 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
         }
         libs_opts.push(format!("-l{}", lib_name));
     }
+    for ld_flag in &config.ld_flags {
+        libs_opts.push(ld_flag.clone());
+    }
 
     // Build runtime.c to object file.
     let mut runtime_obj_hash_source = "".to_string();
@@ -750,9 +753,6 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
         com.arg("-Wl,--gc-sections");
     }
     com.arg("-o").arg(out_path.to_str().unwrap());
-    for ld_flag in &config.ld_flags {
-        com.arg(ld_flag);
-    }
 
     let mut obj_paths = build_res.obj_paths;
     obj_paths.append(&mut config.object_files.clone());
