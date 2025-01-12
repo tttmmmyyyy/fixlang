@@ -99,6 +99,12 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         let (_params, body) = expr.destructure_lam_sequence();
         let is_llvm_lam = body.is_llvm();
         costs.costs.get_mut(name).unwrap().is_llvm_lam = is_llvm_lam;
+
+        // If the expression is a primitive literal, set as `is_primitive_literal`.
+        if expr.is_llvm() {
+            let is_primitive_literal = expr.get_llvm().generator.is_primitve_literal();
+            costs.costs.get_mut(name).unwrap().is_primitive_literal = is_primitive_literal;
+        }
     }
     costs
 }
@@ -115,19 +121,24 @@ struct InlineCost {
     is_lambda: bool,
     // Is the expression of the form `|x, y, ...| {llvm}`?
     is_llvm_lam: bool,
+    // Is the expression primitive literal?
+    is_primitive_literal: bool,
 }
 
 impl InlineCost {
     // Returns true if the symbol can be inlined even at a non-call site.
     fn inline_at_non_call_site(&self) -> bool {
+        if self.is_primitive_literal {
+            // TODO: Allow (not only literals but) constant primitives to be inlined too.
+            return true;
+        }
         if self.is_self_recursive {
             return false;
         }
         if self.is_llvm_lam {
             return true;
         }
-        self.call_count == 1
-        // TODO: we should allow constants to be inlined even if they are called more than once.
+        return false;
     }
 
     // Returns true if the symbol can be inlined at a call site.
@@ -175,6 +186,7 @@ impl InlineCosts {
                         is_self_recursive: false,
                         is_lambda: false,
                         is_llvm_lam: false,
+                        is_primitive_literal: false,
                     },
                 );
             }
@@ -193,6 +205,7 @@ impl InlineCosts {
                     complexity: cost.complexity,
                     is_self_recursive: cost.is_call_self,
                     is_lambda: cost.is_lambda,
+                    is_primitive_literal: false,
                     is_llvm_lam: false,
                 },
             );

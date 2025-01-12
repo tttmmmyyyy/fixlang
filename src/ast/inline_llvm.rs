@@ -328,6 +328,17 @@ impl LLVMGenerator {
         };
         format!("LLVM<{}>", raw_name)
     }
+
+    pub fn is_primitve_literal(&self) -> bool {
+        match self {
+            LLVMGenerator::IntLit(_) => true,
+            LLVMGenerator::FloatLit(_) => true,
+            LLVMGenerator::NullPtrLit(_) => true,
+            LLVMGenerator::BoolLit(_) => true,
+            LLVMGenerator::StringLit(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
