@@ -416,6 +416,18 @@ impl ProjectFile {
             }
         }
 
+        // Add ld_flags.
+        config.ld_flags.append(&mut self.build.ld_flags.clone());
+        if use_build_test {
+            config.ld_flags.append(
+                &mut self
+                    .build
+                    .test
+                    .as_ref()
+                    .map_or(vec![], |test| test.ld_flags.clone()),
+            );
+        }
+
         // Set threaded-mode.
         if let Some(threaded) = self.build.threaded {
             if threaded {
@@ -505,18 +517,6 @@ impl ProjectFile {
                     ));
                 }
             }
-        }
-
-        // Set ld_flags.
-        config.ld_flags.append(&mut self.build.ld_flags.clone());
-        if use_build_test {
-            config.ld_flags.append(
-                &mut self
-                    .build
-                    .test
-                    .as_ref()
-                    .map_or(vec![], |test| test.ld_flags.clone()),
-            );
         }
 
         // Set output file.
