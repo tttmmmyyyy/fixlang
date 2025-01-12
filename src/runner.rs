@@ -750,6 +750,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
         com.arg("-Wl,--gc-sections");
     }
     com.arg("-o").arg(out_path.to_str().unwrap());
+    com.arg(config.ld_flags.join(" "));
 
     let mut obj_paths = build_res.obj_paths;
     obj_paths.append(&mut config.object_files.clone());
