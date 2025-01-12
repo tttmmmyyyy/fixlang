@@ -1,7 +1,7 @@
 use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::cpu_features::CpuFeatures;
 use crate::error::{panic_if_err, Errors};
-use crate::misc::{to_absolute_path, Finally};
+use crate::misc::{split_string_by_space_not_quated, to_absolute_path, Finally};
 use crate::typecheckcache::{self, TypeCheckCache};
 use crate::{error::panic_with_err, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
@@ -234,7 +234,8 @@ impl ExtraCommand {
         for stdout_line in stdout_lines {
             if stdout_line.starts_with(PRELIMINARY_BUILD_LD_FLAGS) {
                 let ld_flags = stdout_line[PRELIMINARY_BUILD_LD_FLAGS.len()..].trim();
-                config.ld_flags.push(ld_flags.to_string());
+                let mut ld_flags = split_string_by_space_not_quated(ld_flags);
+                config.ld_flags.append(&mut ld_flags);
             }
         }
         Ok(())

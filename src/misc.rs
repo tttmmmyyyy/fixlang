@@ -184,3 +184,86 @@ pub fn info_msg(msg: &str) {
 pub fn warn_msg(msg: &str) {
     println!("{}: {}", "warning".yellow(), msg);
 }
+
+// Splits a string by spaces, but keeps the words in quotes as a single word.
+pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut current_word = String::new();
+    let mut in_quotes = None; // None if not in quotes, Some(') if in single quotes, Some(") if in double quotes
+    let mut escaped = false; // true if the previous character is an escape character
+
+    for c in s.chars() {
+        if escaped {
+            current_word.push(c);
+            escaped = false;
+            continue;
+        }
+
+        match c {
+            ' ' if in_quotes.is_none() => {
+                if !current_word.is_empty() {
+                    result.push(current_word.clone());
+                    current_word.clear();
+                }
+            }
+            '"' if in_quotes.is_none() => in_quotes = Some('"'),
+            '"' if in_quotes == Some('"') => in_quotes = None,
+            '\'' if in_quotes.is_none() => in_quotes = Some('\''),
+            '\'' if in_quotes == Some('\'') => in_quotes = None,
+            '\\' => escaped = true, // The next character is escaped
+            _ => current_word.push(c),
+        }
+    }
+
+    if !current_word.is_empty() {
+        result.push(current_word);
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_string() {
+        assert_eq!(
+            split_string_by_space_not_quated("hello world"),
+            vec!["hello", "world"]
+        );
+        assert_eq!(
+            split_string_by_space_not_quated("hello   world"),
+            vec!["hello", "world"]
+        );
+        assert_eq!(
+            split_string_by_space_not_quated(" \"hello world\" "),
+            vec!["hello world"]
+        );
+        assert_eq!(
+            split_string_by_space_not_quated(" 'hello world' "),
+            vec!["hello world"]
+        );
+        assert_eq!(
+            split_string_by_space_not_quated("hello \"big world\""),
+            vec!["hello", "big world"]
+        );
+        assert_eq!(
+            split_string_by_space_not_quated("'it\\'s a beautiful day'"),
+            vec!["it's a beautiful day"]
+        );
+        assert_eq!(
+            split_string_by_space_not_quated("\"this has \\\"escaped quotes\\\"\""),
+            vec!["this has \"escaped quotes\""]
+        );
+        assert_eq!(
+            split_string_by_space_not_quated("混合 \"日本語 の テスト\""),
+            vec!["混合", "日本語 の テスト"]
+        );
+        assert_eq!(split_string_by_space_not_quated(""), Vec::<String>::new());
+        assert_eq!(
+            split_string_by_space_not_quated("   "),
+            Vec::<String>::new()
+        );
+    }
+}
