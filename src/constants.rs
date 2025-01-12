@@ -123,6 +123,9 @@ pub const OPTIMIZATION_LEVEL_BASIC: &str = "basic";
 pub const OPTIMIZATION_LEVEL_MAX: &str = "max";
 pub const OPTIMIZATION_LEVEL_EXPERIMENTAL: &str = "experimental";
 
+// Format of stdout of preliminary build commands.
+pub const PRELIMINARY_BUILD_LD_FLAGS: &str = "fix.ld_flags=";
+
 // Messages
 pub const TRY_FIX_RESOLVE: &str = "Try `fix deps update` to update the lock file.";
 

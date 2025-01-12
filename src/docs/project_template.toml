@@ -35,6 +35,9 @@ files = ["main.fix"]
 ## Merged with paths specified in the command line argument.
 # library_paths = ["."]
 
+## Other linker options.
+# ld_flags = ["-L/usr/lib", "-lijk"]
+
 ## Whether to generate debug information.
 ## Overwritten by the command line argument.
 # debug = true

@@ -137,6 +137,12 @@ fn main() {
         .multiple_values(true)
         .takes_value(true)
         .help("Add library search paths.");
+    let ld_flags = Arg::new("ld-flags")
+        .long("ld-flags")
+        .action(clap::ArgAction::Append)
+        .multiple_values(true)
+        .takes_value(true)
+        .help("Other linker flags.");
     let debug_info = Arg::new("debug-info")
         .long("debug")
         .short('g')
@@ -216,6 +222,7 @@ fn main() {
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
         .arg(library_paths.clone())
+        .arg(ld_flags.clone())
         .arg(debug_info.clone())
         .arg(opt_level.clone())
         .arg(emit_llvm.clone())
@@ -235,6 +242,7 @@ fn main() {
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
         .arg(library_paths.clone())
+        .arg(ld_flags.clone())
         .arg(debug_info.clone())
         .arg(opt_level.clone())
         .arg(emit_llvm.clone())
@@ -255,6 +263,7 @@ fn main() {
         .arg(static_link_library.clone())
         .arg(dynamic_link_library.clone())
         .arg(library_paths.clone())
+        .arg(ld_flags.clone())
         .arg(debug_info.clone())
         .arg(opt_level.clone())
         .arg(emit_llvm.clone())
@@ -423,6 +432,14 @@ fn main() {
             .collect::<Vec<_>>()
     }
 
+    fn read_ld_flags_option(m: &ArgMatches) -> Vec<String> {
+        m.try_get_many::<String>("ld-flags")
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .cloned()
+            .collect::<Vec<_>>()
+    }
+
     fn read_projects_option(m: &ArgMatches) -> Vec<String> {
         m.try_get_many::<String>("projects")
             .unwrap_or_default()
@@ -459,6 +476,9 @@ fn main() {
         config
             .library_search_paths
             .append(&mut read_library_paths_option(args));
+
+        // Set `ld_flags`.
+        config.ld_flags.append(&mut read_ld_flags_option(args));
 
         // Set `emit_llvm`.
         config.emit_llvm = args.contains_id("emit-llvm");

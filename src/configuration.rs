@@ -9,7 +9,7 @@ use crate::{
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
-    OPTIMIZATION_LEVEL_NONE,
+    OPTIMIZATION_LEVEL_NONE, PRELIMINARY_BUILD_LD_FLAGS,
 };
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
@@ -147,6 +147,8 @@ pub struct Configuration {
     pub linked_libraries: Vec<(String, LinkType)>,
     // Library search paths.
     pub library_search_paths: Vec<PathBuf>,
+    // Other linker flags
+    pub ld_flags: Vec<String>,
     // Create debug info.
     pub debug_info: bool,
     // Whether to emit LLVM IR.
@@ -195,7 +197,7 @@ pub struct ExtraCommand {
 }
 
 impl ExtraCommand {
-    pub fn run(&self) -> Result<(), Errors> {
+    pub fn run(&self, config: &mut Configuration) -> Result<(), Errors> {
         let mut com = Command::new(&self.command[0]);
         for arg in &self.command[1..] {
             com.arg(arg);
@@ -215,6 +217,25 @@ impl ExtraCommand {
                 self.command.join(" "),
                 status.code().unwrap_or(-1)
             )));
+        }
+
+        // Get stdout as String.
+        let output = com.output().map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to run command \"{}\": {:?}",
+                self.command.join(" "),
+                e
+            ))
+        })?;
+
+        // If the command outputs build flags in the designated format, add them to the configuration.
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stdout_lines: Vec<&str> = stdout.lines().collect();
+        for stdout_line in stdout_lines {
+            if stdout_line.starts_with(PRELIMINARY_BUILD_LD_FLAGS) {
+                let ld_flags = stdout_line[PRELIMINARY_BUILD_LD_FLAGS.len()..].trim();
+                config.ld_flags.push(ld_flags.to_string());
+            }
         }
         Ok(())
     }
@@ -259,6 +280,7 @@ impl Configuration {
             object_files: vec![],
             fix_opt_level: FixOptimizationLevel::Max, // Fix's optimization level.
             linked_libraries: vec![],
+            ld_flags: vec![],
             debug_info: false,
             emit_llvm: false,
             out_file_path: None,
@@ -477,9 +499,9 @@ impl Configuration {
         }
     }
 
-    pub fn run_extra_commands(&self) -> Result<(), Errors> {
-        for com in &self.extra_commands {
-            com.run()?;
+    pub fn run_extra_commands(&mut self) -> Result<(), Errors> {
+        for com in &self.extra_commands.clone() {
+            com.run(self)?;
         }
         Ok(())
     }

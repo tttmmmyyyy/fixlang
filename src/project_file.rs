@@ -62,6 +62,8 @@ pub struct ProjectFileBuild {
     output: Option<PathBuf>,
     output_type: Option<String>,
     #[serde(default)]
+    ld_flags: Vec<String>,
+    #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
     test: Option<ProjectFileBuildTest>,
 }
@@ -79,6 +81,8 @@ pub struct ProjectFileBuildTest {
     threaded: Option<bool>,
     debug: Option<bool>,
     opt_level: Option<String>,
+    #[serde(default)]
+    ld_flags: Vec<String>,
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
     memcheck: Option<bool>,
@@ -501,6 +505,18 @@ impl ProjectFile {
                     ));
                 }
             }
+        }
+
+        // Set ld_flags.
+        config.ld_flags.append(&mut self.build.ld_flags.clone());
+        if use_build_test {
+            config.ld_flags.append(
+                &mut self
+                    .build
+                    .test
+                    .as_ref()
+                    .map_or(vec![], |test| test.ld_flags.clone()),
+            );
         }
 
         // Set output file.
