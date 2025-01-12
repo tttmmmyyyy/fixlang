@@ -1790,7 +1790,8 @@ The project file should have a name "fixproj.toml".
 Many of features of "fix" command tries to read the project file in the current directory, and if found, uses the information in it.
 Moreover, some subcommands (e.g., "fix deps", "fix docs" or "fix language-server") requires the project file to be present.
 
-"fix init" command generates a template project file. To learn more about the project file, read the comments in it.
+"fix init" command generates [a template project file](./src/docs/project_template.toml).
+To learn more about the project file, read the comments in it.
 
 ## Managing dependencies
 
