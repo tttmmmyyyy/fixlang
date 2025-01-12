@@ -228,7 +228,7 @@ fn main() {
     // "fix run" subcommand
     let run_subc = App::new("run")
         .trailing_var_arg(true)
-        .about("Runs a Fix program. Executes \"Main::main\" of type `IO ()`.")
+        .about("Runs a Fix program. Executes `Main::main : IO ()`.")
         .arg(source_file.clone())
         .arg(object_file.clone())
         .arg(output_file.clone())
@@ -248,7 +248,7 @@ fn main() {
     // "fix test" subcommand
     let test_subc = App::new("test")
         .trailing_var_arg(true)
-        .about("Tests a Fix program. Executes \"Test::test\" of type `IO ()`.")
+        .about("Tests a Fix program. Executes `Test::test : IO ()`.")
         .arg(source_file.clone())
         .arg(object_file.clone())
         .arg(output_file.clone())
