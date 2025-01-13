@@ -32,7 +32,7 @@ impl ExprNode {
         match &*self.expr {
             Expr::Var(v) => {
                 if &v.name == var {
-                    return Some(self.source.clone().unwrap());
+                    return self.source.clone();
                 }
                 None
             }
