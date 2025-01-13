@@ -2,13 +2,13 @@ use std::{sync::Arc, usize};
 
 use crate::{
     ast::name::{FullName, Name},
-    collect_app, expr_abs, expr_app, expr_let, expr_var,
+    collect_app, expr_abs, expr_app, expr_let_typed, expr_var,
     misc::Set,
     type_funptr, Expr, ExprNode, Program, Symbol, Var, FIX_NAME, FUNPTR_ARGS_MAX,
     INSTANCIATED_NAME_SEPARATOR, STD_NAME,
 };
 
-use super::utils::replace_free_var_of_expr;
+use super::utils::rename_lam_param_avoiding;
 
 // First-order uncurrying optimizaion:
 // Global closures are uncurried as long as possible, and converted to function pointers (= has no field for captured values).
@@ -119,7 +119,7 @@ fn funptr_lambda(
     }
 
     // Extract abstractions from expr.
-    let expr = move_abs_front_let_all(expr);
+    let expr = internalize_let_to_var_at_head(expr);
     let (args, body) = collect_abs(&expr, vars_count);
     if args.len() != vars_count {
         return None;
@@ -267,88 +267,55 @@ fn replace_closure_call_to_funptr_call_subexprs(
     }
 }
 
-// Convert `let a = x in |b| y` to `|b| let a = x in y` if possible.
-// NOTE: if name `b` is contained in x, then first we need to replace `b` to another name.
-// TODO: Refactor this using `rename_lam_param_avoiding`.
-fn move_abs_front_let_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    match &*expr.expr {
-        Expr::Let(let_var, let_bound, let_val) => {
-            let let_val = move_abs_front_let_one(let_val);
-            match &*let_val.expr {
-                Expr::Lam(lam_vars, lam_val) => {
-                    let ty = expr.ty.clone().unwrap();
-
-                    // Replace lam_var and its appearance in lam_val to avoid confliction with free variables in let_bound.
-                    let let_bound = let_bound.calculate_free_vars();
-                    let let_bound_free_vars = let_bound.free_vars();
-
-                    let mut lam_vars = lam_vars.clone();
-                    let mut lam_val = lam_val.clone();
-
-                    for lam_var in &mut lam_vars {
-                        let original_name = lam_var.name.clone();
-                        let mut lam_var_name = original_name.clone();
-                        if let_bound_free_vars.contains(&lam_var_name) {
-                            // If replace is necessary,
-                            let mut counter = -1;
-                            loop {
-                                counter += 1;
-                                // Make a candidate for the new name.
-                                *lam_var_name.name_as_mut() =
-                                    format!("{}@{}", original_name.name, counter);
-
-                                // If it is still appears in let_bound, try another name.
-                                if let_bound_free_vars.contains(&lam_var_name) {
-                                    continue;
-                                }
-
-                                // If new name is already appears freely in lam_val, it cannot be used.
-                                if lam_val
-                                    .calculate_free_vars()
-                                    .free_vars()
-                                    .contains(&lam_var_name)
-                                {
-                                    continue;
-                                }
-
-                                // Replace original_name in lam_val.
-                                let replaced = replace_free_var_of_expr(
-                                    &lam_val,
-                                    &original_name,
-                                    &lam_var_name,
-                                );
-
-                                *lam_var = lam_var.set_name(lam_var_name.clone());
-                                lam_val = replaced;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Construct the expression.
-                    let expr = expr_let(let_var.clone(), let_bound.clone(), lam_val.clone(), None)
-                        .set_inferred_type(lam_val.ty.clone().unwrap());
-                    let expr = expr_abs(lam_vars, expr, None).set_inferred_type(ty);
-                    expr
-                }
-                _ => expr.clone(),
-            }
-        }
-        _ => expr.clone(),
+// Convert `let a = x in |b| y` to `|b| let a = x in y` if `x` is a variable expression.
+fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+    // Check if the expression is in the form of `let a = x in |b| y`.
+    if !expr.is_let() {
+        return expr.clone();
     }
+    let lam = expr.get_let_value();
+    if !lam.is_lam() {
+        return expr.clone();
+    }
+    let pat_a = expr.get_let_pat();
+    let bound_x = expr.get_let_bound();
+    if !bound_x.is_var() {
+        return expr.clone();
+    }
+
+    // Rename the parameter of the lambda so that it is not contained in `FV(bound_x) + FV(pat_a)`.
+    let mut black_list = pat_a.pattern.vars();
+    black_list.extend(&mut bound_x.calculate_free_vars().free_vars().iter().cloned());
+    let lam = rename_lam_param_avoiding(&black_list, lam);
+
+    // Construct the expression.
+    let params_b = lam.get_lam_params();
+    let body_y = lam.get_lam_body();
+    let new_expr = expr_let_typed(pat_a.clone(), bound_x.clone(), body_y.clone());
+    let new_expr = expr_abs(params_b, new_expr, None);
+    new_expr.set_inferred_type(expr.ty.clone().unwrap())
 }
 
-// apply move_abs_front_let_one repeatedly at the head.
-fn move_abs_front_let_all(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+// Apply `internalize_let_to_var_one` recursively as long as it can increase the head `lam` expressions.
+fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
-        Expr::Lam(_, val) => {
-            let val = move_abs_front_let_all(val);
-            expr.set_lam_body(val)
+        Expr::Lam(_, body) => {
+            let body = internalize_let_to_var_at_head(body);
+            expr.set_lam_body(body)
         }
-        Expr::Let(_, _, _) => {
-            let expr = move_abs_front_let_one(&expr);
+        Expr::Let(_, _, val) => {
+            // Before applying `internalize_let_to_var_one` into the whole let expression,
+            // apply it to the value of the let expression.
+            // This increases the chance of applying `internalize_let_to_var_one` by changing the value to a lambda expression.
+            let val = internalize_let_to_var_at_head(val);
+            let expr = expr.set_let_value_typed(val);
+
+            // Apply `internalize_let_to_var_one` to the whole let expression.
+            let expr = internalize_let_to_var_one(&expr);
+
+            // If the whole expression changed into a lambda expression, apply `internalize_let_to_var_at_tail` again.
             match &*expr.expr {
-                Expr::Lam(_, _) => move_abs_front_let_all(&expr),
+                Expr::Lam(_, _) => internalize_let_to_var_at_head(&expr),
                 _ => expr,
             }
         }

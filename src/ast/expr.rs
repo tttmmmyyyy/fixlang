@@ -256,6 +256,13 @@ impl ExprNode {
         }
     }
 
+    pub fn is_let(&self) -> bool {
+        match &*self.expr {
+            Expr::Let(_, _, _) => true,
+            _ => false,
+        }
+    }
+
     pub fn get_let_pat(&self) -> Arc<PatternNode> {
         match &*self.expr {
             Expr::Let(pat, _, _) => pat.clone(),
