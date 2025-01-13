@@ -541,6 +541,29 @@ pub struct QualPredicate {
 }
 
 impl QualPredicate {
+    // Get the source code position of the first occurrence of the specified type variable.
+    pub fn get_first_tv_source(&self, tv: &str) -> Option<Span> {
+        for pred in &self.pred_constraints {
+            let src = pred.get_first_tv_source(tv);
+            if src.is_some() {
+                return src;
+            }
+        }
+        for eq in &self.eq_constraints {
+            let src = eq.get_first_tv_source(tv);
+            if src.is_some() {
+                return src;
+            }
+        }
+        for kind_sign in &self.kind_constraints {
+            let src = kind_sign.get_first_tv_source(tv);
+            if src.is_some() {
+                return src;
+            }
+        }
+        self.predicate.get_first_tv_source(tv)
+    }
+
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let node = self.predicate.find_node_at(pos);
@@ -709,6 +732,13 @@ pub struct QualPredScheme {
     pub qual_pred: QualPredicate,
 }
 
+impl QualPredScheme {
+    // Get the source code position of the first occurrence of the specified type variable.
+    pub fn get_first_tv_source(&self, tv: &str) -> Option<Span> {
+        self.qual_pred.get_first_tv_source(tv)
+    }
+}
+
 #[derive(Clone)]
 pub struct QualType {
     pub preds: Vec<Predicate>,
@@ -807,6 +837,11 @@ pub struct Predicate {
 }
 
 impl Predicate {
+    // Get the source code position of the first occurrence of the specified type variable.
+    pub fn get_first_tv_source(&self, tv: &str) -> Option<Span> {
+        self.ty.get_first_tv_source(tv)
+    }
+
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         self.ty.free_vars_to_vec(buf);
     }
@@ -908,6 +943,14 @@ pub struct KindSignature {
 }
 
 impl KindSignature {
+    // Get the source code position of the first occurrence of the specified type variable.
+    pub fn get_first_tv_source(&self, tv: &str) -> Option<Span> {
+        if self.tyvar == tv {
+            return self.source.clone();
+        }
+        None
+    }
+
     pub fn to_string(&self) -> String {
         format!("{} : {}", self.tyvar, self.kind.to_string())
     }
@@ -923,6 +966,17 @@ pub struct Equality {
 }
 
 impl Equality {
+    // Get the source code position of the first occurrence of the specified type variable.
+    pub fn get_first_tv_source(&self, tv: &str) -> Option<Span> {
+        for arg in &self.args {
+            let source = arg.get_first_tv_source(tv);
+            if source.is_some() {
+                return source;
+            }
+        }
+        self.value.get_first_tv_source(tv)
+    }
+
     // Find the minimum expression node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         if self.source.is_none() {
@@ -1045,6 +1099,13 @@ impl Equality {
 pub struct EqualityScheme {
     pub gen_vars: Vec<Arc<TyVar>>,
     pub equality: Equality,
+}
+
+impl EqualityScheme {
+    // Get the source code position of the first occurrence of the specified type variable.
+    pub fn get_first_tv_source(&self, tv: &str) -> Option<Span> {
+        self.equality.get_first_tv_source(tv)
+    }
 }
 
 // Trait environments.

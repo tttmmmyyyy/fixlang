@@ -27,6 +27,105 @@ pub struct ExprNode {
 }
 
 impl ExprNode {
+    // Get the source code position of the first occurrence of the specified variable.
+    pub fn get_first_var_source(&self, var: &FullName) -> Option<Span> {
+        match &*self.expr {
+            Expr::Var(v) => {
+                if &v.name == var {
+                    return Some(self.source.clone().unwrap());
+                }
+                None
+            }
+            Expr::LLVM(_) => None,
+            Expr::App(f, xs) => {
+                let src = f.get_first_var_source(var);
+                if src.is_some() {
+                    return src;
+                }
+                for x in xs {
+                    let src = x.get_first_var_source(var);
+                    if src.is_some() {
+                        return src;
+                    }
+                }
+                None
+            }
+            Expr::Lam(ps, b) => {
+                for p in ps {
+                    if &p.name == var {
+                        return None; // Shadowed by lambda parameter.
+                    }
+                }
+                b.get_first_var_source(var)
+            }
+            Expr::Let(p, b, v) => {
+                if p.pattern.vars().iter().any(|v| v == var) {
+                    return None; // Shadowed by let pattern.
+                }
+                let src = b.get_first_var_source(var);
+                if src.is_some() {
+                    return src;
+                }
+                v.get_first_var_source(var)
+            }
+            Expr::If(c, t, e) => {
+                let c = c.get_first_var_source(var);
+                if c.is_some() {
+                    return c;
+                }
+                let t = t.get_first_var_source(var);
+                if t.is_some() {
+                    return t;
+                }
+                e.get_first_var_source(var)
+            }
+            Expr::Match(c, pvs) => {
+                let c = c.get_first_var_source(var);
+                if c.is_some() {
+                    return c;
+                }
+                for (p, v) in pvs {
+                    if p.pattern.vars().iter().any(|v| v == var) {
+                        continue; // Shadowed by match pattern.
+                    }
+                    let v = v.get_first_var_source(var);
+                    if v.is_some() {
+                        return v;
+                    }
+                }
+                None
+            }
+            Expr::TyAnno(e, _) => e.get_first_var_source(var),
+            Expr::MakeStruct(_, fields) => {
+                for (_, v) in fields {
+                    let v = v.get_first_var_source(var);
+                    if v.is_some() {
+                        return v;
+                    }
+                }
+                None
+            }
+            Expr::ArrayLit(elems) => {
+                for e in elems {
+                    let e = e.get_first_var_source(var);
+                    if e.is_some() {
+                        return e;
+                    }
+                }
+                None
+            }
+            Expr::FFICall(_, _, _, args, _) => {
+                for a in args {
+                    let a = a.get_first_var_source(var);
+                    if a.is_some() {
+                        return a;
+                    }
+                }
+                None
+            }
+        }
+    }
+
     // Clone all fields except the set of free variables.
     fn clone_without_fvs(&self) -> ExprNode {
         ExprNode {
