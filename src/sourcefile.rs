@@ -125,14 +125,6 @@ impl Span {
         }
     }
 
-    pub fn to_next_head_character(&self) -> Self {
-        Self {
-            input: self.input.clone(),
-            start: self.start + 1,
-            end: self.start + 2,
-        }
-    }
-
     pub fn unite_opt(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
         if lhs.is_none() {
             return None;

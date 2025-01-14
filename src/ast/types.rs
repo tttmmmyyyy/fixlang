@@ -137,25 +137,14 @@ impl TyCon {
         assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
 
         // Make type variables for type parameters.
-        let tyvars_kind_src = ti
+        let new_tyvars_kind = ti
             .tyvars
             .iter()
-            .map(|tv| {
-                let kind = tv.kind.clone();
-                let mut src = None;
-                for field in &ti.fields {
-                    src = field.ty.get_first_tv_source(&tv.name);
-                    if src.is_some() {
-                        break;
-                    }
-                }
-                (tv.name.clone(), kind, src)
-            })
+            .map(|tv| tv.kind.clone())
             .collect::<Vec<_>>();
         let mut new_tyvars: Vec<Arc<TypeNode>> = vec![];
-        for (_name, kind, src) in tyvars_kind_src {
-            let new_tv = typechcker.new_tyvar(Some(kind), src);
-            new_tyvars.push(new_tv);
+        for new_tyvar_kind in new_tyvars_kind {
+            new_tyvars.push(type_tyvar(&typechcker.new_tyvar(), &new_tyvar_kind));
         }
 
         // Make type.
@@ -341,37 +330,6 @@ impl std::fmt::Debug for TypeNode {
 }
 
 impl TypeNode {
-    // Get the source code position of the first occurrence of the specified type variable.
-    pub fn get_first_tv_source(&self, tv: &str) -> Option<Span> {
-        match &self.ty {
-            Type::TyVar(tyvar) => {
-                if tyvar.name.to_string() == tv {
-                    return self.info.source.clone();
-                }
-                return None;
-            }
-            Type::TyCon(_) => {
-                return None;
-            }
-            Type::TyApp(fun, arg) => {
-                let src = fun.get_first_tv_source(tv);
-                if src.is_some() {
-                    return src;
-                }
-                arg.get_first_tv_source(tv)
-            }
-            Type::AssocTy(_, args) => {
-                for arg in args {
-                    let src = arg.get_first_tv_source(tv);
-                    if src.is_some() {
-                        return src;
-                    }
-                }
-                None
-            }
-        }
-    }
-
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         if self.info.source.is_none() {
@@ -1876,23 +1834,6 @@ impl Scheme {
             }
         }
         self.ty.find_node_at(pos)
-    }
-
-    // Get the source code position of the first occurrence of the specified type variable.
-    pub fn get_first_tv_source(&self, tv: &str) -> Option<Span> {
-        for p in &self.predicates {
-            let src = p.get_first_tv_source(tv);
-            if src.is_some() {
-                return src;
-            }
-        }
-        for eq in &self.equalities {
-            let src = eq.get_first_tv_source(tv);
-            if src.is_some() {
-                return src;
-            }
-        }
-        self.ty.get_first_tv_source(tv)
     }
 }
 

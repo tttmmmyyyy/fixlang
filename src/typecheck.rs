@@ -398,13 +398,10 @@ impl TypeCheckContext {
     }
 
     // Generate new type variable.
-    pub fn new_tyvar(&mut self, kind: Option<Arc<Kind>>, src: Option<Span>) -> Arc<TypeNode> {
+    pub fn new_tyvar(&mut self) -> String {
         let id = self.tyvar_id;
         self.tyvar_id += 1;
-         // To avlid confliction with user-defined type variable, we use prefix #a.
-        let tv_name = "#a".to_string() + &id.to_string();
-        let kind = kind.unwrap_or(kind_star());
-        type_tyvar(&tv_name, &kind).set_source(src)
+        "#a".to_string() + &id.to_string() // To avlid confliction with user-defined type variable, we add prefix #.
     }
 
     // Apply substitution to type.
@@ -437,9 +434,11 @@ impl TypeCheckContext {
             ConstraintInstantiationMode::Require => {
                 // Instantiate type variables.
                 let mut sub = Substitution::default();
+                let mut new_tyvars = vec![];
                 for tv in &scheme.gen_vars {
-                    let new_var = self.new_tyvar(Some(tv.kind.clone()), scheme.get_first_tv_source(&tv.name));
-                    sub.add_substitution(&Substitution::single(&tv.name, new_var));
+                    let new_var_name = self.new_tyvar();
+                    new_tyvars.push(new_var_name.clone());
+                    sub.add_substitution(&Substitution::single(&tv.name, type_tyvar(&new_var_name, &tv.kind)));
                 }
                 // Apply substitution to type, predicates and equalities.
                 let ty = sub.substitute_type(&scheme.ty);
@@ -613,7 +612,7 @@ impl TypeCheckContext {
             Expr::App(fun, args) => {
                 assert_eq!(args.len(), 1); // lambda of multiple arguments generated in optimization.
                 let arg = args[0].clone();
-                let arg_ty = self.new_tyvar(None, arg.source.clone());
+                let arg_ty = type_tyvar_star(&self.new_tyvar());
                 if ei.app_order == AppSourceCodeOrderType::XDotF {
                     let arg = self.unify_type_of_expr(&arg, arg_ty.clone())?;
                     let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty))?;
@@ -627,8 +626,8 @@ impl TypeCheckContext {
             Expr::Lam(args, body) => {
                 assert_eq!(args.len(), 1); // lambda of multiple arguments generated in optimization.
                 let arg = args[0].clone();
-                let arg_ty = self.new_tyvar(None, body.get_first_var_source(&arg.name));
-                let body_ty = self.new_tyvar(None, body.source.clone());
+                let arg_ty = type_tyvar_star(&self.new_tyvar());
+                let body_ty = type_tyvar_star(&self.new_tyvar());
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
                 if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&fun_ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
@@ -662,7 +661,7 @@ impl TypeCheckContext {
             }
             Expr::Match(cond, pat_vals) => {
                 // First, perform type inference for the condition.
-                let cond_ty = self.new_tyvar(None, cond.source.clone());
+                let cond_ty = type_tyvar_star(&self.new_tyvar());
                 let cond = self.unify_type_of_expr(cond, cond_ty.clone())?;
 
                 let mut cond_tc_info: Option<(Arc<TyCon>, TyConInfo)> = None;
@@ -841,12 +840,7 @@ impl TypeCheckContext {
             }
             Expr::ArrayLit(elems) => {
                 // Prepare type of element.
-                let elem_src = if elems.len() > 0 {
-                    elems[0].source.clone()
-                } else {
-                    ei.source.as_ref().map(|src|src.to_next_head_character())
-                };
-                let elem_ty = self.new_tyvar(None, elem_src);
+                let elem_ty = type_tyvar_star(&self.new_tyvar());
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
                 if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&array_ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
@@ -1018,8 +1012,7 @@ impl TypeCheckContext {
                     // Instantiate `assumed_eq`.
                     let mut subst = Substitution::default();
                     for tv in &assumed_eq.gen_vars {
-                        let new_tv = self.new_tyvar(Some(tv.kind.clone()), assumed_eq.get_first_tv_source(&tv.name));
-                        subst.add_substitution(&Substitution::single(&tv.name, new_tv));
+                        subst.add_substitution(&Substitution::single(&tv.name, type_tyvar(&self.new_tyvar(), &tv.kind)));
                     }
                     let mut equality = assumed_eq.equality.clone();
                     subst.substitute_equality(&mut equality);
@@ -1180,8 +1173,7 @@ impl TypeCheckContext {
             // Instantiate qualified predicate.
             let mut subst = Substitution::default();
             for tv in &qual_pred_scm.gen_vars {
-                let new_tyvar = self.new_tyvar(Some(tv.kind.clone()), qual_pred_scm.get_first_tv_source(&tv.name));
-                subst.add_substitution(&Substitution::single(&tv.name, new_tyvar));
+                subst.add_substitution(&Substitution::single(&tv.name, type_tyvar(&self.new_tyvar(), &tv.kind)));
             }
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
             subst.substitute_qualpred(&mut qual_pred);
