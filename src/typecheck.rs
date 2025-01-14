@@ -1045,9 +1045,9 @@ impl TypeCheckContext {
         ty2: &Arc<TypeNode>,
     ) -> Result<(), UnifOrOtherErr> {
         let ty1 = self.substitute_type(ty1);
-        let mut ty1 = self.reduce_type_by_equality(ty1.clone())?;
+        let mut ty1 = self.reduce_type_by_equality(ty1)?;
         let ty2 = self.substitute_type(ty2);
-        let mut ty2 = self.reduce_type_by_equality(ty2.clone())?;
+        let mut ty2 = self.reduce_type_by_equality(ty2)?;
 
         if ty1.to_string() == ty2.to_string() {
             return Ok(());
