@@ -1044,11 +1044,15 @@ impl TypeCheckContext {
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
     ) -> Result<(), UnifOrOtherErr> {
-        let mut ty1 = &self.substitute_type(ty1);
-        let mut ty2 = &self.substitute_type(ty2);
+        let ty1 = self.substitute_type(ty1);
+        let mut ty1 = self.reduce_type_by_equality(ty1.clone())?;
+        let ty2 = self.substitute_type(ty2);
+        let mut ty2 = self.reduce_type_by_equality(ty2.clone())?;
+
         if ty1.to_string() == ty2.to_string() {
             return Ok(());
         }
+
         // Case: Either is a type variable.
         for _ in 0..2 {
             match &ty1.ty {
@@ -1061,6 +1065,7 @@ impl TypeCheckContext {
             }
             std::mem::swap(&mut ty1, &mut ty2);
         }
+
         // Case: Either is usage of associated type.
         for _ in 0..2 {
             if let Type::AssocTy(assoc_ty, args) = &ty1.ty

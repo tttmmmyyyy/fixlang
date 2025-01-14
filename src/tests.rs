@@ -7751,6 +7751,10 @@ pub fn test_external_projects() {
         "https://github.com/tttmmmyyyy/fixlang-binary-heap.git",
         "fixlang-binary-heap",
     );
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-fast-iter.git",
+        "fixlang-fast-iter",
+    );
 }
 
 // Run `cargo install --locked --path .`.
@@ -7859,4 +7863,43 @@ fn test_fix_linked_with_c(fix_src: &str, c_src: &str, test_name: &str) {
 
     // Remove the shared library.
     let _ = fs::remove_file(so_file_path);
+}
+
+#[test]
+pub fn test_regression_on_associated_type_bug() {
+    let source = r##"
+module Main;
+
+type BinaryHeap p e = unbox struct { _d : Array e, _p : p };
+
+trait p : Priority {
+    type Elem p;
+}
+
+type PriorityMinimum e = struct {};
+
+impl [e : LessThan] PriorityMinimum e : Priority {
+    type Elem (PriorityMinimum e) = e;
+}
+
+type MinBinaryHeap e = BinaryHeap (PriorityMinimum e) e;
+
+namespace MinBinaryHeap {
+    // Create an empty minimum heap.
+    empty : MinBinaryHeap e;
+    empty = BinaryHeap { _d: [], _p: PriorityMinimum {} }; // Dummy implementation.
+}
+
+namespace BinaryHeap {
+    push : [p : Priority, Elem p = e] e -> BinaryHeap p e -> BinaryHeap p e;
+    push = |_, heap| heap; // Dummy implementation.
+}
+
+main: IO ();
+main = (
+    let heap = MinBinaryHeap::empty.push(0); // Error occurred here.
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
 }
