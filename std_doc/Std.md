@@ -1094,8 +1094,6 @@ Pushes an element to the back of an array.
 
 Reserves the memory region for an array.
 
-TODO: change to more optimized implementation.
-
 ### `set : Std::I64 -> a -> Std::Array a -> Std::Array a`
 
 Updates an array by setting a value as the element at the specified index.
@@ -2345,17 +2343,15 @@ Generates an iterator from a state transition function.
 
 Gets the first element of an iterator. If the iterator is empty, this function returns `none`.
 
-TODO: add test
-
 ### `get_size : Std::Iterator a -> Std::I64`
 
 Counts the number of elements of an iterator.
 
 ### `get_tail : Std::Iterator a -> Std::Option (Std::Iterator a)`
 
-Removes the first element from an iterator. If the iterator is empty, this function returns `none`.
+Removes the first element from an iterator.
 
-TODO: add test
+If the iterator is empty, this function returns `none`.
 
 ### `intersperse : a -> Std::Iterator a -> Std::Iterator a`
 
@@ -2417,7 +2413,6 @@ Takes at most n elements from an iterator.
 ### `take_while : (a -> Std::Bool) -> Std::Iterator a -> Std::Iterator a`
 
 Takes elements of an iterator while a condition is satisfied.
-TODO: add test
 
 ### `to_array : Std::Iterator a -> Std::Array a`
 
