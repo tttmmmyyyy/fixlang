@@ -342,6 +342,9 @@ pub struct TypeCheckContext {
     // In unification, these type variables are not allowed to be replaced to another type.
     // NOTE: We use `Vec` instead of `Set` because the expected size is small.
     pub fixed_tyvars: Vec<Arc<TyVar>>,
+    // Locally assumed equalities.
+    // For example, when type checking `extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2`, we assume `Elem c1 = e` and `Elem c2 = e` locally.
+    pub local_assumed_eqs: Vec<Equality>,
     // Type check cache.
     pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
     // Number of worker threads.
@@ -358,6 +361,7 @@ impl TypeCheckContext {
         println!("assumed_eqs size = {}", self.assumed_eqs.len());
         println!("assumed_preds size = {}", self.assumed_preds.len());
         println!("fixed_tyvars size = {}", self.fixed_tyvars.len());
+        println!("local_assumed_eqs size = {}", self.local_assumed_eqs.len());
     }
 
     // Create instance.
@@ -385,6 +389,7 @@ impl TypeCheckContext {
             assumed_preds,
             assumed_eqs,
             fixed_tyvars: vec![],
+            local_assumed_eqs: vec![],
             cache,
             num_worker_threads,
         }
@@ -476,9 +481,10 @@ impl TypeCheckContext {
                     let assoc_ty = eq.assoc_type.clone();
                     let eq_scm = EqualityScheme {
                         gen_vars: vec![],
-                        equality: eq,
+                        equality: eq.clone(),
                     };
                     misc::insert_to_map_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
+                    self.local_assumed_eqs.push(eq);
                 }
                 return Ok(scheme.ty.clone());
             },
@@ -893,13 +899,14 @@ impl TypeCheckContext {
         }
     }
 
-    // Check if expr has type scm.
-    // Returns given AST set with inferred type.
+    // Check if an expression matches the expected type scheme.
+    // Returns the given expression with each subexpression annotated with inferred types.
     pub fn check_type(&mut self, expr: Arc<ExprNode>, expect_scm: Arc<Scheme>) -> Result<Arc<ExprNode>, Errors> {
         // This function should be called when TypeCheckContext is "fresh".
         assert!(self.substitution.is_empty());
         assert!(self.predicates.is_empty());
         assert!(self.equalities.is_empty());
+        assert!(self.local_assumed_eqs.is_empty());
 
         let specified_ty = UnifOrOtherErr::extract_others(self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume))?;
         if let Err(e) = specified_ty {
@@ -1209,8 +1216,18 @@ impl TypeCheckContext {
     pub fn finish_inferred_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ty = self.substitute_type(expr.ty.as_ref().unwrap());
         let ty = self.reduce_type_by_equality(ty)?;
+
+        let mut errs = None;
+        if ty.free_vars().len() > 0 {
+            errs = Some(Errors::from_msg_srcs(
+                format!("Cannot determine the type of an expression. Add type annotation to fix it."),
+                &[&expr.source],
+            ));
+            // To raise an error of this kind in the deepest node of the AST, we do not return here.
+        }
+
         let expr = expr.set_inferred_type(ty);
-        Ok(match &*expr.expr {
+        let res = Ok(match &*expr.expr {
             Expr::Var(_) => expr,
             Expr::LLVM(_) => expr,
             Expr::App(fun, args) => {
@@ -1259,7 +1276,12 @@ impl TypeCheckContext {
                 let args = collect_results(args.iter().map(|arg| self.finish_inferred_types(arg.clone())))?;
                 expr.set_ffi_call_args(args)
             }
-        })
+        });
+
+        if let Some(errs) = errs {
+            return Err(errs);
+        }
+        res
     }
 }
 

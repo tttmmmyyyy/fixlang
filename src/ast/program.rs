@@ -223,11 +223,27 @@ impl SymbolExpr {
     }
 }
 
-// Pair of expression and type resolver for it.
+// The expression with all sub-expressions typed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
+    // The expression.
     pub expr: Arc<ExprNode>,
+    // Substitution to be applied to the type of this expression or its sub-expressions.
     pub substitution: Substitution,
+    // Equalities to be assumed in the context of this expression.
+    //
+    // For example, consider the following expression:
+    // ```
+    // extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
+    // extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
+    // ```
+    // In this case, the `equalities` field consists of two equalities: `Elem c1 = e` and `Elem c2 = e`.
+    //
+    // In fact, this information is neccesary to instantiate the typed expression to a concrete type:
+    // In the above case, the sub-expression `x` has type `e` (not `Elem c1` or `Elem c2`).
+    // When instantiating this typed expression to a concrete type, e.g., `extend : Array I64 -> Array I64 -> Array I64`,
+    // we need to use the equality `Elem c1 = e` to prove that `x` has type `I64`.
+    pub equalities: Vec<Equality>,
 }
 
 impl TypedExpr {
@@ -235,6 +251,7 @@ impl TypedExpr {
         TypedExpr {
             expr,
             substitution: Substitution::default(),
+            equalities: vec![],
         }
     }
 
@@ -951,6 +968,7 @@ impl Program {
         tc.current_module = Some(def_mod.clone());
         te.expr = tc.check_type(te.expr.clone(), req_scm.clone())?;
         te.substitution = tc.substitution;
+        te.equalities = tc.local_assumed_eqs;
 
         // Save the result to cache file.
         tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
@@ -1185,16 +1203,7 @@ impl Program {
         tc: &TypeCheckContext,
     ) -> Result<(), Errors> {
         assert!(sym.expr.is_none());
-        if !sym.ty.free_vars().is_empty() {
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "Cannot instantiate global value `{}` of type `{}` since the type contains undetermined type variable. Maybe you need to add type annotation.",
-                    sym.generic_name.to_string(),
-                    sym.ty.to_string_normalize()
-                ),
-                &[&sym.expr.as_ref().map(|expr| expr.source.clone()).flatten()],
-            ));
-        }
+
         // First, perform namespace resolution and type-checking.
         let method_selector = |method: &MethodImpl| -> Result<bool, Errors> {
             // Select method implementation whose type unifies with the required type `sym.ty`.
@@ -1212,11 +1221,13 @@ impl Program {
         let expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
                 // Specialize e's type to the required type `sym.ty`.
-                // tc.show();
                 let mut tc = tc.clone();
                 assert!(tc.substitution.is_empty());
                 tc.substitution = e.substitution.clone();
                 tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
+                for eq in &e.equalities {
+                    tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
+                }
                 tc.finish_inferred_types(e.expr.clone())?
             }
             SymbolExpr::Method(impls) => {
@@ -1233,6 +1244,9 @@ impl Program {
                     assert!(tc.substitution.is_empty());
                     tc.substitution = e.substitution;
                     tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
+                    for eq in &e.equalities {
+                        tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
+                    }
                     opt_e = Some(tc.finish_inferred_types(e.expr)?);
                     break;
                 }
