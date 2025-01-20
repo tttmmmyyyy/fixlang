@@ -2563,6 +2563,60 @@ pub fn test101() {
 }
 
 #[test]
+pub fn test_iterator_get_first_get_tail() {
+    // Test Iterator::get_first, get_last.
+    // get_first : Iterator a -> Option a;
+    // get_tail : Iterator a -> Option (Iterator a);
+    let source = r#"
+        module Main; 
+        main : IO ();
+
+        main = (
+            let iter = Iterator::from_array([1,2,3,4]);
+            assert_eq(|_|"case 1", iter.get_first.as_some, 1);;
+            assert_eq(|_|"case 2", iter.get_tail.as_some, Iterator::from_array([2,3,4]));;
+
+            let iter = Iterator::from_array([]) : Iterator I64;
+            assert_eq(|_|"case 3", iter.get_first.is_none, true);;
+            assert_eq(|_|"case 4", iter.get_tail.is_none, true);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_take_while() {
+    // take_while : (a -> Bool) -> Iterator a -> Iterator a;
+    let source = r#"
+        module Main; 
+        main : IO ();
+
+        main = (
+            let iter = Iterator::from_array([1,2,3,4,5,6,7,8,9,10]);
+            let iter = iter.take_while(|x| x < 5);
+            assert_eq(|_|"case 1", iter, Iterator::from_array([1,2,3,4]));;
+
+            let iter = Iterator::from_array([1,2,3,4,5,6,7,8,9,10]);
+            let iter = iter.take_while(|x| x < 100);
+            assert_eq(|_|"case 2", iter, Iterator::from_array([1,2,3,4,5,6,7,8,9,10]));;
+
+            let iter = Iterator::from_array([1,2,3,4,5,6,7,8,9,10]);
+            let iter = iter.take_while(|x| x < 0);
+            assert_eq(|_|"case 3", iter, Iterator::from_array([]));;
+
+            let iter = Iterator::from_array([]) : Iterator I64;
+            let iter = iter.take_while(|x| x < 100);
+            assert_eq(|_|"case 4", iter, Iterator::from_array([]));;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test102() {
     // Test I64 : Eq, LessThan, LessThanEq
     let source = r#"

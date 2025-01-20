@@ -250,8 +250,6 @@ namespace Array {
     );
 
     // Reserves the memory region for an array.
-    // 
-    // TODO: change to more optimized implementation.
     reserve : I64 -> Array a -> Array a;
     reserve = |cap, arr| (
         if cap <= arr.get_capacity { arr };
@@ -1072,8 +1070,6 @@ namespace Iterator {
     );
 
     // Gets the first element of an iterator. If the iterator is empty, this function returns `none`.
-    // 
-    // TODO: add test
     get_first : Iterator a -> Option a;
     get_first = |iter| iter.advance.map(@0);
 
@@ -1081,9 +1077,9 @@ namespace Iterator {
     get_size : Iterator a -> I64;
     get_size = fold(0, |acm, _| acm + 1);
 
-    // Removes the first element from an iterator. If the iterator is empty, this function returns `none`.
+    // Removes the first element from an iterator. 
     // 
-    // TODO: add test
+    // If the iterator is empty, this function returns `none`.
     get_tail : Iterator a -> Option (Iterator a);
     get_tail = |iter| iter.advance.map(@1);
 
@@ -1204,7 +1200,6 @@ namespace Iterator {
     );
 
     // Takes elements of an iterator while a condition is satisfied.
-    // TODO: add test
     take_while : (a -> Bool) -> Iterator a -> Iterator a;
     take_while = |cond, iter| (
         let next = |_| (
