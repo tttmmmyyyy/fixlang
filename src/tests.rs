@@ -546,7 +546,9 @@ pub fn test27_5() {
 pub fn test28() {
     // Calculate Fibonacci sequence using array.
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
+        
         main = (
             let arr = Array::fill(31, 0);
             let arr = arr.assert_unique(|_|"The array is not unique!").set(0, 0);
