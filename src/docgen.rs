@@ -270,7 +270,11 @@ fn type_entries(
 
         if ty_info.variant == TyConVariant::Struct {
             for field in ty_info.fields.iter() {
-                doc += &format!("\n\n#### field `{} : {}`", field.name, field.ty.to_string(),);
+                doc += &format!(
+                    "\n\n#### field `{} : {}`",
+                    field.name,
+                    field.syn_ty.as_ref().unwrap().to_string(),
+                );
             }
         }
         if ty_info.variant == TyConVariant::Union {
@@ -278,7 +282,7 @@ fn type_entries(
                 doc += &format!(
                     "\n\n#### variant `{} : {}`",
                     variant.name,
-                    variant.ty.to_string(),
+                    variant.syn_ty.as_ref().unwrap().to_string(),
                 );
             }
         }
@@ -474,7 +478,11 @@ fn value_entries(
             continue;
         }
 
-        let title = format!("`{} : {}`", name.name, gv.scm.to_string());
+        let title = format!(
+            "`{} : {}`",
+            name.name,
+            gv.syn_scm.as_ref().unwrap().to_string()
+        );
 
         let mut doc = String::new();
         doc += gv.get_document().unwrap_or_default().trim();

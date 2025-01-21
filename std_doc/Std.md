@@ -209,7 +209,7 @@ and there is a possibility that the value is used after the destructor function 
 
 The type for I/O actions which may fail.
 
-#### field `_data : Std::IO (Std::Result Std::String a)`
+#### field `_data : Std::IO (Std::Result Std::ErrMsg a)`
 
 ### `type IOHandle = unbox struct { ...fields... }`
 
@@ -1120,19 +1120,19 @@ Prints a string to the specified stream and flushes the stream.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
-### `assert : (() -> Std::String) -> Std::Bool -> Std::IO ()`
+### `assert : Std::Lazy Std::String -> Std::Bool -> Std::IO ()`
 
 Asserts that a condition (boolean value) is true.
 
 If the assertion failed, prints a message to the stderr and aborts the program.
 
-### `assert_eq : [a : Std::Eq] (() -> Std::String) -> a -> a -> Std::IO ()`
+### `assert_eq : [a : Std::Eq] Std::Lazy Std::String -> a -> a -> Std::IO ()`
 
 Asserts that two values are equal.
 
 If the assertion failed, prints a message to the stderr and aborts the program.
 
-### `assert_unique : (() -> Std::String) -> a -> a`
+### `assert_unique : Std::Lazy Std::String -> a -> a`
 
 Asserts that the given value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts the program.
@@ -1143,7 +1143,7 @@ The main use of this function is to check whether a boxed value given as an argu
 
 Get clocks (cpu time) elapsed while executing an I/O action.
 
-### `consumed_time_while_lazy : (() -> a) -> (a, Std::F64)`
+### `consumed_time_while_lazy : Std::Lazy a -> (a, Std::F64)`
 
 Get clocks (cpu time) elapsed while evaluating a lazy value.
 
@@ -1469,11 +1469,11 @@ If you want to get a pointer to the data of the boxed value, use `borrow_boxed`.
 
 Sets errno to zero.
 
-### `get_errno : Std::IO Std::I32`
+### `get_errno : Std::IO Std::FFI::CInt`
 
 Gets errno which is set by C functions.
 
-### `get_funptr_release : [a : Std::Boxed] (() -> a) -> Std::Ptr`
+### `get_funptr_release : [a : Std::Boxed] Std::Lazy a -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
 This function is used to release a pointer obtained by `boxed_to_retained_ptr`.
@@ -1494,7 +1494,7 @@ main = (
 );
 ```
 
-### `get_funptr_retain : [a : Std::Boxed] (() -> a) -> Std::Ptr`
+### `get_funptr_retain : [a : Std::Boxed] Std::Lazy a -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which retains a boxed value of type `a`.
 This function is used to retain a pointer obtained by `boxed_to_retained_ptr`.
@@ -1561,11 +1561,11 @@ This is similar to `mutate_unique`, but the `ctor` and `action` is executed in t
 
 ## `namespace Std::FromBytes`
 
-### `from_bytes : [a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::String a`
+### `from_bytes : [a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::ErrMsg a`
 
 ## `namespace Std::FromString`
 
-### `from_string : [a : Std::FromString] Std::String -> Std::Result Std::String a`
+### `from_string : [a : Std::FromString] Std::String -> Std::Result Std::ErrMsg a`
 
 ## `namespace Std::Functor`
 
@@ -2129,7 +2129,7 @@ Loop on lines read from an `IOHandle`.
 
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
-### `open_file : Std::String -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
+### `open_file : Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
 
 Openes a file. The second argument is a mode string for `fopen` C function.
 
@@ -2145,11 +2145,11 @@ Prints a string followed by a newline to stdout.
 
 Reads all bytes from an IOHandle.
 
-### `read_file_bytes : Std::String -> Std::IO::IOFail (Std::Array Std::U8)`
+### `read_file_bytes : Std::Path -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads all bytes from a file.
 
-### `read_file_string : Std::String -> Std::IO::IOFail Std::String`
+### `read_file_string : Std::Path -> Std::IO::IOFail Std::String`
 
 Raads all characters from a file.
 
@@ -2180,7 +2180,7 @@ The handle for standard output.
 
 ### `unsafe_perform : Std::IO a -> a`
 
-### `with_file : Std::String -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
+### `with_file : Std::Path -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
 
 Performs a function with a file handle. The second argument is a mode string for `fopen` C function.
 
@@ -2190,11 +2190,11 @@ The file handle will be closed automatically.
 
 Writes a byte array into an IOHandle.
 
-### `write_file_bytes : Std::String -> Std::Array Std::U8 -> Std::IO::IOFail ()`
+### `write_file_bytes : Std::Path -> Std::Array Std::U8 -> Std::IO::IOFail ()`
 
 Writes a byte array into a file.
 
-### `write_file_string : Std::String -> Std::String -> Std::IO::IOFail ()`
+### `write_file_string : Std::Path -> Std::String -> Std::IO::IOFail ()`
 
 Writes a string into a file.
 
@@ -2204,11 +2204,11 @@ Writes a string into an IOHandle.
 
 ## `namespace Std::IO::IOFail`
 
-### `from_io_result : Std::IO (Std::Result Std::String a) -> Std::IO::IOFail a`
+### `from_io_result : Std::IO (Std::Result Std::ErrMsg a) -> Std::IO::IOFail a`
 
 Create from IO action of which returns `Result ErrMsg a`.
 
-### `from_result : Std::Result Std::String a -> Std::IO::IOFail a`
+### `from_result : Std::Result Std::ErrMsg a -> Std::IO::IOFail a`
 
 Creates an pure `IOFail` value from a `Result` value.
 
@@ -2216,15 +2216,15 @@ Creates an pure `IOFail` value from a `Result` value.
 
 Lifts an `IO` action to a successful `IOFail` action.
 
-### `throw : Std::String -> Std::IO::IOFail a`
+### `throw : Std::ErrMsg -> Std::IO::IOFail a`
 
 Creates an error `IOFail` action.
 
-### `to_result : Std::IO::IOFail a -> Std::IO (Std::Result Std::String a)`
+### `to_result : Std::IO::IOFail a -> Std::IO (Std::Result Std::ErrMsg a)`
 
 Converts an `IOFail` to an `Result` value (wrapped by `IO`).
 
-### `try : (Std::String -> Std::IO a) -> Std::IO::IOFail a -> Std::IO a`
+### `try : (Std::ErrMsg -> Std::IO a) -> Std::IO::IOFail a -> Std::IO a`
 
 Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
 

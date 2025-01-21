@@ -633,7 +633,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
         if full_name.to_string().contains('#') {
             continue;
         }
-        let scheme = gv.scm.to_string_normalize();
+        let scheme = gv.syn_scm.as_ref().unwrap().to_string_normalize();
         let item = create_item(
             full_name,
             CompletionItemKind::FUNCTION,

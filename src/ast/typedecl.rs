@@ -329,6 +329,7 @@ impl TypeAlias {
 pub struct Field {
     pub name: Name,
     pub ty: Arc<TypeNode>,
+    pub syn_ty: Option<Arc<TypeNode>>,
     pub is_punched: bool,
 }
 
@@ -344,6 +345,7 @@ impl Field {
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.syn_ty = Some(self.ty.clone());
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())
     }

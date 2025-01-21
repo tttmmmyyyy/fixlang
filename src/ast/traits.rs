@@ -160,6 +160,8 @@ pub struct MethodInfo {
     // the type of method "show" is "a -> String",
     // and not "[a : Show] a -> String".
     pub qual_ty: QualType,
+    // The type of the method, but with aliases retained.
+    pub syn_qual_ty: Option<QualType>,
     pub source: Option<Span>,
     // Document of this method.
     // This field is used only If document from `source` is not available.
@@ -184,6 +186,7 @@ impl MethodInfo {
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.syn_qual_ty = Some(self.qual_ty.clone());
         self.qual_ty.resolve_type_aliases(type_env)
     }
 }
@@ -265,26 +268,21 @@ impl TraitInfo {
     // Get type-scheme of a method.
     // Here, for example, in case "trait a: ToString { to_string : a -> String }",
     // this function returns "[a: ToString] a -> String" as type of "to_string" method.
-    pub fn method_scheme(&self, name: &Name) -> Arc<Scheme> {
-        let mut method_info = self
-            .methods
-            .iter()
-            .find(|mi| mi.name == *name)
-            .unwrap()
-            .clone();
+    pub fn method_scheme(&self, name: &Name, syntactic: bool) -> Arc<Scheme> {
+        let method_info = self.methods.iter().find(|mi| mi.name == *name).unwrap();
+        let mut qual_ty = if syntactic {
+            method_info.syn_qual_ty.as_ref().unwrap().clone()
+        } else {
+            method_info.qual_ty.clone()
+        };
         let mut vars = vec![];
-        method_info.qual_ty.free_vars_vec(&mut vars);
+        qual_ty.free_vars_vec(&mut vars);
         let mut preds = vec![Predicate::make(
             self.trait_.clone(),
             type_from_tyvar(self.type_var.clone()),
         )];
-        preds.append(&mut method_info.qual_ty.preds);
-        Scheme::generalize(
-            &method_info.qual_ty.kind_signs,
-            preds,
-            method_info.qual_ty.eqs,
-            method_info.qual_ty.ty,
-        )
+        preds.append(&mut qual_ty.preds);
+        Scheme::generalize(&qual_ty.kind_signs, preds, qual_ty.eqs, qual_ty.ty)
     }
 
     // Get the type of a method.

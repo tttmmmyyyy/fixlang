@@ -182,6 +182,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             fields: vec![Field {
                 name: "array_elem".to_string(), // Unused
                 ty: type_tyvar_star("a"),
+                syn_ty: None,
                 is_punched: false,
             }],
             source: None,
@@ -548,6 +549,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
                 .map(|i| Field {
                     name: i.to_string(),
                     ty: type_from_tyvar(tyvars[i as usize].clone()),
+                    syn_ty: None,
                     is_punched: false,
                 })
                 .collect(),

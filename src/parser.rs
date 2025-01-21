@@ -417,6 +417,7 @@ fn parse_trait_member_value_defn(
     Ok(MethodInfo {
         name: method_name,
         qual_ty: qual_type,
+        syn_qual_ty: None,
         source: Some(span),
         document: None, // Document can be obtained from `source`
     })
@@ -900,6 +901,7 @@ fn parse_type_field(pair: Pair<Rule>, ctx: &mut ParseContext) -> Field {
     Field {
         name: name.to_string(),
         ty,
+        syn_ty: None,
         is_punched: false,
     }
 }

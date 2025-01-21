@@ -96,6 +96,8 @@ pub struct GlobalValue {
     // Type of this symbol.
     // For example, in case `trait a : Show { show : a -> String; }`, the type of method `show` is `[a : Show] a -> String`.
     pub scm: Arc<Scheme>,
+    // Type of this symbol, with aliases retained.
+    pub syn_scm: Option<Arc<Scheme>>,
     // The expression or implementation of this value.
     pub expr: SymbolExpr,
     // Source code where this value is defined.
@@ -123,6 +125,7 @@ impl GlobalValue {
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
+        self.syn_scm = Some(self.scm.clone());
         self.scm = self.scm.resolve_type_aliases(type_env)?;
         self.expr.resolve_type_aliases(type_env)?;
         Ok(())
@@ -788,7 +791,8 @@ impl Program {
         compiler_defined_method: bool,
     ) -> Result<(), Errors> {
         let gv = GlobalValue {
-            scm,
+            scm: scm.clone(),
+            syn_scm: None,
             expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
             def_src,
             document,
@@ -1490,7 +1494,8 @@ impl Program {
     pub fn create_trait_method_symbols(&mut self) {
         for (trait_id, trait_info) in &self.trait_env.traits {
             for method_info in &trait_info.methods {
-                let method_ty = trait_info.method_scheme(&method_info.name);
+                let method_ty = trait_info.method_scheme(&method_info.name, false);
+                let syn_method_ty = trait_info.method_scheme(&method_info.name, true);
                 let mut method_impls: Vec<MethodImpl> = vec![];
                 let instances = self.trait_env.instances.get(trait_id);
                 if let Some(insntances) = instances {
@@ -1509,6 +1514,7 @@ impl Program {
                     method_name,
                     GlobalValue {
                         scm: method_ty,
+                        syn_scm: Some(syn_method_ty),
                         expr: SymbolExpr::Method(method_impls),
                         def_src: method_info.source.clone(),
                         document: method_info.document.clone(),
