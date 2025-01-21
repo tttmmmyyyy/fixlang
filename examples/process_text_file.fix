@@ -2,7 +2,7 @@ module Main;
 
 main : IO ();
 main = (
-    let file_path = Path::parse("test_process_text_file.txt").as_some;
+    let file_path = "test_process_text_file.txt";
 
     do {
         // Write a `String` to a file.

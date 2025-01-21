@@ -1334,21 +1334,7 @@ impl Option : Monad {
 }
 
 // The type for file path.
-// 
-// TODO: give better implementation.
-type Path = unbox struct { _data: String };
-
-namespace Path {
-
-    // Parse a string.
-    parse : String -> Option Path;
-    parse = |s| Option::some $ Path { _data: s };
-
-}
-
-impl Path : ToString {
-    to_string = @_data;
-}
+type Path = String;
 
 // The type of punched arrays. 
 // 

@@ -2759,7 +2759,7 @@ pub fn test108() {
         module Main; 
         main : IO ();
         main = (
-            let file_path = Path::parse("test_uAfQDPwJ7sS6.txt").as_some;
+            let file_path = "test_uAfQDPwJ7sS6.txt";
             let lines = ["Hello", "World!"];
             let content = Iterator::from_array(lines).intersperse("\n").concat_iter;
             do {
@@ -2789,7 +2789,7 @@ pub fn test_is_eof() {
         
         main : IO ();
         main = (
-            let file_path = Path::parse("test_bUeW9baGGZmE.txt").as_some;
+            let file_path = "test_bUeW9baGGZmE.txt";
             let content = "Hello World!";
             do {
                 write_file_string(file_path, content);;
@@ -2818,7 +2818,7 @@ pub fn test108_5() {
         module Main; 
         main : IO ();
         main = (
-            let file_path = Path::parse("test_vgZNhmj4gPbF.dat").as_some;
+            let file_path = "test_vgZNhmj4gPbF.dat";
             let data = Array::from_map(1024 + 512, |n| n.to_U8);
             do {
                 write_file_bytes(file_path, data);;
@@ -3983,7 +3983,7 @@ pub fn test_consumed_time() {
             println("loop time : " + t.to_string + ", sum : " + r.to_string);;
 
             let (_, t) = *consumed_time_while_io(
-                let file_path = Path::parse("test_tMB3iCfTeeES.txt").as_some;
+                let file_path = "test_tMB3iCfTeeES.txt";
                 write_file_string(file_path, "Hello World!").try(exit_with_msg(1));;
                 let read_content = *read_file_string(file_path).try(exit_with_msg(1));
                 println $ read_content
@@ -4119,7 +4119,7 @@ pub fn test_loop_lines() {
     
     main : IO ();
     main = (
-        let file_path = Path::parse("test_GndeZP399tLX.txt").as_some;
+        let file_path = "test_GndeZP399tLX.txt";
         do {
             write_file_string(file_path, ["0", "1", "2", "X", "3", "4"].to_iter.join("\n"));;
             assert_eq(|_|"", *sum_up_while(file_path), 0 + 1 + 2).lift;;
@@ -4225,8 +4225,8 @@ pub fn test_loop_lines_io() {
     main : IO ();
     main = (
         let content1 = "Hello\nWorld!";
-        let file1 = Path::parse("test_MsuHh3QEXKYN.txt").as_some;
-        let file2 = Path::parse("test_9A5bu4U57xTd.txt").as_some;
+        let file1 = "test_MsuHh3QEXKYN.txt";
+        let file2 = "test_9A5bu4U57xTd.txt";
         do {
             write_file_string(file1, content1);;
 
@@ -6467,7 +6467,7 @@ pub fn test_read_file_after_close() {
         
         main: IO ();
         main = do {
-            let fh = *open_file(Path::parse("/dev/null").as_some, "r");
+            let fh = *open_file("/dev/null", "r");
             close_file(fh).lift;;
             let line = *read_line(fh);
             println(line).lift

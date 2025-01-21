@@ -96,13 +96,9 @@ This type is used to represent the result of a loop body function passed to `Std
 
 #### variant `some : a`
 
-### `type Path = unbox struct { ...fields... }`
+### `type Path = Std::String`
 
 The type for file path.
-
-TODO: give better implementation.
-
-#### field `_data : Std::String`
 
 ### `type Ptr = unbox { built-in }`
 
@@ -626,8 +622,6 @@ The empty iterator.
 ### `impl [a : Std::Eq] Std::Option a : Std::Eq`
 
 ### `impl [a : Std::ToString] Std::Option a : Std::ToString`
-
-### `impl Std::Path : Std::ToString`
 
 ### `impl Std::Ptr : Std::Eq`
 
@@ -2135,7 +2129,7 @@ Loop on lines read from an `IOHandle`.
 
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
-### `open_file : Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
+### `open_file : Std::String -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
 
 Openes a file. The second argument is a mode string for `fopen` C function.
 
@@ -2151,11 +2145,11 @@ Prints a string followed by a newline to stdout.
 
 Reads all bytes from an IOHandle.
 
-### `read_file_bytes : Std::Path -> Std::IO::IOFail (Std::Array Std::U8)`
+### `read_file_bytes : Std::String -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads all bytes from a file.
 
-### `read_file_string : Std::Path -> Std::IO::IOFail Std::String`
+### `read_file_string : Std::String -> Std::IO::IOFail Std::String`
 
 Raads all characters from a file.
 
@@ -2186,7 +2180,7 @@ The handle for standard output.
 
 ### `unsafe_perform : Std::IO a -> a`
 
-### `with_file : Std::Path -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
+### `with_file : Std::String -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
 
 Performs a function with a file handle. The second argument is a mode string for `fopen` C function.
 
@@ -2196,11 +2190,11 @@ The file handle will be closed automatically.
 
 Writes a byte array into an IOHandle.
 
-### `write_file_bytes : Std::Path -> Std::Array Std::U8 -> Std::IO::IOFail ()`
+### `write_file_bytes : Std::String -> Std::Array Std::U8 -> Std::IO::IOFail ()`
 
 Writes a byte array into a file.
 
-### `write_file_string : Std::Path -> Std::String -> Std::IO::IOFail ()`
+### `write_file_string : Std::String -> Std::String -> Std::IO::IOFail ()`
 
 Writes a string into a file.
 
@@ -2497,12 +2491,6 @@ Unwrap an option value if it is `some`, or returns given default value if it is 
 ### `map_or : b -> (a -> b) -> Std::Option a -> b`
 
 Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
-
-## `namespace Std::Path`
-
-### `parse : Std::String -> Std::Option Std::Path`
-
-Parse a string.
 
 ## `namespace Std::Ptr`
 
