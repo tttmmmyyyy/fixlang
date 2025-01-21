@@ -633,7 +633,11 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
         if full_name.to_string().contains('#') {
             continue;
         }
-        let scheme = gv.syn_scm.as_ref().unwrap().to_string_normalize();
+        let scheme = gv
+            .syn_scm
+            .clone()
+            .unwrap_or(gv.scm.clone())
+            .to_string_normalize();
         let item = create_item(
             full_name,
             CompletionItemKind::FUNCTION,
@@ -962,7 +966,11 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
                 // In case the variable is global, show the documentation of the global value.
                 let mut scm_string = String::new();
                 if let Some(gv) = program.global_values.get(full_name) {
-                    scm_string = gv.scm.to_string_normalize();
+                    scm_string = gv
+                        .syn_scm
+                        .clone()
+                        .unwrap_or(gv.scm.clone())
+                        .to_string_normalize();
                     docs += &format!("```\n{} : {}\n```", full_name.to_string(), scm_string);
                 } else {
                     docs += &format!("```\n{}\n```", full_name.to_string());
