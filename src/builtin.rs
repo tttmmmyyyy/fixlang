@@ -178,7 +178,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             kind: kind_arrow(kind_star(), kind_star()),
             variant: TyConVariant::Array,
             is_unbox: false,
-            tyvars: vec![tyvar_from_name("a", &kind_star())],
+            tyvars: vec![make_tyvar("a", &kind_star())],
             fields: vec![Field {
                 name: "array_elem".to_string(), // Unused
                 ty: type_tyvar_star("a"),
@@ -198,8 +198,8 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             variant: TyConVariant::Arrow,
             is_unbox: true,
             tyvars: vec![
-                tyvar_from_name("a", &kind_star()),
-                tyvar_from_name("b", &kind_star()),
+                make_tyvar("a", &kind_star()),
+                make_tyvar("b", &kind_star()),
             ],
             fields: vec![],
             source: None,
@@ -216,7 +216,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
                 variant: TyConVariant::Primitive,
                 is_unbox: true,
                 tyvars: (0..arity)
-                    .map(|i| (tyvar_from_name(&format!("a{}", i), &kind_star())))
+                    .map(|i| (make_tyvar(&format!("a{}", i), &kind_star())))
                     .collect(),
                 fields: vec![],
                 source: None,
@@ -539,7 +539,7 @@ pub fn get_tuple_n(name: &FullName) -> Option<u32> {
 
 pub fn tuple_defn(size: u32) -> TypeDefn {
     let tyvars = (0..size)
-        .map(|i| tyvar_from_name(&("t".to_string() + &i.to_string()), &kind_star()))
+        .map(|i| make_tyvar(&("t".to_string() + &i.to_string()), &kind_star()))
         .collect::<Vec<_>>();
     TypeDefn {
         name: make_tuple_name(size),

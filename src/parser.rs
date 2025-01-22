@@ -380,7 +380,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInf
     }
     Ok(TraitInfo {
         trait_: Trait::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
-        type_var: tyvar_from_name(&trait_tyvar, &kind_star()),
+        type_var: make_tyvar(&trait_tyvar, &kind_star()),
         methods,
         assoc_types: type_syns,
         kind_signs: kinds,
@@ -822,7 +822,7 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn,
     while pairs.peek().unwrap().as_rule() == Rule::type_var {
         let tyvar_name = pairs.next().unwrap().as_str();
         let kind = kinds.get(tyvar_name).unwrap_or(&kind_star()).clone();
-        tyvars.push(tyvar_from_name(tyvar_name, &kind));
+        tyvars.push(make_tyvar(tyvar_name, &kind));
     }
     let pair = pairs.next().unwrap();
     let type_value = if pair.as_rule() == Rule::struct_defn {

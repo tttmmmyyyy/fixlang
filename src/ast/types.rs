@@ -14,11 +14,20 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
-#[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
     pub name: Name,
     pub kind: Arc<Kind>,
+    pub source: Option<Span>,
 }
+
+impl PartialEq for TyVar {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.kind == other.kind
+    }
+}
+
+impl Eq for TyVar {}
 
 impl TyVar {
     pub fn set_kind(&self, kind: Arc<Kind>) -> Arc<TyVar> {
@@ -1138,7 +1147,7 @@ impl TypeNode {
         if app_seq[1].to_string() != impl_type.to_string() {
             return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
         }
-        let mut tyvars = vec![tyvar_from_name("#impl_type", &kind_star())];
+        let mut tyvars = vec![make_tyvar("#impl_type", &kind_star())];
         let impl_ty_tyvar_set: Set<Name> = impl_type
             .free_vars_vec()
             .iter()
@@ -1423,19 +1432,20 @@ pub fn kind_arrow(src: Arc<Kind>, dst: Arc<Kind>) -> Arc<Kind> {
     Arc::new(Kind::Arrow(src, dst))
 }
 
-pub fn tyvar_from_name(var_name: &str, kind: &Arc<Kind>) -> Arc<TyVar> {
+pub fn make_tyvar(var_name: &str, kind: &Arc<Kind>) -> Arc<TyVar> {
     Arc::new(TyVar {
         name: String::from(var_name),
         kind: kind.clone(),
+        source: None,
     })
 }
 
 pub fn type_tyvar(var_name: &str, kind: &Arc<Kind>) -> Arc<TypeNode> {
-    TypeNode::new_arc(Type::TyVar(tyvar_from_name(var_name, kind)))
+    TypeNode::new_arc(Type::TyVar(make_tyvar(var_name, kind)))
 }
 
 pub fn type_tyvar_star(var_name: &str) -> Arc<TypeNode> {
-    TypeNode::new_arc(Type::TyVar(tyvar_from_name(var_name, &kind_star())))
+    TypeNode::new_arc(Type::TyVar(make_tyvar(var_name, &kind_star())))
 }
 
 pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
