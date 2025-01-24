@@ -125,6 +125,14 @@ impl Span {
         }
     }
 
+    pub fn offset(&self, offset: usize) -> Self {
+        Self {
+            input: self.input.clone(),
+            start: self.start + offset,
+            end: self.end + offset,
+        }
+    }
+
     pub fn unite_opt(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
         if lhs.is_none() {
             return None;

@@ -66,7 +66,7 @@ pub const STRUCT_ACT_SYMBOL: &str = "act_";
 // Names used by compiler.
 pub const FUNPTR_NAME: &str = "#FunPtr";
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
-pub const ARG_NAME: &str = "#arg";
+pub const PARAM_NAME: &str = "#param";
 pub const EVAL_VAR_NAME: &str = "#eval_var";
 pub const INSTANCIATED_NAME_SEPARATOR: &str = "#";
 pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";

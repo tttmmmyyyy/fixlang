@@ -820,9 +820,12 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn,
     let name = pairs.next().unwrap().as_str();
     let mut tyvars: Vec<Arc<TyVar>> = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::type_var {
-        let tyvar_name = pairs.next().unwrap().as_str();
+        let tyvar_name_pair = pairs.next().unwrap();
+        let tyvar_name = tyvar_name_pair.as_str();
+        let tyvar_name_span = Span::from_pair(&ctx.source, &tyvar_name_pair);
         let kind = kinds.get(tyvar_name).unwrap_or(&kind_star()).clone();
-        tyvars.push(make_tyvar(tyvar_name, &kind));
+        let tv = make_tyvar(tyvar_name, &kind).set_source(Some(tyvar_name_span));
+        tyvars.push(tv);
     }
     let pair = pairs.next().unwrap();
     let type_value = if pair.as_rule() == Rule::struct_defn {
@@ -979,7 +982,7 @@ fn parse_expr_and_then_sequence(
             Some(op_span.clone()),
         );
         let bind_next_expr_span = unite_span(&Some(op_span), &next_expr_span);
-        let lazy_next_expr = expr_abs(vec![var_local(ARG_NAME)], next_expr, next_expr_span);
+        let lazy_next_expr = expr_abs(vec![var_local(PARAM_NAME)], next_expr, next_expr_span);
         let bind_next_expr = expr_app(
             bind_function,
             vec![lazy_next_expr],
@@ -1538,18 +1541,19 @@ fn parse_expr_lam(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     }
     let mut expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
     let mut pat_body_span = expr.source.clone();
-    let var = var_local(ARG_NAME);
+    let var = var_local(PARAM_NAME);
     for pat in pats.iter().rev() {
         pat_body_span = Span::unite_opt(&pat_body_span, &pat.info.source);
-        expr = expr_abs(
+        expr = expr_abs_param_src(
             vec![var.clone()],
             expr_let(
                 pat.clone(),
-                expr_var(FullName::local(ARG_NAME), pat.info.source.clone()),
+                expr_var(FullName::local(PARAM_NAME), pat.info.source.clone()),
                 expr,
                 pat_body_span.clone(),
             ),
             pat_body_span.clone(),
+            pat.info.source.clone(),
         )
     }
     Ok(expr.set_source(Some(span)))
@@ -2050,8 +2054,10 @@ fn parse_type_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
 
 fn parse_type_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_var);
+    let tv_name = pair.as_str();
     let span = Span::from_pair(&ctx.source, &pair);
-    type_tyvar(pair.as_str(), &kind_star()).set_source(Some(span))
+    let tv = make_tyvar(tv_name, &kind_star()).set_source(Some(span.clone()));
+    type_from_tyvar(tv).set_source(Some(span))
 }
 
 fn parse_type_tycon(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {

@@ -36,10 +36,15 @@ impl TyVar {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_name(&self, name: Name) -> Arc<TyVar> {
         let mut ret = self.clone();
         ret.name = name;
+        Arc::new(ret)
+    }
+
+    pub fn set_source(&self, src: Option<Span>) -> Arc<TyVar> {
+        let mut ret = self.clone();
+        ret.source = src;
         Arc::new(ret)
     }
 }
@@ -146,14 +151,10 @@ impl TyCon {
         assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
 
         // Make type variables for type parameters.
-        let new_tyvars_kind = ti
-            .tyvars
-            .iter()
-            .map(|tv| tv.kind.clone())
-            .collect::<Vec<_>>();
         let mut new_tyvars: Vec<Arc<TypeNode>> = vec![];
-        for new_tyvar_kind in new_tyvars_kind {
-            new_tyvars.push(type_tyvar(&typechcker.new_tyvar(), &new_tyvar_kind));
+        for tv in ti.tyvars.clone() {
+            let tv = typechcker.new_tyvar_by(&tv);
+            new_tyvars.push(type_from_tyvar(tv));
         }
 
         // Make type.
@@ -1449,7 +1450,9 @@ pub fn type_tyvar_star(var_name: &str) -> Arc<TypeNode> {
 }
 
 pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
-    TypeNode::new_arc(Type::TyVar(tyvar))
+    let mut ty = TypeNode::new(Type::TyVar(tyvar.clone()));
+    ty.info.source = tyvar.source.clone();
+    Arc::new(ty)
 }
 
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {

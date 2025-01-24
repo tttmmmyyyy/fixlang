@@ -24,7 +24,10 @@ impl PatternNode {
             Pattern::Var(v, ty) => {
                 let var_name = v.name.clone();
                 let ty = if ty.is_none() {
-                    type_tyvar_star(&typechcker.new_tyvar())
+                    let tv = typechcker
+                        .new_tyvar_star()
+                        .set_source(self.info.source.clone());
+                    type_from_tyvar(tv)
                 } else {
                     let ty = ty.as_ref().unwrap();
                     typechcker.validate_type_annotation(ty)?
