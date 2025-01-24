@@ -68,6 +68,10 @@ impl Errors {
         }
     }
 
+    pub fn from_err(err: Error) -> Errors {
+        Errors { errs: vec![err] }
+    }
+
     pub fn from_msg_err<E>(msg: &str, err: E) -> Errors
     where
         E: Display,
@@ -98,7 +102,7 @@ impl Errors {
         for err in &self.errs {
             let path = match err.srcs.first() {
                 None => PathBuf::new(),
-                Some(span) => span.input.file_path.clone(),
+                Some((_, span)) => span.input.file_path.clone(),
             };
             misc::insert_to_map_vec(&mut map, &path, err.clone());
         }
@@ -116,7 +120,9 @@ impl Errors {
 #[derive(Clone)]
 pub struct Error {
     pub msg: String,
-    pub srcs: Vec<Span>,
+    // The list of source locations.
+    // The first element is the description of the source code location such as "The error occurs at:" or "The value is defined at:".
+    pub srcs: Vec<(String, Span)>,
 }
 
 impl Error {
@@ -127,8 +133,15 @@ impl Error {
     pub fn from_msg_srcs(msg: String, srcs: &[&Option<Span>]) -> Error {
         Error {
             msg,
-            srcs: srcs.iter().filter_map(|x| (*x).clone()).collect(),
+            srcs: srcs
+                .iter()
+                .filter_map(|x| x.as_ref().map(|x| (String::default(), (*x).clone())))
+                .collect(),
         }
+    }
+
+    pub fn add_src(&mut self, src_desc: String, src: Span) {
+        self.srcs.push((src_desc, src));
     }
 
     pub fn to_string(&self) -> String {
@@ -137,7 +150,8 @@ impl Error {
         str += ": ";
         str += &self.msg;
         str += "\n";
-        for src in &self.srcs {
+        for (src_desc, src) in &self.srcs {
+            str += src_desc;
             str += "\n";
             str += &src.to_string();
         }

@@ -5,6 +5,7 @@ use ast::{
     import::ImportStatement,
     name::{FullName, NameSpace},
 };
+use error::Error;
 use misc::{collect_results, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
 use typecheckcache::TypeCheckCache;
@@ -590,6 +591,7 @@ impl TypeCheckContext {
                         candidates_check_res.push(Ok((tc, ns.clone())))
                     }
                 }
+                let mut tyvars: Vec<Arc<TyVar>> = vec![]; // The set of type variables that appears in the error message.
                 let ok_count = candidates_check_res
                     .iter()
                     .filter(|cand| cand.is_ok())
@@ -600,24 +602,42 @@ impl TypeCheckContext {
                         .iter()
                         .filter_map(|cand| cand.as_ref().err())
                     {
+                        let scm = self.substitution.substitute_scheme(scm);
                         let msg = format!(
                             "- `{}` of type `{}` does not match since the constraint {} cannot be deduced.",
                             fullname.to_string(),
-                            self.substitution.substitute_scheme(scm).to_string_normalize(),
+                            scm.to_string(),
                             e.to_constraint_string()
                         );
+                        scm.free_vars_to_vec(&mut tyvars);
+                        e.free_vars_to_vec(&mut tyvars);
                         candidates_errors.push(msg)
                     }
+                    let expected_type = self.substitute_type(&ty);
                     let mut msg = format!(
                         "No value named `{}` matches the expected type `{}`.",
                         var.name.to_string(),
-                        &self.substitute_type(&ty).to_string_normalize(),
+                        expected_type.to_string(),
                     );
+                    expected_type.free_vars_to_vec(&mut tyvars);
                     if candidates_errors.len() > 0 {
                         msg.push_str("\n");
                         msg.push_str(&candidates_errors.join("\n"));
                     }
-                    return Err(Errors::from_msg_srcs(msg, &[&ei.source]));
+                    let mut error = Error::from_msg_srcs(msg, &[&ei.source]);
+                    let mut tyvar_added_to_msg = Set::default();
+                    for tv in tyvars {
+                        if tv.source.is_none() {
+                            continue;
+                        }
+                        if tyvar_added_to_msg.contains(&tv.name) {
+                            continue;
+                        }
+                        tyvar_added_to_msg.insert(tv.name.clone());
+                        let desc = format!("``{}` is the type for: ", tv.name);
+                        error.add_src(desc, tv.source.as_ref().unwrap().clone());
+                    }
+                    return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
                     let candidates = candidates_check_res
@@ -1410,6 +1430,17 @@ impl UnificationErr {
             UnificationErr::Unsatisfiable(p) => p.to_string(),
             UnificationErr::Disjoint(ty1, ty2) => {
                 format!("`{}` = `{}`", ty1.to_string(), ty2.to_string())
+            }
+        }
+    }
+
+    // Append free type variables to a buffer of type Vec.
+    pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
+        match self {
+            UnificationErr::Unsatisfiable(p) => p.free_vars_to_vec(buf),
+            UnificationErr::Disjoint(ty1, ty2) => {
+                ty1.free_vars_to_vec(buf);
+                ty2.free_vars_to_vec(buf);
             }
         }
     }

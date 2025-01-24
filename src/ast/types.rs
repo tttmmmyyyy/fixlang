@@ -1715,6 +1715,25 @@ impl Scheme {
         self.to_string_substituted(&s)
     }
 
+    // Append free type variables to a buffer of type Vec.
+    pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
+        let mut free_vars = vec![];
+        for p in &self.predicates {
+            p.free_vars_to_vec(&mut free_vars);
+        }
+        for eq in &self.equalities {
+            eq.free_vars_to_vec(&mut free_vars);
+        }
+        self.ty.free_vars_to_vec(&mut free_vars);
+
+        // Add non-generalized type variables to `buf`.
+        for tv in &free_vars {
+            if !self.gen_vars.iter().any(|tv0| tv0.name == tv.name) {
+                buf.push(tv.clone());
+            }
+        }
+    }
+
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
         let mut ret = self.clone();
         let mut scope: Map<Name, Arc<Kind>> = Default::default();
@@ -1804,6 +1823,7 @@ impl Scheme {
         Scheme::new_arc(vars, preds, eqs, ty)
     }
 
+    // Create the type scheme from a type with no generalization.
     pub fn from_type(ty: Arc<TypeNode>) -> Arc<Scheme> {
         Scheme::new_arc(vec![], vec![], vec![], ty)
     }

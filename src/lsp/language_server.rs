@@ -1245,12 +1245,12 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
     let range = err
         .srcs
         .first()
-        .map(|span| span_to_range(span))
+        .map(|(_, span)| span_to_range(span))
         .unwrap_or_default();
 
     // Other spans are shown in related informations.
     let mut related_information = vec![];
-    for span in err.srcs.iter().skip(1) {
+    for (_, span) in err.srcs.iter().skip(1) {
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(&span.input.file_path));
         if uri.is_err() {
