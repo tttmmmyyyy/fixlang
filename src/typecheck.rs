@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::error::Errors;
-use ast::{import::ImportStatement, name::{FullName, NameSpace}};
+use ast::{
+    import::ImportStatement,
+    name::{FullName, NameSpace},
+};
 use misc::{collect_results, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
 use typecheckcache::TypeCheckCache;
@@ -41,7 +44,7 @@ where
     pub fn pop(self: &mut Self, name: &Name) {
         self.local.get_mut(name).unwrap().pop();
     }
-    
+
     // Check if a local value exists.
     fn has_value(&self, name: &Name) -> bool {
         self.local.contains_key(name) && !self.local[name].is_empty()
@@ -70,13 +73,17 @@ where
         import_stmts: &[ImportStatement],
     ) -> Vec<(NameSpace, T)> {
         if name.is_local() && self.has_value(&name.name) {
-            vec![(NameSpace::local(), self.local[&name.name].last().unwrap().clone())]
+            vec![(
+                NameSpace::local(),
+                self.local[&name.name].last().unwrap().clone(),
+            )]
         } else {
             self.global
                 .iter()
                 .filter(|(full_name, _)| {
-                    full_name.name == name.name && name.namespace.is_suffix_of(&full_name.namespace) && 
-                    import::is_accessible(import_stmts, full_name)
+                    full_name.name == name.name
+                        && name.namespace.is_suffix_of(&full_name.namespace)
+                        && import::is_accessible(import_stmts, full_name)
                 })
                 .map(|(full_name, v)| (full_name.namespace.clone(), v.clone()))
                 .collect()
@@ -154,8 +161,9 @@ impl Substitution {
             Type::TyApp(fun, arg) => ty
                 .set_tyapp_fun(self.substitute_type(fun))
                 .set_tyapp_arg(self.substitute_type(arg)),
-            Type::AssocTy(_, args) => 
-                ty.set_assocty_args(args.iter().map(|arg| self.substitute_type(arg)).collect()),
+            Type::AssocTy(_, args) => {
+                ty.set_assocty_args(args.iter().map(|arg| self.substitute_type(arg)).collect())
+            }
         }
     }
 
@@ -216,7 +224,7 @@ impl Substitution {
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
         fixed_tyvars: &[Arc<TyVar>],
-        kind_env: &KindEnv
+        kind_env: &KindEnv,
     ) -> Result<Option<Self>, Errors> {
         match &ty1.ty {
             Type::TyVar(v1) => {
@@ -239,14 +247,14 @@ impl Substitution {
                         return Ok(None);
                     }
                 }
-                return Ok(Some(Self::single(&v1.name, ty2.clone())))
+                return Ok(Some(Self::single(&v1.name, ty2.clone())));
             }
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
                     if tc1 == tc2 {
-                        return Ok(Some(Self::default()))
+                        return Ok(Some(Self::default()));
                     } else {
-                        return Ok(None)
+                        return Ok(None);
                     }
                 }
                 _ => return Ok(None),
@@ -270,31 +278,29 @@ impl Substitution {
                         }
                         None => return Ok(None),
                     }
-                    return Ok(Some(ret))
+                    return Ok(Some(ret));
                 }
                 _ => return Ok(None),
             },
-            Type::AssocTy(assoc_ty1, args1) => {
-                match &ty2.ty {
-                    Type::AssocTy(assoc_ty2, args2) => {
-                        if assoc_ty1 != assoc_ty2 {
-                            return Ok(None);
-                        }
-                        let mut ret = Self::default();
-                        for i in 0..args1.len() {
-                            match Self::matching(&args1[i], &args2[i], fixed_tyvars, kind_env)? {
-                                Some(s) => {
-                                    if !ret.merge_substitution(&s) {
-                                        return Ok(None);
-                                    }
-                                },
-                                None => return Ok(None),
+            Type::AssocTy(assoc_ty1, args1) => match &ty2.ty {
+                Type::AssocTy(assoc_ty2, args2) => {
+                    if assoc_ty1 != assoc_ty2 {
+                        return Ok(None);
+                    }
+                    let mut ret = Self::default();
+                    for i in 0..args1.len() {
+                        match Self::matching(&args1[i], &args2[i], fixed_tyvars, kind_env)? {
+                            Some(s) => {
+                                if !ret.merge_substitution(&s) {
+                                    return Ok(None);
+                                }
                             }
+                            None => return Ok(None),
                         }
-                        return Ok(Some(ret))
-                    },
-                    _ => return Ok(None),
+                    }
+                    return Ok(Some(ret));
                 }
+                _ => return Ok(None),
             },
         }
     }
@@ -473,21 +479,21 @@ impl TypeCheckContext {
                     self.add_equality(eq)?;
                 }
                 return Ok(ty);
-            },
+            }
             ConstraintInstantiationMode::Assume => {
                 for tv in &scheme.gen_vars {
                     self.fixed_tyvars.push(tv.clone());
                 }
                 for pred in preds {
                     let trait_id = pred.trait_id.clone();
-                    let qual_pred_scm = QualPredScheme { 
+                    let qual_pred_scm = QualPredScheme {
                         gen_vars: vec![],
-                        qual_pred: QualPredicate { 
+                        qual_pred: QualPredicate {
                             pred_constraints: vec![],
                             eq_constraints: vec![],
                             kind_constraints: vec![],
-                            predicate: pred
-                        }
+                            predicate: pred,
+                        },
                     };
                     misc::insert_to_map_vec(&mut self.assumed_preds, &trait_id, qual_pred_scm);
                 }
@@ -501,14 +507,21 @@ impl TypeCheckContext {
                     self.local_assumed_eqs.push(eq);
                 }
                 return Ok(scheme.ty.clone());
-            },
+            }
         }
     }
 
-    pub fn validate_type_annotation(&mut self, ty: &Arc<TypeNode>) -> Result<Arc<TypeNode>, Errors> {
+    pub fn validate_type_annotation(
+        &mut self,
+        ty: &Arc<TypeNode>,
+    ) -> Result<Arc<TypeNode>, Errors> {
         // All type variables should be fixed by the TypeCheckContext, i.e., appear in the generalized variables of the current scheme.
         for tv in ty.free_vars_vec() {
-            if !self.fixed_tyvars.iter().any(|fixed_tv| fixed_tv.name == tv.name) {
+            if !self
+                .fixed_tyvars
+                .iter()
+                .any(|fixed_tv| fixed_tv.name == tv.name)
+            {
                 return Err(Errors::from_msg_srcs(
                     format!("Unknown type variable `{}`.", tv.name),
                     &[&ty.get_source()],
@@ -518,7 +531,11 @@ impl TypeCheckContext {
 
         // Set kinds of type variables in the type annotation.
         let sub = Substitution {
-            data : make_map(self.fixed_tyvars.iter().map(|tv| (tv.name.clone(), type_from_tyvar(tv.clone()))))
+            data: make_map(
+                self.fixed_tyvars
+                    .iter()
+                    .map(|tv| (tv.name.clone(), type_from_tyvar(tv.clone()))),
+            ),
         };
         let ty = sub.substitute_type(ty);
 
@@ -535,7 +552,11 @@ impl TypeCheckContext {
     // Perform typechecking.
     // Update type substitution so that `ei` has type `ty`.
     // Returns given AST augmented with inferred information.
-    pub fn unify_type_of_expr(&mut self, ei: &Arc<ExprNode>, ty: Arc<TypeNode>) -> Result<Arc<ExprNode>, Errors> {
+    pub fn unify_type_of_expr(
+        &mut self,
+        ei: &Arc<ExprNode>,
+        ty: Arc<TypeNode>,
+    ) -> Result<Arc<ExprNode>, Errors> {
         let ei = ei.set_inferred_type(ty.clone());
         match &*ei.expr {
             Expr::Var(var) => {
@@ -544,71 +565,75 @@ impl TypeCheckContext {
                     .overloaded_candidates(&var.name, self.imported_statements());
                 if candidates.is_empty() {
                     return Err(Errors::from_msg_srcs(
-                        format!("No value `{}` is found.", var.name.to_string()),
+                        format!("`{}` is not defined.", var.name.to_string()),
                         &[&ei.source],
                     ));
                 }
-                let mut overload_res: Vec<Result<_, _>> = vec![];
+                let mut candidates_check_res: Vec<
+                    Result<(TypeCheckContext, NameSpace), (FullName, Arc<Scheme>, UnificationErr)>,
+                > = vec![];
                 for (ns, scm) in &candidates {
                     let fullname = FullName::new(ns, &var.name.name);
-                        let mut tc = self.clone();
-                        let var_ty = UnifOrOtherErr::extract_others(tc.instantiate_scheme(&scm, ConstraintInstantiationMode::Require))?;
-                        if let Err(e) = var_ty {
-                            let msg = format!("- `{}` of type `{}` does not match since the constraint {} cannot be deduced.", 
-                                fullname.to_string(), 
-                                self.substitution.substitute_scheme(scm).to_string_normalize(), 
-                                e.to_constraint_string()
-                            );
-                            overload_res.push(Err(msg))
-                        } else if let Err(e) = UnifOrOtherErr::extract_others(tc.unify(&var_ty.ok().unwrap(), &ty))? {
-                            let msg = format!(
-                                "- `{}` of type `{}` does not match the expected type since the constraint {} cannot be deduced.",
-                                fullname.to_string(),
-                                self.substitution.substitute_scheme(scm).to_string_normalize(),
-                                e.to_constraint_string()
-                            );
-                            overload_res.push(Err(msg))
-                        } else if let Err(e) = UnifOrOtherErr::extract_others(tc.reduce_predicates())? {
-                            let msg = format!(
-                                "- `{}` of type `{}` does not match the expected type since the constraint `{}` cannot be deduced.",
-                                fullname.to_string(),
-                                self.substitution.substitute_scheme(scm).to_string_normalize(),
-                                e.to_constraint_string()
-                            );
-                            overload_res.push(Err(msg))
-                        } else {
-                            overload_res.push(Ok((tc, ns.clone())))
-                        }
+                    let mut tc = self.clone();
+                    let var_ty = UnifOrOtherErr::extract_others(
+                        tc.instantiate_scheme(&scm, ConstraintInstantiationMode::Require),
+                    )?;
+                    if let Err(e) = var_ty {
+                        candidates_check_res.push(Err((fullname, scm.clone(), e)))
+                    } else if let Err(e) =
+                        UnifOrOtherErr::extract_others(tc.unify(&var_ty.ok().unwrap(), &ty))?
+                    {
+                        candidates_check_res.push(Err((fullname, scm.clone(), e)))
+                    } else if let Err(e) = UnifOrOtherErr::extract_others(tc.reduce_predicates())? {
+                        candidates_check_res.push(Err((fullname, scm.clone(), e)))
+                    } else {
+                        candidates_check_res.push(Ok((tc, ns.clone())))
+                    }
                 }
-                let ok_count = overload_res.iter().filter(|cand| cand.is_ok()).count();
+                let ok_count = candidates_check_res
+                    .iter()
+                    .filter(|cand| cand.is_ok())
+                    .count();
                 if ok_count == 0 {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "No value named `{}` matches the expected type `{}`.\n{}",
-                            var.name.to_string(),
-                            &self.substitute_type(&ty).to_string_normalize(),
-                            overload_res
-                                .iter()
-                                .map(|cand| cand.as_ref().err().unwrap().clone())
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        ),
-                        &[&ei.source],
-                    ));
+                    let mut candidates_errors = vec![];
+                    for (fullname, scm, e) in candidates_check_res
+                        .iter()
+                        .filter_map(|cand| cand.as_ref().err())
+                    {
+                        let msg = format!(
+                            "- `{}` of type `{}` does not match since the constraint {} cannot be deduced.",
+                            fullname.to_string(),
+                            self.substitution.substitute_scheme(scm).to_string_normalize(),
+                            e.to_constraint_string()
+                        );
+                        candidates_errors.push(msg)
+                    }
+                    let mut msg = format!(
+                        "No value named `{}` matches the expected type `{}`.",
+                        var.name.to_string(),
+                        &self.substitute_type(&ty).to_string_normalize(),
+                    );
+                    if candidates_errors.len() > 0 {
+                        msg.push_str("\n");
+                        msg.push_str(&candidates_errors.join("\n"));
+                    }
+                    return Err(Errors::from_msg_srcs(msg, &[&ei.source]));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
-                    let candidates = overload_res
+                    let candidates = candidates_check_res
                         .iter()
                         .filter_map(|cand| cand.as_ref().ok())
-                        .map(|(_, ns)| {
-                            FullName::new(&ns, &var.name.name)
-                        })
+                        .map(|(_, ns)| FullName::new(&ns, &var.name.name))
                         .collect::<Vec<_>>();
-                    let msg = NameResolutionContext::create_ambiguous_message(&var.name.to_string(), candidates,true);                  
-                    return Err(Errors::from_msg_srcs(msg,&[&ei.source]));
+                    let msg = NameResolutionContext::create_ambiguous_message(
+                        &var.name.to_string(),
+                        candidates,
+                        true,
+                    );
+                    return Err(Errors::from_msg_srcs(msg, &[&ei.source]));
                 } else {
                     // candidates.len() == 1
-                    let (tc, ns) = overload_res
+                    let (tc, ns) = candidates_check_res
                         .iter()
                         .find_map(|cand| cand.as_ref().ok())
                         .unwrap();
@@ -647,8 +672,10 @@ impl TypeCheckContext {
             Expr::Lam(args, body) => {
                 assert_eq!(args.len(), 1); // lambda of multiple arguments generated in optimization.
                 let arg = args[0].clone();
-                let arg_ty = type_from_tyvar(self.new_tyvar_star().set_source(ei.param_src.clone()));
-                let body_ty = type_from_tyvar(self.new_tyvar_star().set_source(body.source.clone()));
+                let arg_ty =
+                    type_from_tyvar(self.new_tyvar_star().set_source(ei.param_src.clone()));
+                let body_ty =
+                    type_from_tyvar(self.new_tyvar_star().set_source(body.source.clone()));
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
                 if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&fun_ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
@@ -669,10 +696,12 @@ impl TypeCheckContext {
             Expr::Let(pat, val, body) => {
                 pat.validate(&self.type_env)?;
                 let (pat, var_ty) = pat.get_typed(self)?;
-                let val = self.unify_type_of_expr(val, pat.info.inferred_ty.as_ref().unwrap().clone())?;
+                let val =
+                    self.unify_type_of_expr(val, pat.info.inferred_ty.as_ref().unwrap().clone())?;
                 for (var_name, var_ty) in &var_ty {
                     assert!(var_name.is_local());
-                    self.scope.push(&var_name.name, Scheme::from_type(var_ty.clone()));
+                    self.scope
+                        .push(&var_name.name, Scheme::from_type(var_ty.clone()));
                 }
                 let body = self.unify_type_of_expr(body, ty)?;
                 for (name, _) in var_ty {
@@ -682,7 +711,8 @@ impl TypeCheckContext {
             }
             Expr::Match(cond, pat_vals) => {
                 // First, perform type inference for the condition.
-                let cond_ty = type_from_tyvar(self.new_tyvar_star().set_source(cond.source.clone()));
+                let cond_ty =
+                    type_from_tyvar(self.new_tyvar_star().set_source(cond.source.clone()));
                 let cond = self.unify_type_of_expr(cond, cond_ty.clone())?;
 
                 let mut cond_tc_info: Option<(Arc<TyCon>, TyConInfo)> = None;
@@ -702,7 +732,8 @@ impl TypeCheckContext {
                             if cond_tycon.is_none() {
                                 return Err(Errors::from_msg_srcs(
                                     "The condition of `match` is unknown at this point.\
-                                        Please give a type annotation to the condition.".to_string(),
+                                        Please give a type annotation to the condition."
+                                        .to_string(),
                                     &[&cond.source],
                                 ));
                             }
@@ -726,12 +757,14 @@ impl TypeCheckContext {
                     let (pat, var_ty) = pat.get_typed(self)?;
                     let pat_ty = pat.info.inferred_ty.as_ref().unwrap().clone();
                     if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
-                        let type_strs = TypeNode::to_string_normalize_many(&vec![cond_ty.clone(), pat_ty.clone()]);
+                        let type_strs = TypeNode::to_string_normalize_many(&vec![
+                            cond_ty.clone(),
+                            pat_ty.clone(),
+                        ]);
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Type mismatch. Expected `{}`, found `{}`.",
-                                &type_strs[0],
-                                &type_strs[1],
+                                &type_strs[0], &type_strs[1],
                             ),
                             &[&ei.source],
                         ));
@@ -740,7 +773,8 @@ impl TypeCheckContext {
                     // Check if the type of the value matches the whole type.
                     for (var_name, var_ty) in &var_ty {
                         assert!(var_name.is_local());
-                        self.scope.push(&var_name.name, Scheme::from_type(var_ty.clone()));
+                        self.scope
+                            .push(&var_name.name, Scheme::from_type(var_ty.clone()));
                     }
                     let val = self.unify_type_of_expr(val, ty.clone())?;
                     for (var_name, _) in var_ty {
@@ -752,28 +786,36 @@ impl TypeCheckContext {
                 // If there is at least one union pattern, check if the match cases are exhaustive.
                 if let Some((cond_tycon, cond_ti)) = cond_tc_info {
                     let pats = new_pat_vals.iter().map(|(pat, _)| pat.clone());
-                    Pattern::validate_match_cases_exhaustiveness(&cond_tycon, &cond_ti, &ei.source, pats)?;
+                    Pattern::validate_match_cases_exhaustiveness(
+                        &cond_tycon,
+                        &cond_ti,
+                        &ei.source,
+                        pats,
+                    )?;
                 }
 
                 Ok(ei.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
-            },
+            }
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.unify_type_of_expr(cond, make_bool_ty())?;
                 let then_expr = self.unify_type_of_expr(then_expr, ty.clone())?;
                 let else_expr = self.unify_type_of_expr(else_expr, ty)?;
-                Ok(ei.set_if_cond(cond)
+                Ok(ei
+                    .set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr))
             }
             Expr::TyAnno(e, anno_ty) => {
                 let anno_ty = self.validate_type_annotation(&anno_ty)?;
                 if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, &anno_ty))? {
-                    let ty_strs = TypeNode::to_string_normalize_many(&vec![self.substitute_type(&ty), self.substitute_type(&anno_ty)]);
+                    let ty_strs = TypeNode::to_string_normalize_many(&vec![
+                        self.substitute_type(&ty),
+                        self.substitute_type(&anno_ty),
+                    ]);
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Type mismatch. Expected `{}`, found `{}`.",
-                            &ty_strs[0],
-                            &ty_strs[1],
+                            &ty_strs[0], &ty_strs[1],
                         ),
                         &[&ei.source],
                     ));
@@ -847,8 +889,7 @@ impl TypeCheckContext {
                 assert_eq!(field_tys.len(), fields.len());
 
                 // Reorder fields as ordering of fields in struct definition.
-                let fields: Map<Name, Arc<ExprNode>> =
-                    Map::from_iter(fields.iter().cloned());
+                let fields: Map<Name, Arc<ExprNode>> = Map::from_iter(fields.iter().cloned());
                 let mut fields = field_names
                     .iter()
                     .map(|name| (name.clone(), fields[name].clone()))
@@ -921,14 +962,20 @@ impl TypeCheckContext {
 
     // Check if an expression matches the expected type scheme.
     // Returns the given expression with each subexpression annotated with inferred types.
-    pub fn check_type(&mut self, expr: Arc<ExprNode>, expect_scm: Arc<Scheme>) -> Result<Arc<ExprNode>, Errors> {
+    pub fn check_type(
+        &mut self,
+        expr: Arc<ExprNode>,
+        expect_scm: Arc<Scheme>,
+    ) -> Result<Arc<ExprNode>, Errors> {
         // This function should be called when TypeCheckContext is "fresh".
         assert!(self.substitution.is_empty());
         assert!(self.predicates.is_empty());
         assert!(self.equalities.is_empty());
         assert!(self.local_assumed_eqs.is_empty());
 
-        let specified_ty = UnifOrOtherErr::extract_others(self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume))?;
+        let specified_ty = UnifOrOtherErr::extract_others(
+            self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume),
+        )?;
         if let Err(e) = specified_ty {
             return Err(Errors::from_msg_srcs(
                 format!(
@@ -980,7 +1027,7 @@ impl TypeCheckContext {
     }
 
     fn add_equality(&mut self, mut eq: Equality) -> Result<(), UnifOrOtherErr> {
-        // We add only equalities that are not trivial, and cannot be simplified further. 
+        // We add only equalities that are not trivial, and cannot be simplified further.
         // If the equation can be simplified in some way, then unify lhs and rhs of the equation, instead of adding it to `equalities`.
         // `unify` may be recursively call this function again.
         // To avoid infinite loop, we use `unify` only when the equality can be simplified.
@@ -1002,19 +1049,19 @@ impl TypeCheckContext {
             self.unify(&red_lhs, &eq.value)?;
             return Ok(());
         }
-        
+
         // If the rhs of the equality is reducible, call unify.
         eq.value = self.reduce_type_by_equality(eq.value.clone())?;
         if eq.value.to_string() != rhs_org {
             self.unify(&eq.lhs(), &eq.value)?;
             return Ok(());
         }
-        
+
         // Avoid adding trivial equality.
         if eq.lhs().to_string() == eq.value.to_string() {
             return Ok(());
         }
-        
+
         self.equalities.push(eq);
         Ok(())
     }
@@ -1028,10 +1075,13 @@ impl TypeCheckContext {
                 let tyfun = self.reduce_type_by_equality(tyfun.clone())?;
                 let tyarg = self.reduce_type_by_equality(tyarg.clone())?;
                 ty.set_tyapp_fun(tyfun).set_tyapp_arg(tyarg)
-            },
+            }
             Type::AssocTy(assoc_ty, args) => {
-                // Reduce each arguments. 
-                let args = collect_results(args.iter().map(|arg| self.reduce_type_by_equality(arg.clone())))?;
+                // Reduce each arguments.
+                let args = collect_results(
+                    args.iter()
+                        .map(|arg| self.reduce_type_by_equality(arg.clone())),
+                )?;
                 let ty = ty.set_assocty_args(args);
 
                 // Try matching to assumed equality.
@@ -1046,7 +1096,12 @@ impl TypeCheckContext {
                     subst.substitute_equality(&mut equality);
 
                     // Try to match lhs of `equality` to `ty`.
-                    let subst: Option<Substitution> = Substitution::matching(&equality.lhs(), &ty, &self.fixed_tyvars, &self.kind_env)?;
+                    let subst: Option<Substitution> = Substitution::matching(
+                        &equality.lhs(),
+                        &ty,
+                        &self.fixed_tyvars,
+                        &self.kind_env,
+                    )?;
                     if subst.is_none() {
                         continue;
                     }
@@ -1055,7 +1110,7 @@ impl TypeCheckContext {
                     return self.reduce_type_by_equality(rhs);
                 }
                 ty
-            },
+            }
         })
     }
 
@@ -1078,7 +1133,11 @@ impl TypeCheckContext {
         for _ in 0..2 {
             match &ty1.ty {
                 Type::TyVar(var1) => {
-                    if !self.fixed_tyvars.iter().any(|fixed_tv| fixed_tv.name == var1.name) {
+                    if !self
+                        .fixed_tyvars
+                        .iter()
+                        .any(|fixed_tv| fixed_tv.name == var1.name)
+                    {
                         return self.unify_tyvar(var1.clone(), ty2.clone());
                     }
                 }
@@ -1089,11 +1148,10 @@ impl TypeCheckContext {
 
         // Case: Either is usage of associated type.
         for _ in 0..2 {
-            if let Type::AssocTy(assoc_ty, args) = &ty1.ty
-            {
+            if let Type::AssocTy(assoc_ty, args) = &ty1.ty {
                 let eq = Equality {
                     assoc_type: assoc_ty.clone(),
-                    args:args.clone(),
+                    args: args.clone(),
                     value: ty2.clone(),
                     source: None,
                 };
@@ -1108,7 +1166,7 @@ impl TypeCheckContext {
             Type::TyVar(_) => {
                 // If the code reaches here, `ty1` is a fixed type variable, and `ty1` is not equal to `ty2`.
                 return Err(UnificationErr::Disjoint(ty1.clone(), ty2.clone()).into());
-            },
+            }
             Type::AssocTy(_, _) => unreachable!(),
             Type::TyCon(tc1) => match &ty2.ty {
                 Type::TyCon(tc2) => {
@@ -1143,7 +1201,10 @@ impl TypeCheckContext {
         tyvar1: Arc<TyVar>,
         ty2: Arc<TypeNode>,
     ) -> Result<(), UnifOrOtherErr> {
-        assert!(!self.fixed_tyvars.iter().any(|fixed_tv| fixed_tv.name == tyvar1.name));
+        assert!(!self
+            .fixed_tyvars
+            .iter()
+            .any(|fixed_tv| fixed_tv.name == tyvar1.name));
 
         match &ty2.ty {
             Type::TyVar(tyvar2) => {
@@ -1171,7 +1232,7 @@ impl TypeCheckContext {
     // If predicates are unsatisfiable, return Err.
     fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
         let preds = std::mem::replace(&mut self.predicates, vec![]);
-        let mut already_added : Set<String> = Set::default();
+        let mut already_added: Set<String> = Set::default();
         for pred in preds {
             self.add_predicate_reducing(pred, &mut already_added)?;
         }
@@ -1179,7 +1240,11 @@ impl TypeCheckContext {
     }
 
     // Add a predicate after reducing it.
-    fn add_predicate_reducing(&mut self, pred : Predicate, already_added: &mut Set<Name>) -> Result<(), UnifOrOtherErr> {
+    fn add_predicate_reducing(
+        &mut self,
+        pred: Predicate,
+        already_added: &mut Set<Name>,
+    ) -> Result<(), UnifOrOtherErr> {
         for pred in pred.resolve_trait_aliases(&self.trait_env)? {
             self.add_predicate_reducing_noalias(pred, already_added)?;
         }
@@ -1188,7 +1253,11 @@ impl TypeCheckContext {
 
     // Add a predicate after reducing it.
     // Trait in `pred` should not be a trait alias.
-    fn add_predicate_reducing_noalias(&mut self, mut pred : Predicate, already_added: &mut Set<Name>) -> Result<(), UnifOrOtherErr> {
+    fn add_predicate_reducing_noalias(
+        &mut self,
+        mut pred: Predicate,
+        already_added: &mut Set<Name>,
+    ) -> Result<(), UnifOrOtherErr> {
         self.substitute_predicate(&mut pred);
         pred.ty = self.reduce_type_by_equality(pred.ty)?;
         let pred_str = pred.to_string();
@@ -1197,7 +1266,12 @@ impl TypeCheckContext {
         }
         already_added.insert(pred_str);
         let mut unifiable = false;
-        for qual_pred_scm in &self.assumed_preds.get(&pred.trait_id).unwrap_or(&vec![]).clone() {
+        for qual_pred_scm in &self
+            .assumed_preds
+            .get(&pred.trait_id)
+            .unwrap_or(&vec![])
+            .clone()
+        {
             // Instantiate qualified predicate.
             let mut subst = Substitution::default();
             for tv in &qual_pred_scm.gen_vars {
@@ -1208,12 +1282,17 @@ impl TypeCheckContext {
             subst.substitute_qualpred(&mut qual_pred);
 
             // Try to match head of `qual_pred` to `pred`.
-            if let Some(subst) = Substitution::matching(&qual_pred.predicate.ty, &pred.ty, &self.fixed_tyvars, &self.kind_env)? {
+            if let Some(subst) = Substitution::matching(
+                &qual_pred.predicate.ty,
+                &pred.ty,
+                &self.fixed_tyvars,
+                &self.kind_env,
+            )? {
                 for mut eq in qual_pred.eq_constraints {
                     subst.substitute_equality(&mut eq);
                     self.add_equality(eq)?;
                 }
-                for mut pred in qual_pred.pred_constraints { 
+                for mut pred in qual_pred.pred_constraints {
                     subst.substitute_predicate(&mut pred);
                     self.add_predicate_reducing(pred, already_added)?;
                 }
@@ -1223,7 +1302,9 @@ impl TypeCheckContext {
                 // But we may be able to reduce it after the predicate is substituted further.
                 // To see if there is possibility for further reduction, we check here the unifiability.
                 let mut tc = self.clone();
-                if UnifOrOtherErr::extract_others(tc.unify(&qual_pred.predicate.ty, &pred.ty))?.is_ok() {
+                if UnifOrOtherErr::extract_others(tc.unify(&qual_pred.predicate.ty, &pred.ty))?
+                    .is_ok()
+                {
                     unifiable = true;
                 }
             }
@@ -1242,7 +1323,9 @@ impl TypeCheckContext {
         let mut errs = None;
         if ty.free_vars().len() > 0 {
             errs = Some(Errors::from_msg_srcs(
-                format!("Cannot determine the type of an expression. Add type annotation to fix it."),
+                format!(
+                    "Cannot determine the type of an expression. Add type annotation to fix it."
+                ),
                 &[&expr.source],
             ));
             // To raise an error of this kind in the deepest node of the AST, we do not return here.
@@ -1253,7 +1336,10 @@ impl TypeCheckContext {
             Expr::Var(_) => expr,
             Expr::LLVM(_) => expr,
             Expr::App(fun, args) => {
-                let args = collect_results(args.iter().map(|arg| self.finish_inferred_types(arg.clone())))?;
+                let args = collect_results(
+                    args.iter()
+                        .map(|arg| self.finish_inferred_types(arg.clone())),
+                )?;
                 let fun = self.finish_inferred_types(fun.clone())?;
                 expr.set_app_func(fun).set_app_args(args)
             }
@@ -1270,7 +1356,9 @@ impl TypeCheckContext {
                 let cond = self.finish_inferred_types(cond.clone())?;
                 let then_expr = self.finish_inferred_types(then_expr.clone())?;
                 let else_expr = self.finish_inferred_types(else_expr.clone())?;
-                expr.set_if_cond(cond).set_if_then(then_expr).set_if_else(else_expr)
+                expr.set_if_cond(cond)
+                    .set_if_then(then_expr)
+                    .set_if_else(else_expr)
             }
             Expr::Match(cond, pat_vals) => {
                 let cond = self.finish_inferred_types(cond.clone())?;
@@ -1280,7 +1368,7 @@ impl TypeCheckContext {
                     new_pat_vals.push((pat.clone(), val));
                 }
                 expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
-            },
+            }
             Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.finish_inferred_types(e.clone())?),
             Expr::MakeStruct(_tc, fields) => {
                 let mut fields_res = vec![];
@@ -1291,11 +1379,15 @@ impl TypeCheckContext {
                 expr.set_make_struct_fields(fields_res)
             }
             Expr::ArrayLit(elems) => {
-                let elems = collect_results(elems.iter().map(|e| self.finish_inferred_types(e.clone())))?;
+                let elems =
+                    collect_results(elems.iter().map(|e| self.finish_inferred_types(e.clone())))?;
                 expr.set_array_lit_elems(elems)
             }
-            Expr::FFICall(_, _, _, args,_) => {
-                let args = collect_results(args.iter().map(|arg| self.finish_inferred_types(arg.clone())))?;
+            Expr::FFICall(_, _, _, args, _) => {
+                let args = collect_results(
+                    args.iter()
+                        .map(|arg| self.finish_inferred_types(arg.clone())),
+                )?;
                 expr.set_ffi_call_args(args)
             }
         });
@@ -1315,12 +1407,10 @@ pub enum UnificationErr {
 impl UnificationErr {
     pub fn to_constraint_string(&self) -> String {
         match self {
-            UnificationErr::Unsatisfiable(p) => {
-                p.to_string()
-            },
+            UnificationErr::Unsatisfiable(p) => p.to_string(),
             UnificationErr::Disjoint(ty1, ty2) => {
                 format!("`{}` = `{}`", ty1.to_string(), ty2.to_string())
-            },
+            }
         }
     }
 }
@@ -1331,7 +1421,9 @@ pub enum UnifOrOtherErr {
 }
 
 impl UnifOrOtherErr {
-    pub fn extract_others<T>(res: Result<T, UnifOrOtherErr>) -> Result<Result<T, UnificationErr>, Errors> {
+    pub fn extract_others<T>(
+        res: Result<T, UnifOrOtherErr>,
+    ) -> Result<Result<T, UnificationErr>, Errors> {
         match res {
             Ok(v) => Ok(Ok(v)),
             Err(UnifOrOtherErr::UnifErr(ue)) => Ok(Err(ue)),
