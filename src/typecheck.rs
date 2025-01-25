@@ -625,36 +625,27 @@ impl TypeCheckContext {
                 if ok_count == 0 {
                     let mut extra_srcs = vec![];
 
-                    let expected_type = self.substitute_type(&ty);
-                    let mut msg = format!(
-                        "No value named `{}` matches the expected type `{}`.",
-                        var.name.to_string(),
-                        expected_type.to_string(),
-                    );
-                    for tv in expected_type.free_vars_vec() {
-                        if let Some(src) = self.tyvar_expr.get(&tv.name) {
-                            let msg = format!("`{}` is the type for this expression.", tv.name);
-                            extra_srcs.push((msg, src.clone()));
-                        }
-                    }
-
-                    let mut candidates_errors = vec![];
-                    for (tc, fullname, scm, e) in candidates_check_res
+                    let err_cnt = candidates_check_res
                         .iter()
-                        .filter_map(|cand| cand.as_ref().err())
-                    {
-                        let cnt = candidates_errors.len() + 1;
+                        .filter(|cand| cand.is_err())
+                        .count();
+                    // let expected_type = self.substitute_type(&ty);
+                    let msg = if err_cnt == 1 {
+                        let (tc, fullname, scm, e) = candidates_check_res
+                            .iter()
+                            .find_map(|cand| cand.as_ref().err())
+                            .unwrap();
                         let scm = tc.substitution.substitute_scheme(scm);
                         let msg = format!(
-                            "- ({}) `{}` of type `{}` does not match since the constraint {} cannot be deduced.",
-                            cnt,
+                            "`{}` of type `{}` does not match here since the constraint {} cannot be deduced.",
                             fullname.to_string(),
                             scm.to_string(),
+                            // expected_type.to_string(),
                             e.to_constraint_string(),
                         );
-                        candidates_errors.push(msg);
                         let mut tvs = vec![];
                         scm.free_vars_to_vec(&mut tvs);
+                        // expected_type.free_vars_to_vec(&mut tvs);
                         e.free_vars_to_vec(&mut tvs);
                         let mut tvs = tvs
                             .into_iter()
@@ -664,18 +655,64 @@ impl TypeCheckContext {
                         tvs.dedup();
                         for tv in tvs {
                             if let Some(src) = tc.tyvar_expr.get(&tv) {
-                                let msg = format!(
-                                    "`{}` in ({}) is the type for this expression.",
-                                    tv, cnt,
-                                );
+                                let msg = format!("`{}` is the type for this expression.", tv);
                                 extra_srcs.push((msg, src.clone()));
                             }
                         }
-                    }
-                    if candidates_errors.len() > 0 {
-                        msg.push_str("\n");
-                        msg.push_str(&candidates_errors.join("\n"));
-                    }
+                        msg
+                    } else {
+                        let mut msg = format!(
+                            "Any of `{}` does not match here.",
+                            var.name.to_string(),
+                            // expected_type.to_string(),
+                        );
+                        // for tv in expected_type.free_vars_vec() {
+                        //     if let Some(src) = self.tyvar_expr.get(&tv.name) {
+                        //         let msg = format!("`{}` is the type for this expression.", tv.name);
+                        //         extra_srcs.push((msg, src.clone()));
+                        //     }
+                        // }
+
+                        let mut candidates_errors = vec![];
+                        for (tc, fullname, scm, e) in candidates_check_res
+                            .iter()
+                            .filter_map(|cand| cand.as_ref().err())
+                        {
+                            let cnt = candidates_errors.len() + 1;
+                            let scm = tc.substitution.substitute_scheme(scm);
+                            let msg = format!(
+                            "- ({}) `{}` of type `{}` does not match since the constraint {} cannot be deduced.",
+                            cnt,
+                            fullname.to_string(),
+                            scm.to_string(),
+                            e.to_constraint_string(),
+                        );
+                            candidates_errors.push(msg);
+                            let mut tvs = vec![];
+                            scm.free_vars_to_vec(&mut tvs);
+                            e.free_vars_to_vec(&mut tvs);
+                            let mut tvs = tvs
+                                .into_iter()
+                                .map(|tv| tv.name.clone())
+                                .collect::<Vec<_>>();
+                            tvs.sort();
+                            tvs.dedup();
+                            for tv in tvs {
+                                if let Some(src) = tc.tyvar_expr.get(&tv) {
+                                    let msg = format!(
+                                        "`{}` in ({}) is the type for this expression.",
+                                        tv, cnt,
+                                    );
+                                    extra_srcs.push((msg, src.clone()));
+                                }
+                            }
+                        }
+                        if candidates_errors.len() > 0 {
+                            msg.push_str("\n");
+                            msg.push_str(&candidates_errors.join("\n"));
+                        }
+                        msg
+                    };
                     let mut error = Error::from_msg_srcs(msg, &[&ei.source]);
                     for (msg, src) in extra_srcs {
                         error.add_src(msg, src);
