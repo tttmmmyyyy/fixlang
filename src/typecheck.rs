@@ -838,8 +838,7 @@ impl TypeCheckContext {
                             let cond_tycon = cond_ty.toplevel_tycon();
                             if cond_tycon.is_none() {
                                 return Err(Errors::from_msg_srcs(
-                                    "The condition of `match` is unknown at this point.\
-                                        Please give a type annotation to the condition."
+                                    "The type of the matched value is unknown at this point. Add type annotation to it."
                                         .to_string(),
                                     &[&cond.source],
                                 ));
