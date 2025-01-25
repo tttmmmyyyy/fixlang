@@ -321,6 +321,9 @@ pub enum ConstraintInstantiationMode {
 pub struct TypeCheckContext {
     // The identifier of type variables.
     tyvar_id: u32,
+    // The map from type variables to the source location of an expression whose type is the type variable.
+    // This is used for generating error messages.
+    pub tyvar_expr: Map<String, Span>,
     // Scoped map of variable name -> scheme. (Assamptions of type inference.)
     pub scope: Scope<Arc<Scheme>>,
     // Substitution.
@@ -384,6 +387,7 @@ impl TypeCheckContext {
         let assumed_eqs = trait_env.type_equalities();
         Self {
             tyvar_id: Default::default(),
+            tyvar_expr: Default::default(),
             scope: Default::default(),
             type_env,
             trait_env: Arc::new(trait_env),
@@ -400,6 +404,26 @@ impl TypeCheckContext {
             cache,
             num_worker_threads,
         }
+    }
+
+    // Register the source location of an expression whose type is a type variable.
+    pub fn add_tyvar_source(&mut self, tyvar_name: Name, source: Option<Span>) {
+        if let Some(source) = source {
+            self.tyvar_expr.insert(tyvar_name, source);
+        }
+    }
+
+    // Set the source locations of two unified type variables to the same one.
+    pub fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
+        let mut src = None;
+        if let Some(tv1_src) = self.tyvar_expr.get(&tv1) {
+            src = Some(tv1_src.clone());
+        }
+        if let Some(tv2_src) = self.tyvar_expr.get(&tv2) {
+            src = Some(tv2_src.clone());
+        }
+        self.add_tyvar_source(tv1, src.clone());
+        self.add_tyvar_source(tv2, src);
     }
 
     // Get modules imported by current module.
@@ -571,7 +595,10 @@ impl TypeCheckContext {
                     ));
                 }
                 let mut candidates_check_res: Vec<
-                    Result<(TypeCheckContext, NameSpace), (FullName, Arc<Scheme>, UnificationErr)>,
+                    Result<
+                        (TypeCheckContext, NameSpace),
+                        (TypeCheckContext, FullName, Arc<Scheme>, UnificationErr),
+                    >,
                 > = vec![];
                 for (ns, scm) in &candidates {
                     let fullname = FullName::new(ns, &var.name.name);
@@ -580,62 +607,78 @@ impl TypeCheckContext {
                         tc.instantiate_scheme(&scm, ConstraintInstantiationMode::Require),
                     )?;
                     if let Err(e) = var_ty {
-                        candidates_check_res.push(Err((fullname, scm.clone(), e)))
+                        candidates_check_res.push(Err((tc, fullname, scm.clone(), e)))
                     } else if let Err(e) =
                         UnifOrOtherErr::extract_others(tc.unify(&var_ty.ok().unwrap(), &ty))?
                     {
-                        candidates_check_res.push(Err((fullname, scm.clone(), e)))
+                        candidates_check_res.push(Err((tc, fullname, scm.clone(), e)))
                     } else if let Err(e) = UnifOrOtherErr::extract_others(tc.reduce_predicates())? {
-                        candidates_check_res.push(Err((fullname, scm.clone(), e)))
+                        candidates_check_res.push(Err((tc, fullname, scm.clone(), e)))
                     } else {
                         candidates_check_res.push(Ok((tc, ns.clone())))
                     }
                 }
-                let mut tyvars: Vec<Arc<TyVar>> = vec![]; // The set of type variables that appears in the error message.
                 let ok_count = candidates_check_res
                     .iter()
                     .filter(|cand| cand.is_ok())
                     .count();
                 if ok_count == 0 {
-                    let mut candidates_errors = vec![];
-                    for (fullname, scm, e) in candidates_check_res
-                        .iter()
-                        .filter_map(|cand| cand.as_ref().err())
-                    {
-                        let scm = self.substitution.substitute_scheme(scm);
-                        let msg = format!(
-                            "- `{}` of type `{}` does not match since the constraint {} cannot be deduced.",
-                            fullname.to_string(),
-                            scm.to_string(),
-                            e.to_constraint_string()
-                        );
-                        scm.free_vars_to_vec(&mut tyvars);
-                        e.free_vars_to_vec(&mut tyvars);
-                        candidates_errors.push(msg)
-                    }
+                    let mut extra_srcs = vec![];
+
                     let expected_type = self.substitute_type(&ty);
                     let mut msg = format!(
                         "No value named `{}` matches the expected type `{}`.",
                         var.name.to_string(),
                         expected_type.to_string(),
                     );
-                    expected_type.free_vars_to_vec(&mut tyvars);
+                    for tv in expected_type.free_vars_vec() {
+                        if let Some(src) = self.tyvar_expr.get(&tv.name) {
+                            let msg = format!("`{}` is the type for this expression.", tv.name);
+                            extra_srcs.push((msg, src.clone()));
+                        }
+                    }
+
+                    let mut candidates_errors = vec![];
+                    for (tc, fullname, scm, e) in candidates_check_res
+                        .iter()
+                        .filter_map(|cand| cand.as_ref().err())
+                    {
+                        let cnt = candidates_errors.len() + 1;
+                        let scm = tc.substitution.substitute_scheme(scm);
+                        let msg = format!(
+                            "- ({}) `{}` of type `{}` does not match since the constraint {} cannot be deduced.",
+                            cnt,
+                            fullname.to_string(),
+                            scm.to_string(),
+                            e.to_constraint_string(),
+                        );
+                        candidates_errors.push(msg);
+                        let mut tvs = vec![];
+                        scm.free_vars_to_vec(&mut tvs);
+                        e.free_vars_to_vec(&mut tvs);
+                        let mut tvs = tvs
+                            .into_iter()
+                            .map(|tv| tv.name.clone())
+                            .collect::<Vec<_>>();
+                        tvs.sort();
+                        tvs.dedup();
+                        for tv in tvs {
+                            if let Some(src) = tc.tyvar_expr.get(&tv) {
+                                let msg = format!(
+                                    "`{}` in ({}) is the type for this expression.",
+                                    tv, cnt,
+                                );
+                                extra_srcs.push((msg, src.clone()));
+                            }
+                        }
+                    }
                     if candidates_errors.len() > 0 {
                         msg.push_str("\n");
                         msg.push_str(&candidates_errors.join("\n"));
                     }
                     let mut error = Error::from_msg_srcs(msg, &[&ei.source]);
-                    let mut tyvar_added_to_msg = Set::default();
-                    for tv in tyvars {
-                        if tv.source.is_none() {
-                            continue;
-                        }
-                        if tyvar_added_to_msg.contains(&tv.name) {
-                            continue;
-                        }
-                        tyvar_added_to_msg.insert(tv.name.clone());
-                        let desc = format!("``{}` is the type for: ", tv.name);
-                        error.add_src(desc, tv.source.as_ref().unwrap().clone());
+                    for (msg, src) in extra_srcs {
+                        error.add_src(msg, src);
                     }
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
@@ -677,7 +720,8 @@ impl TypeCheckContext {
             Expr::App(fun, args) => {
                 assert_eq!(args.len(), 1); // lambda of multiple arguments generated in optimization.
                 let arg = args[0].clone();
-                let arg_tv = self.new_tyvar_star().set_source(arg.source.clone());
+                let arg_tv = self.new_tyvar_star();
+                self.add_tyvar_source(arg_tv.name.clone(), arg.source.clone());
                 let arg_ty = type_from_tyvar(arg_tv);
                 if ei.app_order == AppSourceCodeOrderType::XDotF {
                     let arg = self.unify_type_of_expr(&arg, arg_ty.clone())?;
@@ -692,10 +736,15 @@ impl TypeCheckContext {
             Expr::Lam(args, body) => {
                 assert_eq!(args.len(), 1); // lambda of multiple arguments generated in optimization.
                 let arg = args[0].clone();
-                let arg_ty =
-                    type_from_tyvar(self.new_tyvar_star().set_source(ei.param_src.clone()));
-                let body_ty =
-                    type_from_tyvar(self.new_tyvar_star().set_source(body.source.clone()));
+
+                let arg_tv = self.new_tyvar_star();
+                self.add_tyvar_source(arg_tv.name.clone(), ei.param_src.clone());
+                let arg_ty = type_from_tyvar(arg_tv);
+
+                let body_tv = self.new_tyvar_star();
+                self.add_tyvar_source(body_tv.name.clone(), body.source.clone());
+                let body_ty = type_from_tyvar(body_tv);
+
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
                 if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&fun_ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
@@ -731,8 +780,9 @@ impl TypeCheckContext {
             }
             Expr::Match(cond, pat_vals) => {
                 // First, perform type inference for the condition.
-                let cond_ty =
-                    type_from_tyvar(self.new_tyvar_star().set_source(cond.source.clone()));
+                let cond_tv = self.new_tyvar_star();
+                self.add_tyvar_source(cond_tv.name.clone(), cond.source.clone());
+                let cond_ty = type_from_tyvar(cond_tv);
                 let cond = self.unify_type_of_expr(cond, cond_ty.clone())?;
 
                 let mut cond_tc_info: Option<(Arc<TyCon>, TyConInfo)> = None;
@@ -927,7 +977,10 @@ impl TypeCheckContext {
                 } else {
                     ei.source.clone().map(|s| s.to_head_character().offset(1))
                 };
-                let elem_ty = type_from_tyvar(self.new_tyvar_star().set_source(elem_src));
+                let elem_tv = self.new_tyvar_star();
+                self.add_tyvar_source(elem_tv.name.clone(), elem_src.clone());
+                let elem_ty = type_from_tyvar(elem_tv);
+
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
                 if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&array_ty, &ty))? {
                     return Err(Errors::from_msg_srcs(
@@ -1244,6 +1297,12 @@ impl TypeCheckContext {
         if tyvar1.kind != ty2.kind(&self.kind_env)? {
             return Err(UnificationErr::Disjoint(type_from_tyvar(tyvar1), ty2).into());
         }
+
+        // If `ty2` is also a type variable, unify source locations of them.
+        if let Type::TyVar(tv2) = &ty2.ty {
+            self.unify_tyvar_source(tyvar1.name.clone(), tv2.name.clone());
+        }
+
         self.add_substitution(&Substitution::single(&tyvar1.name, ty2.clone()))?;
         Ok(())
     }

@@ -1250,7 +1250,7 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
 
     // Other spans are shown in related informations.
     let mut related_information = vec![];
-    for (_, span) in err.srcs.iter().skip(1) {
+    for (msg, span) in err.srcs.iter().skip(1) {
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(&span.input.file_path));
         if uri.is_err() {
@@ -1268,7 +1268,11 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
                 uri,
                 range: span_to_range(span),
             },
-            message: "see also here".to_string(),
+            message: if msg.len() > 0 {
+                msg.to_string()
+            } else {
+                "See also here.".to_string()
+            },
         };
         related_information.push(related);
     }

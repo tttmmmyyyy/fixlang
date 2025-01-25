@@ -18,7 +18,6 @@ use super::*;
 pub struct TyVar {
     pub name: Name,
     pub kind: Arc<Kind>,
-    pub source: Option<Span>,
 }
 
 impl PartialEq for TyVar {
@@ -39,12 +38,6 @@ impl TyVar {
     pub fn set_name(&self, name: Name) -> Arc<TyVar> {
         let mut ret = self.clone();
         ret.name = name;
-        Arc::new(ret)
-    }
-
-    pub fn set_source(&self, src: Option<Span>) -> Arc<TyVar> {
-        let mut ret = self.clone();
-        ret.source = src;
         Arc::new(ret)
     }
 }
@@ -512,6 +505,16 @@ impl TypeNode {
             Type::TyVar(tv) => {
                 ret.ty = Type::TyVar(tv.set_kind(kind));
             }
+            _ => panic!(),
+        }
+        Arc::new(ret)
+    }
+
+    #[allow(dead_code)]
+    pub fn set_tyvar(&self, tv: Arc<TyVar>) -> Arc<TypeNode> {
+        let mut ret = self.clone();
+        match &self.ty {
+            Type::TyVar(_) => ret.ty = Type::TyVar(tv),
             _ => panic!(),
         }
         Arc::new(ret)
@@ -1437,7 +1440,6 @@ pub fn make_tyvar(var_name: &str, kind: &Arc<Kind>) -> Arc<TyVar> {
     Arc::new(TyVar {
         name: String::from(var_name),
         kind: kind.clone(),
-        source: None,
     })
 }
 
@@ -1450,8 +1452,7 @@ pub fn type_tyvar_star(var_name: &str) -> Arc<TypeNode> {
 }
 
 pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
-    let mut ty = TypeNode::new(Type::TyVar(tyvar.clone()));
-    ty.info.source = tyvar.source.clone();
+    let ty = TypeNode::new(Type::TyVar(tyvar.clone()));
     Arc::new(ty)
 }
 

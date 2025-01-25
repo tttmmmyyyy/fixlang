@@ -822,9 +822,8 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn,
     while pairs.peek().unwrap().as_rule() == Rule::type_var {
         let tyvar_name_pair = pairs.next().unwrap();
         let tyvar_name = tyvar_name_pair.as_str();
-        let tyvar_name_span = Span::from_pair(&ctx.source, &tyvar_name_pair);
         let kind = kinds.get(tyvar_name).unwrap_or(&kind_star()).clone();
-        let tv = make_tyvar(tyvar_name, &kind).set_source(Some(tyvar_name_span));
+        let tv = make_tyvar(tyvar_name, &kind);
         tyvars.push(tv);
     }
     let pair = pairs.next().unwrap();
@@ -2056,7 +2055,7 @@ fn parse_type_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_var);
     let tv_name = pair.as_str();
     let span = Span::from_pair(&ctx.source, &pair);
-    let tv = make_tyvar(tv_name, &kind_star()).set_source(Some(span.clone()));
+    let tv = make_tyvar(tv_name, &kind_star());
     type_from_tyvar(tv).set_source(Some(span))
 }
 

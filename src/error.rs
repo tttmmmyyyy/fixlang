@@ -151,7 +151,11 @@ impl Error {
         str += &self.msg;
         str += "\n";
         for (src_desc, src) in &self.srcs {
-            str += src_desc;
+            if src_desc.len() > 0 {
+                str += "\n";
+                str += src_desc;
+                str += "\n";
+            }
             str += "\n";
             str += &src.to_string();
         }
