@@ -168,6 +168,18 @@ impl Substitution {
         }
     }
 
+    pub fn substitute_unification_error(&self, e: &mut UnificationErr) {
+        match e {
+            UnificationErr::Unsatisfiable(predicate) => {
+                self.substitute_predicate(predicate);
+            }
+            UnificationErr::Disjoint(type_node, type_node1) => {
+                *type_node = self.substitute_type(type_node);
+                *type_node1 = self.substitute_type(type_node1);
+            }
+        }
+    }
+
     pub fn substitute_scheme(&self, scm: &Arc<Scheme>) -> Arc<Scheme> {
         // Generalized variables cannot be replaced.
         for v in &scm.gen_vars {
@@ -629,7 +641,7 @@ impl TypeCheckContext {
                         .iter()
                         .filter(|cand| cand.is_err())
                         .count();
-                    // let expected_type = self.substitute_type(&ty);
+                    let expected_type = self.substitute_type(&ty);
                     let msg = if err_cnt == 1 {
                         let (tc, fullname, scm, e) = candidates_check_res
                             .iter()
@@ -637,41 +649,30 @@ impl TypeCheckContext {
                             .unwrap();
                         let scm = tc.substitution.substitute_scheme(scm);
                         let msg = format!(
-                            "`{}` of type `{}` does not match here since the constraint {} cannot be deduced.",
+                            "`{}` of type `{}` does not match the expected type `{}` since `{}` cannot be deduced.",
                             fullname.to_string(),
                             scm.to_string(),
-                            // expected_type.to_string(),
+                            expected_type.to_string(),
                             e.to_constraint_string(),
                         );
                         let mut tvs = vec![];
                         scm.free_vars_to_vec(&mut tvs);
-                        // expected_type.free_vars_to_vec(&mut tvs);
+                        expected_type.free_vars_to_vec(&mut tvs);
                         e.free_vars_to_vec(&mut tvs);
-                        let mut tvs = tvs
-                            .into_iter()
-                            .map(|tv| tv.name.clone())
-                            .collect::<Vec<_>>();
-                        tvs.sort();
-                        tvs.dedup();
-                        for tv in tvs {
-                            if let Some(src) = tc.tyvar_expr.get(&tv) {
-                                let msg = format!("`{}` is the type for this expression.", tv);
-                                extra_srcs.push((msg, src.clone()));
-                            }
-                        }
+                        extra_srcs.append(&mut self.create_tyvar_location_messages(&tvs, None));
                         msg
                     } else {
                         let mut msg = format!(
-                            "Any of `{}` does not match here.",
+                            "Any of values named `{}` does not match the expected type `{}`.",
                             var.name.to_string(),
-                            // expected_type.to_string(),
+                            expected_type.to_string(),
                         );
-                        // for tv in expected_type.free_vars_vec() {
-                        //     if let Some(src) = self.tyvar_expr.get(&tv.name) {
-                        //         let msg = format!("`{}` is the type for this expression.", tv.name);
-                        //         extra_srcs.push((msg, src.clone()));
-                        //     }
-                        // }
+                        extra_srcs.append(
+                            &mut self.create_tyvar_location_messages(
+                                &expected_type.free_vars_vec(),
+                                None,
+                            ),
+                        );
 
                         let mut candidates_errors = vec![];
                         for (tc, fullname, scm, e) in candidates_check_res
@@ -681,31 +682,18 @@ impl TypeCheckContext {
                             let cnt = candidates_errors.len() + 1;
                             let scm = tc.substitution.substitute_scheme(scm);
                             let msg = format!(
-                            "- ({}) `{}` of type `{}` does not match since the constraint {} cannot be deduced.",
-                            cnt,
-                            fullname.to_string(),
-                            scm.to_string(),
-                            e.to_constraint_string(),
-                        );
+                                "- ({}) `{}` of type `{}` does not match since `{}` cannot be deduced.",
+                                cnt,
+                                fullname.to_string(),
+                                scm.to_string(),
+                                e.to_constraint_string(),
+                            );
                             candidates_errors.push(msg);
                             let mut tvs = vec![];
                             scm.free_vars_to_vec(&mut tvs);
                             e.free_vars_to_vec(&mut tvs);
-                            let mut tvs = tvs
-                                .into_iter()
-                                .map(|tv| tv.name.clone())
-                                .collect::<Vec<_>>();
-                            tvs.sort();
-                            tvs.dedup();
-                            for tv in tvs {
-                                if let Some(src) = tc.tyvar_expr.get(&tv) {
-                                    let msg = format!(
-                                        "`{}` in ({}) is the type for this expression.",
-                                        tv, cnt,
-                                    );
-                                    extra_srcs.push((msg, src.clone()));
-                                }
-                            }
+                            extra_srcs
+                                .append(&mut self.create_tyvar_location_messages(&tvs, Some(cnt)));
                         }
                         if candidates_errors.len() > 0 {
                             msg.push_str("\n");
@@ -714,9 +702,7 @@ impl TypeCheckContext {
                         msg
                     };
                     let mut error = Error::from_msg_srcs(msg, &[&ei.source]);
-                    for (msg, src) in extra_srcs {
-                        error.add_src(msg, src);
-                    }
+                    error.add_srcs(extra_srcs);
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
@@ -742,15 +728,9 @@ impl TypeCheckContext {
                 }
             }
             Expr::LLVM(lit) => {
-                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&lit.ty, &ty))? {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Type mismatch. Expected `{}`, found `{}`.",
-                            &self.substitute_type(&ty).to_string_normalize(),
-                            &lit.ty.to_string_normalize(),
-                        ),
-                        &[&ei.source],
-                    ));
+                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &lit.ty))? {
+                    let err = self.create_type_mismatch_error(&ty, &lit.ty, &e, &ei.source);
+                    return Err(Errors::from_err(err));
                 }
                 Ok(ei.clone())
             }
@@ -783,15 +763,9 @@ impl TypeCheckContext {
                 let body_ty = type_from_tyvar(body_tv);
 
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
-                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&fun_ty, &ty))? {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Type mismatch. Expected `{}`, found `{}`",
-                            &self.substitute_type(&ty).to_string_normalize(),
-                            &self.substitute_type(&fun_ty).to_string_normalize(),
-                        ),
-                        &[&ei.source],
-                    ));
+                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &fun_ty))? {
+                    let err = self.create_type_mismatch_error(&ty, &fun_ty, &e, &ei.source);
+                    return Err(Errors::from_err(err));
                 }
                 assert!(arg.name.is_local());
                 self.scope.push(&arg.name.name, Scheme::from_type(arg_ty));
@@ -838,7 +812,7 @@ impl TypeCheckContext {
                             let cond_tycon = cond_ty.toplevel_tycon();
                             if cond_tycon.is_none() {
                                 return Err(Errors::from_msg_srcs(
-                                    "The type of the matched value is unknown at this point. Add type annotation to it."
+                                    "The type of the matched value must be known at this point. Add type annotation to it."
                                         .to_string(),
                                     &[&cond.source],
                                 ));
@@ -847,7 +821,7 @@ impl TypeCheckContext {
                             let cond_ti = self.type_env.tycons.get(&cond_tycon).unwrap().clone();
                             if cond_ti.variant != TyConVariant::Union {
                                 return Err(Errors::from_msg_srcs(
-                                    format!("The matched value has type `{}` which is not union, but matched on a variant pattern `{}`.", cond_ty.to_string_normalize(), pat.pattern.to_string()),
+                                    format!("The matched value has non-union type `{}`, but it is matched on a variant pattern `{}`.", cond_ty.to_string_normalize(), pat.pattern.to_string()),
                                     &[&cond.source, &pat.info.source],
                                 ));
                             }
@@ -862,18 +836,14 @@ impl TypeCheckContext {
                     // Check if the type of the pattern matches the type of the condition.
                     let (pat, var_ty) = pat.get_typed(self)?;
                     let pat_ty = pat.info.inferred_ty.as_ref().unwrap().clone();
-                    if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
-                        let type_strs = TypeNode::to_string_normalize_many(&vec![
-                            cond_ty.clone(),
-                            pat_ty.clone(),
-                        ]);
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Type mismatch. Expected `{}`, found `{}`.",
-                                &type_strs[0], &type_strs[1],
-                            ),
-                            &[&ei.source],
-                        ));
+                    if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
+                        let err = self.create_type_mismatch_error(
+                            &pat_ty,
+                            &cond_ty,
+                            &e,
+                            &pat.info.source,
+                        );
+                        return Err(Errors::from_err(err));
                     }
 
                     // Check if the type of the value matches the whole type.
@@ -913,18 +883,9 @@ impl TypeCheckContext {
             }
             Expr::TyAnno(e, anno_ty) => {
                 let anno_ty = self.validate_type_annotation(&anno_ty)?;
-                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, &anno_ty))? {
-                    let ty_strs = TypeNode::to_string_normalize_many(&vec![
-                        self.substitute_type(&ty),
-                        self.substitute_type(&anno_ty),
-                    ]);
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Type mismatch. Expected `{}`, found `{}`.",
-                            &ty_strs[0], &ty_strs[1],
-                        ),
-                        &[&ei.source],
-                    ));
+                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &anno_ty))? {
+                    let err = self.create_type_mismatch_error(&ty, &anno_ty, &e, &ei.source);
+                    return Err(Errors::from_err(err));
                 }
                 let e = self.unify_type_of_expr(e, ty.clone())?;
                 Ok(ei.set_tyanno_expr(e))
@@ -981,15 +942,9 @@ impl TypeCheckContext {
 
                 // Get field types.
                 let struct_ty = tc.get_struct_union_value_type(self);
-                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&struct_ty, &ty))? {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Type mismatch. Expected `{}`, found `{}`.",
-                            &self.substitute_type(&ty).to_string_normalize(),
-                            &self.substitute_type(&struct_ty).to_string_normalize(),
-                        ),
-                        &[&ei.source],
-                    ));
+                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &struct_ty))? {
+                    let err = self.create_type_mismatch_error(&ty, &struct_ty, &e, &ei.source);
+                    return Err(Errors::from_err(err));
                 }
                 let field_tys = struct_ty.field_types(&self.type_env);
                 assert_eq!(field_tys.len(), fields.len());
@@ -1018,14 +973,9 @@ impl TypeCheckContext {
                 let elem_ty = type_from_tyvar(elem_tv);
 
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
-                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&array_ty, &ty))? {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Type mismatch. Expected `{}`, found an array.",
-                            &self.substitute_type(&ty).to_string_normalize(),
-                        ),
-                        &[&ei.source],
-                    ));
+                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&array_ty, &ty))? {
+                    let err = self.create_type_mismatch_error(&ty, &array_ty, &e, &ei.source);
+                    return Err(Errors::from_err(err));
                 }
                 let mut ei = ei.clone();
                 for (i, e) in elems.iter().enumerate() {
@@ -1041,15 +991,9 @@ impl TypeCheckContext {
                 } else {
                     ret_ty
                 };
-                if let Err(_) = UnifOrOtherErr::extract_others(self.unify(&ty, &ret_ty))? {
-                    return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Type mismatch. Expected `{}`, found `{}`.",
-                            &self.substitute_type(&ty).to_string_normalize(),
-                            &self.substitute_type(&ret_ty).to_string_normalize()
-                        ),
-                        &[&ei.source],
-                    ));
+                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &ret_ty))? {
+                    let err = self.create_type_mismatch_error(&ty, &ret_ty, &e, &ei.source);
+                    return Err(Errors::from_err(err));
                 }
                 let mut param_tys = param_tys
                     .iter()
@@ -1069,6 +1013,62 @@ impl TypeCheckContext {
         }
     }
 
+    fn create_tyvar_location_messages(
+        &self,
+        tvs: &[Arc<TyVar>],
+        ref_no: Option<usize>,
+    ) -> Vec<(String, Span)> {
+        let mut tvs = tvs
+            .into_iter()
+            .map(|tv| tv.name.clone())
+            .collect::<Vec<_>>();
+        tvs.sort();
+        tvs.dedup();
+        let mut msg_srcs = vec![];
+        for tv in tvs {
+            if let Some(src) = self.tyvar_expr.get(&tv) {
+                let msg = if let Some(ref_no) = ref_no {
+                    format!("`{}` in ({}) is the type for:", tv, ref_no)
+                } else {
+                    format!("`{}` is the type for this expression.", tv)
+                };
+                msg_srcs.push((msg, src.clone()));
+            }
+        }
+        msg_srcs
+    }
+
+    fn create_type_mismatch_error(
+        &self,
+        expected_ty: &Arc<TypeNode>,
+        found_ty: &Arc<TypeNode>,
+        unif_err: &UnificationErr,
+        source: &Option<Span>,
+    ) -> Error {
+        let expected_ty = self.substitution.substitute_type(expected_ty);
+        let found_ty = self.substitution.substitute_type(found_ty);
+        let mut unif_err = unif_err.clone();
+        self.substitution
+            .substitute_unification_error(&mut unif_err);
+
+        let mut tvs = vec![];
+        expected_ty.free_vars_to_vec(&mut tvs);
+        found_ty.free_vars_to_vec(&mut tvs);
+        unif_err.free_vars_to_vec(&mut tvs);
+        let tv_loc_msgs = self.create_tyvar_location_messages(&tvs, None);
+        let mut err = Error::from_msg_srcs(
+            format!(
+                "Type mismatch. Expected `{}`, found `{}`. They do not match since `{}` cannot be deduced.",
+                expected_ty.to_string(),
+                found_ty.to_string(),
+                unif_err.to_constraint_string(),
+            ),
+            &[&source],
+        );
+        err.add_srcs(tv_loc_msgs);
+        err
+    }
+
     // Check if an expression matches the expected type scheme.
     // Returns the given expression with each subexpression annotated with inferred types.
     pub fn check_type(
@@ -1082,45 +1082,47 @@ impl TypeCheckContext {
         assert!(self.equalities.is_empty());
         assert!(self.local_assumed_eqs.is_empty());
 
+        fn make_error(
+            tc: &TypeCheckContext,
+            mut unif_err: UnificationErr,
+            src: &Option<Span>,
+        ) -> Error {
+            tc.substitution.substitute_unification_error(&mut unif_err);
+            let mut error = Error::from_msg_srcs(
+                format!(
+                    "`{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
+                    unif_err.to_constraint_string()
+                ),
+                &[src],
+            );
+            let mut tvs = vec![];
+            unif_err.free_vars_to_vec(&mut tvs);
+            let tv_loc_msgs = tc.create_tyvar_location_messages(&tvs, None);
+            error.add_srcs(tv_loc_msgs);
+            error
+        }
+
         let specified_ty = UnifOrOtherErr::extract_others(
             self.instantiate_scheme(&expect_scm, ConstraintInstantiationMode::Assume),
         )?;
         if let Err(e) = specified_ty {
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "`{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
-                    e.to_constraint_string()
-                ), &[&expr.source]
-            ));
+            return Err(Errors::from_err(make_error(self, e, &expr.source)));
         }
         let specified_ty = specified_ty.ok().unwrap();
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
         let reduction_res = UnifOrOtherErr::extract_others(self.reduce_predicates())?;
         if let Err(e) = reduction_res {
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "`{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
-                    e.to_constraint_string()
-                ), &[&expr.source]
-            ));
+            return Err(Errors::from_err(make_error(self, e, &expr.source)));
         }
         if self.predicates.len() > 0 {
             let pred = &self.predicates[0];
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "Condition `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
-                    pred.to_string()
-                ), &[&expr.source]
-            ));
+            let e = UnificationErr::Unsatisfiable(pred.clone());
+            return Err(Errors::from_err(make_error(self, e, &expr.source)));
         }
         if self.equalities.len() > 0 {
             let eq = &self.equalities[0];
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "Condition `{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
-                    eq.to_string()
-                ), &[&expr.source]
-            ));
+            let e = UnificationErr::Disjoint(eq.lhs(), eq.value.clone());
+            return Err(Errors::from_err(make_error(self, e, &expr.source)));
         }
 
         Ok(expr)
@@ -1514,6 +1516,7 @@ impl TypeCheckContext {
     }
 }
 
+#[derive(Clone)]
 pub enum UnificationErr {
     Unsatisfiable(Predicate),
     Disjoint(Arc<TypeNode>, Arc<TypeNode>),
@@ -1524,7 +1527,7 @@ impl UnificationErr {
         match self {
             UnificationErr::Unsatisfiable(p) => p.to_string(),
             UnificationErr::Disjoint(ty1, ty2) => {
-                format!("`{}` = `{}`", ty1.to_string(), ty2.to_string())
+                format!("{} = {}", ty1.to_string(), ty2.to_string())
             }
         }
     }

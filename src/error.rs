@@ -140,8 +140,13 @@ impl Error {
         }
     }
 
+    #[allow(dead_code)]
     pub fn add_src(&mut self, src_desc: String, src: Span) {
         self.srcs.push((src_desc, src));
+    }
+
+    pub fn add_srcs(&mut self, mut desc_srcs: Vec<(String, Span)>) {
+        self.srcs.append(&mut desc_srcs);
     }
 
     pub fn to_string(&self) -> String {
