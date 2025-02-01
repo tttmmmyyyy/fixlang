@@ -936,6 +936,9 @@ impl IOFail : Monad {
 }
 
 // The type of iterators (a.k.a lazy list).
+// 
+// NOTE: This implementation is slow, and you should consider using iterators provided in `fast-iter` (https://github.com/tttmmmyyyy/fixlang-fast-iter) instead.
+// You can install `fast-iter` by `fix deps add fast-iter`.
 type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };
 
 namespace Iterator {
