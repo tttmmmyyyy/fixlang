@@ -71,6 +71,9 @@ The type of 8-bit signed integers.
 
 The type of iterators (a.k.a lazy list).
 
+NOTE: This implementation is slow, and you should consider using iterators provided in `fast-iter` (https://github.com/tttmmmyyyy/fixlang-fast-iter) instead.
+You can install `fast-iter` by `fix deps add fast-iter`.
+
 #### field `next : () -> Std::Option (a, Std::Iterator a)`
 
 ### `type Lazy = () -> a`
