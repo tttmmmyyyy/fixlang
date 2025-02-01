@@ -115,7 +115,7 @@ pub const FIX_CONFIG_FILE_NAME: &str = ".fixconfig.toml";
 
 // Urls
 pub const DEFAULT_REGISTRY: &str =
-    "https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml";
+    "https://raw.githubusercontent.com/tttmmmyyyy/fixlang-registry/refs/heads/main/registry.toml";
 
 // Optimization levels
 pub const OPTIMIZATION_LEVEL_NONE: &str = "none";

@@ -1810,7 +1810,7 @@ The definition of SemVer compatibility is the same as that of Cargo. See https:/
 
 You can add dependencies manually by adding [[dependencies]] elements, or by using "fix deps add {name}@{ver-req}" command.
 The "fix deps add" command tries to find the specified Fix project from the registry files, and get the URL of its Git repository.
-You can add other registry files in the [configuration file](#configuration-file) in addition to the default registry file https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml.
+You can add other registry files in the [configuration file](#configuration-file) in addition to the default registry file (which is managed in [this repo](https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml)).
 
 As mentioned above, the [[dependencies]] element specifies a range of versions, not a specific version, for each dependency.
 Specific version (commit) to use for each dependency is written in the "fixdeps.lock" file.
@@ -1828,7 +1828,7 @@ The fields allowed in the configuration file are as follows:
 ```
 # URLs to the registry files.
 # "fix deps add {proj-name}@{ver-req}" command will search the project in the registry files from the first to the last, and if found, adds "[[dependencies]]" section to the project file at the current directory.
-# The default registry "https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml" is implicitly added to the end of the list.
+# The default registry "https://raw.githubusercontent.com/tttmmmyyyy/fixlang-registry/refs/heads/main/registry.toml" is implicitly added to the end of the list.
 registries = [
     "https://first-searched-registry.com/registry.toml"
     "https://second-searched-registry.com/registry.toml"
