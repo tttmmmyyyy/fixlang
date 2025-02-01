@@ -7874,6 +7874,8 @@ pub fn test_generate_docs() {
         .arg("docs")
         .arg("-m")
         .arg("Std")
+        .arg("-o")
+        .arg(".")
         .current_dir("std_doc")
         .output()
         .expect("Failed to run fix doc.");
