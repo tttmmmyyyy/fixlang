@@ -95,6 +95,15 @@ fn generate_doc(program: &Program, mod_name: &Name, config: &DocsConfig) -> Resu
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
+
+    // Create the output directory.
+    if let Err(e) = std::fs::create_dir_all(&config.out_dir) {
+        return Err(Errors::from_msg(format!(
+            "Failed to create directory \"{}\": {:?}",
+            config.out_dir.display(),
+            e
+        )));
+    }
     let doc_path = config.out_dir.join(doc_file);
     std::fs::write(&doc_path, doc).map_err(|e| {
         Errors::from_msg(format!(

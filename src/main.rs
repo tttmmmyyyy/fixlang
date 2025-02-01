@@ -322,7 +322,7 @@ fn main() {
         ).arg(
             Arg::new("include-compiler-defined-methods").long("with-compiler-defined-methods").help("Include compiler-defined methods such as `@{field_name}` or `as_{variant_name}` in the documentation."),
         ).arg(
-            Arg::new("out-dir").long("out-dir").short('o').takes_value(true).help("Output directory for generated documents."),
+            Arg::new("out-dir").long("out-dir").short('o').takes_value(true).help("Output directory for generated documents.").default_value("docs"),
         );
 
     // "fix init" subcommand
