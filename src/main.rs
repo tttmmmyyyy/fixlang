@@ -33,6 +33,7 @@ mod constants;
 mod cpu_features;
 mod dependency_lockfile;
 mod dependency_resolver;
+mod deps_list;
 mod docgen;
 mod error;
 mod generator;
@@ -292,11 +293,13 @@ fn main() {
                 .takes_value(true)
                 .help("Projects to be added. \nEach entry should be in the form \"proj-name\" or \"proj-name@ver_req\" (e.g.,\"hashmap@0.1.0\")."),
         );
+    let deps_list = App::new("list").about("List all available projects in the registry.");
 
     let mut deps_subc = deps
         .subcommand(deps_install)
         .subcommand(deps_update)
-        .subcommand(deps_add);
+        .subcommand(deps_add)
+        .subcommand(deps_list);
 
     // "fix clean" subcommand
     let clean_subc = App::new("clean").about("Removes intermediate files or cache files.");
@@ -585,6 +588,9 @@ fn main() {
                 let proj_file = panic_if_err(ProjectFile::read_root_file());
                 panic_if_err(proj_file.add_dependencies(&projects, &fix_config));
                 panic_if_err(DependecyLockFile::update_and_install());
+            }
+            Some(("list", _args)) => {
+                panic_if_err(deps_list::print_all_projects(&fix_config));
             }
             _ => deps_subc.print_help().unwrap(),
         },

@@ -58,6 +58,10 @@ impl ConfigFile {
     // Merge two config files.
     // Fields of `self` have higher priority than `other`.
     pub fn merge(&mut self, other: ConfigFile) {
-        self.registries.extend(other.registries);
+        for reg in other.registries.iter() {
+            if !self.registries.contains(reg) {
+                self.registries.push(reg.clone());
+            }
+        }
     }
 }

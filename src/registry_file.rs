@@ -1,3 +1,4 @@
+use colored::Colorize;
 use serde::Deserialize;
 
 #[derive(Deserialize, Default, Clone)]
@@ -7,6 +8,16 @@ pub struct RegistryFile {
     pub projects: Vec<RegistryProject>,
 }
 
+impl RegistryFile {
+    pub fn print_projects(&self) {
+        let mut projects = self.projects.clone();
+        projects.sort_by(|a, b| a.name.cmp(&b.name));
+        for project in &projects {
+            project.print();
+        }
+    }
+}
+
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct RegistryProject {
@@ -14,4 +25,13 @@ pub struct RegistryProject {
     pub git: String,
     #[serde(default)]
     pub description: String,
+}
+
+impl RegistryProject {
+    pub fn print(&self) {
+        println!("- {} ({})", self.name.bright_cyan(), self.git);
+        if !self.description.is_empty() {
+            println!("    - {}", self.description);
+        }
+    }
 }

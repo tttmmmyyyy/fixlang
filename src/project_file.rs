@@ -710,24 +710,7 @@ impl ProjectFile {
 
         // Fetch the registry files.
         for reg_url in &fix_config.registries {
-            let reg_res = reqwest::blocking::get(reg_url).map_err(|e| {
-                Errors::from_msg(format!(
-                    "Failed to fetch registry file \"{}\": {:?}",
-                    reg_url, e
-                ))
-            })?;
-            let reg_file = reg_res.text().map_err(|e| {
-                Errors::from_msg(format!(
-                    "Failed to fetch registry file \"{}\": {:?}",
-                    reg_url, e
-                ))
-            })?;
-            let reg_file = toml::from_str::<RegistryFile>(&reg_file).map_err(|e| {
-                Errors::from_msg(format!(
-                    "Failed to parse registry file \"{}\": {:?}",
-                    reg_url, e
-                ))
-            })?;
+            let reg_file = ProjectFile::download_registry_file(reg_url)?;
 
             // For each project to be added, search it in the registry file.
             let mut added_indices = Set::default();
@@ -832,5 +815,27 @@ impl ProjectFile {
             ))
         })?;
         Ok(())
+    }
+
+    pub fn download_registry_file(url: &str) -> Result<RegistryFile, Errors> {
+        let reg_res = reqwest::blocking::get(url).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to fetch registry file \"{}\": {:?}",
+                url, e
+            ))
+        })?;
+        let reg_file = reg_res.text().map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to fetch registry file \"{}\": {:?}",
+                url, e
+            ))
+        })?;
+        let reg_file = toml::from_str::<RegistryFile>(&reg_file).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to parse registry file \"{}\": {:?}",
+                url, e
+            ))
+        })?;
+        Ok(reg_file)
     }
 }

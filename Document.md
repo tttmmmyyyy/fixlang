@@ -1809,8 +1809,10 @@ Here, the notation `version = "0.1.0"` means that it requires version "0.1.0" or
 The definition of SemVer compatibility is the same as that of Cargo. See https://doc.rust-lang.org/cargo/reference/resolver.html#semver-compatibility for details.
 
 You can add dependencies manually by adding [[dependencies]] elements, or by using "fix deps add {name}@{ver-req}" command.
-The "fix deps add" command tries to find the specified Fix project from the registry files, and get the URL of its Git repository.
-You can add other registry files in the [configuration file](#configuration-file) in addition to the default registry file (which is managed in [this repo](https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml)).
+The "fix deps add" command searches the specified Fix project from "registry file"s, and add the dependency to the project file if it is found.
+The default registry file is managed in [this repo](https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml).
+You can add other registry files by specifying them in the [configuration file](#configuration-file).
+To list all available projects registered in the registry files, use "fix deps list" command.
 
 As mentioned above, the [[dependencies]] element specifies a range of versions, not a specific version, for each dependency.
 Specific version (commit) to use for each dependency is written in the "fixdeps.lock" file.
