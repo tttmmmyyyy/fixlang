@@ -12,4 +12,6 @@ pub struct RegistryFile {
 pub struct RegistryProject {
     pub name: String,
     pub git: String,
+    #[serde(default)]
+    pub description: String,
 }
