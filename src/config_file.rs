@@ -5,7 +5,7 @@ use crate::{error::Errors, DEFAULT_REGISTRY, FIX_CONFIG_FILE_NAME};
 // `.fixconfig.toml` file structure
 #[derive(Deserialize)]
 pub struct ConfigFile {
-    // URLs to registries.
+    // Location (URL or path) to registries.
     // The former element is higher priority than the latter.
     #[serde(default)]
     pub registries: Vec<String>,

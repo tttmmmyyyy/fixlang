@@ -1832,8 +1832,9 @@ The fields allowed in the configuration file are as follows:
 # "fix deps add {proj-name}@{ver-req}" command will search the project in the registry files from the first to the last, and if found, adds "[[dependencies]]" section to the project file at the current directory.
 # The default registry "https://raw.githubusercontent.com/tttmmmyyyy/fixlang-registry/refs/heads/main/registry.toml" is implicitly added to the end of the list.
 registries = [
-    "https://first-searched-registry.com/registry.toml"
-    "https://second-searched-registry.com/registry.toml"
+    "https://first-searched-registry.com/registry.toml",
+    "https://second-searched-registry.com/registry.toml",
+    "/path/to/my_registry.toml"
 ]
 ```
 

@@ -7,6 +7,7 @@ use crate::{
     Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, SourceFile, Span,
     LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
 };
+use reqwest::Url;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -709,8 +710,8 @@ impl ProjectFile {
         }
 
         // Fetch the registry files.
-        for reg_url in &fix_config.registries {
-            let reg_file = ProjectFile::download_registry_file(reg_url)?;
+        for reg_loc in &fix_config.registries {
+            let reg_file = ProjectFile::retrieve_registry_file(reg_loc)?;
 
             // For each project to be added, search it in the registry file.
             let mut added_indices = Set::default();
@@ -723,8 +724,8 @@ impl ProjectFile {
                 {
                     // If the project is found in the registry, add it to the project file.
                     println!(
-                        "The project \"{}\" was found at \"{}\".",
-                        proj_name, reg_url
+                        "The project \"{}\" was found in \"{}\".",
+                        proj_name, reg_loc
                     );
 
                     // When the version requirement is empty, try to use the latest tagged version.
@@ -817,23 +818,37 @@ impl ProjectFile {
         Ok(())
     }
 
-    pub fn download_registry_file(url: &str) -> Result<RegistryFile, Errors> {
-        let reg_res = reqwest::blocking::get(url).map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to fetch registry file \"{}\": {:?}",
-                url, e
-            ))
-        })?;
-        let reg_file = reg_res.text().map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to fetch registry file \"{}\": {:?}",
-                url, e
-            ))
-        })?;
-        let reg_file = toml::from_str::<RegistryFile>(&reg_file).map_err(|e| {
+    // Retrieve the registry file at the specified location.
+    // 
+    // - `loc`: The location of the registry file, which is a url or a file path.
+    pub fn retrieve_registry_file(loc: &str) -> Result<RegistryFile, Errors> {
+        let reg_file_content = if Url::parse(loc).is_ok() {
+            // The location is a URL.
+            let reg_res = reqwest::blocking::get(loc).map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to fetch registry file \"{}\": {:?}",
+                    loc, e
+                ))
+            })?;
+            reg_res.text().map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to fetch registry file \"{}\": {:?}",
+                    loc, e
+                ))
+            })?
+        } else {
+            // The location is a file path.
+            std::fs::read_to_string(loc).map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to read registry file \"{}\": {:?}",
+                    loc, e
+                ))
+            })?
+        };
+        let reg_file = toml::from_str::<RegistryFile>(&reg_file_content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to parse registry file \"{}\": {:?}",
-                url, e
+                loc, e
             ))
         })?;
         Ok(reg_file)
