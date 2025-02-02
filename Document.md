@@ -1828,7 +1828,7 @@ You can specify the bahavior of "fix" command by a configuration file named ".fi
 The fields allowed in the configuration file are as follows:
 
 ```
-# URLs to the registry files.
+# URLs / paths to the registry files.
 # "fix deps add {proj-name}@{ver-req}" command will search the project in the registry files from the first to the last, and if found, adds "[[dependencies]]" section to the project file at the current directory.
 # The default registry "https://raw.githubusercontent.com/tttmmmyyyy/fixlang-registry/refs/heads/main/registry.toml" is implicitly added to the end of the list.
 registries = [
