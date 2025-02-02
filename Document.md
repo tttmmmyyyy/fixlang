@@ -1810,7 +1810,7 @@ The definition of SemVer compatibility is the same as that of Cargo. See https:/
 
 You can add dependencies manually by adding [[dependencies]] elements, or by using "fix deps add {name}@{ver-req}" command.
 The "fix deps add" command searches the specified Fix project from "registry file"s, and add the dependency to the project file if it is found.
-The default registry file is managed in [this repo](https://raw.githubusercontent.com/tttmmmyyyy/fixlang/refs/heads/main/registry.toml).
+The default registry file is managed in [this repo](https://github.com/tttmmmyyyy/fixlang-registry).
 You can add other registry files by specifying them in the [configuration file](#configuration-file).
 To list all available projects registered in the registry files, use "fix deps list" command.
 
