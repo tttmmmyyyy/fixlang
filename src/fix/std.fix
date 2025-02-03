@@ -711,18 +711,18 @@ namespace IO {
     // Reads all bytes from an IOHandle.
     read_bytes : IOHandle -> IOFail (Array U8);
     read_bytes = |handle| (
-        // Get Iterator of Arrays.
-        let (iter, len) = *loop_m((Iterator::empty, 0), |(iter, len)| (
-            let bytes = *read_n_bytes(handle, 1024);
-            if bytes.is_empty {
-                break_m $ (iter.reverse, len)
+        // Get all bytes into an array of buffers.
+        let (bufs, len) = *loop_m(([], 0), |(bufs, len)| (
+            let buf = *read_n_bytes(handle, 1024);
+            if buf.is_empty {
+                break_m $ (bufs, len)
             } else {
-                continue_m $ (iter.push_front(bytes), len + bytes.get_size)
+                continue_m $ (bufs.push_back(buf), len + buf.get_size)
             }
         ));
-        // Concatenate bytes.
+        // Concatenate all buffers.
         let res = Array::empty(len);
-        pure $ iter.fold(res, |res, bytes| res.append(bytes))
+        pure $ bufs.to_iter.fold(res, |bytes, res| res.append(bytes))
     );
 
     // Reads at most n bytes from an IOHandle.
@@ -1003,7 +1003,7 @@ namespace Iterator {
 
     // Calcculate sum of the elements of an iterator.
     sum : [iter : Iterable, Item iter = a, a : Additive] iter -> a;
-    sum = |iter| iter.fold(zero, |acc, a| acc + a);
+    sum = |iter| iter.fold(zero, |a, acc| acc + a);
 
     // Compare two iterators by their elements.
     is_equal : [iter1 : Iterable, iter2 : Iterable, Item iter1 = a, Item iter2 = a, a : Eq] iter1 -> iter2 -> Bool;
