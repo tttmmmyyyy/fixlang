@@ -3045,7 +3045,7 @@ pub fn test112() {
             let ans = [] : Array I64;
             assert_eq(|_|"case 1", iter.to_array, ans);;
 
-            let iter = Iterator::generate(0, |i| if i == 3 { Option::none() } else { Option::some $ (i, i+1) });
+            let iter = Iterator::generate(0, |i| if i == 3 { Option::none() } else { Option::some $ (i+1, i) });
             let ans = [0, 1, 2];
             assert_eq(|_|"case 1", iter.to_array, ans);;
 
