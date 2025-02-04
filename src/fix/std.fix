@@ -268,19 +268,7 @@ namespace Array {
 
     // Converts an array to an iterator.
     to_iter : Array a -> ArrayIterator a;
-    to_iter = |arr| ArrayIterator { arr: arr, idx: 0 };
-
-    // Iterators that yields elements of an array.
-    type ArrayIterator a = unbox struct { arr : Array a, idx : I64 };
-
-    impl ArrayIterator a : Iterable {
-        type Item (ArrayIterator a) = a;
-        advance = |ArrayIterator { arr : arr, idx : idx }| (
-            if idx == arr.get_size { none() };
-            let v = arr.@(idx);
-            some((ArrayIterator { arr: arr, idx: idx + 1 }, v))
-        );
-    }
+    to_iter = Iterator::from_array;
 
     // Truncates an array, keeping the given number of first elements.
     // 
@@ -391,7 +379,7 @@ impl Array : Monad {
 }
 
 impl [a : ToString] Array a : ToString {
-    to_string = |arr| ("[" + arr.to_iter.map(to_string).join(", ") + "]");
+    to_string = |arr| ("[" + arr.to_iter.imap(to_string).join(", ") + "]");
 }
 
 impl Arrow a : Functor {
@@ -940,13 +928,15 @@ impl IOFail : Monad {
     }};
 }
 
-namespace Iterator {
-    // A trait for types that can be iterated over.
-    trait iter : Iterable {
-        type Item iter;
-        advance : iter -> Option (iter, Item iter);
-    }
+// A trait of iterators.
+// 
+// Typically, an iterator consists of a sequence of elements and a cursor to the current element.
+trait iter : Iterator {
+    type Item iter;
+    advance : iter -> Option (iter, Item iter);
+}
 
+namespace Iterator {
     /*
         Folding and looping.
     */
@@ -1027,6 +1017,22 @@ namespace Iterator {
     // Convert an iterator to an array.
     to_array : [iter : Iterable, Item iter = a] iter -> Array a;
     to_array = |iter| iter.fold([], |a, acc| acc.push_back(a));
+
+    // Create an iterator from an array.
+    from_array : Array a -> ArrayIterator a;
+    from_array = |arr| ArrayIterator { arr: arr, idx: 0 };
+
+    // Iterators that yields elements of an array.
+    type ArrayIterator a = unbox struct { arr : Array a, idx : I64 };
+
+    impl ArrayIterator a : Iterable {
+        type Item (ArrayIterator a) = a;
+        advance = |ArrayIterator { arr : arr, idx : idx }| (
+            if idx == arr.get_size { none() };
+            let v = arr.@(idx);
+            some((ArrayIterator { arr: arr, idx: idx + 1 }, v))
+        );
+    }
 
     // Convert any iterator to an array iterator.
     // 
@@ -1134,7 +1140,7 @@ namespace Iterator {
 
     // Create an iterator by a function that returns element at each index.
     from_map : (I64 -> a) -> MapIterator CountUpIterator I64 a;
-    from_map = |f| count_up(0).map(f);
+    from_map = |f| count_up(0).imap(f);
 
     /*
         Extract information from iterators.
@@ -1147,8 +1153,8 @@ namespace Iterator {
     // Get the first element of an iterator.
     // 
     // If the iterator is empty, this function aborts the program.
-    get_front : [iter : Iterable] iter -> Item iter;
-    get_front = |iter| (
+    get_first : [iter : Iterable] iter -> Item iter;
+    get_first = |iter| (
         match iter.advance {
             none() => undefined("`get_first` for empty iterator"),
             some((_, a)) => a
@@ -1187,9 +1193,9 @@ namespace Iterator {
 
     // Map a function over an iterator.
     // 
-    // `iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
-    map : [i : Iterable, Item i = a] (a -> b) -> i -> MapIterator i a b;
-    map = |f, iter| MapIterator { iter: iter, f: f };
+    // `iter.imap(f)` returns an iterator that applies `f` to each element of `iter`.
+    imap : [i : Iterable, Item i = a] (a -> b) -> i -> MapIterator i a b;
+    imap = |f, iter| MapIterator { iter: iter, f: f };
 
     type FilterIterator i a = unbox struct { iter : i, pred : a -> Bool };
     impl [i : Iterable, Item i = a] FilterIterator i a : Iterable {
@@ -1491,7 +1497,7 @@ namespace Iterator {
 
         impl DynIterator : Monad {
             pure = |e| Iterator::empty.push_front(e).to_dyn;
-            bind = |f, xs| xs.Iterator::map(f).flatten.to_dyn;
+            bind = |f, xs| xs.imap(f).flatten.to_dyn;
         }
     }
 }
@@ -1713,7 +1719,7 @@ namespace String {
     // Concatenate an iterator of strings.
     concat_iter : [strs : Iterable, Item strs = String] strs -> String;
     concat_iter = |iter| (
-        let len = iter.map(get_size).fold(0, add);
+        let len = iter.imap(get_size).fold(0, add);
         let data_len = len + 1; // Add space for null terminator.
         let data = "".@_data.reserve(data_len);
         let data = iter.fold(data, |str, data| data.pop_back.append(str.@_data));

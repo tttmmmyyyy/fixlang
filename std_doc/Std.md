@@ -153,16 +153,6 @@ The type of 64-bit unsigned integers.
 
 The type of 8-bit unsinged integers.
 
-## `namespace Std::Array`
-
-### `type ArrayIterator a = unbox struct { ...fields... }`
-
-Iterators that yields elements of an array.
-
-#### field `arr : Std::Array a`
-
-#### field `idx : Std::I64`
-
 ## `namespace Std::FFI`
 
 ### `type CChar = Std::I8`
@@ -251,6 +241,14 @@ Technically, `IOState` exists to specify the execution of I/O operations to the 
 #### field `iter1 : Std::Option i1`
 
 #### field `iter2 : i2`
+
+### `type ArrayIterator a = unbox struct { ...fields... }`
+
+Iterators that yields elements of an array.
+
+#### field `arr : Std::Array a`
+
+#### field `idx : Std::I64`
 
 ### `type ConsIterator i a = unbox struct { ...fields... }`
 
@@ -573,8 +571,6 @@ Compares two arrays by lexicographic order.
 
 The empty array with zero capacity.
 
-### `impl Std::Array::ArrayIterator a : Std::Iterator::Iterable`
-
 ### `impl Std::Arrow a : Std::Functor`
 
 ### `impl Std::Arrow a : Std::Monad`
@@ -762,6 +758,8 @@ The empty array with zero capacity.
 ### `impl Std::IO::IOFail : Std::Monad`
 
 ### `impl [i1 : Std::Iterator::Iterable, i2 : Std::Iterator::Iterable] Std::Iterator::AppendIterator i1 i2 : Std::Iterator::Iterable`
+
+### `impl Std::Iterator::ArrayIterator a : Std::Iterator::Iterable`
 
 ### `impl [i : Std::Iterator::Iterable] Std::Iterator::ConsIterator i a : Std::Iterator::Iterable`
 
@@ -1296,7 +1294,7 @@ This function clones the given array if it is shared.
 
 Sorts elements in a vector by "less than" comparator.
 
-### `to_iter : Std::Array a -> Std::Array::ArrayIterator a`
+### `to_iter : Std::Array a -> Std::Iterator::ArrayIterator a`
 
 Converts an array to an iterator.
 
@@ -2469,7 +2467,7 @@ Append two iterators.
 
 NOTE: Since this function is designed so that `iter1.append(iter2)` appends `iter2` after `iter1`, `append(iter1, iter2)` appends iterators in the opposite order.
 
-### `bang : [iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] iter -> Std::Array::ArrayIterator a`
+### `bang : [iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] iter -> Std::Iterator::ArrayIterator a`
 
 Convert any iterator to an array iterator.
 
@@ -2518,6 +2516,10 @@ Conceptually, `[a0, a1, a2, ...].fold(s, op) = s.op(a0).op(a1).op(a2)...`.
 
 Fold the elements of an iterator from left to right by monadic action.
 
+### `from_array : Std::Array a -> Std::Iterator::ArrayIterator a`
+
+Create an iterator from an array.
+
 ### `from_map : (Std::I64 -> a) -> Std::Iterator::MapIterator Std::Iterator::CountUpIterator Std::I64 a`
 
 Create an iterator by a function that returns element at each index.
@@ -2526,7 +2528,7 @@ Create an iterator by a function that returns element at each index.
 
 Create an iterator that generates elements by the state transition function.
 
-### `get_front : [iter : Std::Iterator::Iterable] iter -> Std::Iterator::Iterable::Item iter`
+### `get_first : [iter : Std::Iterator::Iterable] iter -> Std::Iterator::Iterable::Item iter`
 
 Get the first element of an iterator.
 
@@ -2535,6 +2537,12 @@ If the iterator is empty, this function aborts the program.
 ### `get_size : [iter : Std::Iterator::Iterable] iter -> Std::I64`
 
 Get the number of elements in an iterator.
+
+### `imap : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
+
+Map a function over an iterator.
+
+`iter.imap(f)` returns an iterator that applies `f` to each element of `iter`.
 
 ### `intersperse : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] a -> i -> Std::Iterator::IntersperseIterator i a`
 
@@ -2562,12 +2570,6 @@ This function is similar to `fold` but a more general version of it. It allows t
 ### `loop_iter_m : [m : Std::Monad, iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
 
 Loop over the elements of an iterator by monadic action.
-
-### `map : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
-
-Map a function over an iterator.
-
-`iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
 
 ### `pop_front : [iter : Std::Iterator::Iterable] iter -> iter`
 
