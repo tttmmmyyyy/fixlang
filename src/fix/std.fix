@@ -1263,6 +1263,11 @@ namespace Iterator {
     flatten : [i2 : Iterator, i1 : Iterator, Item i2 = i1] i2 -> FlattenIterator i2 i1;
     flatten = |i2| FlattenIterator { i2: i2, i1: none() };
 
+    type FlatMapIterator i1 a i2 = FlattenIterator (MapIterator i1 a i2) i2;
+
+    flat_map : [i1 : Iterator, Item i1 = a, i2 : Iterator, Item i2 = b] (a -> i2) -> i1 -> FlatMapIterator i1 a i2;
+    flat_map = |f, iter| iter.imap(f).flatten;
+
     type ProductIterator i1 i2 a b = unbox struct { iter1 : i1, iter2 : i2, e2 : Option b, iter1_org : i1 };
     impl [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = b] ProductIterator i1 i2 a b : Iterator {
         type Item (ProductIterator i1 i2 a b) = (Item i1, Item i2);

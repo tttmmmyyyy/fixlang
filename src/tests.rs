@@ -5823,6 +5823,25 @@ pub fn test_iterator_product() {
 }
 
 #[test]
+pub fn test_iterator_flat_map() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        let f = |x| range(0, max(0, x));
+        let it = [-1, 0, 1, 2, 3].to_iter.flat_map(f);
+        assert(|_|"", it.is_equal([0, 0, 1, 0, 1, 2].to_iter));;
+
+        assert(|_|"", [].to_iter.flat_map(f).is_equal(Iterator::empty));;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_type_alias() {
     // Test type alias.
     let source = r#"
