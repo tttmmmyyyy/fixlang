@@ -1542,6 +1542,21 @@ namespace Option {
     // Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
     map_or : b -> (a -> b) -> Option a -> b;
     map_or = |def, f, opt| if opt.is_some { f(opt.as_some) } else { def };
+
+    // Converts an option into an iterator.
+    to_iter : Option a -> OptionIterator (Option a);
+    to_iter = |opt| OptionIterator { opt: opt };
+
+    type OptionIterator opt = unbox struct { opt : opt };
+    impl OptionIterator (Option a) : Iterator {
+        type Item (OptionIterator (Option a)) = a;
+        advance = |OptionIterator { opt : opt }| (
+            match opt {
+                none() => none(),
+                some(a) => some((OptionIterator { opt: none() }, a))
+            }
+        );
+    }
 }
 
 impl [a : Eq] Option a : Eq {

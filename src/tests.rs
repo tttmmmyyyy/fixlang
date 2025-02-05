@@ -5842,6 +5842,21 @@ pub fn test_iterator_flat_map() {
 }
 
 #[test]
+pub fn test_option_iterator() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert(|_|"", some(42).to_iter.is_equal(Iterator::empty.push_front(42)));;
+        assert(|_|"", (none() : Option I64).to_iter.is_equal(Iterator::empty));;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_type_alias() {
     // Test type alias.
     let source = r#"
