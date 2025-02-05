@@ -6,25 +6,28 @@ trait c : Collects {
     // Here, we define a type level function `Elem` which domain is the trait `Collects` and returns a type.
     // When implementing `Collects` trait for a type `c`, you need to specify the value (which is a type) `Elem c`.
     type Elem c;
+    type Iterator c;
     // You can use `Elem c` in trait method definitions.
     empty : c;
     insert : Elem c -> c -> c;
-    to_iter : c -> Iterator (Elem c);
+    to_iter : c -> Iterator c;
 }
 
 // Implementing `Collects` for arrays.
 impl Array a : Collects {
     type Elem (Array a) = a;
+    type Iterator (Array a) = ArrayIterator a;
     empty = [];
     insert = |x, xs| xs.push_back(x);
-    to_iter = |xs| Array::to_iter(xs);
+    to_iter = Array::to_iter;
 }
 
-// Implementing `Collects` for iterators.
-impl Iterator a : Collects {
-    type Elem (Iterator a) = a;
-    empty = Iterator::empty;
-    insert = |x, xs| xs.push_front(x);
+// Implementing `Collects` for dynamic iterators.
+impl DynIterator a : Collects {
+    type Elem (DynIterator a) = a;
+    type Iterator (DynIterator a) = DynIterator a;
+    empty = DynIterator::empty;
+    insert = |x, xs| xs.push_front(x).to_dyn;
     to_iter = |xs| xs;
 }
 
@@ -33,12 +36,12 @@ triple : [c : Collects, Elem c = e] e -> e -> e -> c;
 triple = |x, y, z| Collects::empty.insert(x).insert(y).insert(z);
 
 // Takes two collections with the same element type, and insert all elements of the second collection to the first one.
-extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
-extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
+extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e, Iterator c1 = it, it : Iterator, Iterator::Item it = e] c1 -> c2 -> c2;
+extend = |xs, ys| xs.to_iter.fold(ys, |x, ys| ys.insert(x));
 
 // Take a collection whose element type implements `ToString` trait, and stringify the collection.
-stringify : [c : Collects, Elem c = e, e : ToString] c -> String;
-stringify = |xs| xs.to_iter.map(to_string).join(", ");
+stringify : [c : Collects, Elem c = e, e : ToString, Iterator c = it, it : Iterator, Iterator::Item it = e] c -> String;
+stringify = |xs| xs.to_iter.imap(to_string).join(", ");
 
 main : IO ();
 main = (
@@ -46,7 +49,7 @@ main = (
     assert_eq(|_|"", (triple(1, 2, 3) : Array I64).extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");;
 
     // If you use `Iterator`, the `insert` is `push_front`, so the result is in reverse order.
-    assert_eq(|_|"", (triple(1, 2, 3) : Iterator I64).extend([4, 5, 6]).stringify, "6, 5, 4, 3, 2, 1");;
+    assert_eq(|_|"", (triple(1, 2, 3) : DynIterator I64).extend([4, 5, 6]).stringify, "6, 5, 4, 3, 2, 1");;
     
     pure()
 );

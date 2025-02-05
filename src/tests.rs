@@ -1779,7 +1779,7 @@ pub fn test77() {
         let iter0 = Iterator::count_up(5);
         let iter1 = Iterator::from_map(|i| 2*i);
         let iter = iter0.zip(iter1);
-        let iter = iter.map(|(a,b)| a+b).take(3);
+        let iter = iter.imap(|(a,b)| a+b).take(3);
         let res = iter.fold(0, add);
         assert_eq(|_|"case 1", res, (5+2*0) + (6+2*1) + (7+2*2));;
 
@@ -2810,7 +2810,7 @@ pub fn test109() {
         add_opt_int : Option I64 -> Option I64 -> Option I64;
         add_opt_int = |lhs, rhs| pure $ *lhs + *rhs;
 
-        sequence : [m : Monad, m : Functor, it : Iterable, Item it = m a] it -> m (Array a);
+        sequence : [m : Monad, m : Functor, it : Iterator, Item it = m a] it -> m (Array a);
         sequence = |iter| (
             match iter.advance {
                 none() => pure $ [],
@@ -3715,7 +3715,7 @@ pub fn test_trait_alias() {
         impl Option : MyFunctorPlus {
             my_fplus = |rhs, lhs| if lhs.is_some { lhs } else { rhs };
         }
-        my_msum : [m : MyMonadAdditive, it : Iterable, Item it = m a] it -> m a;
+        my_msum : [m : MyMonadAdditive, it : Iterator, Item it = m a] it -> m a;
         my_msum = |iter| (
             let next = iter.advance;
             if next.is_none { my_fzero };
@@ -7480,7 +7480,7 @@ pub fn test_arrow_functor() {
     main: IO ();
     main = (
         let f = Array::to_iter;
-        let g = Iterable::advance;
+        let g = Iterator::advance;
         let h = f.map(g);
         assert_eq(|_|"", h([1,2,3,4]).as_some.@1, 1)
     );

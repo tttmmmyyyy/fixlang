@@ -433,6 +433,16 @@ Checks equality of two values. An expression `x == y` is translated to `eq(x, y)
 
 #### method `map : (a -> b) -> f a -> f b`
 
+### `trait iter : Iterator`
+
+A trait of iterators.
+
+Typically, an iterator consists of a sequence of elements and a cursor to the current element.
+
+#### associated type `Item iter`
+
+#### method `advance : iter -> Std::Option (iter, Std::Iterator::Item iter)`
+
 ### `trait a : LessThan`
 
 Trait for infix operator `<`.
@@ -506,16 +516,6 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 ### `trait a : Zero`
 
 #### method `zero : a`
-
-## `namespace Std::Iterator`
-
-### `trait iter : Iterable`
-
-A trait for types that can be iterated over.
-
-#### associated type `Item iter`
-
-#### method `advance : iter -> Std::Option (iter, Std::Iterator::Iterable::Item iter)`
 
 # Trait implementations
 
@@ -757,13 +757,13 @@ The empty array with zero capacity.
 
 ### `impl Std::IO::IOFail : Std::Monad`
 
-### `impl [i1 : Std::Iterator::Iterable, i2 : Std::Iterator::Iterable] Std::Iterator::AppendIterator i1 i2 : Std::Iterator::Iterable`
+### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
 
-### `impl Std::Iterator::ArrayIterator a : Std::Iterator::Iterable`
+### `impl Std::Iterator::ArrayIterator a : Std::Iterator`
 
-### `impl [i : Std::Iterator::Iterable] Std::Iterator::ConsIterator i a : Std::Iterator::Iterable`
+### `impl [i : Std::Iterator] Std::Iterator::ConsIterator i a : Std::Iterator`
 
-### `impl Std::Iterator::CountUpIterator : Std::Iterator::Iterable`
+### `impl Std::Iterator::CountUpIterator : Std::Iterator`
 
 ### `impl Std::Iterator::DynIterator : Std::Functor`
 
@@ -775,39 +775,39 @@ Concatenates two dynamic iterators.
 
 ### `impl [a : Std::Eq] Std::Iterator::DynIterator a : Std::Eq`
 
-### `impl Std::Iterator::DynIterator a : Std::Iterator::Iterable`
+### `impl Std::Iterator::DynIterator a : Std::Iterator`
 
 ### `impl Std::Iterator::DynIterator a : Std::Zero`
 
 Creates an empty dynamic iterator.
 
-### `impl Std::Iterator::EmptyIterator a : Std::Iterator::Iterable`
+### `impl Std::Iterator::EmptyIterator a : Std::Iterator`
 
-### `impl [i : Std::Iterator::Iterable] Std::Iterator::FilterIterator i a : Std::Iterator::Iterable`
+### `impl [i : Std::Iterator] Std::Iterator::FilterIterator i a : Std::Iterator`
 
-### `impl [i : Std::Iterator::Iterable] Std::Iterator::FilterMapIterator i a b : Std::Iterator::Iterable`
+### `impl [i : Std::Iterator] Std::Iterator::FilterMapIterator i a b : Std::Iterator`
 
-### `impl [i2 : Std::Iterator::Iterable, i1 : Std::Iterator::Iterable] Std::Iterator::FlattenIterator i2 i1 : Std::Iterator::Iterable`
+### `impl [i2 : Std::Iterator, i1 : Std::Iterator] Std::Iterator::FlattenIterator i2 i1 : Std::Iterator`
 
-### `impl [i : Std::Iterator::Iterable] Std::Iterator::IntersperseIterator i a : Std::Iterator::Iterable`
+### `impl [i : Std::Iterator] Std::Iterator::IntersperseIterator i a : Std::Iterator`
 
-### `impl [i : Std::Iterator::Iterable] Std::Iterator::MapIterator i a b : Std::Iterator::Iterable`
+### `impl [i : Std::Iterator] Std::Iterator::MapIterator i a b : Std::Iterator`
 
-### `impl [i1 : Std::Iterator::Iterable, i2 : Std::Iterator::Iterable] Std::Iterator::ProductIterator i1 i2 a b : Std::Iterator::Iterable`
+### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ProductIterator i1 i2 a b : Std::Iterator`
 
-### `impl Std::Iterator::RangeIterator : Std::Iterator::Iterable`
+### `impl Std::Iterator::RangeIterator : Std::Iterator`
 
-### `impl Std::Iterator::RangeStepIterator : Std::Iterator::Iterable`
+### `impl Std::Iterator::RangeStepIterator : Std::Iterator`
 
-### `impl [i : Std::Iterator::Iterable] Std::Iterator::ReverseIterator i a : Std::Iterator::Iterable`
+### `impl [i : Std::Iterator] Std::Iterator::ReverseIterator i a : Std::Iterator`
 
-### `impl Std::Iterator::StateIterator s a : Std::Iterator::Iterable`
+### `impl Std::Iterator::StateIterator s a : Std::Iterator`
 
-### `impl [i : Std::Iterator::Iterable] Std::Iterator::TakeIterator i : Std::Iterator::Iterable`
+### `impl [i : Std::Iterator] Std::Iterator::TakeIterator i : Std::Iterator`
 
-### `impl [i : Std::Iterator::Iterable] Std::Iterator::TakeWhileIterator i a : Std::Iterator::Iterable`
+### `impl [i : Std::Iterator] Std::Iterator::TakeWhileIterator i a : Std::Iterator`
 
-### `impl [i1 : Std::Iterator::Iterable, i2 : Std::Iterator::Iterable] Std::Iterator::ZipIterator i1 i2 : Std::Iterator::Iterable`
+### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ZipIterator i1 i2 : Std::Iterator`
 
 ### `impl Std::Option : Std::Functor`
 
@@ -845,7 +845,7 @@ Concatenates two strings.
 
 The empty string.
 
-### `impl Std::String::StringSplitIterator : Std::Iterator::Iterable`
+### `impl Std::String::StringSplitIterator : Std::Iterator`
 
 ### `impl Std::Tuple2 t0 : Std::Functor`
 
@@ -1229,7 +1229,7 @@ Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
 Finds the first index at which the element satisfies a condition.
 
-### `from_iter : [it : Std::Iterator::Iterable, Std::Iterator::Iterable::Item it = a] it -> Std::Array a`
+### `from_iter : [it : Std::Iterator, Std::Iterator::Item it = a] it -> Std::Array a`
 
 Create an array from an iterator.
 
@@ -2461,20 +2461,22 @@ If `IO::close` is called while using the `Ptr` obtained by this function, the `P
 
 ## `namespace Std::Iterator`
 
-### `append : [i1 : Std::Iterator::Iterable, i2 : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i1 = a, Std::Iterator::Iterable::Item i2 = a] i2 -> i1 -> Std::Iterator::AppendIterator i1 i2`
+### `advance : [iter : Std::Iterator] iter -> Std::Option (iter, Std::Iterator::Item iter)`
+
+### `append : [i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = a] i2 -> i1 -> Std::Iterator::AppendIterator i1 i2`
 
 Append two iterators.
 
 NOTE: Since this function is designed so that `iter1.append(iter2)` appends `iter2` after `iter1`, `append(iter1, iter2)` appends iterators in the opposite order.
 
-### `bang : [iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] iter -> Std::Iterator::ArrayIterator a`
+### `bang : [iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::ArrayIterator a`
 
 Convert any iterator to an array iterator.
 
 All elements of the input iterator are collected into an array. Therefore, this function may consume a lot of memory.
 On the other hand, iteration may be faster by banging.
 
-### `collect_m : [m : Std::Monad, iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = m a] iter -> m (Std::Array a)`
+### `collect_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = m a] iter -> m (Std::Array a)`
 
 Executes monadic actions and collects the results into an array.
 
@@ -2490,29 +2492,29 @@ An iterator that yields no elements.
 
 NOTE: When using this iterator, you may need to specify the type of the iterator explicitly, e.g, `(empty : EmptyIterator I64)`.
 
-### `filter : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::FilterIterator i a`
+### `filter : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::FilterIterator i a`
 
 Filter the elements of an iterator by a predicate.
 
 `iter.filter(pred)` returns an iterator that only yields elements of `iter` for which `pred` returns `true`.
 
-### `filter_map : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] (a -> Std::Option b) -> i -> Std::Iterator::FilterMapIterator i a b`
+### `filter_map : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Option b) -> i -> Std::Iterator::FilterMapIterator i a b`
 
 Filter and map the elements of an iterator.
 
 `iter.filter_map(f)` returns an iterator that applies `f` to each element of `iter` and yields the result if it is `some`.
 
-### `flatten : [i2 : Std::Iterator::Iterable, i1 : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
+### `flatten : [i2 : Std::Iterator, i1 : Std::Iterator, Std::Iterator::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
 
 Flatten an iterator of iterators.
 
-### `fold : [iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] s -> (a -> s -> s) -> iter -> s`
+### `fold : [iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> s) -> iter -> s`
 
 Fold the elements of an iterator from left to right.
 
 Conceptually, `[a0, a1, a2, ...].fold(s, op) = s.op(a0).op(a1).op(a2)...`.
 
-### `fold_m : [m : Std::Monad, iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
+### `fold_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
 
 Fold the elements of an iterator from left to right by monadic action.
 
@@ -2528,23 +2530,23 @@ Create an iterator by a function that returns element at each index.
 
 Create an iterator that generates elements by the state transition function.
 
-### `get_first : [iter : Std::Iterator::Iterable] iter -> Std::Iterator::Iterable::Item iter`
+### `get_first : [iter : Std::Iterator] iter -> Std::Iterator::Item iter`
 
 Get the first element of an iterator.
 
 If the iterator is empty, this function aborts the program.
 
-### `get_size : [iter : Std::Iterator::Iterable] iter -> Std::I64`
+### `get_size : [iter : Std::Iterator] iter -> Std::I64`
 
 Get the number of elements in an iterator.
 
-### `imap : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
+### `imap : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
 
 Map a function over an iterator.
 
 `iter.imap(f)` returns an iterator that applies `f` to each element of `iter`.
 
-### `intersperse : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] a -> i -> Std::Iterator::IntersperseIterator i a`
+### `intersperse : [i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::IntersperseIterator i a`
 
 Intersperse an element between elements of an iterator.
 
@@ -2553,31 +2555,31 @@ Example:
 assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3]);;
 ```
 
-### `is_empty : [iter : Std::Iterator::Iterable] iter -> Std::Bool`
+### `is_empty : [iter : Std::Iterator] iter -> Std::Bool`
 
 Is an iterator empty?
 
-### `is_equal : [iter1 : Std::Iterator::Iterable, iter2 : Std::Iterator::Iterable, a : Std::Eq, Std::Iterator::Iterable::Item iter1 = a, Std::Iterator::Iterable::Item iter2 = a] iter1 -> iter2 -> Std::Bool`
+### `is_equal : [iter1 : Std::Iterator, iter2 : Std::Iterator, a : Std::Eq, Std::Iterator::Item iter1 = a, Std::Iterator::Item iter2 = a] iter1 -> iter2 -> Std::Bool`
 
 Compare two iterators by their elements.
 
-### `loop_iter : [iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] s -> (a -> s -> Std::LoopState s s) -> iter -> s`
+### `loop_iter : [iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> Std::LoopState s s) -> iter -> s`
 
 Loop over the elements of an iterator.
 
 This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop early.
 
-### `loop_iter_m : [m : Std::Monad, iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
+### `loop_iter_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
 
 Loop over the elements of an iterator by monadic action.
 
-### `pop_front : [iter : Std::Iterator::Iterable] iter -> iter`
+### `pop_front : [iter : Std::Iterator] iter -> iter`
 
 Remove the first element of an iterator.
 
 If the iterator is empty, this function does nothing.
 
-### `product : [i1 : Std::Iterator::Iterable, i2 : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i1 = a, Std::Iterator::Iterable::Item i2 = b] i2 -> i1 -> Std::Iterator::ProductIterator i1 i2 a b`
+### `product : [i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] i2 -> i1 -> Std::Iterator::ProductIterator i1 i2 a b`
 
 Create an iterator that yields the Cartesian product of two iterators.
 
@@ -2588,7 +2590,7 @@ Example:
 assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);;
 ```
 
-### `push_front : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] a -> i -> Std::Iterator::ConsIterator i a`
+### `push_front : [i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::ConsIterator i a`
 
 Push an element to an iterator.
 
@@ -2604,33 +2606,33 @@ If `a` is greater than or equal to `b`, the iterator will an infinite sequence o
 
 Create an iterator that generates a range of numbers with a step.
 
-### `reverse : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] i -> Std::Iterator::ReverseIterator i a`
+### `reverse : [i : Std::Iterator, Std::Iterator::Item i = a] i -> Std::Iterator::ReverseIterator i a`
 
 Reverses an iterator.
 
 NOTE: This function puts all elements of the iterator into an array, so it may consume a lot of memory.
 
-### `sum : [iter : Std::Iterator::Iterable, a : Std::Additive, Std::Iterator::Iterable::Item iter = a] iter -> a`
+### `sum : [iter : Std::Iterator, a : Std::Additive, Std::Iterator::Item iter = a] iter -> a`
 
 Calcculate sum of the elements of an iterator.
 
-### `take : [i : Std::Iterator::Iterable] Std::I64 -> i -> Std::Iterator::TakeIterator i`
+### `take : [i : Std::Iterator] Std::I64 -> i -> Std::Iterator::TakeIterator i`
 
 Take the first `n` elements of an iterator.
 
-### `take_while : [i : Std::Iterator::Iterable, Std::Iterator::Iterable::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::TakeWhileIterator i a`
+### `take_while : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::TakeWhileIterator i a`
 
 Take elements from an iterator while a predicate holds.
 
-### `to_array : [iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] iter -> Std::Array a`
+### `to_array : [iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Array a`
 
 Convert an iterator to an array.
 
-### `to_dyn : [iter : Std::Iterator::Iterable, Std::Iterator::Iterable::Item iter = a] iter -> Std::Iterator::DynIterator a`
+### `to_dyn : [iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::DynIterator a`
 
 Convert an iterator into a dynamic iterator.
 
-### `zip : [i1 : Std::Iterator::Iterable, i2 : Std::Iterator::Iterable] i2 -> i1 -> Std::Iterator::ZipIterator i1 i2`
+### `zip : [i1 : Std::Iterator, i2 : Std::Iterator] i2 -> i1 -> Std::Iterator::ZipIterator i1 i2`
 
 Zip two iterators.
 
@@ -2641,10 +2643,6 @@ NOTE: Since this function is designed so that `iter1.zip(iter2)` zips `iter1` an
 ### `empty : Std::Iterator::DynIterator a`
 
 Creates an empty dynamic iterator.
-
-## `namespace Std::Iterator::Iterable`
-
-### `advance : [iter : Std::Iterator::Iterable] iter -> Std::Option (iter, Std::Iterator::Iterable::Item iter)`
 
 ## `namespace Std::LessThan`
 
@@ -2793,7 +2791,7 @@ Concatenate two strings.
 
 Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
 
-### `concat_iter : [strs : Std::Iterator::Iterable, Std::Iterator::Iterable::Item strs = Std::String] strs -> Std::String`
+### `concat_iter : [strs : Std::Iterator, Std::Iterator::Item strs = Std::String] strs -> Std::String`
 
 Concatenate an iterator of strings.
 
@@ -2842,7 +2840,7 @@ Gets the length of a string.
 
 Returns if the string is empty or not.
 
-### `join : [ss : Std::Iterator::Iterable, Std::Iterator::Iterable::Item ss = Std::String] Std::String -> ss -> Std::String`
+### `join : [ss : Std::Iterator, Std::Iterator::Item ss = Std::String] Std::String -> ss -> Std::String`
 
 Joins (an iterator of) strings by a separator.
 

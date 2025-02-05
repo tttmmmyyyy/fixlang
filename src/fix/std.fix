@@ -179,7 +179,7 @@ namespace Array {
     );
 
     // Create an array from an iterator.
-    from_iter : [it : Iterable, Item it = a] it -> Array a;
+    from_iter : [it : Iterator, Item it = a] it -> Array a;
     from_iter = Iterator::to_array;
 
     // Creates an array by a mapping function.
@@ -944,7 +944,7 @@ namespace Iterator {
     // Fold the elements of an iterator from left to right.
     //
     // Conceptually, `[a0, a1, a2, ...].fold(s, op) = s.op(a0).op(a1).op(a2)...`.
-    fold : [iter : Iterable, Item iter = a] s -> (a -> s -> s) -> iter -> s;
+    fold : [iter : Iterator, Item iter = a] s -> (a -> s -> s) -> iter -> s;
     fold = |s, op, iter| (
         match iter.advance {
             none() => s,
@@ -953,7 +953,7 @@ namespace Iterator {
     );
 
     // Fold the elements of an iterator from left to right by monadic action.
-    fold_m : [m : Monad, iter : Iterable, Item iter = a] s -> (a -> s -> m s) -> iter -> m s;
+    fold_m : [m : Monad, iter : Iterator, Item iter = a] s -> (a -> s -> m s) -> iter -> m s;
     fold_m = |s, op, iter| (
         match iter.advance {
             none() => pure(s),
@@ -964,7 +964,7 @@ namespace Iterator {
     // Loop over the elements of an iterator.
     // 
     // This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop early.
-    loop_iter : [iter : Iterable, Item iter = a] s -> (a -> s -> LoopState s s) -> iter -> s;
+    loop_iter : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s s) -> iter -> s;
     loop_iter = |s, body, iter| (
         match iter.advance {
             none() => s,
@@ -976,7 +976,7 @@ namespace Iterator {
     );
 
     // Loop over the elements of an iterator by monadic action.
-    loop_iter_m : [m : Monad, iter : Iterable, Item iter = a] s -> (a -> s -> m (LoopState s s)) -> iter -> m s;
+    loop_iter_m : [m : Monad, iter : Iterator, Item iter = a] s -> (a -> s -> m (LoopState s s)) -> iter -> m s;
     loop_iter_m = |s, body, iter| (
         match iter.advance {
             none() => pure(s),
@@ -988,15 +988,15 @@ namespace Iterator {
     );
 
     // Executes monadic actions and collects the results into an array.
-    collect_m : [m : Monad, iter : Iterable, Item iter = m a] iter -> m (Array a);
+    collect_m : [m : Monad, iter : Iterator, Item iter = m a] iter -> m (Array a);
     collect_m = |iter| iter.fold_m([], |act, acm| pure $ acm.push_back(*act));
 
     // Calcculate sum of the elements of an iterator.
-    sum : [iter : Iterable, Item iter = a, a : Additive] iter -> a;
+    sum : [iter : Iterator, Item iter = a, a : Additive] iter -> a;
     sum = |iter| iter.fold(zero, |a, acc| acc + a);
 
     // Compare two iterators by their elements.
-    is_equal : [iter1 : Iterable, iter2 : Iterable, Item iter1 = a, Item iter2 = a, a : Eq] iter1 -> iter2 -> Bool;
+    is_equal : [iter1 : Iterator, iter2 : Iterator, Item iter1 = a, Item iter2 = a, a : Eq] iter1 -> iter2 -> Bool;
     is_equal = |iter1, iter2| (
         match iter1.advance {
             none() => match iter2.advance {
@@ -1015,7 +1015,7 @@ namespace Iterator {
     */
 
     // Convert an iterator to an array.
-    to_array : [iter : Iterable, Item iter = a] iter -> Array a;
+    to_array : [iter : Iterator, Item iter = a] iter -> Array a;
     to_array = |iter| iter.fold([], |a, acc| acc.push_back(a));
 
     // Create an iterator from an array.
@@ -1025,7 +1025,7 @@ namespace Iterator {
     // Iterators that yields elements of an array.
     type ArrayIterator a = unbox struct { arr : Array a, idx : I64 };
 
-    impl ArrayIterator a : Iterable {
+    impl ArrayIterator a : Iterator {
         type Item (ArrayIterator a) = a;
         advance = |ArrayIterator { arr : arr, idx : idx }| (
             if idx == arr.get_size { none() };
@@ -1038,7 +1038,7 @@ namespace Iterator {
     // 
     // All elements of the input iterator are collected into an array. Therefore, this function may consume a lot of memory.
     // On the other hand, iteration may be faster by banging.
-    bang : [iter : Iterable, Item iter = a] iter -> ArrayIterator a;
+    bang : [iter : Iterator, Item iter = a] iter -> ArrayIterator a;
     bang = |iter| iter.to_array.to_iter;
 
     /*
@@ -1047,7 +1047,7 @@ namespace Iterator {
 
     // Iterators that yields no elements.
     type EmptyIterator a = unbox struct {};
-    impl EmptyIterator a : Iterable {
+    impl EmptyIterator a : Iterator {
         type Item (EmptyIterator a) = a;
         advance = |_| none();
     }
@@ -1061,7 +1061,7 @@ namespace Iterator {
     // Iterators that yields reversed elements of an iterator.
     type RangeIterator = unbox struct { next : I64, end : I64 };
 
-    impl RangeIterator : Iterable {
+    impl RangeIterator : Iterator {
         type Item RangeIterator = I64;
         advance = |RangeIterator { next : next, end : end }| (
             if next == end { Option::none() }
@@ -1079,7 +1079,7 @@ namespace Iterator {
 
     type RangeStepIterator = unbox struct { next : I64, end : I64, step : I64 };
 
-    impl RangeStepIterator : Iterable {
+    impl RangeStepIterator : Iterator {
         type Item RangeStepIterator = I64;
         advance = |RangeStepIterator { next : next, end : end, step : step }| (
             if next == end { Option::none() }
@@ -1105,7 +1105,7 @@ namespace Iterator {
 
     type CountUpIterator = unbox struct { next : I64 };
 
-    impl CountUpIterator : Iterable {
+    impl CountUpIterator : Iterator {
         type Item CountUpIterator = I64;
         advance = |CountUpIterator { next : next }| some((CountUpIterator { next: next + 1 }, next));
     }
@@ -1121,7 +1121,7 @@ namespace Iterator {
         transit : s -> Option (s, a)
     };
 
-    impl StateIterator s a : Iterable {
+    impl StateIterator s a : Iterator {
         type Item (StateIterator s a) = a;    
         advance = |StateIterator { state : s, transit : f }| (
             match s {
@@ -1147,13 +1147,13 @@ namespace Iterator {
     */
 
     // Get the number of elements in an iterator.
-    get_size : [iter : Iterable] iter -> I64;
+    get_size : [iter : Iterator] iter -> I64;
     get_size = |iter| iter.fold(0, |_, acc| acc + 1);
 
     // Get the first element of an iterator.
     // 
     // If the iterator is empty, this function aborts the program.
-    get_first : [iter : Iterable] iter -> Item iter;
+    get_first : [iter : Iterator] iter -> Item iter;
     get_first = |iter| (
         match iter.advance {
             none() => undefined("`get_first` for empty iterator"),
@@ -1164,7 +1164,7 @@ namespace Iterator {
     // Remove the first element of an iterator.
     // 
     // If the iterator is empty, this function does nothing.
-    pop_front : [iter : Iterable] iter -> iter;
+    pop_front : [iter : Iterator] iter -> iter;
     pop_front = |iter| (
         match iter.advance {
             none() => iter,
@@ -1173,7 +1173,7 @@ namespace Iterator {
     );
 
     // Is an iterator empty?
-    is_empty : [iter : Iterable] iter -> Bool;
+    is_empty : [iter : Iterator] iter -> Bool;
     is_empty = |iter| iter.advance.is_none;
 
     /*
@@ -1181,7 +1181,7 @@ namespace Iterator {
     */
 
     type MapIterator i a b = unbox struct { iter : i, f : a -> b };
-    impl [i : Iterable, Item i = a] MapIterator i a b : Iterable {
+    impl [i : Iterator, Item i = a] MapIterator i a b : Iterator {
         type Item (MapIterator i a b) = b;
         advance = |MapIterator { iter : iter, f : f }| (
             match iter.advance {
@@ -1194,11 +1194,11 @@ namespace Iterator {
     // Map a function over an iterator.
     // 
     // `iter.imap(f)` returns an iterator that applies `f` to each element of `iter`.
-    imap : [i : Iterable, Item i = a] (a -> b) -> i -> MapIterator i a b;
+    imap : [i : Iterator, Item i = a] (a -> b) -> i -> MapIterator i a b;
     imap = |f, iter| MapIterator { iter: iter, f: f };
 
     type FilterIterator i a = unbox struct { iter : i, pred : a -> Bool };
-    impl [i : Iterable, Item i = a] FilterIterator i a : Iterable {
+    impl [i : Iterator, Item i = a] FilterIterator i a : Iterator {
         type Item (FilterIterator i a) = Item i;
         advance = |FilterIterator { iter : iter, pred : pred }| (
             match iter.advance {
@@ -1215,11 +1215,11 @@ namespace Iterator {
     // Filter the elements of an iterator by a predicate.
     // 
     // `iter.filter(pred)` returns an iterator that only yields elements of `iter` for which `pred` returns `true`.
-    filter : [i : Iterable, Item i = a] (a -> Bool) -> i -> FilterIterator i a;
+    filter : [i : Iterator, Item i = a] (a -> Bool) -> i -> FilterIterator i a;
     filter = |pred, iter| FilterIterator { iter: iter, pred: pred };
 
     type FilterMapIterator i a b = unbox struct { iter : i, f : a -> Option b };
-    impl [i : Iterable, Item i = a] FilterMapIterator i a b : Iterable {
+    impl [i : Iterator, Item i = a] FilterMapIterator i a b : Iterator {
         type Item (FilterMapIterator i a b) = b;
         advance = |FilterMapIterator { iter : iter, f : f }| (
             match iter.advance {
@@ -1235,11 +1235,11 @@ namespace Iterator {
     // Filter and map the elements of an iterator.
     // 
     // `iter.filter_map(f)` returns an iterator that applies `f` to each element of `iter` and yields the result if it is `some`.
-    filter_map : [i : Iterable, Item i = a] (a -> Option b) -> i -> FilterMapIterator i a b;
+    filter_map : [i : Iterator, Item i = a] (a -> Option b) -> i -> FilterMapIterator i a b;
     filter_map = |f, iter| FilterMapIterator { iter: iter, f: f };
 
     type FlattenIterator i2 i1 = unbox struct { i2 : i2, i1 : Option i1 };
-    impl [i2 : Iterable, i1: Iterable, Item i2 = i1] FlattenIterator i2 i1 : Iterable {
+    impl [i2 : Iterator, i1: Iterator, Item i2 = i1] FlattenIterator i2 i1 : Iterator {
         type Item (FlattenIterator i2 i1) = Item i1;
         advance = |FlattenIterator { i2 : i2, i1 : i1 }| (
             match i1 {
@@ -1260,11 +1260,11 @@ namespace Iterator {
     }
 
     // Flatten an iterator of iterators.
-    flatten : [i2 : Iterable, i1 : Iterable, Item i2 = i1] i2 -> FlattenIterator i2 i1;
+    flatten : [i2 : Iterator, i1 : Iterator, Item i2 = i1] i2 -> FlattenIterator i2 i1;
     flatten = |i2| FlattenIterator { i2: i2, i1: none() };
 
     type ProductIterator i1 i2 a b = unbox struct { iter1 : i1, iter2 : i2, e2 : Option b, iter1_org : i1 };
-    impl [i1 : Iterable, i2 : Iterable, Item i1 = a, Item i2 = b] ProductIterator i1 i2 a b : Iterable {
+    impl [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = b] ProductIterator i1 i2 a b : Iterator {
         type Item (ProductIterator i1 i2 a b) = (Item i1, Item i2);
         advance = |ProductIterator { iter1 : iter1, iter2 : iter2, e2 : e2, iter1_org : iter1_org }| (
             match e2 {
@@ -1295,12 +1295,12 @@ namespace Iterator {
     // ```
     // assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);;
     // ```
-    product : [i1 : Iterable, i2 : Iterable, Item i1 = a, Item i2 = b] i2 -> i1 -> ProductIterator i1 i2 a b;
+    product : [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = b] i2 -> i1 -> ProductIterator i1 i2 a b;
     product = |iter2, iter1| ProductIterator { iter1: iter1, iter2: iter2, e2: none(), iter1_org: iter1 };
 
     type AppendIterator i1 i2 = unbox struct { iter1 : Option i1, iter2 : i2 };
 
-    impl [i1 : Iterable, i2 : Iterable, Item i1 = a, Item i2 = a] AppendIterator i1 i2 : Iterable {
+    impl [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = a] AppendIterator i1 i2 : Iterator {
         type Item (AppendIterator i1 i2) = Item i2;
         advance = |AppendIterator { iter1 : iter1, iter2 : iter2 }| (
             match iter1 {
@@ -1323,12 +1323,12 @@ namespace Iterator {
     // Append two iterators.
     // 
     // NOTE: Since this function is designed so that `iter1.append(iter2)` appends `iter2` after `iter1`, `append(iter1, iter2)` appends iterators in the opposite order.
-    append : [i1 : Iterable, i2 : Iterable, Item i1 = a, Item i2 = a] i2 -> i1 -> AppendIterator i1 i2;
+    append : [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = a] i2 -> i1 -> AppendIterator i1 i2;
     append = |iter2, iter1| AppendIterator { iter1 : some(iter1), iter2 : iter2 };
 
     type IntersperseIterator i a = unbox struct { iter : i, sep : a, next_is_sep : Bool };
 
-    impl [i : Iterable, Item i = a] IntersperseIterator i a : Iterable {
+    impl [i : Iterator, Item i = a] IntersperseIterator i a : Iterator {
         type Item (IntersperseIterator i a) = a;
         advance = |IntersperseIterator { iter : iter, sep : sep, next_is_sep : next_is_sep }| (
             if next_is_sep {
@@ -1348,11 +1348,11 @@ namespace Iterator {
     // ```
     // assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3]);;
     // ```
-    intersperse : [i : Iterable, Item i = a] a -> i -> IntersperseIterator i a;
+    intersperse : [i : Iterator, Item i = a] a -> i -> IntersperseIterator i a;
     intersperse = |sep, iter| IntersperseIterator { iter: iter, sep: sep, next_is_sep: false };
 
     type ConsIterator i a = unbox struct { head : Option a, tail : i };
-    impl [i : Iterable, Item i = a] ConsIterator i a : Iterable {
+    impl [i : Iterator, Item i = a] ConsIterator i a : Iterator {
         type Item (ConsIterator i a) = a;
         advance = |ConsIterator { head : head, tail : tail }| (
             match head {
@@ -1366,11 +1366,11 @@ namespace Iterator {
     }
 
     // Push an element to an iterator.
-    push_front : [i : Iterable, Item i = a] a -> i -> ConsIterator i a;
+    push_front : [i : Iterator, Item i = a] a -> i -> ConsIterator i a;
     push_front = |head, tail| ConsIterator { head: some(head), tail: tail };
 
     type ReverseIterator i a = unbox struct { idx : I64, arr : Array a };
-    impl [i : Iterable, Item i = a] ReverseIterator i a : Iterable {
+    impl [i : Iterator, Item i = a] ReverseIterator i a : Iterator {
         type Item (ReverseIterator i a) = a;
         advance = |ReverseIterator { idx : idx, arr : arr }| (
             if idx == -1 { none() }
@@ -1381,7 +1381,7 @@ namespace Iterator {
     // Reverses an iterator.
     // 
     // NOTE: This function puts all elements of the iterator into an array, so it may consume a lot of memory.
-    reverse : [i : Iterable, Item i = a] i -> ReverseIterator i a;
+    reverse : [i : Iterator, Item i = a] i -> ReverseIterator i a;
     reverse = |iter| (
         let arr = iter.to_array;
         let n = arr.get_size;
@@ -1390,7 +1390,7 @@ namespace Iterator {
 
     // Takes at most `n` elements from an iterator.
     type TakeIterator i = unbox struct { iter : i, n : I64 };
-    impl [i : Iterable] TakeIterator i : Iterable {
+    impl [i : Iterator] TakeIterator i : Iterator {
         type Item (TakeIterator i) = Item i;
         advance = |TakeIterator { iter : iter, n : n }| (
             if n <= 0 { none() };
@@ -1402,11 +1402,11 @@ namespace Iterator {
     }
 
     // Take the first `n` elements of an iterator.
-    take : [i : Iterable] I64 -> i -> TakeIterator i;
+    take : [i : Iterator] I64 -> i -> TakeIterator i;
     take = |n, iter| TakeIterator { iter: iter, n: n };
 
     type TakeWhileIterator i a = unbox struct { iter : i, pred : a -> Bool };
-    impl [i : Iterable, Item i = a] TakeWhileIterator i a : Iterable {
+    impl [i : Iterator, Item i = a] TakeWhileIterator i a : Iterator {
         type Item (TakeWhileIterator i a) = a;
         advance = |TakeWhileIterator { iter : iter, pred : pred }| (
             match iter.advance {
@@ -1421,11 +1421,11 @@ namespace Iterator {
     }
 
     // Take elements from an iterator while a predicate holds.
-    take_while : [i : Iterable, Item i = a] (a -> Bool) -> i -> TakeWhileIterator i a;
+    take_while : [i : Iterator, Item i = a] (a -> Bool) -> i -> TakeWhileIterator i a;
     take_while = |pred, iter| TakeWhileIterator { iter: iter, pred: pred };
 
     type ZipIterator i1 i2 = unbox struct { iter1 : i1, iter2 : i2 };
-    impl [i1 : Iterable, i2 : Iterable] ZipIterator i1 i2 : Iterable {
+    impl [i1 : Iterator, i2 : Iterator] ZipIterator i1 i2 : Iterator {
         type Item (ZipIterator i1 i2) = (Item i1, Item i2);
         advance = |ZipIterator { iter1 : iter1, iter2 : iter2 }| (
             match iter1.advance {
@@ -1441,7 +1441,7 @@ namespace Iterator {
     // Zip two iterators.
     // 
     // NOTE: Since this function is designed so that `iter1.zip(iter2)` zips `iter1` and `iter2`, the elements of `zip(iter2, iter1)` are in the opposite order.
-    zip : [i1 : Iterable, i2 : Iterable] i2 -> i1 -> ZipIterator i1 i2;
+    zip : [i1 : Iterator, i2 : Iterator] i2 -> i1 -> ZipIterator i1 i2;
     zip = |iter2, iter1| ZipIterator { iter1: iter1, iter2: iter2 };
 
     /*
@@ -1464,10 +1464,10 @@ namespace Iterator {
     type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
 
     // Convert an iterator into a dynamic iterator.
-    to_dyn : [iter : Iterable, Item iter = a] iter -> DynIterator a;
+    to_dyn : [iter : Iterator, Item iter = a] iter -> DynIterator a;
     to_dyn = |iter| DynIterator { next: |_| iter.advance.map(|(iter, elm)| (iter.to_dyn, elm)) };
 
-    impl DynIterator a : Iterable {
+    impl DynIterator a : Iterator {
         type Item (DynIterator a) = a;
         advance = |iter| (iter.@next)();
     }
@@ -1717,7 +1717,7 @@ namespace String {
     );
 
     // Concatenate an iterator of strings.
-    concat_iter : [strs : Iterable, Item strs = String] strs -> String;
+    concat_iter : [strs : Iterator, Item strs = String] strs -> String;
     concat_iter = |iter| (
         let len = iter.imap(get_size).fold(0, add);
         let data_len = len + 1; // Add space for null terminator.
@@ -1782,7 +1782,7 @@ namespace String {
     is_empty = |s| s.get_size == 0;
 
     // Joins (an iterator of) strings by a separator.
-    join : [ss : Iterable, Item ss = String] String -> ss -> String;
+    join : [ss : Iterator, Item ss = String] String -> ss -> String;
     join = |sep, ss| (
         ss.intersperse(sep).concat_iter
     );
@@ -1809,7 +1809,7 @@ namespace String {
 
     type StringSplitIterator = unbox struct { idx : I64, str : String, strlen : I64, sep : String, sep_len : I64 };
 
-    impl StringSplitIterator : Iterable {
+    impl StringSplitIterator : Iterator {
         type Item StringSplitIterator = String;
         advance = |iter| (
             let StringSplitIterator { idx: idx, str: str, strlen: strlen, sep: sep, sep_len: sep_len } = iter;

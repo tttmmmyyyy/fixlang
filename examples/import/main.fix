@@ -15,7 +15,7 @@ imports = [Lib0::name, Lib1::name, Lib2::name, Lib2.Lib3::name];
 
 print_imports : String -> Array String -> IO ();
 print_imports = |name, imports| (
-    println $ "Module `" + name + "` imports [" + Iterator::from_array(imports).map(|s| "`" + s + "`").join(", ") + "]."
+    println $ "Module `" + name + "` imports [" + Iterator::from_array(imports).imap(|s| "`" + s + "`").join(", ") + "]."
 );
 
 main : IO ();

@@ -1,16 +1,16 @@
 module Main;
 
-pythagoras_triplets : I64 -> Iterator (I64, I64, I64);
+pythagoras_triplets : I64 -> DynIterator (I64, I64, I64);
 pythagoras_triplets = |limit| (
-    let a = *Iterator::range(1, limit+1);
-    let b = *Iterator::range(a, limit+1);
-    let c = *Iterator::range(b, limit+1);
-    if a*a + b*b != c*c { Iterator::empty };
+    let a = *Iterator::range(1, limit+1).to_dyn;
+    let b = *Iterator::range(a, limit+1).to_dyn;
+    let c = *Iterator::range(b, limit+1).to_dyn;
+    if a*a + b*b != c*c { DynIterator::empty };
     pure $ (a, b, c)
 );
 
 main : IO ();
 main = (
     let triplets = pythagoras_triplets(100);
-    println $ triplets.map(to_string).intersperse(", ").concat_iter
+    println $ triplets.imap(to_string).intersperse(", ").concat_iter
 );
