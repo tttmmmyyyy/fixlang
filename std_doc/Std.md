@@ -2542,11 +2542,11 @@ Create an iterator by a function that returns element at each index.
 
 Create an iterator that generates elements by the state transition function.
 
-### `get_first : [iter : Std::Iterator] iter -> Std::Iterator::Item iter`
+### `get_first : [iter : Std::Iterator] iter -> Std::Option (Std::Iterator::Item iter)`
 
 Get the first element of an iterator.
 
-If the iterator is empty, this function aborts the program.
+If the iterator is empty, this function returns `none`.
 
 ### `get_size : [iter : Std::Iterator] iter -> Std::I64`
 
