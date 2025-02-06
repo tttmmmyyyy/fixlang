@@ -2546,7 +2546,10 @@ pub fn test_iterator_get_first() {
 
         main = (
             let iter = [1,2,3,4].to_iter;
-            assert_eq(|_|"case 1", iter.get_first, 1);;
+            assert_eq(|_|"case 1", iter.get_first, some(1));;
+
+            let iter = ([] : Array I64).to_iter;
+            assert_eq(|_|"case 2", iter.get_first, none());;
 
             pure()
         );

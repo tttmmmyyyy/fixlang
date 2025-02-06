@@ -1152,14 +1152,9 @@ namespace Iterator {
 
     // Get the first element of an iterator.
     // 
-    // If the iterator is empty, this function aborts the program.
-    get_first : [iter : Iterator] iter -> Item iter;
-    get_first = |iter| (
-        match iter.advance {
-            none() => undefined("`get_first` for empty iterator"),
-            some((_, a)) => a
-        }
-    );
+    // If the iterator is empty, this function returns `none`.
+    get_first : [iter : Iterator] iter -> Option (Item iter);
+    get_first = |iter| iter.advance.map(|(_, a)| a);
 
     // Remove the first element of an iterator.
     // 
