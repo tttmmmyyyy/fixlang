@@ -294,6 +294,8 @@ Iterators that yields no elements.
 
 #### field `f : a -> Std::Option b`
 
+### `type FlatMapIterator = Std::Iterator::FlattenIterator (Std::Iterator::MapIterator i1 a i2) i2`
+
 ### `type FlattenIterator i2 i1 = unbox struct { ...fields... }`
 
 #### field `i2 : i2`
@@ -371,6 +373,12 @@ Takes at most `n` elements from an iterator.
 #### field `iter1 : i1`
 
 #### field `iter2 : i2`
+
+## `namespace Std::Option`
+
+### `type OptionIterator opt = unbox struct { ...fields... }`
+
+#### field `opt : opt`
 
 ## `namespace Std::String`
 
@@ -816,6 +824,8 @@ Creates an empty dynamic iterator.
 ### `impl [a : Std::Eq] Std::Option a : Std::Eq`
 
 ### `impl [a : Std::ToString] Std::Option a : Std::ToString`
+
+### `impl Std::Option::OptionIterator (Std::Option a) : Std::Iterator`
 
 ### `impl Std::Ptr : Std::Eq`
 
@@ -2504,6 +2514,8 @@ Filter and map the elements of an iterator.
 
 `iter.filter_map(f)` returns an iterator that applies `f` to each element of `iter` and yields the result if it is `some`.
 
+### `flat_map : [i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] (a -> i2) -> i1 -> Std::Iterator::FlatMapIterator i1 a i2`
+
 ### `flatten : [i2 : Std::Iterator, i1 : Std::Iterator, Std::Iterator::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
 
 Flatten an iterator of iterators.
@@ -2540,12 +2552,6 @@ If the iterator is empty, this function aborts the program.
 
 Get the number of elements in an iterator.
 
-### `imap : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
-
-Map a function over an iterator.
-
-`iter.imap(f)` returns an iterator that applies `f` to each element of `iter`.
-
 ### `intersperse : [i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::IntersperseIterator i a`
 
 Intersperse an element between elements of an iterator.
@@ -2572,6 +2578,12 @@ This function is similar to `fold` but a more general version of it. It allows t
 ### `loop_iter_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
 
 Loop over the elements of an iterator by monadic action.
+
+### `map : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
+
+Map a function over an iterator.
+
+`iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
 
 ### `pop_front : [iter : Std::Iterator] iter -> iter`
 
@@ -2719,6 +2731,10 @@ Unwrap an option value if it is `some`, or returns given default value if it is 
 ### `map_or : b -> (a -> b) -> Std::Option a -> b`
 
 Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
+
+### `to_iter : Std::Option a -> Std::Option::OptionIterator (Std::Option a)`
+
+Converts an option into an iterator.
 
 ## `namespace Std::Ptr`
 

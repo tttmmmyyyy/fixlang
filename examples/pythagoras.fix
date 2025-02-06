@@ -12,5 +12,5 @@ pythagoras_triplets = |limit| (
 main : IO ();
 main = (
     let triplets = pythagoras_triplets(100);
-    println $ triplets.imap(to_string).intersperse(", ").concat_iter
+    println $ triplets.Iterator::map(to_string).intersperse(", ").concat_iter
 );

@@ -41,7 +41,7 @@ extend = |xs, ys| xs.to_iter.fold(ys, |x, ys| ys.insert(x));
 
 // Take a collection whose element type implements `ToString` trait, and stringify the collection.
 stringify : [c : Collects, Elem c = e, e : ToString, Iterator c = it, it : Iterator, Iterator::Item it = e] c -> String;
-stringify = |xs| xs.to_iter.imap(to_string).join(", ");
+stringify = |xs| xs.to_iter.map(to_string).join(", ");
 
 main : IO ();
 main = (

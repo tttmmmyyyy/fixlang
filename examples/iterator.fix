@@ -16,7 +16,7 @@ count_divs = |n| (
     Iterator::count_up(1) // Generate an infinite iterator `1, 2, 3, ...` which are candidates for divisors of `n`.
         .take_while(|d| d*d <= n) // Take elements less than or equal to root of `n`.
         .filter(|d| n%d == 0) // Take only divisors.
-        .imap(|d| if d*d == n { 1 } else { 2 }) // Convert a divisor into the size of the group it belongs to.
+        .map(|d| if d*d == n { 1 } else { 2 }) // Convert a divisor into the size of the group it belongs to.
         .fold(0, Add::add) // Sum up the iterator. `fold` folds an iterator by an operator (two-variable function). 
         // `Add::add : I64 -> I64 -> I64` adds two integers.
 );
@@ -25,10 +25,10 @@ count_divs = |n| (
 rationals : DynIterator (I64, I64); // Pair of numerator and denominator.
 rationals = (
     Iterator::count_up(1) // Iterator of denominators
-        .imap(|d| (
+        .map(|d| (
             Iterator::range(1, d) // Iterator of numerators
                 .filter(|n| gcd(n, d) == 1) // Filter out numerators which has common factor with the denominator.
-                .imap(|n| (n, d)) // Make pair of numerator and denominator.
+                .map(|n| (n, d)) // Make pair of numerator and denominator.
         ))
         .flatten.to_dyn // `flatten : Iterator (Iterator a) -> Iterator a`
 );
@@ -39,6 +39,6 @@ stringify_rational = |(n, d)| n.to_string + "/" + d.to_string;
 main : IO ();
 main = (
     println $ "Number of divisors of 100 is " + count_divs(100).to_string + ".";;
-    println $ "First 100 rationals : " + rationals.take(100).imap(stringify_rational).join(", ");;
+    println $ "First 100 rationals : " + rationals.take(100).map(stringify_rational).join(", ");;
     pure()
 );

@@ -379,7 +379,7 @@ impl Array : Monad {
 }
 
 impl [a : ToString] Array a : ToString {
-    to_string = |arr| ("[" + arr.to_iter.imap(to_string).join(", ") + "]");
+    to_string = |arr| ("[" + arr.to_iter.map(to_string).join(", ") + "]");
 }
 
 impl Arrow a : Functor {
@@ -1140,7 +1140,7 @@ namespace Iterator {
 
     // Create an iterator by a function that returns element at each index.
     from_map : (I64 -> a) -> MapIterator CountUpIterator I64 a;
-    from_map = |f| count_up(0).imap(f);
+    from_map = |f| count_up(0).map(f);
 
     /*
         Extract information from iterators.
@@ -1193,9 +1193,9 @@ namespace Iterator {
 
     // Map a function over an iterator.
     // 
-    // `iter.imap(f)` returns an iterator that applies `f` to each element of `iter`.
-    imap : [i : Iterator, Item i = a] (a -> b) -> i -> MapIterator i a b;
-    imap = |f, iter| MapIterator { iter: iter, f: f };
+    // `iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
+    map : [i : Iterator, Item i = a] (a -> b) -> i -> MapIterator i a b;
+    map = |f, iter| MapIterator { iter: iter, f: f };
 
     type FilterIterator i a = unbox struct { iter : i, pred : a -> Bool };
     impl [i : Iterator, Item i = a] FilterIterator i a : Iterator {
@@ -1266,7 +1266,7 @@ namespace Iterator {
     type FlatMapIterator i1 a i2 = FlattenIterator (MapIterator i1 a i2) i2;
 
     flat_map : [i1 : Iterator, Item i1 = a, i2 : Iterator, Item i2 = b] (a -> i2) -> i1 -> FlatMapIterator i1 a i2;
-    flat_map = |f, iter| iter.imap(f).flatten;
+    flat_map = |f, iter| iter.map(f).flatten;
 
     type ProductIterator i1 i2 a b = unbox struct { iter1 : i1, iter2 : i2, e2 : Option b, iter1_org : i1 };
     impl [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = b] ProductIterator i1 i2 a b : Iterator {
@@ -1502,7 +1502,7 @@ namespace Iterator {
 
         impl DynIterator : Monad {
             pure = |e| Iterator::empty.push_front(e).to_dyn;
-            bind = |f, xs| xs.imap(f).flatten.to_dyn;
+            bind = |f, xs| xs.Iterator::map(f).flatten.to_dyn;
         }
     }
 }
@@ -1739,7 +1739,7 @@ namespace String {
     // Concatenate an iterator of strings.
     concat_iter : [strs : Iterator, Item strs = String] strs -> String;
     concat_iter = |iter| (
-        let len = iter.imap(get_size).fold(0, add);
+        let len = iter.map(get_size).fold(0, add);
         let data_len = len + 1; // Add space for null terminator.
         let data = "".@_data.reserve(data_len);
         let data = iter.fold(data, |str, data| data.pop_back.append(str.@_data));

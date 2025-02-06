@@ -1779,7 +1779,7 @@ pub fn test77() {
         let iter0 = Iterator::count_up(5);
         let iter1 = Iterator::from_map(|i| 2*i);
         let iter = iter0.zip(iter1);
-        let iter = iter.imap(|(a,b)| a+b).take(3);
+        let iter = iter.map(|(a,b)| a+b).take(3);
         let res = iter.fold(0, add);
         assert_eq(|_|"case 1", res, (5+2*0) + (6+2*1) + (7+2*2));;
 
@@ -1798,7 +1798,7 @@ pub fn test78() {
     main = (
         let iter = Iterator::count_up(1).take(100);
         let iter = iter.filter(|n| n%3 == 0 || n%5 == 0);
-        let count = iter.imap(|_|1).fold(0, add);
+        let count = iter.map(|_|1).fold(0, add);
         assert_eq(|_|"", count, 100/3 + 100/5 - 100/15);;
         pure()
     );
@@ -3092,7 +3092,7 @@ pub fn test_destructor() {
             let dtor0 = Destructor { 
                 _value : [1,2,3], 
                 dtor : |val| (
-                    let arr_str = val.to_iter.imap(to_string).join(", ");
+                    let arr_str = val.to_iter.map(to_string).join(", ");
                     println("dtor0 destructed. val: " + arr_str);;
                     pure $ val
                 )
@@ -5654,12 +5654,12 @@ pub fn test_associated_type_collects() {
     has_equal_elements = |xs, ys| xs.to_array == ys.to_array;
 
     stringify : [c : Collects, Elem c = e, e : ToString] c -> String;
-    stringify = |xs| xs.to_array.to_iter.imap(to_string).join(", ");
+    stringify = |xs| xs.to_array.to_iter.map(to_string).join(", ");
 
     type Wrapper c = struct { data : c };
 
     impl [c : Collects, Elem c = e, e : ToString] Wrapper c : ToString {
-        to_string = |xs| xs.@data.to_array.to_iter.imap(to_string).join(", ");
+        to_string = |xs| xs.@data.to_array.to_iter.map(to_string).join(", ");
     }
 
     impl [c : Collects] Wrapper c : Collects {
@@ -6212,12 +6212,12 @@ pub fn test_monadic_bind_and_make_struct_ordering() {
         main = (
             let pairs = do { pure $ Pair { x : *[1, 2], y : *["a", "b"] } }; // Fix `x` first, and move `y`
             assert_eq(|_|"", 
-                            pairs.to_iter.imap(to_string).join(", "), 
+                            pairs.to_iter.map(to_string).join(", "), 
                             "(1, a), (1, b), (2, a), (2, b)");;
 
             let pairs = do { pure $ Pair { y : *["a", "b"], x : *[1, 2] } }; // Fix `y` first, and move `x`.
             assert_eq(|_|"", 
-                            pairs.to_iter.imap(to_string).join(", "), 
+                            pairs.to_iter.map(to_string).join(", "), 
                             "(1, a), (2, a), (1, b), (2, b)");;
             pure()
         );
