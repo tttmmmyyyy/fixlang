@@ -1156,6 +1156,12 @@ namespace Iterator {
     get_first : [iter : Iterator] iter -> Option (Item iter);
     get_first = |iter| iter.advance.map(|(_, a)| a);
 
+    // Get the tail of an iterator.
+    // 
+    // If the iterator is empty, this function returns `none`.
+    get_tail : [iter : Iterator] iter -> Option iter;
+    get_tail = |iter| iter.advance.map(|(iter, _)| iter);
+
     // Remove the first element of an iterator.
     // 
     // If the iterator is empty, this function does nothing.

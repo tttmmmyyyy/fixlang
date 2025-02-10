@@ -2539,7 +2539,7 @@ pub fn test101() {
 }
 
 #[test]
-pub fn test_iterator_get_first() {
+pub fn test_iterator_get_first_get_tail() {
     let source = r#"
         module Main; 
         main : IO ();
@@ -2547,9 +2547,11 @@ pub fn test_iterator_get_first() {
         main = (
             let iter = [1,2,3,4].to_iter;
             assert_eq(|_|"case 1", iter.get_first, some(1));;
+            assert(|_|"case 2", iter.get_tail.as_some.is_equal([2, 3, 4].to_iter));;
 
             let iter = ([] : Array I64).to_iter;
             assert_eq(|_|"case 2", iter.get_first, none());;
+            assert(|_|"case 3", iter.get_tail.is_none);;
 
             pure()
         );
