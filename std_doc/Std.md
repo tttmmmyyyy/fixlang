@@ -2552,6 +2552,12 @@ If the iterator is empty, this function returns `none`.
 
 Get the number of elements in an iterator.
 
+### `get_tail : [iter : Std::Iterator] iter -> Std::Option iter`
+
+Get the tail of an iterator.
+
+If the iterator is empty, this function returns `none`.
+
 ### `intersperse : [i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::IntersperseIterator i a`
 
 Intersperse an element between elements of an iterator.
@@ -2585,7 +2591,7 @@ Map a function over an iterator.
 
 `iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
 
-### `pop_front : [iter : Std::Iterator] iter -> iter`
+### `pop_first : [iter : Std::Iterator] iter -> iter`
 
 Remove the first element of an iterator.
 

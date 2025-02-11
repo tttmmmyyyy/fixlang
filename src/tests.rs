@@ -4299,6 +4299,7 @@ pub fn test_string_split() {
         
     main : IO ();
     main = (
+
         assert_eq(|_|"Ex. 1", "ab,c,".split(",").to_array, ["ab", "c", ""]);;
         assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
         assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
@@ -4409,6 +4410,76 @@ pub fn test_large_tuple() {
     main : IO ();
     main = (
         let x = (1,2,3,4,5,6,7,8,9,10);
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_fold() {
+    let source = r##"
+    module Main;
+        
+    main : IO ();
+    main = (
+        let n = 100;
+        let ans = n * (n - 1) / 2;
+        let res = Iterator::range(0, n).fold(0, |sum, i| sum + i);
+        assert_eq(|_|"", res, ans);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_loop_iter() {
+    let source = r##"
+    module Main;
+        
+    main : IO ();
+    main = (
+        let n = 100;
+        let ans = n * (n - 1) / 2;
+
+        let res = Iterator::range(0, 2*n).loop_iter(0, |i, sum| if i == n { break(sum) } else { continue(sum + i) });
+        assert_eq(|_|"", res, ans);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_to_array() {
+    let source = r##"
+    module Main;
+        
+    main : IO ();
+    main = (
+
+        let arr = ["0", "1", "2", "3", "4"];
+        assert_eq(|_|"", arr.to_iter.to_array, arr);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_flatten() {
+    let source = r##"
+    module Main;
+        
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [[1, 2, 3], [], [4, 5, 6]].to_iter.map(to_iter).flatten.to_array, [1, 2, 3, 4, 5, 6]);;
+        assert_eq(|_|"", [[] : Array I64].to_iter.map(Array::to_iter).flatten.to_array, []);;
+        assert_eq(|_|"", ([] : Array (Array I64)).to_iter.map(Array::to_iter).flatten.to_array, []);;
+        assert_eq(|_|"", [Iterator::range(1, 4), Iterator::range(4, 4), Iterator::range(4, 7)].to_iter.flatten.to_array, Iterator::range(1, 7).to_array);;
+
         pure()
     );
     "##;
@@ -5821,6 +5892,298 @@ pub fn test_iterator_product() {
     main : IO ();
     main = (
         assert_eq(|_|"", [1, 2, 3].to_iter.product(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);;
+        assert_eq(|_|"", [1, 2, 3].to_iter.product(([] : Array U8).to_iter).to_array, []);;
+        assert_eq(|_|"", ([] : Array I64).to_iter.product(['a', 'b'].to_iter).to_array, []);;
+        assert_eq(|_|"", ([] : Array I64).to_iter.product(([] : Array U8).to_iter).to_array, []);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_filtermap() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        let n = 50;
+        let (triples, time) = consumed_time_while_lazy(|_|
+            let r1 = range(1, n);
+            let r2 = range(1, 2*n*n);
+            r1.product(r1).product(r2).filter_map(|((a, b), c)|
+                if a > b { none() };
+                if a*a + b*b != c*c { none() };
+                some((a, b, c))
+            ).to_array
+        );
+        println("pythagorean_triple: " + time.to_string);;
+        assert_eq(|_|"pythagorean_triple", triples, [
+            (3, 4, 5), (6, 8, 10), (5, 12, 13), (9, 12, 15), (8, 15, 17), (12, 16, 20), (15, 20, 25), (7, 24, 25), (10, 24, 26),
+            (20, 21, 29), (18, 24, 30), (16, 30, 34), (21, 28, 35), (12, 35, 37), (15, 36, 39), (24, 32, 40), (9, 40, 41), (27, 36, 45),
+            (30, 40, 50), (14, 48, 50), (24, 45, 51), (20, 48, 52), (28, 45, 53), (33, 44, 55), (40, 42, 58), (36, 48, 60)
+        ]);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_get_size() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1, 2, 3].to_iter.get_size, 3);;
+        assert_eq(|_|"", ([] : Array I64).to_iter.get_size, 0);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_empty() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", (empty : EmptyIterator I64).get_size, 0);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_pop_first() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", range(1, 4).pop_first.to_array, [2, 3]);;
+        assert_eq(|_|"", range(0, 0).pop_first.to_array, []);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_is_empty() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", range(1, 4).is_empty, false);;
+        assert_eq(|_|"", range(0, 0).is_empty, true);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_fold_m() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        range(0, 10).fold_m(0, |i, sum|
+            let sum = sum + i;
+            assert_eq(|_|"", sum, i * (i + 1) / 2);;
+            pure $ sum
+        );;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_loop_iter_m() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        range(0, 20).loop_iter_m(0, |i, sum|
+            if i == 10 { break_m $ sum };
+            let sum = sum + i;
+            assert_eq(|_|"", sum, i * (i + 1) / 2);;
+            continue_m $ sum
+        );;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_generate() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        let iter = Iterator::generate(0, |_| Option::none());
+        assert_eq(|_|"", iter.to_array, [] : Array I64);;
+
+        let iter = Iterator::generate(0, |i| if i == 3 { Option::none() } else { Option::some $ (i+1, i) });
+        assert_eq(|_|"", iter.to_array, [0, 1, 2]);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_intersperse() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", range(1, 4).intersperse(0).to_array, [1, 0, 2, 0, 3]);;
+        assert_eq(|_|"", range(1, 2).intersperse(0).to_array, [1]);;
+        assert_eq(|_|"", range(1, 1).intersperse(0).to_array, [] : Array I64);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_take() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", range(1, 4).take(2).to_array, [1, 2]);;
+        assert_eq(|_|"", range(1, 4).take(0).to_array, [] : Array I64);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_zip() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", range(1, 4).zip(range(4, 10)).to_array, [(1, 4), (2, 5), (3, 6)]);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_monad() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        let iter = do {
+            let x = *Iterator::range(1, 4).to_dyn;
+            let y = *['A', 'B'].to_iter.to_dyn;
+            pure $ (x, y)
+        };
+        assert_eq(|_|"", iter.to_array, [(1, 'A'), (1, 'B'), (2, 'A'), (2, 'B'), (3, 'A'), (3, 'B')]);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_iterator_collect_m() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        let res = [some(1), some(2), some(3)].to_iter.collect_m;
+        assert_eq(|_|"", res, some([1, 2, 3]));;
+
+        let res = [some(1), some(2), none()].to_iter.collect_m;
+        assert_eq(|_|"", res, none());;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_range_step_1() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"A-2", Iterator::range_step(0, 10, -1).take(100).get_size, 100);;
+        assert_eq(|_|"A-1", Iterator::range_step(0, 10, 0).take(100).get_size, 100);;
+        assert_eq(|_|"A0", Iterator::range_step(0, 10, 0).take(100).get_size, 100);;
+        assert_eq(|_|"A1", Iterator::range_step(0, 10, 1).to_array, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);;
+        assert_eq(|_|"A2", Iterator::range_step(0, 10, 2).to_array, [0, 2, 4, 6, 8]);;
+        assert_eq(|_|"A3", Iterator::range_step(0, 10, 3).to_array, [0, 3, 6, 9]);;
+        assert_eq(|_|"A4", Iterator::range_step(0, 10, 4).to_array, [0, 4, 8]);;
+        assert_eq(|_|"A5", Iterator::range_step(0, 10, 5).to_array, [0, 5]);;
+        assert_eq(|_|"A6", Iterator::range_step(0, 10, 6).to_array, [0, 6]);;
+        assert_eq(|_|"A7", Iterator::range_step(0, 10, 7).to_array, [0, 7]);;
+        assert_eq(|_|"A8", Iterator::range_step(0, 10, 8).to_array, [0, 8]);;
+        assert_eq(|_|"A9", Iterator::range_step(0, 10, 9).to_array, [0, 9]);;
+        assert_eq(|_|"A10", Iterator::range_step(0, 10, 10).to_array, [0]);;
+        assert_eq(|_|"A11", Iterator::range_step(0, 10, 11).to_array, [0]);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_range_step_2() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+
+        assert_eq(|_|"B2", Iterator::range_step(10, 0, 2).take(100).get_size, 100);;
+        assert_eq(|_|"B1", Iterator::range_step(10, 0, 1).take(100).get_size, 100);;
+        assert_eq(|_|"B0", Iterator::range_step(10, 0, 0).take(100).get_size, 100);;
+        assert_eq(|_|"B-1", Iterator::range_step(10, 0, -1).to_array, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);;
+        assert_eq(|_|"B-2", Iterator::range_step(10, 0, -2).to_array, [10, 8, 6, 4, 2]);;
+        assert_eq(|_|"B-3", Iterator::range_step(10, 0, -3).to_array, [10, 7, 4, 1]);;
+        assert_eq(|_|"B-4", Iterator::range_step(10, 0, -4).to_array, [10, 6, 2]);;
+        assert_eq(|_|"B-5", Iterator::range_step(10, 0, -5).to_array, [10, 5]);;
+        assert_eq(|_|"B-6", Iterator::range_step(10, 0, -6).to_array, [10, 4]);;
+        assert_eq(|_|"B-7", Iterator::range_step(10, 0, -7).to_array, [10, 3]);;
+        assert_eq(|_|"B-8", Iterator::range_step(10, 0, -8).to_array, [10, 2]);;
+        assert_eq(|_|"B-9", Iterator::range_step(10, 0, -9).to_array, [10, 1]);;
+        assert_eq(|_|"B-10", Iterator::range_step(10, 0, -10).to_array, [10]);;
+        assert_eq(|_|"B-11", Iterator::range_step(10, 0, -11).to_array, [10]);;
+
+        assert_eq(|_|"C1", Iterator::range_step(0, 0, 1).get_size, 0);;
+        assert_eq(|_|"C0", Iterator::range_step(0, 0, 0).get_size, 0);;
+        assert_eq(|_|"C-1", Iterator::range_step(0, 0, -1).get_size, 0);;
+
         pure()
     );
     "##;
@@ -5832,6 +6195,17 @@ pub fn test_iterator_flat_map() {
     let source = r##"
     module Main;
     
+    pythagorean_triples : I64 -> DynIterator (I64, I64, I64);
+    pythagorean_triples = |limit| (
+        Iterator::range(1, limit+1).flat_map(|a| (
+            Iterator::range(a, limit+1).flat_map(|b| (
+                Iterator::range(b, limit+1).filter(|c| (
+                    a*a + b*b == c*c
+                )).map(|c| (a, b, c))
+            ))
+        )).to_dyn
+    );
+
     main : IO ();
     main = (
         let f = |x| range(0, max(0, x));
@@ -5839,6 +6213,8 @@ pub fn test_iterator_flat_map() {
         assert(|_|"", it.is_equal([0, 0, 1, 0, 1, 2].to_iter));;
 
         assert(|_|"", [].to_iter.flat_map(f).is_equal(Iterator::empty));;
+
+        assert(|_|"", pythagorean_triples(100).is_equal([(3, 4, 5), (5, 12, 13), (6, 8, 10), (7, 24, 25), (8, 15, 17), (9, 12, 15), (9, 40, 41), (10, 24, 26), (11, 60, 61), (12, 16, 20), (12, 35, 37), (13, 84, 85), (14, 48, 50), (15, 20, 25), (15, 36, 39), (16, 30, 34), (16, 63, 65), (18, 24, 30), (18, 80, 82), (20, 21, 29), (20, 48, 52), (21, 28, 35), (21, 72, 75), (24, 32, 40), (24, 45, 51), (24, 70, 74), (25, 60, 65), (27, 36, 45), (28, 45, 53), (28, 96, 100), (30, 40, 50), (30, 72, 78), (32, 60, 68), (33, 44, 55), (33, 56, 65), (35, 84, 91), (36, 48, 60), (36, 77, 85), (39, 52, 65), (39, 80, 89), (40, 42, 58), (40, 75, 85), (42, 56, 70), (45, 60, 75), (48, 55, 73), (48, 64, 80), (51, 68, 85), (54, 72, 90), (57, 76, 95), (60, 63, 87), (60, 80, 100), (65, 72, 97)].to_iter));;
 
         pure()
     );

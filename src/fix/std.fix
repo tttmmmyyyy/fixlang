@@ -1165,8 +1165,8 @@ namespace Iterator {
     // Remove the first element of an iterator.
     // 
     // If the iterator is empty, this function does nothing.
-    pop_front : [iter : Iterator] iter -> iter;
-    pop_front = |iter| (
+    pop_first : [iter : Iterator] iter -> iter;
+    pop_first = |iter| (
         match iter.advance {
             none() => iter,
             some((iter, _)) => iter
