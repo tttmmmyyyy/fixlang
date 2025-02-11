@@ -1,7 +1,7 @@
 # Table of contents
 
 - [Table of contents](#table-of-contents)
-- [Tutorial by Fibonacci sequence](#tutorial-by-fibonacci-sequence)
+- [Tutorial](#tutorial)
   - [Set up the tools](#set-up-the-tools)
     - [Fix compiler](#fix-compiler)
       - [Bulid from source](#bulid-from-source)
@@ -83,7 +83,7 @@
   - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
 
-# Tutorial by Fibonacci sequence
+# Tutorial
 
 ## Set up the tools
 

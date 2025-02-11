@@ -443,9 +443,10 @@ Checks equality of two values. An expression `x == y` is translated to `eq(x, y)
 
 ### `trait iter : Iterator`
 
-A trait of iterators.
+The trait of iterators.
 
-Typically, an iterator consists of a sequence of elements and a cursor to the current element.
+Iterator is a concept of a sequence of elements that can be iterated.
+More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
 
 #### associated type `Item iter`
 
@@ -2524,7 +2525,7 @@ Flatten an iterator of iterators.
 
 Fold the elements of an iterator from left to right.
 
-Conceptually, `[a0, a1, a2, ...].fold(s, op) = s.op(a0).op(a1).op(a2)...`.
+Conceptually, `[a0, a1, a2, ...].to_iter.fold(s, op) = s.op(a0).op(a1).op(a2)...`.
 
 ### `fold_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
 
@@ -2579,7 +2580,7 @@ Compare two iterators by their elements.
 
 Loop over the elements of an iterator.
 
-This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop early.
+This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop at any point.
 
 ### `loop_iter_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
 
