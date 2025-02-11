@@ -1,6 +1,6 @@
 module Main;
 
-pythagorean_triples : I64 -> DynIterator (I64, I64, I64);
+pythagorean_triples : I64 -> Array (I64, I64, I64);
 pythagorean_triples = |limit| (
     Iterator::range(1, limit+1).flat_map(|a| (
         Iterator::range(a, limit+1).flat_map(|b| (
@@ -8,11 +8,11 @@ pythagorean_triples = |limit| (
                 a*a + b*b == c*c
             )).map(|c| (a, b, c))
         ))
-    )).to_dyn
+    )).to_array
 );
 
 main : IO ();
 main = (
     let triplets = pythagorean_triples(100);
-    println $ triplets.Iterator::map(to_string).intersperse(", ").concat_iter
+    println $ triplets.to_iter.map(to_string).intersperse(", ").concat_iter
 );

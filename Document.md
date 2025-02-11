@@ -1,7 +1,7 @@
 # Table of contents
 
 - [Table of contents](#table-of-contents)
-- [Tutorial](#tutorial)
+- [Tutorial by Fibonacci sequence](#tutorial-by-fibonacci-sequence)
   - [Set up the tools](#set-up-the-tools)
     - [Fix compiler](#fix-compiler)
       - [Bulid from source](#bulid-from-source)
@@ -24,6 +24,7 @@
   - [Unions](#unions)
   - [Structs](#structs)
   - [Iterators](#iterators)
+    - [Side note: Dynamic iterators](#side-note-dynamic-iterators)
   - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
   - [A bit on IO (or monads)](#a-bit-on-io-or-monads)
 - [More on language](#more-on-language)
@@ -56,9 +57,10 @@
     - [What is monad?](#what-is-monad)
       - [State-like monads](#state-like-monads)
       - [Result-like monads](#result-like-monads)
-      - [List-like monads](#list-like-monads)
+      - [Array-like monads](#array-like-monads)
     - [`do` block and monadic bind operator `*`](#do-block-and-monadic-bind-operator-)
     - [Chaining monadic actions by `;;` syntax](#chaining-monadic-actions-by--syntax)
+    - [Note on iterators](#note-on-iterators)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
     - [Tuples and unit](#tuples-and-unit)
@@ -81,7 +83,7 @@
   - [Language Server Protocol](#language-server-protocol)
   - [Debugging](#debugging)
 
-# Tutorial
+# Tutorial by Fibonacci sequence
 
 ## Set up the tools
 
@@ -582,73 +584,151 @@ Now I explain about the expression `fib.to_iter.map(to_string).join(", ")`, wher
 - concatenates these strings separated by `", "`,
 - results in a string "1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040".
 
-Like array, iterator (a.k.a. "lazy list") is a way to represent sequences. 
-Whereas an array stores the values of all elements in memory at the same time, an iterator only has a function to compute the next element and the next iterator. 
-In fact, iterator in Fix is defined as follows:
+An iterator is a concept of a sequence of elements that can be iterated similar to arrays or singly linked lists.
+More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
+
+Since it does not store all data in memory at once like arrays or singly linked lists, iterators can use memory efficiently.
+Also, it can represent an infinite sequence of data.
+
+In Fix, an iterator is defined as the following trait.
 
 ```
-type Iterator a = unbox struct { next: () -> Option (a, Iterator a) };
+// The trait of iterators.
+// 
+// Iterator is a concept of a sequence of elements that can be iterated.
+// More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
+trait iter : Iterator {
+    type Item iter;
+    advance : iter -> Option (iter, Item iter);
+}
 ```
 
-(You don't need to understand `unbox` specifier at now.)
+A trait is a concept that represents the properties that a type should satisfy.
+The above definition indicates that a type `iter` should have a type `Item iter` and a state transition function `advance` to be an `Iterator`.
 
-The above definition indicates that the `Iterator` is a struct with only one field `next` of type `() -> Option (a, Iterator a)`.
-
-The fundamental API (method) of `Iterator` is `advance` function, which just extract the `next` field from an iterator and calls it on `()`:
-```
-// Get next value and next iterator.
-advance : Iterator a -> Option (a, Iterator a);
-advance = |iter| (iter.@next)();
-```
-
-You can define an iterator that produces infinite sequence of zeros (0, 0, 0, ...) as follows: 
-```
-zeros : Iterator I64;
-zeros = Iterator { next: |_| some $ (0, zeros) };
-```
-
-That is, if `advance` is called on `zeros`, it always returns `some` value (because it is an infinite sequence). If the programmer unwraps the `some` value, he obtains `0` as the value and `zeros` again as the next iterator.
+Let's see a simple example of an iterator.
+An iterator that counts up from a number is created by the following function.
 
 ```
-let iter = zeros;
-let (x, iter) = iter.advance.as_some; // x == 0
-let (y, iter) = iter.advance.as_some; // y == 0
-let (z, iter) = iter.advance.as_some; // z == 0
-...
+// Create an iterator that counts up from a number.
+// 
+// `count_up(start)` generates an infinite sequence of numbers starting from `start`.
+count_up : I64 -> CountUpIterator;
+count_up = |start| CountUpIterator { next: start };
 ```
 
-Since an iterator only has a function as a data, it consumes only a small memory. If we want to apply a function `f : a -> b` to each element of an array `arr : Array a` producing a new array of type `Array b`, we need to allocate an memory for the resulting array, which may be large. On the other hand, applying `f` to an iterator of `Iterator a` to produce an iterator of type `Iterator b` is faster and only needs small memory allocation, because any element of an iterator is not calculated until `advance` will be called. This operation is provided as `map` method of `Iterator`:
-
-- `map : (a -> b) -> Iterator a -> Iterator b`
-
-This can be defined as follows:
+Here is the definition of `CountUpIterator` and the implementation of `Iterator` trait.
 
 ```
-map : (a -> b) -> Iterator a -> Iterator b;
-map = |f, iter| (
-    let next = |_| (
-        let adv = iter.advance;
-        if adv.is_none { none() };
-        let (val, iter_next) = adv.as_some;
-        some $ (f(val), iter_next.map(f))
+type CountUpIterator = unbox struct { next : I64 };
+
+impl CountUpIterator : Iterator {
+    type Item CountUpIterator = I64;
+    advance = |CountUpIterator { next : next }| some((CountUpIterator { next: next + 1 }, next));
+}
+```
+
+In the expression `fib.to_iter.map(to_string).join(", ")` of the example program, first, the array is converted to an iterator by the `to_iter` function.
+The type of the `to_iter` function is as follows.
+
+```
+// Converts an array to an iterator.
+to_iter : Array a -> ArrayIterator a;
+```
+
+`ArrayIterator` is a type that holds an array and the current index as data, and an implementation of `ArrayIterator a : Iterator` is given in the standard library.
+
+`map` is a function that applies a function to each element of an iterator and generates a new iterator.
+
+```
+// Map a function over an iterator.
+// 
+// `iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
+map : [i : Iterator, Item i = a] (a -> b) -> i -> MapIterator i a b;
+```
+
+`to_string` is a function that converts an integer to a string, and by `map(to_string)`, the iterator of integers is converted to the iterator of strings.
+
+`join` is a function that takes an iterator of strings and a separator, and joins the strings.
+
+```
+// Joins (an iterator of) strings by a separator.
+join : [ss : Iterator, Item ss = String] String -> ss -> String;
+```
+
+I hope you can understand the behavior of `fib.to_iter.map(to_string).join(", ")` now.
+
+In the example program, I introduced the `loop` function to realize loops, but sometimes it is more concise to create an iterator of the range to loop over and use a function to loop along the iterator.
+
+A representative example of a function that loops along an iterator is `fold`.
+
+```
+// Fold the elements of an iterator from left to right.
+//
+// Conceptually, `[a0, a1, a2, ...].fold(s, op) = s.op(a0).op(a1).op(a2)...`.
+fold : [iter : Iterator, Item iter = a] s -> (a -> s -> s) -> iter -> s;
+```
+
+The `fold` function creates state update functions `op(a0)`, `op(a1)`, ... from the elements of the iterator, and applies these state update functions in order to calculate the final state.
+
+By using `fold`, the `calc_fib` function in the example program can be written as follows.
+
+```
+calc_fib : I64 -> Array I64;
+calc_fib = |n| (
+    let arr = Array::fill(n, 0);
+    let arr = arr.set(0, 1);
+    let arr = arr.set(1, 1);
+    let arr = Iterator::range(2, n).fold(arr, |idx, arr|
+        let x = arr.@(idx-1);
+        let y = arr.@(idx-2);
+        arr.set(idx, x+y)
     );
-    Iterator { next: next }
+    arr
 );
 ```
 
-Going back to the Fibonacci program, there are more two functions related to `Iterator` used:
+Note that `fold` cannot break in the middle of the loop. If you need to break in the middle, use the `loop_iter` function.
 
-- `to_iter : Array a -> Iterator a`: converts an array into an iterator.
-- `join : String -> Iterator String -> String`: concatenates strings in an iterator separated by a specified string. (This is defined in `Std::String` namespace, not in `Std::Iterator`.)
+```
+// Loop over the elements of an iterator.
+// 
+// This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop at any point.
+loop_iter : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s s) -> iter -> s;
+```
 
-For example, `["Hello", "World!"].to_iter.join(" ") == "Hello World!"`.
+### Side note: Dynamic iterators
 
-In the last, `to_string : I64 -> String` is a function that converts an integer to a decimal string.
+In Fix, the type of an iterator depends on how it is created.
 
-NOTE:
-There is more efficient implementation of iterators than one in `Std::Iterator`. 
-It will be improved in a future, but currently it is provided as an library -- `fast-iter`, https://github.com/tttmmmyyyy/fixlang-fast-iter.
-If you are going to use iterators in your program, I recommend to use `fast-iter` instead of `Std::Iterator`.
+For example, the type of an iterator created from `Array a` is `ArrayIterator a`, but the type of an iterator created from `count_up` is `CountUpIterator`.
+Also, using `map` creates an iterator of a more complex type.
+The type of `fib.to_iter.map(to_string)` in the above code example is `MapIterator (ArrayIterator I64) I64 String`.
+
+This design of iterators greatly contributes to performance improvement.
+On the other hand, complicated iterator types can be an obstacle (e.g., when an iterator appears in a function's type signature, or when the method of creating an iterator is determined at runtime rather than at compile time).
+
+To avoid the problem of the complexity of iterator types, you can use the following iterator.
+
+```
+type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
+```
+
+You can convert any iterator into a `DynIterator` using the `to_dyn` function.
+
+```
+// Convert an iterator into a dynamic iterator.
+to_dyn : [iter : Iterator, Item iter = a] iter -> DynIterator a;
+```
+
+Therefore, by converting a complicated iterator into a `DynIterator`, you can simplify the type of the iterator.
+
+`DynIterator` is similar to lazy evaluation lists in Haskell in Fix.
+Therefore, if you insert `to_dyn` appropriately, you can write programs in Fix that are similar to list operations in Haskell.
+
+Why does the standard library of Fix adopt the design of defining `Iterator` as a trait rather than simply defining `DynIterator` as `Iterator` type?
+This is because the state transition function of an trait can be determined by its type, and by this, the compiler can perform optimizations such as inlining at compile time, which greatly improves performance.
+On the other hand, `DynIterator` has a state transition function as its data, so the state transition function is determined at runtime. Therefore, optimization at compile time is restricted.
 
 ## Mutation in Fix and reference counter
 
@@ -1227,52 +1307,26 @@ main = (
 
 ## Associated types
 
-An associated type is a type level function whose domain is (the set of members of) a trait.
+An associated type is a type level function whose domain is the types implementing a trait.
+A representative example is the `Iterator` trait in the standard library.
 
 ```
-module Main;
-
-// A trait for collection-like types.
-trait c : Collects {
-    // Associated type definition.
-    // Here, we define a type level function `Elem` which domain is the trait `Collects` and returns a type.
-    // When implementing `Collects` trait for a type `c`, you need to specify the value (which is a type) `Elem c`.
-    type Elem c;
-    // You can use `Elem c` in trait method definitions.
-    empty : Elem c;
-    insert : Elem c -> c -> c;
-    to_iter : c -> Iterator (Elem c);
+trait iter : Iterator {
+    type Item iter;
+    advance : iter -> Option (iter, Item iter);
 }
+```
 
-// Implementing `Collects` for arrays.
-impl Array a : Collects {
-    type Elem (Array a) = a;
-    empty = [];
-    insert = |x, xs| xs.push_back(x);
-    to_iter = |xs| Array::to_iter(xs);
-}
+Here, we define a type level function `Item`. 
+`Item` takes an iterator type (i.e., a type implementing the `Iterator` trait) and returns the type of elements generated by it.
 
-// Implementing `Collects` for iterators.
-impl Iterator a : Collects {
-    type Elem (Iterator a) = a;
-    empty = Iterator::empty;
-    insert = |x, xs| xs.push_front(x);
-    to_iter = |xs| xs;
-}
+In a type signature of a function, you can write constraints on associated types.
+For example, consider writing the type of a function that compares two iterators.
+This function should take two iterators whose `Item`s are the same and implements the `Eq` trait.
+Therefore, it has the following type:
 
-// Takes two collections with the same element type, and insert all elements of the second collection to the first one.
-extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2;
-extend = |xs, ys| xs.to_iter.fold(ys, |ys, x| ys.insert(x));
-
-// Take a collection whose element type implements `ToString` trait, and stringify the collection.
-stringify : [c : Collects, Elem c = e, e : ToString] c -> String;
-stringify = |xs| xs.to_iter.map(to_string).join(", ");
-
-main : IO ();
-main = (
-    assert_eq(|_|"", [1, 2, 3].extend([4, 5, 6]).stringify, "1, 2, 3, 4, 5, 6");;
-    pure()
-);
+```
+is_equal : [iter1 : Iterator, iter2 : Iterator, Item iter1 = a, Item iter2 = a, a : Eq] iter1 -> iter2 -> Bool;
 ```
 
 Associated type can have higher arity. 
@@ -1369,11 +1423,14 @@ trait [m : *->*] m : Monad {
 }
 ```
 
+This is the definition of monad. To learn monads, it is important to know examples.
 In the following sections, we introduce 3 typical kinds of monads used practically.
 
 #### State-like monads
 
-This kind of monad represents an "action" (a computation in an environment). In Fix's standard library, `IO` is a state-like monad where `IO a` represents an I/O action that returns a value of type `a`. As another example, the following definition
+A type which represents an "action" (a computation in an environment) becomes often a monad.
+In Fix's standard library, `IO` is a state-like monad where `IO a` represents an I/O action that returns a value of type `a`. 
+As another example, the following definition
 
 ```
 type State s a = unbox struct { run : s -> (s, a) }
@@ -1398,7 +1455,8 @@ NOTE: Actually there is no `read : IO String` defined in Fix's standard library.
 
 #### Result-like monads
 
-This kind of monad represents a value that may fail to be calculated. In Fix's standard library, `Result e` is a monad with an error `e`:
+This kind of monad represents a value that may fail to be calculated. 
+In Fix's standard library, `Result e` is a monad with an error `e`:
 
 ```
 type Result e o = unbox union { ok : o, err: e };
@@ -1432,18 +1490,20 @@ add_opt : Option I64 -> Option I64 -> Option I64;
 add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
 ```
 
-#### List-like monads
+#### Array-like monads
 
-In Fix's standard library, `Iterator` is an example of list-like monad. For list-like moads, `[x, y, z, ...].bind(f)` represents `f(x) + f(y) + f(z) + ...`, where `+` concatenates two list-like values. `bind` is sometimes called "flatMap" in other languages.
+Types representing sequences like arrays are also monads.
+In Fix's standard library, `Array` and `DynIterator` implement `Monad` trait.
+
+For array-like moads, `[x, y, z, ...].bind(f)` represents `f(x) + f(y) + f(z) + ...`, where `+` concatenates two array-like values. 
+`bind` is sometimes called "flat_map" in other languages.
 
 `pure(x)` represents an singleton value `[x]`. 
 
-NOTE: In fact `[a,b,c,...]` is an array literal, but here we are writing it as literal for list-like values.
-
-For example, consider a function `product : Iterator a -> Iterator b -> Iterator (a, b)` that calculates a cartesian product. It can be implemented as:
+For example, consider a function `product : Array a -> Array b -> Array (a, b)` that calculates a cartesian product. It can be implemented as:
 
 ```
-product : Iterator a -> Iterator b -> Iterator (a, b);
+product : Array a -> Array b -> Array (a, b);
 product = |xs, ys| xs.bind(|x| ys.bind(|y| pure $ (x, y)));
 ```
 
@@ -1459,13 +1519,17 @@ xs.bind(|x| ys.bind(|y| pure $ (x, y)))
 
 ### `do` block and monadic bind operator `*`
 
-A prefix unary operator `*` provides a way to use `bind` in more concise way. A code `B(*x)` is expanded to `x.bind(|v| B(v))`. Here, `B(*x)` is the minimal `do` block that encloses the expression `*x`. Here, `do` blocks are defined as follows:
+A prefix unary operator `*` provides a way to use `bind` in more concise way. 
+A code `B(*x)` is expanded to `x.bind(|v| B(v))`. 
+Here, `B(*x)` is the minimal `do` block that encloses the expression `*x`. 
+Here, `do` blocks are defined as follows:
 
-- You can make `do` block explicitly by `do { ... }`.
+- A `do` block can be created explicitly by `do { ... }`.
 - Lambda-expression `|arg| ...` defines a `do` block `...` implicitly.
 - Let-definition `let name = val (in|;) ...` defines a `do` block `...` implicitly.
 - Double semicolon syntax (described later) `act;; ...` defines a `do` block `...` implicitly.
-- If-expression `if cond { ... } else { ... }` defines two blocks  `...` implicitly.
+- If-expression `if cond { ... } else { ... }` defines two `do` blocks  `...` implicitly.
+- Match-expression `match val { pat => (...) }` defines `do` blocks `...` implicitly.
 - Global definition `name = ...` defines a `do` block `...` implicitly.
 
 Examples in previous sections can be written using `*` as follows:
@@ -1481,7 +1545,7 @@ add_opt = |x, y| pure $ *x + *y;
 ```
 
 ```
-product : Iterator a -> Iterator b -> Iterator (a, b);
+product : Array a -> Array b -> Array (a, b);
 product = |xs, ys| pure $ (*xs, *ys);
 ```
 
@@ -1541,6 +1605,44 @@ main = (
     println("The sum of 1 + 2 is: ");;
     println((1 + 2).to_string);;
     pure()
+);
+```
+
+### Note on iterators
+
+As already explained in the tutorial, `Iterator` is defined as a trait in Fix's standard library, not a type.
+Therefore, `Iterator` cannot implement `Monad` trait.
+
+The type `DynIterator` implements `Monad`, so you need to use `DynIterator` if you want to create and manipulate iterators using monadic syntax.
+The following is a program that enumerates Pythagorean triples `(a, b, c)` by exhaustive search for all tuples satisfying `1 <= a <= b <= c <= limit`.
+
+```
+pythagorean_triples : I64 -> DynIterator (I64, I64, I64);
+pythagorean_triples = |limit| (
+    let a = *Iterator::range(1, limit+1).to_dyn;
+    let b = *Iterator::range(a, limit+1).to_dyn;
+    let c = *Iterator::range(b, limit+1).to_dyn;
+    if a*a + b*b != c*c {
+        DynIterator::empty
+    };
+    [(a, b, c)].to_iter.to_dyn
+);
+```
+
+As already explained, `bind` for array-like monads is an operation known as `flat_map`.
+The standard library provides `flat_map` for iterators.
+Therefore, using `flat_map` can avoid using `DynIterator` and improve performance.
+
+```
+pythagorean_triples : I64 -> Array (I64, I64, I64);
+pythagorean_triples = |limit| (
+    Iterator::range(1, limit+1).flat_map(|a| (
+        Iterator::range(a, limit+1).flat_map(|b| (
+            Iterator::range(b, limit+1).filter(|c| (
+                a*a + b*b == c*c
+            )).map(|c| (a, b, c))
+        ))
+    )).to_array
 );
 ```
 

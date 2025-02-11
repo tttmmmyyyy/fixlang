@@ -928,9 +928,10 @@ impl IOFail : Monad {
     }};
 }
 
-// A trait of iterators.
+// The trait of iterators.
 // 
-// Typically, an iterator consists of a sequence of elements and a cursor to the current element.
+// Iterator is a concept of a sequence of elements that can be iterated.
+// More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
 trait iter : Iterator {
     type Item iter;
     advance : iter -> Option (iter, Item iter);
@@ -943,7 +944,7 @@ namespace Iterator {
 
     // Fold the elements of an iterator from left to right.
     //
-    // Conceptually, `[a0, a1, a2, ...].fold(s, op) = s.op(a0).op(a1).op(a2)...`.
+    // Conceptually, `[a0, a1, a2, ...].to_iter.fold(s, op) = s.op(a0).op(a1).op(a2)...`.
     fold : [iter : Iterator, Item iter = a] s -> (a -> s -> s) -> iter -> s;
     fold = |s, op, iter| (
         match iter.advance {
@@ -963,7 +964,7 @@ namespace Iterator {
 
     // Loop over the elements of an iterator.
     // 
-    // This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop early.
+    // This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop at any point.
     loop_iter : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s s) -> iter -> s;
     loop_iter = |s, body, iter| (
         match iter.advance {
