@@ -36,7 +36,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     } else {
         let mut mod_names = vec![];
         // Use all modules defined in the root project file.
-        let src_files = proj_file.get_files(true);
+        let src_files = proj_file.get_files(false);
         let abs_src_paths = src_files
             .iter()
             .map(|f| to_absolute_path(f))
