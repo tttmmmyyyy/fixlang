@@ -55,13 +55,56 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
             "Generating documentation for module `{}`.",
             mod_name.to_string()
         );
-        generate_doc(&program, &mod_name, docs_config)?;
+        docgen_for_module(&program, &mod_name, docs_config)?;
     }
     Ok(())
 }
 
+struct MarkdownBuilder {
+    // The markdown content.
+    content: String,
+    // The current section level.
+    section_level: usize,
+}
+
+impl Default for MarkdownBuilder {
+    fn default() -> Self {
+        Self {
+            content: String::new(),
+            section_level: 0,
+        }
+    }
+}
+
+impl MarkdownBuilder {
+    fn begin_section(&mut self, title: &str) {
+        if !self.content.is_empty() {
+            self.content += "\n\n";
+        }
+        self.section_level += 1;
+        self.content += &format!("{}", "#".repeat(self.section_level));
+        self.content += &format!(" {}", title);
+    }
+
+    fn end_section(&mut self) {
+        self.section_level -= 1;
+    }
+
+    fn add_paragraph(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.content += "\n\n";
+        self.content += text;
+    }
+}
+
 // Generate documentation for a Program consists of single module.
-fn generate_doc(program: &Program, mod_name: &Name, config: &DocsConfig) -> Result<(), Errors> {
+fn docgen_for_module(
+    program: &Program,
+    mod_name: &Name,
+    config: &DocsConfig,
+) -> Result<(), Errors> {
     // Check if the module exists in the program.
     if !program.modules.iter().any(|mi| mi.name == *mod_name) {
         return Err(Errors::from_msg(format!(
@@ -70,28 +113,9 @@ fn generate_doc(program: &Program, mod_name: &Name, config: &DocsConfig) -> Resu
         )));
     }
 
-    let mut doc = String::new();
+    let mut doc = MarkdownBuilder::default();
 
-    // The module name section.
-    write_module_section(program, mod_name, &mut doc);
-
-    let mut entries = vec![];
-
-    doc += "\n\n# Types and aliases";
-    type_entries(program, mod_name, &mut entries)?;
-    write_entries(&mut entries, &mut doc);
-
-    doc += "\n\n# Traits and aliases";
-    trait_entries(program, mod_name, &mut entries)?;
-    write_entries(&mut entries, &mut doc);
-
-    doc += "\n\n# Trait implementations";
-    trait_impl_entries(program, mod_name, &mut entries)?;
-    write_entries(&mut entries, &mut doc);
-
-    doc += "\n\n# Values";
-    value_entries(program, mod_name, &mut entries, config)?;
-    write_entries(&mut entries, &mut doc);
+    write_module(program, mod_name, &mut doc, config)?;
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
@@ -105,7 +129,7 @@ fn generate_doc(program: &Program, mod_name: &Name, config: &DocsConfig) -> Resu
         )));
     }
     let doc_path = config.out_dir.join(doc_file);
-    std::fs::write(&doc_path, doc).map_err(|e| {
+    std::fs::write(&doc_path, doc.content).map_err(|e| {
         Errors::from_msg(format!(
             "Failed to write file \"{}\": {:?}",
             doc_path.display(),
@@ -117,37 +141,84 @@ fn generate_doc(program: &Program, mod_name: &Name, config: &DocsConfig) -> Resu
     Ok(())
 }
 
-fn write_entries(entries: &mut Vec<Entry>, doc: &mut String) {
+fn write_entries(entries: &mut Vec<Entry>, doc: &mut MarkdownBuilder) {
     entries.sort();
     let mut last_ns = NameSpace::new(vec![]);
 
+    let mut section_started = false;
     for entry in entries.iter() {
         if entry.name.namespace != last_ns {
             last_ns = entry.name.namespace.clone();
-            *doc += format!("\n\n## `namespace {}`", last_ns.to_string()).as_str();
+            if section_started {
+                doc.end_section();
+            }
+            let title = format!("`namespace {}`", last_ns.to_string());
+            doc.begin_section(&title);
+            section_started = true;
         }
-        *doc += format!("\n\n### {}", entry.title).as_str();
-        let doc_trim = entry.doc.trim();
-        if !doc_trim.is_empty() {
-            *doc += "\n\n";
-            *doc += doc_trim;
-        }
+        doc.begin_section(&entry.title);
+        let doc_text = entry.doc.trim();
+        doc.add_paragraph(doc_text);
+        doc.end_section();
+    }
+    if section_started {
+        doc.end_section();
     }
 
     entries.clear();
 }
 
 // Add the module name section to the documentation.
-fn write_module_section(program: &Program, mod_name: &Name, doc: &mut String) {
-    *doc += format!("# `module {}`", mod_name).as_str();
+fn write_module(
+    program: &Program,
+    mod_name: &Name,
+    doc: &mut MarkdownBuilder,
+    config: &DocsConfig,
+) -> Result<(), Errors> {
+    // Add the module name section.
+    let title = format!("`module {}`", mod_name);
+    doc.begin_section(&title);
+
     if let Some(mod_info) = program.modules.iter().find(|mi| mi.name == *mod_name) {
         let docstring = mod_info.source.get_document().ok().unwrap_or_default();
         let docstring = docstring.trim();
-        if !docstring.is_empty() {
-            *doc += "\n\n";
-            *doc += docstring;
-        }
+        doc.add_paragraph(docstring);
     }
+
+    {
+        doc.begin_section("Types and aliases");
+        let mut entries = vec![];
+        type_entries(program, mod_name, &mut entries)?;
+        write_entries(&mut entries, doc);
+        doc.end_section();
+    }
+
+    {
+        doc.begin_section("Traits and aliases");
+        let mut entries = vec![];
+        trait_entries(program, mod_name, &mut entries)?;
+        write_entries(&mut entries, doc);
+        doc.end_section();
+    }
+
+    {
+        doc.begin_section("Trait implementations");
+        let mut entries = vec![];
+        trait_impl_entries(program, mod_name, &mut entries)?;
+        write_entries(&mut entries, doc);
+        doc.end_section();
+    }
+
+    {
+        doc.begin_section("Values");
+        let mut entries = vec![];
+        value_entries(program, mod_name, &mut entries, &config)?;
+        write_entries(&mut entries, doc);
+        doc.end_section();
+    }
+
+    doc.end_section();
+    Ok(())
 }
 
 #[derive(PartialEq, Eq)]
