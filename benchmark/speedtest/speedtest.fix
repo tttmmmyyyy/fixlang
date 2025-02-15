@@ -1,7 +1,6 @@
 module Main;
 
 import Random;
-import FastIterator::{range, fold, loop_iter};
 
 // Creates a prime table up to n.
 prime_table : I64 -> Array Bool;
@@ -46,10 +45,10 @@ sum_up_randoms = |n| (
 
 // Benchmark for `Iterator::range(0, n).fold(...)`.
 sum_up_by_fold : I64 -> I64;
-sum_up_by_fold = |n| FastIterator::range(0, n).fold(0, |i, sum| sum + i);
+sum_up_by_fold = |n| Iterator::range(0, n).fold(0, |i, sum| sum + i);
 
 sum_up_by_loop_iter : I64 -> I64;
-sum_up_by_loop_iter = |n| FastIterator::range(0, 2*n).loop_iter(0, |i, sum| if i == n { break $ sum }; continue $ sum + i);
+sum_up_by_loop_iter = |n| Iterator::range(0, 2*n).loop_iter(0, |i, sum| if i == n { break $ sum }; continue $ sum + i);
 
 main : IO ();
 main = (

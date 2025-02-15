@@ -88,8 +88,3 @@ files = ["speedtest.fix"]
 name = "random"
 version = "*"
 git = { url = "https://github.com/tttmmmyyyy/fixlang-random.git" }
-
-[[dependencies]]
-name = "fast-iter"
-version = "*"
-git = { url = "https://github.com/tttmmmyyyy/fixlang-fast-iter.git" }

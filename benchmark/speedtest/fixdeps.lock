@@ -1,19 +1,10 @@
-proj_file_hash = "f1dc54b0028a9215c0f5cb7d980223fd"
-
-[[dependencies]]
-name = "fast-iter"
-version = "0.1.0"
-path = ".fixlang/deps/fast-iter_0.1.0"
-
-[dependencies.git]
-repo = "https://github.com/tttmmmyyyy/fixlang-fast-iter.git"
-rev = "5d4da418988d9c5a822beb80e73ca918fe5a6410"
+proj_file_hash = "90d5b2047de8b38bd5de2b2a41c35c3e"
 
 [[dependencies]]
 name = "random"
-version = "1.0.0"
-path = ".fixlang/deps/random_1.0.0"
+version = "1.1.1"
+path = ".fixlang/deps/random_1.1.1"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/fixlang-random.git"
-rev = "b802af50726199a6dc815bef1cc64075cd4cbd2d"
+rev = "b4f83ee48564e714c0918513dd431f9135493dce"
