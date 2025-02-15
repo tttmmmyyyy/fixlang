@@ -1,4 +1,4 @@
-# `module Std`
+# Std
 
 Module `Std` provides basic types, traits and values.
 
@@ -10,969 +10,6 @@ NOTE on tuples:
 The tuple types `Std::TupleN` are defined on demand, i.e., if the user uses N-tuple in the source code,
 the compiler generates definition `TupleN` and related functions / trait implementations.
 The document for `Std` module describes about them up to N=3, but you can use larger tuples in the same way.
-
-## Types and aliases
-
-### `namespace Std`
-
-#### `type Array a = box { built-in }`
-
-The type of variable length arrays. This is a boxed type.
-
-#### `type Arrow a b = unbox { built-in }`
-
-`Arrow a b` represents the type of a function that takes a value of type `a` and returns a value of type `b`. Usually written as `a -> b`.
-
-#### `type Bool = unbox { built-in }`
-
-The type of boolean values.
-
-#### `type Box a = box struct { ...fields... }`
-
-Boxed wrapper for a type.
-
-##### field `value : a`
-
-#### `type ErrMsg = Std::String`
-
-A type (alias) for error message.
-
-#### `type F32 = unbox { built-in }`
-
-The type of 32-bit floating point values.
-
-#### `type F64 = unbox { built-in }`
-
-The type of 64-bit floating point values.
-
-#### `type I16 = unbox { built-in }`
-
-The type of 16-bit signed integers.
-
-#### `type I32 = unbox { built-in }`
-
-The type of 32-bit signed integers.
-
-#### `type I64 = unbox { built-in }`
-
-The type of 64-bit signed integers.
-
-#### `type I8 = unbox { built-in }`
-
-The type of 8-bit signed integers.
-
-#### `type IO a = unbox struct { ...fields... }`
-
-`IO a` is a type representing I/O actions which return values of type `a`.
-
-##### field `runner : Std::IO::IOState -> (Std::IO::IOState, a)`
-
-#### `type Lazy = () -> a`
-
-The type of lazily generated values.
-
-You can create a lazy value by `|_| (...an expression to generate the value...)`,
-and you can evaluate a lazy value `v` by `v()`.
-
-#### `type LoopState s r = unbox union { ...variants... }`
-
-A union type with variants `continue` and `break`.
-
-This type is used to represent the result of a loop body function passed to `Std::loop` or other similar functions.
-
-##### variant `continue : s`
-
-##### variant `break : r`
-
-#### `type Option a = unbox union { ...variants... }`
-
-##### variant `none : ()`
-
-##### variant `some : a`
-
-#### `type Path = Std::String`
-
-The type for file path.
-
-#### `type Ptr = unbox { built-in }`
-
-The type of pointers.
-
-#### `type PunchedArray a = unbox struct { ...fields... }`
-
-The type of punched arrays.
-
-A punched array is an array from which a certain element has been removed.
-This is used in the implementation of `Array::act`.
-
-##### field `_arr : Std::Array a`
-
-##### field `idx : Std::I64`
-
-#### `type Result e o = unbox union { ...variants... }`
-
-A type of result value for a computation that may fail.
-
-##### variant `ok : o`
-
-##### variant `err : e`
-
-#### `type String = unbox struct { ...fields... }`
-
-##### field `_data : Std::Array Std::U8`
-
-#### `type Tuple0 = unbox struct { ...fields... }`
-
-#### `type Tuple2 t0 t1 = unbox struct { ...fields... }`
-
-##### field `0 : t0`
-
-##### field `1 : t1`
-
-#### `type Tuple3 t0 t1 t2 = unbox struct { ...fields... }`
-
-##### field `0 : t0`
-
-##### field `1 : t1`
-
-##### field `2 : t2`
-
-#### `type U16 = unbox { built-in }`
-
-The type of 16-bit unsigned integers.
-
-#### `type U32 = unbox { built-in }`
-
-The type of 32-bit unsigned integers.
-
-#### `type U64 = unbox { built-in }`
-
-The type of 64-bit unsigned integers.
-
-#### `type U8 = unbox { built-in }`
-
-The type of 8-bit unsinged integers.
-
-### `namespace Std::FFI`
-
-#### `type CChar = Std::I8`
-
-#### `type CDouble = Std::F64`
-
-#### `type CFloat = Std::F32`
-
-#### `type CInt = Std::I32`
-
-#### `type CLong = Std::I64`
-
-#### `type CLongLong = Std::I64`
-
-#### `type CShort = Std::I16`
-
-#### `type CSizeT = Std::U64`
-
-#### `type CUnsignedChar = Std::U8`
-
-#### `type CUnsignedInt = Std::U32`
-
-#### `type CUnsignedLong = Std::U64`
-
-#### `type CUnsignedLongLong = Std::U64`
-
-#### `type CUnsignedShort = Std::U16`
-
-#### `type Destructor a = box struct { ...fields... }`
-
-`Destructor a` is a wrapper type for `a`, which can have a destructor function `a -> IO a`.
-Just before a value of type `Destructor a` is dropped, the destructor function is called on the contained value, and the value can be modified by the `IO` action.
-
-This type is used to create a Fix's type that wraps a resource allocated by FFI. In such cases, the destructor release the resource by FFI.
-
-NOTE: In the destructor, only IO actions for finalizing the passed value are allowed, and you should not perform other IO actions such as writing standard output.
-
-NOTE: Of course, if the value stored in `Destructor` also exists outside of `Destructor`, the value still exists in the Fix program even after the destructor function is called,
-and there is a possibility that the value is used after the destructor function is called.
-
-##### field `_value : a`
-
-##### field `dtor : a -> Std::IO a`
-
-### `namespace Std::IO`
-
-#### `type IOFail a = unbox struct { ...fields... }`
-
-The type for I/O actions which may fail.
-
-##### field `_data : Std::IO (Std::Result Std::ErrMsg a)`
-
-#### `type IOHandle = unbox struct { ...fields... }`
-
-A handle type for read / write operations on files, stdin, stdout, stderr.
-
-You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
-There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
-
-`IOHandle` is different from C's `FILE` structure in that it is safe to close it twice.
-If you try to get a file pointer by `file_ptr` from a closed `IOHandle`, you will get `nullptr`.
-
-NOTE:
-`IOHandle` is implemented by `Destructor`, but the destructor function does not close the file pointer.
-(The destructor function only frees the management memory area.)
-You should explicitly close the file pointer by `IO::close_file`.
-
-##### field `_data : Std::FFI::Destructor Std::Ptr`
-
-#### `type IOState = unbox { built-in }`
-
-The type of the "state"s modified by I/O operations. 
-
-The type `IO a` is isomorphic to `IOState -> (IOState, a)`.
-
-Values of type `IOState` must be used linearly, i.e., each value must be used exactly once and must not be duplicated or discarded.
-
-Values of type `IOState` are generated by the runtime when executing `IO` actions like `main` and passed linearly to various places in the program. At some places, `IOState` values are consumed by `FFI_CALL_IOS` expressions and new `IOState` values are generated. When `IO` actions like `main` finish, they are consumed by the runtime and disappear.
-
-Technically, `IOState` exists to specify the execution of I/O operations to the optimizer in the compiler.
-
-### `namespace Std::Iterator`
-
-#### `type AppendIterator i1 i2 = unbox struct { ...fields... }`
-
-##### field `iter1 : Std::Option i1`
-
-##### field `iter2 : i2`
-
-#### `type ArrayIterator a = unbox struct { ...fields... }`
-
-Iterators that yields elements of an array.
-
-##### field `arr : Std::Array a`
-
-##### field `idx : Std::I64`
-
-#### `type ConsIterator i a = unbox struct { ...fields... }`
-
-##### field `head : Std::Option a`
-
-##### field `tail : i`
-
-#### `type CountUpIterator = unbox struct { ...fields... }`
-
-##### field `next : Std::I64`
-
-#### `type DynIterator a = unbox struct { ...fields... }`
-
-The type of dynamic iterators.
-
-`DynIterator` has a field, `next`, which is a function that returns the next element and the next iterator.
-Therefore, the process to advance `DynIterator` can be determined dynamically at runtime, not at compile time.
-
-The main advantage of dynamic iterator is that since it has a simple type, `DynIterator a`,
-- `DynIterator` can be instances of traits such as `Monad`, `Eq`, etc.
-- it is possible to return two dynamic iterators with different constructions depending on the branch.
-
-However, iterating over `DynIterator` are much slower than iterating over other iterators provided in this namespace.
-Therefore, if performance is important, you should avoid using `DynIterator`.
-In particular, if you iterate over the same `DynIterator` multiple times,
-consider converting it to an `ArrayIterator` using `bang` before iterating.
-
-##### field `next : () -> Std::Option (Std::Iterator::DynIterator a, a)`
-
-#### `type EmptyIterator a = unbox struct { ...fields... }`
-
-Iterators that yields no elements.
-
-#### `type FilterIterator i a = unbox struct { ...fields... }`
-
-##### field `iter : i`
-
-##### field `pred : a -> Std::Bool`
-
-#### `type FilterMapIterator i a b = unbox struct { ...fields... }`
-
-##### field `iter : i`
-
-##### field `f : a -> Std::Option b`
-
-#### `type FlatMapIterator = Std::Iterator::FlattenIterator (Std::Iterator::MapIterator i1 a i2) i2`
-
-#### `type FlattenIterator i2 i1 = unbox struct { ...fields... }`
-
-##### field `i2 : i2`
-
-##### field `i1 : Std::Option i1`
-
-#### `type IntersperseIterator i a = unbox struct { ...fields... }`
-
-##### field `iter : i`
-
-##### field `sep : a`
-
-##### field `next_is_sep : Std::Bool`
-
-#### `type MapIterator i a b = unbox struct { ...fields... }`
-
-##### field `iter : i`
-
-##### field `f : a -> b`
-
-#### `type ProductIterator i1 i2 a b = unbox struct { ...fields... }`
-
-##### field `iter1 : i1`
-
-##### field `iter2 : i2`
-
-##### field `e2 : Std::Option b`
-
-##### field `iter1_org : i1`
-
-#### `type RangeIterator = unbox struct { ...fields... }`
-
-Iterators that yields reversed elements of an iterator.
-
-##### field `next : Std::I64`
-
-##### field `end : Std::I64`
-
-#### `type RangeStepIterator = unbox struct { ...fields... }`
-
-##### field `next : Std::I64`
-
-##### field `end : Std::I64`
-
-##### field `step : Std::I64`
-
-#### `type ReverseIterator i a = unbox struct { ...fields... }`
-
-##### field `idx : Std::I64`
-
-##### field `arr : Std::Array a`
-
-#### `type StateIterator s a = unbox struct { ...fields... }`
-
-##### field `state : Std::Option s`
-
-##### field `transit : s -> Std::Option (s, a)`
-
-#### `type TakeIterator i = unbox struct { ...fields... }`
-
-Takes at most `n` elements from an iterator.
-
-##### field `iter : i`
-
-##### field `n : Std::I64`
-
-#### `type TakeWhileIterator i a = unbox struct { ...fields... }`
-
-##### field `iter : i`
-
-##### field `pred : a -> Std::Bool`
-
-#### `type ZipIterator i1 i2 = unbox struct { ...fields... }`
-
-##### field `iter1 : i1`
-
-##### field `iter2 : i2`
-
-### `namespace Std::Option`
-
-#### `type OptionIterator opt = unbox struct { ...fields... }`
-
-##### field `opt : opt`
-
-### `namespace Std::String`
-
-#### `type StringSplitIterator = unbox struct { ...fields... }`
-
-##### field `idx : Std::I64`
-
-##### field `str : Std::String`
-
-##### field `strlen : Std::I64`
-
-##### field `sep : Std::String`
-
-##### field `sep_len : Std::I64`
-
-## Traits and aliases
-
-### `namespace Std`
-
-#### trait `a : Add`
-
-Trait for infix operator `+`.
-
-##### method `add : a -> a -> a`
-
-Adds two values. An expression `x + y` is translated to `add(x, y)`.
-
-#### trait `a : Boxed`
-
-Marker trait for boxed types.
-
-This trait is automatically implemented for all boxed types.
-Implementing this trait manually is not allowed.
-
-#### trait `a : Div`
-
-Trait for infix operator `/`.
-
-##### method `div : a -> a -> a`
-
-Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
-
-#### trait `a : Eq`
-
-Trait for infix operator `==`.
-
-##### method `eq : a -> a -> Std::Bool`
-
-Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
-
-#### trait `a : FromBytes`
-
-##### method `from_bytes : Std::Array Std::U8 -> Std::Result Std::String a`
-
-#### trait `a : FromString`
-
-##### method `from_string : Std::String -> Std::Result Std::String a`
-
-#### trait `[f : *->*] f : Functor`
-
-##### method `map : (a -> b) -> f a -> f b`
-
-#### trait `iter : Iterator`
-
-The trait of iterators.
-
-Iterator is a concept of a sequence of elements that can be iterated.
-More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
-
-##### associated type `Item iter`
-
-##### method `advance : iter -> Std::Option (iter, Std::Iterator::Item iter)`
-
-#### trait `a : LessThan`
-
-Trait for infix operator `<`.
-
-##### method `less_than : a -> a -> Std::Bool`
-
-Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
-
-#### trait `a : LessThanOrEq`
-
-Trait for infix operator `<=`.
-
-##### method `less_than_or_eq : a -> a -> Std::Bool`
-
-Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
-
-#### trait `[m : *->*] m : Monad`
-
-##### method `bind : (a -> m b) -> m a -> m b`
-
-##### method `pure : a -> m a`
-
-#### trait `a : Mul`
-
-Trait for infix operator `*`.
-
-##### method `mul : a -> a -> a`
-
-Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
-
-#### trait `a : Neg`
-
-Trait for prefix operator `-`.
-
-##### method `neg : a -> a`
-
-Negates a value. An expression `-x` is translated to `neg(x)`.
-
-#### trait `a : Not`
-
-Trait for prefix operator `!`.
-
-##### method `not : a -> a`
-
-Logical NOT of a value. An expression `!x` is translated to `not(x)`.
-
-#### trait `a : Rem`
-
-Trait for infix operator `%`.
-
-##### method `rem : a -> a -> a`
-
-Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
-
-#### trait `a : Sub`
-
-Trait for infix operator `-`.
-
-##### method `sub : a -> a -> a`
-
-Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
-
-#### trait `a : ToBytes`
-
-##### method `to_bytes : a -> Std::Array Std::U8`
-
-#### trait `a : ToString`
-
-##### method `to_string : a -> Std::String`
-
-#### trait `a : Zero`
-
-##### method `zero : a`
-
-## Trait implementations
-
-### `impl () : Std::Eq`
-
-### `impl () : Std::ToString`
-
-Returns "()".
-
-### `impl [t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`
-
-### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan] (t0, t1) : Std::LessThan`
-
-### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq] (t0, t1) : Std::LessThanOrEq`
-
-### `impl [t0 : Std::ToString, t1 : Std::ToString] (t0, t1) : Std::ToString`
-
-### `impl [t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq] (t0, t1, t2) : Std::Eq`
-
-### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan] (t0, t1, t2) : Std::LessThan`
-
-### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq] (t0, t1, t2) : Std::LessThanOrEq`
-
-### `impl [t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`
-
-### `impl Std::Array : Std::Functor`
-
-### `impl Std::Array : Std::Monad`
-
-### `impl Std::Array a : Std::Add`
-
-Concatenates two arrays.
-
-### `impl Std::Array a : Std::Boxed`
-
-### `impl [a : Std::Eq] Std::Array a : Std::Eq`
-
-### `impl [a : Std::Eq, a : Std::LessThan] Std::Array a : Std::LessThan`
-
-`LessThan` implementation for `Array a`.
-
-Compares two arrays by lexicographic order.
-
-### `impl [a : Std::Eq, a : Std::LessThanOrEq] Std::Array a : Std::LessThanOrEq`
-
-`LessThanOrEq` implementation for `Array a`.
-
-Compares two arrays by lexicographic order.
-
-### `impl [a : Std::ToString] Std::Array a : Std::ToString`
-
-### `impl Std::Array a : Std::Zero`
-
-The empty array with zero capacity.
-
-### `impl Std::Arrow a : Std::Functor`
-
-### `impl Std::Arrow a : Std::Monad`
-
-### `impl Std::Bool : Std::Eq`
-
-### `impl Std::Bool : Std::Not`
-
-### `impl Std::Bool : Std::ToString`
-
-### `impl Std::Box a : Std::Boxed`
-
-### `impl Std::F32 : Std::Add`
-
-### `impl Std::F32 : Std::Div`
-
-### `impl Std::F32 : Std::Eq`
-
-### `impl Std::F32 : Std::FromBytes`
-
-### `impl Std::F32 : Std::FromString`
-
-### `impl Std::F32 : Std::LessThan`
-
-### `impl Std::F32 : Std::LessThanOrEq`
-
-### `impl Std::F32 : Std::Mul`
-
-### `impl Std::F32 : Std::Neg`
-
-### `impl Std::F32 : Std::Sub`
-
-### `impl Std::F32 : Std::ToBytes`
-
-### `impl Std::F32 : Std::ToString`
-
-### `impl Std::F32 : Std::Zero`
-
-### `impl Std::F64 : Std::Add`
-
-### `impl Std::F64 : Std::Div`
-
-### `impl Std::F64 : Std::Eq`
-
-### `impl Std::F64 : Std::FromBytes`
-
-### `impl Std::F64 : Std::FromString`
-
-### `impl Std::F64 : Std::LessThan`
-
-### `impl Std::F64 : Std::LessThanOrEq`
-
-### `impl Std::F64 : Std::Mul`
-
-### `impl Std::F64 : Std::Neg`
-
-### `impl Std::F64 : Std::Sub`
-
-### `impl Std::F64 : Std::ToBytes`
-
-### `impl Std::F64 : Std::ToString`
-
-### `impl Std::F64 : Std::Zero`
-
-### `impl Std::FFI::Destructor a : Std::Boxed`
-
-### `impl Std::I16 : Std::Add`
-
-### `impl Std::I16 : Std::Div`
-
-### `impl Std::I16 : Std::Eq`
-
-### `impl Std::I16 : Std::FromBytes`
-
-### `impl Std::I16 : Std::FromString`
-
-### `impl Std::I16 : Std::LessThan`
-
-### `impl Std::I16 : Std::LessThanOrEq`
-
-### `impl Std::I16 : Std::Mul`
-
-### `impl Std::I16 : Std::Neg`
-
-### `impl Std::I16 : Std::Rem`
-
-### `impl Std::I16 : Std::Sub`
-
-### `impl Std::I16 : Std::ToBytes`
-
-### `impl Std::I16 : Std::ToString`
-
-### `impl Std::I16 : Std::Zero`
-
-### `impl Std::I32 : Std::Add`
-
-### `impl Std::I32 : Std::Div`
-
-### `impl Std::I32 : Std::Eq`
-
-### `impl Std::I32 : Std::FromBytes`
-
-### `impl Std::I32 : Std::FromString`
-
-### `impl Std::I32 : Std::LessThan`
-
-### `impl Std::I32 : Std::LessThanOrEq`
-
-### `impl Std::I32 : Std::Mul`
-
-### `impl Std::I32 : Std::Neg`
-
-### `impl Std::I32 : Std::Rem`
-
-### `impl Std::I32 : Std::Sub`
-
-### `impl Std::I32 : Std::ToBytes`
-
-### `impl Std::I32 : Std::ToString`
-
-### `impl Std::I32 : Std::Zero`
-
-### `impl Std::I64 : Std::Add`
-
-### `impl Std::I64 : Std::Div`
-
-### `impl Std::I64 : Std::Eq`
-
-### `impl Std::I64 : Std::FromBytes`
-
-### `impl Std::I64 : Std::FromString`
-
-### `impl Std::I64 : Std::LessThan`
-
-### `impl Std::I64 : Std::LessThanOrEq`
-
-### `impl Std::I64 : Std::Mul`
-
-### `impl Std::I64 : Std::Neg`
-
-### `impl Std::I64 : Std::Rem`
-
-### `impl Std::I64 : Std::Sub`
-
-### `impl Std::I64 : Std::ToBytes`
-
-### `impl Std::I64 : Std::ToString`
-
-### `impl Std::I64 : Std::Zero`
-
-### `impl Std::I8 : Std::Add`
-
-### `impl Std::I8 : Std::Div`
-
-### `impl Std::I8 : Std::Eq`
-
-### `impl Std::I8 : Std::FromBytes`
-
-### `impl Std::I8 : Std::FromString`
-
-### `impl Std::I8 : Std::LessThan`
-
-### `impl Std::I8 : Std::LessThanOrEq`
-
-### `impl Std::I8 : Std::Mul`
-
-### `impl Std::I8 : Std::Neg`
-
-### `impl Std::I8 : Std::Rem`
-
-### `impl Std::I8 : Std::Sub`
-
-### `impl Std::I8 : Std::ToBytes`
-
-### `impl Std::I8 : Std::ToString`
-
-### `impl Std::I8 : Std::Zero`
-
-### `impl Std::IO : Std::Functor`
-
-### `impl Std::IO : Std::Monad`
-
-### `impl Std::IO::IOFail : Std::Functor`
-
-### `impl Std::IO::IOFail : Std::Monad`
-
-### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
-
-### `impl Std::Iterator::ArrayIterator a : Std::Iterator`
-
-### `impl [i : Std::Iterator] Std::Iterator::ConsIterator i a : Std::Iterator`
-
-### `impl Std::Iterator::CountUpIterator : Std::Iterator`
-
-### `impl Std::Iterator::DynIterator : Std::Functor`
-
-### `impl Std::Iterator::DynIterator : Std::Monad`
-
-### `impl Std::Iterator::DynIterator a : Std::Add`
-
-Concatenates two dynamic iterators.
-
-### `impl [a : Std::Eq] Std::Iterator::DynIterator a : Std::Eq`
-
-### `impl Std::Iterator::DynIterator a : Std::Iterator`
-
-### `impl Std::Iterator::DynIterator a : Std::Zero`
-
-Creates an empty dynamic iterator.
-
-### `impl Std::Iterator::EmptyIterator a : Std::Iterator`
-
-### `impl [i : Std::Iterator] Std::Iterator::FilterIterator i a : Std::Iterator`
-
-### `impl [i : Std::Iterator] Std::Iterator::FilterMapIterator i a b : Std::Iterator`
-
-### `impl [i2 : Std::Iterator, i1 : Std::Iterator] Std::Iterator::FlattenIterator i2 i1 : Std::Iterator`
-
-### `impl [i : Std::Iterator] Std::Iterator::IntersperseIterator i a : Std::Iterator`
-
-### `impl [i : Std::Iterator] Std::Iterator::MapIterator i a b : Std::Iterator`
-
-### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ProductIterator i1 i2 a b : Std::Iterator`
-
-### `impl Std::Iterator::RangeIterator : Std::Iterator`
-
-### `impl Std::Iterator::RangeStepIterator : Std::Iterator`
-
-### `impl [i : Std::Iterator] Std::Iterator::ReverseIterator i a : Std::Iterator`
-
-### `impl Std::Iterator::StateIterator s a : Std::Iterator`
-
-### `impl [i : Std::Iterator] Std::Iterator::TakeIterator i : Std::Iterator`
-
-### `impl [i : Std::Iterator] Std::Iterator::TakeWhileIterator i a : Std::Iterator`
-
-### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ZipIterator i1 i2 : Std::Iterator`
-
-### `impl Std::Option : Std::Functor`
-
-### `impl Std::Option : Std::Monad`
-
-### `impl [a : Std::Eq] Std::Option a : Std::Eq`
-
-### `impl [a : Std::ToString] Std::Option a : Std::ToString`
-
-### `impl Std::Option::OptionIterator (Std::Option a) : Std::Iterator`
-
-### `impl Std::Ptr : Std::Eq`
-
-### `impl Std::Ptr : Std::ToString`
-
-### `impl Std::Result e : Std::Functor`
-
-### `impl Std::Result e : Std::Monad`
-
-### `impl [e : Std::Eq, a : Std::Eq] Std::Result e a : Std::Eq`
-
-### `impl [e : Std::ToString, a : Std::ToString] Std::Result e a : Std::ToString`
-
-### `impl Std::String : Std::Add`
-
-Concatenates two strings.
-
-### `impl Std::String : Std::Eq`
-
-### `impl Std::String : Std::LessThan`
-
-### `impl Std::String : Std::LessThanOrEq`
-
-### `impl Std::String : Std::ToString`
-
-### `impl Std::String : Std::Zero`
-
-The empty string.
-
-### `impl Std::String::StringSplitIterator : Std::Iterator`
-
-### `impl Std::Tuple2 t0 : Std::Functor`
-
-### `impl Std::Tuple3 t0 t1 : Std::Functor`
-
-### `impl Std::U16 : Std::Add`
-
-### `impl Std::U16 : Std::Div`
-
-### `impl Std::U16 : Std::Eq`
-
-### `impl Std::U16 : Std::FromBytes`
-
-### `impl Std::U16 : Std::FromString`
-
-### `impl Std::U16 : Std::LessThan`
-
-### `impl Std::U16 : Std::LessThanOrEq`
-
-### `impl Std::U16 : Std::Mul`
-
-### `impl Std::U16 : Std::Neg`
-
-### `impl Std::U16 : Std::Rem`
-
-### `impl Std::U16 : Std::Sub`
-
-### `impl Std::U16 : Std::ToBytes`
-
-### `impl Std::U16 : Std::ToString`
-
-### `impl Std::U16 : Std::Zero`
-
-### `impl Std::U32 : Std::Add`
-
-### `impl Std::U32 : Std::Div`
-
-### `impl Std::U32 : Std::Eq`
-
-### `impl Std::U32 : Std::FromBytes`
-
-### `impl Std::U32 : Std::FromString`
-
-### `impl Std::U32 : Std::LessThan`
-
-### `impl Std::U32 : Std::LessThanOrEq`
-
-### `impl Std::U32 : Std::Mul`
-
-### `impl Std::U32 : Std::Neg`
-
-### `impl Std::U32 : Std::Rem`
-
-### `impl Std::U32 : Std::Sub`
-
-### `impl Std::U32 : Std::ToBytes`
-
-### `impl Std::U32 : Std::ToString`
-
-### `impl Std::U32 : Std::Zero`
-
-### `impl Std::U64 : Std::Add`
-
-### `impl Std::U64 : Std::Div`
-
-### `impl Std::U64 : Std::Eq`
-
-### `impl Std::U64 : Std::FromBytes`
-
-### `impl Std::U64 : Std::FromString`
-
-### `impl Std::U64 : Std::LessThan`
-
-### `impl Std::U64 : Std::LessThanOrEq`
-
-### `impl Std::U64 : Std::Mul`
-
-### `impl Std::U64 : Std::Neg`
-
-### `impl Std::U64 : Std::Rem`
-
-### `impl Std::U64 : Std::Sub`
-
-### `impl Std::U64 : Std::ToBytes`
-
-### `impl Std::U64 : Std::ToString`
-
-### `impl Std::U64 : Std::Zero`
-
-### `impl Std::U8 : Std::Add`
-
-### `impl Std::U8 : Std::Div`
-
-### `impl Std::U8 : Std::Eq`
-
-### `impl Std::U8 : Std::FromBytes`
-
-### `impl Std::U8 : Std::FromString`
-
-### `impl Std::U8 : Std::LessThan`
-
-### `impl Std::U8 : Std::LessThanOrEq`
-
-### `impl Std::U8 : Std::Mul`
-
-### `impl Std::U8 : Std::Neg`
-
-### `impl Std::U8 : Std::Rem`
-
-### `impl Std::U8 : Std::Sub`
-
-### `impl Std::U8 : Std::ToBytes`
-
-### `impl Std::U8 : Std::ToString`
-
-### `impl Std::U8 : Std::Zero`
 
 ## Values
 
@@ -3397,3 +2434,966 @@ Casts a value of `U8` into a value of `U8`.
 ### `namespace Std::Zero`
 
 #### `zero : [a : Std::Zero] a`
+
+## Types and aliases
+
+### `namespace Std`
+
+#### `type Array a = box { built-in }`
+
+The type of variable length arrays. This is a boxed type.
+
+#### `type Arrow a b = unbox { built-in }`
+
+`Arrow a b` represents the type of a function that takes a value of type `a` and returns a value of type `b`. Usually written as `a -> b`.
+
+#### `type Bool = unbox { built-in }`
+
+The type of boolean values.
+
+#### `type Box a = box struct { ...fields... }`
+
+Boxed wrapper for a type.
+
+##### field `value : a`
+
+#### `type ErrMsg = Std::String`
+
+A type (alias) for error message.
+
+#### `type F32 = unbox { built-in }`
+
+The type of 32-bit floating point values.
+
+#### `type F64 = unbox { built-in }`
+
+The type of 64-bit floating point values.
+
+#### `type I16 = unbox { built-in }`
+
+The type of 16-bit signed integers.
+
+#### `type I32 = unbox { built-in }`
+
+The type of 32-bit signed integers.
+
+#### `type I64 = unbox { built-in }`
+
+The type of 64-bit signed integers.
+
+#### `type I8 = unbox { built-in }`
+
+The type of 8-bit signed integers.
+
+#### `type IO a = unbox struct { ...fields... }`
+
+`IO a` is a type representing I/O actions which return values of type `a`.
+
+##### field `runner : Std::IO::IOState -> (Std::IO::IOState, a)`
+
+#### `type Lazy = () -> a`
+
+The type of lazily generated values.
+
+You can create a lazy value by `|_| (...an expression to generate the value...)`,
+and you can evaluate a lazy value `v` by `v()`.
+
+#### `type LoopState s r = unbox union { ...variants... }`
+
+A union type with variants `continue` and `break`.
+
+This type is used to represent the result of a loop body function passed to `Std::loop` or other similar functions.
+
+##### variant `continue : s`
+
+##### variant `break : r`
+
+#### `type Option a = unbox union { ...variants... }`
+
+##### variant `none : ()`
+
+##### variant `some : a`
+
+#### `type Path = Std::String`
+
+The type for file path.
+
+#### `type Ptr = unbox { built-in }`
+
+The type of pointers.
+
+#### `type PunchedArray a = unbox struct { ...fields... }`
+
+The type of punched arrays.
+
+A punched array is an array from which a certain element has been removed.
+This is used in the implementation of `Array::act`.
+
+##### field `_arr : Std::Array a`
+
+##### field `idx : Std::I64`
+
+#### `type Result e o = unbox union { ...variants... }`
+
+A type of result value for a computation that may fail.
+
+##### variant `ok : o`
+
+##### variant `err : e`
+
+#### `type String = unbox struct { ...fields... }`
+
+##### field `_data : Std::Array Std::U8`
+
+#### `type Tuple0 = unbox struct { ...fields... }`
+
+#### `type Tuple2 t0 t1 = unbox struct { ...fields... }`
+
+##### field `0 : t0`
+
+##### field `1 : t1`
+
+#### `type Tuple3 t0 t1 t2 = unbox struct { ...fields... }`
+
+##### field `0 : t0`
+
+##### field `1 : t1`
+
+##### field `2 : t2`
+
+#### `type U16 = unbox { built-in }`
+
+The type of 16-bit unsigned integers.
+
+#### `type U32 = unbox { built-in }`
+
+The type of 32-bit unsigned integers.
+
+#### `type U64 = unbox { built-in }`
+
+The type of 64-bit unsigned integers.
+
+#### `type U8 = unbox { built-in }`
+
+The type of 8-bit unsinged integers.
+
+### `namespace Std::FFI`
+
+#### `type CChar = Std::I8`
+
+#### `type CDouble = Std::F64`
+
+#### `type CFloat = Std::F32`
+
+#### `type CInt = Std::I32`
+
+#### `type CLong = Std::I64`
+
+#### `type CLongLong = Std::I64`
+
+#### `type CShort = Std::I16`
+
+#### `type CSizeT = Std::U64`
+
+#### `type CUnsignedChar = Std::U8`
+
+#### `type CUnsignedInt = Std::U32`
+
+#### `type CUnsignedLong = Std::U64`
+
+#### `type CUnsignedLongLong = Std::U64`
+
+#### `type CUnsignedShort = Std::U16`
+
+#### `type Destructor a = box struct { ...fields... }`
+
+`Destructor a` is a wrapper type for `a`, which can have a destructor function `a -> IO a`.
+Just before a value of type `Destructor a` is dropped, the destructor function is called on the contained value, and the value can be modified by the `IO` action.
+
+This type is used to create a Fix's type that wraps a resource allocated by FFI. In such cases, the destructor release the resource by FFI.
+
+NOTE: In the destructor, only IO actions for finalizing the passed value are allowed, and you should not perform other IO actions such as writing standard output.
+
+NOTE: Of course, if the value stored in `Destructor` also exists outside of `Destructor`, the value still exists in the Fix program even after the destructor function is called,
+and there is a possibility that the value is used after the destructor function is called.
+
+##### field `_value : a`
+
+##### field `dtor : a -> Std::IO a`
+
+### `namespace Std::IO`
+
+#### `type IOFail a = unbox struct { ...fields... }`
+
+The type for I/O actions which may fail.
+
+##### field `_data : Std::IO (Std::Result Std::ErrMsg a)`
+
+#### `type IOHandle = unbox struct { ...fields... }`
+
+A handle type for read / write operations on files, stdin, stdout, stderr.
+
+You can create `IOHandle` value by `IO::open_file`, and close it by `IO::close_file`.
+There are also global `IO::IOHandle::stdin`, `IO::IOHandle::stdout`, `IO::IOHandle::stderr`.
+
+`IOHandle` is different from C's `FILE` structure in that it is safe to close it twice.
+If you try to get a file pointer by `file_ptr` from a closed `IOHandle`, you will get `nullptr`.
+
+NOTE:
+`IOHandle` is implemented by `Destructor`, but the destructor function does not close the file pointer.
+(The destructor function only frees the management memory area.)
+You should explicitly close the file pointer by `IO::close_file`.
+
+##### field `_data : Std::FFI::Destructor Std::Ptr`
+
+#### `type IOState = unbox { built-in }`
+
+The type of the "state"s modified by I/O operations. 
+
+The type `IO a` is isomorphic to `IOState -> (IOState, a)`.
+
+Values of type `IOState` must be used linearly, i.e., each value must be used exactly once and must not be duplicated or discarded.
+
+Values of type `IOState` are generated by the runtime when executing `IO` actions like `main` and passed linearly to various places in the program. At some places, `IOState` values are consumed by `FFI_CALL_IOS` expressions and new `IOState` values are generated. When `IO` actions like `main` finish, they are consumed by the runtime and disappear.
+
+Technically, `IOState` exists to specify the execution of I/O operations to the optimizer in the compiler.
+
+### `namespace Std::Iterator`
+
+#### `type AppendIterator i1 i2 = unbox struct { ...fields... }`
+
+##### field `iter1 : Std::Option i1`
+
+##### field `iter2 : i2`
+
+#### `type ArrayIterator a = unbox struct { ...fields... }`
+
+Iterators that yields elements of an array.
+
+##### field `arr : Std::Array a`
+
+##### field `idx : Std::I64`
+
+#### `type ConsIterator i a = unbox struct { ...fields... }`
+
+##### field `head : Std::Option a`
+
+##### field `tail : i`
+
+#### `type CountUpIterator = unbox struct { ...fields... }`
+
+##### field `next : Std::I64`
+
+#### `type DynIterator a = unbox struct { ...fields... }`
+
+The type of dynamic iterators.
+
+`DynIterator` has a field, `next`, which is a function that returns the next element and the next iterator.
+Therefore, the process to advance `DynIterator` can be determined dynamically at runtime, not at compile time.
+
+The main advantage of dynamic iterator is that since it has a simple type, `DynIterator a`,
+- `DynIterator` can be instances of traits such as `Monad`, `Eq`, etc.
+- it is possible to return two dynamic iterators with different constructions depending on the branch.
+
+However, iterating over `DynIterator` are much slower than iterating over other iterators provided in this namespace.
+Therefore, if performance is important, you should avoid using `DynIterator`.
+In particular, if you iterate over the same `DynIterator` multiple times,
+consider converting it to an `ArrayIterator` using `bang` before iterating.
+
+##### field `next : () -> Std::Option (Std::Iterator::DynIterator a, a)`
+
+#### `type EmptyIterator a = unbox struct { ...fields... }`
+
+Iterators that yields no elements.
+
+#### `type FilterIterator i a = unbox struct { ...fields... }`
+
+##### field `iter : i`
+
+##### field `pred : a -> Std::Bool`
+
+#### `type FilterMapIterator i a b = unbox struct { ...fields... }`
+
+##### field `iter : i`
+
+##### field `f : a -> Std::Option b`
+
+#### `type FlatMapIterator = Std::Iterator::FlattenIterator (Std::Iterator::MapIterator i1 a i2) i2`
+
+#### `type FlattenIterator i2 i1 = unbox struct { ...fields... }`
+
+##### field `i2 : i2`
+
+##### field `i1 : Std::Option i1`
+
+#### `type IntersperseIterator i a = unbox struct { ...fields... }`
+
+##### field `iter : i`
+
+##### field `sep : a`
+
+##### field `next_is_sep : Std::Bool`
+
+#### `type MapIterator i a b = unbox struct { ...fields... }`
+
+##### field `iter : i`
+
+##### field `f : a -> b`
+
+#### `type ProductIterator i1 i2 a b = unbox struct { ...fields... }`
+
+##### field `iter1 : i1`
+
+##### field `iter2 : i2`
+
+##### field `e2 : Std::Option b`
+
+##### field `iter1_org : i1`
+
+#### `type RangeIterator = unbox struct { ...fields... }`
+
+Iterators that yields reversed elements of an iterator.
+
+##### field `next : Std::I64`
+
+##### field `end : Std::I64`
+
+#### `type RangeStepIterator = unbox struct { ...fields... }`
+
+##### field `next : Std::I64`
+
+##### field `end : Std::I64`
+
+##### field `step : Std::I64`
+
+#### `type ReverseIterator i a = unbox struct { ...fields... }`
+
+##### field `idx : Std::I64`
+
+##### field `arr : Std::Array a`
+
+#### `type StateIterator s a = unbox struct { ...fields... }`
+
+##### field `state : Std::Option s`
+
+##### field `transit : s -> Std::Option (s, a)`
+
+#### `type TakeIterator i = unbox struct { ...fields... }`
+
+Takes at most `n` elements from an iterator.
+
+##### field `iter : i`
+
+##### field `n : Std::I64`
+
+#### `type TakeWhileIterator i a = unbox struct { ...fields... }`
+
+##### field `iter : i`
+
+##### field `pred : a -> Std::Bool`
+
+#### `type ZipIterator i1 i2 = unbox struct { ...fields... }`
+
+##### field `iter1 : i1`
+
+##### field `iter2 : i2`
+
+### `namespace Std::Option`
+
+#### `type OptionIterator opt = unbox struct { ...fields... }`
+
+##### field `opt : opt`
+
+### `namespace Std::String`
+
+#### `type StringSplitIterator = unbox struct { ...fields... }`
+
+##### field `idx : Std::I64`
+
+##### field `str : Std::String`
+
+##### field `strlen : Std::I64`
+
+##### field `sep : Std::String`
+
+##### field `sep_len : Std::I64`
+
+## Traits and aliases
+
+### `namespace Std`
+
+#### trait `a : Add`
+
+Trait for infix operator `+`.
+
+##### method `add : a -> a -> a`
+
+Adds two values. An expression `x + y` is translated to `add(x, y)`.
+
+#### trait `a : Boxed`
+
+Marker trait for boxed types.
+
+This trait is automatically implemented for all boxed types.
+Implementing this trait manually is not allowed.
+
+#### trait `a : Div`
+
+Trait for infix operator `/`.
+
+##### method `div : a -> a -> a`
+
+Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
+
+#### trait `a : Eq`
+
+Trait for infix operator `==`.
+
+##### method `eq : a -> a -> Std::Bool`
+
+Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
+
+#### trait `a : FromBytes`
+
+##### method `from_bytes : Std::Array Std::U8 -> Std::Result Std::String a`
+
+#### trait `a : FromString`
+
+##### method `from_string : Std::String -> Std::Result Std::String a`
+
+#### trait `[f : *->*] f : Functor`
+
+##### method `map : (a -> b) -> f a -> f b`
+
+#### trait `iter : Iterator`
+
+The trait of iterators.
+
+Iterator is a concept of a sequence of elements that can be iterated.
+More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
+
+##### associated type `Item iter`
+
+##### method `advance : iter -> Std::Option (iter, Std::Iterator::Item iter)`
+
+#### trait `a : LessThan`
+
+Trait for infix operator `<`.
+
+##### method `less_than : a -> a -> Std::Bool`
+
+Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
+
+#### trait `a : LessThanOrEq`
+
+Trait for infix operator `<=`.
+
+##### method `less_than_or_eq : a -> a -> Std::Bool`
+
+Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
+
+#### trait `[m : *->*] m : Monad`
+
+##### method `bind : (a -> m b) -> m a -> m b`
+
+##### method `pure : a -> m a`
+
+#### trait `a : Mul`
+
+Trait for infix operator `*`.
+
+##### method `mul : a -> a -> a`
+
+Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
+
+#### trait `a : Neg`
+
+Trait for prefix operator `-`.
+
+##### method `neg : a -> a`
+
+Negates a value. An expression `-x` is translated to `neg(x)`.
+
+#### trait `a : Not`
+
+Trait for prefix operator `!`.
+
+##### method `not : a -> a`
+
+Logical NOT of a value. An expression `!x` is translated to `not(x)`.
+
+#### trait `a : Rem`
+
+Trait for infix operator `%`.
+
+##### method `rem : a -> a -> a`
+
+Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
+
+#### trait `a : Sub`
+
+Trait for infix operator `-`.
+
+##### method `sub : a -> a -> a`
+
+Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
+
+#### trait `a : ToBytes`
+
+##### method `to_bytes : a -> Std::Array Std::U8`
+
+#### trait `a : ToString`
+
+##### method `to_string : a -> Std::String`
+
+#### trait `a : Zero`
+
+##### method `zero : a`
+
+## Trait implementations
+
+### `impl () : Std::Eq`
+
+### `impl () : Std::ToString`
+
+Returns "()".
+
+### `impl [t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`
+
+### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan] (t0, t1) : Std::LessThan`
+
+### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq] (t0, t1) : Std::LessThanOrEq`
+
+### `impl [t0 : Std::ToString, t1 : Std::ToString] (t0, t1) : Std::ToString`
+
+### `impl [t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq] (t0, t1, t2) : Std::Eq`
+
+### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan] (t0, t1, t2) : Std::LessThan`
+
+### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq] (t0, t1, t2) : Std::LessThanOrEq`
+
+### `impl [t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`
+
+### `impl Std::Array : Std::Functor`
+
+### `impl Std::Array : Std::Monad`
+
+### `impl Std::Array a : Std::Add`
+
+Concatenates two arrays.
+
+### `impl Std::Array a : Std::Boxed`
+
+### `impl [a : Std::Eq] Std::Array a : Std::Eq`
+
+### `impl [a : Std::Eq, a : Std::LessThan] Std::Array a : Std::LessThan`
+
+`LessThan` implementation for `Array a`.
+
+Compares two arrays by lexicographic order.
+
+### `impl [a : Std::Eq, a : Std::LessThanOrEq] Std::Array a : Std::LessThanOrEq`
+
+`LessThanOrEq` implementation for `Array a`.
+
+Compares two arrays by lexicographic order.
+
+### `impl [a : Std::ToString] Std::Array a : Std::ToString`
+
+### `impl Std::Array a : Std::Zero`
+
+The empty array with zero capacity.
+
+### `impl Std::Arrow a : Std::Functor`
+
+### `impl Std::Arrow a : Std::Monad`
+
+### `impl Std::Bool : Std::Eq`
+
+### `impl Std::Bool : Std::Not`
+
+### `impl Std::Bool : Std::ToString`
+
+### `impl Std::Box a : Std::Boxed`
+
+### `impl Std::F32 : Std::Add`
+
+### `impl Std::F32 : Std::Div`
+
+### `impl Std::F32 : Std::Eq`
+
+### `impl Std::F32 : Std::FromBytes`
+
+### `impl Std::F32 : Std::FromString`
+
+### `impl Std::F32 : Std::LessThan`
+
+### `impl Std::F32 : Std::LessThanOrEq`
+
+### `impl Std::F32 : Std::Mul`
+
+### `impl Std::F32 : Std::Neg`
+
+### `impl Std::F32 : Std::Sub`
+
+### `impl Std::F32 : Std::ToBytes`
+
+### `impl Std::F32 : Std::ToString`
+
+### `impl Std::F32 : Std::Zero`
+
+### `impl Std::F64 : Std::Add`
+
+### `impl Std::F64 : Std::Div`
+
+### `impl Std::F64 : Std::Eq`
+
+### `impl Std::F64 : Std::FromBytes`
+
+### `impl Std::F64 : Std::FromString`
+
+### `impl Std::F64 : Std::LessThan`
+
+### `impl Std::F64 : Std::LessThanOrEq`
+
+### `impl Std::F64 : Std::Mul`
+
+### `impl Std::F64 : Std::Neg`
+
+### `impl Std::F64 : Std::Sub`
+
+### `impl Std::F64 : Std::ToBytes`
+
+### `impl Std::F64 : Std::ToString`
+
+### `impl Std::F64 : Std::Zero`
+
+### `impl Std::FFI::Destructor a : Std::Boxed`
+
+### `impl Std::I16 : Std::Add`
+
+### `impl Std::I16 : Std::Div`
+
+### `impl Std::I16 : Std::Eq`
+
+### `impl Std::I16 : Std::FromBytes`
+
+### `impl Std::I16 : Std::FromString`
+
+### `impl Std::I16 : Std::LessThan`
+
+### `impl Std::I16 : Std::LessThanOrEq`
+
+### `impl Std::I16 : Std::Mul`
+
+### `impl Std::I16 : Std::Neg`
+
+### `impl Std::I16 : Std::Rem`
+
+### `impl Std::I16 : Std::Sub`
+
+### `impl Std::I16 : Std::ToBytes`
+
+### `impl Std::I16 : Std::ToString`
+
+### `impl Std::I16 : Std::Zero`
+
+### `impl Std::I32 : Std::Add`
+
+### `impl Std::I32 : Std::Div`
+
+### `impl Std::I32 : Std::Eq`
+
+### `impl Std::I32 : Std::FromBytes`
+
+### `impl Std::I32 : Std::FromString`
+
+### `impl Std::I32 : Std::LessThan`
+
+### `impl Std::I32 : Std::LessThanOrEq`
+
+### `impl Std::I32 : Std::Mul`
+
+### `impl Std::I32 : Std::Neg`
+
+### `impl Std::I32 : Std::Rem`
+
+### `impl Std::I32 : Std::Sub`
+
+### `impl Std::I32 : Std::ToBytes`
+
+### `impl Std::I32 : Std::ToString`
+
+### `impl Std::I32 : Std::Zero`
+
+### `impl Std::I64 : Std::Add`
+
+### `impl Std::I64 : Std::Div`
+
+### `impl Std::I64 : Std::Eq`
+
+### `impl Std::I64 : Std::FromBytes`
+
+### `impl Std::I64 : Std::FromString`
+
+### `impl Std::I64 : Std::LessThan`
+
+### `impl Std::I64 : Std::LessThanOrEq`
+
+### `impl Std::I64 : Std::Mul`
+
+### `impl Std::I64 : Std::Neg`
+
+### `impl Std::I64 : Std::Rem`
+
+### `impl Std::I64 : Std::Sub`
+
+### `impl Std::I64 : Std::ToBytes`
+
+### `impl Std::I64 : Std::ToString`
+
+### `impl Std::I64 : Std::Zero`
+
+### `impl Std::I8 : Std::Add`
+
+### `impl Std::I8 : Std::Div`
+
+### `impl Std::I8 : Std::Eq`
+
+### `impl Std::I8 : Std::FromBytes`
+
+### `impl Std::I8 : Std::FromString`
+
+### `impl Std::I8 : Std::LessThan`
+
+### `impl Std::I8 : Std::LessThanOrEq`
+
+### `impl Std::I8 : Std::Mul`
+
+### `impl Std::I8 : Std::Neg`
+
+### `impl Std::I8 : Std::Rem`
+
+### `impl Std::I8 : Std::Sub`
+
+### `impl Std::I8 : Std::ToBytes`
+
+### `impl Std::I8 : Std::ToString`
+
+### `impl Std::I8 : Std::Zero`
+
+### `impl Std::IO : Std::Functor`
+
+### `impl Std::IO : Std::Monad`
+
+### `impl Std::IO::IOFail : Std::Functor`
+
+### `impl Std::IO::IOFail : Std::Monad`
+
+### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
+
+### `impl Std::Iterator::ArrayIterator a : Std::Iterator`
+
+### `impl [i : Std::Iterator] Std::Iterator::ConsIterator i a : Std::Iterator`
+
+### `impl Std::Iterator::CountUpIterator : Std::Iterator`
+
+### `impl Std::Iterator::DynIterator : Std::Functor`
+
+### `impl Std::Iterator::DynIterator : Std::Monad`
+
+### `impl Std::Iterator::DynIterator a : Std::Add`
+
+Concatenates two dynamic iterators.
+
+### `impl [a : Std::Eq] Std::Iterator::DynIterator a : Std::Eq`
+
+### `impl Std::Iterator::DynIterator a : Std::Iterator`
+
+### `impl Std::Iterator::DynIterator a : Std::Zero`
+
+Creates an empty dynamic iterator.
+
+### `impl Std::Iterator::EmptyIterator a : Std::Iterator`
+
+### `impl [i : Std::Iterator] Std::Iterator::FilterIterator i a : Std::Iterator`
+
+### `impl [i : Std::Iterator] Std::Iterator::FilterMapIterator i a b : Std::Iterator`
+
+### `impl [i2 : Std::Iterator, i1 : Std::Iterator] Std::Iterator::FlattenIterator i2 i1 : Std::Iterator`
+
+### `impl [i : Std::Iterator] Std::Iterator::IntersperseIterator i a : Std::Iterator`
+
+### `impl [i : Std::Iterator] Std::Iterator::MapIterator i a b : Std::Iterator`
+
+### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ProductIterator i1 i2 a b : Std::Iterator`
+
+### `impl Std::Iterator::RangeIterator : Std::Iterator`
+
+### `impl Std::Iterator::RangeStepIterator : Std::Iterator`
+
+### `impl [i : Std::Iterator] Std::Iterator::ReverseIterator i a : Std::Iterator`
+
+### `impl Std::Iterator::StateIterator s a : Std::Iterator`
+
+### `impl [i : Std::Iterator] Std::Iterator::TakeIterator i : Std::Iterator`
+
+### `impl [i : Std::Iterator] Std::Iterator::TakeWhileIterator i a : Std::Iterator`
+
+### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ZipIterator i1 i2 : Std::Iterator`
+
+### `impl Std::Option : Std::Functor`
+
+### `impl Std::Option : Std::Monad`
+
+### `impl [a : Std::Eq] Std::Option a : Std::Eq`
+
+### `impl [a : Std::ToString] Std::Option a : Std::ToString`
+
+### `impl Std::Option::OptionIterator (Std::Option a) : Std::Iterator`
+
+### `impl Std::Ptr : Std::Eq`
+
+### `impl Std::Ptr : Std::ToString`
+
+### `impl Std::Result e : Std::Functor`
+
+### `impl Std::Result e : Std::Monad`
+
+### `impl [e : Std::Eq, a : Std::Eq] Std::Result e a : Std::Eq`
+
+### `impl [e : Std::ToString, a : Std::ToString] Std::Result e a : Std::ToString`
+
+### `impl Std::String : Std::Add`
+
+Concatenates two strings.
+
+### `impl Std::String : Std::Eq`
+
+### `impl Std::String : Std::LessThan`
+
+### `impl Std::String : Std::LessThanOrEq`
+
+### `impl Std::String : Std::ToString`
+
+### `impl Std::String : Std::Zero`
+
+The empty string.
+
+### `impl Std::String::StringSplitIterator : Std::Iterator`
+
+### `impl Std::Tuple2 t0 : Std::Functor`
+
+### `impl Std::Tuple3 t0 t1 : Std::Functor`
+
+### `impl Std::U16 : Std::Add`
+
+### `impl Std::U16 : Std::Div`
+
+### `impl Std::U16 : Std::Eq`
+
+### `impl Std::U16 : Std::FromBytes`
+
+### `impl Std::U16 : Std::FromString`
+
+### `impl Std::U16 : Std::LessThan`
+
+### `impl Std::U16 : Std::LessThanOrEq`
+
+### `impl Std::U16 : Std::Mul`
+
+### `impl Std::U16 : Std::Neg`
+
+### `impl Std::U16 : Std::Rem`
+
+### `impl Std::U16 : Std::Sub`
+
+### `impl Std::U16 : Std::ToBytes`
+
+### `impl Std::U16 : Std::ToString`
+
+### `impl Std::U16 : Std::Zero`
+
+### `impl Std::U32 : Std::Add`
+
+### `impl Std::U32 : Std::Div`
+
+### `impl Std::U32 : Std::Eq`
+
+### `impl Std::U32 : Std::FromBytes`
+
+### `impl Std::U32 : Std::FromString`
+
+### `impl Std::U32 : Std::LessThan`
+
+### `impl Std::U32 : Std::LessThanOrEq`
+
+### `impl Std::U32 : Std::Mul`
+
+### `impl Std::U32 : Std::Neg`
+
+### `impl Std::U32 : Std::Rem`
+
+### `impl Std::U32 : Std::Sub`
+
+### `impl Std::U32 : Std::ToBytes`
+
+### `impl Std::U32 : Std::ToString`
+
+### `impl Std::U32 : Std::Zero`
+
+### `impl Std::U64 : Std::Add`
+
+### `impl Std::U64 : Std::Div`
+
+### `impl Std::U64 : Std::Eq`
+
+### `impl Std::U64 : Std::FromBytes`
+
+### `impl Std::U64 : Std::FromString`
+
+### `impl Std::U64 : Std::LessThan`
+
+### `impl Std::U64 : Std::LessThanOrEq`
+
+### `impl Std::U64 : Std::Mul`
+
+### `impl Std::U64 : Std::Neg`
+
+### `impl Std::U64 : Std::Rem`
+
+### `impl Std::U64 : Std::Sub`
+
+### `impl Std::U64 : Std::ToBytes`
+
+### `impl Std::U64 : Std::ToString`
+
+### `impl Std::U64 : Std::Zero`
+
+### `impl Std::U8 : Std::Add`
+
+### `impl Std::U8 : Std::Div`
+
+### `impl Std::U8 : Std::Eq`
+
+### `impl Std::U8 : Std::FromBytes`
+
+### `impl Std::U8 : Std::FromString`
+
+### `impl Std::U8 : Std::LessThan`
+
+### `impl Std::U8 : Std::LessThanOrEq`
+
+### `impl Std::U8 : Std::Mul`
+
+### `impl Std::U8 : Std::Neg`
+
+### `impl Std::U8 : Std::Rem`
+
+### `impl Std::U8 : Std::Sub`
+
+### `impl Std::U8 : Std::ToBytes`
+
+### `impl Std::U8 : Std::ToString`
+
+### `impl Std::U8 : Std::Zero`

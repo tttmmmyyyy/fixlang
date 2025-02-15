@@ -177,12 +177,19 @@ fn write_module(
     config: &DocsConfig,
 ) -> Result<MarkdownSection, Errors> {
     // Add the module name section.
-    let mut doc = MarkdownSection::new(format!("`module {}`", mod_name));
+    let mut doc = MarkdownSection::new(format!("{}", mod_name));
 
     if let Some(mod_info) = program.modules.iter().find(|mi| mi.name == *mod_name) {
         let docstring = mod_info.source.get_document().ok().unwrap_or_default();
         let docstring = docstring.trim();
         doc.add_paragraph(docstring.to_string());
+    }
+
+    {
+        let mut section = MarkdownSection::new("Values".to_string());
+        let entries = value_entries(program, mod_name, config)?;
+        write_entries(entries, &mut section);
+        doc.add_subsection(section);
     }
 
     {
@@ -202,13 +209,6 @@ fn write_module(
     {
         let mut section = MarkdownSection::new("Trait implementations".to_string());
         let entries = trait_impl_entries(program, mod_name)?;
-        write_entries(entries, &mut section);
-        doc.add_subsection(section);
-    }
-
-    {
-        let mut section = MarkdownSection::new("Values".to_string());
-        let entries = value_entries(program, mod_name, config)?;
         write_entries(entries, &mut section);
         doc.add_subsection(section);
     }
