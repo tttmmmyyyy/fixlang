@@ -60,42 +60,51 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     Ok(())
 }
 
-struct MarkdownBuilder {
-    // The markdown content.
-    content: String,
-    // The current section level.
-    section_level: usize,
+struct MarkdownSection {
+    title: String,
+    paragraphs: Vec<String>,
+    subsections: Vec<MarkdownSection>,
 }
 
-impl Default for MarkdownBuilder {
-    fn default() -> Self {
+impl MarkdownSection {
+    fn new(title: String) -> Self {
         Self {
-            content: String::new(),
-            section_level: 0,
+            title,
+            paragraphs: vec![],
+            subsections: vec![],
         }
     }
-}
 
-impl MarkdownBuilder {
-    fn begin_section(&mut self, title: &str) {
-        if !self.content.is_empty() {
-            self.content += "\n\n";
-        }
-        self.section_level += 1;
-        self.content += &format!("{}", "#".repeat(self.section_level));
-        self.content += &format!(" {}", title);
-    }
-
-    fn end_section(&mut self) {
-        self.section_level -= 1;
-    }
-
-    fn add_paragraph(&mut self, text: &str) {
+    fn add_paragraph(&mut self, text: String) {
         if text.is_empty() {
             return;
         }
-        self.content += "\n\n";
-        self.content += text;
+        self.paragraphs.push(text);
+    }
+
+    fn add_subsection(&mut self, section: MarkdownSection) {
+        self.subsections.push(section);
+    }
+
+    fn add_subsections(&mut self, sections: Vec<MarkdownSection>) {
+        self.subsections.extend(sections);
+    }
+
+    fn format(&self, section_level: usize, output: &mut String) {
+        *output += &format!("{} {}", "#".repeat(section_level + 1), self.title);
+
+        for paragraph in self.paragraphs.iter() {
+            if paragraph.is_empty() {
+                continue;
+            }
+            *output += "\n\n";
+            *output += paragraph;
+        }
+
+        for subsection in self.subsections.iter() {
+            *output += "\n\n";
+            subsection.format(section_level + 1, output);
+        }
     }
 }
 
@@ -113,9 +122,9 @@ fn docgen_for_module(
         )));
     }
 
-    let mut doc = MarkdownBuilder::default();
-
-    write_module(program, mod_name, &mut doc, config)?;
+    let markdown = write_module(program, mod_name, config)?;
+    let mut markdown_str = String::new();
+    markdown.format(0, &mut markdown_str);
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
@@ -129,7 +138,7 @@ fn docgen_for_module(
         )));
     }
     let doc_path = config.out_dir.join(doc_file);
-    std::fs::write(&doc_path, doc.content).map_err(|e| {
+    std::fs::write(&doc_path, markdown_str).map_err(|e| {
         Errors::from_msg(format!(
             "Failed to write file \"{}\": {:?}",
             doc_path.display(),
@@ -141,93 +150,85 @@ fn docgen_for_module(
     Ok(())
 }
 
-fn write_entries(entries: &mut Vec<Entry>, doc: &mut MarkdownBuilder) {
+fn write_entries(mut entries: Vec<Entry>, doc: &mut MarkdownSection) {
     entries.sort();
-    let mut last_ns = NameSpace::new(vec![]);
 
-    let mut section_started = false;
-    for entry in entries.iter() {
+    let mut last_ns = NameSpace::new(vec![]);
+    let mut subsections: Vec<MarkdownSection> = vec![];
+    for entry in entries {
         if entry.name.namespace != last_ns {
             last_ns = entry.name.namespace.clone();
-            if section_started {
-                doc.end_section();
-            }
             let title = format!("`namespace {}`", last_ns.to_string());
-            doc.begin_section(&title);
-            section_started = true;
+            subsections.push(MarkdownSection::new(title));
         }
-        doc.begin_section(&entry.title);
-        let doc_text = entry.doc.trim();
-        doc.add_paragraph(doc_text);
-        doc.end_section();
+        if let Some(current_section) = subsections.last_mut() {
+            current_section.add_subsection(entry.doc);
+        } else {
+            doc.add_subsection(entry.doc);
+        }
     }
-    if section_started {
-        doc.end_section();
-    }
-
-    entries.clear();
+    doc.add_subsections(subsections);
 }
 
 // Add the module name section to the documentation.
 fn write_module(
     program: &Program,
     mod_name: &Name,
-    doc: &mut MarkdownBuilder,
     config: &DocsConfig,
-) -> Result<(), Errors> {
+) -> Result<MarkdownSection, Errors> {
     // Add the module name section.
-    let title = format!("`module {}`", mod_name);
-    doc.begin_section(&title);
+    let mut doc = MarkdownSection::new(format!("`module {}`", mod_name));
 
     if let Some(mod_info) = program.modules.iter().find(|mi| mi.name == *mod_name) {
         let docstring = mod_info.source.get_document().ok().unwrap_or_default();
         let docstring = docstring.trim();
-        doc.add_paragraph(docstring);
+        doc.add_paragraph(docstring.to_string());
     }
 
     {
-        doc.begin_section("Types and aliases");
-        let mut entries = vec![];
-        type_entries(program, mod_name, &mut entries)?;
-        write_entries(&mut entries, doc);
-        doc.end_section();
+        let mut section = MarkdownSection::new("Types and aliases".to_string());
+        let entries = type_entries(program, mod_name)?;
+        write_entries(entries, &mut section);
+        doc.add_subsection(section);
     }
 
     {
-        doc.begin_section("Traits and aliases");
-        let mut entries = vec![];
-        trait_entries(program, mod_name, &mut entries)?;
-        write_entries(&mut entries, doc);
-        doc.end_section();
+        let mut section = MarkdownSection::new("Traits and aliases".to_string());
+        let entries = trait_entries(program, mod_name)?;
+        write_entries(entries, &mut section);
+        doc.add_subsection(section);
     }
 
     {
-        doc.begin_section("Trait implementations");
-        let mut entries = vec![];
-        trait_impl_entries(program, mod_name, &mut entries)?;
-        write_entries(&mut entries, doc);
-        doc.end_section();
+        let mut section = MarkdownSection::new("Trait implementations".to_string());
+        let entries = trait_impl_entries(program, mod_name)?;
+        write_entries(entries, &mut section);
+        doc.add_subsection(section);
     }
 
     {
-        doc.begin_section("Values");
-        let mut entries = vec![];
-        value_entries(program, mod_name, &mut entries, &config)?;
-        write_entries(&mut entries, doc);
-        doc.end_section();
+        let mut section = MarkdownSection::new("Values".to_string());
+        let entries = value_entries(program, mod_name, config)?;
+        write_entries(entries, &mut section);
+        doc.add_subsection(section);
     }
 
-    doc.end_section();
-    Ok(())
+    Ok(doc)
 }
 
-#[derive(PartialEq, Eq)]
 struct Entry {
     name: FullName,
     sort_key: String, // Additional key for sorting used when `name` is same.
-    title: String,
-    doc: String,
+    doc: MarkdownSection,
 }
+
+impl PartialEq for Entry {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.sort_key == other.sort_key
+    }
+}
+
+impl Eq for Entry {}
 
 impl PartialOrd for Entry {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -274,11 +275,7 @@ fn kind_sign_with_pre_space(kind: &Arc<Kind>) -> String {
     format!(" : {}", kind.to_string())
 }
 
-fn type_entries(
-    program: &Program,
-    mod_name: &Name,
-    entries: &mut Vec<Entry>,
-) -> Result<(), Errors> {
+fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
     fn kind_constraints_with_post_space(tyvars: &Vec<Arc<TyVar>>) -> String {
         if tyvars.is_empty() {
             return String::new();
@@ -309,6 +306,8 @@ fn type_entries(
         )
     }
 
+    let mut entries = vec![];
+
     for (ty_name, ty_info) in program.type_env.tycons.iter() {
         let name = ty_name.name.clone();
 
@@ -331,6 +330,7 @@ fn type_entries(
                 unreachable!()
             }
         };
+
         let title = format!(
             "`type {}{}{} = {} {}`",
             kind_constraints_with_post_space(&ty_info.tyvars),
@@ -339,38 +339,40 @@ fn type_entries(
             box_or_unbox(ty_info.is_unbox),
             def_rhs,
         );
+        let mut doc = MarkdownSection::new(title);
 
-        let mut doc = String::new();
-
-        let docstring = ty_info.get_document().unwrap_or_default();
-        let docstring = docstring.trim();
-        if !docstring.is_empty() {
-            doc += &format!("\n\n{}", docstring);
-        }
+        doc.add_paragraph(
+            ty_info
+                .get_document()
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+        );
 
         if ty_info.variant == TyConVariant::Struct {
             for field in ty_info.fields.iter() {
-                doc += &format!(
-                    "\n\n#### field `{} : {}`",
+                let title = format!(
+                    "field `{} : {}`",
                     field.name,
                     field.syn_ty.as_ref().unwrap().to_string(),
                 );
+                doc.add_subsection(MarkdownSection::new(title));
             }
         }
         if ty_info.variant == TyConVariant::Union {
             for variant in ty_info.fields.iter() {
-                doc += &format!(
-                    "\n\n#### variant `{} : {}`",
+                let title = format!(
+                    "variant `{} : {}`",
                     variant.name,
                     variant.syn_ty.as_ref().unwrap().to_string(),
                 );
+                doc.add_subsection(MarkdownSection::new(title));
             }
         }
 
         let entry = Entry {
             name: name.clone(),
             sort_key: "".to_string(),
-            title,
             doc,
         };
 
@@ -389,33 +391,28 @@ fn type_entries(
             name.name,
             ty_info.value.to_string(),
         );
+        let mut doc = MarkdownSection::new(title);
 
-        let mut doc = String::new();
-        let docstring = &ty_info
+        let content = &ty_info
             .source
             .as_ref()
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let docstring = docstring.trim();
-        doc += docstring;
+        let content = content.trim();
+        doc.add_paragraph(content.to_string());
 
         let entry = Entry {
             name: name.clone(),
             sort_key: "".to_string(),
-            title,
             doc,
         };
         entries.push(entry);
     }
-    Ok(())
+    Ok(entries)
 }
 
-fn trait_entries(
-    program: &Program,
-    mod_name: &Name,
-    entries: &mut Vec<Entry>,
-) -> Result<(), Errors> {
+fn trait_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
     fn kind_constraints_with_post_space(kind_signs: &Vec<KindSignature>) -> String {
         if kind_signs.is_empty() {
             return String::new();
@@ -433,6 +430,8 @@ fn trait_entries(
         format!("[{}] ", consts.join(", "))
     }
 
+    let mut entries = vec![];
+
     for (id, info) in &program.trait_env.traits {
         let name = id.name.clone();
 
@@ -442,11 +441,11 @@ fn trait_entries(
 
         let kind_consts = kind_constraints_with_post_space(&info.kind_signs);
         let title = format!(
-            "`trait {}{} : {}`",
+            "trait `{}{} : {}`",
             kind_consts, info.type_var.name, name.name
         );
+        let mut doc = MarkdownSection::new(title);
 
-        let mut doc = String::new();
         let docstring = &info
             .source
             .as_ref()
@@ -454,19 +453,21 @@ fn trait_entries(
             .transpose()?
             .unwrap_or_default();
         let docstring = docstring.trim();
-        doc += docstring;
+        doc.add_paragraph(docstring.to_string());
+
         for (assoc_ty_name, assoc_ty_defn) in &info.assoc_types {
             let mut params = vec![info.type_var.name.clone()];
             for param in assoc_ty_defn.params.iter().skip(1) {
                 params.push(param.name.clone());
             }
-            doc += &format!(
-                "\n\n#### associated type `{}{} {}{}`",
+            let title = format!(
+                "associated type `{}{} {}{}`",
                 kind_constraints_with_post_space(&assoc_ty_defn.kind_signs),
                 assoc_ty_name,
                 params.join(" "),
                 kind_sign_with_pre_space(&assoc_ty_defn.kind_applied)
             );
+            let mut subsection = MarkdownSection::new(title);
             let docstring = assoc_ty_defn
                 .src
                 .as_ref()
@@ -474,38 +475,31 @@ fn trait_entries(
                 .transpose()?
                 .unwrap_or_default();
             let docstring = docstring.trim();
-            if !docstring.is_empty() {
-                doc += &format!("\n\n{}", docstring);
-            }
+            subsection.add_paragraph(docstring.to_string());
+            doc.add_subsection(subsection);
         }
         for method in &info.methods {
-            doc += &format!(
-                "\n\n#### method `{} : {}`",
-                method.name,
-                method.qual_ty.to_string(),
-            );
+            let title = format!("method `{} : {}`", method.name, method.qual_ty.to_string(),);
+            let mut subsection = MarkdownSection::new(title);
             let docstring = docstring_from_opt_span(&method.source)?;
-            if !docstring.is_empty() {
-                doc += &format!("\n\n{}", docstring);
-            }
+            subsection.add_paragraph(docstring);
+            doc.add_subsection(subsection);
         }
 
         let entry = Entry {
             name: id.name.clone(),
             sort_key: "".to_string(),
-            title,
             doc,
         };
         entries.push(entry);
     }
-    Ok(())
+
+    Ok(entries)
 }
 
-fn trait_impl_entries(
-    program: &Program,
-    mod_name: &Name,
-    entries: &mut Vec<Entry>,
-) -> Result<(), Errors> {
+fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
+    let mut entries = vec![];
+
     for (_id, impls) in &program.trait_env.instances {
         for impl_ in impls {
             if &impl_.define_module != mod_name {
@@ -518,20 +512,19 @@ fn trait_impl_entries(
             }
 
             let title = format!("`impl {}`", impl_.qual_pred.to_string());
+            let mut doc = MarkdownSection::new(title);
 
-            let mut doc = String::new();
-            doc += &docstring_from_opt_span(&impl_.source)?;
+            doc.add_paragraph(docstring_from_opt_span(&impl_.source)?);
 
             let entry = Entry {
                 name: FullName::from_strs(&[], ""),
                 sort_key: impl_.qual_pred.predicate.to_string(),
-                title,
                 doc,
             };
             entries.push(entry);
         }
     }
-    Ok(())
+    Ok(entries)
 }
 
 fn docstring_from_opt_span(src: &Option<Span>) -> Result<String, Errors> {
@@ -547,9 +540,10 @@ fn docstring_from_opt_span(src: &Option<Span>) -> Result<String, Errors> {
 fn value_entries(
     program: &Program,
     mod_name: &Name,
-    entries: &mut Vec<Entry>,
     config: &DocsConfig,
-) -> Result<(), Errors> {
+) -> Result<Vec<Entry>, Errors> {
+    let mut entries = vec![];
+
     for (name, gv) in &program.global_values {
         if !is_entry_should_be_documented(&name, mod_name) {
             continue;
@@ -563,19 +557,19 @@ fn value_entries(
             name.name,
             gv.syn_scm.as_ref().unwrap().to_string()
         );
+        let mut doc = MarkdownSection::new(title);
 
-        let mut doc = String::new();
-        doc += gv.get_document().unwrap_or_default().trim();
+        doc.add_paragraph(gv.get_document().unwrap_or_default().trim().to_string());
 
         let entry = Entry {
             name: name.clone(),
             sort_key: "".to_string(),
-            title,
             doc,
         };
         entries.push(entry);
     }
-    Ok(())
+
+    Ok(entries)
 }
 
 fn box_or_unbox(is_unbox: bool) -> &'static str {
