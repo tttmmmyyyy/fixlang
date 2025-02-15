@@ -293,7 +293,14 @@ fn main() {
                 .takes_value(true)
                 .help("Projects to be added. \nEach entry should be in the form \"proj-name\" or \"proj-name@ver_req\" (e.g.,\"hashmap@0.1.0\")."),
         );
-    let deps_list = App::new("list").about("List all available projects in the registry.");
+    let deps_list = App::new("list")
+        .about("List all available projects in the registry.")
+        .arg(
+            Arg::new("locs-only")
+                .long("locs-only")
+                .takes_value(false)
+                .help("Show only the locations of the projects."),
+        );
 
     let mut deps_subc = deps
         .subcommand(deps_install)
@@ -589,8 +596,9 @@ fn main() {
                 panic_if_err(proj_file.add_dependencies(&projects, &fix_config));
                 panic_if_err(DependecyLockFile::update_and_install());
             }
-            Some(("list", _args)) => {
-                panic_if_err(deps_list::print_all_projects(&fix_config));
+            Some(("list", args)) => {
+                let locs_only = args.contains_id("locs-only");
+                panic_if_err(deps_list::print_all_projects(&fix_config, locs_only));
             }
             _ => deps_subc.print_help().unwrap(),
         },
