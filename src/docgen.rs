@@ -464,7 +464,7 @@ fn trait_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Error
             for param in assoc_ty_defn.params.iter().skip(1) {
                 params.push(param.name.clone());
             }
-            let title = format!("associated type `{}`", assoc_ty_name,);
+            let title = format!("type `{}`", assoc_ty_name,);
             let mut subsection = MarkdownSection::new(title);
             let defined_as = format!(
                 "Defined as: `{}{} {}{}`",
