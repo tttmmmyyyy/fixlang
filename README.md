@@ -78,7 +78,7 @@ main = (
 ## Documents
 
 * [Tutorial and language specification](/Document.md)
-* [Document of the `Std` module](/std_doc/Std.md)
+* [Document for all modules in the default registry](https://tttmmmyyyy.github.io/fixlang-docpage-generator/)
 * [Change log](/CHANGELOG.md)
 * 紹介（日本語）：[HaskellとRustを足して2で割ったような関数型言語Fixを作っている話](https://qiita.com/tttmmmyyyy/items/ddb1c44efd81e3fc2370)
 
