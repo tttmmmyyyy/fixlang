@@ -390,9 +390,10 @@ fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors
 
         let mut doc = MarkdownSection::new(name.name.clone());
         let defined_as = format!(
-            "Defined as: `type {}{} = {}`",
+            "Defined as: `type {}{}{} = {}`",
             kind_constraints_with_post_space(&ty_info.tyvars),
             name.name,
+            tyvars_with_pre_space(&ty_info.tyvars),
             ty_info.value.to_string(),
         );
         doc.add_paragraph(defined_as);

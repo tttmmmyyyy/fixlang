@@ -3532,7 +3532,7 @@ Type: `Std::IO::IOState -> (Std::IO::IOState, a)`
 
 #### Lazy
 
-Defined as: `type Lazy = () -> a`
+Defined as: `type Lazy a = () -> a`
 
 The type of lazily generated values.
 
@@ -3899,7 +3899,7 @@ Type: `a -> Std::Option b`
 
 #### FlatMapIterator
 
-Defined as: `type FlatMapIterator = Std::Iterator::FlattenIterator (Std::Iterator::MapIterator i1 a i2) i2`
+Defined as: `type FlatMapIterator i1 a i2 = Std::Iterator::FlattenIterator (Std::Iterator::MapIterator i1 a i2) i2`
 
 #### FlattenIterator
 
