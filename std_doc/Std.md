@@ -3477,7 +3477,9 @@ Boxed wrapper for a type.
 
 Type: `a`
 
-#### `type ErrMsg = Std::String`
+#### ErrMsg
+
+Defined as: `type ErrMsg = Std::String`
 
 A type (alias) for error message.
 
@@ -3527,7 +3529,9 @@ Defined as: `type IO a = unbox struct { ...fields... }`
 
 Type: `Std::IO::IOState -> (Std::IO::IOState, a)`
 
-#### `type Lazy = () -> a`
+#### Lazy
+
+Defined as: `type Lazy = () -> a`
 
 The type of lazily generated values.
 
@@ -3562,7 +3566,9 @@ Type: `()`
 
 Type: `a`
 
-#### `type Path = Std::String`
+#### Path
+
+Defined as: `type Path = Std::String`
 
 The type for file path.
 
@@ -3669,31 +3675,57 @@ The type of 8-bit unsinged integers.
 
 ### namespace Std::FFI
 
-#### `type CChar = Std::I8`
+#### CChar
 
-#### `type CDouble = Std::F64`
+Defined as: `type CChar = Std::I8`
 
-#### `type CFloat = Std::F32`
+#### CDouble
 
-#### `type CInt = Std::I32`
+Defined as: `type CDouble = Std::F64`
 
-#### `type CLong = Std::I64`
+#### CFloat
 
-#### `type CLongLong = Std::I64`
+Defined as: `type CFloat = Std::F32`
 
-#### `type CShort = Std::I16`
+#### CInt
 
-#### `type CSizeT = Std::U64`
+Defined as: `type CInt = Std::I32`
 
-#### `type CUnsignedChar = Std::U8`
+#### CLong
 
-#### `type CUnsignedInt = Std::U32`
+Defined as: `type CLong = Std::I64`
 
-#### `type CUnsignedLong = Std::U64`
+#### CLongLong
 
-#### `type CUnsignedLongLong = Std::U64`
+Defined as: `type CLongLong = Std::I64`
 
-#### `type CUnsignedShort = Std::U16`
+#### CShort
+
+Defined as: `type CShort = Std::I16`
+
+#### CSizeT
+
+Defined as: `type CSizeT = Std::U64`
+
+#### CUnsignedChar
+
+Defined as: `type CUnsignedChar = Std::U8`
+
+#### CUnsignedInt
+
+Defined as: `type CUnsignedInt = Std::U32`
+
+#### CUnsignedLong
+
+Defined as: `type CUnsignedLong = Std::U64`
+
+#### CUnsignedLongLong
+
+Defined as: `type CUnsignedLongLong = Std::U64`
+
+#### CUnsignedShort
+
+Defined as: `type CUnsignedShort = Std::U16`
 
 #### Destructor
 
@@ -3864,7 +3896,9 @@ Type: `i`
 
 Type: `a -> Std::Option b`
 
-#### `type FlatMapIterator = Std::Iterator::FlattenIterator (Std::Iterator::MapIterator i1 a i2) i2`
+#### FlatMapIterator
+
+Defined as: `type FlatMapIterator = Std::Iterator::FlattenIterator (Std::Iterator::MapIterator i1 a i2) i2`
 
 #### FlattenIterator
 
@@ -4062,7 +4096,9 @@ Type: `Std::I64`
 
 Trait for infix operator `+`.
 
-##### method `add : a -> a -> a`
+##### method `add`
+
+Type: `a -> a -> a`
 
 Adds two values. An expression `x + y` is translated to `add(x, y)`.
 
@@ -4077,7 +4113,9 @@ Implementing this trait manually is not allowed.
 
 Trait for infix operator `/`.
 
-##### method `div : a -> a -> a`
+##### method `div`
+
+Type: `a -> a -> a`
 
 Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
 
@@ -4085,21 +4123,29 @@ Divides a value by another value. An expression `x / y` is translated to `div(x,
 
 Trait for infix operator `==`.
 
-##### method `eq : a -> a -> Std::Bool`
+##### method `eq`
+
+Type: `a -> a -> Std::Bool`
 
 Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
 
 #### trait `a : FromBytes`
 
-##### method `from_bytes : Std::Array Std::U8 -> Std::Result Std::String a`
+##### method `from_bytes`
+
+Type: `Std::Array Std::U8 -> Std::Result Std::String a`
 
 #### trait `a : FromString`
 
-##### method `from_string : Std::String -> Std::Result Std::String a`
+##### method `from_string`
+
+Type: `Std::String -> Std::Result Std::String a`
 
 #### trait `[f : *->*] f : Functor`
 
-##### method `map : (a -> b) -> f a -> f b`
+##### method `map`
+
+Type: `(a -> b) -> f a -> f b`
 
 #### trait `iter : Iterator`
 
@@ -4108,15 +4154,21 @@ The trait of iterators.
 Iterator is a concept of a sequence of elements that can be iterated.
 More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
 
-##### associated type `Item iter`
+##### associated type `Item`
 
-##### method `advance : iter -> Std::Option (iter, Std::Iterator::Item iter)`
+Defined as: `Item iter`
+
+##### method `advance`
+
+Type: `iter -> Std::Option (iter, Std::Iterator::Item iter)`
 
 #### trait `a : LessThan`
 
 Trait for infix operator `<`.
 
-##### method `less_than : a -> a -> Std::Bool`
+##### method `less_than`
+
+Type: `a -> a -> Std::Bool`
 
 Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
@@ -4124,21 +4176,29 @@ Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
 Trait for infix operator `<=`.
 
-##### method `less_than_or_eq : a -> a -> Std::Bool`
+##### method `less_than_or_eq`
+
+Type: `a -> a -> Std::Bool`
 
 Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
 #### trait `[m : *->*] m : Monad`
 
-##### method `bind : (a -> m b) -> m a -> m b`
+##### method `bind`
 
-##### method `pure : a -> m a`
+Type: `(a -> m b) -> m a -> m b`
+
+##### method `pure`
+
+Type: `a -> m a`
 
 #### trait `a : Mul`
 
 Trait for infix operator `*`.
 
-##### method `mul : a -> a -> a`
+##### method `mul`
+
+Type: `a -> a -> a`
 
 Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
 
@@ -4146,7 +4206,9 @@ Multiplies a value by another value. An expression `x * y` is translated to `mul
 
 Trait for prefix operator `-`.
 
-##### method `neg : a -> a`
+##### method `neg`
+
+Type: `a -> a`
 
 Negates a value. An expression `-x` is translated to `neg(x)`.
 
@@ -4154,7 +4216,9 @@ Negates a value. An expression `-x` is translated to `neg(x)`.
 
 Trait for prefix operator `!`.
 
-##### method `not : a -> a`
+##### method `not`
+
+Type: `a -> a`
 
 Logical NOT of a value. An expression `!x` is translated to `not(x)`.
 
@@ -4162,7 +4226,9 @@ Logical NOT of a value. An expression `!x` is translated to `not(x)`.
 
 Trait for infix operator `%`.
 
-##### method `rem : a -> a -> a`
+##### method `rem`
+
+Type: `a -> a -> a`
 
 Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
 
@@ -4170,21 +4236,29 @@ Calculate remainder of a value dividing another value. An expression `x % y` is 
 
 Trait for infix operator `-`.
 
-##### method `sub : a -> a -> a`
+##### method `sub`
+
+Type: `a -> a -> a`
 
 Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
 
 #### trait `a : ToBytes`
 
-##### method `to_bytes : a -> Std::Array Std::U8`
+##### method `to_bytes`
+
+Type: `a -> Std::Array Std::U8`
 
 #### trait `a : ToString`
 
-##### method `to_string : a -> Std::String`
+##### method `to_string`
+
+Type: `a -> Std::String`
 
 #### trait `a : Zero`
 
-##### method `zero : a`
+##### method `zero`
+
+Type: `a`
 
 ## Trait implementations
 

@@ -388,13 +388,14 @@ fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors
             continue;
         }
 
-        let title = format!(
-            "`type {}{} = {}`",
+        let mut doc = MarkdownSection::new(name.name.clone());
+        let defined_as = format!(
+            "Defined as: `type {}{} = {}`",
             kind_constraints_with_post_space(&ty_info.tyvars),
             name.name,
             ty_info.value.to_string(),
         );
-        let mut doc = MarkdownSection::new(title);
+        doc.add_paragraph(defined_as);
 
         let content = &ty_info
             .source
@@ -463,14 +464,16 @@ fn trait_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Error
             for param in assoc_ty_defn.params.iter().skip(1) {
                 params.push(param.name.clone());
             }
-            let title = format!(
-                "associated type `{}{} {}{}`",
+            let title = format!("associated type `{}`", assoc_ty_name,);
+            let mut subsection = MarkdownSection::new(title);
+            let defined_as = format!(
+                "Defined as: `{}{} {}{}`",
                 kind_constraints_with_post_space(&assoc_ty_defn.kind_signs),
                 assoc_ty_name,
                 params.join(" "),
                 kind_sign_with_pre_space(&assoc_ty_defn.kind_applied)
             );
-            let mut subsection = MarkdownSection::new(title);
+            subsection.add_paragraph(defined_as);
             let docstring = assoc_ty_defn
                 .src
                 .as_ref()
@@ -482,8 +485,9 @@ fn trait_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Error
             doc.add_subsection(subsection);
         }
         for method in &info.methods {
-            let title = format!("method `{} : {}`", method.name, method.qual_ty.to_string(),);
+            let title = format!("method `{}`", method.name);
             let mut subsection = MarkdownSection::new(title);
+            subsection.add_paragraph(format!("Type: `{}`", method.qual_ty.to_string()));
             let docstring = docstring_from_opt_span(&method.source)?;
             subsection.add_paragraph(docstring);
             doc.add_subsection(subsection);
