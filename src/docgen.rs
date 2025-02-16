@@ -331,16 +331,17 @@ fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors
             }
         };
 
-        let title = format!(
-            "`type {}{}{} = {} {}`",
+        let mut doc = MarkdownSection::new(name.name.clone());
+
+        let defined_as = format!(
+            "Defined as: `type {}{}{} = {} {}`",
             kind_constraints_with_post_space(&ty_info.tyvars),
             name.name,
             tyvars_with_pre_space(&ty_info.tyvars),
             box_or_unbox(ty_info.is_unbox),
             def_rhs,
         );
-        let mut doc = MarkdownSection::new(title);
-
+        doc.add_paragraph(defined_as);
         doc.add_paragraph(
             ty_info
                 .get_document()
@@ -351,22 +352,24 @@ fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors
 
         if ty_info.variant == TyConVariant::Struct {
             for field in ty_info.fields.iter() {
-                let title = format!(
-                    "field `{} : {}`",
-                    field.name,
-                    field.syn_ty.as_ref().unwrap().to_string(),
-                );
-                doc.add_subsection(MarkdownSection::new(title));
+                let title = format!("field `{}`", field.name);
+                let mut field_sec = MarkdownSection::new(title);
+                field_sec.add_paragraph(format!(
+                    "Type: `{}`",
+                    field.syn_ty.as_ref().unwrap().to_string()
+                ));
+                doc.add_subsection(field_sec);
             }
         }
         if ty_info.variant == TyConVariant::Union {
             for variant in ty_info.fields.iter() {
-                let title = format!(
-                    "variant `{} : {}`",
-                    variant.name,
-                    variant.syn_ty.as_ref().unwrap().to_string(),
-                );
-                doc.add_subsection(MarkdownSection::new(title));
+                let title = format!("variant `{}`", variant.name);
+                let mut variant_sec = MarkdownSection::new(title);
+                variant_sec.add_paragraph(format!(
+                    "Type: `{}`",
+                    variant.syn_ty.as_ref().unwrap().to_string()
+                ));
+                doc.add_subsection(variant_sec);
             }
         }
 

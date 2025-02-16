@@ -3449,57 +3449,83 @@ Type: `[a : Std::Zero] a`
 
 ### namespace Std
 
-#### `type Array a = box { built-in }`
+#### Array
+
+Defined as: `type Array a = box { built-in }`
 
 The type of variable length arrays. This is a boxed type.
 
-#### `type Arrow a b = unbox { built-in }`
+#### Arrow
+
+Defined as: `type Arrow a b = unbox { built-in }`
 
 `Arrow a b` represents the type of a function that takes a value of type `a` and returns a value of type `b`. Usually written as `a -> b`.
 
-#### `type Bool = unbox { built-in }`
+#### Bool
+
+Defined as: `type Bool = unbox { built-in }`
 
 The type of boolean values.
 
-#### `type Box a = box struct { ...fields... }`
+#### Box
+
+Defined as: `type Box a = box struct { ...fields... }`
 
 Boxed wrapper for a type.
 
-##### field `value : a`
+##### field `value`
+
+Type: `a`
 
 #### `type ErrMsg = Std::String`
 
 A type (alias) for error message.
 
-#### `type F32 = unbox { built-in }`
+#### F32
+
+Defined as: `type F32 = unbox { built-in }`
 
 The type of 32-bit floating point values.
 
-#### `type F64 = unbox { built-in }`
+#### F64
+
+Defined as: `type F64 = unbox { built-in }`
 
 The type of 64-bit floating point values.
 
-#### `type I16 = unbox { built-in }`
+#### I16
+
+Defined as: `type I16 = unbox { built-in }`
 
 The type of 16-bit signed integers.
 
-#### `type I32 = unbox { built-in }`
+#### I32
+
+Defined as: `type I32 = unbox { built-in }`
 
 The type of 32-bit signed integers.
 
-#### `type I64 = unbox { built-in }`
+#### I64
+
+Defined as: `type I64 = unbox { built-in }`
 
 The type of 64-bit signed integers.
 
-#### `type I8 = unbox { built-in }`
+#### I8
+
+Defined as: `type I8 = unbox { built-in }`
 
 The type of 8-bit signed integers.
 
-#### `type IO a = unbox struct { ...fields... }`
+#### IO
+
+Defined as: `type IO a = unbox struct { ...fields... }`
 
 `IO a` is a type representing I/O actions which return values of type `a`.
 
-##### field `runner : Std::IO::IOState -> (Std::IO::IOState, a)`
+##### field `runner`
+
+Type: `Std::IO::IOState -> (Std::IO::IOState, a)`
 
 #### `type Lazy = () -> a`
 
@@ -3508,82 +3534,136 @@ The type of lazily generated values.
 You can create a lazy value by `|_| (...an expression to generate the value...)`,
 and you can evaluate a lazy value `v` by `v()`.
 
-#### `type LoopState s r = unbox union { ...variants... }`
+#### LoopState
+
+Defined as: `type LoopState s r = unbox union { ...variants... }`
 
 A union type with variants `continue` and `break`.
 
 This type is used to represent the result of a loop body function passed to `Std::loop` or other similar functions.
 
-##### variant `continue : s`
+##### variant `continue`
 
-##### variant `break : r`
+Type: `s`
 
-#### `type Option a = unbox union { ...variants... }`
+##### variant `break`
 
-##### variant `none : ()`
+Type: `r`
 
-##### variant `some : a`
+#### Option
+
+Defined as: `type Option a = unbox union { ...variants... }`
+
+##### variant `none`
+
+Type: `()`
+
+##### variant `some`
+
+Type: `a`
 
 #### `type Path = Std::String`
 
 The type for file path.
 
-#### `type Ptr = unbox { built-in }`
+#### Ptr
+
+Defined as: `type Ptr = unbox { built-in }`
 
 The type of pointers.
 
-#### `type PunchedArray a = unbox struct { ...fields... }`
+#### PunchedArray
+
+Defined as: `type PunchedArray a = unbox struct { ...fields... }`
 
 The type of punched arrays.
 
 A punched array is an array from which a certain element has been removed.
 This is used in the implementation of `Array::act`.
 
-##### field `_arr : Std::Array a`
+##### field `_arr`
 
-##### field `idx : Std::I64`
+Type: `Std::Array a`
 
-#### `type Result e o = unbox union { ...variants... }`
+##### field `idx`
+
+Type: `Std::I64`
+
+#### Result
+
+Defined as: `type Result e o = unbox union { ...variants... }`
 
 A type of result value for a computation that may fail.
 
-##### variant `ok : o`
+##### variant `ok`
 
-##### variant `err : e`
+Type: `o`
 
-#### `type String = unbox struct { ...fields... }`
+##### variant `err`
 
-##### field `_data : Std::Array Std::U8`
+Type: `e`
 
-#### `type Tuple0 = unbox struct { ...fields... }`
+#### String
 
-#### `type Tuple2 t0 t1 = unbox struct { ...fields... }`
+Defined as: `type String = unbox struct { ...fields... }`
 
-##### field `0 : t0`
+##### field `_data`
 
-##### field `1 : t1`
+Type: `Std::Array Std::U8`
 
-#### `type Tuple3 t0 t1 t2 = unbox struct { ...fields... }`
+#### Tuple0
 
-##### field `0 : t0`
+Defined as: `type Tuple0 = unbox struct { ...fields... }`
 
-##### field `1 : t1`
+#### Tuple2
 
-##### field `2 : t2`
+Defined as: `type Tuple2 t0 t1 = unbox struct { ...fields... }`
 
-#### `type U16 = unbox { built-in }`
+##### field `0`
+
+Type: `t0`
+
+##### field `1`
+
+Type: `t1`
+
+#### Tuple3
+
+Defined as: `type Tuple3 t0 t1 t2 = unbox struct { ...fields... }`
+
+##### field `0`
+
+Type: `t0`
+
+##### field `1`
+
+Type: `t1`
+
+##### field `2`
+
+Type: `t2`
+
+#### U16
+
+Defined as: `type U16 = unbox { built-in }`
 
 The type of 16-bit unsigned integers.
 
-#### `type U32 = unbox { built-in }`
+#### U32
+
+Defined as: `type U32 = unbox { built-in }`
 
 The type of 32-bit unsigned integers.
 
-#### `type U64 = unbox { built-in }`
+#### U64
+
+Defined as: `type U64 = unbox { built-in }`
 
 The type of 64-bit unsigned integers.
 
-#### `type U8 = unbox { built-in }`
+#### U8
+
+Defined as: `type U8 = unbox { built-in }`
 
 The type of 8-bit unsinged integers.
 
@@ -3615,7 +3695,9 @@ The type of 8-bit unsinged integers.
 
 #### `type CUnsignedShort = Std::U16`
 
-#### `type Destructor a = box struct { ...fields... }`
+#### Destructor
+
+Defined as: `type Destructor a = box struct { ...fields... }`
 
 `Destructor a` is a wrapper type for `a`, which can have a destructor function `a -> IO a`.
 Just before a value of type `Destructor a` is dropped, the destructor function is called on the contained value, and the value can be modified by the `IO` action.
@@ -3627,19 +3709,29 @@ NOTE: In the destructor, only IO actions for finalizing the passed value are all
 NOTE: Of course, if the value stored in `Destructor` also exists outside of `Destructor`, the value still exists in the Fix program even after the destructor function is called,
 and there is a possibility that the value is used after the destructor function is called.
 
-##### field `_value : a`
+##### field `_value`
 
-##### field `dtor : a -> Std::IO a`
+Type: `a`
+
+##### field `dtor`
+
+Type: `a -> Std::IO a`
 
 ### namespace Std::IO
 
-#### `type IOFail a = unbox struct { ...fields... }`
+#### IOFail
+
+Defined as: `type IOFail a = unbox struct { ...fields... }`
 
 The type for I/O actions which may fail.
 
-##### field `_data : Std::IO (Std::Result Std::ErrMsg a)`
+##### field `_data`
 
-#### `type IOHandle = unbox struct { ...fields... }`
+Type: `Std::IO (Std::Result Std::ErrMsg a)`
+
+#### IOHandle
+
+Defined as: `type IOHandle = unbox struct { ...fields... }`
 
 A handle type for read / write operations on files, stdin, stdout, stderr.
 
@@ -3654,9 +3746,13 @@ NOTE:
 (The destructor function only frees the management memory area.)
 You should explicitly close the file pointer by `IO::close_file`.
 
-##### field `_data : Std::FFI::Destructor Std::Ptr`
+##### field `_data`
 
-#### `type IOState = unbox { built-in }`
+Type: `Std::FFI::Destructor Std::Ptr`
+
+#### IOState
+
+Defined as: `type IOState = unbox { built-in }`
 
 The type of the "state"s modified by I/O operations. 
 
@@ -3670,31 +3766,55 @@ Technically, `IOState` exists to specify the execution of I/O operations to the 
 
 ### namespace Std::Iterator
 
-#### `type AppendIterator i1 i2 = unbox struct { ...fields... }`
+#### AppendIterator
 
-##### field `iter1 : Std::Option i1`
+Defined as: `type AppendIterator i1 i2 = unbox struct { ...fields... }`
 
-##### field `iter2 : i2`
+##### field `iter1`
 
-#### `type ArrayIterator a = unbox struct { ...fields... }`
+Type: `Std::Option i1`
+
+##### field `iter2`
+
+Type: `i2`
+
+#### ArrayIterator
+
+Defined as: `type ArrayIterator a = unbox struct { ...fields... }`
 
 Iterators that yields elements of an array.
 
-##### field `arr : Std::Array a`
+##### field `arr`
 
-##### field `idx : Std::I64`
+Type: `Std::Array a`
 
-#### `type ConsIterator i a = unbox struct { ...fields... }`
+##### field `idx`
 
-##### field `head : Std::Option a`
+Type: `Std::I64`
 
-##### field `tail : i`
+#### ConsIterator
 
-#### `type CountUpIterator = unbox struct { ...fields... }`
+Defined as: `type ConsIterator i a = unbox struct { ...fields... }`
 
-##### field `next : Std::I64`
+##### field `head`
 
-#### `type DynIterator a = unbox struct { ...fields... }`
+Type: `Std::Option a`
+
+##### field `tail`
+
+Type: `i`
+
+#### CountUpIterator
+
+Defined as: `type CountUpIterator = unbox struct { ...fields... }`
+
+##### field `next`
+
+Type: `Std::I64`
+
+#### DynIterator
+
+Defined as: `type DynIterator a = unbox struct { ...fields... }`
 
 The type of dynamic iterators.
 
@@ -3710,123 +3830,229 @@ Therefore, if performance is important, you should avoid using `DynIterator`.
 In particular, if you iterate over the same `DynIterator` multiple times,
 consider converting it to an `ArrayIterator` using `bang` before iterating.
 
-##### field `next : () -> Std::Option (Std::Iterator::DynIterator a, a)`
+##### field `next`
 
-#### `type EmptyIterator a = unbox struct { ...fields... }`
+Type: `() -> Std::Option (Std::Iterator::DynIterator a, a)`
+
+#### EmptyIterator
+
+Defined as: `type EmptyIterator a = unbox struct { ...fields... }`
 
 Iterators that yields no elements.
 
-#### `type FilterIterator i a = unbox struct { ...fields... }`
+#### FilterIterator
 
-##### field `iter : i`
+Defined as: `type FilterIterator i a = unbox struct { ...fields... }`
 
-##### field `pred : a -> Std::Bool`
+##### field `iter`
 
-#### `type FilterMapIterator i a b = unbox struct { ...fields... }`
+Type: `i`
 
-##### field `iter : i`
+##### field `pred`
 
-##### field `f : a -> Std::Option b`
+Type: `a -> Std::Bool`
+
+#### FilterMapIterator
+
+Defined as: `type FilterMapIterator i a b = unbox struct { ...fields... }`
+
+##### field `iter`
+
+Type: `i`
+
+##### field `f`
+
+Type: `a -> Std::Option b`
 
 #### `type FlatMapIterator = Std::Iterator::FlattenIterator (Std::Iterator::MapIterator i1 a i2) i2`
 
-#### `type FlattenIterator i2 i1 = unbox struct { ...fields... }`
+#### FlattenIterator
 
-##### field `i2 : i2`
+Defined as: `type FlattenIterator i2 i1 = unbox struct { ...fields... }`
 
-##### field `i1 : Std::Option i1`
+##### field `i2`
 
-#### `type IntersperseIterator i a = unbox struct { ...fields... }`
+Type: `i2`
 
-##### field `iter : i`
+##### field `i1`
 
-##### field `sep : a`
+Type: `Std::Option i1`
 
-##### field `next_is_sep : Std::Bool`
+#### IntersperseIterator
 
-#### `type MapIterator i a b = unbox struct { ...fields... }`
+Defined as: `type IntersperseIterator i a = unbox struct { ...fields... }`
 
-##### field `iter : i`
+##### field `iter`
 
-##### field `f : a -> b`
+Type: `i`
 
-#### `type ProductIterator i1 i2 a b = unbox struct { ...fields... }`
+##### field `sep`
 
-##### field `iter1 : i1`
+Type: `a`
 
-##### field `iter2 : i2`
+##### field `next_is_sep`
 
-##### field `e2 : Std::Option b`
+Type: `Std::Bool`
 
-##### field `iter1_org : i1`
+#### MapIterator
 
-#### `type RangeIterator = unbox struct { ...fields... }`
+Defined as: `type MapIterator i a b = unbox struct { ...fields... }`
+
+##### field `iter`
+
+Type: `i`
+
+##### field `f`
+
+Type: `a -> b`
+
+#### ProductIterator
+
+Defined as: `type ProductIterator i1 i2 a b = unbox struct { ...fields... }`
+
+##### field `iter1`
+
+Type: `i1`
+
+##### field `iter2`
+
+Type: `i2`
+
+##### field `e2`
+
+Type: `Std::Option b`
+
+##### field `iter1_org`
+
+Type: `i1`
+
+#### RangeIterator
+
+Defined as: `type RangeIterator = unbox struct { ...fields... }`
 
 Iterators that yields reversed elements of an iterator.
 
-##### field `next : Std::I64`
+##### field `next`
 
-##### field `end : Std::I64`
+Type: `Std::I64`
 
-#### `type RangeStepIterator = unbox struct { ...fields... }`
+##### field `end`
 
-##### field `next : Std::I64`
+Type: `Std::I64`
 
-##### field `end : Std::I64`
+#### RangeStepIterator
 
-##### field `step : Std::I64`
+Defined as: `type RangeStepIterator = unbox struct { ...fields... }`
 
-#### `type ReverseIterator i a = unbox struct { ...fields... }`
+##### field `next`
 
-##### field `idx : Std::I64`
+Type: `Std::I64`
 
-##### field `arr : Std::Array a`
+##### field `end`
 
-#### `type StateIterator s a = unbox struct { ...fields... }`
+Type: `Std::I64`
 
-##### field `state : Std::Option s`
+##### field `step`
 
-##### field `transit : s -> Std::Option (s, a)`
+Type: `Std::I64`
 
-#### `type TakeIterator i = unbox struct { ...fields... }`
+#### ReverseIterator
+
+Defined as: `type ReverseIterator i a = unbox struct { ...fields... }`
+
+##### field `idx`
+
+Type: `Std::I64`
+
+##### field `arr`
+
+Type: `Std::Array a`
+
+#### StateIterator
+
+Defined as: `type StateIterator s a = unbox struct { ...fields... }`
+
+##### field `state`
+
+Type: `Std::Option s`
+
+##### field `transit`
+
+Type: `s -> Std::Option (s, a)`
+
+#### TakeIterator
+
+Defined as: `type TakeIterator i = unbox struct { ...fields... }`
 
 Takes at most `n` elements from an iterator.
 
-##### field `iter : i`
+##### field `iter`
 
-##### field `n : Std::I64`
+Type: `i`
 
-#### `type TakeWhileIterator i a = unbox struct { ...fields... }`
+##### field `n`
 
-##### field `iter : i`
+Type: `Std::I64`
 
-##### field `pred : a -> Std::Bool`
+#### TakeWhileIterator
 
-#### `type ZipIterator i1 i2 = unbox struct { ...fields... }`
+Defined as: `type TakeWhileIterator i a = unbox struct { ...fields... }`
 
-##### field `iter1 : i1`
+##### field `iter`
 
-##### field `iter2 : i2`
+Type: `i`
+
+##### field `pred`
+
+Type: `a -> Std::Bool`
+
+#### ZipIterator
+
+Defined as: `type ZipIterator i1 i2 = unbox struct { ...fields... }`
+
+##### field `iter1`
+
+Type: `i1`
+
+##### field `iter2`
+
+Type: `i2`
 
 ### namespace Std::Option
 
-#### `type OptionIterator opt = unbox struct { ...fields... }`
+#### OptionIterator
 
-##### field `opt : opt`
+Defined as: `type OptionIterator opt = unbox struct { ...fields... }`
+
+##### field `opt`
+
+Type: `opt`
 
 ### namespace Std::String
 
-#### `type StringSplitIterator = unbox struct { ...fields... }`
+#### StringSplitIterator
 
-##### field `idx : Std::I64`
+Defined as: `type StringSplitIterator = unbox struct { ...fields... }`
 
-##### field `str : Std::String`
+##### field `idx`
 
-##### field `strlen : Std::I64`
+Type: `Std::I64`
 
-##### field `sep : Std::String`
+##### field `str`
 
-##### field `sep_len : Std::I64`
+Type: `Std::String`
+
+##### field `strlen`
+
+Type: `Std::I64`
+
+##### field `sep`
+
+Type: `Std::String`
+
+##### field `sep_len`
+
+Type: `Std::I64`
 
 ## Traits and aliases
 
