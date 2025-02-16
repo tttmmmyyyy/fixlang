@@ -52,7 +52,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
 
     for mod_name in mod_names {
         println!(
-            "Generating documentation for module `{}`.",
+            "Generating documentation for module \"{}\".",
             mod_name.to_string()
         );
         docgen_for_module(&program, &mod_name, docs_config)?;
@@ -117,7 +117,7 @@ fn docgen_for_module(
     // Check if the module exists in the program.
     if !program.modules.iter().any(|mi| mi.name == *mod_name) {
         return Err(Errors::from_msg(format!(
-            "Module `{}` does not exist in the program.",
+            "Module \"{}\" does not exist in the project.",
             mod_name
         )));
     }
@@ -158,7 +158,7 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut MarkdownSection) {
     for entry in entries {
         if entry.name.namespace != last_ns {
             last_ns = entry.name.namespace.clone();
-            let title = format!("`namespace {}`", last_ns.to_string());
+            let title = format!("namespace {}", last_ns.to_string());
             subsections.push(MarkdownSection::new(title));
         }
         if let Some(current_section) = subsections.last_mut() {
@@ -511,7 +511,7 @@ fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, 
                 continue;
             }
 
-            let title = format!("`impl {}`", impl_.qual_pred.to_string());
+            let title = format!("impl `{}`", impl_.qual_pred.to_string());
             let mut doc = MarkdownSection::new(title);
 
             doc.add_paragraph(docstring_from_opt_span(&impl_.source)?);
@@ -552,13 +552,12 @@ fn value_entries(
             continue;
         }
 
-        let title = format!(
-            "`{} : {}`",
-            name.name,
-            gv.syn_scm.as_ref().unwrap().to_string()
-        );
-        let mut doc = MarkdownSection::new(title);
+        let mut doc = MarkdownSection::new(name.name.clone());
 
+        doc.add_paragraph(format!(
+            "Type: `{}`",
+            gv.syn_scm.as_ref().unwrap().to_string()
+        ));
         doc.add_paragraph(gv.get_document().unwrap_or_default().trim().to_string());
 
         let entry = Entry {

@@ -13,13 +13,17 @@ The document for `Std` module describes about them up to N=3, but you can use la
 
 ## Values
 
-### `namespace Std`
+### namespace Std
 
-#### `compose : (a -> b) -> (b -> c) -> a -> c`
+#### compose
+
+Type: `(a -> b) -> (b -> c) -> a -> c`
 
 Composes two functions. Composition operators `<<` and `>>` is translated to use of `compose`.
 
-#### `fix : ((a -> b) -> a -> b) -> a -> b`
+#### fix
+
+Type: `((a -> b) -> a -> b) -> a -> b`
 
 `fix` enables you to make a recursive function locally.
 
@@ -36,7 +40,9 @@ main = (
 );
 ```
 
-#### `loop : s -> (s -> Std::LoopState s r) -> r`
+#### loop
+
+Type: `s -> (s -> Std::LoopState s r) -> r`
 
 `loop` enables you to make a loop. `LoopState` is a union type defined as follows:
 
@@ -63,7 +69,9 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99
 ```
 
-#### `loop_m : [m : Std::Monad] s -> (s -> m (Std::LoopState s r)) -> m r`
+#### loop_m
+
+Type: `[m : Std::Monad] s -> (s -> m (Std::LoopState s r)) -> m r`
 
 Monadic loop function. This is similar to `loop` but can be used to perform monadic action at each loop.
 
@@ -84,11 +92,15 @@ main = (
 );
 ```
 
-#### `mark_threaded : a -> a`
+#### mark_threaded
+
+Type: `a -> a`
 
 Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
 
-#### `undefined : Std::String -> a`
+#### undefined
+
+Type: `Std::String -> a`
 
 Generates an undefined value.
 
@@ -112,7 +124,9 @@ if condition {
 }
 ```
 
-#### `unsafe_is_unique : a -> (Std::Bool, a)`
+#### unsafe_is_unique
+
+Type: `a -> (Std::Bool, a)`
 
 This function checks if a value is uniquely referenced by a name, and returns the result paired with the given value itself. An unboxed value is always considered unique.
 
@@ -148,26 +162,34 @@ main = (
 );
 ```
 
-#### `with_retained : (a -> b) -> a -> b`
+#### with_retained
+
+Type: `(a -> b) -> a -> b`
 
 `x.with_retained(f)` runs `f` with retained `x`. 
 It is guaranteed that `x` is keep alive until `with_retained` is finished, even after `f` has finished using `x` in it. 
 
 A typical use case of this function is the implementation of `Std::Array::borrow_ptr`.
 
-### `namespace Std::Add`
+### namespace Std::Add
 
-#### `add : [a : Std::Add] a -> a -> a`
+#### add
+
+Type: `[a : Std::Add] a -> a -> a`
 
 Adds two values. An expression `x + y` is translated to `add(x, y)`.
 
-### `namespace Std::Array`
+### namespace Std::Array
 
-#### `@ : Std::I64 -> Std::Array a -> a`
+#### @
+
+Type: `Std::I64 -> Std::Array a -> a`
 
 Gets an element of an array at the specified index.
 
-#### `_get_ptr : Std::Array a -> Std::Ptr`
+#### _get_ptr
+
+Type: `Std::Array a -> Std::Ptr`
 
 Get the pointer to the memory region where elements are stored.
 
@@ -177,18 +199,24 @@ Try using `borrow_ptr` instead.
 @deprecated
 Use `Std::FFI::_get_boxed_ptr` instead.
 
-#### `_get_sub_size_with_length_and_additional_capacity : Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
+#### _get_sub_size_with_length_and_additional_capacity
+
+Type: `Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
 A function like `get_sub`, but behaves as if the size of the array is the specified value,
 and has a parameter to specify additional capacity of the returned `Array`.
 
-#### `_sort_range_using_buffer : Std::Array a -> Std::I64 -> Std::I64 -> ((a, a) -> Std::Bool) -> Std::Array a -> (Std::Array a, Std::Array a)`
+#### _sort_range_using_buffer
+
+Type: `Std::Array a -> Std::I64 -> Std::I64 -> ((a, a) -> Std::Bool) -> Std::Array a -> (Std::Array a, Std::Array a)`
 
 Sorts elements in a range of a vector by "less than" comparator.
 
 This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
 
-#### `_unsafe_force_unique : Std::Array a -> Std::Array a`
+#### _unsafe_force_unique
+
+Type: `Std::Array a -> Std::Array a`
 
 Force the uniqueness of an array.
 If the given array is shared, this function returns the cloned array.
@@ -225,23 +253,33 @@ let z = x.do_something_for_unique_array;
 
 Therefore, to use this function safely, you need to suppress the inlining of the above `f`. It is uncertain whether a function attribute such as "noinline" will be added in the future, so this function is deprecated currently.
 
-#### `_unsafe_get : Std::I64 -> Std::Array a -> a`
+#### _unsafe_get
+
+Type: `Std::I64 -> Std::Array a -> a`
 
 Gets a value from an array and returns it paired with the array itself, without bounds checking and retaining the value.
 
-#### `_unsafe_get_linear : Std::I64 -> Std::Array a -> (Std::Array a, a)`
+#### _unsafe_get_linear
+
+Type: `Std::I64 -> Std::Array a -> (Std::Array a, a)`
 
 Gets a value from an array, without bounds checking and retaining the returned value.
 
-#### `_unsafe_set : Std::I64 -> a -> Std::Array a -> Std::Array a`
+#### _unsafe_set
+
+Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
 
 Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
 
-#### `_unsafe_set_size : Std::I64 -> Std::Array a -> Std::Array a`
+#### _unsafe_set_size
+
+Type: `Std::I64 -> Std::Array a -> Std::Array a`
 
 Updates the length of an array, without uniqueness checking or validation of the given length value.
 
-#### `act : [f : Std::Functor] Std::I64 -> (a -> f a) -> Std::Array a -> f (Std::Array a)`
+#### act
+
+Type: `[f : Std::Functor] Std::I64 -> (a -> f a) -> Std::Array a -> f (Std::Array a)`
 
 Modifies an array by a functorial action.
 
@@ -255,17 +293,23 @@ If you call `arr.act(idx, fun)` when both of `arr` and `arr.@(idx)` are unique, 
 If you call `act` on an array which is shared, this function clones the given array when inserting the result of your action into the array.
 This means that you don't need to pay cloning cost when your action failed, as expected.
 
-#### `append : Std::Array a -> Std::Array a -> Std::Array a`
+#### append
+
+Type: `Std::Array a -> Std::Array a -> Std::Array a`
 
 Appends an array to an array.
 
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
 
-#### `empty : Std::I64 -> Std::Array a`
+#### empty
+
+Type: `Std::I64 -> Std::Array a`
 
 Creates an empty array with specified capacity.
 
-#### `fill : Std::I64 -> a -> Std::Array a`
+#### fill
+
+Type: `Std::I64 -> a -> Std::Array a`
 
 Creates an array of the specified length filled with the initial value.
 
@@ -273,45 +317,65 @@ The capacity is set to the same value as the length.
 
 Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
-#### `find_by : (a -> Std::Bool) -> Std::Array a -> Std::Option Std::I64`
+#### find_by
+
+Type: `(a -> Std::Bool) -> Std::Array a -> Std::Option Std::I64`
 
 Finds the first index at which the element satisfies a condition.
 
-#### `from_iter : [it : Std::Iterator, Std::Iterator::Item it = a] it -> Std::Array a`
+#### from_iter
+
+Type: `[it : Std::Iterator, Std::Iterator::Item it = a] it -> Std::Array a`
 
 Create an array from an iterator.
 
-#### `from_map : Std::I64 -> (Std::I64 -> a) -> Std::Array a`
+#### from_map
+
+Type: `Std::I64 -> (Std::I64 -> a) -> Std::Array a`
 
 Creates an array by a mapping function.
 
-#### `get_capacity : Std::Array a -> Std::I64`
+#### get_capacity
+
+Type: `Std::Array a -> Std::I64`
 
 Gets the capacity of an array.
 
-#### `get_first : Std::Array a -> Std::Option a`
+#### get_first
+
+Type: `Std::Array a -> Std::Option a`
 
 Gets the first element of an array. Returns none if the array is empty.
 
-#### `get_last : Std::Array a -> Std::Option a`
+#### get_last
+
+Type: `Std::Array a -> Std::Option a`
 
 Gets the last element of an array. Returns none if the array is empty.
 
-#### `get_size : Std::Array a -> Std::I64`
+#### get_size
+
+Type: `Std::Array a -> Std::I64`
 
 Gets the length of an array.
 
-#### `get_sub : Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
+#### get_sub
+
+Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
 `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`.
 
 `s` and `e` are clamped to the range `[0, arr.get_size]`.
 
-#### `is_empty : Std::Array a -> Std::Bool`
+#### is_empty
+
+Type: `Std::Array a -> Std::Bool`
 
 Returns if the array is empty
 
-#### `mod : Std::I64 -> (a -> a) -> Std::Array a -> Std::Array a`
+#### mod
+
+Type: `Std::I64 -> (a -> a) -> Std::Array a -> Std::Array a`
 
 Updates an array by applying a function to the element at the specified index.
 
@@ -319,351 +383,509 @@ This function clones the given array if it is shared.
 
 If you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique.
 
-#### `pop_back : Std::Array a -> Std::Array a`
+#### pop_back
+
+Type: `Std::Array a -> Std::Array a`
 
 Pops an element at the back of an array.
 If the array is empty, this function does nothing.
 
-#### `push_back : a -> Std::Array a -> Std::Array a`
+#### push_back
+
+Type: `a -> Std::Array a -> Std::Array a`
 
 Pushes an element to the back of an array.
 
-#### `reserve : Std::I64 -> Std::Array a -> Std::Array a`
+#### reserve
+
+Type: `Std::I64 -> Std::Array a -> Std::Array a`
 
 Reserves the memory region for an array.
 
-#### `set : Std::I64 -> a -> Std::Array a -> Std::Array a`
+#### set
+
+Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
 
 Updates an array by setting a value as the element at the specified index.
 
 This function clones the given array if it is shared.
 
-#### `sort_by : ((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
+#### sort_by
+
+Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 
 Sorts elements in a vector by "less than" comparator.
 
-#### `to_iter : Std::Array a -> Std::Iterator::ArrayIterator a`
+#### to_iter
+
+Type: `Std::Array a -> Std::Iterator::ArrayIterator a`
 
 Converts an array to an iterator.
 
-#### `truncate : Std::I64 -> Std::Array a -> Std::Array a`
+#### truncate
+
+Type: `Std::I64 -> Std::Array a -> Std::Array a`
 
 Truncates an array, keeping the given number of first elements.
 
 `truncante(len, arr)` does nothing if `len >= arr.get_size`.
 
-### `namespace Std::Box`
+### namespace Std::Box
 
-#### `make : a -> Std::Box a`
+#### make
 
-### `namespace Std::Debug`
+Type: `a -> Std::Box a`
 
-#### `_debug_print_to_stream : Std::IO::IOHandle -> Std::String -> ()`
+### namespace Std::Debug
+
+#### _debug_print_to_stream
+
+Type: `Std::IO::IOHandle -> Std::String -> ()`
 
 Prints a string to the specified stream and flushes the stream.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
-#### `assert : Std::Lazy Std::String -> Std::Bool -> Std::IO ()`
+#### assert
+
+Type: `Std::Lazy Std::String -> Std::Bool -> Std::IO ()`
 
 Asserts that a condition (boolean value) is true.
 
 If the assertion failed, prints a message to the stderr and aborts the program.
 
-#### `assert_eq : [a : Std::Eq] Std::Lazy Std::String -> a -> a -> Std::IO ()`
+#### assert_eq
+
+Type: `[a : Std::Eq] Std::Lazy Std::String -> a -> a -> Std::IO ()`
 
 Asserts that two values are equal.
 
 If the assertion failed, prints a message to the stderr and aborts the program.
 
-#### `assert_unique : Std::Lazy Std::String -> a -> a`
+#### assert_unique
+
+Type: `Std::Lazy Std::String -> a -> a`
 
 Asserts that the given value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts the program.
 
 The main use of this function is to check whether a boxed value given as an argument is unique.
 
-#### `consumed_time_while_io : Std::IO a -> Std::IO (a, Std::F64)`
+#### consumed_time_while_io
+
+Type: `Std::IO a -> Std::IO (a, Std::F64)`
 
 Get clocks (cpu time) elapsed while executing an I/O action.
 
-#### `consumed_time_while_lazy : Std::Lazy a -> (a, Std::F64)`
+#### consumed_time_while_lazy
+
+Type: `Std::Lazy a -> (a, Std::F64)`
 
 Get clocks (cpu time) elapsed while evaluating a lazy value.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
-#### `debug_eprint : Std::String -> ()`
+#### debug_eprint
+
+Type: `Std::String -> ()`
 
 Prints a string to stderr and flushes.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
-#### `debug_eprintln : Std::String -> ()`
+#### debug_eprintln
+
+Type: `Std::String -> ()`
 
 Prints a string followed by a newline to stderr and flushes.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
-#### `debug_print : Std::String -> ()`
+#### debug_print
+
+Type: `Std::String -> ()`
 
 Prints a string to stdout and flushes.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
-#### `debug_println : Std::String -> ()`
+#### debug_println
+
+Type: `Std::String -> ()`
 
 Prints a string followed by a newline to stdout and flushes.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
-### `namespace Std::Div`
+### namespace Std::Div
 
-#### `div : [a : Std::Div] a -> a -> a`
+#### div
+
+Type: `[a : Std::Div] a -> a -> a`
 
 Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
 
-### `namespace Std::Eq`
+### namespace Std::Eq
 
-#### `eq : [a : Std::Eq] a -> a -> Std::Bool`
+#### eq
+
+Type: `[a : Std::Eq] a -> a -> Std::Bool`
 
 Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
 
-### `namespace Std::F32`
+### namespace Std::F32
 
-#### `abs : Std::F32 -> Std::F32`
+#### abs
 
-#### `infinity : Std::F32`
+Type: `Std::F32 -> Std::F32`
+
+#### infinity
+
+Type: `Std::F32`
 
 The infinity value for the given floating point type.
 
-#### `quiet_nan : Std::F32`
+#### quiet_nan
+
+Type: `Std::F32`
 
 A floating number represented by `01...1` in binary.
 
-#### `to_CChar : Std::F32 -> Std::I8`
+#### to_CChar
+
+Type: `Std::F32 -> Std::I8`
 
 Casts a value of `F32` into a value of `CChar`.
 
-#### `to_CDouble : Std::F32 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::F32 -> Std::F64`
 
 Casts a value of `F32` into a value of `CDouble`.
 
-#### `to_CFloat : Std::F32 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::F32 -> Std::F32`
 
 Casts a value of `F32` into a value of `CFloat`.
 
-#### `to_CInt : Std::F32 -> Std::I32`
+#### to_CInt
+
+Type: `Std::F32 -> Std::I32`
 
 Casts a value of `F32` into a value of `CInt`.
 
-#### `to_CLong : Std::F32 -> Std::I64`
+#### to_CLong
+
+Type: `Std::F32 -> Std::I64`
 
 Casts a value of `F32` into a value of `CLong`.
 
-#### `to_CLongLong : Std::F32 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::F32 -> Std::I64`
 
 Casts a value of `F32` into a value of `CLongLong`.
 
-#### `to_CShort : Std::F32 -> Std::I16`
+#### to_CShort
+
+Type: `Std::F32 -> Std::I16`
 
 Casts a value of `F32` into a value of `CShort`.
 
-#### `to_CSizeT : Std::F32 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::F32 -> Std::U64`
 
 Casts a value of `F32` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::F32 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::F32 -> Std::U8`
 
 Casts a value of `F32` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::F32 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::F32 -> Std::U32`
 
 Casts a value of `F32` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::F32 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::F32 -> Std::U64`
 
 Casts a value of `F32` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::F32 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::F32 -> Std::U64`
 
 Casts a value of `F32` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::F32 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::F32 -> Std::U16`
 
 Casts a value of `F32` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::F32 -> Std::F32`
+#### to_F32
+
+Type: `Std::F32 -> Std::F32`
 
 Casts a value of `F32` into a value of `F32`.
 
-#### `to_F64 : Std::F32 -> Std::F64`
+#### to_F64
+
+Type: `Std::F32 -> Std::F64`
 
 Casts a value of `F32` into a value of `F64`.
 
-#### `to_I16 : Std::F32 -> Std::I16`
+#### to_I16
+
+Type: `Std::F32 -> Std::I16`
 
 Casts a value of `F32` into a value of `I16`.
 
-#### `to_I32 : Std::F32 -> Std::I32`
+#### to_I32
+
+Type: `Std::F32 -> Std::I32`
 
 Casts a value of `F32` into a value of `I32`.
 
-#### `to_I64 : Std::F32 -> Std::I64`
+#### to_I64
+
+Type: `Std::F32 -> Std::I64`
 
 Casts a value of `F32` into a value of `I64`.
 
-#### `to_I8 : Std::F32 -> Std::I8`
+#### to_I8
+
+Type: `Std::F32 -> Std::I8`
 
 Casts a value of `F32` into a value of `I8`.
 
-#### `to_U16 : Std::F32 -> Std::U16`
+#### to_U16
+
+Type: `Std::F32 -> Std::U16`
 
 Casts a value of `F32` into a value of `U16`.
 
-#### `to_U32 : Std::F32 -> Std::U32`
+#### to_U32
+
+Type: `Std::F32 -> Std::U32`
 
 Casts a value of `F32` into a value of `U32`.
 
-#### `to_U64 : Std::F32 -> Std::U64`
+#### to_U64
+
+Type: `Std::F32 -> Std::U64`
 
 Casts a value of `F32` into a value of `U64`.
 
-#### `to_U8 : Std::F32 -> Std::U8`
+#### to_U8
+
+Type: `Std::F32 -> Std::U8`
 
 Casts a value of `F32` into a value of `U8`.
 
-#### `to_string_exp : Std::F32 -> Std::String`
+#### to_string_exp
+
+Type: `Std::F32 -> Std::String`
 
 Converts a floating number to a string of exponential form.
 
-#### `to_string_exp_precision : Std::U8 -> Std::F32 -> Std::String`
+#### to_string_exp_precision
+
+Type: `Std::U8 -> Std::F32 -> Std::String`
 
 Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
 
-#### `to_string_precision : Std::U8 -> Std::F32 -> Std::String`
+#### to_string_precision
+
+Type: `Std::U8 -> Std::F32 -> Std::String`
 
 Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
-### `namespace Std::F64`
+### namespace Std::F64
 
-#### `abs : Std::F64 -> Std::F64`
+#### abs
 
-#### `infinity : Std::F64`
+Type: `Std::F64 -> Std::F64`
+
+#### infinity
+
+Type: `Std::F64`
 
 The infinity value for the given floating point type.
 
-#### `quiet_nan : Std::F64`
+#### quiet_nan
+
+Type: `Std::F64`
 
 A floating number represented by `01...1` in binary.
 
-#### `to_CChar : Std::F64 -> Std::I8`
+#### to_CChar
+
+Type: `Std::F64 -> Std::I8`
 
 Casts a value of `F64` into a value of `CChar`.
 
-#### `to_CDouble : Std::F64 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::F64 -> Std::F64`
 
 Casts a value of `F64` into a value of `CDouble`.
 
-#### `to_CFloat : Std::F64 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::F64 -> Std::F32`
 
 Casts a value of `F64` into a value of `CFloat`.
 
-#### `to_CInt : Std::F64 -> Std::I32`
+#### to_CInt
+
+Type: `Std::F64 -> Std::I32`
 
 Casts a value of `F64` into a value of `CInt`.
 
-#### `to_CLong : Std::F64 -> Std::I64`
+#### to_CLong
+
+Type: `Std::F64 -> Std::I64`
 
 Casts a value of `F64` into a value of `CLong`.
 
-#### `to_CLongLong : Std::F64 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::F64 -> Std::I64`
 
 Casts a value of `F64` into a value of `CLongLong`.
 
-#### `to_CShort : Std::F64 -> Std::I16`
+#### to_CShort
+
+Type: `Std::F64 -> Std::I16`
 
 Casts a value of `F64` into a value of `CShort`.
 
-#### `to_CSizeT : Std::F64 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::F64 -> Std::U64`
 
 Casts a value of `F64` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::F64 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::F64 -> Std::U8`
 
 Casts a value of `F64` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::F64 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::F64 -> Std::U32`
 
 Casts a value of `F64` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::F64 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::F64 -> Std::U64`
 
 Casts a value of `F64` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::F64 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::F64 -> Std::U64`
 
 Casts a value of `F64` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::F64 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::F64 -> Std::U16`
 
 Casts a value of `F64` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::F64 -> Std::F32`
+#### to_F32
+
+Type: `Std::F64 -> Std::F32`
 
 Casts a value of `F64` into a value of `F32`.
 
-#### `to_F64 : Std::F64 -> Std::F64`
+#### to_F64
+
+Type: `Std::F64 -> Std::F64`
 
 Casts a value of `F64` into a value of `F64`.
 
-#### `to_I16 : Std::F64 -> Std::I16`
+#### to_I16
+
+Type: `Std::F64 -> Std::I16`
 
 Casts a value of `F64` into a value of `I16`.
 
-#### `to_I32 : Std::F64 -> Std::I32`
+#### to_I32
+
+Type: `Std::F64 -> Std::I32`
 
 Casts a value of `F64` into a value of `I32`.
 
-#### `to_I64 : Std::F64 -> Std::I64`
+#### to_I64
+
+Type: `Std::F64 -> Std::I64`
 
 Casts a value of `F64` into a value of `I64`.
 
-#### `to_I8 : Std::F64 -> Std::I8`
+#### to_I8
+
+Type: `Std::F64 -> Std::I8`
 
 Casts a value of `F64` into a value of `I8`.
 
-#### `to_U16 : Std::F64 -> Std::U16`
+#### to_U16
+
+Type: `Std::F64 -> Std::U16`
 
 Casts a value of `F64` into a value of `U16`.
 
-#### `to_U32 : Std::F64 -> Std::U32`
+#### to_U32
+
+Type: `Std::F64 -> Std::U32`
 
 Casts a value of `F64` into a value of `U32`.
 
-#### `to_U64 : Std::F64 -> Std::U64`
+#### to_U64
+
+Type: `Std::F64 -> Std::U64`
 
 Casts a value of `F64` into a value of `U64`.
 
-#### `to_U8 : Std::F64 -> Std::U8`
+#### to_U8
+
+Type: `Std::F64 -> Std::U8`
 
 Casts a value of `F64` into a value of `U8`.
 
-#### `to_string_exp : Std::F64 -> Std::String`
+#### to_string_exp
+
+Type: `Std::F64 -> Std::String`
 
 Converts a floating number to a string of exponential form.
 
-#### `to_string_exp_precision : Std::U8 -> Std::F64 -> Std::String`
+#### to_string_exp_precision
+
+Type: `Std::U8 -> Std::F64 -> Std::String`
 
 Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
 
-#### `to_string_precision : Std::U8 -> Std::F64 -> Std::String`
+#### to_string_precision
+
+Type: `Std::U8 -> Std::F64 -> Std::String`
 
 Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
-### `namespace Std::FFI`
+### namespace Std::FFI
 
-#### `_get_boxed_ptr : [a : Std::Boxed] a -> Std::Ptr`
+#### _get_boxed_ptr
+
+Type: `[a : Std::Boxed] a -> Std::Ptr`
 
 Returns a pointer to the data of a boxed value.
 
@@ -679,26 +901,34 @@ NOTE:
 This function is unsafe in that if the call `v._get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
 To avoid this issue, use `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`, or `mutate_boxed_io` instead.
 
-#### `borrow_boxed : [a : Std::Boxed] (Std::Ptr -> b) -> a -> b`
+#### borrow_boxed
+
+Type: `[a : Std::Boxed] (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
 For the details of the pointer, see the document of `_get_boxed_ptr`.
 
-#### `borrow_boxed_io : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
+#### borrow_boxed_io
+
+Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
 
 Performs an IO action borrowing a pointer to the data of a boxed value.
 
 For the details of the pointer, see the document of `_get_boxed_ptr`.
 
-#### `boxed_from_retained_ptr : [a : Std::Boxed] Std::Ptr -> a`
+#### boxed_from_retained_ptr
+
+Type: `[a : Std::Boxed] Std::Ptr -> a`
 
 Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr`.
 
 NOTE: 
 It is the user's responsibility to ensure that the argument is actually a pointer to the type of the return value, and undefined behavior will occur if it is not.
 
-#### `boxed_to_retained_ptr : [a : Std::Boxed] a -> Std::Ptr`
+#### boxed_to_retained_ptr
+
+Type: `[a : Std::Boxed] a -> Std::Ptr`
 
 Returns a retained pointer to a boxed value.
 This function is used to share ownership of Fix's boxed values with foreign languages.
@@ -709,15 +939,21 @@ To release / retain the value in a foreign language, call the function pointer o
 Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
 If you want to get a pointer to the data of the boxed value, use `borrow_boxed`.
 
-#### `clear_errno : Std::IO ()`
+#### clear_errno
+
+Type: `Std::IO ()`
 
 Sets errno to zero.
 
-#### `get_errno : Std::IO Std::FFI::CInt`
+#### get_errno
+
+Type: `Std::IO Std::FFI::CInt`
 
 Gets errno which is set by C functions.
 
-#### `get_funptr_release : [a : Std::Boxed] Std::Lazy a -> Std::Ptr`
+#### get_funptr_release
+
+Type: `[a : Std::Boxed] Std::Lazy a -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which releases a boxed value of type `a`.
 This function is used to release a pointer obtained by `boxed_to_retained_ptr`.
@@ -738,14 +974,18 @@ main = (
 );
 ```
 
-#### `get_funptr_retain : [a : Std::Boxed] Std::Lazy a -> Std::Ptr`
+#### get_funptr_retain
+
+Type: `[a : Std::Boxed] Std::Lazy a -> Std::Ptr`
 
 Returns a pointer to the function of type `void (*)(void*)` which retains a boxed value of type `a`.
 This function is used to retain a pointer obtained by `boxed_to_retained_ptr`.
 
 For the reason that this function requires a value of type `Lazy a`, not of `a`, see the document for `get_funptr_release`.
 
-#### `mutate_boxed : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> (a, b)`
+#### mutate_boxed
+
+Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> (a, b)`
 
 `x.mutate_boxed(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of ``io(ptr)``.
 
@@ -756,7 +996,9 @@ For more details on the value of the pointer passed to `io`, see the document of
 
 This function first clones the value if `x` is not unique.
 
-#### `mutate_boxed_io : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
+#### mutate_boxed_io
+
+Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
 
 `x.mutate_boxed_io(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of `io(ptr)`.
 
@@ -764,13 +1006,17 @@ Similar to `mutate_boxed`, but this function is used when you want to run the IO
 
 For more details, see the document of `mutate_boxed`.
 
-#### `mutate_boxed_ios : [a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
+#### mutate_boxed_ios
+
+Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
 
 Internal implementation of the `mutate_boxed_io` function.
 
-### `namespace Std::FFI::Destructor`
+### namespace Std::FFI::Destructor
 
-#### `borrow : (a -> b) -> Std::FFI::Destructor a -> b`
+#### borrow
+
+Type: `(a -> b) -> Std::FFI::Destructor a -> b`
 
 Borrow the contained value.
 
@@ -779,15 +1025,21 @@ Borrow the contained value.
 It is guaranteed that the `dtor` is alive during the call of `worker`.
 In other words, the `worker` receives the contained value for which the destructor is not called yet.
 
-#### `borrow_io : (a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO b`
+#### borrow_io
+
+Type: `(a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO b`
 
 Performs an IO action borrowing the contained value.
 
-#### `make : a -> (a -> Std::IO a) -> Std::FFI::Destructor a`
+#### make
+
+Type: `a -> (a -> Std::IO a) -> Std::FFI::Destructor a`
 
 Make a destructor value.
 
-#### `mutate_unique : (a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> (Std::FFI::Destructor a, b)`
+#### mutate_unique
+
+Type: `(a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> (Std::FFI::Destructor a, b)`
 
 Apply an IO action which mutates the semantics of the value.
 
@@ -797,567 +1049,851 @@ If `dtor` is shared, it creates a new `Destructor` value using `ctor` and applie
 The `action` is allowed to modify the external resource stored in `dtor` (e.g., if `value` is a pointer, it can modify the value pointed by the pointer).
 Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resource stored in `dtor`.
 
-#### `mutate_unique_io : (a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO (Std::FFI::Destructor a, b)`
+#### mutate_unique_io
+
+Type: `(a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO (Std::FFI::Destructor a, b)`
 
 Apply an IO action which mutates the semantics of the value.
 
 This is similar to `mutate_unique`, but the `ctor` and `action` is executed in the context of the external `IO` context.
 
-### `namespace Std::FromBytes`
+### namespace Std::FromBytes
 
-#### `from_bytes : [a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::ErrMsg a`
+#### from_bytes
 
-### `namespace Std::FromString`
+Type: `[a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::ErrMsg a`
 
-#### `from_string : [a : Std::FromString] Std::String -> Std::Result Std::ErrMsg a`
+### namespace Std::FromString
 
-### `namespace Std::Functor`
+#### from_string
 
-#### `forget : [f : Std::Functor] f a -> f ()`
+Type: `[a : Std::FromString] Std::String -> Std::Result Std::ErrMsg a`
 
-#### `map : [f : Std::Functor] (a -> b) -> f a -> f b`
+### namespace Std::Functor
 
-### `namespace Std::I16`
+#### forget
 
-#### `abs : Std::I16 -> Std::I16`
+Type: `[f : Std::Functor] f a -> f ()`
 
-#### `bit_and : Std::I16 -> Std::I16 -> Std::I16`
+#### map
+
+Type: `[f : Std::Functor] (a -> b) -> f a -> f b`
+
+### namespace Std::I16
+
+#### abs
+
+Type: `Std::I16 -> Std::I16`
+
+#### bit_and
+
+Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Calculates bitwise AND of two values.
 
-#### `bit_or : Std::I16 -> Std::I16 -> Std::I16`
+#### bit_or
+
+Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Calculates bitwise OR of two values.
 
-#### `bit_xor : Std::I16 -> Std::I16 -> Std::I16`
+#### bit_xor
+
+Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Calculates bitwise XOR of two values.
 
-#### `maximum : Std::I16`
+#### maximum
 
-#### `minimum : Std::I16`
+Type: `Std::I16`
 
-#### `shift_left : Std::I16 -> Std::I16 -> Std::I16`
+#### minimum
+
+Type: `Std::I16`
+
+#### shift_left
+
+Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 `v.shift_left(w)` shifts `v` to left by `w` bits.
 
-#### `shift_right : Std::I16 -> Std::I16 -> Std::I16`
+#### shift_right
+
+Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 `v.shift_right(w)` shifts `v` to right by `w` bits.
 
-#### `to_CChar : Std::I16 -> Std::I8`
+#### to_CChar
+
+Type: `Std::I16 -> Std::I8`
 
 Casts a value of `I16` into a value of `CChar`.
 
-#### `to_CDouble : Std::I16 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::I16 -> Std::F64`
 
 Casts a value of `I16` into a value of `CDouble`.
 
-#### `to_CFloat : Std::I16 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::I16 -> Std::F32`
 
 Casts a value of `I16` into a value of `CFloat`.
 
-#### `to_CInt : Std::I16 -> Std::I32`
+#### to_CInt
+
+Type: `Std::I16 -> Std::I32`
 
 Casts a value of `I16` into a value of `CInt`.
 
-#### `to_CLong : Std::I16 -> Std::I64`
+#### to_CLong
+
+Type: `Std::I16 -> Std::I64`
 
 Casts a value of `I16` into a value of `CLong`.
 
-#### `to_CLongLong : Std::I16 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::I16 -> Std::I64`
 
 Casts a value of `I16` into a value of `CLongLong`.
 
-#### `to_CShort : Std::I16 -> Std::I16`
+#### to_CShort
+
+Type: `Std::I16 -> Std::I16`
 
 Casts a value of `I16` into a value of `CShort`.
 
-#### `to_CSizeT : Std::I16 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::I16 -> Std::U64`
 
 Casts a value of `I16` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::I16 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::I16 -> Std::U8`
 
 Casts a value of `I16` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::I16 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::I16 -> Std::U32`
 
 Casts a value of `I16` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::I16 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::I16 -> Std::U64`
 
 Casts a value of `I16` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::I16 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::I16 -> Std::U64`
 
 Casts a value of `I16` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::I16 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::I16 -> Std::U16`
 
 Casts a value of `I16` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::I16 -> Std::F32`
+#### to_F32
+
+Type: `Std::I16 -> Std::F32`
 
 Casts a value of `I16` into a value of `F32`.
 
-#### `to_F64 : Std::I16 -> Std::F64`
+#### to_F64
+
+Type: `Std::I16 -> Std::F64`
 
 Casts a value of `I16` into a value of `F64`.
 
-#### `to_I16 : Std::I16 -> Std::I16`
+#### to_I16
+
+Type: `Std::I16 -> Std::I16`
 
 Casts a value of `I16` into a value of `I16`.
 
-#### `to_I32 : Std::I16 -> Std::I32`
+#### to_I32
+
+Type: `Std::I16 -> Std::I32`
 
 Casts a value of `I16` into a value of `I32`.
 
-#### `to_I64 : Std::I16 -> Std::I64`
+#### to_I64
+
+Type: `Std::I16 -> Std::I64`
 
 Casts a value of `I16` into a value of `I64`.
 
-#### `to_I8 : Std::I16 -> Std::I8`
+#### to_I8
+
+Type: `Std::I16 -> Std::I8`
 
 Casts a value of `I16` into a value of `I8`.
 
-#### `to_U16 : Std::I16 -> Std::U16`
+#### to_U16
+
+Type: `Std::I16 -> Std::U16`
 
 Casts a value of `I16` into a value of `U16`.
 
-#### `to_U32 : Std::I16 -> Std::U32`
+#### to_U32
+
+Type: `Std::I16 -> Std::U32`
 
 Casts a value of `I16` into a value of `U32`.
 
-#### `to_U64 : Std::I16 -> Std::U64`
+#### to_U64
+
+Type: `Std::I16 -> Std::U64`
 
 Casts a value of `I16` into a value of `U64`.
 
-#### `to_U8 : Std::I16 -> Std::U8`
+#### to_U8
+
+Type: `Std::I16 -> Std::U8`
 
 Casts a value of `I16` into a value of `U8`.
 
-### `namespace Std::I32`
+### namespace Std::I32
 
-#### `abs : Std::I32 -> Std::I32`
+#### abs
 
-#### `bit_and : Std::I32 -> Std::I32 -> Std::I32`
+Type: `Std::I32 -> Std::I32`
+
+#### bit_and
+
+Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Calculates bitwise AND of two values.
 
-#### `bit_or : Std::I32 -> Std::I32 -> Std::I32`
+#### bit_or
+
+Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Calculates bitwise OR of two values.
 
-#### `bit_xor : Std::I32 -> Std::I32 -> Std::I32`
+#### bit_xor
+
+Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Calculates bitwise XOR of two values.
 
-#### `maximum : Std::I32`
+#### maximum
 
-#### `minimum : Std::I32`
+Type: `Std::I32`
 
-#### `shift_left : Std::I32 -> Std::I32 -> Std::I32`
+#### minimum
+
+Type: `Std::I32`
+
+#### shift_left
+
+Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 `v.shift_left(w)` shifts `v` to left by `w` bits.
 
-#### `shift_right : Std::I32 -> Std::I32 -> Std::I32`
+#### shift_right
+
+Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 `v.shift_right(w)` shifts `v` to right by `w` bits.
 
-#### `to_CChar : Std::I32 -> Std::I8`
+#### to_CChar
+
+Type: `Std::I32 -> Std::I8`
 
 Casts a value of `I32` into a value of `CChar`.
 
-#### `to_CDouble : Std::I32 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::I32 -> Std::F64`
 
 Casts a value of `I32` into a value of `CDouble`.
 
-#### `to_CFloat : Std::I32 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::I32 -> Std::F32`
 
 Casts a value of `I32` into a value of `CFloat`.
 
-#### `to_CInt : Std::I32 -> Std::I32`
+#### to_CInt
+
+Type: `Std::I32 -> Std::I32`
 
 Casts a value of `I32` into a value of `CInt`.
 
-#### `to_CLong : Std::I32 -> Std::I64`
+#### to_CLong
+
+Type: `Std::I32 -> Std::I64`
 
 Casts a value of `I32` into a value of `CLong`.
 
-#### `to_CLongLong : Std::I32 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::I32 -> Std::I64`
 
 Casts a value of `I32` into a value of `CLongLong`.
 
-#### `to_CShort : Std::I32 -> Std::I16`
+#### to_CShort
+
+Type: `Std::I32 -> Std::I16`
 
 Casts a value of `I32` into a value of `CShort`.
 
-#### `to_CSizeT : Std::I32 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::I32 -> Std::U64`
 
 Casts a value of `I32` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::I32 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::I32 -> Std::U8`
 
 Casts a value of `I32` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::I32 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::I32 -> Std::U32`
 
 Casts a value of `I32` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::I32 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::I32 -> Std::U64`
 
 Casts a value of `I32` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::I32 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::I32 -> Std::U64`
 
 Casts a value of `I32` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::I32 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::I32 -> Std::U16`
 
 Casts a value of `I32` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::I32 -> Std::F32`
+#### to_F32
+
+Type: `Std::I32 -> Std::F32`
 
 Casts a value of `I32` into a value of `F32`.
 
-#### `to_F64 : Std::I32 -> Std::F64`
+#### to_F64
+
+Type: `Std::I32 -> Std::F64`
 
 Casts a value of `I32` into a value of `F64`.
 
-#### `to_I16 : Std::I32 -> Std::I16`
+#### to_I16
+
+Type: `Std::I32 -> Std::I16`
 
 Casts a value of `I32` into a value of `I16`.
 
-#### `to_I32 : Std::I32 -> Std::I32`
+#### to_I32
+
+Type: `Std::I32 -> Std::I32`
 
 Casts a value of `I32` into a value of `I32`.
 
-#### `to_I64 : Std::I32 -> Std::I64`
+#### to_I64
+
+Type: `Std::I32 -> Std::I64`
 
 Casts a value of `I32` into a value of `I64`.
 
-#### `to_I8 : Std::I32 -> Std::I8`
+#### to_I8
+
+Type: `Std::I32 -> Std::I8`
 
 Casts a value of `I32` into a value of `I8`.
 
-#### `to_U16 : Std::I32 -> Std::U16`
+#### to_U16
+
+Type: `Std::I32 -> Std::U16`
 
 Casts a value of `I32` into a value of `U16`.
 
-#### `to_U32 : Std::I32 -> Std::U32`
+#### to_U32
+
+Type: `Std::I32 -> Std::U32`
 
 Casts a value of `I32` into a value of `U32`.
 
-#### `to_U64 : Std::I32 -> Std::U64`
+#### to_U64
+
+Type: `Std::I32 -> Std::U64`
 
 Casts a value of `I32` into a value of `U64`.
 
-#### `to_U8 : Std::I32 -> Std::U8`
+#### to_U8
+
+Type: `Std::I32 -> Std::U8`
 
 Casts a value of `I32` into a value of `U8`.
 
-### `namespace Std::I64`
+### namespace Std::I64
 
-#### `abs : Std::I64 -> Std::I64`
+#### abs
 
-#### `bit_and : Std::I64 -> Std::I64 -> Std::I64`
+Type: `Std::I64 -> Std::I64`
+
+#### bit_and
+
+Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Calculates bitwise AND of two values.
 
-#### `bit_or : Std::I64 -> Std::I64 -> Std::I64`
+#### bit_or
+
+Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Calculates bitwise OR of two values.
 
-#### `bit_xor : Std::I64 -> Std::I64 -> Std::I64`
+#### bit_xor
+
+Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Calculates bitwise XOR of two values.
 
-#### `maximum : Std::I64`
+#### maximum
 
-#### `minimum : Std::I64`
+Type: `Std::I64`
 
-#### `shift_left : Std::I64 -> Std::I64 -> Std::I64`
+#### minimum
+
+Type: `Std::I64`
+
+#### shift_left
+
+Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 `v.shift_left(w)` shifts `v` to left by `w` bits.
 
-#### `shift_right : Std::I64 -> Std::I64 -> Std::I64`
+#### shift_right
+
+Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 `v.shift_right(w)` shifts `v` to right by `w` bits.
 
-#### `to_CChar : Std::I64 -> Std::I8`
+#### to_CChar
+
+Type: `Std::I64 -> Std::I8`
 
 Casts a value of `I64` into a value of `CChar`.
 
-#### `to_CDouble : Std::I64 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::I64 -> Std::F64`
 
 Casts a value of `I64` into a value of `CDouble`.
 
-#### `to_CFloat : Std::I64 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::I64 -> Std::F32`
 
 Casts a value of `I64` into a value of `CFloat`.
 
-#### `to_CInt : Std::I64 -> Std::I32`
+#### to_CInt
+
+Type: `Std::I64 -> Std::I32`
 
 Casts a value of `I64` into a value of `CInt`.
 
-#### `to_CLong : Std::I64 -> Std::I64`
+#### to_CLong
+
+Type: `Std::I64 -> Std::I64`
 
 Casts a value of `I64` into a value of `CLong`.
 
-#### `to_CLongLong : Std::I64 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::I64 -> Std::I64`
 
 Casts a value of `I64` into a value of `CLongLong`.
 
-#### `to_CShort : Std::I64 -> Std::I16`
+#### to_CShort
+
+Type: `Std::I64 -> Std::I16`
 
 Casts a value of `I64` into a value of `CShort`.
 
-#### `to_CSizeT : Std::I64 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::I64 -> Std::U64`
 
 Casts a value of `I64` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::I64 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::I64 -> Std::U8`
 
 Casts a value of `I64` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::I64 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::I64 -> Std::U32`
 
 Casts a value of `I64` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::I64 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::I64 -> Std::U64`
 
 Casts a value of `I64` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::I64 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::I64 -> Std::U64`
 
 Casts a value of `I64` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::I64 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::I64 -> Std::U16`
 
 Casts a value of `I64` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::I64 -> Std::F32`
+#### to_F32
+
+Type: `Std::I64 -> Std::F32`
 
 Casts a value of `I64` into a value of `F32`.
 
-#### `to_F64 : Std::I64 -> Std::F64`
+#### to_F64
+
+Type: `Std::I64 -> Std::F64`
 
 Casts a value of `I64` into a value of `F64`.
 
-#### `to_I16 : Std::I64 -> Std::I16`
+#### to_I16
+
+Type: `Std::I64 -> Std::I16`
 
 Casts a value of `I64` into a value of `I16`.
 
-#### `to_I32 : Std::I64 -> Std::I32`
+#### to_I32
+
+Type: `Std::I64 -> Std::I32`
 
 Casts a value of `I64` into a value of `I32`.
 
-#### `to_I64 : Std::I64 -> Std::I64`
+#### to_I64
+
+Type: `Std::I64 -> Std::I64`
 
 Casts a value of `I64` into a value of `I64`.
 
-#### `to_I8 : Std::I64 -> Std::I8`
+#### to_I8
+
+Type: `Std::I64 -> Std::I8`
 
 Casts a value of `I64` into a value of `I8`.
 
-#### `to_U16 : Std::I64 -> Std::U16`
+#### to_U16
+
+Type: `Std::I64 -> Std::U16`
 
 Casts a value of `I64` into a value of `U16`.
 
-#### `to_U32 : Std::I64 -> Std::U32`
+#### to_U32
+
+Type: `Std::I64 -> Std::U32`
 
 Casts a value of `I64` into a value of `U32`.
 
-#### `to_U64 : Std::I64 -> Std::U64`
+#### to_U64
+
+Type: `Std::I64 -> Std::U64`
 
 Casts a value of `I64` into a value of `U64`.
 
-#### `to_U8 : Std::I64 -> Std::U8`
+#### to_U8
+
+Type: `Std::I64 -> Std::U8`
 
 Casts a value of `I64` into a value of `U8`.
 
-### `namespace Std::I8`
+### namespace Std::I8
 
-#### `abs : Std::I8 -> Std::I8`
+#### abs
 
-#### `bit_and : Std::I8 -> Std::I8 -> Std::I8`
+Type: `Std::I8 -> Std::I8`
+
+#### bit_and
+
+Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Calculates bitwise AND of two values.
 
-#### `bit_or : Std::I8 -> Std::I8 -> Std::I8`
+#### bit_or
+
+Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Calculates bitwise OR of two values.
 
-#### `bit_xor : Std::I8 -> Std::I8 -> Std::I8`
+#### bit_xor
+
+Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Calculates bitwise XOR of two values.
 
-#### `maximum : Std::I8`
+#### maximum
 
-#### `minimum : Std::I8`
+Type: `Std::I8`
 
-#### `shift_left : Std::I8 -> Std::I8 -> Std::I8`
+#### minimum
+
+Type: `Std::I8`
+
+#### shift_left
+
+Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 `v.shift_left(w)` shifts `v` to left by `w` bits.
 
-#### `shift_right : Std::I8 -> Std::I8 -> Std::I8`
+#### shift_right
+
+Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 `v.shift_right(w)` shifts `v` to right by `w` bits.
 
-#### `to_CChar : Std::I8 -> Std::I8`
+#### to_CChar
+
+Type: `Std::I8 -> Std::I8`
 
 Casts a value of `I8` into a value of `CChar`.
 
-#### `to_CDouble : Std::I8 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::I8 -> Std::F64`
 
 Casts a value of `I8` into a value of `CDouble`.
 
-#### `to_CFloat : Std::I8 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::I8 -> Std::F32`
 
 Casts a value of `I8` into a value of `CFloat`.
 
-#### `to_CInt : Std::I8 -> Std::I32`
+#### to_CInt
+
+Type: `Std::I8 -> Std::I32`
 
 Casts a value of `I8` into a value of `CInt`.
 
-#### `to_CLong : Std::I8 -> Std::I64`
+#### to_CLong
+
+Type: `Std::I8 -> Std::I64`
 
 Casts a value of `I8` into a value of `CLong`.
 
-#### `to_CLongLong : Std::I8 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::I8 -> Std::I64`
 
 Casts a value of `I8` into a value of `CLongLong`.
 
-#### `to_CShort : Std::I8 -> Std::I16`
+#### to_CShort
+
+Type: `Std::I8 -> Std::I16`
 
 Casts a value of `I8` into a value of `CShort`.
 
-#### `to_CSizeT : Std::I8 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::I8 -> Std::U64`
 
 Casts a value of `I8` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::I8 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::I8 -> Std::U8`
 
 Casts a value of `I8` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::I8 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::I8 -> Std::U32`
 
 Casts a value of `I8` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::I8 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::I8 -> Std::U64`
 
 Casts a value of `I8` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::I8 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::I8 -> Std::U64`
 
 Casts a value of `I8` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::I8 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::I8 -> Std::U16`
 
 Casts a value of `I8` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::I8 -> Std::F32`
+#### to_F32
+
+Type: `Std::I8 -> Std::F32`
 
 Casts a value of `I8` into a value of `F32`.
 
-#### `to_F64 : Std::I8 -> Std::F64`
+#### to_F64
+
+Type: `Std::I8 -> Std::F64`
 
 Casts a value of `I8` into a value of `F64`.
 
-#### `to_I16 : Std::I8 -> Std::I16`
+#### to_I16
+
+Type: `Std::I8 -> Std::I16`
 
 Casts a value of `I8` into a value of `I16`.
 
-#### `to_I32 : Std::I8 -> Std::I32`
+#### to_I32
+
+Type: `Std::I8 -> Std::I32`
 
 Casts a value of `I8` into a value of `I32`.
 
-#### `to_I64 : Std::I8 -> Std::I64`
+#### to_I64
+
+Type: `Std::I8 -> Std::I64`
 
 Casts a value of `I8` into a value of `I64`.
 
-#### `to_I8 : Std::I8 -> Std::I8`
+#### to_I8
+
+Type: `Std::I8 -> Std::I8`
 
 Casts a value of `I8` into a value of `I8`.
 
-#### `to_U16 : Std::I8 -> Std::U16`
+#### to_U16
+
+Type: `Std::I8 -> Std::U16`
 
 Casts a value of `I8` into a value of `U16`.
 
-#### `to_U32 : Std::I8 -> Std::U32`
+#### to_U32
+
+Type: `Std::I8 -> Std::U32`
 
 Casts a value of `I8` into a value of `U32`.
 
-#### `to_U64 : Std::I8 -> Std::U64`
+#### to_U64
+
+Type: `Std::I8 -> Std::U64`
 
 Casts a value of `I8` into a value of `U64`.
 
-#### `to_U8 : Std::I8 -> Std::U8`
+#### to_U8
+
+Type: `Std::I8 -> Std::U8`
 
 Casts a value of `I8` into a value of `U8`.
 
-### `namespace Std::IO`
+### namespace Std::IO
 
-#### `_read_line_inner : Std::Bool -> Std::IO::IOHandle -> Std::IO::IOFail Std::String`
+#### _read_line_inner
+
+Type: `Std::Bool -> Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads characters from an IOHandle.
 
 If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
 
-#### `close_file : Std::IO::IOHandle -> Std::IO ()`
+#### close_file
+
+Type: `Std::IO::IOHandle -> Std::IO ()`
 
 Closes a file.
 
 Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
 
-#### `eprint : Std::String -> Std::IO ()`
+#### eprint
+
+Type: `Std::String -> Std::IO ()`
 
 Prints a string to stderr.
 
-#### `eprintln : Std::String -> Std::IO ()`
+#### eprintln
+
+Type: `Std::String -> Std::IO ()`
 
 Prints a string followed by a newline to stderr.
 
-#### `exit : Std::I64 -> Std::IO a`
+#### exit
+
+Type: `Std::I64 -> Std::IO a`
 
 Exits the program with an error code.
 
-#### `exit_with_msg : Std::I64 -> Std::String -> Std::IO a`
+#### exit_with_msg
+
+Type: `Std::I64 -> Std::String -> Std::IO a`
 
 Exits the program with an error message and an error code.
 
 The error message is written to the standard error output.
 
-#### `from_runner : (Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a`
+#### from_runner
+
+Type: `(Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a`
 
 Creates an IO action from a IO runner function, which is a function of type `IOState -> (IOState, a)`.
 
-#### `get_arg : Std::I64 -> Std::IO (Std::Option Std::String)`
+#### get_arg
+
+Type: `Std::I64 -> Std::IO (Std::Option Std::String)`
 
 `get_arg(n)` returns the n-th (0-indexed) command line argument.
 
 If n is greater than or equal to the number of command line arguments, this function returns none.
 
-#### `get_arg_count : Std::IO Std::I64`
+#### get_arg_count
+
+Type: `Std::IO Std::I64`
 
 Gets the number of command line arguments.
 
-#### `get_args : Std::IO (Std::Array Std::String)`
+#### get_args
+
+Type: `Std::IO (Std::Array Std::String)`
 
 Gets command line arguments.
 
-#### `input_line : Std::IO Std::String`
+#### input_line
+
+Type: `Std::IO Std::String`
 
 Reads a line from stdin. If some error occurr, this function aborts the program.
 
 If you want to handle errors, use `read_line(stdin)` instead.
 
-#### `is_eof : Std::IO::IOHandle -> Std::IO Std::Bool`
+#### is_eof
+
+Type: `Std::IO::IOHandle -> Std::IO Std::Bool`
 
 Checks if an `IOHandle` reached to the EOF.
 
-#### `loop_lines : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::LoopState s s) -> Std::IO::IOFail s`
+#### loop_lines
+
+Type: `Std::IO::IOHandle -> s -> (s -> Std::String -> Std::LoopState s s) -> Std::IO::IOFail s`
 
 Loop on lines read from an `IOHandle`.
 
@@ -1367,114 +1903,166 @@ When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_
 
 Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
-#### `loop_lines_io : Std::IO::IOHandle -> s -> (s -> Std::String -> Std::IO::IOFail (Std::LoopState s s)) -> Std::IO::IOFail s`
+#### loop_lines_io
+
+Type: `Std::IO::IOHandle -> s -> (s -> Std::String -> Std::IO::IOFail (Std::LoopState s s)) -> Std::IO::IOFail s`
 
 Loop on lines read from an `IOHandle`.
 
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
-#### `open_file : Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
+#### open_file
+
+Type: `Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
 
 Openes a file. The second argument is a mode string for `fopen` C function.
 
-#### `print : Std::String -> Std::IO ()`
+#### print
+
+Type: `Std::String -> Std::IO ()`
 
 Prints a string to stdout.
 
-#### `println : Std::String -> Std::IO ()`
+#### println
+
+Type: `Std::String -> Std::IO ()`
 
 Prints a string followed by a newline to stdout.
 
-#### `read_bytes : Std::IO::IOHandle -> Std::IO::IOFail (Std::Array Std::U8)`
+#### read_bytes
+
+Type: `Std::IO::IOHandle -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads all bytes from an IOHandle.
 
-#### `read_file_bytes : Std::Path -> Std::IO::IOFail (Std::Array Std::U8)`
+#### read_file_bytes
+
+Type: `Std::Path -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads all bytes from a file.
 
-#### `read_file_string : Std::Path -> Std::IO::IOFail Std::String`
+#### read_file_string
+
+Type: `Std::Path -> Std::IO::IOFail Std::String`
 
 Raads all characters from a file.
 
-#### `read_line : Std::IO::IOHandle -> Std::IO::IOFail Std::String`
+#### read_line
+
+Type: `Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads characters from a IOHandle upto newline or EOF.
 The returned string may include newline at its end.
 
-#### `read_n_bytes : Std::IO::IOHandle -> Std::I64 -> Std::IO::IOFail (Std::Array Std::U8)`
+#### read_n_bytes
+
+Type: `Std::IO::IOHandle -> Std::I64 -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads at most n bytes from an IOHandle.
 
-#### `read_string : Std::IO::IOHandle -> Std::IO::IOFail Std::String`
+#### read_string
+
+Type: `Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads all characters from an IOHandle.
 
-#### `stderr : Std::IO::IOHandle`
+#### stderr
+
+Type: `Std::IO::IOHandle`
 
 The handle for standard error.
 
-#### `stdin : Std::IO::IOHandle`
+#### stdin
+
+Type: `Std::IO::IOHandle`
 
 The handle for standard input.
 
-#### `stdout : Std::IO::IOHandle`
+#### stdout
+
+Type: `Std::IO::IOHandle`
 
 The handle for standard output.
 
-#### `unsafe_perform : Std::IO a -> a`
+#### unsafe_perform
 
-#### `with_file : Std::Path -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
+Type: `Std::IO a -> a`
+
+#### with_file
+
+Type: `Std::Path -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
 
 Performs a function with a file handle. The second argument is a mode string for `fopen` C function.
 
 The file handle will be closed automatically.
 
-#### `write_bytes : Std::IO::IOHandle -> Std::Array Std::U8 -> Std::IO::IOFail ()`
+#### write_bytes
+
+Type: `Std::IO::IOHandle -> Std::Array Std::U8 -> Std::IO::IOFail ()`
 
 Writes a byte array into an IOHandle.
 
-#### `write_file_bytes : Std::Path -> Std::Array Std::U8 -> Std::IO::IOFail ()`
+#### write_file_bytes
+
+Type: `Std::Path -> Std::Array Std::U8 -> Std::IO::IOFail ()`
 
 Writes a byte array into a file.
 
-#### `write_file_string : Std::Path -> Std::String -> Std::IO::IOFail ()`
+#### write_file_string
+
+Type: `Std::Path -> Std::String -> Std::IO::IOFail ()`
 
 Writes a string into a file.
 
-#### `write_string : Std::IO::IOHandle -> Std::String -> Std::IO::IOFail ()`
+#### write_string
+
+Type: `Std::IO::IOHandle -> Std::String -> Std::IO::IOFail ()`
 
 Writes a string into an IOHandle.
 
-### `namespace Std::IO::IOFail`
+### namespace Std::IO::IOFail
 
-#### `from_io_result : Std::IO (Std::Result Std::ErrMsg a) -> Std::IO::IOFail a`
+#### from_io_result
+
+Type: `Std::IO (Std::Result Std::ErrMsg a) -> Std::IO::IOFail a`
 
 Create from IO action of which returns `Result ErrMsg a`.
 
-#### `from_result : Std::Result Std::ErrMsg a -> Std::IO::IOFail a`
+#### from_result
+
+Type: `Std::Result Std::ErrMsg a -> Std::IO::IOFail a`
 
 Creates an pure `IOFail` value from a `Result` value.
 
-#### `lift : Std::IO a -> Std::IO::IOFail a`
+#### lift
+
+Type: `Std::IO a -> Std::IO::IOFail a`
 
 Lifts an `IO` action to a successful `IOFail` action.
 
-#### `throw : Std::ErrMsg -> Std::IO::IOFail a`
+#### throw
+
+Type: `Std::ErrMsg -> Std::IO::IOFail a`
 
 Creates an error `IOFail` action.
 
-#### `to_result : Std::IO::IOFail a -> Std::IO (Std::Result Std::ErrMsg a)`
+#### to_result
+
+Type: `Std::IO::IOFail a -> Std::IO (Std::Result Std::ErrMsg a)`
 
 Converts an `IOFail` to an `Result` value (wrapped by `IO`).
 
-#### `try : (Std::ErrMsg -> Std::IO a) -> Std::IO::IOFail a -> Std::IO a`
+#### try
+
+Type: `(Std::ErrMsg -> Std::IO a) -> Std::IO::IOFail a -> Std::IO a`
 
 Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
 
-### `namespace Std::IO::IOHandle`
+### namespace Std::IO::IOHandle
 
-#### `_file_ptr : Std::IO::IOHandle -> Std::Ptr`
+#### _file_ptr
+
+Type: `Std::IO::IOHandle -> Std::Ptr`
 
 Gets pointer to C's `FILE` value from an `IOHandle`.
 
@@ -1488,13 +2076,17 @@ DEPRECATED:
 Use `get_file_ptr` instead.
 This function is deprecated because it has a pure function interface, but the value of `_file_ptr` changes by calling `IO::close_file`.
 
-#### `from_file_ptr : Std::Ptr -> Std::IO::IOHandle`
+#### from_file_ptr
+
+Type: `Std::Ptr -> Std::IO::IOHandle`
 
 Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
 
 Creating two `IOHandle`s from a single file pointer is forbidden.
 
-#### `get_file_ptr : Std::IO::IOHandle -> Std::IO Std::Ptr`
+#### get_file_ptr
+
+Type: `Std::IO::IOHandle -> Std::IO Std::Ptr`
 
 Gets pointer to C's `FILE` value from an `IOHandle`.
 
@@ -1507,96 +2099,134 @@ Instead you should close `IOHandle` by `IO::close_file`.
 NOTE:
 If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
 
-### `namespace Std::Iterator`
+### namespace Std::Iterator
 
-#### `advance : [iter : Std::Iterator] iter -> Std::Option (iter, Std::Iterator::Item iter)`
+#### advance
 
-#### `append : [i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = a] i2 -> i1 -> Std::Iterator::AppendIterator i1 i2`
+Type: `[iter : Std::Iterator] iter -> Std::Option (iter, Std::Iterator::Item iter)`
+
+#### append
+
+Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = a] i2 -> i1 -> Std::Iterator::AppendIterator i1 i2`
 
 Append two iterators.
 
 NOTE: Since this function is designed so that `iter1.append(iter2)` appends `iter2` after `iter1`, `append(iter1, iter2)` appends iterators in the opposite order.
 
-#### `bang : [iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::ArrayIterator a`
+#### bang
+
+Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::ArrayIterator a`
 
 Convert any iterator to an array iterator.
 
 All elements of the input iterator are collected into an array. Therefore, this function may consume a lot of memory.
 On the other hand, iteration may be faster by banging.
 
-#### `collect_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = m a] iter -> m (Std::Array a)`
+#### collect_m
+
+Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = m a] iter -> m (Std::Array a)`
 
 Executes monadic actions and collects the results into an array.
 
-#### `count_up : Std::I64 -> Std::Iterator::CountUpIterator`
+#### count_up
+
+Type: `Std::I64 -> Std::Iterator::CountUpIterator`
 
 Create an iterator that counts up from a number.
 
 `count_up(start)` generates an infinite sequence of numbers starting from `start`.
 
-#### `empty : Std::Iterator::EmptyIterator a`
+#### empty
+
+Type: `Std::Iterator::EmptyIterator a`
 
 An iterator that yields no elements.
 
 NOTE: When using this iterator, you may need to specify the type of the iterator explicitly, e.g, `(empty : EmptyIterator I64)`.
 
-#### `filter : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::FilterIterator i a`
+#### filter
+
+Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::FilterIterator i a`
 
 Filter the elements of an iterator by a predicate.
 
 `iter.filter(pred)` returns an iterator that only yields elements of `iter` for which `pred` returns `true`.
 
-#### `filter_map : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Option b) -> i -> Std::Iterator::FilterMapIterator i a b`
+#### filter_map
+
+Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Option b) -> i -> Std::Iterator::FilterMapIterator i a b`
 
 Filter and map the elements of an iterator.
 
 `iter.filter_map(f)` returns an iterator that applies `f` to each element of `iter` and yields the result if it is `some`.
 
-#### `flat_map : [i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] (a -> i2) -> i1 -> Std::Iterator::FlatMapIterator i1 a i2`
+#### flat_map
 
-#### `flatten : [i2 : Std::Iterator, i1 : Std::Iterator, Std::Iterator::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
+Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] (a -> i2) -> i1 -> Std::Iterator::FlatMapIterator i1 a i2`
+
+#### flatten
+
+Type: `[i2 : Std::Iterator, i1 : Std::Iterator, Std::Iterator::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
 
 Flatten an iterator of iterators.
 
-#### `fold : [iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> s) -> iter -> s`
+#### fold
+
+Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> s) -> iter -> s`
 
 Fold the elements of an iterator from left to right.
 
 Conceptually, `[a0, a1, a2, ...].to_iter.fold(s, op) = s.op(a0).op(a1).op(a2)...`.
 
-#### `fold_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
+#### fold_m
+
+Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
 
 Fold the elements of an iterator from left to right by monadic action.
 
-#### `from_array : Std::Array a -> Std::Iterator::ArrayIterator a`
+#### from_array
+
+Type: `Std::Array a -> Std::Iterator::ArrayIterator a`
 
 Create an iterator from an array.
 
-#### `from_map : (Std::I64 -> a) -> Std::Iterator::MapIterator Std::Iterator::CountUpIterator Std::I64 a`
+#### from_map
+
+Type: `(Std::I64 -> a) -> Std::Iterator::MapIterator Std::Iterator::CountUpIterator Std::I64 a`
 
 Create an iterator by a function that returns element at each index.
 
-#### `generate : s -> (s -> Std::Option (s, a)) -> Std::Iterator::StateIterator s a`
+#### generate
+
+Type: `s -> (s -> Std::Option (s, a)) -> Std::Iterator::StateIterator s a`
 
 Create an iterator that generates elements by the state transition function.
 
-#### `get_first : [iter : Std::Iterator] iter -> Std::Option (Std::Iterator::Item iter)`
+#### get_first
+
+Type: `[iter : Std::Iterator] iter -> Std::Option (Std::Iterator::Item iter)`
 
 Get the first element of an iterator.
 
 If the iterator is empty, this function returns `none`.
 
-#### `get_size : [iter : Std::Iterator] iter -> Std::I64`
+#### get_size
+
+Type: `[iter : Std::Iterator] iter -> Std::I64`
 
 Get the number of elements in an iterator.
 
-#### `get_tail : [iter : Std::Iterator] iter -> Std::Option iter`
+#### get_tail
+
+Type: `[iter : Std::Iterator] iter -> Std::Option iter`
 
 Get the tail of an iterator.
 
 If the iterator is empty, this function returns `none`.
 
-#### `intersperse : [i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::IntersperseIterator i a`
+#### intersperse
+
+Type: `[i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::IntersperseIterator i a`
 
 Intersperse an element between elements of an iterator.
 
@@ -1605,37 +2235,51 @@ Example:
 assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3]);;
 ```
 
-#### `is_empty : [iter : Std::Iterator] iter -> Std::Bool`
+#### is_empty
+
+Type: `[iter : Std::Iterator] iter -> Std::Bool`
 
 Is an iterator empty?
 
-#### `is_equal : [iter1 : Std::Iterator, iter2 : Std::Iterator, a : Std::Eq, Std::Iterator::Item iter1 = a, Std::Iterator::Item iter2 = a] iter1 -> iter2 -> Std::Bool`
+#### is_equal
+
+Type: `[iter1 : Std::Iterator, iter2 : Std::Iterator, a : Std::Eq, Std::Iterator::Item iter1 = a, Std::Iterator::Item iter2 = a] iter1 -> iter2 -> Std::Bool`
 
 Compare two iterators by their elements.
 
-#### `loop_iter : [iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> Std::LoopState s s) -> iter -> s`
+#### loop_iter
+
+Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> Std::LoopState s s) -> iter -> s`
 
 Loop over the elements of an iterator.
 
 This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop at any point.
 
-#### `loop_iter_m : [m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
+#### loop_iter_m
+
+Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
 
 Loop over the elements of an iterator by monadic action.
 
-#### `map : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
+#### map
+
+Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
 
 Map a function over an iterator.
 
 `iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
 
-#### `pop_first : [iter : Std::Iterator] iter -> iter`
+#### pop_first
+
+Type: `[iter : Std::Iterator] iter -> iter`
 
 Remove the first element of an iterator.
 
 If the iterator is empty, this function does nothing.
 
-#### `product : [i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] i2 -> i1 -> Std::Iterator::ProductIterator i1 i2 a b`
+#### product
+
+Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] i2 -> i1 -> Std::Iterator::ProductIterator i1 i2 a b`
 
 Create an iterator that yields the Cartesian product of two iterators.
 
@@ -1646,11 +2290,15 @@ Example:
 assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);;
 ```
 
-#### `push_front : [i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::ConsIterator i a`
+#### push_front
+
+Type: `[i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::ConsIterator i a`
 
 Push an element to an iterator.
 
-#### `range : Std::I64 -> Std::I64 -> Std::Iterator::RangeIterator`
+#### range
+
+Type: `Std::I64 -> Std::I64 -> Std::Iterator::RangeIterator`
 
 Create an iterator that generates a range of numbers.
 
@@ -1658,215 +2306,299 @@ Create an iterator that generates a range of numbers.
 
 If `a` is greater than or equal to `b`, the iterator will an infinite sequence of `a`.
 
-#### `range_step : Std::I64 -> Std::I64 -> Std::I64 -> Std::Iterator::RangeStepIterator`
+#### range_step
+
+Type: `Std::I64 -> Std::I64 -> Std::I64 -> Std::Iterator::RangeStepIterator`
 
 Create an iterator that generates a range of numbers with a step.
 
-#### `reverse : [i : Std::Iterator, Std::Iterator::Item i = a] i -> Std::Iterator::ReverseIterator i a`
+#### reverse
+
+Type: `[i : Std::Iterator, Std::Iterator::Item i = a] i -> Std::Iterator::ReverseIterator i a`
 
 Reverses an iterator.
 
 NOTE: This function puts all elements of the iterator into an array, so it may consume a lot of memory.
 
-#### `sum : [iter : Std::Iterator, a : Std::Additive, Std::Iterator::Item iter = a] iter -> a`
+#### sum
+
+Type: `[iter : Std::Iterator, a : Std::Additive, Std::Iterator::Item iter = a] iter -> a`
 
 Calcculate sum of the elements of an iterator.
 
-#### `take : [i : Std::Iterator] Std::I64 -> i -> Std::Iterator::TakeIterator i`
+#### take
+
+Type: `[i : Std::Iterator] Std::I64 -> i -> Std::Iterator::TakeIterator i`
 
 Take the first `n` elements of an iterator.
 
-#### `take_while : [i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::TakeWhileIterator i a`
+#### take_while
+
+Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::TakeWhileIterator i a`
 
 Take elements from an iterator while a predicate holds.
 
-#### `to_array : [iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Array a`
+#### to_array
+
+Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Array a`
 
 Convert an iterator to an array.
 
-#### `to_dyn : [iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::DynIterator a`
+#### to_dyn
+
+Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::DynIterator a`
 
 Convert an iterator into a dynamic iterator.
 
-#### `zip : [i1 : Std::Iterator, i2 : Std::Iterator] i2 -> i1 -> Std::Iterator::ZipIterator i1 i2`
+#### zip
+
+Type: `[i1 : Std::Iterator, i2 : Std::Iterator] i2 -> i1 -> Std::Iterator::ZipIterator i1 i2`
 
 Zip two iterators.
 
 NOTE: Since this function is designed so that `iter1.zip(iter2)` zips `iter1` and `iter2`, the elements of `zip(iter2, iter1)` are in the opposite order.
 
-### `namespace Std::Iterator::DynIterator`
+### namespace Std::Iterator::DynIterator
 
-#### `empty : Std::Iterator::DynIterator a`
+#### empty
+
+Type: `Std::Iterator::DynIterator a`
 
 Creates an empty dynamic iterator.
 
-### `namespace Std::LessThan`
+### namespace Std::LessThan
 
-#### `less_than : [a : Std::LessThan] a -> a -> Std::Bool`
+#### less_than
+
+Type: `[a : Std::LessThan] a -> a -> Std::Bool`
 
 Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
-#### `max : [a : Std::LessThan] a -> a -> a`
+#### max
 
-#### `min : [a : Std::LessThan] a -> a -> a`
+Type: `[a : Std::LessThan] a -> a -> a`
 
-### `namespace Std::LessThanOrEq`
+#### min
 
-#### `less_than_or_eq : [a : Std::LessThanOrEq] a -> a -> Std::Bool`
+Type: `[a : Std::LessThan] a -> a -> a`
+
+### namespace Std::LessThanOrEq
+
+#### less_than_or_eq
+
+Type: `[a : Std::LessThanOrEq] a -> a -> Std::Bool`
 
 Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
-### `namespace Std::LoopState`
+### namespace Std::LoopState
 
-#### `break_m : [m : Std::Monad] r -> m (Std::LoopState s r)`
+#### break_m
+
+Type: `[m : Std::Monad] r -> m (Std::LoopState s r)`
 
 Make a break value wrapped in a monad.
 
 This is used with `loop_m` function.
 
-#### `continue_m : [m : Std::Monad] s -> m (Std::LoopState s r)`
+#### continue_m
+
+Type: `[m : Std::Monad] s -> m (Std::LoopState s r)`
 
 Make a continue value wrapped in a monad.
 
 This is used with `loop_m` function.
 
-### `namespace Std::Monad`
+### namespace Std::Monad
 
-#### `bind : [m : Std::Monad] (a -> m b) -> m a -> m b`
+#### bind
 
-#### `flatten : [m : Std::Monad] m (m a) -> m a`
+Type: `[m : Std::Monad] (a -> m b) -> m a -> m b`
+
+#### flatten
+
+Type: `[m : Std::Monad] m (m a) -> m a`
 
 Flattens a nested monadic action.
 
-#### `pure : [m : Std::Monad] a -> m a`
+#### pure
 
-#### `unless : [m : Std::Monad] Std::Bool -> m () -> m ()`
+Type: `[m : Std::Monad] a -> m a`
+
+#### unless
+
+Type: `[m : Std::Monad] Std::Bool -> m () -> m ()`
 
 `unless(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is false.
 
-#### `when : [m : Std::Monad] Std::Bool -> m () -> m ()`
+#### when
+
+Type: `[m : Std::Monad] Std::Bool -> m () -> m ()`
 
 `when(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is true.
 
-### `namespace Std::Mul`
+### namespace Std::Mul
 
-#### `mul : [a : Std::Mul] a -> a -> a`
+#### mul
+
+Type: `[a : Std::Mul] a -> a -> a`
 
 Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
 
-### `namespace Std::Neg`
+### namespace Std::Neg
 
-#### `neg : [a : Std::Neg] a -> a`
+#### neg
+
+Type: `[a : Std::Neg] a -> a`
 
 Negates a value. An expression `-x` is translated to `neg(x)`.
 
-### `namespace Std::Not`
+### namespace Std::Not
 
-#### `not : [a : Std::Not] a -> a`
+#### not
+
+Type: `[a : Std::Not] a -> a`
 
 Logical NOT of a value. An expression `!x` is translated to `not(x)`.
 
-### `namespace Std::Option`
+### namespace Std::Option
 
-#### `as_some_or : a -> Std::Option a -> a`
+#### as_some_or
+
+Type: `a -> Std::Option a -> a`
 
 Unwrap an option value if it is `some`, or returns given default value if it is `none`.
 
-#### `map_or : b -> (a -> b) -> Std::Option a -> b`
+#### map_or
+
+Type: `b -> (a -> b) -> Std::Option a -> b`
 
 Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
 
-#### `to_iter : Std::Option a -> Std::Option::OptionIterator (Std::Option a)`
+#### to_iter
+
+Type: `Std::Option a -> Std::Option::OptionIterator (Std::Option a)`
 
 Converts an option into an iterator.
 
-### `namespace Std::Ptr`
+### namespace Std::Ptr
 
-#### `add_offset : Std::I64 -> Std::Ptr -> Std::Ptr`
+#### add_offset
+
+Type: `Std::I64 -> Std::Ptr -> Std::Ptr`
 
 Adds an offset to a pointer.
 
-#### `subtract_ptr : Std::Ptr -> Std::Ptr -> Std::I64`
+#### subtract_ptr
+
+Type: `Std::Ptr -> Std::Ptr -> Std::I64`
 
 Subtracts two pointers.
 
 Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
 
-### `namespace Std::PunchedArray`
+### namespace Std::PunchedArray
 
-#### `plug_in : a -> Std::PunchedArray a -> Std::Array a`
+#### plug_in
+
+Type: `a -> Std::PunchedArray a -> Std::Array a`
 
 Plug in an element to a punched array to get back an array.
 
-#### `unsafe_punch : Std::I64 -> Std::Array a -> (Std::PunchedArray a, a)`
+#### unsafe_punch
+
+Type: `Std::I64 -> Std::Array a -> (Std::PunchedArray a, a)`
 
 Creates a punched array by moving out the element at the specified index.
 
 NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
 The uniqueness of the array is ensured in the `Array::act` function.
 
-### `namespace Std::Rem`
+### namespace Std::Rem
 
-#### `rem : [a : Std::Rem] a -> a -> a`
+#### rem
+
+Type: `[a : Std::Rem] a -> a -> a`
 
 Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
 
-### `namespace Std::Result`
+### namespace Std::Result
 
-#### `unwrap : Std::Result e o -> o`
+#### unwrap
+
+Type: `Std::Result e o -> o`
 
 Returns the containing value if the value is ok, or otherwise aborts the program.
 
-### `namespace Std::String`
+### namespace Std::String
 
-#### `_get_c_str : Std::String -> Std::Ptr`
+#### _get_c_str
+
+Type: `Std::String -> Std::Ptr`
 
 Get the null-terminated C string.
 
 Note that in case the string is not used after call of this function, the returned pointer will be already released.
 
-#### `_unsafe_from_c_str : Std::Array Std::U8 -> Std::String`
+#### _unsafe_from_c_str
+
+Type: `Std::Array Std::U8 -> Std::String`
 
 Create a string from C string (i.e., null-terminated byte array).
 
 If the byte array doesn't include `\0`, this function causes undefined behavior.
 
-#### `_unsafe_from_c_str_ptr : Std::Ptr -> Std::String`
+#### _unsafe_from_c_str_ptr
+
+Type: `Std::Ptr -> Std::String`
 
 Create a `String` from a pointer to null-terminated C string.
 
 If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
 
-#### `borrow_c_str : (Std::Ptr -> a) -> Std::String -> a`
+#### borrow_c_str
+
+Type: `(Std::Ptr -> a) -> Std::String -> a`
 
 Call a function with a null-terminated C string.
 
-#### `borrow_c_str_io : (Std::Ptr -> Std::IO a) -> Std::String -> Std::IO a`
+#### borrow_c_str_io
+
+Type: `(Std::Ptr -> Std::IO a) -> Std::String -> Std::IO a`
 
 Call an IO action with a null-terminated C string.
 
-#### `concat : Std::String -> Std::String -> Std::String`
+#### concat
+
+Type: `Std::String -> Std::String -> Std::String`
 
 Concatenate two strings.
 
 Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
 
-#### `concat_iter : [strs : Std::Iterator, Std::Iterator::Item strs = Std::String] strs -> Std::String`
+#### concat_iter
+
+Type: `[strs : Std::Iterator, Std::Iterator::Item strs = Std::String] strs -> Std::String`
 
 Concatenate an iterator of strings.
 
-#### `empty : Std::I64 -> Std::String`
+#### empty
+
+Type: `Std::I64 -> Std::String`
 
 Create an empty string, which is reserved for a length.
 
-#### `find : Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`
+#### find
+
+Type: `Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`
 
 `str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
 
 Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
 `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
 
-#### `from_U8 : Std::U8 -> Std::String`
+#### from_U8
+
+Type: `Std::U8 -> Std::String`
 
 Creates a string from a byte.
 
@@ -1876,41 +2608,59 @@ assert_eq(|_|"", String::from_U8('a'), "a");;
 assert_eq(|_|"", String::from_U8('\x00'), "");;
 ```
 
-#### `get_bytes : Std::String -> Std::Array Std::U8`
+#### get_bytes
+
+Type: `Std::String -> Std::Array Std::U8`
 
 Gets the byte array of a string, containing null-terminator.
 
-#### `get_first_byte : Std::String -> Std::Option Std::U8`
+#### get_first_byte
+
+Type: `Std::String -> Std::Option Std::U8`
 
 Gets the first byte of a string. Returns none if the string is empty.
 
-#### `get_last_byte : Std::String -> Std::Option Std::U8`
+#### get_last_byte
+
+Type: `Std::String -> Std::Option Std::U8`
 
 Gets the last byte of a string. Returns none if the string is empty.
 
-#### `get_size : Std::String -> Std::I64`
+#### get_size
+
+Type: `Std::String -> Std::I64`
 
 Gets the length of a string.
 
-#### `get_sub : Std::I64 -> Std::I64 -> Std::String -> Std::String`
+#### get_sub
+
+Type: `Std::I64 -> Std::I64 -> Std::String -> Std::String`
 
 `String` version of `Array::get_sub`.
 
-#### `is_empty : Std::String -> Std::Bool`
+#### is_empty
+
+Type: `Std::String -> Std::Bool`
 
 Returns if the string is empty or not.
 
-#### `join : [ss : Std::Iterator, Std::Iterator::Item ss = Std::String] Std::String -> ss -> Std::String`
+#### join
+
+Type: `[ss : Std::Iterator, Std::Iterator::Item ss = Std::String] Std::String -> ss -> Std::String`
 
 Joins (an iterator of) strings by a separator.
 
-#### `pop_back_byte : Std::String -> Std::String`
+#### pop_back_byte
+
+Type: `Std::String -> Std::String`
 
 Removes the last byte.
 
 If the string is empty, this function does nothing.
 
-#### `split : Std::String -> Std::String -> Std::String::StringSplitIterator`
+#### split
+
+Type: `Std::String -> Std::String -> Std::String::StringSplitIterator`
 
 `str.split(sep)` splits `str` by `sep` into an iterator.
 
@@ -1921,523 +2671,783 @@ assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
 assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
 ```
 
-#### `strip_first_bytes : (Std::U8 -> Std::Bool) -> Std::String -> Std::String`
+#### strip_first_bytes
+
+Type: `(Std::U8 -> Std::Bool) -> Std::String -> Std::String`
 
 Removes the first byte of a string while it satisifies the specified condition.
 
-#### `strip_first_spaces : Std::String -> Std::String`
+#### strip_first_spaces
+
+Type: `Std::String -> Std::String`
 
 Removes leading whitespace characters.
 
-#### `strip_last_bytes : (Std::U8 -> Std::Bool) -> Std::String -> Std::String`
+#### strip_last_bytes
+
+Type: `(Std::U8 -> Std::Bool) -> Std::String -> Std::String`
 
 Removes the last byte of a string while it satisifies the specified condition.
 
-#### `strip_last_newlines : Std::String -> Std::String`
+#### strip_last_newlines
+
+Type: `Std::String -> Std::String`
 
 Removes newlines and carriage returns at the end of the string.
 
-#### `strip_last_spaces : Std::String -> Std::String`
+#### strip_last_spaces
+
+Type: `Std::String -> Std::String`
 
 Removes trailing whitespace characters.
 
-#### `strip_spaces : Std::String -> Std::String`
+#### strip_spaces
+
+Type: `Std::String -> Std::String`
 
 Strips leading and trailing whitespace characters.
 
-### `namespace Std::Sub`
+### namespace Std::Sub
 
-#### `sub : [a : Std::Sub] a -> a -> a`
+#### sub
+
+Type: `[a : Std::Sub] a -> a -> a`
 
 Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
 
-### `namespace Std::ToBytes`
+### namespace Std::ToBytes
 
-#### `to_bytes : [a : Std::ToBytes] a -> Std::Array Std::U8`
+#### to_bytes
 
-### `namespace Std::ToString`
+Type: `[a : Std::ToBytes] a -> Std::Array Std::U8`
 
-#### `to_string : [a : Std::ToString] a -> Std::String`
+### namespace Std::ToString
 
-### `namespace Std::U16`
+#### to_string
 
-#### `bit_and : Std::U16 -> Std::U16 -> Std::U16`
+Type: `[a : Std::ToString] a -> Std::String`
+
+### namespace Std::U16
+
+#### bit_and
+
+Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Calculates bitwise AND of two values.
 
-#### `bit_or : Std::U16 -> Std::U16 -> Std::U16`
+#### bit_or
+
+Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Calculates bitwise OR of two values.
 
-#### `bit_xor : Std::U16 -> Std::U16 -> Std::U16`
+#### bit_xor
+
+Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Calculates bitwise XOR of two values.
 
-#### `maximum : Std::U16`
+#### maximum
 
-#### `minimum : Std::U16`
+Type: `Std::U16`
 
-#### `shift_left : Std::U16 -> Std::U16 -> Std::U16`
+#### minimum
+
+Type: `Std::U16`
+
+#### shift_left
+
+Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 `v.shift_left(w)` shifts `v` to left by `w` bits.
 
-#### `shift_right : Std::U16 -> Std::U16 -> Std::U16`
+#### shift_right
+
+Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 `v.shift_right(w)` shifts `v` to right by `w` bits.
 
-#### `to_CChar : Std::U16 -> Std::I8`
+#### to_CChar
+
+Type: `Std::U16 -> Std::I8`
 
 Casts a value of `U16` into a value of `CChar`.
 
-#### `to_CDouble : Std::U16 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::U16 -> Std::F64`
 
 Casts a value of `U16` into a value of `CDouble`.
 
-#### `to_CFloat : Std::U16 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::U16 -> Std::F32`
 
 Casts a value of `U16` into a value of `CFloat`.
 
-#### `to_CInt : Std::U16 -> Std::I32`
+#### to_CInt
+
+Type: `Std::U16 -> Std::I32`
 
 Casts a value of `U16` into a value of `CInt`.
 
-#### `to_CLong : Std::U16 -> Std::I64`
+#### to_CLong
+
+Type: `Std::U16 -> Std::I64`
 
 Casts a value of `U16` into a value of `CLong`.
 
-#### `to_CLongLong : Std::U16 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::U16 -> Std::I64`
 
 Casts a value of `U16` into a value of `CLongLong`.
 
-#### `to_CShort : Std::U16 -> Std::I16`
+#### to_CShort
+
+Type: `Std::U16 -> Std::I16`
 
 Casts a value of `U16` into a value of `CShort`.
 
-#### `to_CSizeT : Std::U16 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::U16 -> Std::U64`
 
 Casts a value of `U16` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::U16 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::U16 -> Std::U8`
 
 Casts a value of `U16` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::U16 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::U16 -> Std::U32`
 
 Casts a value of `U16` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::U16 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::U16 -> Std::U64`
 
 Casts a value of `U16` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::U16 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::U16 -> Std::U64`
 
 Casts a value of `U16` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::U16 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::U16 -> Std::U16`
 
 Casts a value of `U16` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::U16 -> Std::F32`
+#### to_F32
+
+Type: `Std::U16 -> Std::F32`
 
 Casts a value of `U16` into a value of `F32`.
 
-#### `to_F64 : Std::U16 -> Std::F64`
+#### to_F64
+
+Type: `Std::U16 -> Std::F64`
 
 Casts a value of `U16` into a value of `F64`.
 
-#### `to_I16 : Std::U16 -> Std::I16`
+#### to_I16
+
+Type: `Std::U16 -> Std::I16`
 
 Casts a value of `U16` into a value of `I16`.
 
-#### `to_I32 : Std::U16 -> Std::I32`
+#### to_I32
+
+Type: `Std::U16 -> Std::I32`
 
 Casts a value of `U16` into a value of `I32`.
 
-#### `to_I64 : Std::U16 -> Std::I64`
+#### to_I64
+
+Type: `Std::U16 -> Std::I64`
 
 Casts a value of `U16` into a value of `I64`.
 
-#### `to_I8 : Std::U16 -> Std::I8`
+#### to_I8
+
+Type: `Std::U16 -> Std::I8`
 
 Casts a value of `U16` into a value of `I8`.
 
-#### `to_U16 : Std::U16 -> Std::U16`
+#### to_U16
+
+Type: `Std::U16 -> Std::U16`
 
 Casts a value of `U16` into a value of `U16`.
 
-#### `to_U32 : Std::U16 -> Std::U32`
+#### to_U32
+
+Type: `Std::U16 -> Std::U32`
 
 Casts a value of `U16` into a value of `U32`.
 
-#### `to_U64 : Std::U16 -> Std::U64`
+#### to_U64
+
+Type: `Std::U16 -> Std::U64`
 
 Casts a value of `U16` into a value of `U64`.
 
-#### `to_U8 : Std::U16 -> Std::U8`
+#### to_U8
+
+Type: `Std::U16 -> Std::U8`
 
 Casts a value of `U16` into a value of `U8`.
 
-### `namespace Std::U32`
+### namespace Std::U32
 
-#### `bit_and : Std::U32 -> Std::U32 -> Std::U32`
+#### bit_and
+
+Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Calculates bitwise AND of two values.
 
-#### `bit_or : Std::U32 -> Std::U32 -> Std::U32`
+#### bit_or
+
+Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Calculates bitwise OR of two values.
 
-#### `bit_xor : Std::U32 -> Std::U32 -> Std::U32`
+#### bit_xor
+
+Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Calculates bitwise XOR of two values.
 
-#### `maximum : Std::U32`
+#### maximum
 
-#### `minimum : Std::U32`
+Type: `Std::U32`
 
-#### `shift_left : Std::U32 -> Std::U32 -> Std::U32`
+#### minimum
+
+Type: `Std::U32`
+
+#### shift_left
+
+Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 `v.shift_left(w)` shifts `v` to left by `w` bits.
 
-#### `shift_right : Std::U32 -> Std::U32 -> Std::U32`
+#### shift_right
+
+Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 `v.shift_right(w)` shifts `v` to right by `w` bits.
 
-#### `to_CChar : Std::U32 -> Std::I8`
+#### to_CChar
+
+Type: `Std::U32 -> Std::I8`
 
 Casts a value of `U32` into a value of `CChar`.
 
-#### `to_CDouble : Std::U32 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::U32 -> Std::F64`
 
 Casts a value of `U32` into a value of `CDouble`.
 
-#### `to_CFloat : Std::U32 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::U32 -> Std::F32`
 
 Casts a value of `U32` into a value of `CFloat`.
 
-#### `to_CInt : Std::U32 -> Std::I32`
+#### to_CInt
+
+Type: `Std::U32 -> Std::I32`
 
 Casts a value of `U32` into a value of `CInt`.
 
-#### `to_CLong : Std::U32 -> Std::I64`
+#### to_CLong
+
+Type: `Std::U32 -> Std::I64`
 
 Casts a value of `U32` into a value of `CLong`.
 
-#### `to_CLongLong : Std::U32 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::U32 -> Std::I64`
 
 Casts a value of `U32` into a value of `CLongLong`.
 
-#### `to_CShort : Std::U32 -> Std::I16`
+#### to_CShort
+
+Type: `Std::U32 -> Std::I16`
 
 Casts a value of `U32` into a value of `CShort`.
 
-#### `to_CSizeT : Std::U32 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::U32 -> Std::U64`
 
 Casts a value of `U32` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::U32 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::U32 -> Std::U8`
 
 Casts a value of `U32` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::U32 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::U32 -> Std::U32`
 
 Casts a value of `U32` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::U32 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::U32 -> Std::U64`
 
 Casts a value of `U32` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::U32 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::U32 -> Std::U64`
 
 Casts a value of `U32` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::U32 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::U32 -> Std::U16`
 
 Casts a value of `U32` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::U32 -> Std::F32`
+#### to_F32
+
+Type: `Std::U32 -> Std::F32`
 
 Casts a value of `U32` into a value of `F32`.
 
-#### `to_F64 : Std::U32 -> Std::F64`
+#### to_F64
+
+Type: `Std::U32 -> Std::F64`
 
 Casts a value of `U32` into a value of `F64`.
 
-#### `to_I16 : Std::U32 -> Std::I16`
+#### to_I16
+
+Type: `Std::U32 -> Std::I16`
 
 Casts a value of `U32` into a value of `I16`.
 
-#### `to_I32 : Std::U32 -> Std::I32`
+#### to_I32
+
+Type: `Std::U32 -> Std::I32`
 
 Casts a value of `U32` into a value of `I32`.
 
-#### `to_I64 : Std::U32 -> Std::I64`
+#### to_I64
+
+Type: `Std::U32 -> Std::I64`
 
 Casts a value of `U32` into a value of `I64`.
 
-#### `to_I8 : Std::U32 -> Std::I8`
+#### to_I8
+
+Type: `Std::U32 -> Std::I8`
 
 Casts a value of `U32` into a value of `I8`.
 
-#### `to_U16 : Std::U32 -> Std::U16`
+#### to_U16
+
+Type: `Std::U32 -> Std::U16`
 
 Casts a value of `U32` into a value of `U16`.
 
-#### `to_U32 : Std::U32 -> Std::U32`
+#### to_U32
+
+Type: `Std::U32 -> Std::U32`
 
 Casts a value of `U32` into a value of `U32`.
 
-#### `to_U64 : Std::U32 -> Std::U64`
+#### to_U64
+
+Type: `Std::U32 -> Std::U64`
 
 Casts a value of `U32` into a value of `U64`.
 
-#### `to_U8 : Std::U32 -> Std::U8`
+#### to_U8
+
+Type: `Std::U32 -> Std::U8`
 
 Casts a value of `U32` into a value of `U8`.
 
-### `namespace Std::U64`
+### namespace Std::U64
 
-#### `bit_and : Std::U64 -> Std::U64 -> Std::U64`
+#### bit_and
+
+Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Calculates bitwise AND of two values.
 
-#### `bit_or : Std::U64 -> Std::U64 -> Std::U64`
+#### bit_or
+
+Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Calculates bitwise OR of two values.
 
-#### `bit_xor : Std::U64 -> Std::U64 -> Std::U64`
+#### bit_xor
+
+Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Calculates bitwise XOR of two values.
 
-#### `maximum : Std::U64`
+#### maximum
 
-#### `minimum : Std::U64`
+Type: `Std::U64`
 
-#### `shift_left : Std::U64 -> Std::U64 -> Std::U64`
+#### minimum
+
+Type: `Std::U64`
+
+#### shift_left
+
+Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 `v.shift_left(w)` shifts `v` to left by `w` bits.
 
-#### `shift_right : Std::U64 -> Std::U64 -> Std::U64`
+#### shift_right
+
+Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 `v.shift_right(w)` shifts `v` to right by `w` bits.
 
-#### `to_CChar : Std::U64 -> Std::I8`
+#### to_CChar
+
+Type: `Std::U64 -> Std::I8`
 
 Casts a value of `U64` into a value of `CChar`.
 
-#### `to_CDouble : Std::U64 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::U64 -> Std::F64`
 
 Casts a value of `U64` into a value of `CDouble`.
 
-#### `to_CFloat : Std::U64 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::U64 -> Std::F32`
 
 Casts a value of `U64` into a value of `CFloat`.
 
-#### `to_CInt : Std::U64 -> Std::I32`
+#### to_CInt
+
+Type: `Std::U64 -> Std::I32`
 
 Casts a value of `U64` into a value of `CInt`.
 
-#### `to_CLong : Std::U64 -> Std::I64`
+#### to_CLong
+
+Type: `Std::U64 -> Std::I64`
 
 Casts a value of `U64` into a value of `CLong`.
 
-#### `to_CLongLong : Std::U64 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::U64 -> Std::I64`
 
 Casts a value of `U64` into a value of `CLongLong`.
 
-#### `to_CShort : Std::U64 -> Std::I16`
+#### to_CShort
+
+Type: `Std::U64 -> Std::I16`
 
 Casts a value of `U64` into a value of `CShort`.
 
-#### `to_CSizeT : Std::U64 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::U64 -> Std::U64`
 
 Casts a value of `U64` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::U64 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::U64 -> Std::U8`
 
 Casts a value of `U64` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::U64 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::U64 -> Std::U32`
 
 Casts a value of `U64` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::U64 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::U64 -> Std::U64`
 
 Casts a value of `U64` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::U64 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::U64 -> Std::U64`
 
 Casts a value of `U64` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::U64 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::U64 -> Std::U16`
 
 Casts a value of `U64` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::U64 -> Std::F32`
+#### to_F32
+
+Type: `Std::U64 -> Std::F32`
 
 Casts a value of `U64` into a value of `F32`.
 
-#### `to_F64 : Std::U64 -> Std::F64`
+#### to_F64
+
+Type: `Std::U64 -> Std::F64`
 
 Casts a value of `U64` into a value of `F64`.
 
-#### `to_I16 : Std::U64 -> Std::I16`
+#### to_I16
+
+Type: `Std::U64 -> Std::I16`
 
 Casts a value of `U64` into a value of `I16`.
 
-#### `to_I32 : Std::U64 -> Std::I32`
+#### to_I32
+
+Type: `Std::U64 -> Std::I32`
 
 Casts a value of `U64` into a value of `I32`.
 
-#### `to_I64 : Std::U64 -> Std::I64`
+#### to_I64
+
+Type: `Std::U64 -> Std::I64`
 
 Casts a value of `U64` into a value of `I64`.
 
-#### `to_I8 : Std::U64 -> Std::I8`
+#### to_I8
+
+Type: `Std::U64 -> Std::I8`
 
 Casts a value of `U64` into a value of `I8`.
 
-#### `to_U16 : Std::U64 -> Std::U16`
+#### to_U16
+
+Type: `Std::U64 -> Std::U16`
 
 Casts a value of `U64` into a value of `U16`.
 
-#### `to_U32 : Std::U64 -> Std::U32`
+#### to_U32
+
+Type: `Std::U64 -> Std::U32`
 
 Casts a value of `U64` into a value of `U32`.
 
-#### `to_U64 : Std::U64 -> Std::U64`
+#### to_U64
+
+Type: `Std::U64 -> Std::U64`
 
 Casts a value of `U64` into a value of `U64`.
 
-#### `to_U8 : Std::U64 -> Std::U8`
+#### to_U8
+
+Type: `Std::U64 -> Std::U8`
 
 Casts a value of `U64` into a value of `U8`.
 
-### `namespace Std::U8`
+### namespace Std::U8
 
-#### `bit_and : Std::U8 -> Std::U8 -> Std::U8`
+#### bit_and
+
+Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Calculates bitwise AND of two values.
 
-#### `bit_or : Std::U8 -> Std::U8 -> Std::U8`
+#### bit_or
+
+Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Calculates bitwise OR of two values.
 
-#### `bit_xor : Std::U8 -> Std::U8 -> Std::U8`
+#### bit_xor
+
+Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Calculates bitwise XOR of two values.
 
-#### `maximum : Std::U8`
+#### maximum
 
-#### `minimum : Std::U8`
+Type: `Std::U8`
 
-#### `shift_left : Std::U8 -> Std::U8 -> Std::U8`
+#### minimum
+
+Type: `Std::U8`
+
+#### shift_left
+
+Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 `v.shift_left(w)` shifts `v` to left by `w` bits.
 
-#### `shift_right : Std::U8 -> Std::U8 -> Std::U8`
+#### shift_right
+
+Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 `v.shift_right(w)` shifts `v` to right by `w` bits.
 
-#### `to_CChar : Std::U8 -> Std::I8`
+#### to_CChar
+
+Type: `Std::U8 -> Std::I8`
 
 Casts a value of `U8` into a value of `CChar`.
 
-#### `to_CDouble : Std::U8 -> Std::F64`
+#### to_CDouble
+
+Type: `Std::U8 -> Std::F64`
 
 Casts a value of `U8` into a value of `CDouble`.
 
-#### `to_CFloat : Std::U8 -> Std::F32`
+#### to_CFloat
+
+Type: `Std::U8 -> Std::F32`
 
 Casts a value of `U8` into a value of `CFloat`.
 
-#### `to_CInt : Std::U8 -> Std::I32`
+#### to_CInt
+
+Type: `Std::U8 -> Std::I32`
 
 Casts a value of `U8` into a value of `CInt`.
 
-#### `to_CLong : Std::U8 -> Std::I64`
+#### to_CLong
+
+Type: `Std::U8 -> Std::I64`
 
 Casts a value of `U8` into a value of `CLong`.
 
-#### `to_CLongLong : Std::U8 -> Std::I64`
+#### to_CLongLong
+
+Type: `Std::U8 -> Std::I64`
 
 Casts a value of `U8` into a value of `CLongLong`.
 
-#### `to_CShort : Std::U8 -> Std::I16`
+#### to_CShort
+
+Type: `Std::U8 -> Std::I16`
 
 Casts a value of `U8` into a value of `CShort`.
 
-#### `to_CSizeT : Std::U8 -> Std::U64`
+#### to_CSizeT
+
+Type: `Std::U8 -> Std::U64`
 
 Casts a value of `U8` into a value of `CSizeT`.
 
-#### `to_CUnsignedChar : Std::U8 -> Std::U8`
+#### to_CUnsignedChar
+
+Type: `Std::U8 -> Std::U8`
 
 Casts a value of `U8` into a value of `CUnsignedChar`.
 
-#### `to_CUnsignedInt : Std::U8 -> Std::U32`
+#### to_CUnsignedInt
+
+Type: `Std::U8 -> Std::U32`
 
 Casts a value of `U8` into a value of `CUnsignedInt`.
 
-#### `to_CUnsignedLong : Std::U8 -> Std::U64`
+#### to_CUnsignedLong
+
+Type: `Std::U8 -> Std::U64`
 
 Casts a value of `U8` into a value of `CUnsignedLong`.
 
-#### `to_CUnsignedLongLong : Std::U8 -> Std::U64`
+#### to_CUnsignedLongLong
+
+Type: `Std::U8 -> Std::U64`
 
 Casts a value of `U8` into a value of `CUnsignedLongLong`.
 
-#### `to_CUnsignedShort : Std::U8 -> Std::U16`
+#### to_CUnsignedShort
+
+Type: `Std::U8 -> Std::U16`
 
 Casts a value of `U8` into a value of `CUnsignedShort`.
 
-#### `to_F32 : Std::U8 -> Std::F32`
+#### to_F32
+
+Type: `Std::U8 -> Std::F32`
 
 Casts a value of `U8` into a value of `F32`.
 
-#### `to_F64 : Std::U8 -> Std::F64`
+#### to_F64
+
+Type: `Std::U8 -> Std::F64`
 
 Casts a value of `U8` into a value of `F64`.
 
-#### `to_I16 : Std::U8 -> Std::I16`
+#### to_I16
+
+Type: `Std::U8 -> Std::I16`
 
 Casts a value of `U8` into a value of `I16`.
 
-#### `to_I32 : Std::U8 -> Std::I32`
+#### to_I32
+
+Type: `Std::U8 -> Std::I32`
 
 Casts a value of `U8` into a value of `I32`.
 
-#### `to_I64 : Std::U8 -> Std::I64`
+#### to_I64
+
+Type: `Std::U8 -> Std::I64`
 
 Casts a value of `U8` into a value of `I64`.
 
-#### `to_I8 : Std::U8 -> Std::I8`
+#### to_I8
+
+Type: `Std::U8 -> Std::I8`
 
 Casts a value of `U8` into a value of `I8`.
 
-#### `to_U16 : Std::U8 -> Std::U16`
+#### to_U16
+
+Type: `Std::U8 -> Std::U16`
 
 Casts a value of `U8` into a value of `U16`.
 
-#### `to_U32 : Std::U8 -> Std::U32`
+#### to_U32
+
+Type: `Std::U8 -> Std::U32`
 
 Casts a value of `U8` into a value of `U32`.
 
-#### `to_U64 : Std::U8 -> Std::U64`
+#### to_U64
+
+Type: `Std::U8 -> Std::U64`
 
 Casts a value of `U8` into a value of `U64`.
 
-#### `to_U8 : Std::U8 -> Std::U8`
+#### to_U8
+
+Type: `Std::U8 -> Std::U8`
 
 Casts a value of `U8` into a value of `U8`.
 
-### `namespace Std::Zero`
+### namespace Std::Zero
 
-#### `zero : [a : Std::Zero] a`
+#### zero
+
+Type: `[a : Std::Zero] a`
 
 ## Types and aliases
 
-### `namespace Std`
+### namespace Std
 
 #### `type Array a = box { built-in }`
 
@@ -2577,7 +3587,7 @@ The type of 64-bit unsigned integers.
 
 The type of 8-bit unsinged integers.
 
-### `namespace Std::FFI`
+### namespace Std::FFI
 
 #### `type CChar = Std::I8`
 
@@ -2621,7 +3631,7 @@ and there is a possibility that the value is used after the destructor function 
 
 ##### field `dtor : a -> Std::IO a`
 
-### `namespace Std::IO`
+### namespace Std::IO
 
 #### `type IOFail a = unbox struct { ...fields... }`
 
@@ -2658,7 +3668,7 @@ Values of type `IOState` are generated by the runtime when executing `IO` action
 
 Technically, `IOState` exists to specify the execution of I/O operations to the optimizer in the compiler.
 
-### `namespace Std::Iterator`
+### namespace Std::Iterator
 
 #### `type AppendIterator i1 i2 = unbox struct { ...fields... }`
 
@@ -2798,13 +3808,13 @@ Takes at most `n` elements from an iterator.
 
 ##### field `iter2 : i2`
 
-### `namespace Std::Option`
+### namespace Std::Option
 
 #### `type OptionIterator opt = unbox struct { ...fields... }`
 
 ##### field `opt : opt`
 
-### `namespace Std::String`
+### namespace Std::String
 
 #### `type StringSplitIterator = unbox struct { ...fields... }`
 
@@ -2820,7 +3830,7 @@ Takes at most `n` elements from an iterator.
 
 ## Traits and aliases
 
-### `namespace Std`
+### namespace Std
 
 #### trait `a : Add`
 
@@ -2952,448 +3962,448 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 ## Trait implementations
 
-### `impl () : Std::Eq`
+### impl `() : Std::Eq`
 
-### `impl () : Std::ToString`
+### impl `() : Std::ToString`
 
 Returns "()".
 
-### `impl [t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`
+### impl `[t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`
 
-### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan] (t0, t1) : Std::LessThan`
+### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan] (t0, t1) : Std::LessThan`
 
-### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq] (t0, t1) : Std::LessThanOrEq`
+### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq] (t0, t1) : Std::LessThanOrEq`
 
-### `impl [t0 : Std::ToString, t1 : Std::ToString] (t0, t1) : Std::ToString`
+### impl `[t0 : Std::ToString, t1 : Std::ToString] (t0, t1) : Std::ToString`
 
-### `impl [t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq] (t0, t1, t2) : Std::Eq`
+### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq] (t0, t1, t2) : Std::Eq`
 
-### `impl [t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan] (t0, t1, t2) : Std::LessThan`
+### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan] (t0, t1, t2) : Std::LessThan`
 
-### `impl [t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq] (t0, t1, t2) : Std::LessThanOrEq`
+### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq] (t0, t1, t2) : Std::LessThanOrEq`
 
-### `impl [t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`
+### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`
 
-### `impl Std::Array : Std::Functor`
+### impl `Std::Array : Std::Functor`
 
-### `impl Std::Array : Std::Monad`
+### impl `Std::Array : Std::Monad`
 
-### `impl Std::Array a : Std::Add`
+### impl `Std::Array a : Std::Add`
 
 Concatenates two arrays.
 
-### `impl Std::Array a : Std::Boxed`
+### impl `Std::Array a : Std::Boxed`
 
-### `impl [a : Std::Eq] Std::Array a : Std::Eq`
+### impl `[a : Std::Eq] Std::Array a : Std::Eq`
 
-### `impl [a : Std::Eq, a : Std::LessThan] Std::Array a : Std::LessThan`
+### impl `[a : Std::Eq, a : Std::LessThan] Std::Array a : Std::LessThan`
 
 `LessThan` implementation for `Array a`.
 
 Compares two arrays by lexicographic order.
 
-### `impl [a : Std::Eq, a : Std::LessThanOrEq] Std::Array a : Std::LessThanOrEq`
+### impl `[a : Std::Eq, a : Std::LessThanOrEq] Std::Array a : Std::LessThanOrEq`
 
 `LessThanOrEq` implementation for `Array a`.
 
 Compares two arrays by lexicographic order.
 
-### `impl [a : Std::ToString] Std::Array a : Std::ToString`
+### impl `[a : Std::ToString] Std::Array a : Std::ToString`
 
-### `impl Std::Array a : Std::Zero`
+### impl `Std::Array a : Std::Zero`
 
 The empty array with zero capacity.
 
-### `impl Std::Arrow a : Std::Functor`
+### impl `Std::Arrow a : Std::Functor`
 
-### `impl Std::Arrow a : Std::Monad`
+### impl `Std::Arrow a : Std::Monad`
 
-### `impl Std::Bool : Std::Eq`
+### impl `Std::Bool : Std::Eq`
 
-### `impl Std::Bool : Std::Not`
+### impl `Std::Bool : Std::Not`
 
-### `impl Std::Bool : Std::ToString`
+### impl `Std::Bool : Std::ToString`
 
-### `impl Std::Box a : Std::Boxed`
+### impl `Std::Box a : Std::Boxed`
 
-### `impl Std::F32 : Std::Add`
+### impl `Std::F32 : Std::Add`
 
-### `impl Std::F32 : Std::Div`
+### impl `Std::F32 : Std::Div`
 
-### `impl Std::F32 : Std::Eq`
+### impl `Std::F32 : Std::Eq`
 
-### `impl Std::F32 : Std::FromBytes`
+### impl `Std::F32 : Std::FromBytes`
 
-### `impl Std::F32 : Std::FromString`
+### impl `Std::F32 : Std::FromString`
 
-### `impl Std::F32 : Std::LessThan`
+### impl `Std::F32 : Std::LessThan`
 
-### `impl Std::F32 : Std::LessThanOrEq`
+### impl `Std::F32 : Std::LessThanOrEq`
 
-### `impl Std::F32 : Std::Mul`
+### impl `Std::F32 : Std::Mul`
 
-### `impl Std::F32 : Std::Neg`
+### impl `Std::F32 : Std::Neg`
 
-### `impl Std::F32 : Std::Sub`
+### impl `Std::F32 : Std::Sub`
 
-### `impl Std::F32 : Std::ToBytes`
+### impl `Std::F32 : Std::ToBytes`
 
-### `impl Std::F32 : Std::ToString`
+### impl `Std::F32 : Std::ToString`
 
-### `impl Std::F32 : Std::Zero`
+### impl `Std::F32 : Std::Zero`
 
-### `impl Std::F64 : Std::Add`
+### impl `Std::F64 : Std::Add`
 
-### `impl Std::F64 : Std::Div`
+### impl `Std::F64 : Std::Div`
 
-### `impl Std::F64 : Std::Eq`
+### impl `Std::F64 : Std::Eq`
 
-### `impl Std::F64 : Std::FromBytes`
+### impl `Std::F64 : Std::FromBytes`
 
-### `impl Std::F64 : Std::FromString`
+### impl `Std::F64 : Std::FromString`
 
-### `impl Std::F64 : Std::LessThan`
+### impl `Std::F64 : Std::LessThan`
 
-### `impl Std::F64 : Std::LessThanOrEq`
+### impl `Std::F64 : Std::LessThanOrEq`
 
-### `impl Std::F64 : Std::Mul`
+### impl `Std::F64 : Std::Mul`
 
-### `impl Std::F64 : Std::Neg`
+### impl `Std::F64 : Std::Neg`
 
-### `impl Std::F64 : Std::Sub`
+### impl `Std::F64 : Std::Sub`
 
-### `impl Std::F64 : Std::ToBytes`
+### impl `Std::F64 : Std::ToBytes`
 
-### `impl Std::F64 : Std::ToString`
+### impl `Std::F64 : Std::ToString`
 
-### `impl Std::F64 : Std::Zero`
+### impl `Std::F64 : Std::Zero`
 
-### `impl Std::FFI::Destructor a : Std::Boxed`
+### impl `Std::FFI::Destructor a : Std::Boxed`
 
-### `impl Std::I16 : Std::Add`
+### impl `Std::I16 : Std::Add`
 
-### `impl Std::I16 : Std::Div`
+### impl `Std::I16 : Std::Div`
 
-### `impl Std::I16 : Std::Eq`
+### impl `Std::I16 : Std::Eq`
 
-### `impl Std::I16 : Std::FromBytes`
+### impl `Std::I16 : Std::FromBytes`
 
-### `impl Std::I16 : Std::FromString`
+### impl `Std::I16 : Std::FromString`
 
-### `impl Std::I16 : Std::LessThan`
+### impl `Std::I16 : Std::LessThan`
 
-### `impl Std::I16 : Std::LessThanOrEq`
+### impl `Std::I16 : Std::LessThanOrEq`
 
-### `impl Std::I16 : Std::Mul`
+### impl `Std::I16 : Std::Mul`
 
-### `impl Std::I16 : Std::Neg`
+### impl `Std::I16 : Std::Neg`
 
-### `impl Std::I16 : Std::Rem`
+### impl `Std::I16 : Std::Rem`
 
-### `impl Std::I16 : Std::Sub`
+### impl `Std::I16 : Std::Sub`
 
-### `impl Std::I16 : Std::ToBytes`
+### impl `Std::I16 : Std::ToBytes`
 
-### `impl Std::I16 : Std::ToString`
+### impl `Std::I16 : Std::ToString`
 
-### `impl Std::I16 : Std::Zero`
+### impl `Std::I16 : Std::Zero`
 
-### `impl Std::I32 : Std::Add`
+### impl `Std::I32 : Std::Add`
 
-### `impl Std::I32 : Std::Div`
+### impl `Std::I32 : Std::Div`
 
-### `impl Std::I32 : Std::Eq`
+### impl `Std::I32 : Std::Eq`
 
-### `impl Std::I32 : Std::FromBytes`
+### impl `Std::I32 : Std::FromBytes`
 
-### `impl Std::I32 : Std::FromString`
+### impl `Std::I32 : Std::FromString`
 
-### `impl Std::I32 : Std::LessThan`
+### impl `Std::I32 : Std::LessThan`
 
-### `impl Std::I32 : Std::LessThanOrEq`
+### impl `Std::I32 : Std::LessThanOrEq`
 
-### `impl Std::I32 : Std::Mul`
+### impl `Std::I32 : Std::Mul`
 
-### `impl Std::I32 : Std::Neg`
+### impl `Std::I32 : Std::Neg`
 
-### `impl Std::I32 : Std::Rem`
+### impl `Std::I32 : Std::Rem`
 
-### `impl Std::I32 : Std::Sub`
+### impl `Std::I32 : Std::Sub`
 
-### `impl Std::I32 : Std::ToBytes`
+### impl `Std::I32 : Std::ToBytes`
 
-### `impl Std::I32 : Std::ToString`
+### impl `Std::I32 : Std::ToString`
 
-### `impl Std::I32 : Std::Zero`
+### impl `Std::I32 : Std::Zero`
 
-### `impl Std::I64 : Std::Add`
+### impl `Std::I64 : Std::Add`
 
-### `impl Std::I64 : Std::Div`
+### impl `Std::I64 : Std::Div`
 
-### `impl Std::I64 : Std::Eq`
+### impl `Std::I64 : Std::Eq`
 
-### `impl Std::I64 : Std::FromBytes`
+### impl `Std::I64 : Std::FromBytes`
 
-### `impl Std::I64 : Std::FromString`
+### impl `Std::I64 : Std::FromString`
 
-### `impl Std::I64 : Std::LessThan`
+### impl `Std::I64 : Std::LessThan`
 
-### `impl Std::I64 : Std::LessThanOrEq`
+### impl `Std::I64 : Std::LessThanOrEq`
 
-### `impl Std::I64 : Std::Mul`
+### impl `Std::I64 : Std::Mul`
 
-### `impl Std::I64 : Std::Neg`
+### impl `Std::I64 : Std::Neg`
 
-### `impl Std::I64 : Std::Rem`
+### impl `Std::I64 : Std::Rem`
 
-### `impl Std::I64 : Std::Sub`
+### impl `Std::I64 : Std::Sub`
 
-### `impl Std::I64 : Std::ToBytes`
+### impl `Std::I64 : Std::ToBytes`
 
-### `impl Std::I64 : Std::ToString`
+### impl `Std::I64 : Std::ToString`
 
-### `impl Std::I64 : Std::Zero`
+### impl `Std::I64 : Std::Zero`
 
-### `impl Std::I8 : Std::Add`
+### impl `Std::I8 : Std::Add`
 
-### `impl Std::I8 : Std::Div`
+### impl `Std::I8 : Std::Div`
 
-### `impl Std::I8 : Std::Eq`
+### impl `Std::I8 : Std::Eq`
 
-### `impl Std::I8 : Std::FromBytes`
+### impl `Std::I8 : Std::FromBytes`
 
-### `impl Std::I8 : Std::FromString`
+### impl `Std::I8 : Std::FromString`
 
-### `impl Std::I8 : Std::LessThan`
+### impl `Std::I8 : Std::LessThan`
 
-### `impl Std::I8 : Std::LessThanOrEq`
+### impl `Std::I8 : Std::LessThanOrEq`
 
-### `impl Std::I8 : Std::Mul`
+### impl `Std::I8 : Std::Mul`
 
-### `impl Std::I8 : Std::Neg`
+### impl `Std::I8 : Std::Neg`
 
-### `impl Std::I8 : Std::Rem`
+### impl `Std::I8 : Std::Rem`
 
-### `impl Std::I8 : Std::Sub`
+### impl `Std::I8 : Std::Sub`
 
-### `impl Std::I8 : Std::ToBytes`
+### impl `Std::I8 : Std::ToBytes`
 
-### `impl Std::I8 : Std::ToString`
+### impl `Std::I8 : Std::ToString`
 
-### `impl Std::I8 : Std::Zero`
+### impl `Std::I8 : Std::Zero`
 
-### `impl Std::IO : Std::Functor`
+### impl `Std::IO : Std::Functor`
 
-### `impl Std::IO : Std::Monad`
+### impl `Std::IO : Std::Monad`
 
-### `impl Std::IO::IOFail : Std::Functor`
+### impl `Std::IO::IOFail : Std::Functor`
 
-### `impl Std::IO::IOFail : Std::Monad`
+### impl `Std::IO::IOFail : Std::Monad`
 
-### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
+### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
 
-### `impl Std::Iterator::ArrayIterator a : Std::Iterator`
+### impl `Std::Iterator::ArrayIterator a : Std::Iterator`
 
-### `impl [i : Std::Iterator] Std::Iterator::ConsIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator] Std::Iterator::ConsIterator i a : Std::Iterator`
 
-### `impl Std::Iterator::CountUpIterator : Std::Iterator`
+### impl `Std::Iterator::CountUpIterator : Std::Iterator`
 
-### `impl Std::Iterator::DynIterator : Std::Functor`
+### impl `Std::Iterator::DynIterator : Std::Functor`
 
-### `impl Std::Iterator::DynIterator : Std::Monad`
+### impl `Std::Iterator::DynIterator : Std::Monad`
 
-### `impl Std::Iterator::DynIterator a : Std::Add`
+### impl `Std::Iterator::DynIterator a : Std::Add`
 
 Concatenates two dynamic iterators.
 
-### `impl [a : Std::Eq] Std::Iterator::DynIterator a : Std::Eq`
+### impl `[a : Std::Eq] Std::Iterator::DynIterator a : Std::Eq`
 
-### `impl Std::Iterator::DynIterator a : Std::Iterator`
+### impl `Std::Iterator::DynIterator a : Std::Iterator`
 
-### `impl Std::Iterator::DynIterator a : Std::Zero`
+### impl `Std::Iterator::DynIterator a : Std::Zero`
 
 Creates an empty dynamic iterator.
 
-### `impl Std::Iterator::EmptyIterator a : Std::Iterator`
+### impl `Std::Iterator::EmptyIterator a : Std::Iterator`
 
-### `impl [i : Std::Iterator] Std::Iterator::FilterIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator] Std::Iterator::FilterIterator i a : Std::Iterator`
 
-### `impl [i : Std::Iterator] Std::Iterator::FilterMapIterator i a b : Std::Iterator`
+### impl `[i : Std::Iterator] Std::Iterator::FilterMapIterator i a b : Std::Iterator`
 
-### `impl [i2 : Std::Iterator, i1 : Std::Iterator] Std::Iterator::FlattenIterator i2 i1 : Std::Iterator`
+### impl `[i2 : Std::Iterator, i1 : Std::Iterator] Std::Iterator::FlattenIterator i2 i1 : Std::Iterator`
 
-### `impl [i : Std::Iterator] Std::Iterator::IntersperseIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator] Std::Iterator::IntersperseIterator i a : Std::Iterator`
 
-### `impl [i : Std::Iterator] Std::Iterator::MapIterator i a b : Std::Iterator`
+### impl `[i : Std::Iterator] Std::Iterator::MapIterator i a b : Std::Iterator`
 
-### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ProductIterator i1 i2 a b : Std::Iterator`
+### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ProductIterator i1 i2 a b : Std::Iterator`
 
-### `impl Std::Iterator::RangeIterator : Std::Iterator`
+### impl `Std::Iterator::RangeIterator : Std::Iterator`
 
-### `impl Std::Iterator::RangeStepIterator : Std::Iterator`
+### impl `Std::Iterator::RangeStepIterator : Std::Iterator`
 
-### `impl [i : Std::Iterator] Std::Iterator::ReverseIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator] Std::Iterator::ReverseIterator i a : Std::Iterator`
 
-### `impl Std::Iterator::StateIterator s a : Std::Iterator`
+### impl `Std::Iterator::StateIterator s a : Std::Iterator`
 
-### `impl [i : Std::Iterator] Std::Iterator::TakeIterator i : Std::Iterator`
+### impl `[i : Std::Iterator] Std::Iterator::TakeIterator i : Std::Iterator`
 
-### `impl [i : Std::Iterator] Std::Iterator::TakeWhileIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator] Std::Iterator::TakeWhileIterator i a : Std::Iterator`
 
-### `impl [i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ZipIterator i1 i2 : Std::Iterator`
+### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ZipIterator i1 i2 : Std::Iterator`
 
-### `impl Std::Option : Std::Functor`
+### impl `Std::Option : Std::Functor`
 
-### `impl Std::Option : Std::Monad`
+### impl `Std::Option : Std::Monad`
 
-### `impl [a : Std::Eq] Std::Option a : Std::Eq`
+### impl `[a : Std::Eq] Std::Option a : Std::Eq`
 
-### `impl [a : Std::ToString] Std::Option a : Std::ToString`
+### impl `[a : Std::ToString] Std::Option a : Std::ToString`
 
-### `impl Std::Option::OptionIterator (Std::Option a) : Std::Iterator`
+### impl `Std::Option::OptionIterator (Std::Option a) : Std::Iterator`
 
-### `impl Std::Ptr : Std::Eq`
+### impl `Std::Ptr : Std::Eq`
 
-### `impl Std::Ptr : Std::ToString`
+### impl `Std::Ptr : Std::ToString`
 
-### `impl Std::Result e : Std::Functor`
+### impl `Std::Result e : Std::Functor`
 
-### `impl Std::Result e : Std::Monad`
+### impl `Std::Result e : Std::Monad`
 
-### `impl [e : Std::Eq, a : Std::Eq] Std::Result e a : Std::Eq`
+### impl `[e : Std::Eq, a : Std::Eq] Std::Result e a : Std::Eq`
 
-### `impl [e : Std::ToString, a : Std::ToString] Std::Result e a : Std::ToString`
+### impl `[e : Std::ToString, a : Std::ToString] Std::Result e a : Std::ToString`
 
-### `impl Std::String : Std::Add`
+### impl `Std::String : Std::Add`
 
 Concatenates two strings.
 
-### `impl Std::String : Std::Eq`
+### impl `Std::String : Std::Eq`
 
-### `impl Std::String : Std::LessThan`
+### impl `Std::String : Std::LessThan`
 
-### `impl Std::String : Std::LessThanOrEq`
+### impl `Std::String : Std::LessThanOrEq`
 
-### `impl Std::String : Std::ToString`
+### impl `Std::String : Std::ToString`
 
-### `impl Std::String : Std::Zero`
+### impl `Std::String : Std::Zero`
 
 The empty string.
 
-### `impl Std::String::StringSplitIterator : Std::Iterator`
+### impl `Std::String::StringSplitIterator : Std::Iterator`
 
-### `impl Std::Tuple2 t0 : Std::Functor`
+### impl `Std::Tuple2 t0 : Std::Functor`
 
-### `impl Std::Tuple3 t0 t1 : Std::Functor`
+### impl `Std::Tuple3 t0 t1 : Std::Functor`
 
-### `impl Std::U16 : Std::Add`
+### impl `Std::U16 : Std::Add`
 
-### `impl Std::U16 : Std::Div`
+### impl `Std::U16 : Std::Div`
 
-### `impl Std::U16 : Std::Eq`
+### impl `Std::U16 : Std::Eq`
 
-### `impl Std::U16 : Std::FromBytes`
+### impl `Std::U16 : Std::FromBytes`
 
-### `impl Std::U16 : Std::FromString`
+### impl `Std::U16 : Std::FromString`
 
-### `impl Std::U16 : Std::LessThan`
+### impl `Std::U16 : Std::LessThan`
 
-### `impl Std::U16 : Std::LessThanOrEq`
+### impl `Std::U16 : Std::LessThanOrEq`
 
-### `impl Std::U16 : Std::Mul`
+### impl `Std::U16 : Std::Mul`
 
-### `impl Std::U16 : Std::Neg`
+### impl `Std::U16 : Std::Neg`
 
-### `impl Std::U16 : Std::Rem`
+### impl `Std::U16 : Std::Rem`
 
-### `impl Std::U16 : Std::Sub`
+### impl `Std::U16 : Std::Sub`
 
-### `impl Std::U16 : Std::ToBytes`
+### impl `Std::U16 : Std::ToBytes`
 
-### `impl Std::U16 : Std::ToString`
+### impl `Std::U16 : Std::ToString`
 
-### `impl Std::U16 : Std::Zero`
+### impl `Std::U16 : Std::Zero`
 
-### `impl Std::U32 : Std::Add`
+### impl `Std::U32 : Std::Add`
 
-### `impl Std::U32 : Std::Div`
+### impl `Std::U32 : Std::Div`
 
-### `impl Std::U32 : Std::Eq`
+### impl `Std::U32 : Std::Eq`
 
-### `impl Std::U32 : Std::FromBytes`
+### impl `Std::U32 : Std::FromBytes`
 
-### `impl Std::U32 : Std::FromString`
+### impl `Std::U32 : Std::FromString`
 
-### `impl Std::U32 : Std::LessThan`
+### impl `Std::U32 : Std::LessThan`
 
-### `impl Std::U32 : Std::LessThanOrEq`
+### impl `Std::U32 : Std::LessThanOrEq`
 
-### `impl Std::U32 : Std::Mul`
+### impl `Std::U32 : Std::Mul`
 
-### `impl Std::U32 : Std::Neg`
+### impl `Std::U32 : Std::Neg`
 
-### `impl Std::U32 : Std::Rem`
+### impl `Std::U32 : Std::Rem`
 
-### `impl Std::U32 : Std::Sub`
+### impl `Std::U32 : Std::Sub`
 
-### `impl Std::U32 : Std::ToBytes`
+### impl `Std::U32 : Std::ToBytes`
 
-### `impl Std::U32 : Std::ToString`
+### impl `Std::U32 : Std::ToString`
 
-### `impl Std::U32 : Std::Zero`
+### impl `Std::U32 : Std::Zero`
 
-### `impl Std::U64 : Std::Add`
+### impl `Std::U64 : Std::Add`
 
-### `impl Std::U64 : Std::Div`
+### impl `Std::U64 : Std::Div`
 
-### `impl Std::U64 : Std::Eq`
+### impl `Std::U64 : Std::Eq`
 
-### `impl Std::U64 : Std::FromBytes`
+### impl `Std::U64 : Std::FromBytes`
 
-### `impl Std::U64 : Std::FromString`
+### impl `Std::U64 : Std::FromString`
 
-### `impl Std::U64 : Std::LessThan`
+### impl `Std::U64 : Std::LessThan`
 
-### `impl Std::U64 : Std::LessThanOrEq`
+### impl `Std::U64 : Std::LessThanOrEq`
 
-### `impl Std::U64 : Std::Mul`
+### impl `Std::U64 : Std::Mul`
 
-### `impl Std::U64 : Std::Neg`
+### impl `Std::U64 : Std::Neg`
 
-### `impl Std::U64 : Std::Rem`
+### impl `Std::U64 : Std::Rem`
 
-### `impl Std::U64 : Std::Sub`
+### impl `Std::U64 : Std::Sub`
 
-### `impl Std::U64 : Std::ToBytes`
+### impl `Std::U64 : Std::ToBytes`
 
-### `impl Std::U64 : Std::ToString`
+### impl `Std::U64 : Std::ToString`
 
-### `impl Std::U64 : Std::Zero`
+### impl `Std::U64 : Std::Zero`
 
-### `impl Std::U8 : Std::Add`
+### impl `Std::U8 : Std::Add`
 
-### `impl Std::U8 : Std::Div`
+### impl `Std::U8 : Std::Div`
 
-### `impl Std::U8 : Std::Eq`
+### impl `Std::U8 : Std::Eq`
 
-### `impl Std::U8 : Std::FromBytes`
+### impl `Std::U8 : Std::FromBytes`
 
-### `impl Std::U8 : Std::FromString`
+### impl `Std::U8 : Std::FromString`
 
-### `impl Std::U8 : Std::LessThan`
+### impl `Std::U8 : Std::LessThan`
 
-### `impl Std::U8 : Std::LessThanOrEq`
+### impl `Std::U8 : Std::LessThanOrEq`
 
-### `impl Std::U8 : Std::Mul`
+### impl `Std::U8 : Std::Mul`
 
-### `impl Std::U8 : Std::Neg`
+### impl `Std::U8 : Std::Neg`
 
-### `impl Std::U8 : Std::Rem`
+### impl `Std::U8 : Std::Rem`
 
-### `impl Std::U8 : Std::Sub`
+### impl `Std::U8 : Std::Sub`
 
-### `impl Std::U8 : Std::ToBytes`
+### impl `Std::U8 : Std::ToBytes`
 
-### `impl Std::U8 : Std::ToString`
+### impl `Std::U8 : Std::ToString`
 
-### `impl Std::U8 : Std::Zero`
+### impl `Std::U8 : Std::Zero`
