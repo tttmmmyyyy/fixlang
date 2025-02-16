@@ -3,6 +3,7 @@
 Module `Std` provides basic types, traits and values.
 
 This module is special in the sense that:
+
 - It is always imported implicitly. If you don't want to import some or all of entities in this module, you should write `import Std {...entities...}` explicitly.
 - It contains built-in types or values which are defined or implemented directly by Fix compiler, not by Fix source code.
 
