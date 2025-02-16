@@ -2437,6 +2437,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let obj_val = obj.value;
         let storage =
             self.build_alloca_at_entry(obj_val.get_type(), "alloca@create_debug_local_variable");
+        self.builder().build_store(storage, obj_val);
 
         let embed_ty = obj.debug_embedded_ty(self);
         let loc_var = self.get_di_builder().create_auto_variable(
