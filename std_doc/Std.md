@@ -4154,7 +4154,7 @@ The trait of iterators.
 Iterator is a concept of a sequence of elements that can be iterated.
 More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
 
-##### associated type `Item`
+##### type `Item`
 
 Defined as: `Item iter`
 
