@@ -299,7 +299,7 @@ fn main() {
             Arg::new("locs-only")
                 .long("locs-only")
                 .takes_value(false)
-                .help("Show only the locations of the projects."),
+                .help("Show only the locations of the projects. NOTE: this option may be removed in the future."),
         );
 
     let mut deps_subc = deps
