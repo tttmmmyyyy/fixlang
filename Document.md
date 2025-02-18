@@ -1899,13 +1899,18 @@ To learn more about the project file, read the comments in it.
 ## Managing dependencies
 
 Dependencies of a Fix project are represented by [[dependencies]] elements in the "fixproj.toml" file.
-The following is an example of adding "hash" as a dependency.
+The following is an example of adding two dependencies: "hash" in the remote repository and "mylib" in the local repository.
 
 ```
 [[dependencies]]
 name = "hash"
 version = "0.1.0"
 git = { url = "https://github.com/tttmmmyyyy/fixlang-hash.git" }
+
+[[dependencies]]
+name = "mylib"
+version = "*"
+path = "/path/to/mylib"
 ```
 
 Here, the notation `version = "0.1.0"` means that it requires version "0.1.0" or other versions that are SemVer compatible with it.
