@@ -9,7 +9,6 @@ pub fn print_all_projects(fix_config: &ConfigFile, json: bool) -> Result<(), Err
         }
         projects.sort_by(|a, b| a.name.cmp(&b.name));
 
-        // serde_jsonを使って`projects`をJSONに変換して出力する
         let json = serde_json::to_string_pretty(&projects);
         match json {
             Ok(json) => {
