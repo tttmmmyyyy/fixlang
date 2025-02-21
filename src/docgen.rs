@@ -55,7 +55,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
             "Generating documentation for module \"{}\".",
             mod_name.to_string()
         );
-        docgen_for_module(&program, &mod_name, docs_config)?;
+        docgen_for_module(&program, &mod_name, &proj_file, docs_config)?;
     }
     Ok(())
 }
@@ -112,6 +112,7 @@ impl MarkdownSection {
 fn docgen_for_module(
     program: &Program,
     mod_name: &Name,
+    project: &ProjectFile,
     config: &DocsConfig,
 ) -> Result<(), Errors> {
     // Check if the module exists in the program.
@@ -122,7 +123,7 @@ fn docgen_for_module(
         )));
     }
 
-    let markdown = write_module(program, mod_name, config)?;
+    let markdown = write_module(program, mod_name, project, config)?;
     let mut markdown_str = String::new();
     markdown.format(0, &mut markdown_str);
 
@@ -174,10 +175,16 @@ fn write_entries(mut entries: Vec<Entry>, doc: &mut MarkdownSection) {
 fn write_module(
     program: &Program,
     mod_name: &Name,
+    project: &ProjectFile,
     config: &DocsConfig,
 ) -> Result<MarkdownSection, Errors> {
     // Add the module name section.
     let mut doc = MarkdownSection::new(format!("{}", mod_name));
+
+    // Add the project name including this module.
+    let proj_name = &project.general.name;
+    let proj_ver = &project.general.version;
+    doc.add_paragraph(format!("Defined in {}@{}", proj_name, proj_ver));
 
     if let Some(mod_info) = program.modules.iter().find(|mi| mi.name == *mod_name) {
         let docstring = mod_info.source.get_document().ok().unwrap_or_default();
