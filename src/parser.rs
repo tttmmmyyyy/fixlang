@@ -897,6 +897,7 @@ fn parse_box_unbox(pair: Pair<Rule>, _ctx: &mut ParseContext) -> bool {
 
 fn parse_type_field(pair: Pair<Rule>, ctx: &mut ParseContext) -> Field {
     assert_eq!(pair.as_rule(), Rule::type_field);
+    let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
     let ty = parse_type(pairs.next().unwrap(), ctx);
@@ -905,6 +906,7 @@ fn parse_type_field(pair: Pair<Rule>, ctx: &mut ParseContext) -> Field {
         ty,
         syn_ty: None,
         is_punched: false,
+        source: Some(span),
     }
 }
 

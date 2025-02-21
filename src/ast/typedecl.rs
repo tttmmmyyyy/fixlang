@@ -331,6 +331,7 @@ pub struct Field {
     pub ty: Arc<TypeNode>,
     pub syn_ty: Option<Arc<TypeNode>>,
     pub is_punched: bool,
+    pub source: Option<Span>,
 }
 
 impl Field {

@@ -184,6 +184,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
                 ty: type_tyvar_star("a"),
                 syn_ty: None,
                 is_punched: false,
+                source: None,
             }],
             source: None,
             document: Some("The type of variable length arrays. This is a boxed type.".to_string()),
@@ -551,6 +552,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
                     ty: type_from_tyvar(tyvars[i as usize].clone()),
                     syn_ty: None,
                     is_punched: false,
+                    source: None,
                 })
                 .collect(),
             is_unbox: TUPLE_UNBOX,

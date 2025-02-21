@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    ast::name::{FullName, Name, NameSpace},
+    ast::{
+        name::{FullName, Name, NameSpace},
+        typedecl::Field,
+    },
     build_file,
     error::Errors,
     kind_star,
@@ -359,23 +362,13 @@ fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors
 
         if ty_info.variant == TyConVariant::Struct {
             for field in ty_info.fields.iter() {
-                let title = format!("field `{}`", field.name);
-                let mut field_sec = MarkdownSection::new(title);
-                field_sec.add_paragraph(format!(
-                    "Type: `{}`",
-                    field.syn_ty.as_ref().unwrap().to_string()
-                ));
+                let field_sec = field_subsection(TyConVariant::Struct, field)?;
                 doc.add_subsection(field_sec);
             }
         }
         if ty_info.variant == TyConVariant::Union {
             for variant in ty_info.fields.iter() {
-                let title = format!("variant `{}`", variant.name);
-                let mut variant_sec = MarkdownSection::new(title);
-                variant_sec.add_paragraph(format!(
-                    "Type: `{}`",
-                    variant.syn_ty.as_ref().unwrap().to_string()
-                ));
+                let variant_sec = field_subsection(TyConVariant::Union, variant)?;
                 doc.add_subsection(variant_sec);
             }
         }
@@ -422,6 +415,28 @@ fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors
         entries.push(entry);
     }
     Ok(entries)
+}
+
+fn field_subsection(
+    struct_or_union: TyConVariant,
+    field: &Field,
+) -> Result<MarkdownSection, Errors> {
+    let title = match struct_or_union {
+        TyConVariant::Struct => format!("field `{}`", field.name),
+        TyConVariant::Union => format!("variant `{}`", field.name),
+        _ => unreachable!(),
+    };
+    let mut field_sec = MarkdownSection::new(title);
+    field_sec.add_paragraph(format!(
+        "Type: `{}`",
+        field.syn_ty.as_ref().unwrap().to_string()
+    ));
+    if let Some(src) = &field.source {
+        let doc = src.get_document()?;
+        let doc = doc.trim().to_string();
+        field_sec.add_paragraph(doc);
+    }
+    Ok(field_sec)
 }
 
 fn trait_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
