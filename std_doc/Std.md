@@ -562,13 +562,13 @@ Casts a value of `F32` into a value of `CChar`.
 
 #### to_CDouble
 
-Type: `Std::F32 -> Std::F64`
+Type: `Std::F32 -> Std::FFI::CDouble`
 
 Casts a value of `F32` into a value of `CDouble`.
 
 #### to_CFloat
 
-Type: `Std::F32 -> Std::F32`
+Type: `Std::F32 -> Std::FFI::CFloat`
 
 Casts a value of `F32` into a value of `CFloat`.
 
@@ -736,13 +736,13 @@ Casts a value of `F64` into a value of `CChar`.
 
 #### to_CDouble
 
-Type: `Std::F64 -> Std::F64`
+Type: `Std::F64 -> Std::FFI::CDouble`
 
 Casts a value of `F64` into a value of `CDouble`.
 
 #### to_CFloat
 
-Type: `Std::F64 -> Std::F32`
+Type: `Std::F64 -> Std::FFI::CFloat`
 
 Casts a value of `F64` into a value of `CFloat`.
 
@@ -1128,7 +1128,7 @@ Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 #### to_CChar
 
-Type: `Std::I16 -> Std::I8`
+Type: `Std::I16 -> Std::FFI::CChar`
 
 Casts a value of `I16` into a value of `CChar`.
 
@@ -1146,61 +1146,61 @@ Casts a value of `I16` into a value of `CFloat`.
 
 #### to_CInt
 
-Type: `Std::I16 -> Std::I32`
+Type: `Std::I16 -> Std::FFI::CInt`
 
 Casts a value of `I16` into a value of `CInt`.
 
 #### to_CLong
 
-Type: `Std::I16 -> Std::I64`
+Type: `Std::I16 -> Std::FFI::CLong`
 
 Casts a value of `I16` into a value of `CLong`.
 
 #### to_CLongLong
 
-Type: `Std::I16 -> Std::I64`
+Type: `Std::I16 -> Std::FFI::CLongLong`
 
 Casts a value of `I16` into a value of `CLongLong`.
 
 #### to_CShort
 
-Type: `Std::I16 -> Std::I16`
+Type: `Std::I16 -> Std::FFI::CShort`
 
 Casts a value of `I16` into a value of `CShort`.
 
 #### to_CSizeT
 
-Type: `Std::I16 -> Std::U64`
+Type: `Std::I16 -> Std::FFI::CSizeT`
 
 Casts a value of `I16` into a value of `CSizeT`.
 
 #### to_CUnsignedChar
 
-Type: `Std::I16 -> Std::U8`
+Type: `Std::I16 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `I16` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
-Type: `Std::I16 -> Std::U32`
+Type: `Std::I16 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `I16` into a value of `CUnsignedInt`.
 
 #### to_CUnsignedLong
 
-Type: `Std::I16 -> Std::U64`
+Type: `Std::I16 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `I16` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
-Type: `Std::I16 -> Std::U64`
+Type: `Std::I16 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `I16` into a value of `CUnsignedLongLong`.
 
 #### to_CUnsignedShort
 
-Type: `Std::I16 -> Std::U16`
+Type: `Std::I16 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `I16` into a value of `CUnsignedShort`.
 
@@ -1310,7 +1310,7 @@ Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 #### to_CChar
 
-Type: `Std::I32 -> Std::I8`
+Type: `Std::I32 -> Std::FFI::CChar`
 
 Casts a value of `I32` into a value of `CChar`.
 
@@ -1328,61 +1328,61 @@ Casts a value of `I32` into a value of `CFloat`.
 
 #### to_CInt
 
-Type: `Std::I32 -> Std::I32`
+Type: `Std::I32 -> Std::FFI::CInt`
 
 Casts a value of `I32` into a value of `CInt`.
 
 #### to_CLong
 
-Type: `Std::I32 -> Std::I64`
+Type: `Std::I32 -> Std::FFI::CLong`
 
 Casts a value of `I32` into a value of `CLong`.
 
 #### to_CLongLong
 
-Type: `Std::I32 -> Std::I64`
+Type: `Std::I32 -> Std::FFI::CLongLong`
 
 Casts a value of `I32` into a value of `CLongLong`.
 
 #### to_CShort
 
-Type: `Std::I32 -> Std::I16`
+Type: `Std::I32 -> Std::FFI::CShort`
 
 Casts a value of `I32` into a value of `CShort`.
 
 #### to_CSizeT
 
-Type: `Std::I32 -> Std::U64`
+Type: `Std::I32 -> Std::FFI::CSizeT`
 
 Casts a value of `I32` into a value of `CSizeT`.
 
 #### to_CUnsignedChar
 
-Type: `Std::I32 -> Std::U8`
+Type: `Std::I32 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `I32` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
-Type: `Std::I32 -> Std::U32`
+Type: `Std::I32 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `I32` into a value of `CUnsignedInt`.
 
 #### to_CUnsignedLong
 
-Type: `Std::I32 -> Std::U64`
+Type: `Std::I32 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `I32` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
-Type: `Std::I32 -> Std::U64`
+Type: `Std::I32 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `I32` into a value of `CUnsignedLongLong`.
 
 #### to_CUnsignedShort
 
-Type: `Std::I32 -> Std::U16`
+Type: `Std::I32 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `I32` into a value of `CUnsignedShort`.
 
@@ -1492,7 +1492,7 @@ Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 #### to_CChar
 
-Type: `Std::I64 -> Std::I8`
+Type: `Std::I64 -> Std::FFI::CChar`
 
 Casts a value of `I64` into a value of `CChar`.
 
@@ -1510,61 +1510,61 @@ Casts a value of `I64` into a value of `CFloat`.
 
 #### to_CInt
 
-Type: `Std::I64 -> Std::I32`
+Type: `Std::I64 -> Std::FFI::CInt`
 
 Casts a value of `I64` into a value of `CInt`.
 
 #### to_CLong
 
-Type: `Std::I64 -> Std::I64`
+Type: `Std::I64 -> Std::FFI::CLong`
 
 Casts a value of `I64` into a value of `CLong`.
 
 #### to_CLongLong
 
-Type: `Std::I64 -> Std::I64`
+Type: `Std::I64 -> Std::FFI::CLongLong`
 
 Casts a value of `I64` into a value of `CLongLong`.
 
 #### to_CShort
 
-Type: `Std::I64 -> Std::I16`
+Type: `Std::I64 -> Std::FFI::CShort`
 
 Casts a value of `I64` into a value of `CShort`.
 
 #### to_CSizeT
 
-Type: `Std::I64 -> Std::U64`
+Type: `Std::I64 -> Std::FFI::CSizeT`
 
 Casts a value of `I64` into a value of `CSizeT`.
 
 #### to_CUnsignedChar
 
-Type: `Std::I64 -> Std::U8`
+Type: `Std::I64 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `I64` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
-Type: `Std::I64 -> Std::U32`
+Type: `Std::I64 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `I64` into a value of `CUnsignedInt`.
 
 #### to_CUnsignedLong
 
-Type: `Std::I64 -> Std::U64`
+Type: `Std::I64 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `I64` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
-Type: `Std::I64 -> Std::U64`
+Type: `Std::I64 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `I64` into a value of `CUnsignedLongLong`.
 
 #### to_CUnsignedShort
 
-Type: `Std::I64 -> Std::U16`
+Type: `Std::I64 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `I64` into a value of `CUnsignedShort`.
 
@@ -1674,7 +1674,7 @@ Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 #### to_CChar
 
-Type: `Std::I8 -> Std::I8`
+Type: `Std::I8 -> Std::FFI::CChar`
 
 Casts a value of `I8` into a value of `CChar`.
 
@@ -1692,61 +1692,61 @@ Casts a value of `I8` into a value of `CFloat`.
 
 #### to_CInt
 
-Type: `Std::I8 -> Std::I32`
+Type: `Std::I8 -> Std::FFI::CInt`
 
 Casts a value of `I8` into a value of `CInt`.
 
 #### to_CLong
 
-Type: `Std::I8 -> Std::I64`
+Type: `Std::I8 -> Std::FFI::CLong`
 
 Casts a value of `I8` into a value of `CLong`.
 
 #### to_CLongLong
 
-Type: `Std::I8 -> Std::I64`
+Type: `Std::I8 -> Std::FFI::CLongLong`
 
 Casts a value of `I8` into a value of `CLongLong`.
 
 #### to_CShort
 
-Type: `Std::I8 -> Std::I16`
+Type: `Std::I8 -> Std::FFI::CShort`
 
 Casts a value of `I8` into a value of `CShort`.
 
 #### to_CSizeT
 
-Type: `Std::I8 -> Std::U64`
+Type: `Std::I8 -> Std::FFI::CSizeT`
 
 Casts a value of `I8` into a value of `CSizeT`.
 
 #### to_CUnsignedChar
 
-Type: `Std::I8 -> Std::U8`
+Type: `Std::I8 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `I8` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
-Type: `Std::I8 -> Std::U32`
+Type: `Std::I8 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `I8` into a value of `CUnsignedInt`.
 
 #### to_CUnsignedLong
 
-Type: `Std::I8 -> Std::U64`
+Type: `Std::I8 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `I8` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
-Type: `Std::I8 -> Std::U64`
+Type: `Std::I8 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `I8` into a value of `CUnsignedLongLong`.
 
 #### to_CUnsignedShort
 
-Type: `Std::I8 -> Std::U16`
+Type: `Std::I8 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `I8` into a value of `CUnsignedShort`.
 
@@ -2772,7 +2772,7 @@ Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 #### to_CChar
 
-Type: `Std::U16 -> Std::I8`
+Type: `Std::U16 -> Std::FFI::CChar`
 
 Casts a value of `U16` into a value of `CChar`.
 
@@ -2790,61 +2790,61 @@ Casts a value of `U16` into a value of `CFloat`.
 
 #### to_CInt
 
-Type: `Std::U16 -> Std::I32`
+Type: `Std::U16 -> Std::FFI::CInt`
 
 Casts a value of `U16` into a value of `CInt`.
 
 #### to_CLong
 
-Type: `Std::U16 -> Std::I64`
+Type: `Std::U16 -> Std::FFI::CLong`
 
 Casts a value of `U16` into a value of `CLong`.
 
 #### to_CLongLong
 
-Type: `Std::U16 -> Std::I64`
+Type: `Std::U16 -> Std::FFI::CLongLong`
 
 Casts a value of `U16` into a value of `CLongLong`.
 
 #### to_CShort
 
-Type: `Std::U16 -> Std::I16`
+Type: `Std::U16 -> Std::FFI::CShort`
 
 Casts a value of `U16` into a value of `CShort`.
 
 #### to_CSizeT
 
-Type: `Std::U16 -> Std::U64`
+Type: `Std::U16 -> Std::FFI::CSizeT`
 
 Casts a value of `U16` into a value of `CSizeT`.
 
 #### to_CUnsignedChar
 
-Type: `Std::U16 -> Std::U8`
+Type: `Std::U16 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `U16` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
-Type: `Std::U16 -> Std::U32`
+Type: `Std::U16 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `U16` into a value of `CUnsignedInt`.
 
 #### to_CUnsignedLong
 
-Type: `Std::U16 -> Std::U64`
+Type: `Std::U16 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `U16` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
-Type: `Std::U16 -> Std::U64`
+Type: `Std::U16 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `U16` into a value of `CUnsignedLongLong`.
 
 #### to_CUnsignedShort
 
-Type: `Std::U16 -> Std::U16`
+Type: `Std::U16 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `U16` into a value of `CUnsignedShort`.
 
@@ -2950,7 +2950,7 @@ Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 #### to_CChar
 
-Type: `Std::U32 -> Std::I8`
+Type: `Std::U32 -> Std::FFI::CChar`
 
 Casts a value of `U32` into a value of `CChar`.
 
@@ -2968,61 +2968,61 @@ Casts a value of `U32` into a value of `CFloat`.
 
 #### to_CInt
 
-Type: `Std::U32 -> Std::I32`
+Type: `Std::U32 -> Std::FFI::CInt`
 
 Casts a value of `U32` into a value of `CInt`.
 
 #### to_CLong
 
-Type: `Std::U32 -> Std::I64`
+Type: `Std::U32 -> Std::FFI::CLong`
 
 Casts a value of `U32` into a value of `CLong`.
 
 #### to_CLongLong
 
-Type: `Std::U32 -> Std::I64`
+Type: `Std::U32 -> Std::FFI::CLongLong`
 
 Casts a value of `U32` into a value of `CLongLong`.
 
 #### to_CShort
 
-Type: `Std::U32 -> Std::I16`
+Type: `Std::U32 -> Std::FFI::CShort`
 
 Casts a value of `U32` into a value of `CShort`.
 
 #### to_CSizeT
 
-Type: `Std::U32 -> Std::U64`
+Type: `Std::U32 -> Std::FFI::CSizeT`
 
 Casts a value of `U32` into a value of `CSizeT`.
 
 #### to_CUnsignedChar
 
-Type: `Std::U32 -> Std::U8`
+Type: `Std::U32 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `U32` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
-Type: `Std::U32 -> Std::U32`
+Type: `Std::U32 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `U32` into a value of `CUnsignedInt`.
 
 #### to_CUnsignedLong
 
-Type: `Std::U32 -> Std::U64`
+Type: `Std::U32 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `U32` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
-Type: `Std::U32 -> Std::U64`
+Type: `Std::U32 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `U32` into a value of `CUnsignedLongLong`.
 
 #### to_CUnsignedShort
 
-Type: `Std::U32 -> Std::U16`
+Type: `Std::U32 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `U32` into a value of `CUnsignedShort`.
 
@@ -3128,7 +3128,7 @@ Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 #### to_CChar
 
-Type: `Std::U64 -> Std::I8`
+Type: `Std::U64 -> Std::FFI::CChar`
 
 Casts a value of `U64` into a value of `CChar`.
 
@@ -3146,61 +3146,61 @@ Casts a value of `U64` into a value of `CFloat`.
 
 #### to_CInt
 
-Type: `Std::U64 -> Std::I32`
+Type: `Std::U64 -> Std::FFI::CInt`
 
 Casts a value of `U64` into a value of `CInt`.
 
 #### to_CLong
 
-Type: `Std::U64 -> Std::I64`
+Type: `Std::U64 -> Std::FFI::CLong`
 
 Casts a value of `U64` into a value of `CLong`.
 
 #### to_CLongLong
 
-Type: `Std::U64 -> Std::I64`
+Type: `Std::U64 -> Std::FFI::CLongLong`
 
 Casts a value of `U64` into a value of `CLongLong`.
 
 #### to_CShort
 
-Type: `Std::U64 -> Std::I16`
+Type: `Std::U64 -> Std::FFI::CShort`
 
 Casts a value of `U64` into a value of `CShort`.
 
 #### to_CSizeT
 
-Type: `Std::U64 -> Std::U64`
+Type: `Std::U64 -> Std::FFI::CSizeT`
 
 Casts a value of `U64` into a value of `CSizeT`.
 
 #### to_CUnsignedChar
 
-Type: `Std::U64 -> Std::U8`
+Type: `Std::U64 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `U64` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
-Type: `Std::U64 -> Std::U32`
+Type: `Std::U64 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `U64` into a value of `CUnsignedInt`.
 
 #### to_CUnsignedLong
 
-Type: `Std::U64 -> Std::U64`
+Type: `Std::U64 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `U64` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
-Type: `Std::U64 -> Std::U64`
+Type: `Std::U64 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `U64` into a value of `CUnsignedLongLong`.
 
 #### to_CUnsignedShort
 
-Type: `Std::U64 -> Std::U16`
+Type: `Std::U64 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `U64` into a value of `CUnsignedShort`.
 
@@ -3306,7 +3306,7 @@ Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 #### to_CChar
 
-Type: `Std::U8 -> Std::I8`
+Type: `Std::U8 -> Std::FFI::CChar`
 
 Casts a value of `U8` into a value of `CChar`.
 
@@ -3324,61 +3324,61 @@ Casts a value of `U8` into a value of `CFloat`.
 
 #### to_CInt
 
-Type: `Std::U8 -> Std::I32`
+Type: `Std::U8 -> Std::FFI::CInt`
 
 Casts a value of `U8` into a value of `CInt`.
 
 #### to_CLong
 
-Type: `Std::U8 -> Std::I64`
+Type: `Std::U8 -> Std::FFI::CLong`
 
 Casts a value of `U8` into a value of `CLong`.
 
 #### to_CLongLong
 
-Type: `Std::U8 -> Std::I64`
+Type: `Std::U8 -> Std::FFI::CLongLong`
 
 Casts a value of `U8` into a value of `CLongLong`.
 
 #### to_CShort
 
-Type: `Std::U8 -> Std::I16`
+Type: `Std::U8 -> Std::FFI::CShort`
 
 Casts a value of `U8` into a value of `CShort`.
 
 #### to_CSizeT
 
-Type: `Std::U8 -> Std::U64`
+Type: `Std::U8 -> Std::FFI::CSizeT`
 
 Casts a value of `U8` into a value of `CSizeT`.
 
 #### to_CUnsignedChar
 
-Type: `Std::U8 -> Std::U8`
+Type: `Std::U8 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `U8` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
-Type: `Std::U8 -> Std::U32`
+Type: `Std::U8 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `U8` into a value of `CUnsignedInt`.
 
 #### to_CUnsignedLong
 
-Type: `Std::U8 -> Std::U64`
+Type: `Std::U8 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `U8` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
-Type: `Std::U8 -> Std::U64`
+Type: `Std::U8 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `U8` into a value of `CUnsignedLongLong`.
 
 #### to_CUnsignedShort
 
-Type: `Std::U8 -> Std::U16`
+Type: `Std::U8 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `U8` into a value of `CUnsignedShort`.
 

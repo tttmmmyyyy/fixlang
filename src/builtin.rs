@@ -950,9 +950,12 @@ impl InlineLLVMCastIntegralBody {
 }
 
 // Cast function of integrals
+//
+// - `to_alias`: A type alias to the target type. If set, it will appear in the documentation.
 pub fn cast_between_integral_function(
     from: Arc<TypeNode>,
     to: Arc<TypeNode>,
+    to_alias: Option<Arc<TypeNode>>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
     let from_name = FullName::local(FROM_NAME);
@@ -963,7 +966,7 @@ pub fn cast_between_integral_function(
         Default::default(),
         vec![],
         vec![],
-        type_fun(from.clone(), to.clone()),
+        type_fun(from.clone(), to_alias.unwrap_or(to.clone())),
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
@@ -1034,16 +1037,19 @@ impl InlineLLVMCastFloatBody {
 }
 
 // Cast function of integrals
+//
+// - `to_alias`: A type alias to the target type. If set, it will appear in the documentation.
 pub fn cast_between_float_function(
     from: Arc<TypeNode>,
     to: Arc<TypeNode>,
+    to_alias: Option<Arc<TypeNode>>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const FROM_NAME: &str = "from";
     let scm = Scheme::generalize(
         Default::default(),
         vec![],
         vec![],
-        type_fun(from.clone(), to.clone()),
+        type_fun(from.clone(), to_alias.unwrap_or(to.clone())),
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],

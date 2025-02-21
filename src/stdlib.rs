@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ast::name::FullName;
 
 use crate::error::Errors;
@@ -178,7 +180,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
-                cast_between_integral_function(from.clone(), to.clone()),
+                cast_between_integral_function(from.clone(), to.clone(), None),
                 None,
                 Some(format!(
                     "Casts a value of `{}` into a value of `{}`.",
@@ -190,23 +192,30 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // Cast function from integer to C integers.
     for from in integral_types {
         let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for (to_name, sign, size) in &c_types {
+        for (to_name_c, sign, size) in &c_types {
             if *sign == "F" {
                 continue;
             }
-            let to_type = make_integral_ty(&format!("{}{}", sign, size));
-            if to_type.is_none() {
+            // The type as is in C, e.g., "CInt".
+            let to_type_c = FullName::from_strs(&[STD_NAME, FFI_NAME], to_name_c);
+            let to_type_c = type_tycon(&Arc::new(TyCon::new(to_type_c)));
+
+            // The type in Fix, e.g., "I32".
+            let to_type_fix = make_integral_ty(&format!("{}{}", sign, size));
+            if to_type_fix.is_none() {
                 continue;
             }
-            let to_type = to_type.unwrap();
-            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let to_type_fix = to_type_fix.unwrap();
+
+            // The namespace of the conversion function is the same as the namespace of the source type.
+            let namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&from_namespace, &format!("to_{}", to_name)),
-                cast_between_integral_function(from.clone(), to_type),
+                FullName::new(&namespace, &format!("to_{}", to_name_c)),
+                cast_between_integral_function(from.clone(), to_type_fix, Some(to_type_c)),
                 None,
                 Some(format!(
                     "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name
+                    from_name, to_name_c
                 )),
             ));
         }
@@ -219,7 +228,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
-                cast_between_float_function(from.clone(), to.clone()),
+                cast_between_float_function(from.clone(), to.clone(), None),
                 None,
                 Some(format!(
                     "Casts a value of `{}` into a value of `{}`.",
@@ -235,15 +244,22 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             if *sign == "I" {
                 continue;
             }
-            let to_type = make_floating_ty(&format!("{}{}", sign, size));
-            if to_type.is_none() {
+            // The type as is in C, e.g., "CFloat".
+            let to_type_c = FullName::from_strs(&[STD_NAME, FFI_NAME], to_name);
+            let to_type_c = type_tycon(&Arc::new(TyCon::new(to_type_c)));
+
+            // The type as is in Fix, e.g., "F32".
+            let to_type_fix = make_floating_ty(&format!("{}{}", sign, size));
+            if to_type_fix.is_none() {
                 continue;
             }
-            let to_type = to_type.unwrap();
-            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let to_type_fix = to_type_fix.unwrap();
+
+            // The namespace of the conversion function is the same as the namespace of the source type.
+            let namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&from_namespace, &format!("to_{}", to_name)),
-                cast_between_float_function(from.clone(), to_type.clone()),
+                FullName::new(&namespace, &format!("to_{}", to_name)),
+                cast_between_float_function(from.clone(), to_type_fix.clone(), Some(to_type_c)),
                 None,
                 Some(format!(
                     "Casts a value of `{}` into a value of `{}`.",
