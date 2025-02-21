@@ -296,10 +296,10 @@ fn main() {
     let deps_list = App::new("list")
         .about("List all available projects in the registry.")
         .arg(
-            Arg::new("locs-only")
-                .long("locs-only")
+            Arg::new("json")
+                .long("json")
                 .takes_value(false)
-                .help("Show only the locations of the projects. NOTE: this option may be removed in the future."),
+                .help("Output the result in JSON format. NOTE: this option is experimental and may be removed in the future."),
         );
 
     let mut deps_subc = deps
@@ -597,8 +597,8 @@ fn main() {
                 panic_if_err(DependecyLockFile::update_and_install());
             }
             Some(("list", args)) => {
-                let locs_only = args.contains_id("locs-only");
-                panic_if_err(deps_list::print_all_projects(&fix_config, locs_only));
+                let json = args.contains_id("json");
+                panic_if_err(deps_list::print_all_projects(&fix_config, json));
             }
             _ => deps_subc.print_help().unwrap(),
         },

@@ -1,7 +1,7 @@
 use colored::Colorize;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Default, Clone)]
+#[derive(Deserialize, Serialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct RegistryFile {
     #[serde(default)]
@@ -18,7 +18,7 @@ impl RegistryFile {
     }
 }
 
-#[derive(Deserialize, Default, Clone)]
+#[derive(Deserialize, Serialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct RegistryProject {
     pub name: String,
