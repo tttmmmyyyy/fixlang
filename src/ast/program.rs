@@ -2116,6 +2116,7 @@ impl Program {
         let values = self.global_values.keys().collect::<Set<_>>();
         let types = self.tycon_names_with_aliases();
         let traits = self.trait_names_with_aliases();
+        let assoc_tys = self.assoc_ty_to_arity();
 
         for item in items {
             match item {
@@ -2129,7 +2130,10 @@ impl Program {
                     ));
                 }
                 ImportItem::TypeOrTrait(name, src) => {
-                    if types.contains(&name) || traits.contains(&name) {
+                    if types.contains(&name)
+                        || traits.contains(&name)
+                        || assoc_tys.contains_key(&name)
+                    {
                         continue;
                     }
                     errors.append(Errors::from_msg_srcs(

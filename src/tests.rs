@@ -5592,6 +5592,22 @@ pub fn test_import_hiding_unnecessary() {
 }
 
 #[test]
+pub fn test_import_hiding_associated_type() {
+    let source = r##"
+    module Main;
+    import Std hiding Iterator::Item;
+
+    type Item = I64;
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 42 : Item, 42 : I64)
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_type_and_trait_name_collision() {
     let source = r##"
     module Main;
