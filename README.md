@@ -3,30 +3,32 @@ Fix-lang: Fix Programming Language
 
 ## Overview
 
-Fix is a functional programming language focused on ease of learning and use.
+Fix is a purely functional programming language that focuses on ease of learning, usability, and fun.
 
-You can try Fix in [fix playground](https://tttmmmyyyy.github.io/fixlang-playground/).
+You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/).
 
 Concepts: 
-- **Familiar syntax.** 
-  - The syntax of Fix is more similar to languages such as C++ or Rust than to other functional languages such as Haskell. Even if you have never learned a functional language, you will be able to learn Fix quickly.
-- **Simplicity.** 
-  - We try to keep the specifications of Fix simple and small so that it is easily learned and understood.
-- **Safety and efficiency.** 
-  - For modern languages, memory / thread safety is a natural requirement. An outstanding language with this characteristic is Rust. Rust introduces "lifetime", "mutable references" and "borrowing rules" to achieve it, but these language features complicate the type system and put a burden on a programmer. Since Fix focuses on simplicity and ease, we go another way: Fix manages lifetime and mutability of values by reference counting.
-  - Fix uses reference counter for judging mutability. For example, suppose that you are trying to make a new array by modifying an old one, like `let arr2 = arr1.set(i, v);`. If the reference counter of `arr1` is one at the call of `set(i, v)`, Fix just mutates `arr1` and call the result as `arr2`, avoiding cloning the array. This optimization enables you to implement an algorithm which needs to mutate an array in O(1) without relying something like "ST monad".
-  - Of course, Fix uses reference counter for garbage collection. This ensures that values that are no longer needed are immediately released, and that no invalid memory access occurs. Moreover, Fix's syntax ensures that no circular reference is made, so Fix is free from memory leak.
+- **Syntax that combines the advantages of functional and OOP languages** 
+  - For example, if you have an array of integers called `fib` and you want to display it on the screen, you can write any of the following:
+    -  `println(fib.to_iter.map(to_string).join(", "))` 
+    -  `println $ fib.to_iter.map(to_string).join(", ")`
+    -  `fib.to_iter.map(to_string).join(", ").println`
+- **In-place update** 
+  - Since Fix uses reference counting for memory management, it can update uniquely referenced values in place while being purely functional.
+  - As an example, look at the program below that calculates the Fibonacci sequence. In this code, the array is never cloned when modified by the `set` function.
+  - This allows Fix to implement algorithms naturally using arrays and hash tables, while remaining purely functional.
+- **Performance** 
+  - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
+  - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
 
-Example code: 
+The following is an example program that calculates the Fibonacci sequence using Fix:
 ```
 module Main;
 
-// Prints n-th value of Fibonacci sequence in O(n).
-main : IO ();
-main = (
-    let n = 30;
-    let arr = Array::fill(n+1, 0);
-    let arr = arr.set(0, 0);
+calc_fib : I64 -> Array I64;
+calc_fib = |n| (
+    let arr = Array::fill(n, 0);
+    let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
         if idx == arr.get_size {
@@ -38,28 +40,35 @@ main = (
             continue $ (idx+1, arr)
         }
     );
-    println $ arr.@(n).to_string // 832040 for n = 30
+    arr
+);
+
+main : IO ();
+main = (
+    let fib = calc_fib(30);
+    println("The first 30 numbers of Fibonacci sequence are: ");;
+    println $ fib.to_iter.map(to_string).join(", ")
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCi8vIFByaW50cyBuLXRoIHZhbHVlIG9mIEZpYm9uYWNjaSBzZXF1ZW5jZSBpbiBPKG4pLg0KbWFpbiA6IElPICgpOw0KbWFpbiA9ICgNCiAgICBsZXQgbiA9IDMwOw0KICAgIGxldCBhcnIgPSBBcnJheTo6ZmlsbChuKzEsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDAsIDApOw0KICAgIGxldCBhcnIgPSBhcnIuc2V0KDEsIDEpOw0KICAgIGxldCBhcnIgPSBsb29wKCgyLCBhcnIpLCB8KGlkeCwgYXJyKXwNCiAgICAgICAgaWYgaWR4ID09IGFyci5nZXRfc2l6ZSB7DQogICAgICAgICAgICBicmVhayAkIGFycg0KICAgICAgICB9IGVsc2Ugew0KICAgICAgICAgICAgbGV0IHggPSBhcnIuQChpZHgtMSk7DQogICAgICAgICAgICBsZXQgeSA9IGFyci5AKGlkeC0yKTsNCiAgICAgICAgICAgIGxldCBhcnIgPSBhcnIuc2V0KGlkeCwgeCt5KTsNCiAgICAgICAgICAgIGNvbnRpbnVlICQgKGlkeCsxLCBhcnIpDQogICAgICAgIH0NCiAgICApOw0KICAgIHByaW50bG4gJCBhcnIuQChuKS50b19zdHJpbmcgLy8gODMyMDQwIGZvciBuID0gMzANCik7)
 
 ## Features
 
 - Functional:
-  - First class functions (a.k.a. closures)
+  - First-class functions (a.k.a. closures)
   - Pattern matching
   - Higher kinded types
   - Traits
   - Associated types
-  - Syntax for monads (that is different from `do` in Haskell)
-  - Hindley-Milner type inference
-- Ad hoc overloading
-- Foreign function interface (Calling C function, managing reference counter from C side)
-- Multithread programming
-- Memory management / mutability:
+  - Syntax for monads (distinct from `do` in Haskell)
+  - Type inference
+  - Built-in lens functions
+- Memory management & mutability:
+  - In-place update of values using reference counting
   - Memory safety and thread safety
-  - Leakless memory management by reference counting
-  - In-place update of uniquely referenced arrays and structs
+  - No memory leak achieved by avoiding cyclic references syntactically
+- Ad hoc overloading
+- Multithreading
+- Foreign function interface (FFI)
 
 ## Examples
 
