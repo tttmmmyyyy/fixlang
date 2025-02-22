@@ -75,10 +75,12 @@ jobs:
               LLVM_PATH="${GITHUB_WORKSPACE}/llvm"
               echo "LLVM_SYS_120_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
               sudo apt-get install libssl-dev
+              echo "OPENSSL_DIR=/usr/" >> $GITHUB_ENV
             elif [[ "${{ matrix.job.os }}" == "macos-latest" ]]; then
               brew install llvm@12
               echo "LLVM_SYS_120_PREFIX=$(brew --prefix llvm@12)" >> $GITHUB_ENV
               brew install openssl
+              echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
             else
               echo "Unsupported OS: ${{ matrix.job.os }}"
               exit 1
