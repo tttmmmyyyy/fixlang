@@ -56,7 +56,7 @@ jobs:
           echo "PROJECT_NAME=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -n1)" >> $GITHUB_ENV
 
       # LLVMをインストールして、環境変数LLVM_SYS_120_PREFIXを設定。
-      - name: Install LLVM
+      - name: Install LLVM & OpenSSL
         shell: bash
         run: |
             if [[ "${{ matrix.job.os }}" == "ubuntu-latest" ]]; then
@@ -73,9 +73,11 @@ jobs:
               tar -xf llvm.tar.xz -C llvm --strip-components=1
               LLVM_PATH="${GITHUB_WORKSPACE}/llvm"
               echo "LLVM_SYS_120_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
+              sudo apt-get install libssl-dev
             elif [[ "${{ matrix.job.os }}" == "macos-latest" ]]; then
               brew install llvm@12
               echo "LLVM_SYS_120_PREFIX=$(brew --prefix llvm@12)" >> $GITHUB_ENV
+              brew install openssl
             else
               echo "Unsupported OS: ${{ matrix.job.os }}"
               exit 1
