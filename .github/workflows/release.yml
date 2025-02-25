@@ -62,7 +62,7 @@ jobs:
         run: |
             if [[ "${{ matrix.job.os }}" == "ubuntu-latest" ]]; then
               if [[ "${{ matrix.job.target }}" == "x86_64-unknown-linux-gnu" ]]; then
-                # Nothing to do
+                echo "Skip OpenSSL installation"
               elif [[ "${{ matrix.job.target }}" == "aarch64-unknown-linux-gnu" ]]; then
                 sudo apt install -y build-essential crossbuild-essential-arm64
                 wget -q https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz -O openssl.tar.gz
@@ -78,7 +78,7 @@ jobs:
                 exit 1
               fi
             elif [[ "${{ matrix.job.os }}" == "macos-latest" ]]; then
-              # TODO
+              echo "Skip OpenSSL installation"
             else
               echo "Unsupported OS: ${{ matrix.job.os }}"
               exit 1
