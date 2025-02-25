@@ -41,11 +41,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        job: # https://github.com/actions/runner-images
-          - { os: ubuntu, image: ubuntu-20.04  , target: x86_64-unknown-linux-gnu       , use-cross: false , extension: ""   }
+        job:
+          - { os: ubuntu, 
+              image: ubuntu-20.04, 
+              target: x86_64-unknown-linux-gnu, 
+              use-cross: false, 
+              llvm-url: "https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/clang+llvm-12.0.1-x86_64-linux-gnu-ubuntu-16.04.tar.xz", 
+              extension: "" }
+          - { os: macos,  
+              image: macos-13, 
+              target: x86_64-apple-darwin, 
+              use-cross: false, 
+              extension: "" }
+          - { os: macos,  
+              image: macos-14, 
+              target: aarch64-apple-darwin, 
+              use-cross: false, 
+              extension: "" }
+          # Reference: https://github.com/actions/runner-images
           # - { os: ubuntu, image: ubuntu-latest  , target: aarch64-unknown-linux-gnu      , use-cross: true  , extension: ""   } # OpenSSLのクロスコンパイルがうまくできないのでカット
-          - { os: macos,  image: macos-13   , target: x86_64-apple-darwin            , use-cross: false , extension: ""   }
-          - { os: macos,  image: macos-14   , target: aarch64-apple-darwin           , use-cross: false , extension: ""   }
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -60,21 +74,14 @@ jobs:
       - name: Install LLVM & OpenSSL
         shell: bash
         run: |
-            if [[ "${{ matrix.job.os }}" == "ubuntu-latest" ]]; then
-              if [[ "${{ matrix.job.target }}" == "x86_64-unknown-linux-gnu" ]]; then
-                LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/clang+llvm-12.0.1-x86_64-linux-gnu-ubuntu-16.04.tar.xz"
-              elif [[ "${{ matrix.job.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-                LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/clang+llvm-12.0.1-aarch64-linux-gnu.tar.xz"
-              else
-                echo "Unsupported target: ${{ matrix.job.target }}"
-                exit 1
-              fi
+            if [[ "${{ matrix.job.os }}" == "ubuntu" ]]; then
+              LLVM_URL="${{ matrix.job.llvm-url }}"
               mkdir -p llvm
               wget -q "$LLVM_URL" -O llvm.tar.xz
               tar -xf llvm.tar.xz -C llvm --strip-components=1
               LLVM_PATH="${GITHUB_WORKSPACE}/llvm"
               echo "LLVM_SYS_120_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
-            elif [[ "${{ matrix.job.os }}" == "macos-latest" ]]; then
+            elif [[ "${{ matrix.job.os }}" == "macos" ]]; then
               brew install llvm@12
               echo "LLVM_SYS_120_PREFIX=$(brew --prefix llvm@12)" >> $GITHUB_ENV
               brew install openssl
