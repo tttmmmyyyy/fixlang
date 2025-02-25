@@ -131,6 +131,8 @@ pub struct DocsConfig {
     pub modules: Vec<String>,
     // Include compiler-defined methods in the documentation.
     pub include_compiler_defined_methods: bool,
+    // Include private items in the documentation.
+    pub include_private: bool,
     // Output directory.
     pub out_dir: PathBuf,
 }

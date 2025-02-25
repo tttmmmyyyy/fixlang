@@ -333,7 +333,8 @@ fn main() {
             Arg::new("include-compiler-defined-methods").long("with-compiler-defined-methods").help("Include compiler-defined methods such as `@{field_name}` or `as_{variant_name}` in the documentation."),
         ).arg(
             Arg::new("out-dir").long("out-dir").short('o').takes_value(true).help("Output directory for generated documents.").default_value("docs"),
-        );
+        ).arg(
+            Arg::new("private").long("private").help("Include private values (i.e., values whose name starts with underscore) in the documentation."));
 
     // "fix init" subcommand
     let init_subc = App::new("init")
@@ -402,6 +403,9 @@ fn main() {
         // `with-compiler-defined-methods` option
         docs_config.include_compiler_defined_methods =
             m.contains_id("include-compiler-defined-methods");
+
+        // `private` option
+        docs_config.include_private = m.contains_id("private");
 
         // `out-dir` option
         let dir = m

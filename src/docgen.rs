@@ -266,11 +266,14 @@ fn to_markdown_link(header: &str) -> String {
     link
 }
 
-fn is_entry_should_be_documented(name: &FullName, mod_name: &Name) -> bool {
+fn is_entry_should_be_documented(name: &FullName, mod_name: &Name, config: &DocsConfig) -> bool {
     if &name.module() != mod_name {
         return false;
     }
     if name.to_string().contains("#") {
+        return false;
+    }
+    if !config.include_private && name.name.starts_with("_") {
         return false;
     }
     true
@@ -575,7 +578,7 @@ fn value_entries(
     let mut entries = vec![];
 
     for (name, gv) in &program.global_values {
-        if !is_entry_should_be_documented(&name, mod_name) {
+        if !is_entry_should_be_documented(&name, mod_name, config) {
             continue;
         }
         if gv.compiler_defined_method && !config.include_compiler_defined_methods {
