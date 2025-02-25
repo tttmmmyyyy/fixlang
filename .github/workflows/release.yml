@@ -69,7 +69,7 @@ jobs:
                 mkdir -p openssl
                 tar -xf openssl.tar.gz -C openssl --strip-components=1
                 cd openssl
-                ./configure linux-aarch64 --prefix=/opt/openssl-arm64
+                ./Configure linux-aarch64 --prefix=/opt/openssl-arm64
                 make -j$(nproc) && make install
                 cd ..
                 echo "OPENSSL_DIR=/opt/openssl-arm64" >> $GITHUB_ENV
@@ -89,23 +89,6 @@ jobs:
         shell: bash
         run: |
             if [[ "${{ matrix.job.os }}" == "ubuntu-latest" ]]; then
-              if [[ "${{ matrix.job.target }}" == "x86_64-unknown-linux-gnu" ]]; then
-                # Nothing to do
-              elif [[ "${{ matrix.job.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-                sudo apt install -y build-essential crossbuild-essential-arm64
-                wget -q https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz -O openssl.tar.gz
-                mkdir -p openssl
-                tar -xf openssl.tar.gz -C openssl --strip-components=1
-                cd openssl
-                ./configure linux-aarch64 --prefix=/opt/openssl-arm64
-                make -j$(nproc) && make install
-                cd ..
-                echo "OPENSSL_DIR=/opt/openssl-arm64" >> $GITHUB_ENV
-              else
-                echo "Unsupported target: ${{ matrix.job.target }}"
-                exit 1
-              fi
-
               if [[ "${{ matrix.job.target }}" == "x86_64-unknown-linux-gnu" ]]; then
                 LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/clang+llvm-12.0.1-x86_64-linux-gnu-ubuntu-16.04.tar.xz"
               elif [[ "${{ matrix.job.target }}" == "aarch64-unknown-linux-gnu" ]]; then
