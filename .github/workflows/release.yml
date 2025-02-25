@@ -42,10 +42,10 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu       , use-cross: false , extension: ""   }
-          - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu      , use-cross: true  , extension: ""   }
-          # - { os: macos-latest   , target: x86_64-apple-darwin            , use-cross: false , extension: ""   }
-          # - { os: macos-latest   , target: aarch64-apple-darwin           , use-cross: false , extension: ""   }
+          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu       , use-cross: false , extension: ""   }
+          # - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu      , use-cross: true  , extension: ""   } # OpenSSLのクロスコンパイルができないのでコメントアウト
+          # - { os: macos-latest   , target: x86_64-apple-darwin            , use-cross: false , extension: ""   } # OpenSSLのクロスコンパイルができないのでコメントアウト
+          - { os: macos-latest   , target: aarch64-apple-darwin           , use-cross: false , extension: ""   }
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -56,36 +56,8 @@ jobs:
         run: |
           echo "PROJECT_NAME=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -n1)" >> $GITHUB_ENV
 
-      # OpenSSLをインストールして、環境変数OPENSSL_DIRを設定。
-      - name: Install OpenSSL
-        shell: bash
-        run: |
-            if [[ "${{ matrix.job.os }}" == "ubuntu-latest" ]]; then
-              if [[ "${{ matrix.job.target }}" == "x86_64-unknown-linux-gnu" ]]; then
-                echo "Skip OpenSSL installation"
-              elif [[ "${{ matrix.job.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-                sudo apt install -y build-essential crossbuild-essential-arm64
-                wget -q https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz -O openssl.tar.gz
-                mkdir -p openssl
-                tar -xf openssl.tar.gz -C openssl --strip-components=1
-                cd openssl
-                ./Configure linux-aarch64 --prefix=/opt/openssl-arm64
-                make -j$(nproc) && make install
-                cd ..
-                echo "OPENSSL_DIR=/opt/openssl-arm64" >> $GITHUB_ENV
-              else
-                echo "Unsupported target: ${{ matrix.job.target }}"
-                exit 1
-              fi
-            elif [[ "${{ matrix.job.os }}" == "macos-latest" ]]; then
-              echo "Skip OpenSSL installation"
-            else
-              echo "Unsupported OS: ${{ matrix.job.os }}"
-              exit 1
-            fi
-
-      # LLVMをインストールして、環境変数LLVM_SYS_120_PREFIXを設定。
-      - name: Install LLVM
+      # LLVMとOpenSSLをインストール
+      - name: Install LLVM & OpenSSL
         shell: bash
         run: |
             if [[ "${{ matrix.job.os }}" == "ubuntu-latest" ]]; then
