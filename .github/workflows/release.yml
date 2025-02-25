@@ -64,6 +64,8 @@ jobs:
               if [[ "${{ matrix.job.target }}" == "x86_64-unknown-linux-gnu" ]]; then
                 sudo apt-get install libssl-dev
               elif [[ "${{ matrix.job.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+                sudo dpkg --add-architecture arm64
+                sudo apt update
                 sudo apt-get install libssl-dev:arm64
               else
                 echo "Unsupported target: ${{ matrix.job.target }}"
