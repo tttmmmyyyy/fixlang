@@ -1,6 +1,6 @@
 [general]
 name = "std-doc"
-version = "0.1.0"
+version = "1.0.0"
 description = "A project for the standard library documentation"
 
 [build]

@@ -8,6 +8,14 @@
 
 ### Fixed
 
+## [1.0.1] - 2025-02-26
+
+### Added
+- Rebuild prebuilt binaries (attached to this release). x86_64-unknown-linux-gnu is built on ubuntu-20.04, x86_64-apple-darwin is built on macos-13, aarch64-apple-darwin is built on macos-14.
+
+### Changed
+- Update the version of the Fix project "std-doc" for generating the document of the standard library to 1.0.0 to match the version of the compiler.
+
 ## [1.0.0] - 2025-02-22
 
 ### Added
@@ -37,7 +45,7 @@
 - Add `Std::Arrow`, which is a higher-kinded type for functions.
 - Add absolute namespace syntax: you can `::Main::X` instead of `Main::X` to refer to `X` in the top level namespace of the `Main` module.
 - Implement `Zero` for `Array a`, `Iterator a`, `String`. Implement `Add` for `String`, `Array a`.
-
+ 
 ### Changed
 
 - Change namespace of `type Destructor` from `Std::FFI::Destructor` to `Std::FFI`.
