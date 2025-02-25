@@ -42,10 +42,10 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu       , use-cross: false , extension: ""   }
-          # - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu      , use-cross: true  , extension: ""   }  OpenSSLのクロスコンパイルの方法がわかるまでコメントアウト
-          # - { os: macos-latest   , target: x86_64-apple-darwin            , use-cross: false , extension: ""   }　OpenSSLのクロスコンパイルの方法がわかるまでコメントアウト
-          - { os: macos-latest   , target: aarch64-apple-darwin           , use-cross: false , extension: ""   }
+          # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu       , use-cross: false , extension: ""   }
+          - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu      , use-cross: true  , extension: ""   }
+          # - { os: macos-latest   , target: x86_64-apple-darwin            , use-cross: false , extension: ""   }
+          # - { os: macos-latest   , target: aarch64-apple-darwin           , use-cross: false , extension: ""   }
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -61,6 +61,15 @@ jobs:
         shell: bash
         run: |
             if [[ "${{ matrix.job.os }}" == "ubuntu-latest" ]]; then
+              if [[ "${{ matrix.job.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+                sudo apt-get install libssl-dev
+              elif [[ "${{ matrix.job.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+                sudo apt-get install libssl-dev:arm64
+              else
+                echo "Unsupported target: ${{ matrix.job.target }}"
+                exit 1
+              fi
+
               if [[ "${{ matrix.job.target }}" == "x86_64-unknown-linux-gnu" ]]; then
                 LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/clang+llvm-12.0.1-x86_64-linux-gnu-ubuntu-16.04.tar.xz"
               elif [[ "${{ matrix.job.target }}" == "aarch64-unknown-linux-gnu" ]]; then
