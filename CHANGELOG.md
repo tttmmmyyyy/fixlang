@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- Added `fix_version` field to `fixproj.toml` file. You can specify the version of Fix your project needs.
+- Added `fix_version` field to `fixproj.toml` file. You can specify the version of Fix necessary to compile your project.
 
 ### Changed
 
