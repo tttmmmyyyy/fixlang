@@ -29,6 +29,9 @@ pub struct ProjectFileGeneral {
     // The version of the project.
     // Use `version` method to get the value validated as semver.
     pub version: String,
+    // The Fix compiler version.
+    // Defaults to "*".
+    pub fix_version: Option<String>,
     // The description of the project.
     #[allow(unused)]
     pub description: Option<String>,
@@ -192,6 +195,9 @@ impl ProjectFile {
         // Perform validation.
         proj_file.validate()?;
 
+        // Check if the project file is compatible with the current version of Fix.
+        proj_file.is_fix_version_compatible()?;
+
         Ok(proj_file)
     }
 
@@ -235,10 +241,20 @@ impl ProjectFile {
         // Validate the version.
         Version::parse(&self.general.version).map_err(|e| {
             Errors::from_msg_srcs(
-                format!("Failed to parse version: {}", e),
+                format!("Failed to parse `version`: {}", e),
                 &[&Some(self.project_file_span(0, 0))],
             )
         })?;
+
+        // Validate `fix_version`.
+        if let Some(fix_version) = &self.general.fix_version {
+            VersionReq::parse(fix_version).map_err(|e| {
+                Errors::from_msg_srcs(
+                    format!("Failed to parse `fix_version`: {}", e),
+                    &[&Some(self.project_file_span(0, 0))],
+                )
+            })?;
+        }
 
         // Validate the dependencies section.
         let mut dep_names = vec![];
@@ -297,6 +313,29 @@ impl ProjectFile {
             }));
         }
         files
+    }
+    
+    // Get the version requirement for the Fix compiler.
+    pub fn fix_version(&self) -> VersionReq {
+        match &self.general.fix_version {
+            Some(v) => VersionReq::parse(v).unwrap(),
+            None => VersionReq::STAR,
+        }
+    }
+
+    // Check if the project file is compatible with the current version of Fix.
+    pub fn is_fix_version_compatible(&self) -> Result<(), Errors> {
+        if self.fix_version().matches(&Version::parse(env!("CARGO_PKG_VERSION")).unwrap()) {
+            Ok(())
+        } else {
+            Err(Errors::from_msg(format!(
+                "The project \"{}\" requires Fix version \"{}\" which is not compatible with the current version of Fix \"{}\".",
+                self.general.name,
+                self.fix_version(),
+                env!("CARGO_PKG_VERSION"),
+            )))
+        }
+        // self.fix_version().matches(&Version::parse(env!("CARGO_PKG_VERSION")).unwrap())
     }
 
     // Update a configuration from a project file.
@@ -641,14 +680,20 @@ impl ProjectFile {
         }
 
         let content = include_str!("docs/project_template.toml");
+
         // Replace `{PLACEHOLDER_PROJECT_NAME}` to `proj_name`.
         let content = content.replace("{PLACEHOLDER_PROJECT_NAME}", &proj_name);
+        
+        // Replace `{PLACEHOLDER_FIX_VERSION}` to the current version of Fix.
+        let content = content.replace("{PLACEHOLDER_FIX_VERSION}", env!("CARGO_PKG_VERSION"));
+
         std::fs::write(PROJECT_FILE_PATH, content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to create file \"{}\": {:?}.",
                 PROJECT_FILE_PATH, e
             ))
         })?;
+
         Ok(())
     }
 

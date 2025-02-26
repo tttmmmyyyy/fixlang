@@ -5,6 +5,9 @@ name = "{PLACEHOLDER_PROJECT_NAME}"
 ## Project version (in semver). This is a required field.
 version = "0.1.0"
 
+## Fix version requirement. Default is "*".
+fix_version = "{PLACEHOLDER_FIX_VERSION}"
+
 ## Project authors.
 # authors = ["Alice", "Bob"]
 
