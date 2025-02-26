@@ -329,13 +329,12 @@ impl ProjectFile {
             Ok(())
         } else {
             Err(Errors::from_msg(format!(
-                "The project \"{}\" requires Fix version \"{}\" which is not compatible with the current version of Fix \"{}\".",
+                "The project \"{}\" requires Fix version \"{}\", but the current version of Fix is \"{}\".",
                 self.general.name,
                 self.fix_version(),
                 env!("CARGO_PKG_VERSION"),
             )))
         }
-        // self.fix_version().matches(&Version::parse(env!("CARGO_PKG_VERSION")).unwrap())
     }
 
     // Update a configuration from a project file.
