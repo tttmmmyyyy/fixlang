@@ -8355,3 +8355,34 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_string_from_bytes_to_bytes() {
+    let source = r##"
+module Main;
+
+main: IO ();
+main = (
+    let s = from_bytes(['a', 'b', 'c', '\0']);
+    assert_eq(|_|"", s.as_ok, "abc");;
+    assert_eq(|_|"", s.as_ok.to_bytes, ['a', 'b', 'c', '\0']);;
+
+    let s = from_bytes(['\0']);
+    assert_eq(|_|"", s.as_ok, "");;
+    assert_eq(|_|"", s.as_ok.to_bytes, ['\0']);;
+
+    let s = from_bytes(['a', '\0', 'b']);
+    assert_eq(|_|"", s.as_ok, "a");;
+    assert_eq(|_|"", s.as_ok.to_bytes, ['a', '\0']);;
+
+    let s : Result ErrMsg String = from_bytes(['a', 'b', 'c']);
+    assert(|_|"", s.is_err);;
+
+    let s : Result ErrMsg String = from_bytes([]);
+    assert(|_|"", s.is_err);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

@@ -4,6 +4,8 @@
 
 ### Added
 - Added `fix_version` field to `fixproj.toml` file. You can specify the version of Fix necessary to compile your project.
+- Added `Std::String::unsafe_from_c_str_ptr : Ptr -> String` function.
+- Implement `String : FromBytes` and `String : ToBytes`. You can convert a string to a (null-terminated) byte array and vice versa.
 
 ### Changed
 

@@ -1960,6 +1960,35 @@ impl () : Eq {
     eq = |_, _| true;
 }
 
+// Creates a string from a byte array.
+// 
+// The byte array must include a null terminator (`'\0'`). If not, `from_bytes` returns an error.
+// 
+// The length of the string is the number of bytes until the first null character.
+impl String : FromBytes {
+    from_bytes = |buf| (
+        // Search for null terminator.
+        let buf_n = buf.get_size;
+        let null_idx = range(0, buf_n).loop_iter(buf_n, |i, _|
+            if buf.@(i) == '\0' { break $ i };
+            continue $ buf_n
+        );
+        // If the byte array doesn't include a null terminator, return an error.
+        if null_idx == buf_n { Result::err("The byte array doesn't include a null terminator.") };
+
+        // Create a string.
+        let buf = buf._unsafe_set_size(null_idx + 1);
+        Result::ok $ String { _data : buf }
+    );
+}
+
+// Converts a string into a byte array.
+// 
+// The byte array ends with a null terminator (`'\0'`).
+impl String : ToBytes {
+    to_bytes = |s| s.@_data;
+}
+
 // Functions
 
 // Composes two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
