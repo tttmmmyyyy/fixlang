@@ -902,6 +902,7 @@ Type: `[a : Std::Boxed] (Std::Ptr -> b) -> a -> b`
 Borrows a pointer to the data of a boxed value.
 
 The returned pointer points to:
+
 - if the value is an `Array`, the first element of the array,
 - if the value is a struct, the first field,
 - if the value is an union, the data field (not the tag field).
