@@ -8,6 +8,7 @@
 - Implement `String : FromBytes` and `String : ToBytes`. You can convert a string to a (null-terminated) byte array and vice versa.
 
 ### Changed
+- Now `fix docs` command skips generating document for private values (i.e., values whose names start with an underscore). If you want to generate document for them, use `--with-private` option.
 
 ### Fixed
 

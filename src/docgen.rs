@@ -204,14 +204,14 @@ fn write_module(
 
     {
         let mut section = MarkdownSection::new("Types and aliases".to_string());
-        let entries = type_entries(program, mod_name)?;
+        let entries = type_entries(program, mod_name, config)?;
         write_entries(entries, &mut section);
         doc.add_subsection(section);
     }
 
     {
         let mut section = MarkdownSection::new("Traits and aliases".to_string());
-        let entries = trait_entries(program, mod_name)?;
+        let entries = trait_entries(program, mod_name, config)?;
         write_entries(entries, &mut section);
         doc.add_subsection(section);
     }
@@ -288,7 +288,11 @@ fn kind_sign_with_pre_space(kind: &Arc<Kind>) -> String {
     format!(" : {}", kind.to_string())
 }
 
-fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
+fn type_entries(
+    program: &Program,
+    mod_name: &Name,
+    config: &DocsConfig,
+) -> Result<Vec<Entry>, Errors> {
     fn kind_constraints_with_post_space(tyvars: &Vec<Arc<TyVar>>) -> String {
         if tyvars.is_empty() {
             return String::new();
@@ -324,7 +328,7 @@ fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors
     for (ty_name, ty_info) in program.type_env.tycons.iter() {
         let name = ty_name.name.clone();
 
-        if !is_entry_should_be_documented(&name, mod_name) {
+        if !is_entry_should_be_documented(&name, mod_name, config) {
             continue;
         }
 
@@ -387,7 +391,7 @@ fn type_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors
     for (ty_name, ty_info) in program.type_env.aliases.iter() {
         let name = ty_name.name.clone();
 
-        if !is_entry_should_be_documented(&name, mod_name) {
+        if !is_entry_should_be_documented(&name, mod_name, config) {
             continue;
         }
 
@@ -442,7 +446,11 @@ fn field_subsection(
     Ok(field_sec)
 }
 
-fn trait_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
+fn trait_entries(
+    program: &Program,
+    mod_name: &Name,
+    config: &DocsConfig,
+) -> Result<Vec<Entry>, Errors> {
     fn kind_constraints_with_post_space(kind_signs: &Vec<KindSignature>) -> String {
         if kind_signs.is_empty() {
             return String::new();
@@ -465,7 +473,7 @@ fn trait_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Error
     for (id, info) in &program.trait_env.traits {
         let name = id.name.clone();
 
-        if !is_entry_should_be_documented(&name, mod_name) {
+        if !is_entry_should_be_documented(&name, mod_name, config) {
             continue;
         }
 

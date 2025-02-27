@@ -334,7 +334,7 @@ fn main() {
         ).arg(
             Arg::new("out-dir").long("out-dir").short('o').takes_value(true).help("Output directory for generated documents.").default_value("docs"),
         ).arg(
-            Arg::new("private").long("private").help("Include private values (i.e., values whose name starts with underscore) in the documentation."));
+            Arg::new("private").long("with-private").help("Include private values (i.e., values whose name starts with underscore) in the documentation."));
 
     // "fix init" subcommand
     let init_subc = App::new("init")

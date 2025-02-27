@@ -190,95 +190,6 @@ Type: `Std::I64 -> Std::Array a -> a`
 
 Gets an element of an array at the specified index.
 
-#### _get_ptr
-
-Type: `Std::Array a -> Std::Ptr`
-
-Get the pointer to the memory region where elements are stored.
-
-This function is dangerous because if the array is not used after call of this function, the array will be deallocated soon and the returned pointer will be dangling.
-Try using `borrow_ptr` instead.
-
-DEPRECATED: Use `Std::FFI::borrow_boxed` instead.
-
-#### _get_sub_size_with_length_and_additional_capacity
-
-Type: `Std::I64 -> Std::I64 -> Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
-
-A function like `get_sub`, but behaves as if the size of the array is the specified value,
-and has a parameter to specify additional capacity of the returned `Array`.
-
-#### _sort_range_using_buffer
-
-Type: `Std::Array a -> Std::I64 -> Std::I64 -> ((a, a) -> Std::Bool) -> Std::Array a -> (Std::Array a, Std::Array a)`
-
-Sorts elements in a range of a vector by "less than" comparator.
-
-This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
-
-#### _unsafe_force_unique
-
-Type: `Std::Array a -> Std::Array a`
-
-Force the uniqueness of an array.
-If the given array is shared, this function returns the cloned array.
-
-DEPRECATED:
-This function is unsafe and deprecated because it is fragile when the "common expression elimination" optimization is implemented in the future. 
-Consider the following example:
-
-```
-f : Array a -> Array a
-f = |arr| arr.force_unique.do_something_for_unique_array;
-
-let x = [1, 2, 3];
-let y = f(x);
-let z = f(x);
-```
-
-When this function `f` is inlined, the code will be as follows.
-
-```
-let x = [1, 2, 3];
-let y = x.force_unique.do_something_for_unique_array;
-let z = x.force_unique.do_something_for_unique_array;
-```
-
-Here, if the optimization is applied to the two `x.force_unique`, the code will call `do_something_for_unique_array` with a non-unique array.
-
-```
-let x = [1, 2, 3];
-let x = x.force_unique;
-let y = x.do_something_for_unique_array; // Here `x` is not unique
-let z = x.do_something_for_unique_array;
-```
-
-Therefore, to use this function safely, you need to suppress the inlining of the above `f`. It is uncertain whether a function attribute such as "noinline" will be added in the future, so this function is deprecated currently.
-
-#### _unsafe_get
-
-Type: `Std::I64 -> Std::Array a -> a`
-
-Gets a value from an array and returns it paired with the array itself, without bounds checking and retaining the value.
-
-#### _unsafe_get_linear
-
-Type: `Std::I64 -> Std::Array a -> (Std::Array a, a)`
-
-Gets a value from an array, without bounds checking and retaining the returned value.
-
-#### _unsafe_set
-
-Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
-
-Sets a value into an array, without uniqueness checking, bounds checking and releasing the old value.
-
-#### _unsafe_set_size
-
-Type: `Std::I64 -> Std::Array a -> Std::Array a`
-
-Updates the length of an array, without uniqueness checking or validation of the given length value.
-
 #### act
 
 Type: `[f : Std::Functor] Std::I64 -> (a -> f a) -> Std::Array a -> f (Std::Array a)`
@@ -439,14 +350,6 @@ Truncates an array, keeping the given number of first elements.
 Type: `a -> Std::Box a`
 
 ### namespace Std::Debug
-
-#### _debug_print_to_stream
-
-Type: `Std::IO::IOHandle -> Std::String -> ()`
-
-Prints a string to the specified stream and flushes the stream.
-
-NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
 #### assert
 
@@ -884,16 +787,6 @@ Type: `Std::U8 -> Std::F64 -> Std::String`
 Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
 
 ### namespace Std::FFI
-
-#### _get_boxed_ptr
-
-Type: `[a : Std::Boxed] a -> Std::Ptr`
-
-Returns a pointer to the data of a boxed value.
-
-NOTE: 
-This function is unsafe in that if the call `v._get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
-To avoid this issue, use `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`, or `mutate_boxed_io` instead.
 
 #### borrow_boxed
 
@@ -1824,14 +1717,6 @@ Casts a value of `I8` into a value of `U8`.
 
 ### namespace Std::IO
 
-#### _read_line_inner
-
-Type: `Std::Bool -> Std::IO::IOHandle -> Std::IO::IOFail Std::String`
-
-Reads characters from an IOHandle.
-
-If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.
-
 #### close_file
 
 Type: `Std::IO::IOHandle -> Std::IO ()`
@@ -2074,22 +1959,6 @@ Type: `(Std::ErrMsg -> Std::IO a) -> Std::IO::IOFail a -> Std::IO a`
 Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
 
 ### namespace Std::IO::IOHandle
-
-#### _file_ptr
-
-Type: `Std::IO::IOHandle -> Std::Ptr`
-
-Gets pointer to C's `FILE` value from an `IOHandle`.
-
-If the `IOHandle` is already closed, the function returns `nullptr`.
-
-NOTE:
-Do not directly close the file pointer by `fclose` or other functions.
-Instead you should close `IOHandle` by `IO::close_file`.
-
-DEPRECATED:
-Use `get_file_ptr` instead.
-This function is deprecated because it has a pure function interface, but the value of `_file_ptr` changes by calling `IO::close_file`.
 
 #### from_file_ptr
 
@@ -2545,34 +2414,6 @@ Type: `Std::Result e o -> o`
 Returns the containing value if the value is ok, or otherwise aborts the program.
 
 ### namespace Std::String
-
-#### _get_c_str
-
-Type: `Std::String -> Std::Ptr`
-
-Get the null-terminated C string.
-
-NOTE:
-This function is dangerous because it returns a dangling pointer if `_get_c_str` is the last use of `s`.
-To avoid this problem, you should use `borrow_c_str` or `borrow_c_str_io` instead.
-
-#### _unsafe_from_c_str
-
-Type: `Std::Array Std::U8 -> Std::String`
-
-Create a string from C string (i.e., null-terminated byte array).
-
-If the byte array doesn't include `\0`, this function causes undefined behavior.
-
-#### _unsafe_from_c_str_ptr
-
-Type: `Std::Ptr -> Std::String`
-
-Create a `String` from a pointer to a null-terminated C string.
-
-If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
-
-This function is private, but it should be public. Therefore, `unsafe_from_c_str_ptr` is created, and this function is deprecated.
 
 #### borrow_c_str
 
