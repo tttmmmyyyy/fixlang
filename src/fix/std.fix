@@ -421,19 +421,38 @@ namespace FFI {
     // 
     // Similar to `mutate_boxed`, but this function is used when you want to run the IO action in the existing IO context.
     // 
+    // For more details on the pointer passed to `io`, see the document of `borrow_boxed`.
+    // 
     // For more details, see the document of `mutate_boxed`.
+    // 
+    // See also: `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`.
     mutate_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO (a, b);
     mutate_boxed_io = |act, val| IO::from_runner $ |ios| mutate_boxed_ios(act, val, ios);
 
     // Borrows a pointer to the data of a boxed value.
     // 
-    // For the details of the pointer, see the document of `_get_boxed_ptr`.
+    // The returned pointer points to:
+    // 
+    // - if the value is an `Array`, the first element of the array,
+    // - if the value is a struct, the first field,
+    // - if the value is an union, the data field (not the tag field).
+    // 
+    // The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
+    // on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (which currently points to the reference counter of the boxed value).
+    // 
+    // It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
+    // 
+    // See also: `borrow_boxed_io`, `mutate_boxed`, `mutate_boxed_io`.
     borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b;
     borrow_boxed = |act, val| val.with_retained(|val| act(val._get_boxed_ptr));
 
     // Performs an IO action borrowing a pointer to the data of a boxed value.
     // 
-    // For the details of the pointer, see the document of `_get_boxed_ptr`.
+    // For the details of the pointer, see the document of `borrow_boxed`.
+    //
+    // It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
+    // 
+    // See also: `borrow_boxed`, `mutate_boxed`, `mutate_boxed_io`.
     borrow_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO b;
     borrow_boxed_io = |act, val| IO::from_runner $ |ios| val.borrow_boxed(|ptr| (act(ptr).@runner)(ios));
 
@@ -1693,7 +1712,9 @@ namespace String {
 
     // Get the null-terminated C string.
     // 
-    // Note that in case the string is not used after call of this function, the returned pointer will be already released.
+    // NOTE: 
+    // This function is dangerous because it returns a dangling pointer if `_get_c_str` is the last use of `s`.
+    // To avoid this problem, you should use `borrow_c_str` or `borrow_c_str_io` instead.
     _get_c_str : String -> Ptr;
     _get_c_str = |s| s.@_data._get_boxed_ptr;
 
@@ -1702,15 +1723,17 @@ namespace String {
     // If the byte array doesn't include `\0`, this function causes undefined behavior.
     _unsafe_from_c_str : Array U8 -> String;
     _unsafe_from_c_str = |buf| (
-        // Return length.
+        // Calculate length.
         let len = buf.borrow_boxed(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
         let buf = buf._unsafe_set_size(len + 1);
         String { _data : buf }
     );
 
-    // Create a `String` from a pointer to null-terminated C string.
+    // Create a `String` from a pointer to a null-terminated C string.
     // 
-    // If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+    // If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
+    // 
+    // This function is private, but it should be public. Therefore, `unsafe_from_c_str_ptr` is created, and this function is deprecated.
     _unsafe_from_c_str_ptr : Ptr -> String;
     _unsafe_from_c_str_ptr = |ptr| (
         let len = FFI_CALL[I64 strlen(Ptr), ptr];
@@ -1719,6 +1742,12 @@ namespace String {
         let (buf, _) = buf.mutate_boxed(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
         String { _data : buf }
     );
+
+    // Create a `String` from a pointer to a null-terminated C string.
+    // 
+    // If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+    unsafe_from_c_str_ptr : Ptr -> String;
+    unsafe_from_c_str_ptr = _unsafe_from_c_str_ptr;
 
     // Call a function with a null-terminated C string.
     borrow_c_str : (Ptr -> a) -> String -> a;
@@ -1930,6 +1959,35 @@ impl String : ToString {
 
 impl () : Eq {
     eq = |_, _| true;
+}
+
+// Creates a string from a byte array.
+// 
+// The byte array must include a null terminator (`'\0'`). If not, `from_bytes` returns an error.
+// 
+// The length of the string is the number of bytes until the first null character.
+impl String : FromBytes {
+    from_bytes = |buf| (
+        // Search for null terminator.
+        let buf_n = buf.get_size;
+        let null_idx = range(0, buf_n).loop_iter(buf_n, |i, _|
+            if buf.@(i) == '\0' { break $ i };
+            continue $ buf_n
+        );
+        // If the byte array doesn't include a null terminator, return an error.
+        if null_idx == buf_n { Result::err("The byte array doesn't include a null terminator.") };
+
+        // Create a string.
+        let buf = buf._unsafe_set_size(null_idx + 1);
+        Result::ok $ String { _data : buf }
+    );
+}
+
+// Converts a string into a byte array.
+// 
+// The byte array ends with a null terminator (`'\0'`).
+impl String : ToBytes {
+    to_bytes = |s| s.@_data;
 }
 
 // Functions

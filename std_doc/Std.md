@@ -1,6 +1,6 @@
 # Std
 
-Defined in std-doc@0.1.0
+Defined in std-doc@1.1.0
 
 Module `Std` provides basic types, traits and values.
 
@@ -199,8 +199,7 @@ Get the pointer to the memory region where elements are stored.
 This function is dangerous because if the array is not used after call of this function, the array will be deallocated soon and the returned pointer will be dangling.
 Try using `borrow_ptr` instead.
 
-@deprecated
-Use `Std::FFI::_get_boxed_ptr` instead.
+DEPRECATED: Use `Std::FFI::borrow_boxed` instead.
 
 #### _get_sub_size_with_length_and_additional_capacity
 
@@ -892,14 +891,6 @@ Type: `[a : Std::Boxed] a -> Std::Ptr`
 
 Returns a pointer to the data of a boxed value.
 
-The returned pointer points to:
-- if the value is an `Array`, the first element of the array,
-- if the value is a struct, the first field,
-- if the value is an union, the data field (not the tag field).
-
-The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
-on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (which currently points to the reference counter of the boxed value).
-
 NOTE: 
 This function is unsafe in that if the call `v._get_boxed_ptr` is the last usage of `v`, then this function deallocates `v` and returns a dangling pointer.
 To avoid this issue, use `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`, or `mutate_boxed_io` instead.
@@ -910,7 +901,18 @@ Type: `[a : Std::Boxed] (Std::Ptr -> b) -> a -> b`
 
 Borrows a pointer to the data of a boxed value.
 
-For the details of the pointer, see the document of `_get_boxed_ptr`.
+The returned pointer points to:
+
+- if the value is an `Array`, the first element of the array,
+- if the value is a struct, the first field,
+- if the value is an union, the data field (not the tag field).
+
+The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
+on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (which currently points to the reference counter of the boxed value).
+
+It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
+
+See also: `borrow_boxed_io`, `mutate_boxed`, `mutate_boxed_io`.
 
 #### borrow_boxed_io
 
@@ -918,7 +920,11 @@ Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
 
 Performs an IO action borrowing a pointer to the data of a boxed value.
 
-For the details of the pointer, see the document of `_get_boxed_ptr`.
+For the details of the pointer, see the document of `borrow_boxed`.
+
+It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
+
+See also: `borrow_boxed`, `mutate_boxed`, `mutate_boxed_io`.
 
 #### boxed_from_retained_ptr
 
@@ -995,9 +1001,11 @@ Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> (a, b)`
 The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
 Do not perform any IO operations other than mutating the value of `x`.
 
-For more details on the value of the pointer passed to `io`, see the document of `_get_boxed_ptr`.
+For more details on the pointer passed to `io`, see the document of `borrow_boxed`.
 
 This function first clones the value if `x` is not unique.
+
+See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
 
 #### mutate_boxed_io
 
@@ -1007,7 +1015,11 @@ Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
 
 Similar to `mutate_boxed`, but this function is used when you want to run the IO action in the existing IO context.
 
+For more details on the pointer passed to `io`, see the document of `borrow_boxed`.
+
 For more details, see the document of `mutate_boxed`.
+
+See also: `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`.
 
 #### mutate_boxed_ios
 
@@ -2540,7 +2552,9 @@ Type: `Std::String -> Std::Ptr`
 
 Get the null-terminated C string.
 
-Note that in case the string is not used after call of this function, the returned pointer will be already released.
+NOTE:
+This function is dangerous because it returns a dangling pointer if `_get_c_str` is the last use of `s`.
+To avoid this problem, you should use `borrow_c_str` or `borrow_c_str_io` instead.
 
 #### _unsafe_from_c_str
 
@@ -2554,9 +2568,11 @@ If the byte array doesn't include `\0`, this function causes undefined behavior.
 
 Type: `Std::Ptr -> Std::String`
 
-Create a `String` from a pointer to null-terminated C string.
+Create a `String` from a pointer to a null-terminated C string.
 
-If `ptr` is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
+
+This function is private, but it should be public. Therefore, `unsafe_from_c_str_ptr` is created, and this function is deprecated.
 
 #### borrow_c_str
 
@@ -2709,6 +2725,14 @@ Removes trailing whitespace characters.
 Type: `Std::String -> Std::String`
 
 Strips leading and trailing whitespace characters.
+
+#### unsafe_from_c_str_ptr
+
+Type: `Std::Ptr -> Std::String`
+
+Create a `String` from a pointer to a null-terminated C string.
+
+If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
 
 ### namespace Std::Sub
 
@@ -4583,9 +4607,23 @@ Concatenates two strings.
 
 ### impl `Std::String : Std::Eq`
 
+### impl `Std::String : Std::FromBytes`
+
+Creates a string from a byte array.
+
+The byte array must include a null terminator (`'\0'`). If not, `from_bytes` returns an error.
+
+The length of the string is the number of bytes until the first null character.
+
 ### impl `Std::String : Std::LessThan`
 
 ### impl `Std::String : Std::LessThanOrEq`
+
+### impl `Std::String : Std::ToBytes`
+
+Converts a string into a byte array.
+
+The byte array ends with a null terminator (`'\0'`).
 
 ### impl `Std::String : Std::ToString`
 
