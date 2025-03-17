@@ -282,7 +282,7 @@ namespace Array {
         ))
     );
 
-    // `arr.search_partition_point(pred)` returns an index x such that `cond` is true on [0, x) and false on [x, n) by binary search.
+    // `arr.search_partition_point(pred)` returns an index x such that `pred` is true on [0, x) and false on [x, n) by binary search.
     // 
     // When we put an order on `Bool` as `false < true`, `pred` must be monotonically decreasing on `arr`.
     // 
