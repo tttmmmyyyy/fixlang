@@ -8156,6 +8156,50 @@ main = (
 }
 
 #[test]
+pub fn test_array_search_partition_point() {
+    let source = r##"
+    module Main;
+
+    main : IO ();
+    main = (
+        // Basic
+        let arr = [-3, -2, -1, 0, 1, 2, 3];
+        let pred = |x| x < 0;
+        let x = search_partition_point(pred, arr);
+        assert_eq(|_|"1", x, 3);;
+
+        // Empty
+        let arr = [];
+        let x = search_partition_point(pred, arr);
+        assert_eq(|_|"2", x, 0);;
+
+        // All elements satisfy the condition
+        let arr = [-3, -2, -1];
+        let x = search_partition_point(pred, arr);
+        assert_eq(|_|"3", x, 3);;
+
+        // No element satisfies the condition
+        let arr = [0, 1, 2, 3];
+        let x = search_partition_point(pred, arr);
+        assert_eq(|_|"4", x, 0);;
+
+        // `pred(x)` changes at the index 1
+        let arr = [-1, 0, 1, 2];
+        let x = search_partition_point(pred, arr);
+        assert_eq(|_|"5", x, 1);;
+
+        // `pred(x)` changes at the index n-1
+        let arr = [-3, -2, -1, 0];
+        let x = search_partition_point(pred, arr);
+        assert_eq(|_|"6", x, 3);;
+        
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",

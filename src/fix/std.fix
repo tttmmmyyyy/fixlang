@@ -281,6 +281,25 @@ namespace Array {
             continue $ vec.pop_back
         ))
     );
+
+    // `arr.search_partition_point(pred)` returns an index x such that `cond` is true on [0, x) and false on [x, n) by binary search.
+    // 
+    // When we put an order on `Bool` as `false < true`, `pred` must be monotonically decreasing on `arr`.
+    // 
+    // The returned value x satisfies 0 <= x <= `arr.get_size`.
+    //
+    // If `arr` is empty, it returns 0.
+    search_partition_point : (a -> Bool) -> Array a -> I64;
+    search_partition_point = |pred, arr| (
+        let n = arr.get_size;
+        if n == 0 { 0 };
+        if !pred(arr.@(0)) { 0 };
+        loop((0, n), |(left, right)|
+            if right - left <= 1 { break $ right };
+            let mid = (left + right) / 2;
+            continue $ if pred(arr.@(mid)) { (mid, right) } else { (left, mid) }
+        )
+    );
 }
 
 // The empty array with zero capacity.

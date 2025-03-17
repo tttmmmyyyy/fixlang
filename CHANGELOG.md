@@ -3,9 +3,10 @@
 ## [Unreleased]
 
 ### Added
-- Added `fix_version` field to `fixproj.toml` file. You can specify the version of Fix necessary to compile your project.
-- Added `Std::String::unsafe_from_c_str_ptr : Ptr -> String` function.
+- Add `fix_version` field to `fixproj.toml` file. You can specify the version of Fix necessary to compile your project.
+- Add `Std::String::unsafe_from_c_str_ptr : Ptr -> String` function.
 - Implement `String : FromBytes` and `String : ToBytes`. You can convert a string to a (null-terminated) byte array and vice versa.
+- Add `Std::Array::search_partition_point`.
 
 ### Changed
 - Now `fix docs` command skips generating document for private values (i.e., values whose names start with an underscore). If you want to generate document for them, use `--with-private` option.
