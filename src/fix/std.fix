@@ -286,9 +286,9 @@ namespace Array {
     // 
     // When we put an order on `Bool` as `false < true`, `pred` must be monotonically decreasing on `arr`.
     // 
-    // The returned value x satisfies 0 <= x <= `arr.get_size`.
-    //
-    // If `arr` is empty, it returns 0.
+    // The returned value x satisfies 0 <= x <= `arr.get_size`. If `arr` is empty, it returns 0.
+    // 
+    // Added in v1.1.0.
     search_partition_point : (a -> Bool) -> Array a -> I64;
     search_partition_point = |pred, arr| (
         let n = arr.get_size;

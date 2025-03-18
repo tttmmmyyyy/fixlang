@@ -315,6 +315,18 @@ Type: `Std::I64 -> Std::Array a -> Std::Array a`
 
 Reserves the memory region for an array.
 
+#### search_partition_point
+
+Type: `(a -> Std::Bool) -> Std::Array a -> Std::I64`
+
+`arr.search_partition_point(pred)` returns an index x such that `pred` is true on [0, x) and false on [x, n) by binary search.
+
+When we put an order on `Bool` as `false < true`, `pred` must be monotonically decreasing on `arr`.
+
+The returned value x satisfies 0 <= x <= `arr.get_size`.
+
+If `arr` is empty, it returns 0.
+
 #### set
 
 Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
