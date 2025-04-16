@@ -1,1 +1,1 @@
-sroa,reassociate,inline,simple-loop-unswitch,tailcallelim,inline,loop-rotate,inline,instcombine,gvn,loop_deletion,jump_threading,inline,mem2reg,sroa,early-cse-memssa,dce,simplifycfg,instcombine,loop-unroll,early-cse-memssa,jump_threading,loop-rotate,reassociate,gvn,gvn,instcombine,
+default<O3>
