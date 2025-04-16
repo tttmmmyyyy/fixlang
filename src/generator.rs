@@ -208,7 +208,10 @@ impl<'c> Object<'c> {
     ) -> BasicValueEnum<'c> {
         assert!(self.is_box(&gc.type_env));
         let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
-        gc.builder().build_load(ty, ptr_to_field, "field").unwrap()
+        let field_ty = ty.get_field_type_at_index(field_idx).unwrap();
+        gc.builder()
+            .build_load(field_ty, ptr_to_field, "field")
+            .unwrap()
     }
 
     // Insert a field value into an object.
