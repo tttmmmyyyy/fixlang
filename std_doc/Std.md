@@ -323,9 +323,9 @@ Type: `(a -> Std::Bool) -> Std::Array a -> Std::I64`
 
 When we put an order on `Bool` as `false < true`, `pred` must be monotonically decreasing on `arr`.
 
-The returned value x satisfies 0 <= x <= `arr.get_size`.
+The returned value x satisfies 0 <= x <= `arr.get_size`. If `arr` is empty, it returns 0.
 
-If `arr` is empty, it returns 0.
+Added in v1.1.0.
 
 #### set
 
