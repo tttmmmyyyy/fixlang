@@ -207,7 +207,7 @@ impl<'c> Object<'c> {
         field_idx: u32,
     ) -> BasicValueEnum<'c> {
         assert!(self.is_box(&gc.type_env));
-        let ptr_to_field = self.ptr_to_field(gc, field_idx);
+        let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
         gc.builder().build_load(ty, ptr_to_field, "field").unwrap()
     }
 
