@@ -16,6 +16,7 @@ LOG_FILE = './passes_optimizer.log'
 ADDED_PASSES_NUM = 10
 
 # All passes
+# Can be found in: "/opt --print-passes"
 # Exclude:
 #  scalar_repl_aggregates_pass_with_threshold (because requires parameter),
 #  internalize_pass (because requires parameter, and breaks program),

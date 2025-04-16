@@ -134,9 +134,9 @@ impl ExportStatement {
 
         // Return the result.
         if codom.to_string() == make_unit_ty().to_string() {
-            gc.builder().build_return(None);
+            gc.builder().build_return(None).unwrap();
         } else {
-            gc.builder().build_return(Some(&fix_value.value));
+            gc.builder().build_return(Some(&fix_value.value)).unwrap();
         }
     }
 }

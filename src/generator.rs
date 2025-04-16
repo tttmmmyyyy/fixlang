@@ -52,6 +52,7 @@ impl<'c> ValueAccessor<'c> {
                     let call = gc
                         .builder()
                         .build_call(fun.clone(), &[], "get_global_obj")
+                        .unwrap()
                         .try_as_basic_value();
                     match call {
                         Left(val) => val,
@@ -93,14 +94,9 @@ impl<'c> Object<'c> {
     ) -> Self {
         assert!(ty.free_vars().is_empty());
         let value = if ty.is_box(gc.type_env()) {
-            gc.cast_pointer(value.into_pointer_value(), ptr_to_object_type(&gc.context))
-                .as_basic_value_enum()
+            value
         } else if ty.is_funptr() {
-            gc.cast_pointer(
-                value.into_pointer_value(),
-                opaque_lambda_function_ptr_type(&gc.context),
-            )
-            .as_basic_value_enum()
+            value
         } else {
             // Unboxed case
             let embed_ty = ty.get_embedded_type(gc, &vec![]);
@@ -170,9 +166,9 @@ impl<'c> Object<'c> {
     ) -> PointerValue<'c> {
         assert!(self.ty.is_box(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
-        let ptr = gc.cast_pointer(self.value.into_pointer_value(), ptr_type(struct_ty));
+        let ptr = self.value.into_pointer_value();
         gc.builder()
-            .build_struct_gep(ptr, field_idx, "ptr_to_field_nocap")
+            .build_struct_gep(struct_ty, ptr, field_idx, "ptr_to_field_nocap")
             .unwrap()
     }
 
@@ -211,8 +207,8 @@ impl<'c> Object<'c> {
         field_idx: u32,
     ) -> BasicValueEnum<'c> {
         assert!(self.is_box(&gc.type_env));
-        let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
-        gc.builder().build_load(ptr_to_field, "field")
+        let ptr_to_field = self.ptr_to_field(gc, field_idx);
+        gc.builder().build_load(ty, ptr_to_field, "field").unwrap()
     }
 
     // Insert a field value into an object.
@@ -259,7 +255,7 @@ impl<'c> Object<'c> {
     {
         assert!(self.is_box(&gc.type_env));
         let ptr_to_field = self.ptr_to_field_as(gc, ty, field_idx);
-        gc.builder().build_store(ptr_to_field, value);
+        gc.builder().build_store(ptr_to_field, value).unwrap();
     }
 
     // Get the pointer to traverser function from a dynamic object.
@@ -278,6 +274,7 @@ impl<'c> Object<'c> {
         assert!(self.is_box(gc.type_env()));
         gc.builder()
             .build_is_null(self.value.into_pointer_value(), "is_null")
+            .unwrap()
     }
 
     // Get the pointer to the field of an boxed object.
@@ -302,9 +299,9 @@ impl<'c> Object<'c> {
         field_idx: u32,
     ) -> PointerValue<'c> {
         assert!(self.is_box(&gc.type_env));
-        let ptr = gc.cast_pointer(self.value.into_pointer_value(), ptr_type(ty));
+        let ptr = self.value.into_pointer_value();
         gc.builder()
-            .build_struct_gep(ptr, field_idx, "gep2field")
+            .build_struct_gep(ty, ptr, field_idx, "gep2field")
             .unwrap()
     }
 }
@@ -430,7 +427,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Some(first_inst) => self.builder().position_before(&first_inst),
             None => self.builder().position_at_end(first_bb),
         }
-        let ptr = self.builder().build_alloca(ty, name);
+        let ptr = self.builder().build_alloca(ty, name).unwrap();
         self.builder().position_at_end(current_bb);
         self.reset_debug_location();
         ptr
@@ -443,6 +440,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let func = intrinsic.get_declaration(&self.module, &[]).unwrap();
         self.builder()
             .build_call(func, &[], "save_stack")
+            .unwrap()
             .try_as_basic_value()
             .left()
             .unwrap()
@@ -456,7 +454,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         assert!(!intrinsic.is_overloaded()); // So we don't need to specify type parameters in the next line.
         let func = intrinsic.get_declaration(&self.module, &[]).unwrap();
         self.builder()
-            .build_call(func, &[pos.into()], "restore_stack");
+            .build_call(func, &[pos.into()], "restore_stack")
+            .unwrap();
     }
 
     pub fn type_env(&self) -> &TypeEnv {
@@ -472,7 +471,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     pub fn ptr_size(&mut self) -> u64 {
-        let ptr_ty = self.context.i8_type().ptr_type(AddressSpace::from(0));
+        let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
         let ptr_size = self.target_data.get_bit_size(&ptr_ty) / 8;
         assert_eq!(ptr_size, 8);
         ptr_size
@@ -686,24 +685,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
-    pub fn cast_pointer(&self, from: PointerValue<'c>, to: PointerType<'c>) -> PointerValue<'c> {
-        if from.get_type() == to {
-            from
-        } else {
-            self.builder().build_pointer_cast(from, to, "pointer_cast")
-        }
-    }
-
-    // Get pointer to control block of a given object.
-    pub fn get_control_block_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
-        self.cast_pointer(obj, ptr_to_control_block_type(self))
-    }
-
     // Get pointer to reference counter of a given object.
     pub fn get_refcnt_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
-        let ptr_control_block = self.get_control_block_ptr(obj);
         self.builder()
-            .build_struct_gep(ptr_control_block, CTRL_BLK_REFCNT_IDX, "ptr_to_refcnt")
+            .build_struct_gep(
+                control_block_type(self),
+                obj,
+                CTRL_BLK_REFCNT_IDX,
+                "ptr_to_refcnt",
+            )
             .unwrap()
     }
 
@@ -728,15 +718,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
         let refcnt = self
             .builder()
-            .build_load(ptr_to_refcnt, "refcnt")
+            .build_load(refcnt_type(self.context), ptr_to_refcnt, "refcnt")
+            .unwrap()
             .into_int_value();
         // Jump to shared_bb if refcnt > 1.
         let one = refcnt_type(self.context).const_int(1, false);
-        let is_unique: IntValue<'_> =
-            self.builder()
-                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+        let is_unique: IntValue<'_> = self
+            .builder()
+            .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique")
+            .unwrap();
         self.builder()
-            .build_conditional_branch(is_unique, unique_bb, shared_bb);
+            .build_conditional_branch(is_unique, unique_bb, shared_bb)
+            .unwrap();
 
         // Implement threaded_bb.
         if threaded_bb.is_some() {
@@ -750,7 +743,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
             let refcnt = self
                 .builder()
-                .build_load(ptr_to_refcnt, "refcnt")
+                .build_load(refcnt_type(self.context), ptr_to_refcnt, "refcnt")
+                .unwrap()
                 .into_int_value();
             refcnt
                 .as_instruction_value()
@@ -758,11 +752,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 .set_atomic_ordering(inkwell::AtomicOrdering::Monotonic)
                 .expect("Set atomic ordering failed");
             // Jump to shared_bb if refcnt > 1.
-            let is_unique =
-                self.builder()
-                    .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique");
+            let is_unique = self
+                .builder()
+                .build_int_compare(IntPredicate::EQ, refcnt, one, "is_unique")
+                .unwrap();
             self.builder()
-                .build_conditional_branch(is_unique, unique_threaded_bb, shared_bb);
+                .build_conditional_branch(is_unique, unique_threaded_bb, shared_bb)
+                .unwrap();
 
             // Implement unique_threaded_bb.
             self.builder().position_at_end(unique_threaded_bb);
@@ -770,17 +766,22 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // - write / modify operations which will follow in this thread and
             // - read operations done before another thread releases this object.
             self.builder()
-                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
+                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "")
+                .unwrap();
             // Mark the object as non_threaded.
             self.mark_local_one(obj_ptr);
             // And jump to unique_bb.
-            self.builder().build_unconditional_branch(unique_bb);
+            self.builder()
+                .build_unconditional_branch(unique_bb)
+                .unwrap();
         }
 
         // Implement global_bb.
         self.builder().position_at_end(global_bb);
         // Jump to shared_bb.
-        self.builder().build_unconditional_branch(shared_bb);
+        self.builder()
+            .build_unconditional_branch(shared_bb)
+            .unwrap();
 
         (unique_bb, shared_bb)
     }
@@ -797,7 +798,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let refcnt_state_ptr = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
             .builder()
-            .build_load(refcnt_state_ptr, "refcnt_state")
+            .build_load(
+                refcnt_state_type(self.context),
+                refcnt_state_ptr,
+                "refcnt_state",
+            )
+            .unwrap()
             .into_int_value();
 
         // Add three basic blocks.
@@ -809,14 +815,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // In single-threaded program,
 
             // Check refcnt_state and jump to local_bb if it is equal to `REFCNT_STATE_LOCAL`.
-            let is_refcnt_state_local = self.builder().build_int_compare(
-                inkwell::IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                "is_refcnt_state_local",
-            );
+            let is_refcnt_state_local = self
+                .builder()
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    refcnt_state,
+                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                    "is_refcnt_state_local",
+                )
+                .unwrap();
             self.builder()
-                .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb);
+                .build_conditional_branch(is_refcnt_state_local, local_bb, global_bb)
+                .unwrap();
         } else {
             // In multi-threaded program,
             let th_bb = self.context.append_basic_block(current_func, "threaded_bb");
@@ -825,38 +835,43 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             let nonlocal_bb = self.context.append_basic_block(current_func, "nonlocal_bb");
 
-            let is_refcnt_state_local = self.builder().build_int_compare(
-                inkwell::IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                "is_refcnt_state_local",
-            );
+            let is_refcnt_state_local = self
+                .builder()
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    refcnt_state,
+                    refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                    "is_refcnt_state_local",
+                )
+                .unwrap();
             self.builder()
-                .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb);
+                .build_conditional_branch(is_refcnt_state_local, local_bb, nonlocal_bb)
+                .unwrap();
 
             // Implement nonlocal_bb.
             self.builder().position_at_end(nonlocal_bb);
-            let is_refcnt_state_threaded = self.builder().build_int_compare(
-                inkwell::IntPredicate::EQ,
-                refcnt_state,
-                refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
-                "is_refcnt_state_threaded",
-            );
-            self.builder().build_conditional_branch(
-                is_refcnt_state_threaded,
-                threaded_bb,
-                global_bb,
-            );
+            let is_refcnt_state_threaded = self
+                .builder()
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    refcnt_state,
+                    refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
+                    "is_refcnt_state_threaded",
+                )
+                .unwrap();
+            self.builder()
+                .build_conditional_branch(is_refcnt_state_threaded, threaded_bb, global_bb)
+                .unwrap();
         }
         (local_bb, threaded_bb, global_bb)
     }
 
     // Get pointer to state of reference counter of a given object.
     pub fn get_refcnt_state_ptr(&self, obj: PointerValue<'c>) -> PointerValue<'c> {
-        let ptr_control_block = self.get_control_block_ptr(obj);
         self.builder()
             .build_struct_gep(
-                ptr_control_block,
+                control_block_type(self),
+                obj,
                 CTRL_BLK_REFCNT_STATE_IDX,
                 "ptr_to_refcnt_state",
             )
@@ -866,18 +881,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Take a lambda object and return function pointer.
     fn get_lambda_func_ptr(&mut self, obj: Object<'c>) -> PointerValue<'c> {
         // Get the pointer value.
-        let ptr = if obj.ty.is_closure() {
+        if obj.ty.is_closure() {
             obj.extract_field(self, CLOSURE_FUNPTR_IDX)
                 .into_pointer_value()
         } else if obj.ty.is_funptr() {
             obj.value.into_pointer_value()
         } else {
             panic!()
-        };
-
-        // Cast to function pointer type.
-        let func_ptr_ty = lambda_function_type(&obj.ty, self).ptr_type(AddressSpace::from(0));
-        self.cast_pointer(ptr, func_ptr_ty)
+        }
     }
 
     // Apply objects to a lambda.
@@ -898,8 +909,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
 
         // Get function.
-        let ptr_to_func = self.get_lambda_func_ptr(fun.clone());
-        let func = CallableValue::try_from(ptr_to_func).unwrap();
+        let func_ptr = self.get_lambda_func_ptr(fun.clone());
+        let func_ty = lambda_function_type(&fun.ty, self);
 
         // Call function pointer with arguments, CAP if closure.
         let mut call_args: Vec<BasicMetadataValueEnum> = vec![];
@@ -910,7 +921,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             call_args.push(fun.extract_field(self, CLOSURE_CAPTURE_IDX).into());
         }
 
-        let ret = self.builder().build_call(func, &call_args, "call_lambda");
+        let ret = self
+            .builder()
+            .build_indirect_call(func_ty, func_ptr, &call_args, "call_lambda")
+            .unwrap();
         ret.set_tail_call(!self.has_di());
         let ret = match ret.try_as_basic_value() {
             Left(ret) => ret,
@@ -954,13 +968,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let obj_val = func.get_first_param().unwrap();
             let obj = Object::new(obj_val, obj.ty.clone(), self);
             self.build_retain(obj);
-            self.builder().build_return(None);
+            self.builder().build_return(None).unwrap();
             func
         };
 
         // Call retain function.
         self.builder()
-            .build_call(func, &[obj.value.into()], "call_retain");
+            .build_call(func, &[obj.value.into()], "call_retain")
+            .unwrap();
     }
 
     // Retain an object.
@@ -983,7 +998,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // Branch to nonnull_bb if object is not null.
                 let is_null = obj.is_null(self);
                 self.builder()
-                    .build_conditional_branch(is_null, cont_bb, nonnull_bb);
+                    .build_conditional_branch(is_null, cont_bb, nonnull_bb)
+                    .unwrap();
 
                 // Implement code to retain in nonnull_bb.
                 self.builder().position_at_end(nonnull_bb);
@@ -997,18 +1013,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             self.builder().position_at_end(local_bb);
 
             // In `local_bb`, increment refcnt and jump to `cont_bb`.
-            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
             let old_refcnt_local = self
                 .builder()
-                .build_load(ptr_to_refcnt, "")
+                .build_load(refcnt_type(self.context), obj_ptr, "")
+                .unwrap()
                 .into_int_value();
-            let new_refcnt = self.builder().build_int_nsw_add(
-                old_refcnt_local,
-                refcnt_type(self.context).const_int(1, false).into(),
-                "",
-            );
-            self.builder().build_store(ptr_to_refcnt, new_refcnt);
-            self.builder().build_unconditional_branch(cont_bb);
+            let new_refcnt = self
+                .builder()
+                .build_int_nsw_add(
+                    old_refcnt_local,
+                    refcnt_type(self.context).const_int(1, false).into(),
+                    "",
+                )
+                .unwrap();
+            self.builder().build_store(obj_ptr, new_refcnt).unwrap();
+            self.builder().build_unconditional_branch(cont_bb).unwrap();
 
             // Implement threaded_bb.
             if threaded_bb.is_some() {
@@ -1026,12 +1045,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                         inkwell::AtomicOrdering::Monotonic,
                     )
                     .unwrap();
-                self.builder().build_unconditional_branch(cont_bb);
+                self.builder().build_unconditional_branch(cont_bb).unwrap();
             }
 
             // Implement global_bb.
             self.builder().position_at_end(global_bb);
-            self.builder().build_unconditional_branch(cont_bb);
+            self.builder().build_unconditional_branch(cont_bb).unwrap();
 
             self.builder().position_at_end(cont_bb);
         } else {
@@ -1097,7 +1116,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
                 &res,
             );
-            self.builder().build_unconditional_branch(shared_bb);
+            self.builder()
+                .build_unconditional_branch(shared_bb)
+                .unwrap();
 
             self.builder().position_at_end(shared_bb);
         }
@@ -1128,7 +1149,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // Branch to nonnull_bb if object is not null.
                 let is_null = obj.is_null(self);
                 self.builder()
-                    .build_conditional_branch(is_null, cont_bb, nonnull_bb);
+                    .build_conditional_branch(is_null, cont_bb, nonnull_bb)
+                    .unwrap();
 
                 // Implement nonnull_bb.
                 self.builder().position_at_end(nonnull_bb);
@@ -1143,7 +1165,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
-                self.builder().build_unconditional_branch(cont_bb.unwrap());
+                self.builder()
+                    .build_unconditional_branch(cont_bb.unwrap())
+                    .unwrap();
                 self.builder().position_at_end(cont_bb.unwrap());
             }
         } else if obj.is_funptr() {
@@ -1152,11 +1176,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Unboxed case (inlude lambda object).
             match create_traverser(&obj.ty, &vec![], self, Some(work)) {
                 Some(trav) => {
-                    self.builder().build_call(
-                        trav,
-                        &[obj.value.into()],
-                        "call_traverser_of_unboxed",
-                    );
+                    self.builder()
+                        .build_call(trav, &[obj.value.into()], "call_traverser_of_unboxed")
+                        .unwrap();
                 }
                 None => {}
             }
@@ -1190,24 +1212,34 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Decrement refcnt.
         let old_refcnt = self
             .builder()
-            .build_load(ptr_to_refcnt, "")
+            .build_load(refcnt_type(self.context), ptr_to_refcnt, "")
+            .unwrap()
             .into_int_value();
-        let new_refcnt = self.builder().build_int_nsw_sub(
-            old_refcnt,
-            refcnt_type(self.context).const_int(1, false).into(),
-            "",
-        );
-        self.builder().build_store(ptr_to_refcnt, new_refcnt);
+        let new_refcnt = self
+            .builder()
+            .build_int_nsw_sub(
+                old_refcnt,
+                refcnt_type(self.context).const_int(1, false).into(),
+                "",
+            )
+            .unwrap();
+        self.builder()
+            .build_store(ptr_to_refcnt, new_refcnt)
+            .unwrap();
 
         // Branch to `destruction_bb` if old_refcnt is one.
-        let is_refcnt_one = self.builder().build_int_compare(
-            inkwell::IntPredicate::EQ,
-            old_refcnt,
-            refcnt_type(self.context).const_int(1, false),
-            "is_refcnt_zero",
-        );
+        let is_refcnt_one = self
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                old_refcnt,
+                refcnt_type(self.context).const_int(1, false),
+                "is_refcnt_zero",
+            )
+            .unwrap();
         self.builder()
-            .build_conditional_branch(is_refcnt_one, destruction_bb, end_bb);
+            .build_conditional_branch(is_refcnt_one, destruction_bb, end_bb)
+            .unwrap();
 
         // Implement threaded_bb.
         if threaded_bb.is_some() {
@@ -1230,20 +1262,27 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let threaded_destruction_bb = self
                 .context
                 .append_basic_block(current_func, "threaded_destruction_bb");
-            let is_refcnt_one = self.builder().build_int_compare(
-                inkwell::IntPredicate::EQ,
-                old_refcnt,
-                refcnt_type(self.context).const_int(1, false),
-                "is_refcnt_one",
-            );
+            let is_refcnt_one = self
+                .builder()
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    old_refcnt,
+                    refcnt_type(self.context).const_int(1, false),
+                    "is_refcnt_one",
+                )
+                .unwrap();
             self.builder()
-                .build_conditional_branch(is_refcnt_one, threaded_destruction_bb, end_bb);
+                .build_conditional_branch(is_refcnt_one, threaded_destruction_bb, end_bb)
+                .unwrap();
 
             // Implement `threaded_destruction_bb`.
             self.builder().position_at_end(threaded_destruction_bb);
             self.builder()
-                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "");
-            self.builder().build_unconditional_branch(destruction_bb);
+                .build_fence(inkwell::AtomicOrdering::Acquire, 0, "")
+                .unwrap();
+            self.builder()
+                .build_unconditional_branch(destruction_bb)
+                .unwrap();
         }
 
         // Implement `destruction_bb`
@@ -1253,17 +1292,20 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if obj.is_dynamic_object() {
             // If the object is dynamic, extract the traverser from the object and call it.
             let trav = obj.extract_trav_from_dynamic(self);
-            let trav = CallableValue::try_from(trav).unwrap();
-            self.builder().build_call(
-                trav,
-                &[
-                    obj_ptr.into(),
-                    traverser_work_type(self.context)
-                        .const_int(TRAVERSER_WORK_RELEASE as u64, false)
-                        .into(),
-                ],
-                "call_dtor",
-            );
+            let trav_ty = traverser_type(self, &obj.ty, true);
+            self.builder()
+                .build_indirect_call(
+                    trav_ty,
+                    trav,
+                    &[
+                        obj_ptr.into(),
+                        traverser_work_type(self.context)
+                            .const_int(TRAVERSER_WORK_RELEASE as u64, false)
+                            .into(),
+                    ],
+                    "call_dtor",
+                )
+                .unwrap();
         } else {
             // If the object is not dynamic, call the dtor of the object.
             let dtor = object::create_traverser(
@@ -1274,17 +1316,18 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             );
             if let Some(dtor) = dtor {
                 self.builder()
-                    .build_call(dtor, &[obj_ptr.into()], "call_dtor");
+                    .build_call(dtor, &[obj_ptr.into()], "call_dtor")
+                    .unwrap();
             }
         }
 
         // free.
-        self.builder().build_free(obj_ptr);
-        self.builder().build_unconditional_branch(end_bb);
+        self.builder().build_free(obj_ptr).unwrap();
+        self.builder().build_unconditional_branch(end_bb).unwrap();
 
         // Implement global_bb.
         self.builder().position_at_end(global_bb);
-        self.builder().build_unconditional_branch(end_bb);
+        self.builder().build_unconditional_branch(end_bb).unwrap();
 
         self.builder().position_at_end(end_bb);
     }
@@ -1301,23 +1344,27 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Get pointer to call the traverser function.
         if obj.is_dynamic_object() {
             let trav = obj.extract_trav_from_dynamic(self);
-            let trav = CallableValue::try_from(trav).unwrap();
-            self.builder().build_call(
-                trav,
-                &[
-                    obj_ptr.into(),
-                    traverser_work_type(self.context)
-                        .const_int(work.0 as u64, false)
-                        .into(),
-                ],
-                "call_trav_dynamic_for_mark",
-            );
+            let trav_ty = traverser_type(self, &obj.ty, true);
+            self.builder()
+                .build_indirect_call(
+                    trav_ty,
+                    trav,
+                    &[
+                        obj_ptr.into(),
+                        traverser_work_type(self.context)
+                            .const_int(work.0 as u64, false)
+                            .into(),
+                    ],
+                    "call_trav_dynamic_for_mark",
+                )
+                .unwrap();
         } else {
             // If the object is not dynamic, call the dtor of the object.
             let trav = object::create_traverser(&obj.ty, &vec![], self, Some(work));
             if let Some(trav) = trav {
                 self.builder()
-                    .build_call(trav, &[obj_ptr.into()], "call_trav_for_mark");
+                    .build_call(trav, &[obj_ptr.into()], "call_trav_for_mark")
+                    .unwrap();
             }
         }
 
@@ -1349,13 +1396,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let obj_val = func.get_first_param().unwrap();
             let obj = Object::new(obj_val, obj.ty.clone(), self);
             self.build_release_mark(obj, TraverserWorkType::release());
-            self.builder().build_return(None);
+            self.builder().build_return(None).unwrap();
             func
         };
 
         // Call release function.
         self.builder()
-            .build_call(func, &[obj.value.into()], "call_release");
+            .build_call(func, &[obj.value.into()], "call_release")
+            .unwrap();
     }
 
     // Release nonnull boxed object.
@@ -1383,13 +1431,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let obj_val = func.get_first_param().unwrap();
             let obj = Object::new(obj_val, obj.ty.clone(), self);
             self.build_release_mark(obj, TraverserWorkType::mark_global());
-            self.builder().build_return(None);
+            self.builder().build_return(None).unwrap();
             func
         };
 
         // Call `mark_global` function.
         self.builder()
-            .build_call(func, &[obj.value.into()], "call_mark_global");
+            .build_call(func, &[obj.value.into()], "call_mark_global")
+            .unwrap();
     }
 
     pub fn mark_threaded(&mut self, obj: Object<'c>) {
@@ -1411,22 +1460,25 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let obj_val = func.get_first_param().unwrap();
             let obj = Object::new(obj_val, obj.ty.clone(), self);
             self.build_release_mark(obj, TraverserWorkType::mark_threaded());
-            self.builder().build_return(None);
+            self.builder().build_return(None).unwrap();
             func
         };
 
         // Call `mark_threaded` function.
         self.builder()
-            .build_call(func, &[obj.value.into()], "call_mark_threaded");
+            .build_call(func, &[obj.value.into()], "call_mark_threaded")
+            .unwrap();
     }
 
     fn mark_local_one(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_LOCAL` to `ptr_refcnt_state`.
-        self.builder().build_store(
-            ptr_refcnt_state,
-            refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-        );
+        self.builder()
+            .build_store(
+                ptr_refcnt_state,
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+            )
+            .unwrap();
     }
 
     fn mark_threaded_one(&mut self, obj_ptr: PointerValue<'c>) {
@@ -1440,30 +1492,41 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let ptr_refcnt_state = self.get_refcnt_state_ptr(obj_ptr);
         let refcnt_state = self
             .builder()
-            .build_load(ptr_refcnt_state, "refcnt_state")
+            .build_load(
+                refcnt_state_type(self.context),
+                ptr_refcnt_state,
+                "refcnt_state",
+            )
+            .unwrap()
             .into_int_value();
 
         // Branch by whether or not the refcnt state is `REFCNT_STATE_LOCAL`.
         let local_bb = self
             .context
             .append_basic_block(current_func, "local_bb@mark_threaded");
-        let is_refcnt_state_local = self.builder().build_int_compare(
-            inkwell::IntPredicate::EQ,
-            refcnt_state,
-            refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
-            "is_refcnt_state_local",
-        );
+        let is_refcnt_state_local = self
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                refcnt_state,
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                "is_refcnt_state_local",
+            )
+            .unwrap();
         self.builder()
-            .build_conditional_branch(is_refcnt_state_local, local_bb, cont_bb);
+            .build_conditional_branch(is_refcnt_state_local, local_bb, cont_bb)
+            .unwrap();
 
         // Implement local_bb.
         self.builder().position_at_end(local_bb);
         // Store `REFCNT_STATE_THREADED` to `ptr_refcnt_state`.
-        self.builder().build_store(
-            ptr_refcnt_state,
-            refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
-        );
-        self.builder().build_unconditional_branch(cont_bb);
+        self.builder()
+            .build_store(
+                ptr_refcnt_state,
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_THREADED as u64, false),
+            )
+            .unwrap();
+        self.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Set builder's position as preparation for following implementation.
         self.builder().position_at_end(cont_bb);
@@ -1473,15 +1536,20 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     fn mark_global_one(&mut self, ptr: PointerValue<'c>) {
         let ptr_refcnt_state: PointerValue<'_> = self.get_refcnt_state_ptr(ptr);
         // Store `REFCNT_STATE_GLOBAL` to `ptr_refcnt_state`.
-        self.builder().build_store(
-            ptr_refcnt_state,
-            refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
-        );
+        self.builder()
+            .build_store(
+                ptr_refcnt_state,
+                refcnt_state_type(self.context).const_int(REFCNT_STATE_GLOBAL as u64, false),
+            )
+            .unwrap();
     }
 
     // Print Rust's &str to stderr.
     fn eprint(&self, string: &str) {
-        let string_ptr = self.builder().build_global_string_ptr(string, "rust_str");
+        let string_ptr = self
+            .builder()
+            .build_global_string_ptr(string, "rust_str")
+            .unwrap();
         let string_ptr = string_ptr.as_pointer_value();
         self.call_runtime(RUNTIME_EPRINT, &[string_ptr.into()]);
     }
@@ -1502,7 +1570,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .module
             .get_function(func_name)
             .unwrap_or_else(|| panic!("Runtime function not found: {}", func_name));
-        self.builder().build_call(func, args, "call_runtime")
+        self.builder()
+            .build_call(func, args, "call_runtime")
+            .unwrap()
     }
 
     // Evaluate expression.
@@ -1554,9 +1624,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if tail {
             let ret = obj.value;
             if self.sizeof(&ret.get_type()) != 0 {
-                self.builder().build_return(Some(&ret));
+                self.builder().build_return(Some(&ret)).unwrap();
             } else {
-                self.builder().build_return(None);
+                self.builder().build_return(None).unwrap();
             }
             None
         } else {
@@ -1851,8 +1921,6 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             0
         };
         let lam_fn_ptr = lam_fn.as_global_value().as_pointer_value();
-        let lam_fn_ptr =
-            self.cast_pointer(lam_fn_ptr, opaque_lambda_function_ptr_type(&self.context));
         lam = lam.insert_field(self, funptr_idx, lam_fn_ptr);
 
         if lam_ty.is_closure() {
@@ -1889,7 +1957,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
                 cap_obj.value
             } else {
-                ptr_to_object_type(self.context)
+                // If no objects are captured, we set null pointer.
+                self.context
+                    .ptr_type(AddressSpace::from(0))
                     .const_null()
                     .as_basic_value_enum()
             };
@@ -2008,9 +2078,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.scope_unlock_as_used_later(&used_then_or_else);
         let cond_val = cond_obj.extract_field(self, 0).into_int_value();
         self.release(cond_obj);
-        let cond_val =
-            self.builder()
-                .build_int_cast(cond_val, self.context.bool_type(), "cond_val_i1");
+        let cond_val = self
+            .builder()
+            .build_int_cast(cond_val, self.context.bool_type(), "cond_val_i1")
+            .unwrap();
         let bb = self.builder().get_insert_block().unwrap();
         let func = bb.get_parent().unwrap();
         let mut then_bb = self.context.append_basic_block(func, "then");
@@ -2021,7 +2092,8 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Some(self.context.append_basic_block(func, "cont"))
         };
         self.builder()
-            .build_conditional_branch(cond_val, then_bb, else_bb);
+            .build_conditional_branch(cond_val, then_bb, else_bb)
+            .unwrap();
 
         // Implement then block.
         self.builder().position_at_end(then_bb);
@@ -2042,7 +2114,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let then_val = self.eval_expr(then_expr.clone(), false).unwrap();
             let then_val = then_val.value;
             then_bb = self.builder().get_insert_block().unwrap();
-            self.builder().build_unconditional_branch(cont_bb.unwrap());
+            self.builder()
+                .build_unconditional_branch(cont_bb.unwrap())
+                .unwrap();
             Some(then_val)
         };
 
@@ -2065,7 +2139,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             let else_val = self.eval_expr(else_expr.clone(), false).unwrap();
             let else_val = else_val.value;
             else_bb = self.builder().get_insert_block().unwrap();
-            self.builder().build_unconditional_branch(cont_bb.unwrap());
+            self.builder()
+                .build_unconditional_branch(cont_bb.unwrap())
+                .unwrap();
             Some(else_val)
         };
 
@@ -2080,7 +2156,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().position_at_end(cont_bb);
         // Return the phi value.
         let phi_ty = then_val.get_type();
-        let phi = self.builder().build_phi(phi_ty, "phi");
+        let phi = self.builder().build_phi(phi_ty, "phi").unwrap();
         phi.add_incoming(&[(&then_val, then_bb), (&else_val, else_bb)]);
         Some(Object::new(phi.as_basic_value(), res_ty.clone(), self))
     }
@@ -2153,9 +2229,11 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .collect::<Vec<_>>();
         if cases.len() > 0 {
             let tag_val = ObjectFieldType::get_union_tag(self, &cond);
-            self.builder().build_switch(tag_val, else_bb, &cases);
+            self.builder()
+                .build_switch(tag_val, else_bb, &cases)
+                .unwrap();
         } else {
-            self.builder().build_unconditional_branch(else_bb);
+            self.builder().build_unconditional_branch(else_bb).unwrap();
         }
 
         // Implement each cases.
@@ -2196,7 +2274,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let val_obj = self.eval_expr(val.clone(), false).unwrap();
                 let bb = self.builder().get_insert_block().unwrap();
                 val_objs.push((val_obj, bb));
-                self.builder().build_unconditional_branch(cont_bb.unwrap());
+                self.builder()
+                    .build_unconditional_branch(cont_bb.unwrap())
+                    .unwrap();
             }
             // Pop subobjects from scope.
             for (var_name, _) in &subobjs {
@@ -2221,7 +2301,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         } else {
             // In this case, build phi node.
             let phi_ty = val_objs[0].0.value.get_type();
-            let phi = self.builder().build_phi(phi_ty, "match_phi");
+            let phi = self.builder().build_phi(phi_ty, "match_phi").unwrap();
             for (val, bb) in &val_objs {
                 phi.add_incoming(&[(&val.value, bb.clone())]);
             }
@@ -2339,9 +2419,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .collect::<Vec<_>>();
 
         // Call c function
-        let ret_c_val =
-            self.builder()
-                .build_call(c_fun, &args_vals, &format!("FFI_CALL({})", fun_name));
+        let ret_c_val = self
+            .builder()
+            .build_call(c_fun, &args_vals, &format!("FFI_CALL({})", fun_name))
+            .unwrap();
         match ret_c_val.try_as_basic_value() {
             Either::Left(ret_c_val) => {
                 if is_io {
@@ -2437,7 +2518,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let obj_val = obj.value;
         let storage =
             self.build_alloca_at_entry(obj_val.get_type(), "alloca@create_debug_local_variable");
-        self.builder().build_store(storage, obj_val);
+        self.builder().build_store(storage, obj_val).unwrap();
 
         let embed_ty = obj.debug_embedded_ty(self);
         let loc_var = self.get_di_builder().create_auto_variable(
@@ -2560,18 +2641,23 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 // In single-threaded mode, we implement `call_once` logic by hand.
                 let flag = self
                     .builder()
-                    .build_load(init_flag, "load_init_flag")
+                    .build_load(flag_ty, init_flag, "load_init_flag")
+                    .unwrap()
                     .into_int_value();
-                let is_zero = self.builder().build_int_compare(
-                    IntPredicate::EQ,
-                    flag,
-                    flag.get_type().const_zero(),
-                    "flag_is_zero",
-                );
+                let is_zero = self
+                    .builder()
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        flag,
+                        flag.get_type().const_zero(),
+                        "flag_is_zero",
+                    )
+                    .unwrap();
                 let init_bb = self.context.append_basic_block(acc_fn, "flag_is_zero");
                 let end_bb = self.context.append_basic_block(acc_fn, "flag_is_nonzero");
                 self.builder()
-                    .build_conditional_branch(is_zero, init_bb, end_bb);
+                    .build_conditional_branch(is_zero, init_bb, end_bb)
+                    .unwrap();
 
                 (init_bb, end_bb, None)
             } else {
@@ -2602,7 +2688,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 );
                 // The end block of the accessor function.
                 let end_bb = self.context.append_basic_block(acc_fn, "end_bb");
-                self.builder().build_unconditional_branch(end_bb);
+                self.builder().build_unconditional_branch(end_bb).unwrap();
 
                 // The entry block for the initialization function.
                 let init_bb = self.context.append_basic_block(init_fn, "init_bb");
@@ -2633,20 +2719,21 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
                 // Store the result to global_ptr.
                 let obj_val = obj.value;
-                self.builder().build_store(global_var_ptr, obj_val);
+                self.builder().build_store(global_var_ptr, obj_val).unwrap();
             }
 
             // After initialization,
             if !self.config.threaded {
                 // In unthreaded mode, set the initialized flag 1 by hand.
                 self.builder()
-                    .build_store(init_flag, self.context.i8_type().const_int(1, false));
+                    .build_store(init_flag, self.context.i8_type().const_int(1, false))
+                    .unwrap();
 
                 // And jump to the end of accessor function.
-                self.builder().build_unconditional_branch(end_bb);
+                self.builder().build_unconditional_branch(end_bb).unwrap();
             } else {
                 // In threaded mode, simply return from the initialization function.
-                self.builder().build_return(None);
+                self.builder().build_return(None).unwrap();
 
                 // Drop di_scope_guard for initialization function.
                 init_fun_di_scope_guard.take();
@@ -2655,12 +2742,15 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
             // In the end of the accessor function, return the object.
             self.builder().position_at_end(end_bb);
-            let global_var = self.builder().build_load(global_var_ptr, "load_global_var");
+            let global_var = self
+                .builder()
+                .build_load(obj_embed_ty, global_var_ptr, "load_global_var")
+                .unwrap();
 
             if self.sizeof(&global_var.get_type()) == 0 {
-                self.builder().build_return(None);
+                self.builder().build_return(None).unwrap();
             } else {
-                self.builder().build_return(Some(&global_var));
+                self.builder().build_return(Some(&global_var)).unwrap();
             }
         }
     }
@@ -2680,13 +2770,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         let (from_bits, to_bits) = (self.sizeof(&from_ty), self.sizeof(&to_ty));
         let larger_ty = if from_bits > to_bits { from_ty } else { to_ty };
         let ptr = self.build_alloca_at_entry(larger_ty, "alloca@bit_cast");
-        let from_ptr = self.cast_pointer(ptr, from_ty.ptr_type(AddressSpace::from(0)));
-        self.builder().build_store(from_ptr, val);
-        let to_ptr = self.cast_pointer(ptr, to_ty.ptr_type(AddressSpace::from(0)));
-        self.builder().build_load(to_ptr, "bit_cast")
+        self.builder().build_store(ptr, val).unwrap();
+        self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()
     }
-}
-
-pub fn ptr_type<'c>(ty: StructType<'c>) -> PointerType<'c> {
-    ty.ptr_type(AddressSpace::from(0))
 }

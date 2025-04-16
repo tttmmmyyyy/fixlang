@@ -1,11 +1,9 @@
 use build_time::build_time_utc;
 use inkwell::context::Context;
 use inkwell::module::Module;
+use inkwell::passes::PassBuilderOptions;
+use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
 use inkwell::values::BasicValue;
-use inkwell::{
-    passes::PassManager,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
-};
 use inkwell::{AddressSpace, OptimizationLevel};
 use rand::Rng;
 use std::fs::File;
@@ -25,6 +23,7 @@ use crate::compile_unit::CompileUnit;
 use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, panic_if_err, panic_with_err, Errors};
 use crate::misc::{info_msg, save_temporary_source, temporary_source_path};
+use crate::run_io_value;
 use crate::stopwatch::StopWatch;
 use crate::ExprNode;
 use crate::FixOptimizationLevel;
@@ -40,7 +39,6 @@ use crate::GLOBAL_VAR_NAME_ARGC;
 use crate::GLOBAL_VAR_NAME_ARGV;
 use crate::INTERMEDIATE_PATH;
 use crate::{build_runtime, parse_file_path};
-use crate::{llvm_passes, run_io_value};
 use crate::{make_std_mod, runtime};
 use crate::{make_tuple_traits_mod, BuildMode};
 use crate::{optimization, Configuration};
@@ -293,7 +291,7 @@ fn build_object_files<'c>(
             }
 
             // LLVM level optimization.
-            optimize_and_verify(gc.module, &config);
+            optimize_and_verify(gc.module, &target_machine, &config);
 
             if config.emit_llvm {
                 // Print LLVM-IR to file after optimization.
@@ -366,25 +364,37 @@ fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     }
 }
 
-fn optimize_and_verify<'c>(module: &Module<'c>, config: &Configuration) {
-    // Run optimization
-    let passmgr = PassManager::create(());
+fn optimize_and_verify<'c>(
+    module: &Module<'c>,
+    target_machine: &TargetMachine,
+    config: &Configuration,
+) {
+    fn run_passes_or_panic(module: &Module, passes: &str, target_machine: &TargetMachine) {
+        if let Err(e) = module.run_passes(passes, target_machine, PassBuilderOptions::create()) {
+            panic_with_err(&format!(
+                "Failed to run passes \"{}\": {}",
+                passes,
+                e.to_string()
+            ));
+        }
+    }
 
-    passmgr.add_verifier_pass(); // Verification before optimization.
+    // Run optimization
+    run_passes_or_panic(module, "verify", target_machine);
+    let passes = include_str!("llvm_passes.csv");
     match config.fix_opt_level {
         FixOptimizationLevel::None => {}
         FixOptimizationLevel::Basic => {
-            llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
+            run_passes_or_panic(module, passes, target_machine);
         }
         FixOptimizationLevel::Max => {
-            llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
+            run_passes_or_panic(module, passes, target_machine);
         }
         FixOptimizationLevel::Experimental => {
-            llvm_passes::add_passes(&passmgr, &config.llvm_passes_file);
+            run_passes_or_panic(module, passes, target_machine);
         }
     }
-    passmgr.add_verifier_pass(); // Verification after optimization.
-    passmgr.run_on(module);
+    run_passes_or_panic(module, "verify", target_machine);
 }
 
 // Build exported c functions.
@@ -400,12 +410,8 @@ fn build_exported_c_functions<'c, 'm>(
 fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_fn_type = gc.context.i32_type().fn_type(
         &[
-            gc.context.i32_type().into(), // argc
-            gc.context
-                .i8_type()
-                .ptr_type(AddressSpace::from(0))
-                .ptr_type(AddressSpace::from(0))
-                .into(), // argv
+            gc.context.i32_type().into(),                      // argc
+            gc.context.ptr_type(AddressSpace::from(0)).into(), // argv
         ],
         false,
     );
@@ -425,7 +431,7 @@ fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Ar
             .unwrap()
             .as_basic_value_enum()
             .into_pointer_value();
-        gc.builder().build_store(gv_ptr, arg_val);
+        gc.builder().build_store(gv_ptr, arg_val).unwrap();
     }
 
     // Run main object.
@@ -434,7 +440,8 @@ fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Ar
 
     // Return main function.
     gc.builder()
-        .build_return(Some(&gc.context.i32_type().const_int(0, false)));
+        .build_return(Some(&gc.context.i32_type().const_int(0, false)))
+        .unwrap();
 }
 
 #[allow(dead_code)]

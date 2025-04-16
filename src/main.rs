@@ -38,7 +38,6 @@ mod docgen;
 mod error;
 mod generator;
 mod graph;
-mod llvm_passes;
 mod lsp;
 mod misc;
 mod object;
@@ -80,10 +79,8 @@ use graph::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::{BasicTypeEnum, FunctionType, IntType, PointerType, StructType};
-use inkwell::values::{
-    BasicValue, BasicValueEnum, CallableValue, FunctionValue, IntValue, PointerValue,
-};
+use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
 use lsp::language_server::launch_language_server;
 use object::*;

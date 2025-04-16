@@ -198,11 +198,7 @@ impl TyCon {
             return Some(ctx.f64_type().as_basic_type_enum());
         }
         if self.name.name == PTR_NAME {
-            return Some(
-                ctx.i8_type()
-                    .ptr_type(AddressSpace::from(0))
-                    .as_basic_type_enum(),
-            );
+            return Some(ctx.ptr_type(AddressSpace::from(0)).as_basic_type_enum());
         }
         panic!("call get_c_type for {}", self.to_string())
     }

@@ -42,17 +42,15 @@ impl ObjectFieldType {
     ) -> BasicTypeEnum<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_type(gc).into(),
-            ObjectFieldType::TraverseFunction => {
-                ptr_to_traverser_type(gc, &make_dynamic_object_ty(), true).into()
-            }
+            ObjectFieldType::TraverseFunction => gc.context.ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::LambdaFunction(_ty) => {
-                opaque_lambda_function_ptr_type(&gc.context).into()
+                gc.context.ptr_type(AddressSpace::from(0)).into()
             }
             ObjectFieldType::SubObject(ty, _is_punched) => {
                 ty_to_object_ty(ty, &vec![], gc.type_env())
                     .to_embedded_type(gc, unboxed_path.clone())
             }
-            ObjectFieldType::Ptr => gc.context.i8_type().ptr_type(AddressSpace::from(0)).into(),
+            ObjectFieldType::Ptr => gc.context.ptr_type(AddressSpace::from(0)).into(),
             ObjectFieldType::I8 => gc.context.i8_type().into(),
             ObjectFieldType::U8 => gc.context.i8_type().into(),
             ObjectFieldType::I16 => gc.context.i16_type().into(),
@@ -332,41 +330,57 @@ impl ObjectFieldType {
         let counter_type = gc.context.i64_type();
         let counter_ptr = gc.build_alloca_at_entry(counter_type, "release_loop_counter");
         gc.builder()
-            .build_store(counter_ptr, counter_type.const_zero());
+            .build_store(counter_ptr, counter_type.const_zero())
+            .unwrap();
 
         // Jump to loop_check bb.
-        gc.builder().build_unconditional_branch(loop_check_bb);
+        gc.builder()
+            .build_unconditional_branch(loop_check_bb)
+            .unwrap();
 
         // Implement loop_check bb.
         gc.builder().position_at_end(loop_check_bb);
         let counter_val = gc
             .builder()
-            .build_load(counter_ptr, "counter_val")
+            .build_load(counter_type, counter_ptr, "counter_val")
+            .unwrap()
             .into_int_value();
         let is_end = gc
             .builder()
-            .build_int_compare(IntPredicate::EQ, counter_val, size, "is_end");
+            .build_int_compare(IntPredicate::EQ, counter_val, size, "is_end")
+            .unwrap();
         gc.builder()
-            .build_conditional_branch(is_end, after_loop_bb, loop_body_bb);
+            .build_conditional_branch(is_end, after_loop_bb, loop_body_bb)
+            .unwrap();
 
         // Implement loop_body bb.
         gc.builder().position_at_end(loop_body_bb);
 
         // Generate code of loop body.
-        let idx = gc.builder().build_load(counter_ptr, "idx").into_int_value();
+        let idx = gc
+            .builder()
+            .build_load(counter_type, counter_ptr, "idx")
+            .unwrap()
+            .into_int_value();
         loop_body(gc, idx, size, buffer);
 
         // Increment counter.
-        let incremented_counter_val = gc.builder().build_int_add(
-            counter_val,
-            counter_type.const_int(1, false),
-            "incremented_counter_val",
-        );
+        let incremented_counter_val = gc
+            .builder()
+            .build_int_add(
+                counter_val,
+                counter_type.const_int(1, false),
+                "incremented_counter_val",
+            )
+            .unwrap();
         gc.builder()
-            .build_store(counter_ptr, incremented_counter_val);
+            .build_store(counter_ptr, incremented_counter_val)
+            .unwrap();
 
         // Jump back to loop_check bb.
-        gc.builder().build_unconditional_branch(loop_check_bb);
+        gc.builder()
+            .build_unconditional_branch(loop_check_bb)
+            .unwrap();
 
         // Generate code after loop.
         gc.builder().position_at_end(after_loop_bb);
@@ -380,6 +394,8 @@ impl ObjectFieldType {
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
     ) {
+        let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+
         // In loop body, release object of idx = counter_val.
         let loop_body = |gc: &mut GenerationContext<'c, 'm>,
                          idx: IntValue<'c>,
@@ -387,9 +403,13 @@ impl ObjectFieldType {
                          ptr_to_buffer: PointerValue<'c>| {
             let ptr = unsafe {
                 gc.builder()
-                    .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
+                    .build_gep(value_ty, ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
+                    .unwrap()
             };
-            let obj_val = gc.builder().build_load(ptr, "elem_of_array");
+            let obj_val = gc
+                .builder()
+                .build_load(value_ty, ptr, "elem_of_array")
+                .unwrap();
             // Perform release or mark global or mark threaded.
             let obj = Object::new(obj_val, elem_ty.clone(), gc);
             gc.build_release_mark(obj, work_type);
@@ -420,13 +440,15 @@ impl ObjectFieldType {
             let loop_body = |gc: &mut GenerationContext<'c, 'm>,
                              idx: IntValue<'c>,
                              _size: IntValue<'c>,
-                             ptr_to_buffer: PointerValue<'c>| {
+                             buf_ptr: PointerValue<'c>| {
+                let value_ty = value.ty.get_embedded_type(gc, &vec![]);
                 gc.retain(value.clone());
-                let ptr_to_elm = unsafe {
+                let elm_ptr = unsafe {
                     gc.builder()
-                        .build_gep(ptr_to_buffer, &[idx], "ptr_to_elem_of_array")
-                };
-                gc.builder().build_store(ptr_to_elm, value.value);
+                        .build_gep(value_ty, buf_ptr, &[idx], "ptr_to_elem_of_array")
+                }
+                .unwrap();
+                gc.builder().build_store(elm_ptr, value.value).unwrap();
             };
 
             // After loop, release value.
@@ -450,16 +472,20 @@ impl ObjectFieldType {
     ) {
         let curr_bb = gc.builder().get_insert_block().unwrap();
         let curr_func = curr_bb.get_parent().unwrap();
-        let is_out_of_range =
-            gc.builder()
-                .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_range");
+        let is_out_of_range = gc
+            .builder()
+            .build_int_compare(IntPredicate::UGE, idx, len, "is_out_of_range")
+            .unwrap();
         let out_of_range_bb = gc.context.append_basic_block(curr_func, "out_of_range_bb");
         let in_range_bb = gc.context.append_basic_block(curr_func, "in_range_bb");
         gc.builder()
-            .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb);
+            .build_conditional_branch(is_out_of_range, out_of_range_bb, in_range_bb)
+            .unwrap();
         gc.builder().position_at_end(out_of_range_bb);
         gc.panic("Index out of range.\n");
-        gc.builder().build_unconditional_branch(in_range_bb);
+        gc.builder()
+            .build_unconditional_branch(in_range_bb)
+            .unwrap();
         gc.builder().position_at_end(in_range_bb);
     }
 
@@ -478,13 +504,15 @@ impl ObjectFieldType {
         }
 
         // Get element.
-        let ptr_to_elem = unsafe {
+        let elm_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        let elm_ptr = unsafe {
             gc.builder()
-                .build_gep(buffer, &[idx.into()], "ptr_to_elem_of_array")
-        };
+                .build_gep(elm_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
+        }
+        .unwrap();
 
         // Get value
-        let elem_val = gc.builder().build_load(ptr_to_elem, "elem");
+        let elem_val = gc.builder().build_load(elm_ty, elm_ptr, "elem").unwrap();
 
         // Return value
         Object::new(elem_val, elem_ty, gc)
@@ -521,20 +549,22 @@ impl ObjectFieldType {
         }
 
         // Get ptr to the place at idx.
-        let ptr_to_elm = unsafe {
+        let elm_ty = value.ty.get_embedded_type(gc, &vec![]);
+        let elm_ptr = unsafe {
             gc.builder()
-                .build_gep(buffer, &[idx.into()], "ptr_to_elem_of_array")
-        };
+                .build_gep(elm_ty, buffer, &[idx.into()], "ptr_to_elem_of_array")
+        }
+        .unwrap();
 
         // Release element that is already at the place (if required).
         if release_old_value {
-            let elm_val = gc.builder().build_load(ptr_to_elm, "elem");
+            let elm_val = gc.builder().build_load(elm_ty, elm_ptr, "elem").unwrap();
             let elem_obj = Object::new(elm_val, elem_ty, gc);
             gc.release(elem_obj);
         }
 
         // Insert the given value to the place.
-        gc.builder().build_store(ptr_to_elm, value.value);
+        gc.builder().build_store(elm_ptr, value.value).unwrap();
     }
 
     // Clone an array.
@@ -548,21 +578,35 @@ impl ObjectFieldType {
     ) {
         // Clone each elements.
         {
+            let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
             // In loop body, retain value and store it at idx.
             let loop_body = |gc: &mut GenerationContext<'c, 'm>,
                              idx: IntValue<'c>,
                              _len: IntValue<'c>,
                              _ptr_to_buffer: PointerValue<'c>| {
-                let ptr_to_src_elem = unsafe {
-                    gc.builder()
-                        .build_gep(src_buffer, &[idx.into()], "ptr_to_src_elem")
-                };
-                let ptr_to_dst_elem = unsafe {
-                    gc.builder()
-                        .build_gep(dst_buffer, &[idx.into()], "ptr_to_dst_elem")
-                };
-                let src_elem = gc.builder().build_load(ptr_to_src_elem, "src_elem");
-                gc.builder().build_store(ptr_to_dst_elem, src_elem);
+                let src_ptr = unsafe {
+                    gc.builder().build_gep(
+                        elm_basic_ty,
+                        src_buffer,
+                        &[idx.into()],
+                        "ptr_to_src_elem",
+                    )
+                }
+                .unwrap();
+                let dst_ptr = unsafe {
+                    gc.builder().build_gep(
+                        elm_basic_ty,
+                        dst_buffer,
+                        &[idx.into()],
+                        "ptr_to_dst_elem",
+                    )
+                }
+                .unwrap();
+                let src_elem = gc
+                    .builder()
+                    .build_load(elm_basic_ty, src_ptr, "src_elem")
+                    .unwrap();
+                gc.builder().build_store(dst_ptr, src_elem).unwrap();
                 let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
                 gc.retain(src_obj);
             };
@@ -656,14 +700,18 @@ impl ObjectFieldType {
                 .to_basic_type(gc, vec![])
                 .into_int_type()
                 .const_int(i as u64, false);
-            let is_match = gc.builder().build_int_compare(
-                IntPredicate::EQ,
-                tag,
-                expect_tag_val,
-                &format!("is_tag_{}", i),
-            );
+            let is_match = gc
+                .builder()
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    tag,
+                    expect_tag_val,
+                    &format!("is_tag_{}", i),
+                )
+                .unwrap();
             gc.builder()
-                .build_conditional_branch(is_match, match_bb, unmatch_bb);
+                .build_conditional_branch(is_match, match_bb, unmatch_bb)
+                .unwrap();
 
             // Implement the case tag is match.
             gc.builder().position_at_end(match_bb);
@@ -674,7 +722,7 @@ impl ObjectFieldType {
             } else {
                 gc.build_release_mark(subobj, work_type.unwrap());
             }
-            gc.builder().build_unconditional_branch(end_bb);
+            gc.builder().build_unconditional_branch(end_bb).unwrap();
 
             // Implement the case tag is unmatch.
             gc.builder().position_at_end(unmatch_bb);
@@ -685,7 +733,7 @@ impl ObjectFieldType {
         let last_unmatch_bb = last_unmatch_bb.unwrap();
         gc.builder().position_at_end(last_unmatch_bb);
         gc.panic("All union variants unmatch!\n"); // unreachable didn't work as I expected.
-        gc.builder().build_unconditional_branch(end_bb);
+        gc.builder().build_unconditional_branch(end_bb).unwrap();
 
         gc.builder().position_at_end(end_bb);
     }
@@ -798,21 +846,20 @@ impl ObjectFieldType {
         let tag_value = union.extract_field(gc, 0 + offset).into_int_value();
 
         // If tag unmatch, panic.
-        let is_tag_unmatch = gc.builder().build_int_compare(
-            IntPredicate::NE,
-            expect_tag,
-            tag_value,
-            "is_tag_unmatch",
-        );
+        let is_tag_unmatch = gc
+            .builder()
+            .build_int_compare(IntPredicate::NE, expect_tag, tag_value, "is_tag_unmatch")
+            .unwrap();
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
         let match_bb = gc.context.append_basic_block(current_func, "match_bb");
         gc.builder()
-            .build_conditional_branch(is_tag_unmatch, unmatch_bb, match_bb);
+            .build_conditional_branch(is_tag_unmatch, unmatch_bb, match_bb)
+            .unwrap();
         gc.builder().position_at_end(unmatch_bb);
         gc.panic("Union variant unmatch!\n");
-        gc.builder().build_unconditional_branch(match_bb);
+        gc.builder().build_unconditional_branch(match_bb).unwrap();
         gc.builder().position_at_end(match_bb);
     }
 
@@ -956,28 +1003,28 @@ impl ObjectType {
             let size = array_size.unwrap();
             let size = gc
                 .builder()
-                .build_int_cast(size, ptr_int_ty, "size_as_ptr_int_ty");
-            let elems_size = gc.builder().build_int_mul(elem_sizeof, size, "elems_size");
+                .build_int_cast(size, ptr_int_ty, "size_as_ptr_int_ty")
+                .unwrap();
+            let elems_size = gc
+                .builder()
+                .build_int_mul(elem_sizeof, size, "elems_size")
+                .unwrap();
 
             // Get pointer to the first element
-            let null = gc.cast_pointer(
-                gc.context
-                    .i8_type()
-                    .ptr_type(AddressSpace::from(0))
-                    .const_null(),
-                struct_ty.ptr_type(AddressSpace::from(0)),
-            );
-            let ptr_to_first_elem = gc
+            let null = gc.context.ptr_type(AddressSpace::from(0)).const_null();
+            let first_elm_ptr = gc
                 .builder()
-                .build_struct_gep(null, ARRAY_BUF_IDX, "gep_first_elem_size_of")
+                .build_struct_gep(struct_ty, null, ARRAY_BUF_IDX, "gep_first_elem_size_of")
                 .unwrap();
-            let ptr_to_first_elem =
-                gc.builder()
-                    .build_ptr_to_int(ptr_to_first_elem, ptr_int_ty, "size_with_one_elem");
+            let first_elm_ptr = gc
+                .builder()
+                .build_ptr_to_int(first_elm_ptr, ptr_int_ty, "size_with_one_elem")
+                .unwrap();
 
-            let size_with_elems =
-                gc.builder()
-                    .build_int_add(ptr_to_first_elem, elems_size, "size_with_elems");
+            let size_with_elems = gc
+                .builder()
+                .build_int_add(first_elm_ptr, elems_size, "size_with_elems")
+                .unwrap();
             return size_with_elems;
         } else {
             self.to_struct_type(gc, vec![]).size_of().unwrap()
@@ -996,7 +1043,7 @@ impl ObjectType {
             let str_ty = self.to_struct_type(gc, unboxed_path);
             str_ty.into()
         } else {
-            ptr_to_object_type(gc.context).into()
+            gc.context.ptr_type(AddressSpace::from(0)).into()
         }
     }
 }
@@ -1018,13 +1065,9 @@ pub fn refcnt_state_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-pub fn ptr_to_object_type<'ctx>(context: &'ctx Context) -> PointerType<'ctx> {
-    context.i8_type().ptr_type(AddressSpace::from(0))
-}
-
 // Type of traverser function.
 // - is_dynamic: If true, the traverser is dynamic and takes the work type as the second argument.
-fn traverser_type<'c, 'm>(
+pub fn traverser_type<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     ty: &Arc<TypeNode>,
     is_dynamic: bool,
@@ -1041,14 +1084,6 @@ fn traverser_type<'c, 'm>(
 
 pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
-}
-
-fn ptr_to_traverser_type<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
-    ty: &Arc<TypeNode>,
-    is_dynamic: bool,
-) -> PointerType<'c> {
-    traverser_type(gc, ty, is_dynamic).ptr_type(AddressSpace::from(0))
 }
 
 pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
@@ -1104,12 +1139,8 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DITy
         .as_type()
 }
 
-pub fn ptr_to_control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> PointerType<'c> {
-    control_block_type(gc).ptr_type(AddressSpace::from(0))
-}
-
 pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
-    let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let size_in_bits = gc.target_data.get_bit_size(&ptr_ty);
     gc.get_di_builder()
         .create_basic_type(name, size_in_bits, DW_ATE_ADDRESS, 0)
@@ -1132,14 +1163,14 @@ pub fn lambda_function_type<'c, 'm>(
         .map(|src| src.get_embedded_type(gc, &vec![]).into())
         .collect::<Vec<_>>();
 
-    // CAP for closure.
+    // The pointer to the CAP (a dynamic object which contains captured values), if the lambda is closure.
     if ty.is_closure() {
-        arg_tys.push(ptr_to_object_type(gc.context).into());
+        arg_tys.push(gc.context.ptr_type(AddressSpace::from(0)).into());
     }
 
     let ret_ty = ty.get_lambda_dst();
     let ret_ty = if ret_ty.is_box(gc.type_env()) {
-        ptr_to_object_type(&gc.context).as_basic_type_enum()
+        gc.context.ptr_type(AddressSpace::from(0)).into()
     } else {
         ret_ty.get_embedded_type(gc, &vec![])
     };
@@ -1150,12 +1181,6 @@ pub fn lambda_function_type<'c, 'm>(
     } else {
         ret_ty.fn_type(&arg_tys, false)
     }
-}
-
-// Opaque function pointer type used to handle type definition such as
-// `type Foo = box struct { func : Foo -> Foo }`.
-pub fn opaque_lambda_function_ptr_type<'c>(ctx: &'c Context) -> PointerType<'c> {
-    ctx.i8_type().ptr_type(AddressSpace::from(0))
 }
 
 pub fn struct_field_idx(is_unbox: bool) -> u32 {
@@ -1315,7 +1340,6 @@ pub fn create_obj<'c, 'm>(
             .builder()
             .build_array_malloc(gc.context.i8_type(), sizeof, "malloc_array@create_obj")
             .unwrap();
-        let ptr = gc.cast_pointer(ptr, ptr_type(struct_type));
         Object::new(ptr.as_basic_value_enum(), ty.clone(), gc)
     } else {
         if object_type.is_unbox {
@@ -1343,24 +1367,28 @@ pub fn create_obj<'c, 'm>(
                 assert_eq!(i, 0);
                 // Get pointer to control block.
                 let ptr_to_ctrl_blk = obj.gep_boxed(gc, i as u32);
+                let ctrl_blk_ty = control_block_type(gc);
 
                 // Initialize the reference counter 1.
                 let ptr_to_refcnt = gc
                     .builder()
-                    .build_struct_gep(ptr_to_ctrl_blk, 0, "ptr_to_refcnt")
+                    .build_struct_gep(ctrl_blk_ty, ptr_to_ctrl_blk, 0, "ptr_to_refcnt")
                     .unwrap();
                 gc.builder()
-                    .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false));
+                    .build_store(ptr_to_refcnt, refcnt_type(context).const_int(1, false))
+                    .unwrap();
 
                 // Initialize the reference counter state to REFCNT_STATE_LOCAL.
                 let ptr_to_refcnt_state = gc
                     .builder()
-                    .build_struct_gep(ptr_to_ctrl_blk, 1, "ptr_to_refcnt_state")
+                    .build_struct_gep(ctrl_blk_ty, ptr_to_ctrl_blk, 1, "ptr_to_refcnt_state")
                     .unwrap();
-                gc.builder().build_store(
-                    ptr_to_refcnt_state,
-                    refcnt_state_type(context).const_int(REFCNT_STATE_LOCAL as u64, false),
-                );
+                gc.builder()
+                    .build_store(
+                        ptr_to_refcnt_state,
+                        refcnt_state_type(context).const_int(REFCNT_STATE_LOCAL as u64, false),
+                    )
+                    .unwrap();
             }
             ObjectFieldType::Ptr => {}
             ObjectFieldType::I8 => {}
@@ -1380,14 +1408,15 @@ pub fn create_obj<'c, 'm>(
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
                 let ptr_to_size = obj.gep_boxed(gc, i as u32);
                 gc.builder()
-                    .build_store(ptr_to_size, array_capacity.unwrap());
+                    .build_store(ptr_to_size, array_capacity.unwrap())
+                    .unwrap();
             }
             ObjectFieldType::TraverseFunction => {
                 // Initialize the traverser function.
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 let ptr_to_trav = obj.gep_boxed(gc, i as u32);
                 let trav = get_traverser_ptr(&ty, capture, gc, None);
-                gc.builder().build_store(ptr_to_trav, trav);
+                gc.builder().build_store(ptr_to_trav, trav).unwrap();
             }
             ObjectFieldType::UnionBuf(_) => {}
             ObjectFieldType::UnionTag => {}
@@ -1424,7 +1453,7 @@ pub fn get_traverser_ptr<'c, 'm>(
                 let _builder_guard = gc.push_builder();
                 let bb = gc.context.append_basic_block(func, "entry");
                 gc.builder().position_at_end(bb);
-                gc.builder().build_return(None);
+                gc.builder().build_return(None).unwrap();
                 func
             };
             fv.as_global_value().as_pointer_value()
@@ -1487,7 +1516,7 @@ pub fn create_traverser<'c, 'm>(
         Some(work) => {
             // Static traverser case.
             build_traverse(obj, capture, work, gc);
-            gc.builder().build_return(None);
+            gc.builder().build_return(None).unwrap();
         }
         None => {
             // Dynamic traverser case.
@@ -1516,13 +1545,14 @@ pub fn create_traverser<'c, 'm>(
                 .map(|(work, bb)| (work_ty.const_int(*work as u64, false), bb.clone()))
                 .collect::<Vec<_>>();
             gc.builder()
-                .build_switch(work, switches.pop().unwrap().1, &switches);
+                .build_switch(work, switches.pop().unwrap().1, &switches)
+                .unwrap();
 
             for (work, work_bb) in work_bbs.iter() {
                 let work = TraverserWorkType(*work);
                 gc.builder().position_at_end(*work_bb);
                 build_traverse(obj.clone(), capture, work, gc);
-                gc.builder().build_return(None);
+                gc.builder().build_return(None).unwrap();
             }
         }
     }
@@ -1588,7 +1618,7 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
 ) -> DIType<'c> {
     let debug_str_ty = ty_to_debug_struct_ty(ty.clone(), gc);
     if ty.is_box(&gc.type_env()) {
-        let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+        let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
         let size_in_bits = gc.target_data.get_bit_size(&ptr_ty);
         let align_in_bits = gc.target_data.get_abi_alignment(&ptr_ty) * 8;
         gc.get_di_builder()

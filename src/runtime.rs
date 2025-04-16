@@ -64,10 +64,9 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: Buil
     let context = gc.context;
     let module = gc.module;
 
-    let i8_type = context.i8_type();
-    let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::from(0));
+    let ptr_type = context.ptr_type(inkwell::AddressSpace::from(0));
 
-    let fn_type = context.void_type().fn_type(&[i8_ptr_type.into()], true);
+    let fn_type = context.void_type().fn_type(&[ptr_type.into()], true);
     module.add_function(RUNTIME_EPRINT, fn_type, None);
 
     return;
@@ -85,13 +84,12 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: Buil
     let module = gc.module;
 
     let i32_type = context.i32_type();
-    let i8_type = context.i8_type();
-    let i8_ptr_type = i8_type.ptr_type(inkwell::AddressSpace::from(0));
+    let ptr_type = context.ptr_type(inkwell::AddressSpace::from(0));
 
     let fn_type = i32_type.fn_type(
         &[
-            i8_ptr_type.into(), /* output buffer */
-            i8_ptr_type.into(), /* format */
+            ptr_type.into(), /* output buffer */
+            ptr_type.into(), /* format */
         ],
         true,
     );
@@ -106,7 +104,7 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
             if let Some(_func) = gc.module.get_function(RUNTIME_SUBTRACT_PTR) {
                 return;
             }
-            let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+            let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
             let fn_ty = gc
                 .context
                 .i64_type()
@@ -132,14 +130,20 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
     let rhs = func.get_nth_param(1).unwrap().into_pointer_value();
     let res = gc
         .builder()
-        .build_ptr_diff(lhs, rhs, "ptr_diff@fixruntime_subtract_ptr");
-    gc.builder().build_return(Some(&res));
+        .build_ptr_diff(
+            gc.context.i8_type(),
+            lhs,
+            rhs,
+            "ptr_diff@fixruntime_subtract_ptr",
+        )
+        .unwrap();
+    gc.builder().build_return(Some(&res)).unwrap();
     return;
 }
 
 fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
-    let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
 
     let func = match mode {
         BuildMode::Declare => {
@@ -171,14 +175,17 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>,
     let off = func.get_nth_param(1).unwrap().into_int_value();
     let ptr = gc
         .builder()
-        .build_ptr_to_int(ptr, i64_ty, "ptr_to_int@fixruntime_ptr_add_offset");
+        .build_ptr_to_int(ptr, i64_ty, "ptr_to_int@fixruntime_ptr_add_offset")
+        .unwrap();
     let ptr = gc
         .builder()
-        .build_int_add(ptr, off, "add@fixruntime_ptr_add_offset");
+        .build_int_add(ptr, off, "add@fixruntime_ptr_add_offset")
+        .unwrap();
     let ptr = gc
         .builder()
-        .build_int_to_ptr(ptr, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset");
-    gc.builder().build_return(Some(&ptr));
+        .build_int_to_ptr(ptr, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset")
+        .unwrap();
+    gc.builder().build_return(Some(&ptr)).unwrap();
     return;
 }
 
@@ -193,15 +200,11 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(
         return;
     }
 
-    let init_flag_ty = pthread_once_init_flag_type(gc.context);
-    let init_fn_ty = gc.context.void_type().fn_type(&[], false);
-    let pthread_once_ty = gc.context.void_type().fn_type(
-        &[
-            init_flag_ty.ptr_type(AddressSpace::from(0)).into(),
-            init_fn_ty.ptr_type(AddressSpace::from(0)).into(),
-        ],
-        false,
-    );
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let pthread_once_ty = gc
+        .context
+        .void_type()
+        .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
     gc.module
         .add_function(RUNTIME_PTHREAD_ONCE, pthread_once_ty, None);
     return;
@@ -242,19 +245,17 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
         .unwrap()
         .as_basic_value_enum()
         .into_pointer_value();
-    let argc = gc.builder().build_load(argc_ptr, "argc").into_int_value();
-    gc.builder().build_return(Some(&argc));
+    let argc = gc
+        .builder()
+        .build_load(argc_gv_ty, argc_ptr, "argc")
+        .unwrap()
+        .into_int_value();
+    gc.builder().build_return(Some(&argc)).unwrap();
 
     return;
 }
 
 fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
-    let argv_gv_ty = gc
-        .context
-        .i8_type()
-        .ptr_type(AddressSpace::from(0))
-        .ptr_type(AddressSpace::from(0));
-
     let func = match mode {
         BuildMode::Declare => {
             if let Some(_func) = gc.module.get_function(RUNTIME_GET_ARGV) {
@@ -263,7 +264,6 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
 
             let fn_ty = gc
                 .context
-                .i8_type()
                 .ptr_type(AddressSpace::from(0))
                 .fn_type(&[gc.context.i64_type().into()], false);
             gc.module.add_function(
@@ -280,8 +280,9 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
     };
 
     // Add GLOBAL_VAR_NAME_ARGV global variable.
-    let argv_gv = gc.module.add_global(argv_gv_ty, None, GLOBAL_VAR_NAME_ARGV);
-    argv_gv.set_initializer(&argv_gv_ty.const_zero());
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let argv_gv = gc.module.add_global(ptr_ty, None, GLOBAL_VAR_NAME_ARGV);
+    argv_gv.set_initializer(&ptr_ty.const_zero());
     argv_gv.set_linkage(Linkage::Internal);
 
     let bb = gc.context.append_basic_block(func, "entry");
@@ -295,22 +296,38 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
         .unwrap()
         .as_basic_value_enum()
         .into_pointer_value();
-    let argv = gc.builder().build_load(argv, "argv").into_pointer_value();
+    let argv = gc
+        .builder()
+        .build_load(ptr_ty, argv, "argv")
+        .unwrap()
+        .into_pointer_value();
 
     // Get argv[idx].
     // First, offset argv by idx * size_of_pointer.
     let ptr_int_ty = gc.context.ptr_sized_int_type(&gc.target_data, None);
-    let argv = gc.builder().build_ptr_to_int(argv, ptr_int_ty, "argv");
-    let idx = gc.builder().build_int_z_extend(idx, ptr_int_ty, "idx");
+    let argv = gc
+        .builder()
+        .build_ptr_to_int(argv, ptr_int_ty, "argv")
+        .unwrap();
+    let idx = gc
+        .builder()
+        .build_int_z_extend(idx, ptr_int_ty, "idx")
+        .unwrap();
     let ptr_size = gc.ptr_size();
     let offset = gc
         .builder()
-        .build_int_mul(idx, ptr_int_ty.const_int(ptr_size, false), "offset");
-    let argv = gc.builder().build_int_add(argv, offset, "argv");
-    let argv = gc.builder().build_int_to_ptr(argv, argv_gv_ty, "argv");
-    // Then, load argv[idx].
-    let argv = gc.builder().build_load(argv, "argv").into_pointer_value();
-    gc.builder().build_return(Some(&argv));
+        .build_int_mul(idx, ptr_int_ty.const_int(ptr_size, false), "offset")
+        .unwrap();
+    let argv = gc.builder().build_int_add(argv, offset, "argv").unwrap();
+    let argv = gc.builder().build_int_to_ptr(argv, ptr_ty, "argv").unwrap();
+
+    // Then, load argv[idx] to get the pointer to the argument string.
+    let argv = gc
+        .builder()
+        .build_load(ptr_ty, argv, "argv")
+        .unwrap()
+        .into_pointer_value();
+    gc.builder().build_return(Some(&argv)).unwrap();
 
     return;
 }

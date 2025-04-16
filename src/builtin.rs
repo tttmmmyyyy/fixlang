@@ -670,7 +670,7 @@ impl InlineLLVMNullPtrLit {
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("nullptr"));
-        let ptr_ty = gc.context.i8_type().ptr_type(AddressSpace::from(0));
+        let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
         let value = ptr_ty.const_null();
         obj.insert_field(gc, 0, value)
     }
@@ -740,11 +740,14 @@ pub fn make_string_from_ptr<'c, 'm>(
     );
     let array = array.insert_field(gc, ARRAY_LEN_IDX, len_with_null_terminator);
     let dst = array.gep_boxed(gc, ARRAY_BUF_IDX);
-    let len = gc.builder().build_int_cast(
-        len_with_null_terminator,
-        gc.context.ptr_sized_int_type(&gc.target_data, None),
-        "len_ptr@make_string_from_ptr",
-    );
+    let len = gc
+        .builder()
+        .build_int_cast(
+            len_with_null_terminator,
+            gc.context.ptr_sized_int_type(&gc.target_data, None),
+            "len_ptr@make_string_from_ptr",
+        )
+        .unwrap();
     gc.builder()
         .build_memcpy(dst, 1, buf_with_null_terminator, 1, len)
         .ok()
@@ -788,6 +791,7 @@ impl InlineLLVMStringLit {
         let string_ptr = gc
             .builder()
             .build_global_string_ptr(&self.string, "string_literal")
+            .unwrap()
             .as_basic_value_enum()
             .into_pointer_value();
         let len_with_null_terminator = gc
@@ -848,8 +852,6 @@ impl InlineLLVMFixBody {
             .unwrap()
             .as_global_value()
             .as_pointer_value();
-        let fixf_funptr =
-            gc.cast_pointer(fixf_funptr, opaque_lambda_function_ptr_type(&gc.context));
         let fixf = fixf.insert_field(gc, CLOSURE_FUNPTR_IDX, fixf_funptr);
         let cap_obj = gc.get_scoped_obj(&self.cap_name);
         let cap_obj_ptr = cap_obj.value;
@@ -930,12 +932,15 @@ impl InlineLLVMCastIntegralBody {
             .into_int_type();
 
         // Perform cast.
-        let to_val = gc.builder().build_int_cast_sign_flag(
-            from_val,
-            to_int,
-            self.is_source_signed,
-            "build_int_cast_sign_flag@cast_between_integral_function",
-        );
+        let to_val = gc
+            .builder()
+            .build_int_cast_sign_flag(
+                from_val,
+                to_int,
+                self.is_source_signed,
+                "build_int_cast_sign_flag@cast_between_integral_function",
+            )
+            .unwrap();
 
         // Return result.
         let obj = create_obj(
@@ -1018,11 +1023,10 @@ impl InlineLLVMCastFloatBody {
             .into_float_type();
 
         // Perform cast.
-        let to_val = gc.builder().build_float_cast(
-            from_val,
-            to_float,
-            "float_cast@cast_between_float_function",
-        );
+        let to_val = gc
+            .builder()
+            .build_float_cast(from_val, to_float, "float_cast@cast_between_float_function")
+            .unwrap();
 
         // Return result.
         let obj = create_obj(
@@ -1113,7 +1117,8 @@ impl InlineLLVMCastIntToFloatBody {
                 to_float,
                 "unsigned_int_to_float@cast_int_to_float_function",
             )
-        };
+        }
+        .unwrap();
 
         // Return result.
         let obj = create_obj(
@@ -1196,17 +1201,21 @@ impl InlineLLVMCastFloatToIntBody {
 
         // Perform cast.
         let to_val = if self.is_signed {
-            gc.builder().build_float_to_signed_int(
-                from_val,
-                to_int,
-                "float_to_signed_int@cast_float_to_int_function",
-            )
+            gc.builder()
+                .build_float_to_signed_int(
+                    from_val,
+                    to_int,
+                    "float_to_signed_int@cast_float_to_int_function",
+                )
+                .unwrap()
         } else {
-            gc.builder().build_float_to_unsigned_int(
-                from_val,
-                to_int,
-                "float_to_unsigned_int@cast_float_to_int_function",
-            )
+            gc.builder()
+                .build_float_to_unsigned_int(
+                    from_val,
+                    to_int,
+                    "float_to_unsigned_int@cast_float_to_int_function",
+                )
+                .unwrap()
         };
 
         // Return result.
@@ -1290,9 +1299,11 @@ impl InlineLLVMShiftBody {
         let to_val = if self.is_left {
             gc.builder()
                 .build_left_shift(val, n, "left_shift@shift_function")
+                .unwrap()
         } else {
             gc.builder()
                 .build_right_shift(val, n, is_signed, "right_shift@shift_function")
+                .unwrap()
         };
 
         // Return result.
@@ -1383,18 +1394,18 @@ impl InlineLLVMBitwiseOperationBody {
 
         // Perform cast.
         let val = match self.op_type {
-            BitOperationType::Xor => {
-                gc.builder()
-                    .build_xor(lhs, rhs, "xor@bitwise_operation_function")
-            }
-            BitOperationType::Or => {
-                gc.builder()
-                    .build_or(lhs, rhs, "or@bitwise_operation_function")
-            }
-            BitOperationType::And => {
-                gc.builder()
-                    .build_and(lhs, rhs, "and@bitwise_operation_function")
-            }
+            BitOperationType::Xor => gc
+                .builder()
+                .build_xor(lhs, rhs, "xor@bitwise_operation_function")
+                .unwrap(),
+            BitOperationType::Or => gc
+                .builder()
+                .build_or(lhs, rhs, "or@bitwise_operation_function")
+                .unwrap(),
+            BitOperationType::And => gc
+                .builder()
+                .build_and(lhs, rhs, "and@bitwise_operation_function")
+                .unwrap(),
         };
 
         // Return result.
@@ -2032,17 +2043,20 @@ fn make_array_unique<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, array: Object<'
     // Jump to the end_bb.
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
     let cloned_array_ptr = cloned_array.value.into_pointer_value();
-    gc.builder().build_unconditional_branch(end_bb);
+    gc.builder().build_unconditional_branch(end_bb).unwrap();
 
     // Implement unique_bb
     gc.builder().position_at_end(unique_bb);
     // Jump to end_bb.
-    gc.builder().build_unconditional_branch(end_bb);
+    gc.builder().build_unconditional_branch(end_bb).unwrap();
 
     // Implement end_bb.
     gc.builder().position_at_end(end_bb);
     // Build phi value of array_ptr.
-    let array_phi = gc.builder().build_phi(arr_ptr.get_type(), "array_phi");
+    let array_phi = gc
+        .builder()
+        .build_phi(arr_ptr.get_type(), "array_phi")
+        .unwrap();
     array_phi.add_incoming(&[
         (&arr_ptr, unique_bb),
         (&cloned_array_ptr, succ_of_shared_bb),
@@ -2331,10 +2345,6 @@ impl InlineLLVMArrayGetPtrBody {
 
         // Get pointer
         let ptr = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        let ptr_ty = ObjectFieldType::Ptr
-            .to_basic_type(gc, vec![])
-            .into_pointer_type();
-        let ptr = gc.cast_pointer(ptr, ptr_ty);
 
         // Release array
         if !gc.is_var_used_later(&self.arr_name) {
@@ -3024,17 +3034,20 @@ fn make_struct_union_unique<'c, 'm>(
 
     let cloned_obj_ptr = cloned_obj.value;
     let succ_of_shared_bb = gc.builder().get_insert_block().unwrap();
-    gc.builder().build_unconditional_branch(end_bb);
+    gc.builder().build_unconditional_branch(end_bb).unwrap();
 
     // Implement unique_bb.
     gc.builder().position_at_end(unique_bb);
     // Jump to end_bb.
-    gc.builder().build_unconditional_branch(end_bb);
+    gc.builder().build_unconditional_branch(end_bb).unwrap();
 
     // Implement end_bb.
     gc.builder().position_at_end(end_bb);
     // Build phi value.
-    let obj_phi = gc.builder().build_phi(obj_ptr.get_type(), "obj_phi");
+    let obj_phi = gc
+        .builder()
+        .build_phi(obj_ptr.get_type(), "obj_phi")
+        .unwrap();
     obj_phi.add_incoming(&[(&obj_ptr, unique_bb), (&cloned_obj_ptr, succ_of_shared_bb)]);
 
     obj = Object::new(obj_phi.as_basic_value(), obj.ty.clone(), gc);
@@ -3352,31 +3365,35 @@ impl InlineLLVMUnionIsBody {
         let tag_value = ObjectFieldType::get_union_tag(gc, &obj);
 
         // Branch and store result to ret_ptr.
-        let is_tag_match = gc.builder().build_int_compare(
-            IntPredicate::EQ,
-            specified_tag_value,
-            tag_value,
-            "is_tag_match",
-        );
+        let is_tag_match = gc
+            .builder()
+            .build_int_compare(
+                IntPredicate::EQ,
+                specified_tag_value,
+                tag_value,
+                "is_tag_match",
+            )
+            .unwrap();
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let match_bb = gc.context.append_basic_block(current_func, "match_bb");
         let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
         let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
         gc.builder()
-            .build_conditional_branch(is_tag_match, match_bb, unmatch_bb);
+            .build_conditional_branch(is_tag_match, match_bb, unmatch_bb)
+            .unwrap();
 
         gc.builder().position_at_end(match_bb);
         let one = gc.context.i8_type().const_int(1 as u64, false);
-        gc.builder().build_unconditional_branch(cont_bb);
+        gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         gc.builder().position_at_end(unmatch_bb);
         let zero = gc.context.i8_type().const_int(0 as u64, false);
-        gc.builder().build_unconditional_branch(cont_bb);
+        gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
-        let phi = gc.builder().build_phi(gc.context.i8_type(), "phi");
+        let phi = gc.builder().build_phi(gc.context.i8_type(), "phi").unwrap();
         phi.add_incoming(&[(&one, match_bb), (&zero, unmatch_bb)]);
         let ret = create_obj(
             make_bool_ty(),
@@ -3446,19 +3463,23 @@ impl InlineLLVMUnionModBody {
         let tag_value = ObjectFieldType::get_union_tag(gc, &obj);
 
         // Branch and store result to ret_ptr.
-        let is_tag_match = gc.builder().build_int_compare(
-            IntPredicate::EQ,
-            specified_tag_value,
-            tag_value,
-            "is_tag_match@union_mod_function",
-        );
+        let is_tag_match = gc
+            .builder()
+            .build_int_compare(
+                IntPredicate::EQ,
+                specified_tag_value,
+                tag_value,
+                "is_tag_match@union_mod_function",
+            )
+            .unwrap();
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let mut match_bb = gc.context.append_basic_block(current_func, "match_bb");
         let mut unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
         let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
         gc.builder()
-            .build_conditional_branch(is_tag_match, match_bb, unmatch_bb);
+            .build_conditional_branch(is_tag_match, match_bb, unmatch_bb)
+            .unwrap();
 
         // Implement match_bb
         gc.builder().position_at_end(match_bb);
@@ -3480,20 +3501,21 @@ impl InlineLLVMUnionModBody {
         let ret_obj = ObjectFieldType::set_union_value(gc, ret_obj, value);
         let match_val = ret_obj.value;
         match_bb = gc.builder().get_insert_block().unwrap();
-        gc.builder().build_unconditional_branch(cont_bb);
+        gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Implement unmatch_bb
         gc.builder().position_at_end(unmatch_bb);
         gc.release(modifier);
         let unmatch_val = obj.value;
         unmatch_bb = gc.builder().get_insert_block().unwrap();
-        gc.builder().build_unconditional_branch(cont_bb);
+        gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
         let phi = gc
             .builder()
-            .build_phi(match_val.get_type(), "phi@union_mod_function");
+            .build_phi(match_val.get_type(), "phi@union_mod_function")
+            .unwrap();
         phi.add_incoming(&[(&match_val, match_bb), (&unmatch_val, unmatch_bb)]);
         Object::new(phi.as_basic_value(), union_ty.clone(), gc)
     }
@@ -3565,7 +3587,6 @@ impl InlineLLVMUndefinedFunctionBody {
         // Get the pointer to the message.
         let str = ObjectFieldType::move_out_struct_field(gc, &msg, 0);
         let c_str = str.gep_boxed(gc, ARRAY_BUF_IDX);
-        let c_str = gc.cast_pointer(c_str, gc.context.i8_type().ptr_type(AddressSpace::from(0)));
 
         // Write it to stderr, and flush.
         gc.call_runtime(RUNTIME_EPRINT, &[c_str.into()]);
@@ -3579,7 +3600,7 @@ impl InlineLLVMUndefinedFunctionBody {
                 .get_undef()
                 .as_basic_value_enum()
         } else {
-            ty.get_struct_type(gc, &vec![])
+            gc.context
                 .ptr_type(AddressSpace::from(0))
                 .get_undef()
                 .as_basic_value_enum()
@@ -3742,17 +3763,17 @@ impl InlineLLVMIsUniqueFunctionBody {
             gc.builder().position_at_end(unique_bb);
             let flag_unique_bb = bool_ty.const_int(1, false);
             // Jump to cont_bb.
-            gc.builder().build_unconditional_branch(cont_bb);
+            gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
             // Implement shared_bb.
             gc.builder().position_at_end(shared_bb);
             let flag_shared_bb = bool_ty.const_int(0, false);
             // Jump to cont_bb.
-            gc.builder().build_unconditional_branch(cont_bb);
+            gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
             // Implement cont_bb.
             gc.builder().position_at_end(cont_bb);
-            let flag = gc.builder().build_phi(bool_ty, "phi@is_unique");
+            let flag = gc.builder().build_phi(bool_ty, "phi@is_unique").unwrap();
             flag.add_incoming(&[(&flag_unique_bb, unique_bb), (&flag_shared_bb, shared_bb)]);
             flag.as_basic_value().into_int_value()
         } else {
@@ -3959,7 +3980,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
             let release_function_ty = gc
                 .context
                 .void_type()
-                .fn_type(&[ptr_to_object_type(gc.context).into()], false);
+                .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
             let release_function = gc.module.add_function(
                 &release_function_name,
                 release_function_ty,
@@ -3976,12 +3997,11 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
             // Release object.
             gc.release(obj);
             // Return.
-            gc.builder().build_return(None);
+            gc.builder().build_return(None).unwrap();
 
             release_function
         };
         let func_ptr = func.as_global_value().as_pointer_value();
-        let func_ptr = gc.cast_pointer(func_ptr, ptr_to_object_type(gc.context));
 
         let ret = create_obj(
             make_ptr_ty(),
@@ -4063,7 +4083,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
             let retain_function_ty = gc
                 .context
                 .void_type()
-                .fn_type(&[ptr_to_object_type(gc.context).into()], false);
+                .fn_type(&[gc.context.ptr_type(AddressSpace::from(0)).into()], false);
             let retain_function = gc.module.add_function(
                 &retain_function_name,
                 retain_function_ty,
@@ -4080,12 +4100,11 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
             // retain object.
             gc.retain(obj);
             // Return.
-            gc.builder().build_return(None);
+            gc.builder().build_return(None).unwrap();
 
             retain_function
         };
         let func_ptr = func.as_global_value().as_pointer_value();
-        let func_ptr = gc.cast_pointer(func_ptr, ptr_to_object_type(gc.context));
 
         let ret = create_obj(
             make_ptr_ty(),
@@ -4186,10 +4205,7 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
 
     // Get pointer
     let ptr = val.gep_boxed(gc, data_field_idx);
-    let ptr_ty = ObjectFieldType::Ptr
-        .to_basic_type(gc, vec![])
-        .into_pointer_type();
-    gc.cast_pointer(ptr, ptr_ty)
+    ptr
 }
 
 pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -4684,16 +4700,20 @@ impl InlineLLVMIntEqBody {
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs_obj.extract_field(gc, 0).into_int_value();
-        let value =
-            gc.builder()
-                .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME);
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8
-                .to_basic_type(gc, vec![])
-                .into_int_type(),
-            "eq",
-        );
+        let value = gc
+            .builder()
+            .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME)
+            .unwrap();
+        let value = gc
+            .builder()
+            .build_int_z_extend(
+                value,
+                ObjectFieldType::I8
+                    .to_basic_type(gc, vec![])
+                    .into_int_type(),
+                "eq",
+            )
+            .unwrap();
         let obj = create_obj(
             make_bool_ty(),
             &vec![],
@@ -4747,22 +4767,33 @@ impl InlineLLVMPtrEqBody {
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_pointer_value();
         let rhs_val = rhs_obj.extract_field(gc, 0).into_pointer_value();
-        let diff = gc
+        // let diff = gc
+        //     .builder()
+        //     .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr")
+        //     .unwrap();
+        // let value = gc
+        //     .builder()
+        //     .build_int_compare(
+        //         IntPredicate::EQ,
+        //         diff,
+        //         diff.get_type().const_zero(),
+        //         EQ_TRAIT_EQ_NAME,
+        //     )
+        //     .unwrap();
+        let value = gc
             .builder()
-            .build_ptr_diff(lhs_val, rhs_val, "ptr_diff@eq_trait_instance_ptr");
-        let value = gc.builder().build_int_compare(
-            IntPredicate::EQ,
-            diff,
-            diff.get_type().const_zero(),
-            EQ_TRAIT_EQ_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8
-                .to_basic_type(gc, vec![])
-                .into_int_type(),
-            "eq_of_int",
-        );
+            .build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME)
+            .unwrap();
+        let value = gc
+            .builder()
+            .build_int_z_extend(
+                value,
+                ObjectFieldType::I8
+                    .to_basic_type(gc, vec![])
+                    .into_int_type(),
+                "eq_of_int",
+            )
+            .unwrap();
         let obj = create_obj(
             make_bool_ty(),
             &vec![],
@@ -4816,19 +4847,25 @@ impl InlineLLVMFloatEqBody {
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs_obj.extract_field(gc, 0).into_float_value();
-        let value = gc.builder().build_float_compare(
-            inkwell::FloatPredicate::OEQ,
-            lhs_val,
-            rhs_val,
-            EQ_TRAIT_EQ_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8
-                .to_basic_type(gc, vec![])
-                .into_int_type(),
-            "eq_of_float",
-        );
+        let value = gc
+            .builder()
+            .build_float_compare(
+                inkwell::FloatPredicate::OEQ,
+                lhs_val,
+                rhs_val,
+                EQ_TRAIT_EQ_NAME,
+            )
+            .unwrap();
+        let value = gc
+            .builder()
+            .build_int_z_extend(
+                value,
+                ObjectFieldType::I8
+                    .to_basic_type(gc, vec![])
+                    .into_int_type(),
+                "eq_of_float",
+            )
+            .unwrap();
         let obj = create_obj(
             make_bool_ty(),
             &vec![],
@@ -4894,23 +4931,29 @@ impl InlineLLVMIntLessThanBody {
 
         let is_singed = lhs_obj.ty.toplevel_tycon().unwrap().is_singned_intger();
 
-        let value = gc.builder().build_int_compare(
-            if is_singed {
-                IntPredicate::SLT
-            } else {
-                IntPredicate::ULT
-            },
-            lhs_val,
-            rhs_val,
-            LESS_THAN_TRAIT_LT_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8
-                .to_basic_type(gc, vec![])
-                .into_int_type(),
-            LESS_THAN_TRAIT_LT_NAME,
-        );
+        let value = gc
+            .builder()
+            .build_int_compare(
+                if is_singed {
+                    IntPredicate::SLT
+                } else {
+                    IntPredicate::ULT
+                },
+                lhs_val,
+                rhs_val,
+                LESS_THAN_TRAIT_LT_NAME,
+            )
+            .unwrap();
+        let value = gc
+            .builder()
+            .build_int_z_extend(
+                value,
+                ObjectFieldType::I8
+                    .to_basic_type(gc, vec![])
+                    .into_int_type(),
+                LESS_THAN_TRAIT_LT_NAME,
+            )
+            .unwrap();
         let obj = create_obj(
             make_bool_ty(),
             &vec![],
@@ -4965,19 +5008,25 @@ impl InlineLLVMFloatLessThanBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        let value = gc.builder().build_float_compare(
-            inkwell::FloatPredicate::OLT,
-            lhs_val,
-            rhs_val,
-            LESS_THAN_TRAIT_LT_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8
-                .to_basic_type(gc, vec![])
-                .into_int_type(),
-            LESS_THAN_TRAIT_LT_NAME,
-        );
+        let value = gc
+            .builder()
+            .build_float_compare(
+                inkwell::FloatPredicate::OLT,
+                lhs_val,
+                rhs_val,
+                LESS_THAN_TRAIT_LT_NAME,
+            )
+            .unwrap();
+        let value = gc
+            .builder()
+            .build_int_z_extend(
+                value,
+                ObjectFieldType::I8
+                    .to_basic_type(gc, vec![])
+                    .into_int_type(),
+                LESS_THAN_TRAIT_LT_NAME,
+            )
+            .unwrap();
         let obj = create_obj(
             make_bool_ty(),
             &vec![],
@@ -5041,23 +5090,29 @@ impl InlineLLVMIntLessThanOrEqBody {
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
-        let value = gc.builder().build_int_compare(
-            if is_singed {
-                IntPredicate::SLE
-            } else {
-                IntPredicate::ULE
-            },
-            lhs_val,
-            rhs_val,
-            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8
-                .to_basic_type(gc, vec![])
-                .into_int_type(),
-            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
-        );
+        let value = gc
+            .builder()
+            .build_int_compare(
+                if is_singed {
+                    IntPredicate::SLE
+                } else {
+                    IntPredicate::ULE
+                },
+                lhs_val,
+                rhs_val,
+                LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+            )
+            .unwrap();
+        let value = gc
+            .builder()
+            .build_int_z_extend(
+                value,
+                ObjectFieldType::I8
+                    .to_basic_type(gc, vec![])
+                    .into_int_type(),
+                LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+            )
+            .unwrap();
         let obj = create_obj(
             make_bool_ty(),
             &vec![],
@@ -5111,19 +5166,25 @@ impl InlineLLVMFloatLessThanOrEqBody {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
-        let value = gc.builder().build_float_compare(
-            inkwell::FloatPredicate::OLE,
-            lhs_val,
-            rhs_val,
-            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
-        );
-        let value = gc.builder().build_int_z_extend(
-            value,
-            ObjectFieldType::I8
-                .to_basic_type(gc, vec![])
-                .into_int_type(),
-            LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
-        );
+        let value = gc
+            .builder()
+            .build_float_compare(
+                inkwell::FloatPredicate::OLE,
+                lhs_val,
+                rhs_val,
+                LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+            )
+            .unwrap();
+        let value = gc
+            .builder()
+            .build_int_z_extend(
+                value,
+                ObjectFieldType::I8
+                    .to_basic_type(gc, vec![])
+                    .into_int_type(),
+                LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
+            )
+            .unwrap();
         let obj = create_obj(
             make_bool_ty(),
             &vec![],
@@ -5188,7 +5249,8 @@ impl InlineLLVMIntAddBody {
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
             .builder()
-            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
+            .build_int_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
+            .unwrap();
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -5244,7 +5306,8 @@ impl InlineLLVMFloatAddBody {
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc
             .builder()
-            .build_float_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME);
+            .build_float_add(lhs_val, rhs_val, ADD_TRAIT_ADD_NAME)
+            .unwrap();
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -5309,7 +5372,8 @@ impl InlineLLVMIntSubBody {
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
             .builder()
-            .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
+            .build_int_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
+            .unwrap();
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -5365,7 +5429,8 @@ impl InlineLLVMFloatSubBody {
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc
             .builder()
-            .build_float_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME);
+            .build_float_sub(lhs_val, rhs_val, SUBTRACT_TRAIT_SUBTRACT_NAME)
+            .unwrap();
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -5430,7 +5495,8 @@ impl InlineLLVMIntMulBody {
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
             .builder()
-            .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
+            .build_int_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
+            .unwrap();
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -5486,7 +5552,8 @@ impl InlineLLVMFloatMulBody {
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc
             .builder()
-            .build_float_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME);
+            .build_float_mul(lhs_val, rhs_val, MULTIPLY_TRAIT_MULTIPLY_NAME)
+            .unwrap();
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -5555,9 +5622,11 @@ impl InlineLLVMIntDivBody {
         let value = if is_singed {
             gc.builder()
                 .build_int_signed_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
+                .unwrap()
         } else {
             gc.builder()
                 .build_int_unsigned_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
+                .unwrap()
         };
         let obj = create_obj(
             lhs.ty.clone(),
@@ -5614,7 +5683,8 @@ impl InlineLLVMFloatDivBody {
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
         let value = gc
             .builder()
-            .build_float_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME);
+            .build_float_div(lhs_val, rhs_val, DIVIDE_TRAIT_DIVIDE_NAME)
+            .unwrap();
         let obj = create_obj(
             lhs.ty.clone(),
             &vec![],
@@ -5683,9 +5753,11 @@ impl InlineLLVMIntRemBody {
         let value = if is_singed {
             gc.builder()
                 .build_int_signed_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
+                .unwrap()
         } else {
             gc.builder()
                 .build_int_unsigned_rem(lhs_val, rhs_val, REMAINDER_TRAIT_REMAINDER_NAME)
+                .unwrap()
         };
         let obj = create_obj(
             lhs.ty.clone(),
@@ -5744,7 +5816,8 @@ impl InlineLLVMIntNegBody {
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
             .builder()
-            .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
+            .build_int_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
+            .unwrap();
         let obj = create_obj(
             rhs.ty.clone(),
             &vec![],
@@ -5793,7 +5866,8 @@ impl InlineLLVMFloatNegBody {
 
         let value = gc
             .builder()
-            .build_float_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME);
+            .build_float_neg(rhs_val, NEGATE_TRAIT_NEGATE_NAME)
+            .unwrap();
         let obj = create_obj(
             rhs.ty.clone(),
             &vec![],
@@ -5854,12 +5928,14 @@ impl InlineLLVMBoolNegBody {
             .to_basic_type(gc, vec![])
             .into_int_type();
         let false_val = bool_ty.const_zero();
-        let value =
-            gc.builder()
-                .build_int_compare(IntPredicate::EQ, rhs_val, false_val, NOT_TRAIT_OP_NAME);
         let value = gc
             .builder()
-            .build_int_z_extend(value, bool_ty, NOT_TRAIT_OP_NAME);
+            .build_int_compare(IntPredicate::EQ, rhs_val, false_val, NOT_TRAIT_OP_NAME)
+            .unwrap();
+        let value = gc
+            .builder()
+            .build_int_z_extend(value, bool_ty, NOT_TRAIT_OP_NAME)
+            .unwrap();
         let obj = create_obj(
             make_bool_ty(),
             &vec![],
