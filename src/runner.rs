@@ -369,19 +369,27 @@ fn optimize_and_verify<'c>(
     target_machine: &TargetMachine,
     config: &Configuration,
 ) {
-    fn run_passes_or_panic(module: &Module, passes: &str, target_machine: &TargetMachine) {
-        if let Err(e) = module.run_passes(passes, target_machine, PassBuilderOptions::create()) {
-            panic_with_err(&format!(
-                "Failed to run passes \"{}\": {}",
-                passes,
-                e.to_string()
-            ));
+    fn run_passes_or_panic(module: &Module, passes: Vec<&str>, target_machine: &TargetMachine) {
+        for pass in passes {
+            if let Err(e) = module.run_passes(pass, target_machine, PassBuilderOptions::create()) {
+                panic_with_err(&format!(
+                    "Failed to run pass \"{}\": {}",
+                    pass,
+                    e.to_string()
+                ));
+            }
         }
     }
 
     // Run optimization
-    run_passes_or_panic(module, "verify", target_machine);
-    let passes = include_str!("llvm_passes.csv");
+    run_passes_or_panic(module, vec!["verify"], target_machine);
+    let passes = include_str!("llvm_passes.txt");
+    // Split into lines.
+    let passes = passes
+        .lines()
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+
     match config.fix_opt_level {
         FixOptimizationLevel::None => {}
         FixOptimizationLevel::Basic => {
@@ -394,7 +402,7 @@ fn optimize_and_verify<'c>(
             run_passes_or_panic(module, passes, target_machine);
         }
     }
-    run_passes_or_panic(module, "verify", target_machine);
+    run_passes_or_panic(module, vec!["verify"], target_machine);
 }
 
 // Build exported c functions.
