@@ -24,29 +24,10 @@ ADDED_PASSES_NUM = 10
 #  strip_symbol_pass (because added by default),
 #  verifier_pass (because added by default),
 PASSES = '''
-aa-eval
-basic-aa
-basiccg
-da
-domfrontier
-domtree
-globals-aa
-instcount
-iv-users
-lazy-value-info
-loops
-memdep
-postdomtree
-regions
-scalar-evolution
-scev-aa
-stack-safety
 adce
 always-inline
 argpromotion
-block-placement
 break-crit-edges
-codegenprepare
 constmerge
 dce
 deadargelim
@@ -59,7 +40,6 @@ indvars
 inline
 instcombine
 aggressive-instcombine
-internalize
 ipsccp
 jump-threading
 lcssa
@@ -72,9 +52,6 @@ loop-simplify
 loop-unroll
 loop-unroll-and-jam
 lower-global-dtors
-lower-atomic
-lower-invoke
-lower-switch
 mem2reg
 memcpyopt
 mergefunc
@@ -88,7 +65,6 @@ sccp
 simplifycfg
 sink
 simple-loop-unswitch
-strip
 strip-dead-prototypes
 tailcallelim
 '''
