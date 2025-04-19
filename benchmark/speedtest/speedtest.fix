@@ -31,11 +31,14 @@ count_element = |elem, arr| (
     )
 );
 
-// Generated many random numbers and sum them up.
-sum_up_randoms : I64 -> U64;
-sum_up_randoms = |n| (
-    let init = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
-    let rng = init_by_array(init);
+// Common random seed
+g_seed : Array U64;
+g_seed = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
+
+// Generate random numbers and sum them up by `loop`.
+sum_by_loop : I64 -> U64;
+sum_by_loop = |n| (
+    let rng = init_by_array(g_seed);
     loop((0, 0_U64, rng), |(i, sum, rng)|
         if n == i { break $ sum };
         let (rng, x) = rng.generate_U64;
@@ -43,18 +46,31 @@ sum_up_randoms = |n| (
     )
 );
 
-// Benchmark for `Iterator::range(0, n).fold(...)`.
-sum_up_by_fold : I64 -> I64;
-sum_up_by_fold = |n| Iterator::range(0, n).fold(0, |i, sum| sum + i);
+// Generate random numbers and sum them up by `fold`.
+sum_up_by_fold : I64 -> U64;
+sum_up_by_fold = |n| (
+    let rng = init_by_array(g_seed);
+    Iterator::range(0, n).fold((rng, 0_U64), |_, (rng, sum)| 
+        let (rng, x) = rng.generate_U64;
+        (rng, sum + x)
+    ).@1
+);
 
-sum_up_by_loop_iter : I64 -> I64;
-sum_up_by_loop_iter = |n| Iterator::range(0, 2*n).loop_iter(0, |i, sum| if i == n { break $ sum }; continue $ sum + i);
+// Generate random numbers and sum them up by `loop_iter`.
+sum_up_by_loop_iter : I64 -> U64;
+sum_up_by_loop_iter = |n| (
+    let rng = init_by_array(g_seed);
+    Iterator::range(0, n).loop_iter((rng, 0_U64), |i, (rng, sum)| 
+        let (rng, x) = rng.generate_U64;
+        continue $ (rng, sum + x)
+    ).@1
+);
 
 main : IO ();
 main = (
-    assert_eq(|_|"count-primes", prime_table(700000).count_element(true), 56543);;
-    assert_eq(|_|"sum-up-randoms", sum_up_randoms(100000), 12468381052418219682_U64);;
-    assert_eq(|_|"sum_up_by_fold", sum_up_by_fold(100000), 4999950000);;
-    assert_eq(|_|"sum_up_by_loop_iter", sum_up_by_loop_iter(100000), 4999950000);;
+    assert_eq(|_|"count_primes", prime_table(700000).count_element(true), 56543);;
+    assert_eq(|_|"sum_by_loop", sum_by_loop(100000), 12468381052418219682_U64);;
+    assert_eq(|_|"sum_up_by_fold", sum_up_by_fold(100000), 12468381052418219682_U64);;
+    assert_eq(|_|"sum_up_by_loop_iter", sum_up_by_loop_iter(100000), 12468381052418219682_U64);;
     pure()
 );
