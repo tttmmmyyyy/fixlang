@@ -24,49 +24,178 @@ ADDED_PASSES_NUM = 10
 #  strip_symbol_pass (because added by default),
 #  verifier_pass (because added by default),
 PASSES = '''
+aa-eval
 adce
+add-discriminators
+aggressive-instcombine
+alignment-from-assumptions
 always-inline
+annotation-remarks
+annotation2metadata
 argpromotion
+assume-builder
+assume-simplify
+attributor
+attributor-cgscc
+bdce
+bounds-checking
 break-crit-edges
+called-value-propagation
+callsite-splitting
+canon-freeze
+canonicalize-aliases
+check-debugify
+chr
+consthoist
 constmerge
+constraint-elimination
+coro-cleanup
+coro-early
+coro-elide
+coro-split
+correlated-propagation
+count-visits
+cross-dso-cfi
 dce
 deadargelim
+declare-to-assign
+dfa-jump-threading
+div-rem-pairs
 dse
+early-cse
+ee-instrument
+elim-avail-extern
+extract-blocks
+fix-irreducible
+flattencfg
+float2int
+forceattrs
 function-attrs
 globaldce
 globalopt
+globalsplit
+guard-widening
 gvn
+gvn-hoist
+gvn-sink
+hardware-loops
+hotcoldsplit
 indvars
+infer-address-spaces
+inferattrs
+inject-tli-mappings
 inline
+inliner-wrapper
+inliner-wrapper-no-mandatory-first
 instcombine
-aggressive-instcombine
-ipsccp
+instcount
+instnamer
+instrorderfile
+instrprof
+instsimplify
+internalize
+irce
+iroutliner
 jump-threading
+kcfi
 lcssa
+libcalls-shrinkwrap
 licm
+lint
+lnicm
+load-store-vectorizer
+loop-bound-split
+loop-data-prefetch
 loop-deletion
+loop-distribute
 loop-extract
+loop-flatten
+loop-fusion
+loop-idiom
+loop-instsimplify
+loop-interchange
+loop-load-elim
+loop-predication
 loop-reduce
+loop-reroll
 loop-rotate
 loop-simplify
+loop-simplifycfg
+loop-sink
 loop-unroll
 loop-unroll-and-jam
+loop-unroll-full
+loop-vectorize
+loop-versioning
+loop-versioning-licm
+lower-constant-intrinsics
+lower-expect
 lower-global-dtors
+lower-guard-intrinsic
+lower-ifunc
+lower-matrix-intrinsics
+lower-widenable-condition
+loweratomic
+lowerinvoke
+lowerswitch
+lowertypetests
+make-guards-explicit
 mem2reg
 memcpyopt
 mergefunc
+mergeicmps
 mergereturn
+metarenamer
+mldst-motion
+module-inline
+move-auto-init
+name-anon-globals
+nary-reassociate
+newgvn
+no-op-cgscc
+no-op-function
+no-op-loop
+no-op-loopnest
+no-op-module
+pa-eval
 partial-inliner
+partially-inline-libcalls
+place-safepoints
+poison-checking
+pseudo-probe
+pseudo-probe-update
 reassociate
-rel-lookup-table-converter
+recompute-globalsaa
+redundant-dbg-inst-elim
 reg2mem
-sroa
+rel-lookup-table-converter
+rewrite-statepoints-for-gc
+rewrite-symbols
+rpo-function-attrs
+sancov-module
+sanmd-module
+scalarize-masked-mem-intrin
+scalarizer
+scc-oz-module-inliner
 sccp
+separate-const-offset-from-gep
+simple-loop-unswitch
 simplifycfg
 sink
-simple-loop-unswitch
+slp-vectorizer
+slsr
+speculative-execution
+sroa
 strip-dead-prototypes
+structurizecfg
+synthetic-counts-propagation
 tailcallelim
+tlshoist
+transform-warning
+typepromotion
+unify-loop-exits
+vector-combine
+wholeprogramdevirt
 '''
 
 
@@ -124,7 +253,9 @@ def run_benchmark(timeout=10):
             return None
         else:
             # Split the output by comma and take the second element
-            return int(cp.stdout.strip().split(',')[1])
+            costs = cp.stdout.strip().split(',')
+            print('Benchmark result:', costs)
+            return int(float(costs[1]) * 0.68 + float(costs[0]))
 
     except subprocess.TimeoutExpired:
         return None
@@ -230,7 +361,7 @@ def optimize():
         # print current optimum
         print('Current optimum passes:')
         print_passes(optimum_passes)
-        print('Current optimum time: {}'.format(optimum_time))
+        print('Current optimum cost: {}'.format(optimum_time))
 
 
 if __name__ == '__main__':
