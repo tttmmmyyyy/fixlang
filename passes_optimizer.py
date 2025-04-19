@@ -19,10 +19,7 @@ ADDED_PASSES_NUM = 10
 # Can be found in: "opt --print-passes"
 # See also: https://gist.github.com/gingerBill/d889ae03d429653a4a9081ad6dc2a6c3
 # Exclude:
-#  scalar_repl_aggregates_pass_with_threshold (because requires parameter),
-#  internalize_pass (because requires parameter, and breaks program),
-#  strip_symbol_pass (because added by default),
-#  verifier_pass (because added by default),
+# attributor, attributor-cgscc: may breaks the program
 PASSES = '''
 aa-eval
 adce
