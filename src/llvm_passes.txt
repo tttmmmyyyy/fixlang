@@ -26,4 +26,4 @@ pseudo-probe
 early-cse
 loop-unroll
 correlated-propagation
-dce
+globalopt
