@@ -4,9 +4,9 @@
 - [Tutorial](#tutorial)
   - [Set up the tools](#set-up-the-tools)
     - [Fix compiler](#fix-compiler)
+      - [Use pre-built binary](#use-pre-built-binary)
       - [Bulid from source](#bulid-from-source)
       - [Use Docker image](#use-docker-image)
-      - [Use pre-built binary](#use-pre-built-binary)
     - [(Optional) VScode extensions](#optional-vscode-extensions)
   - [Run the first Fix program](#run-the-first-fix-program)
   - [Modules](#modules)
@@ -92,27 +92,25 @@
 
 Currently, Fix compiler is supported on macOS / Linux / Windows (via WSL). You can prepare the compiler one of the following ways:
 
+#### Use pre-built binary
+
+You can download pre-built compiler binary from [Releases](https://github.com/tttmmmyyyy/fixlang/releases/).
+
 #### Bulid from source
 
 Fix compiler is written in Rust. Thanks to Cargo, it is relatively easy to build the compiler from source.
 
 1. Install [Rust](https://www.rust-lang.org/tools/install).
-2. Install LLVM 12.0.x. 
+2. Install LLVM 17.0.x.
   - In Linux / WSL, you can download prebuilt binary of LLVM from [LLVM Download Page](https://releases.llvm.org/download.html).
-  - In macOS, you can get LLVM by `brew install llvm@12`.
-3. Set LLVM_SYS_120_PREFIX variable to the directory to which LLVM is installed.
+  - In macOS, you can get LLVM by `brew install llvm@17`.
+3. Set LLVM_SYS_170_PREFIX variable to the directory to which LLVM is installed.
 4. `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
 5. `cargo install --locked --path .`. Then the command `fix` will be installed to `~/.cargo/bin`.
 
 #### Use Docker image
 
 Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker.com/r/pt9999/fixlang) is available! 
-
-#### Use pre-built binary
-
-You can download pre-built compiler binary from [Releases](https://github.com/tttmmmyyyy/fixlang/releases/).
-
-NOTE: Since Fix is under active development, features described in this tutorial may not be available in the pre-built binary.
 
 ### (Optional) VScode extensions
 
