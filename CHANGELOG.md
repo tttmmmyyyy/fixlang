@@ -10,6 +10,7 @@
 
 ### Changed
 - Update LLVM to 17.0.x.
+- Improve language server protocol support.
 - Now `fix docs` command skips generating document for private values (i.e., values whose names start with an underscore). If you want to generate document for them, use `--with-private` option.
 
 ### Fixed
