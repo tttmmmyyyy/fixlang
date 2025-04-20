@@ -43,7 +43,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu, 
-              image: ubuntu-20.04, 
+              image: ubuntu-24.04, 
               target: x86_64-unknown-linux-gnu, 
               use-cross: false, 
               llvm-url: "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz", 
