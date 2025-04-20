@@ -32,8 +32,6 @@ annotation2metadata
 argpromotion
 assume-builder
 assume-simplify
-attributor
-attributor-cgscc
 bdce
 bounds-checking
 break-crit-edges
