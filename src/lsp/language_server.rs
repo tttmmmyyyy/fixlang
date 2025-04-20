@@ -24,6 +24,7 @@ use lsp_types::{
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
+use std::mem;
 use std::path::Path;
 use std::{
     fs::File,
@@ -1093,9 +1094,10 @@ fn diagnostics_thread(req_recv: Receiver<DiagnosticsMessage>, res_send: Sender<D
 
         // Send the result to the main thread and language clinent.
         let errs = match res {
-            Ok(res) => {
+            Ok(mut res) => {
+                let errs = mem::replace(&mut res.prgoram.deferred_errors, Errors::empty());
                 res_send.send(res).unwrap();
-                Errors::empty()
+                errs
             }
             Err(errs) => errs,
         };

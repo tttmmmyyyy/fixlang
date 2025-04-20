@@ -521,6 +521,11 @@ pub struct Program {
 
     /* Dependency information */
     pub modules: Vec<ModuleInfo>,
+
+    /* Diagnostic */
+    // Deferred errors.
+    // Errors that should be displayed in the diagnostic information.
+    pub deferred_errors: Errors,
 }
 
 impl Program {
@@ -566,6 +571,7 @@ impl Program {
             modules: Default::default(),
             entry_io_value: None,
             export_statements: vec![],
+            deferred_errors: Errors::empty(),
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
             mod_info.name.clone(),

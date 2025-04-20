@@ -508,6 +508,14 @@ impl Configuration {
         }
         Ok(())
     }
+
+    #[allow(dead_code)]
+    pub fn is_diagnostics_mode(&self) -> bool {
+        match &self.subcommand {
+            SubCommand::Diagnostics(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

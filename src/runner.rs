@@ -144,7 +144,9 @@ fn build_object_files<'c>(
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
         let _sw = StopWatch::new("typecheck", config.show_build_times);
         let modules = program.modules_from_files(&diag_config.files);
-        program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules)?;
+        let mut errors = Errors::empty();
+        errors.eat_err(program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules));
+        program.deferred_errors.append(errors);
         return Ok(BuildObjFilesResult {
             obj_paths: vec![],
             program: Some(program),
@@ -522,30 +524,40 @@ where
 
 // Load all source files specified in the configuration, link them, and return the resulting `Program`.
 pub fn load_source_files(config: &mut Configuration) -> Result<Program, Errors> {
-    // Load all source files.
+    // Create `Std` module.
+    let mut program = make_std_mod(config)?;
+
+    // Parse all source files.
     let mut modules = vec![];
     let mut errors = Errors::empty();
-
     for file_path in &config.source_files {
         let res = parse_file_path(file_path.clone(), config);
-        errors.eat_err_or(res, |prog| modules.push(prog));
+        errors.eat_err_or(res, |mod_| modules.push(mod_));
     }
 
-    // If an error occurres in parsing, return the error.
-    errors.to_result()?;
-
-    // Create `Std` module.
-    let mut target_mod = make_std_mod(config)?;
+    // If an error occurres in parsing,
+    if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
+        // In eny parsing error occurres in diagnostics mode, delay the error and remove the root project from modules.
+        // In other words, in the following diagnostic process, only the dependent projects are targeted.
+        // This allows us to give the language server the information it needs for code completion, even if there is a parse error in the root project.
+        if errors.has_error() {
+            modules.retain(|mod_| mod_.modules_from_files(&diag_config.files).is_empty());
+        }
+        program.deferred_errors.append(errors);
+    } else {
+        // In usual compilation, raise the error.
+        errors.to_result()?;
+    }
 
     // Link all modules.
     for mod_ in modules {
-        target_mod.link(mod_, false)?; // If an error occurres in linking, return the error.
+        program.link(mod_, false)?; // If an error occurres in linking, return the error.
     }
 
     // Resolve imports.
-    target_mod.check_imports()?;
+    program.check_imports()?;
 
-    Ok(target_mod)
+    Ok(program)
 }
 
 // Run the program specified in the configuration, and return the exit code.
