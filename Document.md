@@ -102,10 +102,10 @@ Fix compiler is written in Rust. Thanks to Cargo, it is relatively easy to build
 
 1. Install [Rust](https://www.rust-lang.org/tools/install).
 2. Install LLVM 17.0.x.
-  - In Linux / WSL, you can download prebuilt binary of LLVM from [LLVM Download Page](https://releases.llvm.org/download.html).
-  - In macOS, you can get LLVM by `brew install llvm@17`.
+- In Linux / WSL, you can download prebuilt binary of LLVM from [LLVM Download Page](https://releases.llvm.org/download.html).
+- In macOS, you can get LLVM by `brew install llvm@17`.
 3. Set LLVM_SYS_170_PREFIX variable to the directory to which LLVM is installed.
-  - If you installed LLVM by `brew`, you can set it by `export LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)`. 
+- If you installed LLVM by `brew`, you can set it by `export LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)`. 
 4. `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
 5. `cargo install --locked --path .`. Then the command `fix` will be installed to `~/.cargo/bin`.
 
