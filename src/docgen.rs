@@ -63,13 +63,136 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     Ok(())
 }
 
+/*
+#[m] {title}
+
+{paragraph[0]}
+...
+{pragraph[n-1]}
+
+#[m+1] {subsection[0]}
+...
+#[m+1] {subsection[n-1]}
+*/
 struct MarkdownSection {
+    // The title of the section.
+    // If empty, it indicates that there is no heading line.
     title: String,
     paragraphs: Vec<String>,
     subsections: Vec<MarkdownSection>,
 }
 
 impl MarkdownSection {
+    // Parse the text split by lines.
+    //
+    // Parsing ends when a heading line of the same level as itself is found.
+    //
+    // Returns the parsed result and the remaining text.
+    pub fn parse(lines: Vec<&str>) -> (Self, Vec<&str>) {
+        // Utility function
+        fn append_line(paragraph: &mut String, line: &str) {
+            if !paragraph.is_empty() {
+                *paragraph += "\n";
+            }
+            *paragraph += &line;
+        }
+
+        // If it starts with a heading line of level m, treat it as the title. Otherwise, the title is empty and level m is 0.
+        // The following lines are treated as paragraphs separated by empty lines.
+        // If a heading line of level m+1 or higher is found, treat it as a child section.
+        // If a heading line of level m or lower is found, terminate.
+        let mut ret = Self::new("".to_string());
+        let mut level = 0;
+        let mut line_it = lines.into_iter().peekable();
+
+        // Ignore the leading empty lines
+        while let Some(line) = line_it.peek() {
+            if !line.trim().is_empty() {
+                break;
+            }
+            line_it.next();
+        }
+
+        // If the first non-empty line found is a heading line, treat it as the title.
+        if let Some(line) = line_it.peek() {
+            if line.starts_with('#') {
+                level = line.chars().take_while(|&c| c == '#').count();
+                ret.title = line.trim_start_matches('#').trim().to_string();
+                line_it.next();
+            }
+        }
+
+        // Add paragraphs until a heading line is found.
+        let mut paragraph = String::new();
+        let mut in_code_block = false;
+        while let Some(line) = line_it.peek() {
+            // If the line starts with "```", toggle the code block state.
+            if line.trim().starts_with("```") {
+                in_code_block = !in_code_block;
+                append_line(&mut paragraph, line);
+                line_it.next();
+                continue;
+            }
+
+            // If in a code block, add the line to the paragraph.
+            if in_code_block {
+                append_line(&mut paragraph, line);
+                line_it.next();
+                continue;
+            }
+
+            // If a heading line is found, terminate the addition of paragraphs.
+            if line.starts_with('#') {
+                break;
+            }
+
+            // If an empty line is found, add the paragraph.
+            if line.trim().is_empty() {
+                ret.add_paragraph(std::mem::replace(&mut paragraph, String::new()).to_string());
+                line_it.next();
+                continue;
+            }
+
+            // Otherwise, add the line to the paragraph.
+            append_line(&mut paragraph, line);
+            line_it.next();
+        }
+        // Add the last paragraph.
+        ret.add_paragraph(std::mem::replace(&mut paragraph, String::new()).to_string());
+
+        // Parse the sub-sections.
+        while let Some(line) = line_it.peek() {
+            // If a heading line is found, terminate the addition of paragraphs.
+            if line.starts_with('#') {
+                // If a heading line of a level shallower than the whole is found, terminate.
+                let sub_level = line.chars().take_while(|&c| c == '#').count();
+                if sub_level <= level {
+                    break;
+                }
+
+                // Add a sub-section.
+                let (subsect, left_lines) = MarkdownSection::parse(line_it.collect());
+                ret.add_subsection(subsect);
+                line_it = left_lines.into_iter().peekable();
+            }
+        }
+
+        (ret, line_it.collect())
+    }
+
+    fn parse_many(mut lines: Vec<&str>) -> Vec<Self> {
+        let mut ret = vec![];
+        loop {
+            if lines.is_empty() {
+                break;
+            }
+            let (section, left_lines) = MarkdownSection::parse(lines);
+            lines = left_lines;
+            ret.push(section);
+        }
+        ret
+    }
+
     fn new(title: String) -> Self {
         Self {
             title,
@@ -93,19 +216,42 @@ impl MarkdownSection {
         self.subsections.extend(sections);
     }
 
+    // If `other` has no title, add `other`'s paragraphs and subsections to `self`.
+    // If `other` has a title, add it as a subsection of `self`.
+    fn concatenate(&mut self, other: MarkdownSection) {
+        if other.title.is_empty() {
+            self.paragraphs.extend(other.paragraphs);
+            self.subsections.extend(other.subsections);
+        } else {
+            self.add_subsection(other);
+        }
+    }
+
+    fn concatenate_many(&mut self, others: Vec<MarkdownSection>) {
+        for other in others {
+            self.concatenate(other);
+        }
+    }
+
     fn format(&self, section_level: usize, output: &mut String) {
-        *output += &format!("{} {}", "#".repeat(section_level + 1), self.title);
+        if !self.title.is_empty() {
+            *output += &format!("{} {}", "#".repeat(section_level + 1), self.title);
+        }
 
         for paragraph in self.paragraphs.iter() {
             if paragraph.is_empty() {
                 continue;
             }
-            *output += "\n\n";
+            if !output.is_empty() {
+                *output += "\n\n";
+            }
             *output += paragraph;
         }
 
         for subsection in self.subsections.iter() {
-            *output += "\n\n";
+            if !output.is_empty() {
+                *output += "\n\n";
+            }
             subsection.format(section_level + 1, output);
         }
     }
@@ -191,8 +337,8 @@ fn write_module(
 
     if let Some(mod_info) = program.modules.iter().find(|mi| mi.name == *mod_name) {
         let docstring = mod_info.source.get_document().ok().unwrap_or_default();
-        let docstring = docstring.trim();
-        doc.add_paragraph(docstring.to_string());
+        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        doc.concatenate_many(docstring);
     }
 
     {
@@ -359,13 +505,13 @@ fn type_entries(
             def_rhs,
         );
         doc.add_paragraph(defined_as);
-        doc.add_paragraph(
-            ty_info
-                .get_document()
-                .unwrap_or_default()
-                .trim()
-                .to_string(),
-        );
+        let docstring = ty_info
+            .get_document()
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        doc.concatenate_many(docstring);
 
         if ty_info.variant == TyConVariant::Struct {
             for field in ty_info.fields.iter() {
@@ -405,14 +551,14 @@ fn type_entries(
         );
         doc.add_paragraph(defined_as);
 
-        let content = &ty_info
+        let docstring = &ty_info
             .source
             .as_ref()
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let content = content.trim();
-        doc.add_paragraph(content.to_string());
+        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        doc.concatenate_many(docstring);
 
         let entry = Entry {
             name: name.clone(),
@@ -439,9 +585,9 @@ fn field_subsection(
         field.syn_ty.as_ref().unwrap().to_string()
     ));
     if let Some(src) = &field.source {
-        let doc = src.get_document()?;
-        let doc = doc.trim().to_string();
-        field_sec.add_paragraph(doc);
+        let docstring = src.get_document()?;
+        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        field_sec.concatenate_many(docstring);
     }
     Ok(field_sec)
 }
@@ -490,8 +636,8 @@ fn trait_entries(
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let docstring = docstring.trim();
-        doc.add_paragraph(docstring.to_string());
+        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        doc.concatenate_many(docstring);
 
         for (assoc_ty_name, assoc_ty_defn) in &info.assoc_types {
             let mut params = vec![info.type_var.name.clone()];
@@ -514,8 +660,8 @@ fn trait_entries(
                 .map(|src| src.get_document())
                 .transpose()?
                 .unwrap_or_default();
-            let docstring = docstring.trim();
-            subsection.add_paragraph(docstring.to_string());
+            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            subsection.concatenate_many(docstring);
             doc.add_subsection(subsection);
         }
         for method in &info.methods {
@@ -523,7 +669,8 @@ fn trait_entries(
             let mut subsection = MarkdownSection::new(title);
             subsection.add_paragraph(format!("Type: `{}`", method.qual_ty.to_string()));
             let docstring = docstring_from_opt_span(&method.source)?;
-            subsection.add_paragraph(docstring);
+            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            subsection.concatenate_many(docstring);
             doc.add_subsection(subsection);
         }
 
@@ -555,7 +702,9 @@ fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, 
             let title = format!("impl `{}`", impl_.qual_pred.to_string());
             let mut doc = MarkdownSection::new(title);
 
-            doc.add_paragraph(docstring_from_opt_span(&impl_.source)?);
+            let docstring = docstring_from_opt_span(&impl_.source)?;
+            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            doc.concatenate_many(docstring);
 
             let entry = Entry {
                 name: FullName::from_strs(&[], ""),
@@ -599,7 +748,9 @@ fn value_entries(
             "Type: `{}`",
             gv.syn_scm.as_ref().unwrap().to_string()
         ));
-        doc.add_paragraph(gv.get_document().unwrap_or_default().trim().to_string());
+        let docstring = gv.get_document().unwrap_or_default();
+        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        doc.concatenate_many(docstring);
 
         let entry = Entry {
             name: name.clone(),
