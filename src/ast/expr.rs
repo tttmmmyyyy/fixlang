@@ -24,8 +24,6 @@ pub struct ExprNode {
     pub param_src: Option<Span>,
     pub app_order: AppSourceCodeOrderType,
     pub ty: Option<Arc<TypeNode>>,
-    // When this expression is a function, this field contains indices of parameters which are released exactly once by calling this function (if known).
-    pub released_params_indices: Option<Vec<usize>>,
 }
 
 impl ExprNode {
@@ -38,7 +36,6 @@ impl ExprNode {
             param_src: self.param_src.clone(),
             app_order: self.app_order.clone(),
             ty: self.ty.clone(),
-            released_params_indices: self.released_params_indices.clone(),
         }
     }
 
@@ -51,7 +48,6 @@ impl ExprNode {
             param_src: self.param_src.clone(),
             app_order: self.app_order.clone(),
             ty: self.ty.clone(),
-            released_params_indices: self.released_params_indices.clone(),
         }
     }
 
@@ -1077,7 +1073,6 @@ impl Expr {
             param_src,
             app_order: AppSourceCodeOrderType::FX,
             ty: None,
-            released_params_indices: None,
         })
     }
 

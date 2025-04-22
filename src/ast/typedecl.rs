@@ -3,7 +3,7 @@ use std::sync::Arc;
 use misc::{Map, Set};
 use name::{FullName, Name};
 
-use crate::{dependency_resolver::resolve_dependency, error::Errors};
+use crate::error::Errors;
 
 use super::*;
 
