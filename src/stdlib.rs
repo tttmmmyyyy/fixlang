@@ -357,31 +357,31 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_left"),
             shift_function(int_ty.clone(), true),
             None,
-            Some("`v.shift_left(w)` shifts `v` to left by `w` bits.".to_string()),
+            Some(include_str!("./docs/std_shift_left.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_right"),
             shift_function(int_ty.clone(), false),
             None,
-            Some("`v.shift_right(w)` shifts `v` to right by `w` bits.".to_string()),
+            Some(include_str!("./docs/std_shift_right.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_xor"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Xor),
             None,
-            Some("Calculates bitwise XOR of two values.".to_string()),
+            Some(include_str!("./docs/std_bit_xor.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_and"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::And),
             None,
-            Some("Calculates bitwise AND of two values.".to_string()),
+            Some(include_str!("./docs/std_bit_and.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_or"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Or),
             None,
-            Some("Calculates bitwise OR of two values.".to_string()),
+            Some(include_str!("./docs/std_bit_or.md").to_string()),
         ));
     }
 
@@ -392,12 +392,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("./docs/std_fix.md").to_string()),
     ));
-    // errors.eat_err(fix_module.add_global_value(
-    //     FullName::from_strs(&[STD_NAME], "loop"),
-    //     state_loop(),
-    //     None,
-    //     Some(include_str!("./docs/std_loop.md").to_string()),
-    // ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),

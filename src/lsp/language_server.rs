@@ -1,5 +1,6 @@
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
+use crate::constants::chars_allowed_in_identifiers;
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::typecheckcache::{self, SharedTypeCheckCache};
@@ -1021,20 +1022,43 @@ fn parameters_of_global_value(full_name: &FullName, program: &Program) -> Option
     for paragraph in &param_section.paragraphs {
         for line in paragraph.lines() {
             if line.starts_with("- ") || line.starts_with("* ") {
-                // Split the line into words.
-                let words = line.split_whitespace().collect::<Vec<_>>();
-                if words.len() < 2 {
+                // Find the first backquoted sequence of characters.
+                let mut quoted_str = String::new();
+                let mut in_backquote = false;
+                for c in line.chars() {
+                    if c == '`' {
+                        if in_backquote {
+                            in_backquote = false;
+                            break;
+                        } else {
+                            in_backquote = true;
+                            continue;
+                        }
+                    } else if in_backquote {
+                        quoted_str.push(c);
+                    }
+                }
+                // If the line ends in backquote, then skip it.
+                if in_backquote {
                     continue;
                 }
-                // The first word is `-` or `*`, and the second word is the parameter name.
-                let param = words[1];
 
-                // If the parameter name is quoted by "`", remove the "`".
-                let param = if param.starts_with('`') && param.ends_with('`') {
-                    &param[1..param.len() - 1]
-                } else {
-                    param
-                };
+                // Find the first continuous sequence of characters that are allowed in identifiers.
+                let name_chars = chars_allowed_in_identifiers();
+                let mut param = String::new();
+                for c in quoted_str.chars() {
+                    if name_chars.contains(c) {
+                        param.push(c);
+                    } else if !param.is_empty() {
+                        break;
+                    }
+                }
+
+                // If the parameter is empty, skip it.
+                if param.is_empty() {
+                    continue;
+                }
+
                 params.push(param.to_string());
             }
         }

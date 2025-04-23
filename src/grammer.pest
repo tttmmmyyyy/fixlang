@@ -15,6 +15,8 @@ double_colon = { "::" }
 
 // Strings that can be used as names of values, fields or variants.
 // - "@" is used for getter function ("@x" for getter of field x)
+// 
+// If you change this, please also update `chars_allowed_in_identifiers` in `constants.rs`.
 name_head = _{ ASCII_ALPHA_LOWER | "_" | "@" }
 name_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 name = { !keywords ~ (name_head ~ name_char*) }

@@ -2013,8 +2013,8 @@ To do this, write as follows:
 
 ```
 // # Parameters
-// * x - the first argument
-// * y - the second argument
+// * `x` - the first argument
+// * `y` - the second argument
 foo : I64 -> I64 -> I64 -> I64;
 ```
 
@@ -2023,18 +2023,11 @@ Then, when you complete the function name `foo`, the language server will insert
 If `foo` is completed after a dot, e.g., `y.foo`, it will be inserted as `y.foo(x)`.
 
 Here, we explain the specification of the documentation comment in more detail.
-The language server interprets the documentation comment as a Markdown format, searches list items in the "Parameters" section, and extracts the first word of each list item as a parameter name.
-You can also enclose the parameter name in backquotes ("`").
-As an example, the following code also specifies `x` and `y` as parameter names.
 
-```
-// `foo` is a function with two arguments which returns a function.
-// 
-// # Parameters
-// * x - the first argument
-// - `y` the second argument
-foo : I64 -> I64 -> I64 -> I64;
-```
+- The language server interprets the documentation comment as a Markdown, and searches the "Parameters" section of level 1 or 2.
+- If found, it extracts parameter names from all lists, i.e., lines starting with `* ` or `- `.
+- The parameter names should be enclosed in backquotes ("`").
+- You can contain type annotations in the backquotes, e.g., `x : I64`, which will be ignored by the language server.
 
 ## Debugging
 

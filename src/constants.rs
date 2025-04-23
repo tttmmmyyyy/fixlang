@@ -197,3 +197,13 @@ pub const GLOBAL_VAR_NAME_ARGV: &str = "fixruntime_argv";
 
 pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE: usize = 128;
 pub const DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR: &str = "128";
+
+pub fn chars_allowed_in_identifiers() -> String {
+    // If you add a new character, please also update `name_char` in `grammar.pest`.
+    let mut chars = String::new();
+    chars.push_str("abcdefghijklmnopqrstuvwxyz");
+    chars.push_str("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    chars.push_str("0123456789");
+    chars.push_str("_@");
+    chars
+}
