@@ -81,6 +81,7 @@
   - [Configuration file](#configuration-file)
   - [Generating documentation](#generating-documentation)
   - [Language Server Protocol](#language-server-protocol)
+    - [Parameters in the documentation comment as a hint to the language server](#parameters-in-the-documentation-comment-as-a-hint-to-the-language-server)
   - [Debugging](#debugging)
 - [Other documents](#other-documents)
 
@@ -1986,6 +1987,54 @@ Each time you save a file, the language server will attempt to diagnose the Fix 
 The information obtained in the latest successful diagnostics is used to comletion, hover or go-to-definition, etc.
 So to update the information, you need to write correct Fix code and save the file. 
 [`Std::undefined`](/std_doc/Std.md#undefined-----a) will be useful to do so.
+
+### Parameters in the documentation comment as a hint to the language server
+
+The language server can provide better features if it knows the parameter list of a function.
+For example, when you complete the function name `foo` which has parameters `x` and `y`, it can insert placeholder arguments like `foo(x, y)`.
+
+However, since Fix is a functional programming language, it is ambiguous what the parameter list of a function is, as shown in the following example:
+
+```
+foo : I64 -> I64 -> I64 -> I64;
+foo = |x, y| (
+    if x == 1 {
+        |z| x + y + z
+    } else {
+        |k| (x + y) * k
+    }
+);
+```
+
+The parameter list of this function is `x`, `y`, `z` or `x`, `y`, `k`?
+
+To address this, you can specify the parameter list in the "Parameters" section of the documentation comment of a function.
+To do this, write as follows:
+
+```
+// # Parameters
+// * x - the first argument
+// * y - the second argument
+foo : I64 -> I64 -> I64 -> I64;
+```
+
+This comment indicates that `foo` is a function with two arguments `x` and `y` in typical cases.
+Then, when you complete the function name `foo`, the language server will insert a text `foo(x, y)`.
+If `foo` is completed after a dot, e.g., `y.foo`, it will be inserted as `y.foo(x)`.
+
+Here, we explain the specification of the documentation comment in more detail.
+The language server interprets the documentation comment as a Markdown format, searches list items in the "Parameters" section, and extracts the first word of each list item as a parameter name.
+You can also enclose the parameter name in backquotes ("`").
+As an example, the following code also specifies `x` and `y` as parameter names.
+
+```
+// `foo` is a function with two arguments which returns a function.
+// 
+// # Parameters
+// * x - the first argument
+// - `y` the second argument
+foo : I64 -> I64 -> I64 -> I64;
+```
 
 ## Debugging
 
