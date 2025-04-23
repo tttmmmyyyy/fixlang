@@ -81,7 +81,7 @@
   - [Configuration file](#configuration-file)
   - [Generating documentation](#generating-documentation)
   - [Language Server Protocol](#language-server-protocol)
-    - [Parameters in the documentation comment as a hint to the language server](#parameters-in-the-documentation-comment-as-a-hint-to-the-language-server)
+    - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
   - [Debugging](#debugging)
 - [Other documents](#other-documents)
 
@@ -1988,7 +1988,7 @@ The information obtained in the latest successful diagnostics is used to comleti
 So to update the information, you need to write correct Fix code and save the file. 
 [`Std::undefined`](/std_doc/Std.md#undefined-----a) will be useful to do so.
 
-### Parameters in the documentation comment as a hint to the language server
+### Specifying parameter list in the documentation comment as a hint to the language server
 
 The language server can provide better features if it knows the parameter list of a function.
 For example, when you complete the function name `foo` which has parameters `x` and `y`, it can insert placeholder arguments like `foo(x, y)`.
