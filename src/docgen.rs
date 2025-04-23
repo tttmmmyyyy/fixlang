@@ -74,12 +74,12 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
 ...
 #[m+1] {subsection[n-1]}
 */
-struct MarkdownSection {
+pub struct MarkdownSection {
     // The title of the section.
     // If empty, it indicates that there is no heading line.
-    title: String,
-    paragraphs: Vec<String>,
-    subsections: Vec<MarkdownSection>,
+    pub title: String,
+    pub paragraphs: Vec<String>,
+    pub subsections: Vec<MarkdownSection>,
 }
 
 impl MarkdownSection {
@@ -180,7 +180,7 @@ impl MarkdownSection {
         (ret, line_it.collect())
     }
 
-    fn parse_many(mut lines: Vec<&str>) -> Vec<Self> {
+    pub fn parse_many(mut lines: Vec<&str>) -> Vec<Self> {
         let mut ret = vec![];
         loop {
             if lines.is_empty() {
@@ -193,7 +193,7 @@ impl MarkdownSection {
         ret
     }
 
-    fn new(title: String) -> Self {
+    pub fn new(title: String) -> Self {
         Self {
             title,
             paragraphs: vec![],
@@ -218,7 +218,7 @@ impl MarkdownSection {
 
     // If `other` has no title, add `other`'s paragraphs and subsections to `self`.
     // If `other` has a title, add it as a subsection of `self`.
-    fn concatenate(&mut self, other: MarkdownSection) {
+    pub fn concatenate(&mut self, other: MarkdownSection) {
         if other.title.is_empty() {
             self.paragraphs.extend(other.paragraphs);
             self.subsections.extend(other.subsections);
@@ -227,7 +227,7 @@ impl MarkdownSection {
         }
     }
 
-    fn concatenate_many(&mut self, others: Vec<MarkdownSection>) {
+    pub fn concatenate_many(&mut self, others: Vec<MarkdownSection>) {
         for other in others {
             self.concatenate(other);
         }

@@ -1,5 +1,6 @@
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
+use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::{
@@ -595,15 +596,21 @@ fn uri_to_path(uri: &lsp_types::Uri) -> PathBuf {
 }
 
 // Handle "textDocument/completion" method.
-fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
+fn handle_completion(id: u32, params: &CompletionParams, program: &Program) {
     let mut items = vec![];
 
     fn create_item(
         name: &FullName,
         kind: CompletionItemKind,
         detail: Option<String>,
-        data: &EndNode,
+        end_node: &EndNode,
+        params: &CompletionParams,
     ) -> CompletionItem {
+        let trigger_char = params
+            .context
+            .as_ref()
+            .and_then(|ctx| ctx.trigger_character.clone());
+
         CompletionItem {
             label: name.to_string(),
             label_details: Some(CompletionItemLabelDetails {
@@ -624,7 +631,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
             additional_text_edits: None,
             command: None,
             commit_characters: None,
-            data: Some(serde_json::to_value(data).unwrap()), // Full name of the global value.
+            data: Some(serde_json::to_value((end_node, trigger_char)).unwrap()),
             tags: None,
         }
     }
@@ -644,6 +651,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
             CompletionItemKind::FUNCTION,
             Some(scheme),
             &EndNode::Expr(Var::create(full_name.clone()), None),
+            params,
         );
         items.push(item);
     }
@@ -656,6 +664,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
             CompletionItemKind::CLASS,
             None,
             &EndNode::Type(tycon.clone()),
+            params,
         );
         items.push(item);
     }
@@ -668,6 +677,7 @@ fn handle_completion(id: u32, _params: &CompletionParams, program: &Program) {
             CompletionItemKind::INTERFACE,
             None,
             &EndNode::Trait(trait_.clone()),
+            params,
         );
         items.push(item);
     }
@@ -684,8 +694,8 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
         return;
     }
     let data = params.data.as_ref().unwrap();
-    let node = serde_json::from_value::<EndNode>(data.clone());
-    if let Err(e) = node {
+    let data = serde_json::from_value::<(EndNode, Option<String>)>(data.clone());
+    if let Err(e) = data {
         let msg = format!(
             "In textDocument/completion, failed to parse params.data as EndNode: {}",
             e
@@ -694,7 +704,7 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
-    let node = node.unwrap();
+    let (node, trigger_char) = data.unwrap();
 
     // Get the documentation.
     let docs = document_from_endnode(&node, program);
@@ -703,6 +713,33 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
     let docs = Documentation::MarkupContent(docs);
     let mut item = params.clone();
     item.documentation = Some(docs);
+
+    // If the node is a global value with parameters defined in the document, then add the parameters to the insert text.
+    match &node {
+        EndNode::Expr(var, _) => {
+            if var.name.is_global() {
+                let params = parameters_of_global_value(&var.name, program);
+                if let Some(mut params) = params {
+                    // If the trigger character is ".", then remove the last parameter.
+                    if let Some(trigger_char) = trigger_char {
+                        if trigger_char == "." {
+                            params.pop();
+                        }
+                    }
+
+                    // Mutate the insert text of the completion item.
+                    if let Some(insert_text) = &mut item.insert_text {
+                        if params.len() > 0 {
+                            *insert_text += "(";
+                            *insert_text += &params.join(", ");
+                            *insert_text += ")";
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    };
 
     // Send the completion item.
     send_response(id, Ok::<_, ()>(item));
@@ -942,6 +979,68 @@ fn handle_hover(
         range: None,
     };
     send_response(id, Ok::<_, ()>(hover))
+}
+
+// Get the parameters of a global value from its documentation.
+fn parameters_of_global_value(full_name: &FullName, program: &Program) -> Option<Vec<String>> {
+    let msg = format!("parameters_of_global_value: {}", full_name.to_string());
+    write_log(msg.as_str());
+
+    // Get the document of the global value, which is a markdown string.
+    let opt_gv = program.global_values.get(full_name);
+    if opt_gv.is_none() {
+        return None;
+    }
+    let gv = opt_gv.unwrap();
+    let opt_docs = gv.get_document();
+    if opt_docs.is_none() {
+        return None;
+    }
+    let docs = opt_docs.unwrap();
+    let sections = MarkdownSection::parse_many(docs.lines().collect());
+
+    // Find the first top-level or second-level section named "Parameters".
+    // let param_section = sections.iter().find(|sec| sec.title.trim() == "Parameters");
+    let param_section = sections.iter().find_map(|sec| {
+        if sec.title.trim() == "Parameters" {
+            Some(sec)
+        } else {
+            sec.subsections
+                .iter()
+                .find(|subsec| subsec.title.trim() == "Parameters")
+        }
+    });
+    if param_section.is_none() {
+        write_log("No parameters section found.");
+        return None;
+    }
+    let param_section = param_section.unwrap();
+
+    // Collect the top-level list items.
+    let mut params = vec![];
+    for paragraph in &param_section.paragraphs {
+        for line in paragraph.lines() {
+            if line.starts_with("- ") || line.starts_with("* ") {
+                // Split the line into words.
+                let words = line.split_whitespace().collect::<Vec<_>>();
+                if words.len() < 2 {
+                    continue;
+                }
+                // The first word is `-` or `*`, and the second word is the parameter name.
+                let param = words[1];
+
+                // If the parameter name is quoted by "`", remove the "`".
+                let param = if param.starts_with('`') && param.ends_with('`') {
+                    &param[1..param.len() - 1]
+                } else {
+                    param
+                };
+                params.push(param.to_string());
+            }
+        }
+    }
+
+    Some(params)
 }
 
 fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
