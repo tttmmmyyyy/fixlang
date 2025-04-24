@@ -1619,6 +1619,11 @@ namespace Iterator {
     // Filter the elements of an iterator by a predicate.
     // 
     // `iter.filter(pred)` returns an iterator that only yields elements of `iter` for which `pred` returns `true`.
+    // 
+    // # Parameters
+    //
+    // * `predicate` - The predicate function to be applied to each element of the iterator.
+    // * `iter` - The iterator to be filtered.
     filter : [i : Iterator, Item i = a] (a -> Bool) -> i -> FilterIterator i a;
     filter = |pred, iter| FilterIterator { iter: iter, pred: pred };
 
@@ -1639,6 +1644,11 @@ namespace Iterator {
     // Filter and map the elements of an iterator.
     // 
     // `iter.filter_map(f)` returns an iterator that applies `f` to each element of `iter` and yields the result if it is `some`.
+    // 
+    // # Parameters
+    //
+    // * `f` - The function to be applied to each element of the iterator.
+    // * `iter` - The iterator to be filtered and mapped.
     filter_map : [i : Iterator, Item i = a] (a -> Option b) -> i -> FilterMapIterator i a b;
     filter_map = |f, iter| FilterMapIterator { iter: iter, f: f };
 
@@ -1664,11 +1674,21 @@ namespace Iterator {
     }
 
     // Flatten an iterator of iterators.
+    // 
+    // # Parameters
+    //
+    // * `iter_iter` - The iterator of iterators.
     flatten : [i2 : Iterator, i1 : Iterator, Item i2 = i1] i2 -> FlattenIterator i2 i1;
     flatten = |i2| FlattenIterator { i2: i2, i1: none() };
 
     type FlatMapIterator i1 a i2 = FlattenIterator (MapIterator i1 a i2) i2;
 
+    // Apply a function to each element of an iterator and flatten the result.
+    //
+    // # Parameters
+    //
+    // * `f` - The function to be applied to each element of the iterator.
+    // * `iter` - The iterator.
     flat_map : [i1 : Iterator, Item i1 = a, i2 : Iterator, Item i2 = b] (a -> i2) -> i1 -> FlatMapIterator i1 a i2;
     flat_map = |f, iter| iter.map(f).flatten;
 
@@ -1704,6 +1724,11 @@ namespace Iterator {
     // ```
     // assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);;
     // ```
+    //
+    // # Parameters
+    //
+    // * `second` - The second iterator.
+    // * `first` - The first iterator.
     product : [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = b] i2 -> i1 -> ProductIterator i1 i2 a b;
     product = |iter2, iter1| ProductIterator { iter1: iter1, iter2: iter2, e2: none(), iter1_org: iter1 };
 
@@ -1732,6 +1757,11 @@ namespace Iterator {
     // Append two iterators.
     // 
     // NOTE: Since this function is designed so that `iter1.append(iter2)` appends `iter2` after `iter1`, `append(iter1, iter2)` appends iterators in the opposite order.
+    //
+    // # Parameters
+    //
+    // * `second` - The second iterator.
+    // * `first` - The first iterator.
     append : [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = a] i2 -> i1 -> AppendIterator i1 i2;
     append = |iter2, iter1| AppendIterator { iter1 : some(iter1), iter2 : iter2 };
 
@@ -1757,6 +1787,11 @@ namespace Iterator {
     // ```
     // assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3]);;
     // ```
+    //
+    // # Parameters
+    //
+    // * `sep` - The element to be interspersed.
+    // * `iter` - The iterator.
     intersperse : [i : Iterator, Item i = a] a -> i -> IntersperseIterator i a;
     intersperse = |sep, iter| IntersperseIterator { iter: iter, sep: sep, next_is_sep: false };
 
@@ -1774,7 +1809,12 @@ namespace Iterator {
         );
     }
 
-    // Push an element to an iterator.
+    // Push an element to the front of an iterator.
+    //
+    // # Parameters
+    //
+    // * `head` - The element to be pushed.
+    // * `tail` - The iterator to be pushed to.
     push_front : [i : Iterator, Item i = a] a -> i -> ConsIterator i a;
     push_front = |head, tail| ConsIterator { head: some(head), tail: tail };
 
@@ -1790,6 +1830,10 @@ namespace Iterator {
     // Reverses an iterator.
     // 
     // NOTE: This function puts all elements of the iterator into an array, so it may consume a lot of memory.
+    //
+    // # Parameters
+    //
+    // * `iter` - The iterator to be reversed.
     reverse : [i : Iterator, Item i = a] i -> ReverseIterator i a;
     reverse = |iter| (
         let arr = iter.to_array;
@@ -1797,7 +1841,6 @@ namespace Iterator {
         ReverseIterator { idx: n - 1, arr: arr }
     );
 
-    // Takes at most `n` elements from an iterator.
     type TakeIterator i = unbox struct { iter : i, n : I64 };
     impl [i : Iterator] TakeIterator i : Iterator {
         type Item (TakeIterator i) = Item i;
@@ -1811,6 +1854,11 @@ namespace Iterator {
     }
 
     // Take the first `n` elements of an iterator.
+    // 
+    // # Parameters
+    //
+    // * `n` - The number of elements to be taken.
+    // * `iter` - The iterator to be taken from.
     take : [i : Iterator] I64 -> i -> TakeIterator i;
     take = |n, iter| TakeIterator { iter: iter, n: n };
 
@@ -1830,6 +1878,11 @@ namespace Iterator {
     }
 
     // Take elements from an iterator while a predicate holds.
+    //
+    // # Parameters
+    //
+    // * `predicate` - The predicate function to be applied to each element of the iterator.
+    // * `iter` - The iterator to be taken from.
     take_while : [i : Iterator, Item i = a] (a -> Bool) -> i -> TakeWhileIterator i a;
     take_while = |pred, iter| TakeWhileIterator { iter: iter, pred: pred };
 
@@ -1850,6 +1903,11 @@ namespace Iterator {
     // Zip two iterators.
     // 
     // NOTE: Since this function is designed so that `iter1.zip(iter2)` zips `iter1` and `iter2`, the elements of `zip(iter2, iter1)` are in the opposite order.
+    //
+    // # Parameters
+    //
+    // * `second` - The second iterator.
+    // * `first` - The first iterator.
     zip : [i1 : Iterator, i2 : Iterator] i2 -> i1 -> ZipIterator i1 i2;
     zip = |iter2, iter1| ZipIterator { iter1: iter1, iter2: iter2 };
 
@@ -1873,6 +1931,10 @@ namespace Iterator {
     type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
 
     // Convert an iterator into a dynamic iterator.
+    //
+    // # Parameters
+    //
+    // * `iter` - The iterator to be converted.
     to_dyn : [iter : Iterator, Item iter = a] iter -> DynIterator a;
     to_dyn = |iter| DynIterator { next: |_| iter.advance.map(|(iter, elm)| (iter.to_dyn, elm)) };
 
@@ -1918,7 +1980,6 @@ namespace Iterator {
 type Lazy a = () -> a;
 
 namespace LoopState {
-
     // Make a break value wrapped in a monad.
     // 
     // This is used with `loop_m` function.
@@ -1938,12 +1999,22 @@ type Option a = union { none: (), some: a };
 namespace Option {
 
     // Unwrap an option value if it is `some`, or returns given default value if it is `none`.
+    //
+    // # Parameters
+    //
+    // * `default` - The default value to be returned if the option is `none`.
+    // * `opt` - The option value to be unwrapped.
     as_some_or : a -> Option a -> a;
     as_some_or = |def, opt| (
         if opt.is_none { def } else { opt.as_some }
     );
 
     // Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
+    //
+    // # Parameters
+    //
+    // * `default` - The default value to be returned if the option is `none`.
+    // * `f` - The function to be applied to the contained value if the option is `some`.
     map_or : b -> (a -> b) -> Option a -> b;
     map_or = |def, f, opt| if opt.is_some { f(opt.as_some) } else { def };
 
@@ -2001,6 +2072,11 @@ type PunchedArray a = unbox struct { _arr : Array a, idx : I64 };
 namespace PunchedArray {
 
     // Plug in an element to a punched array to get back an array.
+    //
+    // # Parameters
+    //
+    // * `element` - The element to be plugged in.
+    // * `parray` - The punched array to be plugged in.
     plug_in : a -> PunchedArray a -> Array a;
     plug_in = |elm, parr| (
         let PunchedArray { _arr : arr, idx : idx } = parr;
@@ -2023,6 +2099,11 @@ namespace PunchedArray {
     // 
     // NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
     // The uniqueness of the array is ensured in the `Array::act` function.
+    //
+    // # Parameters
+    //
+    // * `i` - The index of the element to be punched.
+    // * `array` - The array to be punched.
     unsafe_punch : I64 -> Array a -> (PunchedArray a, a);
     unsafe_punch = |idx, arr| (
         // Bounds check.
@@ -2051,6 +2132,10 @@ type Result e o = unbox union { ok : o, err: e };
 namespace Result {
 
     // Returns the containing value if the value is ok, or otherwise aborts the program.
+    //
+    // # Parameters
+    //
+    // * `res` - The result value to be unwrapped.
     unwrap : Result e o -> o;
     unwrap = |res| (
         if res.is_err {
@@ -2128,14 +2213,28 @@ namespace String {
     // Create a `String` from a pointer to a null-terminated C string.
     // 
     // If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+    //
+    // # Parameters
+    //
+    // * `ptr` - The pointer to a null-terminated C string.
     unsafe_from_c_str_ptr : Ptr -> String;
     unsafe_from_c_str_ptr = _unsafe_from_c_str_ptr;
 
     // Call a function with a null-terminated C string.
+    //
+    // # Parameters
+    //
+    // * `borrower` - The function to be called with the C string.
+    // * `str` - The string.
     borrow_c_str : (Ptr -> a) -> String -> a;
     borrow_c_str = |f, str| str.@_data.borrow_boxed(f);
 
     // Call an IO action with a null-terminated C string.
+    //
+    // # Parameters
+    //
+    // * `borrower` - The IO action to be called with the C string.
+    // * `str` - The string.
     borrow_c_str_io : (Ptr -> IO a) -> String -> IO a;
     borrow_c_str_io = |act, str| IO::from_runner $ |ios| (
         str.borrow_c_str(|c_str| (act(c_str).@runner)(ios))
@@ -2144,6 +2243,11 @@ namespace String {
     // Concatenate two strings.
     // 
     // Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
+    //
+    // # Parameters
+    //
+    // * `first` - The first string.
+    // * `second` - The second string.
     concat : String -> String -> String;
     concat = |rhs, lhs| (
         // Remove null terminator from lhs and append rhs.
@@ -2151,6 +2255,10 @@ namespace String {
     );
 
     // Concatenate an iterator of strings.
+    //
+    // # Parameters
+    //
+    // * `iter_strs` - The iterator of strings.
     concat_iter : [strs : Iterator, Item strs = String] strs -> String;
     concat_iter = |iter| (
         let len = iter.map(get_size).fold(0, add);
@@ -2160,7 +2268,11 @@ namespace String {
         String { _data : data }
     );
 
-    // Create an empty string, which is reserved for a length.
+    // Create an empty string with a given capacity.
+    //
+    // # Parameters
+    //
+    // * `capacity` - The capacity of the string to be created.
     empty : I64 -> String;
     empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
 
@@ -2168,6 +2280,12 @@ namespace String {
     // 
     // Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
     // `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
+    //
+    // # Parameters
+    //
+    // * `token` - The token to be searched.
+    // * `start_idx` - The index to start searching from.
+    // * `str` - The string to be searched.
     find : String -> I64 -> String -> Option I64;
     find = |tok, start, str| (
         str.borrow_c_str(|c_str|
@@ -2182,10 +2300,18 @@ namespace String {
     );
 
     // Gets the byte array of a string, containing null-terminator.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be converted.
     get_bytes : String -> Array U8;
     get_bytes = @_data;
 
     // Gets the first byte of a string. Returns none if the string is empty.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be converted.
     get_first_byte : String -> Option U8;
     get_first_byte = |s| (
         if s.is_empty { Option::none() };
@@ -2193,6 +2319,10 @@ namespace String {
     );
 
     // Gets the last byte of a string. Returns none if the string is empty.
+    // 
+    // # Parameters
+    //
+    // * `str` - The string to be converted.
     get_last_byte : String -> Option U8;
     get_last_byte = |s| (
         let len = s.get_size;
@@ -2201,10 +2331,19 @@ namespace String {
     );
 
     // Gets the length of a string.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be converted.
     get_size : String -> I64;
     get_size = |s| s.@_data.get_size - 1; // exclude null terminator
 
     // `String` version of `Array::get_sub`.
+    //
+    // # Parameters
+    //
+    // * `start` - The start index of the substring.
+    // * `end` - The end index of the substring.
     get_sub : I64 -> I64 -> String -> String;
     get_sub = |s, e, str| (
         let len = str.get_size;
@@ -2212,10 +2351,19 @@ namespace String {
     );
 
     // Returns if the string is empty or not.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be checked.
     is_empty : String -> Bool;
     is_empty = |s| s.get_size == 0;
 
     // Joins (an iterator of) strings by a separator.
+    //
+    // # Parameters
+    //
+    // * `sep` - The separator to be used for joining.
+    // * `iter_strs` - The iterator of strings to be joined.
     join : [ss : Iterator, Item ss = String] String -> ss -> String;
     join = |sep, ss| (
         ss.intersperse(sep).concat_iter
@@ -2224,6 +2372,10 @@ namespace String {
     // Removes the last byte.
     // 
     // If the string is empty, this function does nothing.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be modified.
     pop_back_byte : String -> String;
     pop_back_byte = |s| (
         if s.is_empty { s };
@@ -2238,6 +2390,11 @@ namespace String {
     // assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
     // assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
     // ```
+    //
+    // # Parameters
+    //
+    // * `sep` - The separator to be used for splitting.
+    // * `str` - The string to be split.
     split : String -> String -> StringSplitIterator;
     split = |sep, str| StringSplitIterator { idx: 0, str: str, strlen: str.get_size, sep: sep, sep_len: sep.get_size };
 
@@ -2267,10 +2424,19 @@ namespace String {
     // assert_eq(|_|"", String::from_U8('a'), "a");;
     // assert_eq(|_|"", String::from_U8('\x00'), "");;
     // ```
+    //
+    // # Parameters
+    //
+    // * `byte` - The byte to be converted.
     from_U8 : U8 -> String;
     from_U8 = |b| String::_unsafe_from_c_str([b, '\x00']);
 
     // Removes the first byte of a string while it satisifies the specified condition.
+    //
+    // # Parameters
+    //
+    // * `cond` - The condition for the byte to be removed.
+    // * `str` - The string to be modified.
     strip_first_bytes : (U8 -> Bool) -> String -> String;
     strip_first_bytes = |cond, str| (
         let len = str.get_size;
@@ -2284,10 +2450,18 @@ namespace String {
     );
 
     // Removes leading whitespace characters.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be modified.
     strip_first_spaces : String -> String;
     strip_first_spaces = strip_first_bytes(|c| FFI_CALL[I32 isspace(I32), c.to_I32] > 0_I32);
 
     // Removes the last byte of a string while it satisifies the specified condition.
+    // 
+    // # Parameters
+    //
+    // * `cond` - The condition for the byte to be removed.
     strip_last_bytes : (U8 -> Bool) -> String -> String;
     strip_last_bytes = |cond, s| (
         loop(s, |s|
@@ -2301,14 +2475,26 @@ namespace String {
     );
 
     // Removes newlines and carriage returns at the end of the string.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be modified.
     strip_last_newlines : String -> String;
     strip_last_newlines = strip_last_bytes(|c| c == '\n' || c == '\r');
 
     // Removes trailing whitespace characters.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be modified.
     strip_last_spaces : String -> String;
     strip_last_spaces = strip_last_bytes(|c| FFI_CALL[I32 isspace(I32), c.to_I32] > 0_I32);
 
     // Strips leading and trailing whitespace characters.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be modified.
     strip_spaces : String -> String;
     strip_spaces = |s| s.strip_last_spaces.strip_first_spaces;
 }
@@ -2375,6 +2561,11 @@ impl String : ToBytes {
 // Functions
 
 // Composes two functions. Composition operators `<<` and `>>` is translated to use of `compose`. 
+//
+// # Parameters
+//
+// * `first` - The first function to be composed.
+// * `second` - The second function to be composed.
 compose : (a -> b) -> (b -> c) -> a -> c;
 compose = |f, g, a| g(f(a));
 
@@ -2396,6 +2587,11 @@ compose = |f, g, a| g(f(a));
 //     ))
 // );
 // ```
+//
+// # Parameters
+//
+// * `s0` - The initial state of the loop.
+// * `body` - The body of the loop. It takes the current state and returns a monadic action that produces a new state or a break value.
 loop_m : [m : Monad] s -> (s -> m (LoopState s r)) -> m r;
 loop_m = |s, f| (
     let res = *f(s);
@@ -2518,93 +2714,193 @@ trait a : Not {
 // Trait for infix operator `==`.
 trait a : Eq {
     // Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
+    //
+    // # Parameters
+    //
+    // * `lhs`
+    // * `rhs`
     eq : a -> a -> Bool;
 }
 
 // Trait for infix operator `<`.
 trait a : LessThan {
     // Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
+    // 
+    // # Parameters
+    //
+    // * `lhs`
+    // * `rhs`
     less_than : a -> a -> Bool;
 }
 
 // Trait for infix operator `<=`.
 trait a : LessThanOrEq {
     // Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
+    //
+    // # Parameters
+    //
+    // * `lhs`
+    // * `rhs`
     less_than_or_eq : a -> a -> Bool;
 }
 
 // Trait for infix operator `+`.
 trait a : Add {
     // Adds two values. An expression `x + y` is translated to `add(x, y)`.
+    //
+    // # Parameters
+    //
+    // * `lhs`
+    // * `rhs`
     add : a -> a -> a;
 }
 
 // Trait for infix operator `-`.
 trait a : Sub {
     // Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
+    //
+    // # Parameters
+    //
+    // * `lhs`
+    // * `rhs`    
     sub : a -> a -> a;
 }
 
 // Trait for infix operator `*`.
 trait a : Mul {
     // Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
+    //
+    // # Parameters
+    //
+    // * `lhs`
+    // * `rhs`    
     mul : a -> a -> a;
 }
 
 // Trait for infix operator `/`.
 trait a : Div {
     // Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
+    //
+    // # Parameters
+    //
+    // * `lhs`
+    // * `rhs`
     div : a -> a -> a;
 }
 
 // Trait for infix operator `%`.
 trait a : Rem {
     // Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
+    //
+    // # Parameters
+    //
+    // * `lhs`
+    // * `rhs`
     rem : a -> a -> a;
 }
 
 trait Additive = Add + Zero;
 
 trait a : FromBytes {
+    // Converts a byte array into a value by parsing it.
+    // 
+    // # Parameters
+    //
+    // * `byte_array` - The byte array to be converted.
     from_bytes : Array U8 -> Result ErrMsg a;
 }
 
 trait a : FromString {
+    // Converts a string into a value by parsing it.
+    //
+    // # Parameters
+    //
+    // * `str` - The string to be converted.
     from_string : String -> Result ErrMsg a;
 }
 
+// The trait for functors.
 trait [f : *->*] f : Functor {
+    // Applies a function to the value inside the functor.
+    //
+    // # Parameters
+    //
+    // * `f` - The function to be applied.
+    // * `value` - The functor value to be transformed.
     map : (a -> b) -> f a -> f b;
 }
 
 namespace Functor {
+    // Discards the value inside the functor and returns a functor containing `()`.
+    //
+    // # Parameters
+    //
+    // * `value` - The functor value.
     forget : [f : Functor] f a -> f ();
     forget = map(|_|());
 }
 
 namespace LessThan {
+    // The maximum of two values.
+    //
+    // # Parameters
+    //
+    // * `lhs` - The first value.
+    // * `rhs` - The second value.
     max : [a : LessThan] a -> a -> a;
     max = |x, y| if x < y { y } else { x };
 
+    // The minimum of two values.
+    //
+    // # Parameters
+    //
+    // * `lhs` - The first value.
+    // * `rhs` - The second value.
     min : [a : LessThan] a -> a -> a;
     min = |x, y| if x < y { x } else { y };
 }
 
+// The trait for monads.
 trait [m : *->*] m : Monad {
+    // Evaluate a monadic action, and pass the result to the next action.
+    //
+    // # Parameters
+    //
+    // * `following` - The following action.
+    // * `action` - The first action. 
     bind : (a -> m b) -> m a -> m b;
+    // Creates a pure monadic action which just returns a specified value.
+    //
+    // # Parameters
+    //
+    // * `value`
     pure : a -> m a;
 }
 
 namespace Monad {
     // Flattens a nested monadic action.
+    //
+    // # Parameters
+    //
+    // * `nested_monad`
     flatten : [m : Monad] m (m a) -> m a;
     flatten = Monad::bind(|x|x);
 
     // `unless(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is false.
+    //
+    // # Parameters
+    //
+    // * `condition`
+    // * `action`
     unless : [m : Monad] Bool -> m () -> m ();
     unless = |cond, act| if cond { pure $ () } else { act };
 
     // `when(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is true.
+    //
+    // # Parameters
+    //
+    // * `condition`
+    // * `action`
     when : [m : Monad] Bool -> m () -> m ();
     when = |cond, act| if cond { act } else { pure $ () };
 }
@@ -2655,12 +2951,22 @@ namespace F64 {
 
 namespace Ptr {
     // Adds an offset to a pointer.
+    //
+    // # Parameters
+    //
+    // * `offset`
+    // * `ptr`
     add_offset : I64 -> Ptr -> Ptr;
     add_offset = |off, ptr| FFI_CALL[Ptr fixruntime_ptr_add_offset(Ptr, I64), ptr, off];
 
     // Subtracts two pointers.
     // 
     // Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
+    //
+    // # Parameters
+    //
+    // * `rhs`
+    // * `lhs`
     subtract_ptr : Ptr -> Ptr -> I64;
     subtract_ptr = |rhs, lhs| FFI_CALL[I64 fixruntime_subtract_ptr(Ptr, Ptr), lhs, rhs];
 }
@@ -3028,6 +3334,11 @@ namespace Debug {
     // Asserts that a condition (boolean value) is true. 
     // 
     // If the assertion failed, prints a message to the stderr and aborts the program.
+    //
+    // # Parameters
+    //
+    // * `lazy_msg`
+    // * `condition`
     assert : Lazy String -> Bool -> IO ();
     assert = |msg, b| IO::from_runner $ |state| (
         if b {
@@ -3040,6 +3351,12 @@ namespace Debug {
     // Asserts that two values are equal.
     // 
     // If the assertion failed, prints a message to the stderr and aborts the program.
+    //
+    // # Parameters
+    //
+    // * `lazy_msg`
+    // * `lhs`
+    // * `rhs`
     assert_eq : [a: Eq] Lazy String -> a -> a -> IO ();
     assert_eq = |msg, lhs, rhs| assert(msg, lhs == rhs);
 
@@ -3047,6 +3364,11 @@ namespace Debug {
     // If the assertion failed, prints a message to the stderr and aborts the program.
     // 
     // The main use of this function is to check whether a boxed value given as an argument is unique.
+    //
+    // # Parameters
+    //
+    // * `lazy_msg`
+    // * `value`
     assert_unique : Lazy String -> a -> a;
     assert_unique = |msg, x| (
         let (unique, x) = x.unsafe_is_unique;
@@ -3055,6 +3377,10 @@ namespace Debug {
     );
 
     // Get clocks (cpu time) elapsed while executing an I/O action.
+    //
+    // # Parameters
+    //
+    // * `action`
     consumed_time_while_io : IO a -> IO (a, F64);
     consumed_time_while_io = |io| (
         let s = *FFI_CALL_IO[I64 fixruntime_clock()];
@@ -3067,6 +3393,10 @@ namespace Debug {
     // Get clocks (cpu time) elapsed while evaluating a lazy value.
     // 
     // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    //
+    // * `lazy_value`
     consumed_time_while_lazy : Lazy a -> (a, F64);
     consumed_time_while_lazy = |l| (
         let s = FFI_CALL[I64 fixruntime_clock()];
@@ -3079,24 +3409,40 @@ namespace Debug {
     // Prints a string to stderr and flushes.
     // 
     // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    //
+    // * `msg`    
     debug_eprint : String -> ();
     debug_eprint = |msg| _debug_print_to_stream(stderr, msg);
 
     // Prints a string followed by a newline to stderr and flushes.
     //
     // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    //
+    // * `msg`    
     debug_eprintln : String -> ();
     debug_eprintln = |msg| debug_eprint(msg + "\n");
 
     // Prints a string to stdout and flushes.
     // 
     // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    //
+    // * `msg`        
     debug_print : String -> ();
     debug_print = |msg| _debug_print_to_stream(stdout, msg);
 
     // Prints a string followed by a newline to stdout and flushes.
     //
     // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    //
+    // * `msg`        
     debug_println : String -> ();
     debug_println = |msg| debug_print(msg + "\n");
 
