@@ -16,3 +16,7 @@ main = (
     pure()
 );
 ```
+
+# Parameters
+
+* `lazy_value` - The lazy boxed value to indicate the type of the boxed value to be released.

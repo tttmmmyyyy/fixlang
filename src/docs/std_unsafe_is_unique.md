@@ -31,3 +31,7 @@ main = (
     pure()
 );
 ```
+
+# Parameters
+
+* `value` - The value to check for uniqueness.

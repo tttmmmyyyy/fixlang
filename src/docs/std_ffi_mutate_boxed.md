@@ -8,3 +8,8 @@ For more details on the pointer passed to `io`, see the document of `borrow_boxe
 This function first clones the value if `x` is not unique.
 
 See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
+
+# Parameters
+
+* `act` - The action to perform on the pointer to the boxed value.
+* `value` - The boxed value to mutate.

@@ -40,6 +40,11 @@ type LoopState s r = unbox union { continue : s, break : r };
 //     println $ sum.to_string
 // ); // evaluates to 0 + 1 + ... + 99 
 // ```
+// 
+// # Parameters
+// 
+// * `s0` - The initial state of the loop.
+// * `body` - The loop body function. It takes the current state of the loop and returns either `continue(s)` or `break(r)`.
 loop : s -> (s -> LoopState s r) -> r;
 loop = |s, body| (
     match body(s) {
@@ -130,6 +135,12 @@ namespace Array {
     // 
     // If you call `act` on an array which is shared, this function clones the given array when inserting the result of your action into the array. 
     // This means that you don't need to pay cloning cost when your action failed, as expected.
+    // 
+    // # Parameters
+    //
+    // * `i` - The index of the element to be acted on.
+    // * `action` - The functorial action to be performed on the element at index `idx`.
+    // * `array` - The array.
     act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     act = |idx, fun, arr| (
         let (unique, arr) = arr.unsafe_is_unique;
@@ -144,6 +155,11 @@ namespace Array {
     // Appends an array to an array.
     // 
     // Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
+    // 
+    // # Parameters
+    // 
+    // * `second` - The array to be appended.
+    // * `first` - The array to which `second` is appended.
     append : Array a -> Array a -> Array a;
     append = |v2, v1| (
         let v1_len = v1.get_size;
@@ -169,6 +185,11 @@ namespace Array {
     );
 
     // Finds the first index at which the element satisfies a condition.
+    // 
+    // # Parameters
+    //
+    // * `cond` - The condition to be satisfied.
+    // * `array` - The array to be searched.
     find_by : (a -> Bool) -> Array a -> Option I64;
     find_by = |cond, arr| (
         let len = arr.get_size;
@@ -180,10 +201,19 @@ namespace Array {
     );
 
     // Create an array from an iterator.
+    // 
+    // # Parameters
+    // 
+    // * `it` - The iterator to be converted to an array.
     from_iter : [it : Iterator, Item it = a] it -> Array a;
     from_iter = Iterator::to_array;
 
     // Creates an array by a mapping function.
+    // 
+    // # Parameters
+    // 
+    // * `size` - The size of the array to be created.
+    // * `map` - The mapping function. It takes an index and returns the value at that index.
     from_map : I64 -> (I64 -> a) -> Array a;
     from_map = |size, map| (
         let arr = Array::empty(size)._unsafe_set_size(size);
@@ -198,6 +228,10 @@ namespace Array {
     );
 
     // Gets the first element of an array. Returns none if the array is empty.
+    // 
+    // # Parameters
+    // 
+    // * `arr` - The array.
     get_first : Array a -> Option a;
     get_first = |arr| (
         if arr.is_empty { Option::none() };
@@ -205,6 +239,10 @@ namespace Array {
     );
 
     // Gets the last element of an array. Returns none if the array is empty.
+    // 
+    // # Parameters
+    // 
+    // * `arr` - The array.
     get_last : Array a -> Option a;
     get_last = |arr| (
         let len = arr.get_size;
@@ -215,15 +253,29 @@ namespace Array {
     // `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`.
     // 
     // `s` and `e` are clamped to the range `[0, arr.get_size]`.
+    // 
+    // # Parameters
+    // 
+    // * `start` - The start index of the subarray.
+    // * `end` - The end index of the subarray.
+    // * `array` - The array to be sliced.
     get_sub : I64 -> I64 -> Array a -> Array a;
     get_sub = |s, e, arr| arr._get_sub_size_with_length_and_additional_capacity(arr.get_size, 0, s, e);
 
-    // Returns if the array is empty
+    // Gets whether the array is empty.
+    // 
+    // # Parameters
+    // 
+    // * `array` - The array to be checked.
     is_empty : Array a -> Bool;
     is_empty = |arr| ( arr.get_size == 0 );
 
     // Pops an element at the back of an array.
     // If the array is empty, this function does nothing.
+    // 
+    // # Parameters
+    // 
+    // * `array` - The array to be popped.
     pop_back : Array a -> Array a;
     pop_back = |arr| (
         let len = arr.get_size;
@@ -232,6 +284,11 @@ namespace Array {
     );
 
     // Pushes an element to the back of an array.
+    // 
+    // # Parameters
+    // 
+    // * `element` - The element to be pushed.
+    // * `array` - The array to which the element is pushed.
     push_back : a -> Array a -> Array a;
     push_back = |e, arr| (
         let len = arr.get_size;
@@ -244,6 +301,11 @@ namespace Array {
     );
 
     // Reserves the memory region for an array.
+    // 
+    // # Parameters
+    // 
+    // * `capacity` - The capacity to be reserved.
+    // * `array` - The array to be reserved.
     reserve : I64 -> Array a -> Array a;
     reserve = |cap, arr| (
         if cap <= arr.get_capacity { arr };
@@ -260,6 +322,11 @@ namespace Array {
     );
 
     // Sorts elements in a vector by "less than" comparator.
+    // 
+    // # Parameters
+    // 
+    // * `less_than` - The comparator function.
+    // * `array` - The array to be sorted.
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, vec| (
         let buffer = Array::empty(vec.get_size);
@@ -268,12 +335,21 @@ namespace Array {
     );
 
     // Converts an array to an iterator.
+    // 
+    // # Parameters
+    // 
+    // * `array` - The array to be converted.
     to_iter : Array a -> ArrayIterator a;
     to_iter = Iterator::from_array;
 
     // Truncates an array, keeping the given number of first elements.
     // 
     // `truncante(len, arr)` does nothing if `len >= arr.get_size`.
+    // 
+    // # Parameters
+    // 
+    // * `new_length` - The number of elements to be kept.
+    // * `array` - The array to be truncated.
     truncate : I64 -> Array a -> Array a;
     truncate = |length, vec| (
         loop(vec, |vec|(
@@ -289,6 +365,11 @@ namespace Array {
     // The returned value x satisfies 0 <= x <= `arr.get_size`. If `arr` is empty, it returns 0.
     // 
     // Added in v1.1.0.
+    // 
+    // # Parameters
+    // 
+    // * `predicate` - The predicate function.
+    // * `array` - The array to be searched.
     search_partition_point : (a -> Bool) -> Array a -> I64;
     search_partition_point = |pred, arr| (
         let n = arr.get_size;
@@ -445,6 +526,11 @@ namespace FFI {
     // For more details, see the document of `mutate_boxed`.
     // 
     // See also: `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`.
+    // 
+    // # Parameters
+    // 
+    // * `action` - The IO action to be performed on the pointer.
+    // * `value` - The boxed value to be mutated.
     mutate_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO (a, b);
     mutate_boxed_io = |act, val| IO::from_runner $ |ios| mutate_boxed_ios(act, val, ios);
 
@@ -462,6 +548,11 @@ namespace FFI {
     // It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
     // 
     // See also: `borrow_boxed_io`, `mutate_boxed`, `mutate_boxed_io`.
+    // 
+    // # Parameters
+    // 
+    // * `borrower` - The action to be performed on the pointer.
+    // * `value` - The boxed value to be borrowed.
     borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b;
     borrow_boxed = |act, val| val.with_retained(|val| act(val._get_boxed_ptr));
 
@@ -472,6 +563,11 @@ namespace FFI {
     // It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
     // 
     // See also: `borrow_boxed`, `mutate_boxed`, `mutate_boxed_io`.
+    // 
+    // # Parameters
+    // 
+    // * `action` - The IO action to be performed on the pointer.
+    // * `value` - The boxed value to be borrowed.
     borrow_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO b;
     borrow_boxed_io = |act, val| IO::from_runner $ |ios| val.borrow_boxed(|ptr| (act(ptr).@runner)(ios));
 
@@ -501,14 +597,29 @@ namespace FFI {
         // 
         // It is guaranteed that the `dtor` is alive during the call of `worker`.
         // In other words, the `worker` receives the contained value for which the destructor is not called yet.
+        // 
+        // # Parameters
+        // 
+        // * `borrower` - The function to be called on the contained value.
+        // * `dtor` - The destructor value.
         borrow : (a -> b) -> Destructor a -> b;
         borrow = |worker, dtor| dtor.with_retained(|dtor| worker(dtor.@_value));
 
         // Performs an IO action borrowing the contained value.
+        // 
+        // # Parameters
+        // 
+        // * `action` - The IO action to be performed on the contained value.
+        // * `dtor` - The destructor value.
         borrow_io : (a -> IO b) -> Destructor a -> IO b;
         borrow_io = |act, dtor| IO::from_runner $ |ios| dtor.borrow(|val| (act(val).@runner)(ios));
 
         // Make a destructor value.
+        // 
+        // # Parameters
+        // 
+        // * `value` - The value to be wrapped.
+        // * `dtor` - The destructor function to be called on the value.
         make : a -> (a -> IO a) -> Destructor a;
         make = |val, dtor| Destructor { _value : val, dtor : dtor };
 
@@ -519,12 +630,24 @@ namespace FFI {
         // 
         // The `action` is allowed to modify the external resource stored in `dtor` (e.g., if `value` is a pointer, it can modify the value pointed by the pointer).
         // Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resource stored in `dtor`.
+        // 
+        // # Parameters
+        //
+        // * `clone` - The constructor function of the contained value.
+        // * `action` - The action to be performed on the contained value.
+        // * `dtor` - The destructor value.
         mutate_unique : (a -> IO a) -> (a -> IO b) -> Destructor a -> (Destructor a, b);
         mutate_unique = |ctr, action, dtor| dtor.mutate_unique_io(ctr, action).unsafe_perform;
 
         // Apply an IO action which mutates the semantics of the value.
         // 
         // This is similar to `mutate_unique`, but the `ctor` and `action` is executed in the context of the external `IO` context.
+        // 
+        // # Parameters
+        // 
+        // * `clone` - The constructor function of the contained value.
+        // * `action` - The action to be performed on the contained value.
+        // * `dtor` - The destructor value.
         mutate_unique_io : (a -> IO a) -> (a -> IO b) -> Destructor a -> IO (Destructor a, b);
         mutate_unique_io = |ctor, action, dtor| (
             let (unique, dtor) = dtor.unsafe_is_unique;
@@ -590,34 +713,63 @@ namespace IO {
     // Closes a file.
     // 
     // Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
+    // 
+    // # Parameters
+    // 
+    // * `handle` - The IOHandle to be closed.
     close_file : IOHandle -> IO ();
     close_file = |handle| handle.@_data.borrow_io(|handle_ptr| FFI_CALL_IO[() fixruntime_iohandle_close(Ptr), handle_ptr]);
 
     // Prints a string to stderr.
+    // 
+    // # Parameters
+    // 
+    // * `msg` - The string to be printed.
     eprint : String -> IO ();
     eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stderr.
+    // 
+    // # Parameters
+    // 
+    // * `msg` - The string to be printed.
     eprintln : String -> IO ();
     eprintln = |str| eprint(str + "\n");
 
     // Exits the program with an error code.
+    // 
+    // # Parameters
+    // 
+    // * `code` - The error code to be returned.
     exit : I64 -> IO a;
     exit = |code| FFI_CALL_IO[() exit(I32), code.to_I32];; pure $ undefined("");
 
     // Exits the program with an error message and an error code.
     //  
     // The error message is written to the standard error output.
+    // 
+    // # Parameters
+    // 
+    // * `code` - The error code to be returned.
+    // * `msg` - The error message to be printed.
     exit_with_msg : I64 -> String -> IO a;
     exit_with_msg = |code, msg| eprintln(msg);; exit(code);
 
     // Creates an IO action from a IO runner function, which is a function of type `IOState -> (IOState, a)`.
+    // 
+    // # Parameters
+    //
+    // * `io_runner` - The IO runner function.
     from_runner : (IOState -> (IOState, a)) -> IO a;
     from_runner = |runner| IO { runner : runner };
 
-    // `get_arg(n)` returns the n-th (0-indexed) command line argument.
+    // `get_arg(i)` returns the i-th (0-indexed) command line argument.
     // 
-    // If n is greater than or equal to the number of command line arguments, this function returns none.
+    // If i is greater than or equal to the number of command line arguments, this function returns none.
+    // 
+    // # Parameters
+    // 
+    // * `i` - The index of the command line argument.
     get_arg : I64 -> IO (Option String);
     get_arg = |n| (
         let argc = *get_arg_count;
@@ -659,6 +811,10 @@ namespace IO {
     );
 
     // Checks if an `IOHandle` reached to the EOF.
+    // 
+    // # Parameters
+    // 
+    // * `handle` - The IOHandle to be checked.
     is_eof : IOHandle -> IO Bool;
     is_eof = |handle| FFI_CALL_IO[I32 feof(Ptr), *handle.get_file_ptr].map(|res| res != 0_I32);
 
@@ -669,6 +825,12 @@ namespace IO {
     // When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_lines` returns the last state value.
     // 
     // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
+    // 
+    // # Parameters
+    // 
+    // * `handle` - The IOHandle to be read.
+    // * `s0` - The initial state.
+    // * `work` - The function to be called on the pair of current state and a line string read from `handle`.
     loop_lines : IOHandle -> s -> (s -> String -> LoopState s s) -> IOFail s;
     loop_lines = |handle, state, worker| (
         if *is_eof(handle).lift {
@@ -686,6 +848,12 @@ namespace IO {
     // Loop on lines read from an `IOHandle`.
     // 
     // Similar to `loop_lines`, but the worker function can perform an IO action.
+    // 
+    // # Parameters
+    //
+    // * `handle` - The IOHandle to be read.
+    // * `s0` - The initial state.
+    // * `work` - The function to be called on the pair of current state and a line string read from `handle`.
     loop_lines_io : IOHandle -> s -> (s -> String -> IOFail (LoopState s s)) -> IOFail s;
     loop_lines_io = |handle, state, worker| (
         if *is_eof(handle).lift {
@@ -701,6 +869,11 @@ namespace IO {
     );
 
     // Openes a file. The second argument is a mode string for `fopen` C function.
+    // 
+    // # Parameters
+    //
+    // * `path` - The path to the file to be opened.
+    // * `mode` - The mode string for `fopen` C function.
     open_file : Path -> String -> IOFail IOHandle;
     open_file = |path, mode| (
         let path = path.to_string;
@@ -715,27 +888,51 @@ namespace IO {
     );
 
     // Prints a string to stdout.
+    // 
+    // # Parameters
+    //
+    // * `msg` - The string to be printed.
     print : String -> IO ();
     print = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stdout.
+    // 
+    // # Parameters
+    //
+    // * `msg` - The string to be printed.
     println : String -> IO ();
     println = |str| print(str + "\n");
 
     // Raads all characters from a file.
+    // 
+    // # Parameters
+    //
+    // * `path` - The path to the file to be read.
     read_file_string : Path -> IOFail String;
     read_file_string = |path| with_file(path, "r", read_string);
 
     // Reads all bytes from a file.
+    // 
+    // # Parameters
+    //
+    // * `path` - The path to the file to be read.
     read_file_bytes : Path -> IOFail (Array U8);
     read_file_bytes = |path| with_file(path, "r", read_bytes);
 
     // Reads characters from a IOHandle upto newline or EOF.
     // The returned string may include newline at its end.
+    // 
+    // # Parameters
+    // 
+    // * `handle` - The IOHandle to be read.
     read_line : IOHandle -> IOFail String;
     read_line = _read_line_inner(true);
 
     // Reads all bytes from an IOHandle.
+    // 
+    // # Parameters
+    // 
+    // * `handle` - The IOHandle to be read.
     read_bytes : IOHandle -> IOFail (Array U8);
     read_bytes = |handle| (
         // Get all bytes into an array of buffers.
@@ -753,6 +950,11 @@ namespace IO {
     );
 
     // Reads at most n bytes from an IOHandle.
+    // 
+    // # Parameters
+    //
+    // * `handle` - The IOHandle to be read.
+    // * `num_bytes` - The number of bytes to be read.
     read_n_bytes : IOHandle -> I64 -> IOFail (Array U8);
     read_n_bytes = |handle, n| IOFail::from_io_result $ do {
         // Get the file pointer.
@@ -775,6 +977,10 @@ namespace IO {
     };
 
     // Reads all characters from an IOHandle.
+    // 
+    // # Parameters
+    //
+    // * `handle` - The IOHandle to be read.
     read_string : IOHandle -> IOFail String;
     read_string = _read_line_inner(false);
 
@@ -808,6 +1014,12 @@ namespace IO {
     // Performs a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // 
     // The file handle will be closed automatically.
+    // 
+    // # Parameters
+    //
+    // * `path` - The path to the file to be opened.
+    // * `mode` - The mode string for `fopen` C function.
+    // * `work` - The function to be called on the opened file handle.
     with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a;
     with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
@@ -817,6 +1029,11 @@ namespace IO {
     );
 
     // Writes a byte array into an IOHandle.
+    // 
+    // # Parameters
+    // 
+    // * `handle` - The IOHandle to be written.
+    // * `array` - The byte array to be written.
     write_bytes : IOHandle -> Array U8 -> IOFail ();
     write_bytes = |handle, array| IOFail::from_io_result $ do {
         let file_ptr = *handle.get_file_ptr;
@@ -829,14 +1046,29 @@ namespace IO {
     };
 
     // Writes a byte array into a file.
+    // 
+    // # Parameters
+    //
+    // * `path` - The path to the file to be written.
+    // * `content` - The byte array to be written.
     write_file_bytes : Path -> Array U8 -> IOFail ();
     write_file_bytes = |path, content| with_file(path, "w", |handle| write_bytes(handle, content));
 
     // Writes a string into a file.
+    // 
+    // # Parameters
+    //
+    // * `path` - The path to the file to be written.
+    // * `content` - The string to be written.
     write_file_string : Path -> String -> IOFail ();
     write_file_string = |path, content| with_file(path, "w", |handle| write_string(handle, content));
 
     // Writes a string into an IOHandle.
+    // 
+    // # Parameters
+    //
+    // * `handle` - The IOHandle to be written.
+    // * `content` - The string to be written.
     write_string : IOHandle -> String -> IOFail ();
     write_string = |handle, content| IOFail::from_io_result $ do {
         let file_ptr = *handle.get_file_ptr;
@@ -906,12 +1138,20 @@ namespace IO::IOHandle {
     // 
     // NOTE: 
     // If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
+    //
+    // # Parameters
+    //
+    // * `handle` - The IOHandle to get the file pointer from.
     get_file_ptr : IOHandle -> IO Ptr;
     get_file_ptr = |handle| handle.@_data.borrow_io(|handle_ptr| FFI_CALL_IO[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]);
 
     // Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
     // 
     // Creating two `IOHandle`s from a single file pointer is forbidden.
+    // 
+    // # Parameters
+    // 
+    // * `file_ptr` - The file pointer to be wrapped.
     from_file_ptr : Ptr -> IOHandle;
     from_file_ptr = |file_ptr| (
         let handle_ptr = FFI_CALL[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
@@ -927,26 +1167,51 @@ namespace IO {
 
 namespace IO::IOFail {
     // Create from IO action of which returns `Result ErrMsg a`.
+    // 
+    // # Parameters
+    //
+    // * `io_res` - The IO action to be converted.
     from_io_result : IO (Result ErrMsg a) -> IOFail a;
     from_io_result = |io_res| IOFail { _data : io_res };
 
     // Creates an pure `IOFail` value from a `Result` value.
+    // 
+    // # Parameters
+    // 
+    // * `res` - The result value to be converted.
     from_result : Result ErrMsg a -> IOFail a;
     from_result = |res| IOFail { _data : pure(res) };
 
     // Lifts an `IO` action to a successful `IOFail` action.
+    // 
+    // # Parameters
+    //
+    // * `io` - The IO action to be lifted.
     lift : IO a -> IOFail a;
     lift = |io| IOFail { _data : io.map(pure) };
 
     // Creates an error `IOFail` action.
+    // 
+    // # Parameters
+    //
+    // * `err_msg` - The error message to be thrown.
     throw : ErrMsg -> IOFail a;
     throw = |e| from_result $ Result::err(e);
 
     // Converts an `IOFail` to an `Result` value (wrapped by `IO`).
+    //
+    // # Parameters
+    //
+    // * `io_fail` - The `IOFail` value to be converted.
     to_result : IOFail a -> IO (Result ErrMsg a);
     to_result = @_data;
 
     // Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
+    // 
+    // # Parameters
+    // 
+    // * `catch` - The error handler function to be called on the error.
+    // * `io_fail` - The `IOFail` value to be run.
     try : (ErrMsg -> IO a) -> IOFail a -> IO a;
     try = |catch, iof| (
         let res = *iof.to_result;
@@ -984,6 +1249,12 @@ namespace Iterator {
     // Fold the elements of an iterator from left to right.
     //
     // Conceptually, `[a0, a1, a2, ...].to_iter.fold(s, op) = s.op(a0).op(a1).op(a2)...`.
+    // 
+    // # Parameters
+    //
+    // * `s` - The initial state.
+    // * `body` - The function to be called on the pair of an element and the current state.
+    // * `iter` - The iterator to be folded.
     fold : [iter : Iterator, Item iter = a] s -> (a -> s -> s) -> iter -> s;
     fold = |s, op, iter| (
         match iter.advance {
@@ -993,6 +1264,12 @@ namespace Iterator {
     );
 
     // Fold the elements of an iterator from left to right by monadic action.
+    // 
+    // # Parameters
+    //
+    // * `s` - The initial state.
+    // * `body` - The function to be called on the pair of an element and the current state.
+    // * `iter` - The iterator to be folded.
     fold_m : [m : Monad, iter : Iterator, Item iter = a] s -> (a -> s -> m s) -> iter -> m s;
     fold_m = |s, op, iter| (
         match iter.advance {
@@ -1004,6 +1281,12 @@ namespace Iterator {
     // Loop over the elements of an iterator.
     // 
     // This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop at any point.
+    // 
+    // # Parameters
+    //
+    // * `s` - The initial state.
+    // * `body` - The function to be called on the pair of an element and the current state.
+    // * `iter` - The iterator to be looped.
     loop_iter : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s s) -> iter -> s;
     loop_iter = |s, body, iter| (
         match iter.advance {
@@ -1016,6 +1299,12 @@ namespace Iterator {
     );
 
     // Loop over the elements of an iterator by monadic action.
+    // 
+    // # Parameters
+    //
+    // * `s` - The initial state.
+    // * `body` - The function to be called on the pair of an element and the current state.
+    // * `iter` - The iterator to be looped.
     loop_iter_m : [m : Monad, iter : Iterator, Item iter = a] s -> (a -> s -> m (LoopState s s)) -> iter -> m s;
     loop_iter_m = |s, body, iter| (
         match iter.advance {
@@ -1028,14 +1317,27 @@ namespace Iterator {
     );
 
     // Executes monadic actions and collects the results into an array.
+    //
+    // # Parameters
+    //
+    // * `iter` - The iterator to be collected.
     collect_m : [m : Monad, iter : Iterator, Item iter = m a] iter -> m (Array a);
     collect_m = |iter| iter.fold_m([], |act, acm| pure $ acm.push_back(*act));
 
     // Calcculate sum of the elements of an iterator.
+    //
+    // # Parameters
+    //
+    // * `iter` - The iterator to be summed.
     sum : [iter : Iterator, Item iter = a, a : Additive] iter -> a;
     sum = |iter| iter.fold(zero, |a, acc| acc + a);
 
     // Compare two iterators by their elements.
+    //
+    // # Parameters
+    //
+    // * `iter1` - The first iterator to be compared.
+    // * `iter2` - The second iterator to be compared.
     is_equal : [iter1 : Iterator, iter2 : Iterator, Item iter1 = a, Item iter2 = a, a : Eq] iter1 -> iter2 -> Bool;
     is_equal = |iter1, iter2| (
         match iter1.advance {
@@ -1055,10 +1357,18 @@ namespace Iterator {
     */
 
     // Convert an iterator to an array.
+    // 
+    // # Parameters
+    //
+    // * `iter` - The iterator to be converted.
     to_array : [iter : Iterator, Item iter = a] iter -> Array a;
     to_array = |iter| iter.fold([], |a, acc| acc.push_back(a));
 
     // Create an iterator from an array.
+    // 
+    // # Parameters
+    //
+    // * `array` - The array to be converted to an iterator.
     from_array : Array a -> ArrayIterator a;
     from_array = |arr| ArrayIterator { arr: arr, idx: 0 };
 
@@ -1078,6 +1388,10 @@ namespace Iterator {
     // 
     // All elements of the input iterator are collected into an array. Therefore, this function may consume a lot of memory.
     // On the other hand, iteration may be faster by banging.
+    //
+    // # Parameters
+    //
+    // * `iter` - The iterator.
     bang : [iter : Iterator, Item iter = a] iter -> ArrayIterator a;
     bang = |iter| iter.to_array.to_iter;
 
@@ -1114,6 +1428,11 @@ namespace Iterator {
     // `range(a, b)` generates a range of numbers from `a` to `b - 1`.
     // 
     // If `a` is greater than or equal to `b`, the iterator will an infinite sequence of `a`.
+    // 
+    // # Parameters
+    //
+    // * `start` - The start of the range.
+    // * `end` - The end of the range.
     range : I64 -> I64 -> RangeIterator;
     range = |start, end| RangeIterator { next: start, end: end };
 
@@ -1128,6 +1447,12 @@ namespace Iterator {
     }
 
     // Create an iterator that generates a range of numbers with a step.
+    // 
+    // # Parameters
+    //
+    // * `start` - The start of the range.
+    // * `end` - The end of the range.
+    // * `step` - The step of the range.
     range_step : I64 -> I64 -> I64 -> RangeStepIterator;
     range_step = |start, end, step| (
         // Adjust end so that `start + n * step == end` for some integer `n` (when `step` is not 0).
@@ -1153,6 +1478,10 @@ namespace Iterator {
     // Create an iterator that counts up from a number.
     // 
     // `count_up(start)` generates an infinite sequence of numbers starting from `start`.
+    //
+    // # Parameters
+    //
+    // * `start` - The start of the count.
     count_up : I64 -> CountUpIterator;
     count_up = |start| CountUpIterator { next: start };
 
@@ -1175,10 +1504,19 @@ namespace Iterator {
     }
 
     // Create an iterator that generates elements by the state transition function.
+    // 
+    // # Parameters
+    //
+    // * `state` - The initial state.
+    // * `transition` - The state transition function that takes the current state and returns the next state and the next element.
     generate : s -> (s -> Option (s, a)) -> StateIterator s a;
     generate = |state, transit| StateIterator { state: some(state), transit: transit };
 
     // Create an iterator by a function that returns element at each index.
+    // 
+    // # Parameters
+    //
+    // * `map` - The function that takes an index and returns the element at that index.
     from_map : (I64 -> a) -> MapIterator CountUpIterator I64 a;
     from_map = |f| count_up(0).map(f);
 
@@ -1187,24 +1525,40 @@ namespace Iterator {
     */
 
     // Get the number of elements in an iterator.
+    // 
+    // # Parameters
+    //
+    // * `iter` - The iterator to be counted.
     get_size : [iter : Iterator] iter -> I64;
     get_size = |iter| iter.fold(0, |_, acc| acc + 1);
 
     // Get the first element of an iterator.
     // 
     // If the iterator is empty, this function returns `none`.
+    //
+    // # Parameters
+    //
+    // * `iter` - The iterator.
     get_first : [iter : Iterator] iter -> Option (Item iter);
     get_first = |iter| iter.advance.map(|(_, a)| a);
 
     // Get the tail of an iterator.
     // 
     // If the iterator is empty, this function returns `none`.
+    // 
+    // # Parameters
+    //
+    // * `iter` - The iterator.
     get_tail : [iter : Iterator] iter -> Option iter;
     get_tail = |iter| iter.advance.map(|(iter, _)| iter);
 
     // Remove the first element of an iterator.
     // 
     // If the iterator is empty, this function does nothing.
+    //
+    // # Parameters
+    //
+    // * `iter` - The iterator.
     pop_first : [iter : Iterator] iter -> iter;
     pop_first = |iter| (
         match iter.advance {
@@ -1214,6 +1568,10 @@ namespace Iterator {
     );
 
     // Is an iterator empty?
+    // 
+    // # Parameters
+    //
+    // * `iter` - The iterator.
     is_empty : [iter : Iterator] iter -> Bool;
     is_empty = |iter| iter.advance.is_none;
 
@@ -1235,6 +1593,11 @@ namespace Iterator {
     // Map a function over an iterator.
     // 
     // `iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
+    //
+    // # Parameters
+    //
+    // * `f` - The function to be applied to each element of the iterator.
+    // * `iter` - The iterator to be mapped.
     map : [i : Iterator, Item i = a] (a -> b) -> i -> MapIterator i a b;
     map = |f, iter| MapIterator { iter: iter, f: f };
 

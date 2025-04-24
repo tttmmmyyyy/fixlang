@@ -19,3 +19,7 @@ if condition {
     undefined("This branch should not be reached.");
 }
 ```
+
+# Parameters
+
+* `msg` - The message to print to the stderr when the undefined value is reached.
