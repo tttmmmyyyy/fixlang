@@ -190,6 +190,11 @@ Type: `Std::I64 -> Std::Array a -> a`
 
 Gets an element of an array at the specified index.
 
+##### Parameters
+
+* `i` - The index of the element to get.
+* `array` - The array to get the element from.
+
 #### act
 
 Type: `[f : Std::Functor] Std::I64 -> (a -> f a) -> Std::Array a -> f (Std::Array a)`
@@ -220,6 +225,10 @@ Type: `Std::I64 -> Std::Array a`
 
 Creates an empty array with specified capacity.
 
+##### Parameters
+
+* `capacity` - The number of elements the array can hold without allocating more space. The array is created with this capacity but is empty.
+
 #### fill
 
 Type: `Std::I64 -> a -> Std::Array a`
@@ -229,6 +238,11 @@ Creates an array of the specified length filled with the initial value.
 The capacity is set to the same value as the length.
 
 Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
+
+##### Parameters
+
+* `length` - The number of elements in the array.
+* `value` - The value to fill the array with.
 
 #### find_by
 
@@ -254,6 +268,10 @@ Type: `Std::Array a -> Std::I64`
 
 Gets the capacity of an array.
 
+##### Parameters
+
+* `array` - The array to get the capacity of.
+
 #### get_first
 
 Type: `Std::Array a -> Std::Option a`
@@ -271,6 +289,10 @@ Gets the last element of an array. Returns none if the array is empty.
 Type: `Std::Array a -> Std::I64`
 
 Gets the length of an array.
+
+##### Parameters
+
+* `array` - The array to get the length of.
 
 #### get_sub
 
@@ -295,6 +317,12 @@ Updates an array by applying a function to the element at the specified index.
 This function clones the given array if it is shared.
 
 If you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. 
+
+##### Parameters
+
+* `i` - The index of the element to modify.
+* `modifier` - The function to apply to the element.
+* `array` - The array to modify.
 
 #### pop_back
 
@@ -334,6 +362,12 @@ Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
 Updates an array by setting a value as the element at the specified index.
 
 This function clones the given array if it is shared.
+
+##### Parameters
+
+* `i` - The index of the element to set.
+* `value` - The value to set the element to.
+* `array` - The array to modify.
 
 #### sort_by
 
@@ -840,11 +874,15 @@ Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr
 NOTE: 
 It is the user's responsibility to ensure that the argument is actually a pointer to the type of the return value, and undefined behavior will occur if it is not.
 
+##### Parameters
+
+* `retained_ptr` - The pointer to the value.
+
 #### boxed_to_retained_ptr
 
 Type: `[a : Std::Boxed] a -> Std::Ptr`
 
-Returns a retained pointer to a boxed value.
+Gets a retained pointer to a boxed value.
 This function is used to share ownership of Fix's boxed values with foreign languages.
 
 To get back the boxed value from the retained pointer, use `from_retained_ptr`.
@@ -852,6 +890,10 @@ To release / retain the value in a foreign language, call the function pointer o
 
 Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
 If you want to get a pointer to the data of the boxed value, use `borrow_boxed`.
+
+##### Parameters
+
+* `value` - The boxed value to get the pointer to.
 
 #### clear_errno
 
@@ -1011,17 +1053,32 @@ Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Calculates bitwise AND of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_or
 
 Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Calculates bitwise OR of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_xor
 
 Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
 
 #### maximum
 
@@ -1035,13 +1092,23 @@ Type: `Std::I16`
 
 Type: `Std::I16 -> Std::I16 -> Std::I16`
 
-`v.shift_left(w)` shifts `v` to left by `w` bits.
+`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### shift_right
 
 Type: `Std::I16 -> Std::I16 -> Std::I16`
 
-`v.shift_right(w)` shifts `v` to right by `w` bits.
+`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### to_CChar
 
@@ -1193,17 +1260,32 @@ Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Calculates bitwise AND of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_or
 
 Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Calculates bitwise OR of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_xor
 
 Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
 
 #### maximum
 
@@ -1217,13 +1299,23 @@ Type: `Std::I32`
 
 Type: `Std::I32 -> Std::I32 -> Std::I32`
 
-`v.shift_left(w)` shifts `v` to left by `w` bits.
+`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### shift_right
 
 Type: `Std::I32 -> Std::I32 -> Std::I32`
 
-`v.shift_right(w)` shifts `v` to right by `w` bits.
+`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### to_CChar
 
@@ -1375,17 +1467,32 @@ Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Calculates bitwise AND of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_or
 
 Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Calculates bitwise OR of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_xor
 
 Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
 
 #### maximum
 
@@ -1399,13 +1506,23 @@ Type: `Std::I64`
 
 Type: `Std::I64 -> Std::I64 -> Std::I64`
 
-`v.shift_left(w)` shifts `v` to left by `w` bits.
+`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### shift_right
 
 Type: `Std::I64 -> Std::I64 -> Std::I64`
 
-`v.shift_right(w)` shifts `v` to right by `w` bits.
+`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### to_CChar
 
@@ -1557,17 +1674,32 @@ Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Calculates bitwise AND of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_or
 
 Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Calculates bitwise OR of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_xor
 
 Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
 
 #### maximum
 
@@ -1581,13 +1713,23 @@ Type: `Std::I8`
 
 Type: `Std::I8 -> Std::I8 -> Std::I8`
 
-`v.shift_left(w)` shifts `v` to left by `w` bits.
+`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### shift_right
 
 Type: `Std::I8 -> Std::I8 -> Std::I8`
 
-`v.shift_right(w)` shifts `v` to right by `w` bits.
+`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### to_CChar
 
@@ -2615,17 +2757,32 @@ Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Calculates bitwise AND of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_or
 
 Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Calculates bitwise OR of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_xor
 
 Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
 
 #### maximum
 
@@ -2639,13 +2796,23 @@ Type: `Std::U16`
 
 Type: `Std::U16 -> Std::U16 -> Std::U16`
 
-`v.shift_left(w)` shifts `v` to left by `w` bits.
+`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### shift_right
 
 Type: `Std::U16 -> Std::U16 -> Std::U16`
 
-`v.shift_right(w)` shifts `v` to right by `w` bits.
+`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### to_CChar
 
@@ -2793,17 +2960,32 @@ Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Calculates bitwise AND of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_or
 
 Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Calculates bitwise OR of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_xor
 
 Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
 
 #### maximum
 
@@ -2817,13 +2999,23 @@ Type: `Std::U32`
 
 Type: `Std::U32 -> Std::U32 -> Std::U32`
 
-`v.shift_left(w)` shifts `v` to left by `w` bits.
+`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### shift_right
 
 Type: `Std::U32 -> Std::U32 -> Std::U32`
 
-`v.shift_right(w)` shifts `v` to right by `w` bits.
+`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### to_CChar
 
@@ -2971,17 +3163,32 @@ Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Calculates bitwise AND of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_or
 
 Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Calculates bitwise OR of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_xor
 
 Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
 
 #### maximum
 
@@ -2995,13 +3202,23 @@ Type: `Std::U64`
 
 Type: `Std::U64 -> Std::U64 -> Std::U64`
 
-`v.shift_left(w)` shifts `v` to left by `w` bits.
+`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### shift_right
 
 Type: `Std::U64 -> Std::U64 -> Std::U64`
 
-`v.shift_right(w)` shifts `v` to right by `w` bits.
+`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### to_CChar
 
@@ -3149,17 +3366,32 @@ Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Calculates bitwise AND of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_or
 
 Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Calculates bitwise OR of two values.
 
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
 #### bit_xor
 
 Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
 
 #### maximum
 
@@ -3173,13 +3405,23 @@ Type: `Std::U8`
 
 Type: `Std::U8 -> Std::U8 -> Std::U8`
 
-`v.shift_left(w)` shifts `v` to left by `w` bits.
+`v.shift_left(bits)` shifts `v` to left by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### shift_right
 
 Type: `Std::U8 -> Std::U8 -> Std::U8`
 
-`v.shift_right(w)` shifts `v` to right by `w` bits.
+`v.shift_right(bits)` shifts `v` to right by `bits` bits.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
 
 #### to_CChar
 
