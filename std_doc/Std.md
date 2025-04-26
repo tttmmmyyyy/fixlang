@@ -3033,7 +3033,7 @@ Evaluate a monadic action, and pass the result to the next action.
 
 ##### Parameters
 
-* `following` - The following action.
+* `continuation` - The following action.
 * `action` - The first action.
 
 #### flatten
@@ -5114,7 +5114,7 @@ Evaluate a monadic action, and pass the result to the next action.
 
 ###### Parameters
 
-* `following` - The following action.
+* `continuation` - The following action.
 * `action` - The first action.
 
 ##### method `pure`

@@ -11,6 +11,7 @@
 ### Changed
 - Update LLVM to 17.0.x.
 - Improve language server protocol support.
+- By creating a "# Parameters" section within a function's documentation comment and listing its arguments, the Language Server now inserts argument placeholders after autocompletion. For details, please refer to the [explanation in the documents](/Document.md#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server).
 - Now `fix docs` command skips generating document for private values (i.e., values whose names start with an underscore). If you want to generate document for them, use `--with-private` option.
 
 ### Fixed
