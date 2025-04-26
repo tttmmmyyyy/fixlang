@@ -2866,7 +2866,7 @@ trait [m : *->*] m : Monad {
     //
     // # Parameters
     //
-    // * `following` - The following action.
+    // * `continuation` - The following action.
     // * `action` - The first action. 
     bind : (a -> m b) -> m a -> m b;
     // Creates a pure monadic action which just returns a specified value.
