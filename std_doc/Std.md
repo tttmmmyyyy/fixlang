@@ -24,6 +24,11 @@ Type: `(a -> b) -> (b -> c) -> a -> c`
 
 Composes two functions. Composition operators `<<` and `>>` is translated to use of `compose`.
 
+##### Parameters
+
+* `first` - The first function to be composed.
+* `second` - The second function to be composed.
+
 #### fix
 
 Type: `((a -> b) -> a -> b) -> a -> b`
@@ -72,6 +77,11 @@ main = (
 ); // evaluates to 0 + 1 + ... + 99
 ```
 
+##### Parameters
+
+* `s0` - The initial state of the loop.
+* `body` - The loop body function. It takes the current state of the loop and returns either `continue(s)` or `break(r)`.
+
 #### loop_m
 
 Type: `[m : Std::Monad] s -> (s -> m (Std::LoopState s r)) -> m r`
@@ -95,11 +105,20 @@ main = (
 );
 ```
 
+##### Parameters
+
+* `s0` - The initial state of the loop.
+* `body` - The body of the loop. It takes the current state and returns a monadic action that produces a new state or a break value.
+
 #### mark_threaded
 
 Type: `a -> a`
 
 Traverses all values reachable from the given value, and changes the reference counters of them into multi-threaded mode.
+
+##### Parameters
+
+* `value` - The value to make multi-threaded.
 
 #### undefined
 
@@ -126,6 +145,10 @@ if condition {
     undefined("This branch should not be reached.");
 }
 ```
+
+##### Parameters
+
+* `msg` - The message to print to the stderr when the undefined value is reached.
 
 #### unsafe_is_unique
 
@@ -165,6 +188,10 @@ main = (
 );
 ```
 
+##### Parameters
+
+* `value` - The value to check for uniqueness.
+
 #### with_retained
 
 Type: `(a -> b) -> a -> b`
@@ -174,6 +201,11 @@ It is guaranteed that `x` is keep alive until `with_retained` is finished, even 
 
 A typical use case of this function is the implementation of `Std::Array::borrow_ptr`.
 
+##### Parameters
+
+* `f` - The function to run with the retained value.
+* `x` - The value to retain.
+
 ### namespace Std::Add
 
 #### add
@@ -181,6 +213,11 @@ A typical use case of this function is the implementation of `Std::Array::borrow
 Type: `[a : Std::Add] a -> a -> a`
 
 Adds two values. An expression `x + y` is translated to `add(x, y)`.
+
+##### Parameters
+
+* `lhs`
+* `rhs`
 
 ### namespace Std::Array
 
@@ -211,6 +248,12 @@ If you call `arr.act(idx, fun)` when both of `arr` and `arr.@(idx)` are unique, 
 If you call `act` on an array which is shared, this function clones the given array when inserting the result of your action into the array.
 This means that you don't need to pay cloning cost when your action failed, as expected.
 
+##### Parameters
+
+* `i` - The index of the element to be acted on.
+* `action` - The functorial action to be performed on the element at index `idx`.
+* `array` - The array.
+
 #### append
 
 Type: `Std::Array a -> Std::Array a -> Std::Array a`
@@ -218,6 +261,11 @@ Type: `Std::Array a -> Std::Array a -> Std::Array a`
 Appends an array to an array.
 
 Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` after `rhs`.
+
+##### Parameters
+
+* `second` - The array to be appended.
+* `first` - The array to which `second` is appended.
 
 #### empty
 
@@ -250,17 +298,31 @@ Type: `(a -> Std::Bool) -> Std::Array a -> Std::Option Std::I64`
 
 Finds the first index at which the element satisfies a condition.
 
+##### Parameters
+
+* `cond` - The condition to be satisfied.
+* `array` - The array to be searched.
+
 #### from_iter
 
 Type: `[it : Std::Iterator, Std::Iterator::Item it = a] it -> Std::Array a`
 
 Create an array from an iterator.
 
+##### Parameters
+
+* `it` - The iterator to be converted to an array.
+
 #### from_map
 
 Type: `Std::I64 -> (Std::I64 -> a) -> Std::Array a`
 
 Creates an array by a mapping function.
+
+##### Parameters
+
+* `size` - The size of the array to be created.
+* `map` - The mapping function. It takes an index and returns the value at that index.
 
 #### get_capacity
 
@@ -278,11 +340,19 @@ Type: `Std::Array a -> Std::Option a`
 
 Gets the first element of an array. Returns none if the array is empty.
 
+##### Parameters
+
+* `arr` - The array.
+
 #### get_last
 
 Type: `Std::Array a -> Std::Option a`
 
 Gets the last element of an array. Returns none if the array is empty.
+
+##### Parameters
+
+* `arr` - The array.
 
 #### get_size
 
@@ -302,11 +372,21 @@ Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
 `s` and `e` are clamped to the range `[0, arr.get_size]`.
 
+##### Parameters
+
+* `start` - The start index of the subarray.
+* `end` - The end index of the subarray.
+* `array` - The array to be sliced.
+
 #### is_empty
 
 Type: `Std::Array a -> Std::Bool`
 
-Returns if the array is empty
+Gets whether the array is empty.
+
+##### Parameters
+
+* `array` - The array to be checked.
 
 #### mod
 
@@ -331,17 +411,31 @@ Type: `Std::Array a -> Std::Array a`
 Pops an element at the back of an array.
 If the array is empty, this function does nothing.
 
+##### Parameters
+
+* `array` - The array to be popped.
+
 #### push_back
 
 Type: `a -> Std::Array a -> Std::Array a`
 
 Pushes an element to the back of an array.
 
+##### Parameters
+
+* `element` - The element to be pushed.
+* `array` - The array to which the element is pushed.
+
 #### reserve
 
 Type: `Std::I64 -> Std::Array a -> Std::Array a`
 
 Reserves the memory region for an array.
+
+##### Parameters
+
+* `capacity` - The capacity to be reserved.
+* `array` - The array to be reserved.
 
 #### search_partition_point
 
@@ -354,6 +448,11 @@ When we put an order on `Bool` as `false < true`, `pred` must be monotonically d
 The returned value x satisfies 0 <= x <= `arr.get_size`. If `arr` is empty, it returns 0.
 
 Added in v1.1.0.
+
+##### Parameters
+
+* `predicate` - The predicate function.
+* `array` - The array to be searched.
 
 #### set
 
@@ -375,11 +474,20 @@ Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 
 Sorts elements in a vector by "less than" comparator.
 
+##### Parameters
+
+* `less_than` - The comparator function.
+* `array` - The array to be sorted.
+
 #### to_iter
 
 Type: `Std::Array a -> Std::Iterator::ArrayIterator a`
 
 Converts an array to an iterator.
+
+##### Parameters
+
+* `array` - The array to be converted.
 
 #### truncate
 
@@ -388,6 +496,11 @@ Type: `Std::I64 -> Std::Array a -> Std::Array a`
 Truncates an array, keeping the given number of first elements.
 
 `truncante(len, arr)` does nothing if `len >= arr.get_size`.
+
+##### Parameters
+
+* `new_length` - The number of elements to be kept.
+* `array` - The array to be truncated.
 
 ### namespace Std::Box
 
@@ -405,6 +518,11 @@ Asserts that a condition (boolean value) is true.
 
 If the assertion failed, prints a message to the stderr and aborts the program.
 
+##### Parameters
+
+* `lazy_msg`
+* `condition`
+
 #### assert_eq
 
 Type: `[a : Std::Eq] Std::Lazy Std::String -> a -> a -> Std::IO ()`
@@ -412,6 +530,12 @@ Type: `[a : Std::Eq] Std::Lazy Std::String -> a -> a -> Std::IO ()`
 Asserts that two values are equal.
 
 If the assertion failed, prints a message to the stderr and aborts the program.
+
+##### Parameters
+
+* `lazy_msg`
+* `lhs`
+* `rhs`
 
 #### assert_unique
 
@@ -422,11 +546,20 @@ If the assertion failed, prints a message to the stderr and aborts the program.
 
 The main use of this function is to check whether a boxed value given as an argument is unique.
 
+##### Parameters
+
+* `lazy_msg`
+* `value`
+
 #### consumed_time_while_io
 
 Type: `Std::IO a -> Std::IO (a, Std::F64)`
 
 Get clocks (cpu time) elapsed while executing an I/O action.
+
+##### Parameters
+
+* `action`
 
 #### consumed_time_while_lazy
 
@@ -436,6 +569,10 @@ Get clocks (cpu time) elapsed while evaluating a lazy value.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
+##### Parameters
+
+* `lazy_value`
+
 #### debug_eprint
 
 Type: `Std::String -> ()`
@@ -443,6 +580,10 @@ Type: `Std::String -> ()`
 Prints a string to stderr and flushes.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
+
+##### Parameters
+
+* `msg`
 
 #### debug_eprintln
 
@@ -452,6 +593,10 @@ Prints a string followed by a newline to stderr and flushes.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
+##### Parameters
+
+* `msg`
+
 #### debug_print
 
 Type: `Std::String -> ()`
@@ -459,6 +604,10 @@ Type: `Std::String -> ()`
 Prints a string to stdout and flushes.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
+
+##### Parameters
+
+* `msg`
 
 #### debug_println
 
@@ -468,6 +617,10 @@ Prints a string followed by a newline to stdout and flushes.
 
 NOTE: This function is not pure and should only be used for temporary debugging purposes.
 
+##### Parameters
+
+* `msg`
+
 ### namespace Std::Div
 
 #### div
@@ -476,6 +629,11 @@ Type: `[a : Std::Div] a -> a -> a`
 
 Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
 
+##### Parameters
+
+* `lhs`
+* `rhs`
+
 ### namespace Std::Eq
 
 #### eq
@@ -483,6 +641,11 @@ Divides a value by another value. An expression `x / y` is translated to `div(x,
 Type: `[a : Std::Eq] a -> a -> Std::Bool`
 
 Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
+
+##### Parameters
+
+* `lhs`
+* `rhs`
 
 ### namespace Std::F32
 
@@ -853,6 +1016,11 @@ It is not allowed to mutate a boxed value through the borrowed pointer. If you w
 
 See also: `borrow_boxed_io`, `mutate_boxed`, `mutate_boxed_io`.
 
+##### Parameters
+
+* `borrower` - The action to be performed on the pointer.
+* `value` - The boxed value to be borrowed.
+
 #### borrow_boxed_io
 
 Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO b`
@@ -864,6 +1032,11 @@ For the details of the pointer, see the document of `borrow_boxed`.
 It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
 
 See also: `borrow_boxed`, `mutate_boxed`, `mutate_boxed_io`.
+
+##### Parameters
+
+* `action` - The IO action to be performed on the pointer.
+* `value` - The boxed value to be borrowed.
 
 #### boxed_from_retained_ptr
 
@@ -930,6 +1103,10 @@ main = (
 );
 ```
 
+##### Parameters
+
+* `lazy_value` - The lazy boxed value to indicate the type of the boxed value to be released.
+
 #### get_funptr_retain
 
 Type: `[a : Std::Boxed] Std::Lazy a -> Std::Ptr`
@@ -938,6 +1115,10 @@ Returns a pointer to the function of type `void (*)(void*)` which retains a boxe
 This function is used to retain a pointer obtained by `boxed_to_retained_ptr`.
 
 For the reason that this function requires a value of type `Lazy a`, not of `a`, see the document for `get_funptr_release`.
+
+##### Parameters
+
+* `lazy_value` - The lazy boxed value to indicate the type of the boxed value to be retained.
 
 #### mutate_boxed
 
@@ -954,6 +1135,11 @@ This function first clones the value if `x` is not unique.
 
 See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
 
+##### Parameters
+
+* `act` - The action to perform on the pointer to the boxed value.
+* `value` - The boxed value to mutate.
+
 #### mutate_boxed_io
 
 Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO (a, b)`
@@ -968,11 +1154,22 @@ For more details, see the document of `mutate_boxed`.
 
 See also: `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`.
 
+##### Parameters
+
+* `action` - The IO action to be performed on the pointer.
+* `value` - The boxed value to be mutated.
+
 #### mutate_boxed_ios
 
 Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
 
 Internal implementation of the `mutate_boxed_io` function.
+
+##### Parameters
+
+* `act` - The action to perform on the pointer to the boxed value.
+* `value` - The boxed value to mutate.
+* `ios` - The `IOState` to use for the action.
 
 ### namespace Std::FFI::Destructor
 
@@ -987,17 +1184,32 @@ Borrow the contained value.
 It is guaranteed that the `dtor` is alive during the call of `worker`.
 In other words, the `worker` receives the contained value for which the destructor is not called yet.
 
+##### Parameters
+
+* `borrower` - The function to be called on the contained value.
+* `dtor` - The destructor value.
+
 #### borrow_io
 
 Type: `(a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO b`
 
 Performs an IO action borrowing the contained value.
 
+##### Parameters
+
+* `action` - The IO action to be performed on the contained value.
+* `dtor` - The destructor value.
+
 #### make
 
 Type: `a -> (a -> Std::IO a) -> Std::FFI::Destructor a`
 
 Make a destructor value.
+
+##### Parameters
+
+* `value` - The value to be wrapped.
+* `dtor` - The destructor function to be called on the value.
 
 #### mutate_unique
 
@@ -1011,6 +1223,12 @@ If `dtor` is shared, it creates a new `Destructor` value using `ctor` and applie
 The `action` is allowed to modify the external resource stored in `dtor` (e.g., if `value` is a pointer, it can modify the value pointed by the pointer).
 Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resource stored in `dtor`.
 
+##### Parameters
+
+* `clone` - The constructor function of the contained value.
+* `action` - The action to be performed on the contained value.
+* `dtor` - The destructor value.
+
 #### mutate_unique_io
 
 Type: `(a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO (Std::FFI::Destructor a, b)`
@@ -1019,11 +1237,23 @@ Apply an IO action which mutates the semantics of the value.
 
 This is similar to `mutate_unique`, but the `ctor` and `action` is executed in the context of the external `IO` context.
 
+##### Parameters
+
+* `clone` - The constructor function of the contained value.
+* `action` - The action to be performed on the contained value.
+* `dtor` - The destructor value.
+
 ### namespace Std::FromBytes
 
 #### from_bytes
 
 Type: `[a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::ErrMsg a`
+
+Converts a byte array into a value by parsing it.
+
+##### Parameters
+
+* `byte_array` - The byte array to be converted.
 
 ### namespace Std::FromString
 
@@ -1031,15 +1261,34 @@ Type: `[a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::ErrMsg a`
 
 Type: `[a : Std::FromString] Std::String -> Std::Result Std::ErrMsg a`
 
+Converts a string into a value by parsing it.
+
+##### Parameters
+
+* `str` - The string to be converted.
+
 ### namespace Std::Functor
 
 #### forget
 
 Type: `[f : Std::Functor] f a -> f ()`
 
+Discards the value inside the functor and returns a functor containing `()`.
+
+##### Parameters
+
+* `value` - The functor value.
+
 #### map
 
 Type: `[f : Std::Functor] (a -> b) -> f a -> f b`
+
+Applies a function to the value inside the functor.
+
+##### Parameters
+
+* `f` - The function to be applied.
+* `value` - The functor value to be transformed.
 
 ### namespace Std::I16
 
@@ -1879,11 +2128,19 @@ Closes a file.
 
 Unlike C's `fclose`, closing an already closed `IOHandle` is safe and does nothing.
 
+##### Parameters
+
+* `handle` - The IOHandle to be closed.
+
 #### eprint
 
 Type: `Std::String -> Std::IO ()`
 
 Prints a string to stderr.
+
+##### Parameters
+
+* `msg` - The string to be printed.
 
 #### eprintln
 
@@ -1891,11 +2148,19 @@ Type: `Std::String -> Std::IO ()`
 
 Prints a string followed by a newline to stderr.
 
+##### Parameters
+
+* `msg` - The string to be printed.
+
 #### exit
 
 Type: `Std::I64 -> Std::IO a`
 
 Exits the program with an error code.
+
+##### Parameters
+
+* `code` - The error code to be returned.
 
 #### exit_with_msg
 
@@ -1905,19 +2170,32 @@ Exits the program with an error message and an error code.
 
 The error message is written to the standard error output.
 
+##### Parameters
+
+* `code` - The error code to be returned.
+* `msg` - The error message to be printed.
+
 #### from_runner
 
 Type: `(Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a`
 
 Creates an IO action from a IO runner function, which is a function of type `IOState -> (IOState, a)`.
 
+##### Parameters
+
+* `io_runner` - The IO runner function.
+
 #### get_arg
 
 Type: `Std::I64 -> Std::IO (Std::Option Std::String)`
 
-`get_arg(n)` returns the n-th (0-indexed) command line argument.
+`get_arg(i)` returns the i-th (0-indexed) command line argument.
 
-If n is greater than or equal to the number of command line arguments, this function returns none.
+If i is greater than or equal to the number of command line arguments, this function returns none.
+
+##### Parameters
+
+* `i` - The index of the command line argument.
 
 #### get_arg_count
 
@@ -1945,6 +2223,10 @@ Type: `Std::IO::IOHandle -> Std::IO Std::Bool`
 
 Checks if an `IOHandle` reached to the EOF.
 
+##### Parameters
+
+* `handle` - The IOHandle to be checked.
+
 #### loop_lines
 
 Type: `Std::IO::IOHandle -> s -> (s -> Std::String -> Std::LoopState s s) -> Std::IO::IOFail s`
@@ -1957,6 +2239,12 @@ When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_
 
 Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
+##### Parameters
+
+* `handle` - The IOHandle to be read.
+* `s0` - The initial state.
+* `work` - The function to be called on the pair of current state and a line string read from `handle`.
+
 #### loop_lines_io
 
 Type: `Std::IO::IOHandle -> s -> (s -> Std::String -> Std::IO::IOFail (Std::LoopState s s)) -> Std::IO::IOFail s`
@@ -1965,11 +2253,22 @@ Loop on lines read from an `IOHandle`.
 
 Similar to `loop_lines`, but the worker function can perform an IO action.
 
+##### Parameters
+
+* `handle` - The IOHandle to be read.
+* `s0` - The initial state.
+* `work` - The function to be called on the pair of current state and a line string read from `handle`.
+
 #### open_file
 
 Type: `Std::Path -> Std::String -> Std::IO::IOFail Std::IO::IOHandle`
 
 Openes a file. The second argument is a mode string for `fopen` C function.
+
+##### Parameters
+
+* `path` - The path to the file to be opened.
+* `mode` - The mode string for `fopen` C function.
 
 #### print
 
@@ -1977,11 +2276,19 @@ Type: `Std::String -> Std::IO ()`
 
 Prints a string to stdout.
 
+##### Parameters
+
+* `msg` - The string to be printed.
+
 #### println
 
 Type: `Std::String -> Std::IO ()`
 
 Prints a string followed by a newline to stdout.
+
+##### Parameters
+
+* `msg` - The string to be printed.
 
 #### read_bytes
 
@@ -1989,17 +2296,29 @@ Type: `Std::IO::IOHandle -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads all bytes from an IOHandle.
 
+##### Parameters
+
+* `handle` - The IOHandle to be read.
+
 #### read_file_bytes
 
 Type: `Std::Path -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads all bytes from a file.
 
+##### Parameters
+
+* `path` - The path to the file to be read.
+
 #### read_file_string
 
 Type: `Std::Path -> Std::IO::IOFail Std::String`
 
 Raads all characters from a file.
+
+##### Parameters
+
+* `path` - The path to the file to be read.
 
 #### read_line
 
@@ -2008,17 +2327,30 @@ Type: `Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 Reads characters from a IOHandle upto newline or EOF.
 The returned string may include newline at its end.
 
+##### Parameters
+
+* `handle` - The IOHandle to be read.
+
 #### read_n_bytes
 
 Type: `Std::IO::IOHandle -> Std::I64 -> Std::IO::IOFail (Std::Array Std::U8)`
 
 Reads at most n bytes from an IOHandle.
 
+##### Parameters
+
+* `handle` - The IOHandle to be read.
+* `num_bytes` - The number of bytes to be read.
+
 #### read_string
 
 Type: `Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
 Reads all characters from an IOHandle.
+
+##### Parameters
+
+* `handle` - The IOHandle to be read.
 
 #### stderr
 
@@ -2050,11 +2382,22 @@ Performs a function with a file handle. The second argument is a mode string for
 
 The file handle will be closed automatically.
 
+##### Parameters
+
+* `path` - The path to the file to be opened.
+* `mode` - The mode string for `fopen` C function.
+* `work` - The function to be called on the opened file handle.
+
 #### write_bytes
 
 Type: `Std::IO::IOHandle -> Std::Array Std::U8 -> Std::IO::IOFail ()`
 
 Writes a byte array into an IOHandle.
+
+##### Parameters
+
+* `handle` - The IOHandle to be written.
+* `array` - The byte array to be written.
 
 #### write_file_bytes
 
@@ -2062,17 +2405,32 @@ Type: `Std::Path -> Std::Array Std::U8 -> Std::IO::IOFail ()`
 
 Writes a byte array into a file.
 
+##### Parameters
+
+* `path` - The path to the file to be written.
+* `content` - The byte array to be written.
+
 #### write_file_string
 
 Type: `Std::Path -> Std::String -> Std::IO::IOFail ()`
 
 Writes a string into a file.
 
+##### Parameters
+
+* `path` - The path to the file to be written.
+* `content` - The string to be written.
+
 #### write_string
 
 Type: `Std::IO::IOHandle -> Std::String -> Std::IO::IOFail ()`
 
 Writes a string into an IOHandle.
+
+##### Parameters
+
+* `handle` - The IOHandle to be written.
+* `content` - The string to be written.
 
 ### namespace Std::IO::IOFail
 
@@ -2082,11 +2440,19 @@ Type: `Std::IO (Std::Result Std::ErrMsg a) -> Std::IO::IOFail a`
 
 Create from IO action of which returns `Result ErrMsg a`.
 
+##### Parameters
+
+* `io_res` - The IO action to be converted.
+
 #### from_result
 
 Type: `Std::Result Std::ErrMsg a -> Std::IO::IOFail a`
 
 Creates an pure `IOFail` value from a `Result` value.
+
+##### Parameters
+
+* `res` - The result value to be converted.
 
 #### lift
 
@@ -2094,11 +2460,19 @@ Type: `Std::IO a -> Std::IO::IOFail a`
 
 Lifts an `IO` action to a successful `IOFail` action.
 
+##### Parameters
+
+* `io` - The IO action to be lifted.
+
 #### throw
 
 Type: `Std::ErrMsg -> Std::IO::IOFail a`
 
 Creates an error `IOFail` action.
+
+##### Parameters
+
+* `err_msg` - The error message to be thrown.
 
 #### to_result
 
@@ -2106,11 +2480,20 @@ Type: `Std::IO::IOFail a -> Std::IO (Std::Result Std::ErrMsg a)`
 
 Converts an `IOFail` to an `Result` value (wrapped by `IO`).
 
+##### Parameters
+
+* `io_fail` - The `IOFail` value to be converted.
+
 #### try
 
 Type: `(Std::ErrMsg -> Std::IO a) -> Std::IO::IOFail a -> Std::IO a`
 
 Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`) function.
+
+##### Parameters
+
+* `catch` - The error handler function to be called on the error.
+* `io_fail` - The `IOFail` value to be run.
 
 ### namespace Std::IO::IOHandle
 
@@ -2121,6 +2504,10 @@ Type: `Std::Ptr -> Std::IO::IOHandle`
 Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
 
 Creating two `IOHandle`s from a single file pointer is forbidden.
+
+##### Parameters
+
+* `file_ptr` - The file pointer to be wrapped.
 
 #### get_file_ptr
 
@@ -2137,6 +2524,10 @@ Instead you should close `IOHandle` by `IO::close_file`.
 NOTE:
 If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
 
+##### Parameters
+
+* `handle` - The IOHandle to get the file pointer from.
+
 ### namespace Std::Iterator
 
 #### advance
@@ -2151,6 +2542,11 @@ Append two iterators.
 
 NOTE: Since this function is designed so that `iter1.append(iter2)` appends `iter2` after `iter1`, `append(iter1, iter2)` appends iterators in the opposite order.
 
+##### Parameters
+
+* `second` - The second iterator.
+* `first` - The first iterator.
+
 #### bang
 
 Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::ArrayIterator a`
@@ -2160,11 +2556,19 @@ Convert any iterator to an array iterator.
 All elements of the input iterator are collected into an array. Therefore, this function may consume a lot of memory.
 On the other hand, iteration may be faster by banging.
 
+##### Parameters
+
+* `iter` - The iterator.
+
 #### collect_m
 
 Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = m a] iter -> m (Std::Array a)`
 
 Executes monadic actions and collects the results into an array.
+
+##### Parameters
+
+* `iter` - The iterator to be collected.
 
 #### count_up
 
@@ -2173,6 +2577,10 @@ Type: `Std::I64 -> Std::Iterator::CountUpIterator`
 Create an iterator that counts up from a number.
 
 `count_up(start)` generates an infinite sequence of numbers starting from `start`.
+
+##### Parameters
+
+* `start` - The start of the count.
 
 #### empty
 
@@ -2190,6 +2598,11 @@ Filter the elements of an iterator by a predicate.
 
 `iter.filter(pred)` returns an iterator that only yields elements of `iter` for which `pred` returns `true`.
 
+##### Parameters
+
+* `predicate` - The predicate function to be applied to each element of the iterator.
+* `iter` - The iterator to be filtered.
+
 #### filter_map
 
 Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Option b) -> i -> Std::Iterator::FilterMapIterator i a b`
@@ -2198,15 +2611,31 @@ Filter and map the elements of an iterator.
 
 `iter.filter_map(f)` returns an iterator that applies `f` to each element of `iter` and yields the result if it is `some`.
 
+##### Parameters
+
+* `f` - The function to be applied to each element of the iterator.
+* `iter` - The iterator to be filtered and mapped.
+
 #### flat_map
 
 Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] (a -> i2) -> i1 -> Std::Iterator::FlatMapIterator i1 a i2`
+
+Apply a function to each element of an iterator and flatten the result.
+
+##### Parameters
+
+* `f` - The function to be applied to each element of the iterator.
+* `iter` - The iterator.
 
 #### flatten
 
 Type: `[i2 : Std::Iterator, i1 : Std::Iterator, Std::Iterator::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
 
 Flatten an iterator of iterators.
+
+##### Parameters
+
+* `iter_iter` - The iterator of iterators.
 
 #### fold
 
@@ -2216,11 +2645,23 @@ Fold the elements of an iterator from left to right.
 
 Conceptually, `[a0, a1, a2, ...].to_iter.fold(s, op) = s.op(a0).op(a1).op(a2)...`.
 
+##### Parameters
+
+* `s` - The initial state.
+* `body` - The function to be called on the pair of an element and the current state.
+* `iter` - The iterator to be folded.
+
 #### fold_m
 
 Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
 
 Fold the elements of an iterator from left to right by monadic action.
+
+##### Parameters
+
+* `s` - The initial state.
+* `body` - The function to be called on the pair of an element and the current state.
+* `iter` - The iterator to be folded.
 
 #### from_array
 
@@ -2228,17 +2669,30 @@ Type: `Std::Array a -> Std::Iterator::ArrayIterator a`
 
 Create an iterator from an array.
 
+##### Parameters
+
+* `array` - The array to be converted to an iterator.
+
 #### from_map
 
 Type: `(Std::I64 -> a) -> Std::Iterator::MapIterator Std::Iterator::CountUpIterator Std::I64 a`
 
 Create an iterator by a function that returns element at each index.
 
+##### Parameters
+
+* `map` - The function that takes an index and returns the element at that index.
+
 #### generate
 
 Type: `s -> (s -> Std::Option (s, a)) -> Std::Iterator::StateIterator s a`
 
 Create an iterator that generates elements by the state transition function.
+
+##### Parameters
+
+* `state` - The initial state.
+* `transition` - The state transition function that takes the current state and returns the next state and the next element.
 
 #### get_first
 
@@ -2248,11 +2702,19 @@ Get the first element of an iterator.
 
 If the iterator is empty, this function returns `none`.
 
+##### Parameters
+
+* `iter` - The iterator.
+
 #### get_size
 
 Type: `[iter : Std::Iterator] iter -> Std::I64`
 
 Get the number of elements in an iterator.
+
+##### Parameters
+
+* `iter` - The iterator to be counted.
 
 #### get_tail
 
@@ -2261,6 +2723,10 @@ Type: `[iter : Std::Iterator] iter -> Std::Option iter`
 Get the tail of an iterator.
 
 If the iterator is empty, this function returns `none`.
+
+##### Parameters
+
+* `iter` - The iterator.
 
 #### intersperse
 
@@ -2273,17 +2739,31 @@ Example:
 assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3]);;
 ```
 
+##### Parameters
+
+* `sep` - The element to be interspersed.
+* `iter` - The iterator.
+
 #### is_empty
 
 Type: `[iter : Std::Iterator] iter -> Std::Bool`
 
 Is an iterator empty?
 
+##### Parameters
+
+* `iter` - The iterator.
+
 #### is_equal
 
 Type: `[iter1 : Std::Iterator, iter2 : Std::Iterator, a : Std::Eq, Std::Iterator::Item iter1 = a, Std::Iterator::Item iter2 = a] iter1 -> iter2 -> Std::Bool`
 
 Compare two iterators by their elements.
+
+##### Parameters
+
+* `iter1` - The first iterator to be compared.
+* `iter2` - The second iterator to be compared.
 
 #### loop_iter
 
@@ -2293,11 +2773,23 @@ Loop over the elements of an iterator.
 
 This function is similar to `fold` but a more general version of it. It allows the user to break out of the loop at any point.
 
+##### Parameters
+
+* `s` - The initial state.
+* `body` - The function to be called on the pair of an element and the current state.
+* `iter` - The iterator to be looped.
+
 #### loop_iter_m
 
 Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
 
 Loop over the elements of an iterator by monadic action.
+
+##### Parameters
+
+* `s` - The initial state.
+* `body` - The function to be called on the pair of an element and the current state.
+* `iter` - The iterator to be looped.
 
 #### map
 
@@ -2307,6 +2799,11 @@ Map a function over an iterator.
 
 `iter.map(f)` returns an iterator that applies `f` to each element of `iter`.
 
+##### Parameters
+
+* `f` - The function to be applied to each element of the iterator.
+* `iter` - The iterator to be mapped.
+
 #### pop_first
 
 Type: `[iter : Std::Iterator] iter -> iter`
@@ -2314,6 +2811,10 @@ Type: `[iter : Std::Iterator] iter -> iter`
 Remove the first element of an iterator.
 
 If the iterator is empty, this function does nothing.
+
+##### Parameters
+
+* `iter` - The iterator.
 
 #### product
 
@@ -2328,11 +2829,21 @@ Example:
 assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);;
 ```
 
+##### Parameters
+
+* `second` - The second iterator.
+* `first` - The first iterator.
+
 #### push_front
 
 Type: `[i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::ConsIterator i a`
 
-Push an element to an iterator.
+Push an element to the front of an iterator.
+
+##### Parameters
+
+* `head` - The element to be pushed.
+* `tail` - The iterator to be pushed to.
 
 #### range
 
@@ -2344,11 +2855,22 @@ Create an iterator that generates a range of numbers.
 
 If `a` is greater than or equal to `b`, the iterator will an infinite sequence of `a`.
 
+##### Parameters
+
+* `start` - The start of the range.
+* `end` - The end of the range.
+
 #### range_step
 
 Type: `Std::I64 -> Std::I64 -> Std::I64 -> Std::Iterator::RangeStepIterator`
 
 Create an iterator that generates a range of numbers with a step.
+
+##### Parameters
+
+* `start` - The start of the range.
+* `end` - The end of the range.
+* `step` - The step of the range.
 
 #### reverse
 
@@ -2358,11 +2880,19 @@ Reverses an iterator.
 
 NOTE: This function puts all elements of the iterator into an array, so it may consume a lot of memory.
 
+##### Parameters
+
+* `iter` - The iterator to be reversed.
+
 #### sum
 
 Type: `[iter : Std::Iterator, a : Std::Additive, Std::Iterator::Item iter = a] iter -> a`
 
 Calcculate sum of the elements of an iterator.
+
+##### Parameters
+
+* `iter` - The iterator to be summed.
 
 #### take
 
@@ -2370,11 +2900,21 @@ Type: `[i : Std::Iterator] Std::I64 -> i -> Std::Iterator::TakeIterator i`
 
 Take the first `n` elements of an iterator.
 
+##### Parameters
+
+* `n` - The number of elements to be taken.
+* `iter` - The iterator to be taken from.
+
 #### take_while
 
 Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::TakeWhileIterator i a`
 
 Take elements from an iterator while a predicate holds.
+
+##### Parameters
+
+* `predicate` - The predicate function to be applied to each element of the iterator.
+* `iter` - The iterator to be taken from.
 
 #### to_array
 
@@ -2382,11 +2922,19 @@ Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Array a
 
 Convert an iterator to an array.
 
+##### Parameters
+
+* `iter` - The iterator to be converted.
+
 #### to_dyn
 
 Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::DynIterator a`
 
 Convert an iterator into a dynamic iterator.
+
+##### Parameters
+
+* `iter` - The iterator to be converted.
 
 #### zip
 
@@ -2395,6 +2943,11 @@ Type: `[i1 : Std::Iterator, i2 : Std::Iterator] i2 -> i1 -> Std::Iterator::ZipIt
 Zip two iterators.
 
 NOTE: Since this function is designed so that `iter1.zip(iter2)` zips `iter1` and `iter2`, the elements of `zip(iter2, iter1)` are in the opposite order.
+
+##### Parameters
+
+* `second` - The second iterator.
+* `first` - The first iterator.
 
 ### namespace Std::Iterator::DynIterator
 
@@ -2412,13 +2965,32 @@ Type: `[a : Std::LessThan] a -> a -> Std::Bool`
 
 Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
+##### Parameters
+
+* `lhs`
+* `rhs`
+
 #### max
 
 Type: `[a : Std::LessThan] a -> a -> a`
 
+The maximum of two values.
+
+##### Parameters
+
+* `lhs` - The first value.
+* `rhs` - The second value.
+
 #### min
 
 Type: `[a : Std::LessThan] a -> a -> a`
+
+The minimum of two values.
+
+##### Parameters
+
+* `lhs` - The first value.
+* `rhs` - The second value.
 
 ### namespace Std::LessThanOrEq
 
@@ -2427,6 +2999,11 @@ Type: `[a : Std::LessThan] a -> a -> a`
 Type: `[a : Std::LessThanOrEq] a -> a -> Std::Bool`
 
 Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
+
+##### Parameters
+
+* `lhs`
+* `rhs`
 
 ### namespace Std::LoopState
 
@@ -2452,15 +3029,32 @@ This is used with `loop_m` function.
 
 Type: `[m : Std::Monad] (a -> m b) -> m a -> m b`
 
+Evaluate a monadic action, and pass the result to the next action.
+
+##### Parameters
+
+* `following` - The following action.
+* `action` - The first action.
+
 #### flatten
 
 Type: `[m : Std::Monad] m (m a) -> m a`
 
 Flattens a nested monadic action.
 
+##### Parameters
+
+* `nested_monad`
+
 #### pure
 
 Type: `[m : Std::Monad] a -> m a`
+
+Creates a pure monadic action which just returns a specified value.
+
+##### Parameters
+
+* `value`
 
 #### unless
 
@@ -2468,11 +3062,21 @@ Type: `[m : Std::Monad] Std::Bool -> m () -> m ()`
 
 `unless(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is false.
 
+##### Parameters
+
+* `condition`
+* `action`
+
 #### when
 
 Type: `[m : Std::Monad] Std::Bool -> m () -> m ()`
 
 `when(cond, act)` where `act` is a monadic value which returns `()` perfoms `act` only when `cond` is true.
+
+##### Parameters
+
+* `condition`
+* `action`
 
 ### namespace Std::Mul
 
@@ -2481,6 +3085,11 @@ Type: `[m : Std::Monad] Std::Bool -> m () -> m ()`
 Type: `[a : Std::Mul] a -> a -> a`
 
 Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
+
+##### Parameters
+
+* `lhs`
+* `rhs`
 
 ### namespace Std::Neg
 
@@ -2506,11 +3115,21 @@ Type: `a -> Std::Option a -> a`
 
 Unwrap an option value if it is `some`, or returns given default value if it is `none`.
 
+##### Parameters
+
+* `default` - The default value to be returned if the option is `none`.
+* `opt` - The option value to be unwrapped.
+
 #### map_or
 
 Type: `b -> (a -> b) -> Std::Option a -> b`
 
 Returns the provided default value if the option is none, or applies a function to the contained value if the option is some.
+
+##### Parameters
+
+* `default` - The default value to be returned if the option is `none`.
+* `f` - The function to be applied to the contained value if the option is `some`.
 
 #### to_iter
 
@@ -2526,6 +3145,11 @@ Type: `Std::I64 -> Std::Ptr -> Std::Ptr`
 
 Adds an offset to a pointer.
 
+##### Parameters
+
+* `offset`
+* `ptr`
+
 #### subtract_ptr
 
 Type: `Std::Ptr -> Std::Ptr -> Std::I64`
@@ -2534,6 +3158,11 @@ Subtracts two pointers.
 
 Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calculates `y - x`.
 
+##### Parameters
+
+* `rhs`
+* `lhs`
+
 ### namespace Std::PunchedArray
 
 #### plug_in
@@ -2541,6 +3170,11 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 Type: `a -> Std::PunchedArray a -> Std::Array a`
 
 Plug in an element to a punched array to get back an array.
+
+##### Parameters
+
+* `element` - The element to be plugged in.
+* `parray` - The punched array to be plugged in.
 
 #### unsafe_punch
 
@@ -2551,6 +3185,11 @@ Creates a punched array by moving out the element at the specified index.
 NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
 The uniqueness of the array is ensured in the `Array::act` function.
 
+##### Parameters
+
+* `i` - The index of the element to be punched.
+* `array` - The array to be punched.
+
 ### namespace Std::Rem
 
 #### rem
@@ -2558,6 +3197,11 @@ The uniqueness of the array is ensured in the `Array::act` function.
 Type: `[a : Std::Rem] a -> a -> a`
 
 Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
+
+##### Parameters
+
+* `lhs`
+* `rhs`
 
 ### namespace Std::Result
 
@@ -2567,6 +3211,10 @@ Type: `Std::Result e o -> o`
 
 Returns the containing value if the value is ok, or otherwise aborts the program.
 
+##### Parameters
+
+* `res` - The result value to be unwrapped.
+
 ### namespace Std::String
 
 #### borrow_c_str
@@ -2575,11 +3223,21 @@ Type: `(Std::Ptr -> a) -> Std::String -> a`
 
 Call a function with a null-terminated C string.
 
+##### Parameters
+
+* `borrower` - The function to be called with the C string.
+* `str` - The string.
+
 #### borrow_c_str_io
 
 Type: `(Std::Ptr -> Std::IO a) -> Std::String -> Std::IO a`
 
 Call an IO action with a null-terminated C string.
+
+##### Parameters
+
+* `borrower` - The IO action to be called with the C string.
+* `str` - The string.
 
 #### concat
 
@@ -2589,17 +3247,30 @@ Concatenate two strings.
 
 Note: Since `s1.concat(s2)` puts `s2` after `s1`, `concat(lhs, rhs)` puts `lhs` after `rhs`.
 
+##### Parameters
+
+* `first` - The first string.
+* `second` - The second string.
+
 #### concat_iter
 
 Type: `[strs : Std::Iterator, Std::Iterator::Item strs = Std::String] strs -> Std::String`
 
 Concatenate an iterator of strings.
 
+##### Parameters
+
+* `iter_strs` - The iterator of strings.
+
 #### empty
 
 Type: `Std::I64 -> Std::String`
 
-Create an empty string, which is reserved for a length.
+Create an empty string with a given capacity.
+
+##### Parameters
+
+* `capacity` - The capacity of the string to be created.
 
 #### find
 
@@ -2609,6 +3280,12 @@ Type: `Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`
 
 Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
 `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
+
+##### Parameters
+
+* `token` - The token to be searched.
+* `start_idx` - The index to start searching from.
+* `str` - The string to be searched.
 
 #### from_U8
 
@@ -2622,11 +3299,19 @@ assert_eq(|_|"", String::from_U8('a'), "a");;
 assert_eq(|_|"", String::from_U8('\x00'), "");;
 ```
 
+##### Parameters
+
+* `byte` - The byte to be converted.
+
 #### get_bytes
 
 Type: `Std::String -> Std::Array Std::U8`
 
 Gets the byte array of a string, containing null-terminator.
+
+##### Parameters
+
+* `str` - The string to be converted.
 
 #### get_first_byte
 
@@ -2634,11 +3319,19 @@ Type: `Std::String -> Std::Option Std::U8`
 
 Gets the first byte of a string. Returns none if the string is empty.
 
+##### Parameters
+
+* `str` - The string to be converted.
+
 #### get_last_byte
 
 Type: `Std::String -> Std::Option Std::U8`
 
 Gets the last byte of a string. Returns none if the string is empty.
+
+##### Parameters
+
+* `str` - The string to be converted.
 
 #### get_size
 
@@ -2646,11 +3339,20 @@ Type: `Std::String -> Std::I64`
 
 Gets the length of a string.
 
+##### Parameters
+
+* `str` - The string to be converted.
+
 #### get_sub
 
 Type: `Std::I64 -> Std::I64 -> Std::String -> Std::String`
 
 `String` version of `Array::get_sub`.
+
+##### Parameters
+
+* `start` - The start index of the substring.
+* `end` - The end index of the substring.
 
 #### is_empty
 
@@ -2658,11 +3360,20 @@ Type: `Std::String -> Std::Bool`
 
 Returns if the string is empty or not.
 
+##### Parameters
+
+* `str` - The string to be checked.
+
 #### join
 
 Type: `[ss : Std::Iterator, Std::Iterator::Item ss = Std::String] Std::String -> ss -> Std::String`
 
 Joins (an iterator of) strings by a separator.
+
+##### Parameters
+
+* `sep` - The separator to be used for joining.
+* `iter_strs` - The iterator of strings to be joined.
 
 #### pop_back_byte
 
@@ -2671,6 +3382,10 @@ Type: `Std::String -> Std::String`
 Removes the last byte.
 
 If the string is empty, this function does nothing.
+
+##### Parameters
+
+* `str` - The string to be modified.
 
 #### split
 
@@ -2685,11 +3400,21 @@ assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
 assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
 ```
 
+##### Parameters
+
+* `sep` - The separator to be used for splitting.
+* `str` - The string to be split.
+
 #### strip_first_bytes
 
 Type: `(Std::U8 -> Std::Bool) -> Std::String -> Std::String`
 
 Removes the first byte of a string while it satisifies the specified condition.
+
+##### Parameters
+
+* `cond` - The condition for the byte to be removed.
+* `str` - The string to be modified.
 
 #### strip_first_spaces
 
@@ -2697,11 +3422,19 @@ Type: `Std::String -> Std::String`
 
 Removes leading whitespace characters.
 
+##### Parameters
+
+* `str` - The string to be modified.
+
 #### strip_last_bytes
 
 Type: `(Std::U8 -> Std::Bool) -> Std::String -> Std::String`
 
 Removes the last byte of a string while it satisifies the specified condition.
+
+##### Parameters
+
+* `cond` - The condition for the byte to be removed.
 
 #### strip_last_newlines
 
@@ -2709,17 +3442,29 @@ Type: `Std::String -> Std::String`
 
 Removes newlines and carriage returns at the end of the string.
 
+##### Parameters
+
+* `str` - The string to be modified.
+
 #### strip_last_spaces
 
 Type: `Std::String -> Std::String`
 
 Removes trailing whitespace characters.
 
+##### Parameters
+
+* `str` - The string to be modified.
+
 #### strip_spaces
 
 Type: `Std::String -> Std::String`
 
 Strips leading and trailing whitespace characters.
+
+##### Parameters
+
+* `str` - The string to be modified.
 
 #### unsafe_from_c_str_ptr
 
@@ -2729,6 +3474,10 @@ Create a `String` from a pointer to a null-terminated C string.
 
 If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
 
+##### Parameters
+
+* `ptr` - The pointer to a null-terminated C string.
+
 ### namespace Std::Sub
 
 #### sub
@@ -2736,6 +3485,11 @@ If the pointer is not pointing to a valid null-terminated C string, this functio
 Type: `[a : Std::Sub] a -> a -> a`
 
 Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
+
+##### Parameters
+
+* `lhs`
+* `rhs`
 
 ### namespace Std::ToBytes
 
@@ -4140,8 +4894,6 @@ Type: `s -> Std::Option (s, a)`
 
 Defined as: `type TakeIterator i = unbox struct { ...fields... }`
 
-Takes at most `n` elements from an iterator.
-
 ##### field `iter`
 
 Type: `i`
@@ -4224,6 +4976,11 @@ Type: `a -> a -> a`
 
 Adds two values. An expression `x + y` is translated to `add(x, y)`.
 
+###### Parameters
+
+* `lhs`
+* `rhs`
+
 #### trait `a : Boxed`
 
 Marker trait for boxed types.
@@ -4241,6 +4998,11 @@ Type: `a -> a -> a`
 
 Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
 
+###### Parameters
+
+* `lhs`
+* `rhs`
+
 #### trait `a : Eq`
 
 Trait for infix operator `==`.
@@ -4251,11 +5013,22 @@ Type: `a -> a -> Std::Bool`
 
 Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
 
+###### Parameters
+
+* `lhs`
+* `rhs`
+
 #### trait `a : FromBytes`
 
 ##### method `from_bytes`
 
 Type: `Std::Array Std::U8 -> Std::Result Std::String a`
+
+Converts a byte array into a value by parsing it.
+
+###### Parameters
+
+* `byte_array` - The byte array to be converted.
 
 #### trait `a : FromString`
 
@@ -4263,11 +5036,26 @@ Type: `Std::Array Std::U8 -> Std::Result Std::String a`
 
 Type: `Std::String -> Std::Result Std::String a`
 
+Converts a string into a value by parsing it.
+
+###### Parameters
+
+* `str` - The string to be converted.
+
 #### trait `[f : *->*] f : Functor`
+
+The trait for functors.
 
 ##### method `map`
 
 Type: `(a -> b) -> f a -> f b`
+
+Applies a function to the value inside the functor.
+
+###### Parameters
+
+* `f` - The function to be applied.
+* `value` - The functor value to be transformed.
 
 #### trait `iter : Iterator`
 
@@ -4294,6 +5082,11 @@ Type: `a -> a -> Std::Bool`
 
 Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
+###### Parameters
+
+* `lhs`
+* `rhs`
+
 #### trait `a : LessThanOrEq`
 
 Trait for infix operator `<=`.
@@ -4304,15 +5097,35 @@ Type: `a -> a -> Std::Bool`
 
 Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
+###### Parameters
+
+* `lhs`
+* `rhs`
+
 #### trait `[m : *->*] m : Monad`
+
+The trait for monads.
 
 ##### method `bind`
 
 Type: `(a -> m b) -> m a -> m b`
 
+Evaluate a monadic action, and pass the result to the next action.
+
+###### Parameters
+
+* `following` - The following action.
+* `action` - The first action.
+
 ##### method `pure`
 
 Type: `a -> m a`
+
+Creates a pure monadic action which just returns a specified value.
+
+###### Parameters
+
+* `value`
 
 #### trait `a : Mul`
 
@@ -4323,6 +5136,11 @@ Trait for infix operator `*`.
 Type: `a -> a -> a`
 
 Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
+
+###### Parameters
+
+* `lhs`
+* `rhs`
 
 #### trait `a : Neg`
 
@@ -4354,6 +5172,11 @@ Type: `a -> a -> a`
 
 Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
 
+###### Parameters
+
+* `lhs`
+* `rhs`
+
 #### trait `a : Sub`
 
 Trait for infix operator `-`.
@@ -4363,6 +5186,11 @@ Trait for infix operator `-`.
 Type: `a -> a -> a`
 
 Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
+
+###### Parameters
+
+* `lhs`
+* `rhs`
 
 #### trait `a : ToBytes`
 
