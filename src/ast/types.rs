@@ -1390,8 +1390,7 @@ impl TypeNode {
     // Get hash value.
     pub fn hash(self: &Arc<TypeNode>) -> String {
         let type_string = self.to_string_normalize();
-        // format!("{:x}", md5::compute(type_string))
-        format!("[{}]", type_string)
+        format!("{:x}", md5::compute(type_string))
     }
 
     // Returns the list of predicates for this type to be well-formed.
