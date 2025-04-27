@@ -46,6 +46,17 @@ sum_by_loop = |n| (
     )
 );
 
+// Same as `sum_by_loop`, but the body function has a captured value.
+sum_by_loop_capturing : I64 -> U64;
+sum_by_loop_capturing = |n| (
+    let rng = init_by_array(g_seed);
+    loop((0, 0_U64, rng), |(i, sum, rng)|
+        if n == i { break $ sum };
+        let (rng, x) = rng.generate_U64;
+        continue $ (i + 1, sum + x * n.to_U64, rng)
+    )
+);
+
 // Generate random numbers and sum them up by `fold`.
 sum_up_by_fold : I64 -> U64;
 sum_up_by_fold = |n| (
@@ -53,6 +64,16 @@ sum_up_by_fold = |n| (
     Iterator::range(0, n).fold((rng, 0_U64), |_, (rng, sum)| 
         let (rng, x) = rng.generate_U64;
         (rng, sum + x)
+    ).@1
+);
+
+// Same as `sum_by_loop`, but the body function has a captured value.
+sum_up_by_fold_capturing : I64 -> U64;
+sum_up_by_fold_capturing = |n| (
+    let rng = init_by_array(g_seed);
+    Iterator::range(0, n).fold((rng, 0_U64), |_, (rng, sum)| 
+        let (rng, x) = rng.generate_U64;
+        (rng, sum + x * n.to_U64)
     ).@1
 );
 
@@ -66,11 +87,27 @@ sum_up_by_loop_iter = |n| (
     ).@1
 );
 
+// Same as `sum_by_loop`, but the body function has a captured value.
+sum_up_by_loop_iter_capturing : I64 -> U64;
+sum_up_by_loop_iter_capturing = |n| (
+    let rng = init_by_array(g_seed);
+    Iterator::range(0, n).loop_iter((rng, 0_U64), |i, (rng, sum)| 
+        let (rng, x) = rng.generate_U64;
+        continue $ (rng, sum + x * n.to_U64)
+    ).@1
+);
+
 main : IO ();
 main = (
     assert_eq(|_|"count_primes", prime_table(700000).count_element(true), 56543);;
+
     assert_eq(|_|"sum_by_loop", sum_by_loop(100000), 12468381052418219682_U64);;
     assert_eq(|_|"sum_up_by_fold", sum_up_by_fold(100000), 12468381052418219682_U64);;
     assert_eq(|_|"sum_up_by_loop_iter", sum_up_by_loop_iter(100000), 12468381052418219682_U64);;
+
+    assert_eq(|_|"sum_by_loop_capturing", sum_by_loop_capturing(100000), 4226555719664922944_U64);;
+    assert_eq(|_|"sum_up_by_fold_capturing", sum_up_by_fold_capturing(100000), 4226555719664922944_U64);;
+    assert_eq(|_|"sum_up_by_loop_iter_capturing", sum_up_by_loop_iter_capturing(100000), 4226555719664922944_U64);;
+
     pure()
 );
