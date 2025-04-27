@@ -2,6 +2,7 @@ mod beta_reduction;
 mod dead_symbol_elimination;
 #[allow(dead_code)]
 mod eta_expand;
+mod higher_order_inline;
 mod inline;
 pub mod optimization;
 mod remove_renaming;

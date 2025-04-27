@@ -1,6 +1,9 @@
 use crate::{Configuration, Program};
 
-use super::{dead_symbol_elimination, inline, remove_tyanno, simplify_symbol_names, uncurry};
+use super::{
+    dead_symbol_elimination, higher_order_inline, inline, remove_tyanno, simplify_symbol_names,
+    uncurry,
+};
 
 pub fn run(prg: &mut Program, config: &Configuration) {
     let mut step = 0;
@@ -33,6 +36,15 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         inline::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.inline", step));
+            step += 1;
+        }
+    }
+
+    // Perform higher-order inlining optimization.
+    if config.enable_higher_order_inline_optimization() {
+        higher_order_inline::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.higher_order_inline", step));
             step += 1;
         }
     }
