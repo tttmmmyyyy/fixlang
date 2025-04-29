@@ -602,7 +602,7 @@ impl TypeNode {
                 let app_seq = self.flatten_type_application();
                 match &app_seq[0].ty {
                     Type::TyCon(tc) => {
-                        // In this case, replase self to associated type application if necessary.
+                        // In this case, replace self to associated type application if necessary.
                         let mut tc = tc.as_ref().clone();
                         tc.resolve_namespace(ctx, &app_seq[0].info.source)?;
                         if ctx.candidates[&tc.name] == NameResolutionType::AssocTy {
