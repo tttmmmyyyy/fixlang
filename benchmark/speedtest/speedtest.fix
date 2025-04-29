@@ -35,6 +35,18 @@ count_element = |elem, arr| (
 g_seed : Array U64;
 g_seed = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
 
+// Generate random numbers
+generate_array : I64 -> Array U64;
+generate_array = |n| (
+    let rng = init_by_array(g_seed);
+    let arr = fill(n, 0_U64);
+    Iterator::range(0, n).fold((arr, rng), |i, (arr, rng)|
+        let (rng, x) = rng.generate_U64;
+        let arr = arr.set(i, x);
+        (arr, rng)
+    ).@0
+);
+
 // Generate random numbers and sum them up by `loop`.
 sum_by_loop : I64 -> U64;
 sum_by_loop = |n| (
@@ -47,13 +59,12 @@ sum_by_loop = |n| (
 );
 
 // Same as `sum_by_loop`, but the body function has a captured value.
-sum_by_loop_capturing : I64 -> U64;
-sum_by_loop_capturing = |n| (
-    let rng = init_by_array(g_seed);
-    loop((0, 0_U64, rng), |(i, sum, rng)|
+sum_by_loop_arr : Array U64 -> U64;
+sum_by_loop_arr = |arr| (
+    let n = arr.get_size;
+    loop((0, 0_U64), |(i, sum)|
         if n == i { break $ sum };
-        let (rng, x) = rng.generate_U64;
-        continue $ (i + 1, sum + x * n.to_U64, rng)
+        continue $ (i + 1, sum + arr.@(i))
     )
 );
 
@@ -68,13 +79,12 @@ sum_up_by_fold = |n| (
 );
 
 // Same as `sum_by_loop`, but the body function has a captured value.
-sum_up_by_fold_capturing : I64 -> U64;
-sum_up_by_fold_capturing = |n| (
-    let rng = init_by_array(g_seed);
-    Iterator::range(0, n).fold((rng, 0_U64), |_, (rng, sum)| 
-        let (rng, x) = rng.generate_U64;
-        (rng, sum + x * n.to_U64)
-    ).@1
+sum_up_by_fold_arr : Array U64 -> U64;
+sum_up_by_fold_arr = |arr| (
+    let n = arr.get_size;
+    Iterator::range(0, n).fold(0_U64, |i, sum| 
+        sum + arr.@(i)
+    )
 );
 
 // Generate random numbers and sum them up by `loop_iter`.
@@ -88,13 +98,12 @@ sum_up_by_loop_iter = |n| (
 );
 
 // Same as `sum_by_loop`, but the body function has a captured value.
-sum_up_by_loop_iter_capturing : I64 -> U64;
-sum_up_by_loop_iter_capturing = |n| (
-    let rng = init_by_array(g_seed);
-    Iterator::range(0, n).loop_iter((rng, 0_U64), |i, (rng, sum)| 
-        let (rng, x) = rng.generate_U64;
-        continue $ (rng, sum + x * n.to_U64)
-    ).@1
+sum_up_by_loop_iter_arr : Array U64 -> U64;
+sum_up_by_loop_iter_arr = |arr| (
+    let n = arr.get_size;
+    Iterator::range(0, n).loop_iter(0_U64, |i, sum| 
+        continue $ sum + arr.@(i)
+    )
 );
 
 main : IO ();
@@ -105,9 +114,11 @@ main = (
     assert_eq(|_|"sum_up_by_fold", sum_up_by_fold(100000), 12468381052418219682_U64);;
     assert_eq(|_|"sum_up_by_loop_iter", sum_up_by_loop_iter(100000), 12468381052418219682_U64);;
 
-    assert_eq(|_|"sum_by_loop_capturing", sum_by_loop_capturing(100000), 4226555719664922944_U64);;
-    assert_eq(|_|"sum_up_by_fold_capturing", sum_up_by_fold_capturing(100000), 4226555719664922944_U64);;
-    assert_eq(|_|"sum_up_by_loop_iter_capturing", sum_up_by_loop_iter_capturing(100000), 4226555719664922944_U64);;
+    let rng = Random::init_by_array(g_seed);
+    let arr = generate_array(100000);
+    assert_eq(|_|"sum_by_loop_arr", sum_by_loop_arr(arr), 12468381052418219682_U64);;
+    assert_eq(|_|"sum_up_by_fold_arr", sum_up_by_fold_arr(arr), 12468381052418219682_U64);;
+    assert_eq(|_|"sum_up_by_loop_iter_arr", sum_up_by_loop_iter_arr(arr), 12468381052418219682_U64);;
 
     pure()
 );
