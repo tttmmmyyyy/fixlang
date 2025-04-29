@@ -8200,6 +8200,24 @@ pub fn test_array_search_partition_point() {
 }
 
 #[test]
+pub fn test_regression_f28ea22() {
+    let source = r##"
+// Compiling this code causes the compiler panic at f28ea221719275887e67220495f23b758ee2368e.
+
+module Main;
+
+trait c : C {
+    type T c;
+    call : c -> T;
+}
+
+main : IO ();
+main = pure();
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
