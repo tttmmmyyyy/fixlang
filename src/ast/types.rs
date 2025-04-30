@@ -596,13 +596,24 @@ impl TypeNode {
             Type::TyCon(tc) => {
                 let mut tc = tc.as_ref().clone();
                 tc.resolve_namespace(ctx, &self.info.source)?;
+                if ctx.candidates[&tc.name] == NameResolutionType::AssocTy {
+                    let arity: usize = ctx.assoc_ty_to_arity[&tc.name];
+                    return Err(Errors::from_msg_srcs(
+                        format!(
+                            "Associated type `{}` has arity {}, but supplied 0 types. All appearance of associated type has to be saturated.",
+                            tc.name.to_string(),
+                            arity,
+                        ),
+                        &[self.get_source()],
+                    ));
+                }
                 Ok(self.set_tycon_tc(Arc::new(tc)))
             }
             Type::TyApp(fun, arg) => {
                 let app_seq = self.flatten_type_application();
                 match &app_seq[0].ty {
                     Type::TyCon(tc) => {
-                        // In this case, replase self to associated type application if necessary.
+                        // In this case, replace self to associated type application if necessary.
                         let mut tc = tc.as_ref().clone();
                         tc.resolve_namespace(ctx, &app_seq[0].info.source)?;
                         if ctx.candidates[&tc.name] == NameResolutionType::AssocTy {
