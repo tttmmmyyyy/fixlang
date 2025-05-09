@@ -526,6 +526,11 @@ pub struct Program {
     // Deferred errors.
     // Errors that should be displayed in the diagnostic information.
     pub deferred_errors: Errors,
+
+    /* Optimization */
+    // Number of optimization steps.
+    // This is used to name the symbol files when outputting them at each optimization step.
+    pub optimization_step: usize,
 }
 
 impl Program {
@@ -572,6 +577,7 @@ impl Program {
             entry_io_value: None,
             export_statements: vec![],
             deferred_errors: Errors::empty(),
+            optimization_step: 0,
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
             mod_info.name.clone(),
