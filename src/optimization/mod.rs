@@ -6,6 +6,7 @@ mod eta_expand;
 mod inline;
 pub mod optimization;
 mod remove_renaming;
+mod remove_shadowing;
 mod remove_tyanno;
 mod simplify_symbol_names;
 mod uncurry;
