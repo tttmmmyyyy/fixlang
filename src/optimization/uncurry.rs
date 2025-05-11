@@ -297,7 +297,7 @@ fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
 }
 
 // Apply `internalize_let_to_var_one` recursively as long as it can increase the head `lam` expressions.
-fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
+pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     match &*expr.expr {
         Expr::Lam(_, body) => {
             let body = internalize_let_to_var_at_head(body);

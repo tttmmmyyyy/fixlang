@@ -87,7 +87,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     changed
 }
 
-fn calculate_inline_costs(prg: &Program) -> InlineCosts {
+pub fn calculate_inline_costs(prg: &Program) -> InlineCosts {
     let mut costs = InlineCosts::new();
     for (name, sym) in &prg.symbols {
         let mut cost_calculator = InlineCostCalculator::new(name.clone());
@@ -157,7 +157,7 @@ impl InlineCost {
 }
 
 // The map from each symbol to the cost of inlining it.
-struct InlineCosts {
+pub struct InlineCosts {
     costs: Map<FullName, InlineCost>,
 }
 
@@ -168,8 +168,12 @@ impl InlineCosts {
         }
     }
 
-    fn get_call_count(&self, name: &FullName) -> usize {
+    pub fn get_call_count(&self, name: &FullName) -> usize {
         self.costs.get(name).map_or(0, |c| c.call_count)
+    }
+
+    pub fn get_complexity(&self, name: &FullName) -> Option<usize> {
+        self.costs.get(name).map(|c| c.complexity)
     }
 
     fn add_cost_calculation_result(&mut self, name: &FullName, cost: InlineCostCalculator) {

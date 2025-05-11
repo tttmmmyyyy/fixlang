@@ -1689,23 +1689,24 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         &mut self,
         lam: Arc<ExprNode>,
     ) -> Vec<(FullName, Arc<TypeNode>)> {
-        let (args, body) = lam.destructure_lam();
+        // let (args, body) = lam.destructure_lam();
+        // let mut cap_names = body.free_vars().clone();
+        // for arg in args {
+        //     cap_names.remove(&arg.name);
+        // }
+        // cap_names.remove(&FullName::local(CAP_NAME));
+        // let mut cap_vars = cap_names
+        //     .into_iter()
+        //     .filter(|name| name.is_local())
+        //     .map(|name| (name.clone(), self.get_scoped_obj_noretain(&name).ty))
+        //     .collect::<Vec<_>>();
+        // cap_vars.sort_by_key(|(name, _)| name.to_string());
 
-        let mut cap_names = body.free_vars().clone();
-        for arg in args {
-            cap_names.remove(&arg.name);
-        }
-        cap_names.remove(&FullName::local(CAP_NAME));
-
-        // We need not and should not capture global variable
-        // If we capture global variable, then global recursive function such as
-        // "main = |x| if x == 0 then 0 else x + main(x-1)" results in infinite recursion at its initialization.
-        let mut cap_vars = cap_names
-            .into_iter()
-            .filter(|name| name.is_local())
-            .map(|name| (name.clone(), self.get_scoped_obj_noretain(&name).ty))
-            .collect::<Vec<_>>();
-        cap_vars.sort_by_key(|(name, _)| name.to_string());
+        let cap_vars = lam.lambda_cap_names();
+        let cap_vars = cap_vars.into_iter().map(|name| {
+            let obj = self.get_scoped_obj_noretain(&name);
+            (name, obj.ty)
+        }).collect::<Vec<_>>();
 
         // Validation
         let lam_ty = lam.ty.clone().unwrap();

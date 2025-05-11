@@ -73,6 +73,7 @@ pub const STRUCT_PUNCH_SYMBOL: &str = "#punch_";
 pub const STRUCT_PLUG_IN_SYMBOL: &str = "#plug_in_";
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 pub const CAP_NAME: &str = "#CAP";
+pub const DECAP_NAME: &str = "#DECAP";
 
 // pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 

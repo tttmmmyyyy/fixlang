@@ -192,6 +192,25 @@ impl ExprNode {
         }
     }
 
+    // `f(x, y, ..., z)` -> `(f, [x, y, ..., z])`
+    // Panics if multivariable function (currently such functions are defined only by the optimization, and not by the user) is found.
+    pub fn destructure_app(&self) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
+        match &*self.expr {
+            Expr::App(func, args) => {
+                assert_eq!(args.len(), 1);
+                let arg = args[0].clone();
+                if func.is_app() {
+                    let (func, mut args) = func.destructure_app();
+                    args.push(arg);
+                    return (func, args);
+                } else {
+                    return (func.clone(), vec![arg]);
+                }
+            }
+            _ => panic!("Call destructure_app for an expression which is not application!"),
+        }
+    }
+
     // destructure lambda expression to list of variables and body expression
     pub fn destructure_lam(&self) -> (Vec<Arc<Var>>, Arc<ExprNode>) {
         match &*self.expr {
@@ -1030,6 +1049,26 @@ impl ExprNode {
                 ei.set_free_vars(free_vars)
             }
         }
+    }
+
+    // Get the names which are captured by a lambda expressions.
+    pub fn lambda_cap_names(&self) -> Vec<FullName> {
+        assert!(self.is_lam());
+        let mut cap_names = self.free_vars().clone();
+        cap_names.remove(&FullName::local(CAP_NAME));
+
+        // We need not and should not capture global variable:
+        // If we capture global variable, then global recursive function such as
+        // "main = |x| if x == 0 then 0 else x + main(x-1)" results in infinite recursion at its initialization.
+        // So we remove global variable from the captured names.
+        let mut cap_names = cap_names
+            .into_iter()
+            .filter(|name| name.is_local())
+            .collect::<Vec<_>>();
+
+        cap_names.sort_by_key(|name| name.to_string());
+
+        cap_names
     }
 }
 

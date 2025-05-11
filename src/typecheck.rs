@@ -47,8 +47,17 @@ where
     }
 
     // Check if a local value exists.
-    fn has_value(&self, name: &Name) -> bool {
+    pub fn has_value(&self, name: &Name) -> bool {
         self.local.contains_key(name) && !self.local[name].is_empty()
+    }
+
+    // Get a local value.
+    pub fn get_local(&self, name: &Name) -> Option<T> {
+        if self.local.contains_key(name) && !self.local[name].is_empty() {
+            Some(self.local[name].last().unwrap().clone())
+        } else {
+            None
+        }
     }
 
     // Get a set of local names.
@@ -57,6 +66,17 @@ where
         for (name, stack) in &self.local {
             if !stack.is_empty() {
                 res.insert(name.clone());
+            }
+        }
+        res
+    }
+
+    // Get the set of local names as `FullName`s.
+    pub fn local_names_as_fullname(&self) -> Set<FullName> {
+        let mut res: Set<FullName> = Default::default();
+        for (name, stack) in &self.local {
+            if !stack.is_empty() {
+                res.insert(FullName::local(name));
             }
         }
         res
