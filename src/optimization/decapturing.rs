@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use crate::{
     ast::{
@@ -8,9 +8,9 @@ use crate::{
         },
         name::FullName,
         pattern::PatternNode,
-        program::Program,
+        program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
-        types::{tycon, TypeNode},
+        types::{tycon, type_fun, TypeNode},
     },
     builtin::{make_tuple_name, make_tuple_ty},
     constants::DECAP_NAME,
@@ -18,7 +18,8 @@ use crate::{
 };
 
 use super::{
-    find_free_name_type::find_types_of_free_names, uncurry::internalize_let_to_var_at_head,
+    find_free_name_type::find_types_of_free_names, remove_shadowing,
+    uncurry::internalize_let_to_var_at_head,
 };
 
 /*
@@ -130,7 +131,164 @@ pub fn run(prg: &mut Program) {
 //
 // * `stable_symbols`: これ以上最適化が進まないことが確定しているシンボルの集合。
 pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
-    // TODO: まずはremove_shadowingを実行しておくこと。
+    // いずれかのシンボルに対して最適化が行われたかどうか。
+    let mut changed = false;
+
+    let symbols = std::mem::take(&mut prg.symbols);
+
+    // 特殊化可能な関数の集合を計算する
+    let mut specializable_funcs: Map<FullName, SpecializableFunctionInfo> = Map::default();
+    for (name, sym) in &symbols {
+        if let Some(specialize_info) = is_specializable_func(sym) {
+            specializable_funcs.insert(name.clone(), specialize_info);
+        }
+    }
+    let specializable_funcs = Rc::new(specializable_funcs);
+
+    // グローバル名の集合を作成しておく
+    let mut global_names = Set::default();
+    for (name, _) in &symbols {
+        global_names.insert(name.clone());
+    }
+
+    // それぞれのシンボルに対してデキャプチャリング最適化を実行する
+    let mut new_symbols: Map<FullName, Symbol> = Map::default();
+    let mut specializations: Vec<SpecializationInfo> = Vec::new();
+    for (name, mut sym) in symbols {
+        // 既に名にも変化しないことが知られているシンボルはスキップする
+        if stable_symbols.contains(&name) {
+            new_symbols.insert(name.clone(), sym.clone());
+            continue;
+        }
+
+        let mut visitor = DecapturingVisitor::new(
+            name.clone(),
+            specializable_funcs.clone(),
+            global_names.clone(),
+        );
+
+        // デキャプチャリング最適化を行う
+        let expr = remove_shadowing::run_on_expr(sym.expr.as_ref().unwrap()); // デキャプチャ最適化の実装はshadowingを考慮していない
+        let trav_res = visitor.traverse(&expr);
+        if !trav_res.changed {
+            // デキャプチャリング最適化が行われなかったとき
+            stable_symbols.insert(name.clone());
+            new_symbols.insert(name.clone(), sym.clone());
+            continue;
+        }
+        changed = true;
+        sym.expr = Some(trav_res.expr);
+        specializations.append(&mut visitor.required_specializations); // 特殊化要求はあとで処理する
+
+        // 生成されたデキャプチャリングラムダをグローバル関数として登録する
+        for decap_lam in visitor.decap_lambdas {
+            let decap_lam_sym = decap_lam.make_symbol();
+            global_names.insert(decap_lam_sym.name.clone());
+            new_symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
+        }
+
+        new_symbols.insert(name.clone(), sym.clone());
+    }
+    let symbols = new_symbols;
+    let mut new_symbols: Map<FullName, Symbol> = Map::default();
+
+    // 特殊化要求を処理する
+    for specialize_info in specializations {
+        // 特殊化された関数の名前と型を生成する
+        let specialized_func_name = specialize_info.specialized_func_name();
+        let specialized_func_ty = specialize_info.specialized_func_ty();
+
+        // 実装済みならスキップ
+        if symbols.contains_key(&specialized_func_name) {
+            continue;
+        }
+
+        // 特殊化された関数を実装する
+        let expr = symbols
+            .get(&specialize_info.org_func_name)
+            .unwrap()
+            .expr
+            .as_ref()
+            .unwrap()
+            .clone();
+        let expr = remove_shadowing::run_on_expr(&expr);
+
+        // 引数名からデキャプチャされたラムダ情報へのマップを生成する
+        let mut local_decap_lambdas = Map::default();
+        let (args, _) = expr.destructure_lam_sequence();
+        for (i, decap_lam) in &specialize_info.specialized_args {
+            assert!(*i < args.len());
+            assert_eq!(args[*i].len(), 1);
+            let arg_name = &args[*i][0].name;
+            local_decap_lambdas.insert(arg_name.clone(), decap_lam.clone());
+        }
+
+        let mut visitor = DecapturingVisitor::new(
+            specialized_func_name.clone(),
+            specializable_funcs.clone(),
+            global_names.clone(),
+        );
+        visitor.local_decap_lambdas = local_decap_lambdas;
+        let trav_res = visitor.traverse(&expr);
+        let expr = trav_res.expr;
+
+        // デキャプチャにより作成されたラムダをグローバル関数として登録する
+        for decap_lam in visitor.decap_lambdas {
+            let decap_lam_sym = decap_lam.make_symbol();
+            global_names.insert(decap_lam_sym.name.clone());
+            new_symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
+        }
+
+        // 特殊化された関数を登録する
+        let specialized_func = Symbol {
+            name: specialized_func_name.clone(),
+            generic_name: specialize_info.org_func_name.clone(),
+            ty: specialized_func_ty,
+            expr: Some(expr),
+        };
+        new_symbols.insert(specialized_func_name.clone(), specialized_func);
+        global_names.insert(specialized_func_name.clone());
+
+        assert!(visitor.specializable_funcs.is_empty()); // 実際にはここでまた新しい特殊化要求が来る場合があるので、ループで処理していく必要がある。
+    }
+
+    prg.symbols = new_symbols;
+    changed
+}
+
+// シンボルが特殊化可能かどうか判定する。特殊化可能なときはSpecializableFunctionInfoを生成する。
+fn is_specializable_func(sym: &Symbol) -> Option<SpecializableFunctionInfo> {
+    // 仮実装。foldとloopだけとする。
+    let name = sym.name.clone();
+    let name_str = name.to_string();
+    if name_str.starts_with("Std::Iterator::fold#") || name_str.starts_with("Std::loop#") {
+        // どちらも第一引数（0-indexed）が特殊化可能。
+        Some(SpecializableFunctionInfo {
+            func_name: name,
+            func_ty: sym.ty.clone(),
+            specializable_arg_indices: vec![1],
+        })
+    } else {
+        None
+    }
+    // 発想：十分条件。
+    // 呼び出しグラフを強連結成分分解しておく。
+    // 自分より下流のノードしか呼び出していないときはOK
+    // そうでないときは、自身をそのまま同じ引数で呼び出していればOK、それ以外はNG。
+    // インライン化によって自己再帰が多くなっているはず。
+
+    // TODO: 最終的に特殊化可能であることをチェックするためにはインラインコストも考慮する必要がある。
+    //
+    // `func`のインラインコストが小さいことを確認する：
+    // let complexity = self.inline_costs.get_complexity(func_name);
+    // if complexity.is_none() {
+    //     return StartVisitResult::VisitChildren;
+    // }
+    // let complexity = complexity.unwrap();
+    // let call_count = self.inline_costs.get_call_count(func_name);
+    // if complexity * call_count > INLINE_COST_THRESHOLD {
+    //     return StartVisitResult::VisitChildren;
+    // }
 }
 
 // デキャプチャリング最適化を行うためのExpreesion Visitor
@@ -143,13 +301,12 @@ struct DecapturingVisitor {
 
     /* 特殊化 */
     // 特殊化可能な関数
-    specializable_funcs: Map<FullName, SpecializableFunctionInfo>,
+    specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
     // デキャプチャリングにより生成された特殊化要求
     required_specializations: Vec<SpecializationInfo>,
 
     /* ラムダ関数の名前の決定に関するフィールド */
     // ラムダ関数の名前を生成するために使われる番号
-    // 複数のデキャプチャリングを行うとき、この番号を必ずしも引き継ぐ必要はないが、引き継ぐほうが名前決定処理の効率が良くなる。
     lam_func_counter: u32,
     // 現在デキャプチャリングを行っているシンボルの名前
     // ラムダ関数の名前を生成するために使われる。
@@ -160,6 +317,23 @@ struct DecapturingVisitor {
 }
 
 impl DecapturingVisitor {
+    // Visitorを生成する
+    fn new(
+        current_symbol: FullName,
+        specializable_funcs: Rc<Map<FullName, SpecializableFunctionInfo>>,
+        global_names: Set<FullName>,
+    ) -> Self {
+        DecapturingVisitor {
+            decap_lambdas: Vec::new(),
+            local_decap_lambdas: Map::default(),
+            specializable_funcs,
+            required_specializations: Vec::new(),
+            lam_func_counter: 0,
+            current_symbol,
+            global_names,
+        }
+    }
+
     // 新しいラムダ関数の名前を生成する。
     fn new_lambda_func_name(&mut self) -> FullName {
         loop {
@@ -271,17 +445,31 @@ impl SpecializationInfo {
         *name += "#specialized";
         let mut hash_data = String::new();
         for (i, decap_lam) in self.specialized_args.iter() {
-            hash_data += &format!("_{}", i);
-            hash_data += &format!("_{}", decap_lam.lambda_func_name.to_string());
+            hash_data += &format!(",{}", i);
+            hash_data += &format!(",{}", decap_lam.lambda_func_name.to_string());
         }
-        *name += &format!("{:x}", md5::compute(hash_data));
+        *name += &format!("_{:x}", md5::compute(hash_data));
         full_name
     }
 
     // 特殊化された関数の型を作成する
     fn specialized_func_ty(&self) -> Arc<TypeNode> {
-        // org_func_tyを分解 → 特殊化される引数の型をDecapturedLambdaInfoのcap_list_tyに置き換える。
-        todo!();
+        // 関数の型 `A1 -> A2 -> ... -> An -> B` を `([A1, A2, ..., An], B)` に分解し、
+        // 特殊化される引数の型をキャプチャリストの型に置き換える。
+        let org_ty = self.org_func_ty.clone();
+        let (mut doms, codom) = org_ty.collect_app_src(usize::MAX);
+        for (i, decap_lam) in self.specialized_args.iter() {
+            let cap_list_ty = decap_lam.cap_list_ty.clone();
+            doms[*i] = cap_list_ty;
+        }
+
+        // 関数の型に戻す
+        let mut func_ty = codom;
+        for dom in doms.iter().rev() {
+            func_ty = type_fun(dom.clone(), func_ty);
+        }
+
+        func_ty
     }
 
     // 特殊化された関数を参照する式を作成する
@@ -289,19 +477,6 @@ impl SpecializationInfo {
         expr_var(self.specialized_func_name(), None).set_inferred_type(self.specialized_func_ty())
     }
 }
-
-// TODO: 特殊化可能であることをチェックするためにはインラインコストも考慮すること：
-//
-// `func`のインラインコストが小さいことを確認する：
-// let complexity = self.inline_costs.get_complexity(func_name);
-// if complexity.is_none() {
-//     return StartVisitResult::VisitChildren;
-// }
-// let complexity = complexity.unwrap();
-// let call_count = self.inline_costs.get_call_count(func_name);
-// if complexity * call_count > INLINE_COST_THRESHOLD {
-//     return StartVisitResult::VisitChildren;
-// }
 
 // デキャプチャしたラムダ式の情報を保持する構造体
 #[derive(Clone)]
@@ -315,6 +490,18 @@ struct DecapturedLambdaInfo {
     lambda_func: Arc<ExprNode>,
     // ラムダ関数の名前
     lambda_func_name: FullName,
+}
+
+impl DecapturedLambdaInfo {
+    // デキャプチャにより作成されたラムダ関数のシンボルを作成する
+    fn make_symbol(&self) -> Symbol {
+        Symbol {
+            name: self.lambda_func_name.clone(),
+            generic_name: self.lambda_func_name.clone(),
+            ty: self.lambda_func.ty.as_ref().unwrap().clone(),
+            expr: Some(self.lambda_func.clone()),
+        }
+    }
 }
 
 impl ExprVisitor for DecapturingVisitor {
@@ -388,9 +575,7 @@ impl ExprVisitor for DecapturingVisitor {
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // このapplication expressionが以下の条件を満たしているときに、クロージャ特殊化を実行する：
-        // - 呼び出される関数はグローバルである。
-        // - 特殊化可能な引数が少なくとも一つある：つまり、ある引数は、ラムダ式であるか、またはデキャプチャされたラムダ式（=キャプチャリスト）である。
-        // - 関数のインラインコストが小さい。
+        // - 呼び出される関数はグローバルであり、その特殊化可能な引数にラムダ式であるかあるいは既にデキャプチャされたラムダ式（=キャプチャリスト）を与えている。
 
         let (func, args) = expr.destructure_app();
 
@@ -434,7 +619,7 @@ impl ExprVisitor for DecapturingVisitor {
             return StartVisitResult::VisitChildren;
         }
 
-        // 特殊化を生成する
+        // 特殊化を要求する。
         let specialization = SpecializationInfo {
             org_func_name: func_name.clone(),
             org_func_ty: func.ty.as_ref().unwrap().clone(),
@@ -478,10 +663,35 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_let(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
+        let pat = expr.get_let_pat();
+        let bound = expr.get_let_bound();
+        let value = expr.get_let_value();
+        if bound.is_lam() {
+            // 束縛される式がラムダ式のとき、デキャプチャリングを行う
+            assert!(pat.is_var());
+            let var_name = pat.get_var().name.clone();
+            let (decap_lam, cap_list) = self.decapture_lambda(&bound);
+            self.decap_lambdas.push(decap_lam.clone());
+            self.local_decap_lambdas.insert(var_name, decap_lam);
+            let pat = PatternNode::make_var(pat.get_var().clone(), None); // 型アノテーションを削除する
+            let expr = expr_let_typed(pat, cap_list, value);
+            return StartVisitResult::ReplaceAndRevisit(expr);
+        } else if bound.is_var() {
+            // 束縛される式が変数で、それがデキャプチャされたラムダ式を示しているときは、
+            // このlet束縛で導入される変数もself.local_decap_lambdasに追加する。
+            let name = &bound.get_var().name;
+            if self.local_decap_lambdas.contains_key(name) {
+                let decap_lambda = self.local_decap_lambdas.get(name).unwrap();
+                self.local_decap_lambdas
+                    .insert(pat.get_var().name.clone(), decap_lambda.clone());
+            }
+            return StartVisitResult::VisitChildren;
+        } else {
+            return StartVisitResult::VisitChildren;
+        }
     }
 
     fn end_visit_let(
