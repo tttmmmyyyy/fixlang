@@ -3,7 +3,6 @@ mod dead_symbol_elimination;
 mod decapturing;
 #[allow(dead_code)]
 mod eta_expand;
-mod find_free_name_type;
 mod inline;
 pub mod optimization;
 mod remove_renaming;

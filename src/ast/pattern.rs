@@ -112,6 +112,21 @@ impl PatternNode {
         }
     }
 
+    // Get the list of names in the pattern with their types (if set).
+    pub fn vars_with_types(&self) -> Vec<(FullName, Option<Arc<TypeNode>>)> {
+        match &self.pattern {
+            Pattern::Var(var, _) => vec![(var.name.clone(), self.info.inferred_ty.clone())],
+            Pattern::Struct(_, pats) => {
+                let mut ret = vec![];
+                for (_, pat) in pats {
+                    ret.extend(pat.vars_with_types());
+                }
+                ret
+            }
+            Pattern::Union(_, pat) => pat.vars_with_types(),
+        }
+    }
+
     // Find the node at the specified position.
     pub fn find_node_at_pos(self: &Arc<PatternNode>, pos: &SourcePos) -> Option<EndNode> {
         if self.info.source.is_none() {

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use super::{typecheck::Scope, Expr, ExprNode};
+use super::{typecheck::Scope, types::TypeNode, Expr, ExprNode};
 
 pub enum StartVisitResult {
     VisitChildren,
@@ -58,7 +58,7 @@ impl EndVisitResult {
 }
 
 pub struct VisitState {
-    pub scope: Scope<()>,
+    pub scope: Scope<Option<Arc<TypeNode>>>,
 }
 
 impl Default for VisitState {
@@ -235,8 +235,12 @@ pub trait ExprVisitor {
                 let res = self.start_visit_lam(&expr, state);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        for arg in args {
-                            state.scope.push(&arg.name.name, ());
+                        let arg_tys = expr.ty.as_ref().map(|ty| ty.get_lambda_srcs());
+                        for (i, arg) in args.iter().enumerate() {
+                            state.scope.push(
+                                &arg.name.name,
+                                arg_tys.as_ref().map(|arg_tys| arg_tys[i].clone()),
+                            );
                         }
                         let body = self.visit_expr(body, state).unwrap(&mut changed);
                         for arg in args {
@@ -260,11 +264,12 @@ pub trait ExprVisitor {
                 match res {
                     StartVisitResult::VisitChildren => {
                         let bound = self.visit_expr(bound, state).unwrap(&mut changed);
-                        for v in pat.pattern.vars() {
-                            state.scope.push(&v.name, ());
+                        let names = pat.vars_with_types();
+                        for (v, opt_ty) in &names {
+                            state.scope.push(&v.name, opt_ty.clone());
                         }
                         let val = self.visit_expr(val, state).unwrap(&mut changed);
-                        for v in pat.pattern.vars() {
+                        for (v, _) in names.iter().rev() {
                             state.scope.pop(&v.name);
                         }
                         if changed {
@@ -310,11 +315,12 @@ pub trait ExprVisitor {
                         let cond = self.visit_expr(cond, state).unwrap(&mut changed);
                         let mut new_pat_vals = vec![];
                         for (pat, val) in pat_vals {
-                            for v in pat.pattern.vars() {
-                                state.scope.push(&v.name, ());
+                            let names = pat.vars_with_types();
+                            for (v, opt_ty) in &names {
+                                state.scope.push(&v.name, opt_ty.clone());
                             }
                             let val = self.visit_expr(&val, state).unwrap(&mut changed);
-                            for v in pat.pattern.vars() {
+                            for (v, _) in names.iter().rev() {
                                 state.scope.pop(&v.name);
                             }
                             new_pat_vals.push((pat.clone(), val));

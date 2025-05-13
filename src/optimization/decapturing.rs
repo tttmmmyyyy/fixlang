@@ -15,12 +15,10 @@ use crate::{
     builtin::{make_tuple_name, make_tuple_ty},
     constants::DECAP_NAME,
     misc::{Map, Set},
+    typecheck::Scope,
 };
 
-use super::{
-    find_free_name_type::find_types_of_free_names, remove_shadowing,
-    uncurry::internalize_let_to_var_at_head,
-};
+use super::{remove_shadowing, uncurry::internalize_let_to_var_at_head};
 
 /*
 # Decapturing optimization
@@ -155,7 +153,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let mut specializations: Vec<SpecializationInfo> = Vec::new();
     for (name, mut sym) in symbols {
-        // 既に名にも変化しないことが知られているシンボルはスキップする
+        // 既に何も変化しないことが知られているシンボルはスキップする
         if stable_symbols.contains(&name) {
             new_symbols.insert(name.clone(), sym.clone());
             continue;
@@ -189,8 +187,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
 
         new_symbols.insert(name.clone(), sym.clone());
     }
-    let symbols = new_symbols;
-    let mut new_symbols: Map<FullName, Symbol> = Map::default();
+    let mut symbols = new_symbols;
 
     // 特殊化要求を処理する
     for specialize_info in specializations {
@@ -236,7 +233,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         for decap_lam in visitor.decap_lambdas {
             let decap_lam_sym = decap_lam.make_symbol();
             global_names.insert(decap_lam_sym.name.clone());
-            new_symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
+            symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
         }
 
         // 特殊化された関数を登録する
@@ -246,13 +243,13 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             ty: specialized_func_ty,
             expr: Some(expr),
         };
-        new_symbols.insert(specialized_func_name.clone(), specialized_func);
+        symbols.insert(specialized_func_name.clone(), specialized_func);
         global_names.insert(specialized_func_name.clone());
 
-        assert!(visitor.specializable_funcs.is_empty()); // 実際にはここでまた新しい特殊化要求が来る場合があるので、ループで処理していく必要がある。
+        // TODO: 実際にはここでまた新しい特殊化要求が来る場合があるので、ループで処理していく必要がある。
     }
 
-    prg.symbols = new_symbols;
+    prg.symbols = symbols;
     changed
 }
 
@@ -359,23 +356,23 @@ impl DecapturingVisitor {
     // ラムダ式をデキャプチャする
     //
     // `DecapturedLambdaInfo`、および、キャプチャリストを生成する式を返す。
-    fn decapture_lambda(&mut self, lam: &Arc<ExprNode>) -> (DecapturedLambdaInfo, Arc<ExprNode>) {
+    fn decapture_lambda(
+        &mut self,
+        lam: &Arc<ExprNode>,
+        scope: &Scope<Option<Arc<TypeNode>>>,
+    ) -> (DecapturedLambdaInfo, Arc<ExprNode>) {
         // キャプチャリストとその型を取得する。
         let cap_names = lam.lambda_cap_names();
-        let cap_names_types = find_types_of_free_names(lam, &cap_names);
         let cap_names_types = cap_names
             .iter()
-            .map(|name| {
-                let ty = cap_names_types.get(name).unwrap();
-                ty.clone()
-            })
+            .map(|name| scope.get_local(&name.name).unwrap().unwrap())
             .collect::<Vec<_>>();
 
         // キャプチャリストの型を作成する。
         let cap_list_ty = make_tuple_ty(cap_names_types.clone());
 
         // キャプチャリストの式を作成する。
-        let cap_list = expr_make_struct(
+        let cap_list_expr = expr_make_struct(
             tycon(make_tuple_name(cap_names.len() as u32)),
             cap_names
                 .iter()
@@ -419,7 +416,7 @@ impl DecapturingVisitor {
             lambda_func_name: self.new_lambda_func_name(),
         };
         self.decap_lambdas.push(decap_lam.clone());
-        (decap_lam, cap_list)
+        (decap_lam, cap_list_expr)
     }
 }
 
@@ -519,7 +516,7 @@ impl ExprVisitor for DecapturingVisitor {
         // この式の型がTで、ラムダ関数の型がC->Tのときは（Cはキャプチャリストの型）、
         // ラムダ関数にキャプチャリストを渡す式に置き換える。
 
-        // 変数名を取得
+        // 名前を取得
         let name = &expr.get_var().name;
 
         // 変数名がローカルであることを確認する。
@@ -527,26 +524,29 @@ impl ExprVisitor for DecapturingVisitor {
             return StartVisitResult::VisitChildren;
         }
 
-        // デキャプチャされたラムダを示しているか確認する。
+        // この名前がデキャプチャされたラムダを示しているか確認する。
         let decap_lambda = self.local_decap_lambdas.get(name);
         if decap_lambda.is_none() {
             return StartVisitResult::VisitChildren;
         }
         let decap_lambda = decap_lambda.unwrap();
 
-        //　この式の型として要求されている型がラムダ関数の型のコドメインと一致するか確認する。
-        let var_ty = expr.ty.as_ref().unwrap().clone();
+        // この式の型として要求されている型がすでにキャプチャリスト型と一致しているなら何もしない。
+        let expr_ty = expr.ty.as_ref().unwrap().clone();
+        let cap_list_ty = decap_lambda.cap_list_ty.clone();
+        if expr_ty.to_string() == cap_list_ty.to_string() {
+            return StartVisitResult::VisitChildren;
+        }
+
+        //　この式の型として要求されている型がラムダ関数の型のコドメインと一致していることを確認する。
         let lambda_ty = decap_lambda.lambda_func.ty.as_ref().unwrap();
         let lambda_codom_ty = lambda_ty.get_lambda_dst();
-        assert_eq!(var_ty.to_string(), lambda_codom_ty.to_string());
-        // if var_ty.to_string() != lambda_codom_ty.to_string() {
-        //     return StartVisitResult::VisitChildren;
-        // }
+        assert_eq!(expr_ty.to_string(), lambda_codom_ty.to_string());
 
         // ラムダ関数にキャプチャリストを与える式に置き換える。
         let lam = expr_var(decap_lambda.lambda_func_name.clone(), None)
             .set_inferred_type(lambda_ty.clone());
-        let expr = expr_app_typed(lam, vec![expr.clone()]);
+        let expr = expr_app_typed(lam, vec![expr.set_inferred_type(cap_list_ty)]);
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
@@ -577,7 +577,7 @@ impl ExprVisitor for DecapturingVisitor {
     fn start_visit_app(
         &mut self,
         expr: &std::sync::Arc<crate::ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // このapplication expressionが以下の条件を満たしているときに、クロージャ特殊化を実行する：
         // - 呼び出される関数はグローバルであり、その特殊化可能な引数にラムダ式であるかあるいは既にデキャプチャされたラムダ式（=キャプチャリスト）を与えている。
@@ -613,9 +613,10 @@ impl ExprVisitor for DecapturingVisitor {
                 let arg_name = &arg.get_var().name;
                 if let Some(decap_info) = self.local_decap_lambdas.get(arg_name) {
                     specialized_args.insert(i, decap_info.clone());
+                    decaptured_args[i] = arg.set_inferred_type(decap_info.cap_list_ty.clone());
                 }
             } else if arg.is_lam() {
-                let (decap_info, expr) = self.decapture_lambda(arg);
+                let (decap_info, expr) = self.decapture_lambda(arg, &state.scope);
                 specialized_args.insert(i, decap_info.clone());
                 decaptured_args[i] = expr;
             }
@@ -669,7 +670,7 @@ impl ExprVisitor for DecapturingVisitor {
     fn start_visit_let(
         &mut self,
         expr: &std::sync::Arc<crate::ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         let pat = expr.get_let_pat();
         let bound = expr.get_let_bound();
@@ -678,7 +679,7 @@ impl ExprVisitor for DecapturingVisitor {
             // 束縛される式がラムダ式のとき、デキャプチャリングを行う
             assert!(pat.is_var());
             let var_name = pat.get_var().name.clone();
-            let (decap_lam, cap_list) = self.decapture_lambda(&bound);
+            let (decap_lam, cap_list) = self.decapture_lambda(&bound, &state.scope);
             self.decap_lambdas.push(decap_lam.clone());
             self.local_decap_lambdas.insert(var_name, decap_lam);
             let pat = PatternNode::make_var(pat.get_var().clone(), None); // 型アノテーションを削除する
