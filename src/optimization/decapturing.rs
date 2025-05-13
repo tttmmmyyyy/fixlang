@@ -262,6 +262,14 @@ fn is_specializable_func(sym: &Symbol) -> Option<SpecializableFunctionInfo> {
     let name = sym.name.clone();
     let name_str = name.to_string();
     if name_str.starts_with("Std::Iterator::fold#") || name_str.starts_with("Std::loop#") {
+        // 型情報を取得して第一引数が関数であることを確認する。
+        let param_tys = sym.ty.collect_app_src(usize::MAX).0;
+        if param_tys.len() < 2 {
+            return None;
+        }
+        if !param_tys[1].is_closure() {
+            return None;
+        }
         // どちらも第一引数（0-indexed）が特殊化可能。
         Some(SpecializableFunctionInfo {
             func_name: name,
@@ -407,7 +415,6 @@ impl DecapturingVisitor {
 
         let decap_lam = DecapturedLambdaInfo {
             cap_list_ty,
-            cap_names: cap_names.clone(),
             lambda_func: new_lam,
             lambda_func_name: self.new_lambda_func_name(),
         };
@@ -481,8 +488,6 @@ impl SpecializationInfo {
 // デキャプチャしたラムダ式の情報を保持する構造体
 #[derive(Clone)]
 struct DecapturedLambdaInfo {
-    // キャプチャされた名前の列
-    cap_names: Vec<FullName>,
     // キャプチャリストの型
     // キャプチャされる型のタプルである。
     cap_list_ty: Arc<TypeNode>,
@@ -524,7 +529,7 @@ impl ExprVisitor for DecapturingVisitor {
 
         // デキャプチャされたラムダを示しているか確認する。
         let decap_lambda = self.local_decap_lambdas.get(name);
-        if !decap_lambda.is_none() {
+        if decap_lambda.is_none() {
             return StartVisitResult::VisitChildren;
         }
         let decap_lambda = decap_lambda.unwrap();
