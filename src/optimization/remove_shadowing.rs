@@ -9,7 +9,7 @@ use crate::{
     optimization::utils::rename_lam_param_avoiding,
 };
 
-use super::utils::rename_match_pattern_avoiding;
+use super::utils::{rename_let_pattern_avoiding, rename_match_pattern_avoiding};
 
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let mut renamer = Renamer {};
@@ -115,7 +115,7 @@ impl ExprVisitor for Renamer {
 
         // If there are conflicting names, rename the local names
         let local_names = state.scope.local_names_as_fullname();
-        let expr = rename_lam_param_avoiding(&local_names, expr.clone());
+        let expr = rename_let_pattern_avoiding(&local_names, expr.clone());
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
