@@ -1453,6 +1453,49 @@ impl TypeCheckContext {
         return Ok(());
     }
 
+    pub fn finish_inferred_types_for_pattern(
+        &mut self,
+        pat: Arc<PatternNode>,
+    ) -> Result<Arc<PatternNode>, Errors> {
+        let ty = self.substitute_type(pat.info.inferred_ty.as_ref().unwrap());
+        let ty = self.reduce_type_by_equality(ty)?;
+
+        let mut errs = None;
+        if ty.free_vars().len() > 0 {
+            errs = Some(Errors::from_msg_srcs(
+                format!("Cannot determine the type of a pattern. Add type annotation to fix it."),
+                &[&pat.info.source],
+            ));
+            // To raise an error of this kind in the deepest node of the AST, we do not return here.
+        }
+
+        let pat = pat.set_inferred_type(ty);
+        if let Some(errs) = errs {
+            return Err(errs);
+        }
+
+        let pat = match &pat.pattern {
+            Pattern::Var(_var, _anno_ty) => {
+                // Currently, type annotation is not used in the following processes, so there is no need to finish type annotation.
+                pat
+            }
+            Pattern::Union(_, subpat) => {
+                let subpat = self.finish_inferred_types_for_pattern(subpat.clone())?;
+                pat.set_union_pat(subpat)
+            }
+            Pattern::Struct(_, fied_to_pat) => {
+                let mut field_to_pat = fied_to_pat.clone();
+                for (_field_name, subpat) in field_to_pat.iter_mut() {
+                    let new_subpat = self.finish_inferred_types_for_pattern(subpat.clone())?;
+                    *subpat = new_subpat;
+                }
+                pat.set_struct_field_to_pat(field_to_pat)
+            }
+        };
+
+        Ok(pat)
+    }
+
     pub fn finish_inferred_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ty = self.substitute_type(expr.ty.as_ref().unwrap());
         let ty = self.reduce_type_by_equality(ty)?;
@@ -1484,10 +1527,11 @@ impl TypeCheckContext {
                 let body = self.finish_inferred_types(body.clone())?;
                 expr.set_lam_body(body)
             }
-            Expr::Let(_pat, val, body) => {
+            Expr::Let(pat, val, body) => {
+                let pat = self.finish_inferred_types_for_pattern(pat.clone())?;
                 let val = self.finish_inferred_types(val.clone())?;
                 let body = self.finish_inferred_types(body.clone())?;
-                expr.set_let_bound(val).set_let_value(body)
+                expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
             }
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.finish_inferred_types(cond.clone())?;
@@ -1501,8 +1545,9 @@ impl TypeCheckContext {
                 let cond = self.finish_inferred_types(cond.clone())?;
                 let mut new_pat_vals = vec![];
                 for (pat, val) in pat_vals {
+                    let pat = self.finish_inferred_types_for_pattern(pat.clone())?;
                     let val = self.finish_inferred_types(val.clone())?;
-                    new_pat_vals.push((pat.clone(), val));
+                    new_pat_vals.push((pat, val));
                 }
                 expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
             }

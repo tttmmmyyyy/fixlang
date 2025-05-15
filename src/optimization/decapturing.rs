@@ -13,7 +13,7 @@ use crate::{
         types::{tycon, type_fun, TypeNode},
     },
     builtin::{make_tuple_name, make_tuple_ty},
-    constants::DECAP_NAME,
+    constants::{DECAP_NAME, TUPLE_SIZE_BASE},
     misc::{Map, Set},
     typecheck::Scope,
 };
@@ -363,6 +363,8 @@ impl DecapturingVisitor {
     ) -> (DecapturedLambdaInfo, Arc<ExprNode>) {
         // キャプチャリストとその型を取得する。
         let cap_names = lam.lambda_cap_names();
+        assert!(cap_names.len() <= TUPLE_SIZE_BASE as usize); // TODO: いずれはこの制約を外すために専用の構造体定義にする。
+
         let cap_names_types = cap_names
             .iter()
             .map(|name| scope.get_local(&name.name).unwrap().unwrap())
@@ -403,7 +405,7 @@ impl DecapturingVisitor {
                 .set_inferred_type(cap_list_ty.clone());
         let new_body = expr_let_typed(
             cap_pat,
-            expr_var(FullName::local(DECAP_NAME), None),
+            expr_var(FullName::local(DECAP_NAME), None).set_inferred_type(cap_list_ty.clone()),
             lam.clone(),
         );
         let new_arg = var_local(DECAP_NAME);
@@ -653,9 +655,26 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_lam(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // もし引数がデキャプチャされたラムダを示しているときは、このラムダ式の型が誤っているので、修正する。
+        let arg = expr.get_lam_params();
+        assert_eq!(arg.len(), 1);
+        let arg = &arg[0];
+        let arg_name = &arg.name;
+        if let Some(local_decap_lambda) = self.local_decap_lambdas.get(arg_name) {
+            let cap_list_ty = local_decap_lambda.cap_list_ty.clone();
+            let lam_ty = expr.ty.as_ref().unwrap();
+            let arg_ty = lam_ty.get_lambda_srcs()[0].clone();
+            if cap_list_ty.to_string() == arg_ty.to_string() {
+                return StartVisitResult::VisitChildren;
+            }
+            // このラムダ式の型を修正する
+            let new_lambda_ty = type_fun(cap_list_ty, lam_ty.get_lambda_dst());
+            let expr = expr.set_inferred_type(new_lambda_ty);
+            return StartVisitResult::ReplaceAndRevisit(expr);
+        }
         StartVisitResult::VisitChildren
     }
 
@@ -664,6 +683,17 @@ impl ExprVisitor for DecapturingVisitor {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
+        // この式の型が誤っている場合は修正する。
+        let lam_ty = expr.ty.as_ref().unwrap();
+        let dom_ty = lam_ty.get_lambda_srcs()[0].clone();
+        let codom_ty = lam_ty.get_lambda_dst().clone();
+        let lam_body = expr.get_lam_body();
+        let impl_codom_ty = lam_body.ty.as_ref().unwrap();
+        if codom_ty.to_string() != impl_codom_ty.to_string() {
+            let new_lambda_ty = type_fun(dom_ty, impl_codom_ty.clone());
+            let expr = expr.set_inferred_type(new_lambda_ty);
+            return EndVisitResult::changed(expr);
+        }
         EndVisitResult::unchanged(expr)
     }
 

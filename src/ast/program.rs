@@ -572,7 +572,7 @@ impl Program {
             deferred_instantiation: Default::default(),
             trait_env: Default::default(),
             type_env: Default::default(),
-            used_tuple_sizes: (0..=TUPLE_SIZE_BASE).filter(|i| *i != 1).collect(),
+            used_tuple_sizes: (0..=TUPLE_SIZE_BASE).collect(),
             modules: Default::default(),
             entry_io_value: None,
             export_statements: vec![],

@@ -1703,10 +1703,13 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // cap_vars.sort_by_key(|(name, _)| name.to_string());
 
         let cap_vars = lam.lambda_cap_names();
-        let cap_vars = cap_vars.into_iter().map(|name| {
-            let obj = self.get_scoped_obj_noretain(&name);
-            (name, obj.ty)
-        }).collect::<Vec<_>>();
+        let cap_vars = cap_vars
+            .into_iter()
+            .map(|name| {
+                let obj = self.get_scoped_obj_noretain(&name);
+                (name, obj.ty)
+            })
+            .collect::<Vec<_>>();
 
         // Validation
         let lam_ty = lam.ty.clone().unwrap();

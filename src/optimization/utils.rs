@@ -362,7 +362,7 @@ fn calculate_renaming_bound_vars_avoiding(
 ) -> Map<FullName, FullName> {
     // Calculate the set of names that should be renamed.
     let mut renamed: Vec<FullName> = vec![];
-    for name in black_list.iter() {
+    for name in bound_vars.iter() {
         if black_list.contains(name) {
             renamed.push(name.clone());
         }
