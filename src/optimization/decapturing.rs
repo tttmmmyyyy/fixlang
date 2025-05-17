@@ -15,10 +15,9 @@ use crate::{
     builtin::{make_tuple_name, make_tuple_ty},
     constants::{DECAP_NAME, TUPLE_SIZE_BASE},
     misc::{Map, Set},
-    typecheck::Scope,
 };
 
-use super::{remove_shadowing, uncurry::internalize_let_to_var_at_head};
+use super::{uncurry::internalize_let_to_var_at_head, unify_local_names};
 
 /*
 # Decapturing optimization
@@ -166,7 +165,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         );
 
         // デキャプチャリング最適化を行う
-        let expr = remove_shadowing::run_on_expr(sym.expr.as_ref().unwrap()); // デキャプチャ最適化の実装はshadowingを考慮していない
+        let expr = unify_local_names::run_on_expr(sym.expr.as_ref().unwrap(), Set::default()); // デキャプチャ最適化の実装はshadowingを考慮していない
         let trav_res = visitor.traverse(&expr);
         if !trav_res.changed {
             // デキャプチャリング最適化が行われなかったとき
@@ -208,7 +207,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             .as_ref()
             .unwrap()
             .clone();
-        let expr = remove_shadowing::run_on_expr(&expr);
+        let expr = unify_local_names::run_on_expr(&expr, Set::default()); // デキャプチャ最適化の実装はshadowingを考慮していない
 
         // 引数名からデキャプチャされたラムダ情報へのマップを生成する
         let mut local_decap_lambdas = Map::default();

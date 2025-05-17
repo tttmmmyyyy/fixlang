@@ -266,15 +266,15 @@ impl ExprVisitor for FreeVarReplacer {
 // Generate new names that is not in the set `black_list`.
 pub fn generate_new_names(black_list: &Set<FullName>, n: usize) -> Vec<FullName> {
     let mut names = vec![];
+    let mut var_name_no = 0;
     for _ in 0..n {
-        let mut var_name_no = 0;
         let var_name = loop {
             let var_name = format!("#v{}", var_name_no);
+            var_name_no += 1;
             let var_name = FullName::local(&var_name);
             if !black_list.contains(&var_name) {
                 break var_name;
             }
-            var_name_no += 1;
         };
         names.push(var_name);
     }

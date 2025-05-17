@@ -2502,7 +2502,7 @@ pub struct InlineLLVMStructGetBody {
 
 impl InlineLLVMStructGetBody {
     pub fn name(&self) -> String {
-        format!("{}.Struct::@{}", self.var_name.to_string(), self.field_idx)
+        format!("{}.@{}", self.var_name.to_string(), self.field_idx)
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {

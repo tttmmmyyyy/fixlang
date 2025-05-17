@@ -1,22 +1,31 @@
-// This module provides a function to rename local names in an expression so that shadowing does not occur in it.
+// This module provides a transformation that makes all local names defined in an expression unique.
+// Not only avoids shadowing but also avoids collisions with names that are already out of scope.
 use std::sync::Arc;
 
 use crate::{
     ast::{
         expr::ExprNode,
+        name::FullName,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
     },
+    misc::Set,
     optimization::utils::rename_lam_param_avoiding,
 };
 
 use super::utils::{rename_let_pattern_avoiding, rename_match_pattern_avoiding};
 
-pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    let mut renamer = Renamer {};
+pub fn run_on_expr(expr: &Arc<ExprNode>, mut occupied: Set<FullName>) -> Arc<ExprNode> {
+    let expr = &expr.calculate_free_vars();
+    let free_vars = expr.free_vars();
+    occupied.extend(free_vars.iter().cloned());
+    let mut renamer = Renamer { occupied: occupied };
     renamer.traverse(expr).expr.calculate_free_vars()
 }
 
-struct Renamer {}
+struct Renamer {
+    // The set of names that are already used.
+    occupied: Set<FullName>,
+}
 
 impl ExprVisitor for Renamer {
     fn start_visit_var(
@@ -70,22 +79,23 @@ impl ExprVisitor for Renamer {
     fn start_visit_lam(
         &mut self,
         expr: &std::sync::Arc<crate::ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
+        _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // Get the parameter name
         let params = expr.get_lam_params();
-        assert_eq!(params.len(), 1);
+        assert_eq!(params.len(), 1); // Currently, we only support single-parameter lambdas, but this can be extended
         let param = params[0].clone();
         let param = &param.name;
+        let conflict = self.occupied.contains(param);
 
-        // If there is no conflict with the current scope, do nothing
-        if !state.scope.has_value(&param.name) {
+        // If there is no conflict with the occupied names, do nothing
+        if !conflict {
+            self.occupied.insert(param.clone());
             return StartVisitResult::VisitChildren;
         }
 
         // Rename the parameter name
-        let local_names = state.scope.local_names_as_fullname();
-        let expr = rename_lam_param_avoiding(&local_names, expr.clone());
+        let expr = rename_lam_param_avoiding(&self.occupied, expr.clone());
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
@@ -100,22 +110,22 @@ impl ExprVisitor for Renamer {
     fn start_visit_let(
         &mut self,
         expr: &std::sync::Arc<crate::ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
+        _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // Get the local names introduced
-        let local_names = expr.get_let_pat().pattern.vars();
+        let new_names = expr.get_let_pat().pattern.vars();
+        let conflict = new_names
+            .iter()
+            .any(|new_name| self.occupied.contains(&new_name));
 
         // Do nothing if there are no conflicting names
-        if local_names
-            .iter()
-            .all(|local_name| !state.scope.has_value(&local_name.name))
-        {
+        if !conflict {
+            self.occupied.extend(new_names.iter().cloned());
             return StartVisitResult::VisitChildren;
         }
 
         // If there are conflicting names, rename the local names
-        let local_names = state.scope.local_names_as_fullname();
-        let expr = rename_let_pattern_avoiding(&local_names, expr.clone());
+        let expr = rename_let_pattern_avoiding(&self.occupied, expr.clone());
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
@@ -146,25 +156,25 @@ impl ExprVisitor for Renamer {
     fn start_visit_match(
         &mut self,
         expr: &std::sync::Arc<crate::ExprNode>,
-        state: &mut crate::ast::traverse::VisitState,
+        _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // If there are no local names introduced that cause shadowing, do nothing
-        let mut shadowing = false;
+        let mut new_names = vec![];
         for (pat, _val) in expr.get_match_pat_vals() {
-            for local_name in pat.pattern.vars() {
-                if state.scope.has_value(&local_name.name) {
-                    shadowing = true;
-                    break;
-                }
+            for new_name in pat.pattern.vars() {
+                new_names.push(new_name.clone());
             }
         }
-        if !shadowing {
+        let conflict = new_names
+            .iter()
+            .any(|new_name| self.occupied.contains(&new_name));
+        if !conflict {
+            self.occupied.extend(new_names.iter().cloned());
             return StartVisitResult::VisitChildren;
         }
 
         // If there are conflicting names, rename the local names
-        let local_names = state.scope.local_names_as_fullname();
-        let expr = rename_match_pattern_avoiding(&local_names, expr.clone());
+        let expr = rename_match_pattern_avoiding(&self.occupied, expr.clone());
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
