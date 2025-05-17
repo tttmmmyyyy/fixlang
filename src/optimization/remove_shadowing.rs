@@ -13,7 +13,7 @@ use super::utils::{rename_let_pattern_avoiding, rename_match_pattern_avoiding};
 
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let mut renamer = Renamer {};
-    renamer.traverse(expr).expr
+    renamer.traverse(expr).expr.calculate_free_vars()
 }
 
 struct Renamer {}

@@ -175,7 +175,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
             continue;
         }
         changed = true;
-        sym.expr = Some(trav_res.expr);
+        sym.expr = Some(trav_res.expr.calculate_free_vars());
         specializations.append(&mut visitor.required_specializations); // 特殊化要求はあとで処理する
 
         // 生成されたデキャプチャリングラムダをグローバル関数として登録する
@@ -227,7 +227,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         );
         visitor.local_decap_lambdas = local_decap_lambdas;
         let trav_res = visitor.traverse(&expr);
-        let expr = trav_res.expr;
+        let expr = trav_res.expr.calculate_free_vars();
 
         // デキャプチャにより作成されたラムダをグローバル関数として登録する
         for decap_lam in visitor.decap_lambdas {
@@ -358,16 +358,28 @@ impl DecapturingVisitor {
     // `DecapturedLambdaInfo`、および、キャプチャリストを生成する式を返す。
     fn decapture_lambda(
         &mut self,
-        lam: &Arc<ExprNode>,
-        scope: &Scope<Option<Arc<TypeNode>>>,
+        mut lam: Arc<ExprNode>,
+        state: &mut crate::ast::traverse::VisitState,
     ) -> (DecapturedLambdaInfo, Arc<ExprNode>) {
         // キャプチャリストとその型を取得する。
         let cap_names = lam.lambda_cap_names();
         assert!(cap_names.len() <= TUPLE_SIZE_BASE as usize); // TODO: いずれはこの制約を外すために専用の構造体定義にする。
 
+        // もしデキャプチャされたラムダ式をキャプチャしている場合は、事前にlamを訪問しておく。
+        for cap_name in &cap_names {
+            if self.local_decap_lambdas.contains_key(cap_name) {
+                let lam_visit_res = self.visit_expr(&lam, state);
+                lam = self
+                    .revisit_if_changed(lam_visit_res, state)
+                    .expr
+                    .calculate_free_vars();
+                break;
+            }
+        }
+
         let cap_names_types = cap_names
             .iter()
-            .map(|name| scope.get_local(&name.name).unwrap().unwrap())
+            .map(|name| state.scope.get_local(&name.name).unwrap().unwrap())
             .collect::<Vec<_>>();
 
         // キャプチャリストの型を作成する。
@@ -618,7 +630,7 @@ impl ExprVisitor for DecapturingVisitor {
                     decaptured_args[i] = arg.set_inferred_type(decap_info.cap_list_ty.clone());
                 }
             } else if arg.is_lam() {
-                let (decap_info, expr) = self.decapture_lambda(arg, &state.scope);
+                let (decap_info, expr) = self.decapture_lambda(arg.clone(), state);
                 specialized_args.insert(i, decap_info.clone());
                 decaptured_args[i] = expr;
             }
@@ -684,6 +696,7 @@ impl ExprVisitor for DecapturingVisitor {
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         // この式の型が誤っている場合は修正する。
+        // 例：|x| |y| (...) のようなラムダ式があって、yがデキャプチャされたラムダ式のとき、|y| (...) の型が変化しているので、|x| |y| (...) のcodomainの型を修正する必要がある場合がある。
         let lam_ty = expr.ty.as_ref().unwrap();
         let dom_ty = lam_ty.get_lambda_srcs()[0].clone();
         let codom_ty = lam_ty.get_lambda_dst().clone();
@@ -709,20 +722,26 @@ impl ExprVisitor for DecapturingVisitor {
             // 束縛される式がラムダ式のとき、デキャプチャリングを行う
             assert!(pat.is_var());
             let var_name = pat.get_var().name.clone();
-            let (decap_lam, cap_list) = self.decapture_lambda(&bound, &state.scope);
+            let (decap_lam, cap_list) = self.decapture_lambda(bound, state);
             self.decap_lambdas.push(decap_lam.clone());
-            self.local_decap_lambdas.insert(var_name, decap_lam);
-            let pat = PatternNode::make_var(pat.get_var().clone(), None); // 型アノテーションを削除する
+            self.local_decap_lambdas.insert(var_name.clone(), decap_lam);
+            let pat = pat
+                .set_var_tyanno(None) // 型アノテーションは不正になるかもしれないので捨てる
+                .set_inferred_type(cap_list.ty.as_ref().unwrap().clone());
             let expr = expr_let_typed(pat, cap_list, value);
             return StartVisitResult::ReplaceAndRevisit(expr);
         } else if bound.is_var() {
-            // 束縛される式が変数で、それがデキャプチャされたラムダ式を示しているときは、
-            // このlet束縛で導入される変数もself.local_decap_lambdasに追加する。
             let name = &bound.get_var().name;
+            // 束縛される式が変数で、それがデキャプチャされたラムダ式を示しているときは、
             if self.local_decap_lambdas.contains_key(name) {
+                // boundの型を修正する。
                 let decap_lambda = self.local_decap_lambdas.get(name).unwrap();
+                let bound = bound.set_inferred_type(decap_lambda.cap_list_ty.clone());
+                let expr = expr.set_let_bound(bound);
+                // このlet束縛で導入される変数もself.local_decap_lambdasに追加する。
                 self.local_decap_lambdas
                     .insert(pat.get_var().name.clone(), decap_lambda.clone());
+                return StartVisitResult::ReplaceAndRevisit(expr);
             }
             return StartVisitResult::VisitChildren;
         } else {

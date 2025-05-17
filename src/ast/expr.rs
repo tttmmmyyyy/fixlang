@@ -1278,6 +1278,10 @@ pub fn expr_let_typed(
     bound: Arc<ExprNode>,
     value: Arc<ExprNode>,
 ) -> Arc<ExprNode> {
+    assert_eq!(
+        pat.info.inferred_ty.as_ref().unwrap().to_string(),
+        bound.ty.as_ref().unwrap().to_string()
+    );
     let ty = value.ty.as_ref().unwrap().clone();
     expr_let(pat, bound, value, None).set_inferred_type(ty)
 }
