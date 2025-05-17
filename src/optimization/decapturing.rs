@@ -630,7 +630,7 @@ impl ExprVisitor for DecapturingVisitor {
                     decaptured_args[i] = arg.set_inferred_type(decap_info.cap_list_ty.clone());
                 }
             } else if arg.is_lam() {
-                let (decap_info, expr) = self.decapture_lambda(arg.clone(), state);
+                let (decap_info, expr) = self.decapture_lambda(arg.clone(), state); // この中でargを訪問している
                 specialized_args.insert(i, decap_info.clone());
                 decaptured_args[i] = expr;
             }
@@ -670,24 +670,28 @@ impl ExprVisitor for DecapturingVisitor {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        // もし引数がデキャプチャされたラムダを示しているときは、このラムダ式の型が誤っているので、修正する。
+        // 子を訪問する前に、もし引数がデキャプチャされたラムダを示しているときは、このラムダ式の型のドメイン部分が間違っているので、修正する。
         let arg = expr.get_lam_params();
         assert_eq!(arg.len(), 1);
         let arg = &arg[0];
         let arg_name = &arg.name;
-        if let Some(local_decap_lambda) = self.local_decap_lambdas.get(arg_name) {
-            let cap_list_ty = local_decap_lambda.cap_list_ty.clone();
-            let lam_ty = expr.ty.as_ref().unwrap();
-            let arg_ty = lam_ty.get_lambda_srcs()[0].clone();
-            if cap_list_ty.to_string() == arg_ty.to_string() {
-                return StartVisitResult::VisitChildren;
-            }
-            // このラムダ式の型を修正する
-            let new_lambda_ty = type_fun(cap_list_ty, lam_ty.get_lambda_dst());
-            let expr = expr.set_inferred_type(new_lambda_ty);
-            return StartVisitResult::ReplaceAndRevisit(expr);
+        let opt_local_decap_lambda = self.local_decap_lambdas.get(arg_name);
+        // 引数がデキャプチャされたラムダを示していないときは何もしない。
+        if opt_local_decap_lambda.is_none() {
+            return StartVisitResult::VisitChildren;
         }
-        StartVisitResult::VisitChildren
+        let local_decap_lambda = opt_local_decap_lambda.unwrap();
+        let cap_list_ty = local_decap_lambda.cap_list_ty.clone();
+        let lam_ty = expr.ty.as_ref().unwrap();
+        let arg_ty = lam_ty.get_lambda_srcs()[0].clone();
+        // 引数の型がすでにあっているときは何もしない。
+        if cap_list_ty.to_string() == arg_ty.to_string() {
+            return StartVisitResult::VisitChildren;
+        }
+        // このラムダ式の型を修正する
+        let new_lambda_ty = type_fun(cap_list_ty, lam_ty.get_lambda_dst());
+        let expr = expr.set_inferred_type(new_lambda_ty);
+        return StartVisitResult::ReplaceAndRevisit(expr);
     }
 
     fn end_visit_lam(
@@ -695,19 +699,20 @@ impl ExprVisitor for DecapturingVisitor {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
-        // この式の型が誤っている場合は修正する。
-        // 例：|x| |y| (...) のようなラムダ式があって、yがデキャプチャされたラムダ式のとき、|y| (...) の型が変化しているので、|x| |y| (...) のcodomainの型を修正する必要がある場合がある。
+        // 子を訪問したことによって、この式の型のコドメインが変化した可能性があるので、型を修正する。
+        // 例：|x| |y| (...) のようなラムダ式があって、yがデキャプチャされたラムダ式だったとき、|y| (...) を訪問したことによってその式が変化しているので、
+        // |x| |y| (...) のcodomainの型を修正する必要がある場合がある。
         let lam_ty = expr.ty.as_ref().unwrap();
         let dom_ty = lam_ty.get_lambda_srcs()[0].clone();
         let codom_ty = lam_ty.get_lambda_dst().clone();
         let lam_body = expr.get_lam_body();
         let impl_codom_ty = lam_body.ty.as_ref().unwrap();
-        if codom_ty.to_string() != impl_codom_ty.to_string() {
-            let new_lambda_ty = type_fun(dom_ty, impl_codom_ty.clone());
-            let expr = expr.set_inferred_type(new_lambda_ty);
-            return EndVisitResult::changed(expr);
+        if codom_ty.to_string() == impl_codom_ty.to_string() {
+            return EndVisitResult::unchanged(expr);
         }
-        EndVisitResult::unchanged(expr)
+        let new_lambda_ty = type_fun(dom_ty, impl_codom_ty.clone());
+        let expr = expr.set_inferred_type(new_lambda_ty);
+        EndVisitResult::changed(expr)
     }
 
     fn start_visit_let(
@@ -722,28 +727,29 @@ impl ExprVisitor for DecapturingVisitor {
             // 束縛される式がラムダ式のとき、デキャプチャリングを行う
             assert!(pat.is_var());
             let var_name = pat.get_var().name.clone();
-            let (decap_lam, cap_list) = self.decapture_lambda(bound, state);
+            let (decap_lam, cap_list) = self.decapture_lambda(bound, state); // この中でboundを訪問している
             self.decap_lambdas.push(decap_lam.clone());
             self.local_decap_lambdas.insert(var_name.clone(), decap_lam);
             let pat = pat
-                .set_var_tyanno(None) // 型アノテーションは不正になるかもしれないので捨てる
+                .set_var_tyanno(None) // 型アノテーションは誤りになるかもしれない。今後必要ではないので捨てておく。
                 .set_inferred_type(cap_list.ty.as_ref().unwrap().clone());
             let expr = expr_let_typed(pat, cap_list, value);
             return StartVisitResult::ReplaceAndRevisit(expr);
         } else if bound.is_var() {
             let name = &bound.get_var().name;
-            // 束縛される式が変数で、それがデキャプチャされたラムダ式を示しているときは、
-            if self.local_decap_lambdas.contains_key(name) {
-                // boundの型を修正する。
-                let decap_lambda = self.local_decap_lambdas.get(name).unwrap();
-                let bound = bound.set_inferred_type(decap_lambda.cap_list_ty.clone());
-                let expr = expr.set_let_bound(bound);
-                // このlet束縛で導入される変数もself.local_decap_lambdasに追加する。
-                self.local_decap_lambdas
-                    .insert(pat.get_var().name.clone(), decap_lambda.clone());
-                return StartVisitResult::ReplaceAndRevisit(expr);
+            let opt_local_decap_lambda = self.local_decap_lambdas.get(name);
+            if opt_local_decap_lambda.is_none() {
+                return StartVisitResult::VisitChildren;
             }
-            return StartVisitResult::VisitChildren;
+            // let式により束縛される式が変数で、それがデキャプチャされたラムダ式を示している場合。
+            let local_decap_lambda = opt_local_decap_lambda.unwrap();
+            // boundの型をキャプチャリストの型に設定しておく。
+            let bound = bound.set_inferred_type(local_decap_lambda.cap_list_ty.clone());
+            let expr = expr.set_let_bound(bound);
+            // このlet束縛で導入される変数もself.local_decap_lambdasに追加する。
+            self.local_decap_lambdas
+                .insert(pat.get_var().name.clone(), local_decap_lambda.clone());
+            return StartVisitResult::ReplaceAndRevisit(expr);
         } else {
             return StartVisitResult::VisitChildren;
         }
