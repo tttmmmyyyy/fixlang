@@ -172,6 +172,7 @@ impl InlineCosts {
         self.costs.get(name).map_or(0, |c| c.call_count)
     }
 
+    #[allow(dead_code)]
     pub fn get_complexity(&self, name: &FullName) -> Option<usize> {
         self.costs.get(name).map(|c| c.complexity)
     }
