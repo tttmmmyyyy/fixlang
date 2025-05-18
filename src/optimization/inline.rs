@@ -241,6 +241,21 @@ impl InlineCostCalculator {
             is_lambda: false,
         }
     }
+
+    fn on_find_usage_of_global_name(&mut self, used_name: &FullName) {
+        // If calling a global symbol, increase the call count.
+        assert!(used_name.is_global());
+        if let Some(count) = self.call_count.get_mut(used_name) {
+            *count += 1;
+        } else {
+            self.call_count.insert(used_name.clone(), 1);
+        }
+
+        // If it calls itself, set `is_call_self`.
+        if used_name == &self.name {
+            self.is_call_self = true;
+        }
+    }
 }
 
 impl ExprVisitor for InlineCostCalculator {
@@ -255,20 +270,9 @@ impl ExprVisitor for InlineCostCalculator {
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var_name = &expr.get_var().name;
         if var_name.is_global() {
-            // If calling a global symbol, increase the call count.
-            if let Some(count) = self.call_count.get_mut(var_name) {
-                *count += 1;
-            } else {
-                self.call_count.insert(var_name.clone(), 1);
-            }
-
+            self.on_find_usage_of_global_name(var_name);
             // Add the complexity of the symbol.
             self.complexity += 1;
-
-            // If it calls itself, set `is_call_self`.
-            if var_name == &self.name {
-                self.is_call_self = true;
-            }
         }
         self.is_lambda = false;
         EndVisitResult::unchanged(expr)
@@ -285,6 +289,11 @@ impl ExprVisitor for InlineCostCalculator {
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.complexity += 1;
         self.is_lambda = false;
+        for free_name in expr.free_vars() {
+            if free_name.is_global() {
+                self.on_find_usage_of_global_name(&free_name);
+            }
+        }
         EndVisitResult::unchanged(expr)
     }
 

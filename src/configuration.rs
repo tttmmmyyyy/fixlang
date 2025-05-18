@@ -453,7 +453,7 @@ impl Configuration {
     }
 
     pub fn enable_decapturing_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Experimental
+        self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     pub fn enable_simplify_symbol_names(&self) -> bool {
