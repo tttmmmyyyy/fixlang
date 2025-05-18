@@ -1458,7 +1458,7 @@ impl TypeCheckContext {
             // To raise an error of this kind in the deepest node of the AST, we do not return here.
         }
 
-        let pat = pat.set_inferred_type(ty);
+        let pat = pat.set_type(ty);
         if let Some(errs) = errs {
             return Err(errs);
         }

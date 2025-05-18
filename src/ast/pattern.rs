@@ -33,7 +33,7 @@ impl PatternNode {
                 };
                 let mut var_to_ty = Map::default();
                 var_to_ty.insert(var_name, ty.clone());
-                Ok((self.set_inferred_type(ty), var_to_ty))
+                Ok((self.set_type(ty), var_to_ty))
             }
             Pattern::Struct(tc, field_to_pat) => {
                 let ty = tc.get_struct_union_value_type(typechcker);
@@ -71,8 +71,7 @@ impl PatternNode {
                     }
                 }
                 Ok((
-                    self.set_inferred_type(ty)
-                        .set_struct_field_to_pat(field_to_pat),
+                    self.set_type(ty).set_struct_field_to_pat(field_to_pat),
                     var_to_ty,
                 ))
             }
@@ -104,10 +103,7 @@ impl PatternNode {
                 }
 
                 // Return the typed pattern.
-                Ok((
-                    self.set_inferred_type(union_ty).set_union_pat(subpat),
-                    var_ty,
-                ))
+                Ok((self.set_type(union_ty).set_union_pat(subpat), var_ty))
             }
         }
     }
@@ -353,15 +349,15 @@ impl PatternNode {
         Arc::new(node)
     }
 
-    pub fn set_inferred_type(self: &PatternNode, ty: Arc<TypeNode>) -> Arc<PatternNode> {
+    pub fn set_type(self: &PatternNode, ty: Arc<TypeNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
         node.info.inferred_ty = Some(ty);
         Arc::new(node)
     }
 
-    pub fn make_var(var: Arc<Var>, ty: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
+    pub fn make_var(var: Arc<Var>, anno_ty: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
         Arc::new(PatternNode {
-            pattern: Pattern::Var(var, ty),
+            pattern: Pattern::Var(var, anno_ty),
             info: PatternInfo::default(),
         })
     }

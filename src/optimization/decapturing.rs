@@ -408,13 +408,13 @@ impl DecapturingVisitor {
             .map(|(i, name)| {
                 let var = var_var(name.clone());
                 let ty = cap_names_types.get(i).unwrap();
-                let pat = PatternNode::make_var(var, Some(ty.clone()));
+                let pat = PatternNode::make_var(var, None).set_type(ty.clone());
                 (i.to_string(), pat)
             })
             .collect::<Vec<_>>();
         let cap_pat =
             PatternNode::make_struct(tycon(make_tuple_name(cap_names.len() as u32)), cap_pats)
-                .set_inferred_type(cap_list_ty.clone());
+                .set_type(cap_list_ty.clone());
         let new_body = expr_let_typed(
             cap_pat,
             expr_var(FullName::local(DECAP_NAME), None).set_inferred_type(cap_list_ty.clone()),
@@ -623,7 +623,7 @@ impl ExprVisitor for DecapturingVisitor {
             let new_name = make_new_name(name);
             expr = expr_let_typed(
                 PatternNode::make_var(var_var(new_name.clone()), None)
-                    .set_inferred_type(call_lam_expr.ty.as_ref().unwrap().clone()),
+                    .set_type(call_lam_expr.ty.as_ref().unwrap().clone()),
                 call_lam_expr.clone(),
                 expr.clone(),
             );
@@ -784,7 +784,7 @@ impl ExprVisitor for DecapturingVisitor {
             self.local_decap_lambdas.insert(var_name.clone(), decap_lam);
             let pat = pat
                 .set_var_tyanno(None) // 型アノテーションは誤りになるかもしれない。今後必要ではないので捨てておく。
-                .set_inferred_type(cap_list.ty.as_ref().unwrap().clone());
+                .set_type(cap_list.ty.as_ref().unwrap().clone());
             let expr = expr_let_typed(pat, cap_list, value);
             return StartVisitResult::ReplaceAndRevisit(expr);
         } else if bound.is_var() {

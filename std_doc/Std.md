@@ -4497,6 +4497,14 @@ Type: `Std::Array Std::U8`
 
 Defined as: `type Tuple0 = unbox struct { ...fields... }`
 
+#### Tuple1
+
+Defined as: `type Tuple1 t0 = unbox struct { ...fields... }`
+
+##### field `0`
+
+Type: `t0`
+
 #### Tuple2
 
 Defined as: `type Tuple2 t0 t1 = unbox struct { ...fields... }`
@@ -5234,6 +5242,14 @@ Returns "()".
 
 ### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`
 
+### impl `[t0 : Std::Eq] (t0,) : Std::Eq`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThan] (t0,) : Std::LessThan`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq] (t0,) : Std::LessThanOrEq`
+
+### impl `[t0 : Std::ToString] (t0,) : Std::ToString`
+
 ### impl `Std::Array : Std::Functor`
 
 ### impl `Std::Array : Std::Monad`
@@ -5555,6 +5571,8 @@ The byte array ends with a null terminator (`'\0'`).
 The empty string.
 
 ### impl `Std::String::StringSplitIterator : Std::Iterator`
+
+### impl `Std::Tuple1 : Std::Functor`
 
 ### impl `Std::Tuple2 t0 : Std::Functor`
 
