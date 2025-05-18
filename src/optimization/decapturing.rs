@@ -15,6 +15,7 @@ use crate::{
     builtin::{make_tuple_name, make_tuple_ty},
     constants::{DECAP_NAME, TUPLE_SIZE_BASE},
     misc::{Map, Set},
+    optimization::utils::replace_free_var_of_expr,
 };
 
 use super::{uncurry::internalize_let_to_var_at_head, unify_local_names};
@@ -573,10 +574,62 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_llvm(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        llvm_expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
+        // LLVM式に与えられている自由変数のうち、デキャプチャされたラムダを示しているものがあれば、
+        // ラムダ関数を呼び出した値を与える式に置き換える。
+
+        let mut replace = Map::default(); // LLVM式の自由変数の置き換えのデータ
+        for free_name in llvm_expr.free_vars() {
+            let opt_decap_lambda = self.local_decap_lambdas.get(free_name);
+            if opt_decap_lambda.is_none() {
+                continue;
+            }
+            let decap_lambda = opt_decap_lambda.unwrap();
+
+            // ラムダ関数にキャプチャリストを与えて呼び出す式を作成しておく。
+            let lambda_ty = decap_lambda.lambda_func.ty.as_ref().unwrap();
+            let lam = expr_var(decap_lambda.lambda_func_name.clone(), None)
+                .set_inferred_type(lambda_ty.clone());
+            let name_expr = expr_var(free_name.clone(), None)
+                .set_inferred_type(decap_lambda.cap_list_ty.clone());
+            let expr = expr_app_typed(lam, vec![name_expr]);
+
+            replace.insert(free_name.clone(), expr);
+        }
+
+        // LLVM式の自由変数のいずれもがデキャプチャされたラムダを示していないときは何もしない。
+        if replace.is_empty() {
+            return StartVisitResult::VisitChildren;
+        }
+
+        let make_new_name = |name: &FullName| {
+            let mut new_name = name.clone();
+            new_name.name_as_mut().push_str("#call_decap_lam");
+            new_name
+        };
+
+        // LLVM式の中の自由変数をリネームする
+        let mut llvm_expr = llvm_expr.clone();
+        for (name, _) in replace.iter() {
+            let new_name = make_new_name(name);
+            llvm_expr = replace_free_var_of_expr(&llvm_expr, name, &new_name);
+        }
+
+        // LLVM式の前にlet (新変数) = (ラムダ関数の呼び出し); を挿入する
+        let mut expr = llvm_expr.clone();
+        for (name, call_lam_expr) in replace.iter() {
+            let new_name = make_new_name(name);
+            expr = expr_let_typed(
+                PatternNode::make_var(var_var(new_name.clone()), None)
+                    .set_inferred_type(call_lam_expr.ty.as_ref().unwrap().clone()),
+                call_lam_expr.clone(),
+                expr.clone(),
+            );
+        }
+
+        StartVisitResult::ReplaceAndRevisit(expr)
     }
 
     fn end_visit_llvm(

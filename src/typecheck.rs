@@ -71,17 +71,6 @@ where
         res
     }
 
-    // Get the set of local names as `FullName`s.
-    pub fn local_names_as_fullname(&self) -> Set<FullName> {
-        let mut res: Set<FullName> = Default::default();
-        for (name, stack) in &self.local {
-            if !stack.is_empty() {
-                res.insert(FullName::local(name));
-            }
-        }
-        res
-    }
-
     // Set global values.
     pub fn set_globals(&mut self, globals: Vec<(FullName, T)>) {
         self.global = Arc::new(globals);
