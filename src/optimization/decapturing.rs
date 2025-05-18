@@ -285,7 +285,7 @@ fn is_specializable_func(sym: &Symbol) -> Option<SpecializableFunctionInfo> {
     }
     return None;
 
-    // TODO: Proposal for future improvement of specializability judgment:
+    // TODO: Plan for future improvement of specializability judgment:
     //
     // The following gives sufficient conditions:
     // Decompose the call graph into strongly connected components.
