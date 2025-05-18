@@ -1,7 +1,5 @@
 use std::{rc::Rc, sync::Arc};
 
-use chrono::format;
-
 use crate::{
     ast::{
         expr::{
@@ -13,10 +11,9 @@ use crate::{
         program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
         typedecl::Field,
-        types::{kind_star, tycon, type_fun, type_tycon, TyCon, TyConInfo, TypeNode},
+        types::{kind_star, type_fun, type_tycon, TyCon, TyConInfo, TypeNode},
     },
-    builtin::{make_tuple_name, make_tuple_ty},
-    constants::{DECAP_NAME, STD_NAME, TUPLE_SIZE_BASE},
+    constants::{DECAP_NAME, STD_NAME},
     misc::{Map, Set},
     optimization::utils::replace_free_var_of_expr,
 };
@@ -30,42 +27,47 @@ use super::{uncurry::internalize_let_to_var_at_head, unify_local_names};
 
 ### デキャプチャリング
 
-ラムダ式ごとに専用の構造体を定義する。
-その構造体はラムダ式がキャプチャする値をフィールドに持つ。
-またラムダ式の処理をグローバル関数として定義する。
+ラムダ式ごとに、そのラムダ式がキャプチャする値をまとめた構造体を定義する。
+また、ラムダ式の処理をグローバル関数として定義する。
 
-例：
+例えば、
 ```
 let f = |x| x + n;
 ```
 があるとき、
 ```
-type #Cap0_f = unbox struct { n: I64 };
+type #DecapF = unbox struct { n: I64 };
 
-#lam0_f : #Cap0_f -> I64 -> I64;
-#lam0_f = |{ n : n }, x| x + n;
+#lamf : #DecapF -> I64 -> I64;
+#lamf = |{ n : n }, x| x + n;
 ```
 が定義される。
 
-ラムダの定義は、`#Cap0_f { n : n }` に置き換えられる。
-
-`#lam0_f`がグローバル関数となることで、後続のuncurry最適化が適用されるようになり、高速化が見込める。
+ラムダの定義は、`#DecapF { n : n }` に置き換えられる。
+例えば、
+```
+let f = |x| x + n;
+```
+は
+```
+let f = #DecapF { n : n };
+```
+に置き換えられる。
 
 ### ラムダの使用個所の書き換え
 
-`f(x)`は、以下のコードに変換される。
+デキャプチャされたラムダ式の呼出し箇所`f(x)`は、以下のコードに変換される。
 ```
-#lam0_f(f, x)
+#lamf(f, x)
 ```
-fにより多数の引数がある場合、fの使用箇所が部分適用となっている式は、`#lam0_f` に部分適用を行う式に置き換えられる。
 
-特に、fに0個の引数が与えられる場合、すなわちfそのものが出現する場所では、原則、`#lam0_f(f)` というコードになる。
-ただし、そのうち「クロージャ特殊化」が適用できる個所では、`#lam0_f` に置き換えられる。
+原則的には、`f`が単独で（すなわち、呼び出し式ではない形で）出現する場所では、`#lamf(f)` というコードになる。
+ただし、そのうち「クロージャ特殊化」が適用できる個所については、`f`のままにしておく。
 
 ### クロージャ特殊化
 
 グローバル関数の引数にラムダを与えている場合を考える。
-例として、`fold`の第2引数に、上記の`f`を与えている場合を考える。
+例として、`fold`の第2引数に、上記の`f`を与えて呼び出しているケースを考える。
 
 ```
 fold : S -> (A -> S -> S) -> Iter -> S;
@@ -77,20 +79,26 @@ fold = |s, op, iter| (
 );
 ```
 
-これをもとに以下のようなバージョンのfoldを定義する。
+```
+it.fold(s0, f)
+```
+
+このとき、以下のようなコードを生成する。
 これをクロージャ特殊化と呼ぶ。
 
 ```
-fold#lam0_f : S -> #Cap0_f -> Iter -> S;
-fold#lam0_f = |s, op, iter| (
+fold#lamf : S -> #DecapF -> Iter -> S;
+fold#lamf = |s, op, iter| (
     match iter.advance {
         none() => s,
-        some((iter, a)) => iter.fold#lam0_f(#lam0_f(op, a, s), op)
+        some((iter, a)) => iter.fold#lamf(#lamf(op, a, s), op)
     }
 );
 ```
 
-そして、`iter.fold(s0, f)`を`iter.fold#lam0_f(s0, f)`に置き換える。
+```
+it.fold#lamf(s0, f)
+```
 
 ## 適用範囲と制限
 
@@ -110,16 +118,18 @@ fold#lam0_f = |s, op, iter| (
 例： `let (_, f) = (0, |acm, i| acm + i); iter.fold(s0, f)`
 このような場合に対処するためには、なんらかの他の最適化を実装し、事前に適用しておく必要があるだろう。
 
+### 特殊化できる関数の判定
+
+特殊化される関数は、is_specializable_func()で判定される。
+現時点では、いくつかのStdの関数を明示的に指定しているのみである。
+ある関数が特殊化可能かどうかの判定はやや難しく（無限ループに陥る可能性がある）検討中である。
+
 ## 他の最適化との関係
 
 * 本最適化の前にインライン化を行っておくべき。例えば、式`f >> g`がインライン化によりラムダ式に置き換わることで、本最適化の対象となる。
 * 本最適化の後にもインライン化を行う価値があるかもしれない。本最適化によりグローバル関数が増えるためである。
 * 本最適化の前にエータ展開を行っておくべきかもしれない。エータ展開により特殊化の対象となる引数が増えるためである。
 * 本最適化により生成されたグローバル関数の性能を向上させるため、アンカリー化は本最適化の後に行うべきである。
-
-TODO:
-とりあえずラムダが直にfoldに渡されている場合に実装してみよう。
-変数を通して引き渡される場合にはそのあとに対処しよう。
 */
 
 pub fn run(prg: &mut Program) {
@@ -252,7 +262,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         symbols.insert(specialized_func_name.clone(), specialized_func);
         global_names.insert(specialized_func_name.clone());
 
-        // TODO: 実際にはここでまた新しい特殊化要求が来る場合があるので、ループで処理していく必要がある。
+        // TODO: 将来的に特殊化可能関数増えると、ここで再度特殊化要求が発生する可能性があるので、ループで処理していく必要がある。
     }
 
     prg.type_env.add_tycons(new_tycons);
@@ -262,36 +272,41 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
 
 // シンボルが特殊化可能かどうか判定する。特殊化可能なときはSpecializableFunctionInfoを生成する。
 fn is_specializable_func(sym: &Symbol) -> Option<SpecializableFunctionInfo> {
-    // 仮実装。foldとloopだけとする。
+    // 特殊化可能な関数の名前のプレフィックスと、特殊化可能な引数のインデックス。
+    const SPECIALIZABLE_FUNC_TABLE: [(&str, usize); 5] = [
+        ("Std::loop#", 1),
+        ("Std::loop_iter#", 1),
+        ("Std::loop_iter_m#", 1),
+        ("Std::Iterator::fold#", 1),
+        ("Std::Iterator::fold_m#", 1),
+    ];
     let name = sym.name.clone();
     let name_str = name.to_string();
-    if name_str.starts_with("Std::Iterator::fold#") || name_str.starts_with("Std::loop#") {
-        // 型情報を取得して第一引数が関数であることを確認する。
+    for (specializable_func, arg_index) in SPECIALIZABLE_FUNC_TABLE.iter() {
+        if !name_str.starts_with(*specializable_func) {
+            continue;
+        }
         let param_tys = sym.ty.collect_app_src(usize::MAX).0;
-        if param_tys.len() < 2 {
+        if param_tys.len() < 2 || !param_tys[*arg_index].is_closure() {
             return None;
         }
-        if !param_tys[1].is_closure() {
-            return None;
-        }
-        // どちらも第一引数（0-indexed）が特殊化可能。
-        Some(SpecializableFunctionInfo {
+        return Some(SpecializableFunctionInfo {
             func_name: name,
             func_ty: sym.ty.clone(),
-            specializable_arg_indices: vec![1],
-        })
-    } else {
-        None
+            specializable_arg_indices: vec![*arg_index],
+        });
     }
-    // 発想：十分条件。
+    return None;
+
+    // TODO: 将来的な特殊化可能判定の改善の案：
+    //
+    // 以下は十分条件を与える：
     // 呼び出しグラフを強連結成分分解しておく。
     // 自分より下流のノードしか呼び出していないときはOK
     // そうでないときは、自身をそのまま同じ引数で呼び出していればOK、それ以外はNG。
-    // インライン化によって自己再帰が多くなっているはず。
-
-    // TODO: 最終的に特殊化可能であることをチェックするためにはインラインコストも考慮する必要がある。
     //
-    // `func`のインラインコストが小さいことを確認する：
+    // また、特殊化可能性ではインラインコストも考慮するべき。
+    // 参考コード：
     // let complexity = self.inline_costs.get_complexity(func_name);
     // if complexity.is_none() {
     //     return StartVisitResult::VisitChildren;
