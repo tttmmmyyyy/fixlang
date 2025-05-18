@@ -514,7 +514,7 @@ impl SpecializationRequest {
             doms[*i] = cap_list_ty;
         }
 
-        // 関数の型に戻す
+        // Convert back to a function type
         let mut func_ty = codom;
         for dom in doms.iter().rev() {
             func_ty = type_fun(dom.clone(), func_ty);
