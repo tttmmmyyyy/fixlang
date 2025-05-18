@@ -36,6 +36,14 @@ impl TypeEnv {
         }
     }
 
+    pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
+        let mut tycons = self.tycons.as_ref().clone();
+        for (tc, ti) in new_tycons.into_iter() {
+            tycons.insert(tc.clone(), ti);
+        }
+        self.tycons = Arc::new(tycons);
+    }
+
     pub fn kinds(&self) -> Map<TyCon, Arc<Kind>> {
         let mut res = Map::default();
         for (tc, ti) in self.tycons.as_ref().iter() {

@@ -329,6 +329,7 @@ impl TypeAlias {
 pub struct Field {
     pub name: Name,
     pub ty: Arc<TypeNode>,
+    // Syntactic type of the field.
     pub syn_ty: Option<Arc<TypeNode>>,
     pub is_punched: bool,
     pub source: Option<Span>,

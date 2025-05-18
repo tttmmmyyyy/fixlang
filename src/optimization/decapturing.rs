@@ -1,5 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 
+use chrono::format;
+
 use crate::{
     ast::{
         expr::{
@@ -10,10 +12,11 @@ use crate::{
         pattern::PatternNode,
         program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
-        types::{tycon, type_fun, TypeNode},
+        typedecl::Field,
+        types::{kind_star, tycon, type_fun, type_tycon, TyCon, TyConInfo, TypeNode},
     },
     builtin::{make_tuple_name, make_tuple_ty},
-    constants::{DECAP_NAME, TUPLE_SIZE_BASE},
+    constants::{DECAP_NAME, STD_NAME, TUPLE_SIZE_BASE},
     misc::{Map, Set},
     optimization::utils::replace_free_var_of_expr,
 };
@@ -133,6 +136,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     let mut changed = false;
 
     let symbols = std::mem::take(&mut prg.symbols);
+    let mut new_tycons = Map::default();
 
     // 特殊化可能な関数の集合を計算する
     let mut specializable_funcs: Map<FullName, SpecializableFunctionInfo> = Map::default();
@@ -178,11 +182,12 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         sym.expr = Some(trav_res.expr.calculate_free_vars());
         specializations.append(&mut visitor.required_specializations); // 特殊化要求はあとで処理する
 
-        // 生成されたデキャプチャリングラムダをグローバル関数として登録する
+        // 生成されたデキャプチャラムダおよび型構成子を取り出す
         for decap_lam in visitor.decap_lambdas {
             let decap_lam_sym = decap_lam.make_symbol();
             global_names.insert(decap_lam_sym.name.clone());
             new_symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
+            new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
         }
 
         new_symbols.insert(name.clone(), sym.clone());
@@ -229,11 +234,12 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         let trav_res = visitor.traverse(&expr);
         let expr = trav_res.expr.calculate_free_vars();
 
-        // デキャプチャにより作成されたラムダをグローバル関数として登録する
+        // 生成されたデキャプチャラムダおよび型構成子を取り出す
         for decap_lam in visitor.decap_lambdas {
             let decap_lam_sym = decap_lam.make_symbol();
             global_names.insert(decap_lam_sym.name.clone());
             symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
+            new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
         }
 
         // 特殊化された関数を登録する
@@ -249,6 +255,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         // TODO: 実際にはここでまた新しい特殊化要求が来る場合があるので、ループで処理していく必要がある。
     }
 
+    prg.type_env.add_tycons(new_tycons);
     prg.symbols = symbols;
     changed
 }
@@ -363,7 +370,6 @@ impl DecapturingVisitor {
     ) -> (DecapturedLambdaInfo, Arc<ExprNode>) {
         // キャプチャリストとその型を取得する。
         let cap_names = lam.lambda_cap_names();
-        assert!(cap_names.len() <= TUPLE_SIZE_BASE as usize); // TODO: いずれはこの制約を外すために専用の構造体定義にする。
 
         // もしデキャプチャされたラムダ式をキャプチャしている場合は、事前にlamを訪問しておく。
         for cap_name in &cap_names {
@@ -377,24 +383,54 @@ impl DecapturingVisitor {
             }
         }
 
+        // それぞれのキャプチャされる名前に対して型を取得する。
         let cap_names_types = cap_names
             .iter()
-            .map(|name| state.scope.get_local(&name.name).unwrap().unwrap())
+            .map(|name| {
+                let ty = state.scope.get_local(&name.name).unwrap().unwrap();
+                (name.clone(), ty.clone())
+            })
             .collect::<Vec<_>>();
 
-        // キャプチャリストの型を作成する。
-        let cap_list_ty = make_tuple_ty(cap_names_types.clone());
-
-        // キャプチャリストの式を作成する。
-        let cap_list_expr = expr_make_struct(
-            tycon(make_tuple_name(cap_names.len() as u32)),
-            cap_names
+        // キャプチャリスト式の型を作成する。
+        let tycon_hash_data = cap_names_types
+            .iter()
+            .map(|(name, ty)| format!("{},{}", name.to_string(), ty.to_string()))
+            .collect::<Vec<_>>()
+            .join(",");
+        let tycon_hash = format!("{:x}", md5::compute(tycon_hash_data));
+        let tycon_name = TyCon {
+            name: FullName::from_strs(&[STD_NAME], &format!("#DecapList_{}", tycon_hash)),
+        };
+        let tycon = Arc::new(tycon_name);
+        let tycon_info = TyConInfo {
+            kind: kind_star(),
+            variant: crate::ast::types::TyConVariant::Struct,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: cap_names_types
                 .iter()
-                .zip(cap_names_types.iter())
-                .enumerate()
-                .map(|(i, (name, ty))| {
+                .map(|(name, ty)| Field {
+                    name: name.name.clone(),
+                    ty: ty.clone(),
+                    syn_ty: None,
+                    is_punched: false,
+                    source: None,
+                })
+                .collect(),
+            source: None,
+            document: None,
+        };
+        let cap_list_ty = type_tycon(&tycon);
+
+        // キャプチャリスト式を作成する。
+        let cap_list_expr = expr_make_struct(
+            tycon.clone(),
+            cap_names_types
+                .iter()
+                .map(|(name, ty)| {
                     let var = expr_var(name.clone(), None).set_inferred_type(ty.clone());
-                    (i.to_string(), var)
+                    (name.to_string(), var)
                 })
                 .collect(),
         )
@@ -402,19 +438,16 @@ impl DecapturingVisitor {
 
         // ラムダ関数を作成する。
         // このために、`lam`にキャプチャリストを受け取るための引数を加え、lamの本体の冒頭でキャプチャリストを分解するlet式を挿入する。
-        let cap_pats = cap_names
+        let cap_pats = cap_names_types
             .iter()
-            .enumerate()
-            .map(|(i, name)| {
+            .map(|(name, ty)| {
                 let var = var_var(name.clone());
-                let ty = cap_names_types.get(i).unwrap();
                 let pat = PatternNode::make_var(var, None).set_type(ty.clone());
-                (i.to_string(), pat)
+                (name.to_string(), pat)
             })
             .collect::<Vec<_>>();
         let cap_pat =
-            PatternNode::make_struct(tycon(make_tuple_name(cap_names.len() as u32)), cap_pats)
-                .set_type(cap_list_ty.clone());
+            PatternNode::make_struct(tycon.clone(), cap_pats).set_type(cap_list_ty.clone());
         let new_body = expr_let_typed(
             cap_pat,
             expr_var(FullName::local(DECAP_NAME), None).set_inferred_type(cap_list_ty.clone()),
@@ -425,6 +458,8 @@ impl DecapturingVisitor {
         let new_lam = internalize_let_to_var_at_head(&new_lam);
 
         let decap_lam = DecapturedLambdaInfo {
+            tycon: tycon.as_ref().clone(),
+            tycon_info,
             cap_list_ty,
             lambda_func: new_lam,
             lambda_func_name: self.new_lambda_func_name(),
@@ -499,8 +534,10 @@ impl SpecializationInfo {
 // デキャプチャしたラムダ式の情報を保持する構造体
 #[derive(Clone)]
 struct DecapturedLambdaInfo {
+    // キャプチャリストの型構築子
+    tycon: TyCon,
+    tycon_info: TyConInfo,
     // キャプチャリストの型
-    // キャプチャされる型のタプルである。
     cap_list_ty: Arc<TypeNode>,
     // ラムダ関数
     lambda_func: Arc<ExprNode>,
