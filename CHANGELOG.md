@@ -7,6 +7,7 @@
 - Add `Std::String::unsafe_from_c_str_ptr : Ptr -> String` function.
 - Implement `String : FromBytes` and `String : ToBytes`. You can convert a string to a (null-terminated) byte array and vice versa.
 - Add `Std::Array::search_partition_point`.
+- Add new optimization ("optimization/decapturing.rs"). This will be applied when the optimization level is `max`.
 
 ### Changed
 - Update LLVM to 17.0.x.
