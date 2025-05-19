@@ -1,5 +1,5 @@
 // === Basic rules ===
-sep = _{ " " | "\t" | NEWLINE | block_comment | line_comment }
+sep = _{ " " | "\t" | "\u{00A0}" | NEWLINE | block_comment | line_comment }
 
 comma_ = { "," }
 

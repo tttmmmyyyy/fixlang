@@ -8222,6 +8222,19 @@ main = pure();
 }
 
 #[test]
+pub fn test_nobreak_space() {
+    let source = r##"
+module Main;
+main : IO ();
+main = (
+    assert_eq(|_|"", 42, 42);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_external_projects() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",

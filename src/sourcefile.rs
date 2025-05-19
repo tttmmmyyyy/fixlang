@@ -182,7 +182,11 @@ impl Span {
             return "".to_string();
         }
         let source_string = source_string.ok().unwrap();
-        let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
+        let opt_span = pest::Span::new(&source_string, self.start, self.end);
+        if opt_span.is_none() {
+            return "".to_string();
+        }
+        let span = opt_span.unwrap();
 
         let mut linenum_str_size = 0;
         for line_span in span.lines_span() {
