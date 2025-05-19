@@ -11,6 +11,7 @@ use ast::name::Name;
 use either::Either;
 use either::Either::Left;
 use either::Either::Right;
+use inkwell::values::GlobalValue;
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{
@@ -384,6 +385,7 @@ pub struct GenerationContext<'c, 'm> {
     type_env: TypeEnv,
     pub target_data: TargetData,
     pub config: Configuration,
+    global_strings: Map<String, GlobalValue<'c>>,
 }
 
 pub struct PopBuilderGuard<'c> {
@@ -417,6 +419,19 @@ impl<'c> Drop for PopDebugScopeGuard<'c> {
 }
 
 impl<'c, 'm> GenerationContext<'c, 'm> {
+    // Add a global string.
+    pub fn add_global_string(&mut self, s: &str) -> GlobalValue<'c> {
+        if let Some(val) = self.global_strings.get(s) {
+            return val.clone();
+        }
+        let gv = self
+            .builder()
+            .build_global_string_ptr(s, "global_string")
+            .unwrap();
+        self.global_strings.insert(s.to_string(), gv);
+        gv
+    }
+
     // Build alloca at current function's entry bb.
     pub fn build_alloca_at_entry<T: BasicType<'c>>(
         &mut self,
@@ -511,6 +526,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             type_env,
             target_data: target_data,
             config,
+            global_strings: Map::default(),
         };
         ret
     }
@@ -1548,17 +1564,14 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Print Rust's &str to stderr.
-    fn eprint(&self, string: &str) {
-        let string_ptr = self
-            .builder()
-            .build_global_string_ptr(string, "rust_str")
-            .unwrap();
+    fn eprint(&mut self, string: &str) {
+        let string_ptr = self.add_global_string(string);
         let string_ptr = string_ptr.as_pointer_value();
         self.call_runtime(RUNTIME_EPRINT, &[string_ptr.into()]);
     }
 
     // Panic with Rust's &str (i.e, print string and abort.)
-    pub fn panic(&self, string: &str) {
+    pub fn panic(&mut self, string: &str) {
         self.eprint(string);
         self.call_runtime(RUNTIME_ABORT, &[]);
     }

@@ -788,12 +788,7 @@ impl InlineLLVMStringLit {
         _ty: &Arc<TypeNode>,
         _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
-        let string_ptr = gc
-            .builder()
-            .build_global_string_ptr(&self.string, "string_literal")
-            .unwrap()
-            .as_basic_value_enum()
-            .into_pointer_value();
+        let string_ptr = gc.add_global_string(&self.string).as_pointer_value();
         let len_with_null_terminator = gc
             .context
             .i64_type()
