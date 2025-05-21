@@ -134,17 +134,12 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     // Whether optimization has been performed on any symbol.
     let mut changed = false;
 
+    // Compute the set of specializable functions.
+    let specializable_funcs = specializable_functions(prg);
+    let specializable_funcs = Rc::new(specializable_funcs);
+
     let symbols = std::mem::take(&mut prg.symbols);
     let mut new_tycons = Map::default();
-
-    // Compute the set of specializable functions
-    let mut specializable_funcs: Map<FullName, SpecializableFunctionInfo> = Map::default();
-    for (name, sym) in &symbols {
-        if let Some(specialize_info) = is_specializable(sym) {
-            specializable_funcs.insert(name.clone(), specialize_info);
-        }
-    }
-    let specializable_funcs = Rc::new(specializable_funcs);
 
     // Create a set of global names
     let mut global_names = Set::default();
@@ -257,6 +252,16 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     prg.type_env.add_tycons(new_tycons);
     prg.symbols = symbols;
     changed
+}
+
+fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunctionInfo> {
+    let mut specializable_funcs = Map::default();
+    for (name, sym) in &prg.symbols {
+        if let Some(specialize_info) = is_specializable(sym) {
+            specializable_funcs.insert(name.clone(), specialize_info);
+        }
+    }
+    specializable_funcs
 }
 
 // Judge whether a symbol is specializable. If it is specializable, generate `SpecializableFunctionInfo`.
