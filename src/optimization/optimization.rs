@@ -66,4 +66,10 @@ pub fn run(prg: &mut Program, config: &Configuration) {
             prg.optimization_step += 1;
         }
     }
+
+    if config.emit_symbols {
+        simplify_symbol_names::run(prg);
+        prg.emit_symbols(&format!("{}.final", prg.optimization_step));
+        prg.optimization_step += 1;
+    }
 }

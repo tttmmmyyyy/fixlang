@@ -15,7 +15,7 @@ use crate::{
 
 use super::{beta_reduction, remove_renaming};
 
-pub const INLINE_COST_THRESHOLD: usize = 30;
+pub const INLINE_COST_THRESHOLD: i32 = 30;
 
 pub fn run(prg: &mut Program) {
     // Calculate free variables of all symbols.
@@ -152,7 +152,8 @@ impl InlineCost {
         if !self.is_lambda {
             return false;
         }
-        self.call_count * self.complexity <= INLINE_COST_THRESHOLD
+        (self.call_count as i32 - 1) * self.complexity as i32 <= INLINE_COST_THRESHOLD
+        // If call count is 1, then inline always regardless of complexity.
     }
 }
 
