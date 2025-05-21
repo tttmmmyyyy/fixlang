@@ -2265,7 +2265,7 @@ impl Program {
 
     // Generate a call graph of instantiated symbols.
     #[allow(dead_code)]
-    pub fn call_graph_inst_syms(&self) -> Graph<FullName> {
+    pub fn call_graph(&self) -> Graph<FullName> {
         let syms = self.symbols.keys().cloned().collect::<Vec<_>>();
         let mut graph = Graph::new(syms);
         for (callee, sym) in &self.symbols {
