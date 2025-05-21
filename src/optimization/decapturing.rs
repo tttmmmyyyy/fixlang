@@ -140,7 +140,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     // Compute the set of specializable functions
     let mut specializable_funcs: Map<FullName, SpecializableFunctionInfo> = Map::default();
     for (name, sym) in &symbols {
-        if let Some(specialize_info) = is_specializable_func(sym) {
+        if let Some(specialize_info) = is_specializable(sym) {
             specializable_funcs.insert(name.clone(), specialize_info);
         }
     }
@@ -260,7 +260,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
 }
 
 // Judge whether a symbol is specializable. If it is specializable, generate `SpecializableFunctionInfo`.
-fn is_specializable_func(sym: &Symbol) -> Option<SpecializableFunctionInfo> {
+fn is_specializable(sym: &Symbol) -> Option<SpecializableFunctionInfo> {
     // Prefix of specializable functions and index of specializable arguments.
     const SPECIALIZABLE_FUNC_TABLE: [(&str, usize); 5] = [
         ("Std::loop#", 1),
