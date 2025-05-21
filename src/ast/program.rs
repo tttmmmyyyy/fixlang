@@ -2263,8 +2263,9 @@ impl Program {
         file.write_all(text.as_bytes()).unwrap();
     }
 
-    // Generate a call graph of instantiated symbols.
-    #[allow(dead_code)]
+    // Generate a call graph of symbols.
+    //
+    // Call graph is a directed graph where each node is a symbol and an edge from A to B means that A calls B.
     pub fn call_graph(&self) -> Graph<FullName> {
         let syms = self.symbols.keys().cloned().collect::<Vec<_>>();
         let mut graph = Graph::new(syms);

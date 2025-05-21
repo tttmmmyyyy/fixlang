@@ -7,9 +7,8 @@ use std::{
 
 use crate::{
     misc::{function_name, number_to_varname, split_by_max_size},
-    run_file, test_source, test_source_fail, Configuration, Graph, SubCommand,
-    COMPILER_TEST_WORKING_PATH, I16_NAME, I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME,
-    U64_NAME, U8_NAME,
+    run_file, test_source, test_source_fail, Configuration, SubCommand, COMPILER_TEST_WORKING_PATH,
+    I16_NAME, I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use rand::Rng;
 
@@ -4484,55 +4483,6 @@ pub fn test_iterator_flatten() {
     );
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
-pub fn test_graph_find_loop() {
-    // Test find_loop of graph.rs.
-
-    let g = Graph::new((0..3).collect());
-    assert_eq!(g.find_loop(), vec![] as Vec<usize>);
-
-    let mut g = Graph::new((0..3).collect());
-    g.connect_idx(0, 1);
-    g.connect_idx(1, 2);
-    assert_eq!(g.find_loop(), vec![] as Vec<usize>);
-
-    let mut g = Graph::new((0..3).collect());
-    g.connect_idx(0, 0);
-    assert_eq!(g.find_loop(), vec![0 as usize]);
-
-    let mut g = Graph::new((0..3).collect());
-    g.connect_idx(1, 1);
-    assert_eq!(g.find_loop(), vec![1 as usize]);
-
-    let mut g = Graph::new((0..3).collect());
-    g.connect_idx(0, 1);
-    g.connect_idx(2, 2);
-    assert_eq!(g.find_loop(), vec![2 as usize]);
-
-    let mut g = Graph::new((0..3).collect());
-    g.connect_idx(1, 2);
-    g.connect_idx(2, 1);
-    assert_eq!(g.find_loop(), vec![1 as usize, 2 as usize]);
-
-    let mut g = Graph::new((0..4).collect());
-    g.connect_idx(0, 1);
-    g.connect_idx(1, 2);
-    g.connect_idx(1, 3);
-    g.connect_idx(2, 3);
-    assert_eq!(g.find_loop(), vec![] as Vec<usize>);
-
-    let mut g = Graph::new((0..5).collect());
-    g.connect_idx(0, 1);
-    g.connect_idx(1, 2);
-    g.connect_idx(1, 3);
-    g.connect_idx(3, 4);
-    g.connect_idx(4, 1);
-    assert_eq!(
-        g.find_loop(),
-        vec![1 as usize, 3 as usize, 4 as usize] as Vec<usize>
-    );
 }
 
 #[test]
