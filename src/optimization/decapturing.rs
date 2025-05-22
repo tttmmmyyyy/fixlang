@@ -406,17 +406,9 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
             }
 
             let inline_cost = inline_costs.costs.get(sym_name).unwrap();
-            let worth_specialized = if self_recursive {
-                // If `sym` is self-recursive, it is worth specializing even if the inline cost is high.
-                true
-            } else {
-                if !inline_cost.inline_at_call_site() {
-                    // If the inline cost is too high, we should not specialize it.
-                    false
-                } else {
-                    called || passed_to_specializable_parameter
-                }
-            };
+            let worth_specialized = (self_recursive || inline_cost.inline_at_call_site())
+                && (called || passed_to_specializable_parameter);
+
             if !worth_specialized {
                 continue;
             }
