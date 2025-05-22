@@ -110,7 +110,7 @@ pub fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 }
 
 // A struct to store information about the cost of inlining a symbol.
-struct InlineCost {
+pub struct InlineCost {
     // The number of times the symbol is called.
     call_count: usize,
     // The complexity of the expression.
@@ -142,7 +142,7 @@ impl InlineCost {
     }
 
     // Returns true if the symbol can be inlined at a call site.
-    fn inline_at_call_site(&self) -> bool {
+    pub fn inline_at_call_site(&self) -> bool {
         if self.is_self_recursive {
             return false;
         }
@@ -159,7 +159,7 @@ impl InlineCost {
 
 // The map from each symbol to the cost of inlining it.
 pub struct InlineCosts {
-    costs: Map<FullName, InlineCost>,
+    pub costs: Map<FullName, InlineCost>,
 }
 
 impl InlineCosts {
@@ -171,11 +171,6 @@ impl InlineCosts {
 
     pub fn get_call_count(&self, name: &FullName) -> usize {
         self.costs.get(name).map_or(0, |c| c.call_count)
-    }
-
-    #[allow(dead_code)]
-    pub fn get_complexity(&self, name: &FullName) -> Option<usize> {
-        self.costs.get(name).map(|c| c.complexity)
     }
 
     fn add_cost_calculation_result(&mut self, name: &FullName, cost: InlineCostCalculator) {

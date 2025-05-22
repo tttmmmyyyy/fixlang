@@ -2263,13 +2263,16 @@ impl Program {
         file.write_all(text.as_bytes()).unwrap();
     }
 
-    // Generate a call graph of instantiated symbols.
-    #[allow(dead_code)]
-    pub fn call_graph_inst_syms(&self) -> Graph<FullName> {
+    // Generate a call graph of symbols.
+    //
+    // Call graph is a directed graph where each node is a symbol and an edge from A to B means that A calls B.
+    pub fn call_graph(&self) -> Graph<FullName> {
         let syms = self.symbols.keys().cloned().collect::<Vec<_>>();
         let mut graph = Graph::new(syms);
         for (callee, sym) in &self.symbols {
-            let called = sym.expr.as_ref().unwrap().free_vars();
+            let expr = sym.expr.as_ref().unwrap();
+            let expr = expr.calculate_free_vars();
+            let called = expr.free_vars();
             for called in called {
                 graph.connect(callee, called);
             }
