@@ -2270,7 +2270,9 @@ impl Program {
         let syms = self.symbols.keys().cloned().collect::<Vec<_>>();
         let mut graph = Graph::new(syms);
         for (callee, sym) in &self.symbols {
-            let called = sym.expr.as_ref().unwrap().free_vars();
+            let expr = sym.expr.as_ref().unwrap();
+            let expr = expr.calculate_free_vars();
+            let called = expr.free_vars();
             for called in called {
                 graph.connect(callee, called);
             }

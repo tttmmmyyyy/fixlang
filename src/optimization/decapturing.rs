@@ -305,6 +305,7 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
         let sym_name = call_graph.get(call_graph_idx);
         let sym = prg.symbols.get(sym_name).unwrap();
         let expr = sym.expr.as_ref().unwrap();
+        let expr = &expr.calculate_free_vars();
 
         // If `sym` calls other nodes in the same SCC, avoid specialization to prevent the risk of an infinite loop.
         let mut prevent_specialization = false;
