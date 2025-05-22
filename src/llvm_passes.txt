@@ -2,12 +2,8 @@ sroa
 tailcallelim
 inline
 instcombine
-inline
 early-cse<memssa>
-jump-threading
 speculative-execution
-gvn-hoist
-scc-oz-module-inliner
 module-inline
 scc-oz-module-inliner
 slp-vectorizer
@@ -18,10 +14,12 @@ loop-unroll
 loop-versioning
 loop-simplifycfg
 loop-versioning
-globaldce
 break-crit-edges
 instcombine
 pseudo-probe
 separate-const-offset-from-gep
 reassociate
 loop-unroll
+loop-unroll
+constraint-elimination
+globalopt
