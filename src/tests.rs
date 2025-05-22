@@ -8459,3 +8459,26 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_recursive_closure_capturing() {
+    let source = r##"
+module Main;
+
+rec : (I64 -> I64) -> I64 -> Array I64 -> Array I64;
+rec = |f, n, arr| (
+    if n == 0 { arr };
+    let g = |x| x + n;
+    let h = f >> g;
+    rec(h, n - 1, arr.push_back(h(n)))
+);
+
+main: IO ();
+main = (
+    let arr = rec(|x| x, 3, []);
+    assert_eq(|_|"", arr, [6, 7, 7]);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
