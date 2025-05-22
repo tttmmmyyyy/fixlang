@@ -8185,51 +8185,95 @@ main = (
 }
 
 #[test]
-pub fn test_external_projects() {
+pub fn test_external_project_math() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
         "fixlang-math",
     );
+}
+
+#[test]
+pub fn test_external_project_hashmap() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-hashmap.git",
         "fixlang-hashmap",
     );
+}
+
+#[test]
+pub fn test_external_project_hashset() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-hashset.git",
         "fixlang-hashset",
     );
+}
+
+#[test]
+pub fn test_external_project_random() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-random.git",
         "fixlang-random",
     );
+}
+
+#[test]
+pub fn test_external_project_time() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-time.git",
         "fixlang-time",
     );
+}
+
+#[test]
+pub fn test_external_project_character() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-character.git",
         "fixlang-character",
     );
+}
+
+#[test]
+pub fn test_external_project_subprocess() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-subprocess.git",
         "fixlang-subprocess",
     );
+}
+
+#[test]
+pub fn test_external_project_regexp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-regexp.git",
         "fixlang-regexp",
     );
+}
+
+#[test]
+pub fn test_external_project_asynctask() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-asynctask.git",
         "fixlang-asynctask",
     );
+}
+
+#[test]
+pub fn test_external_project_gmp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-gmp.git",
         "fixlang-gmp",
     );
+}
+
+#[test]
+pub fn test_external_project_misc_algos() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-misc-algos.git",
         "fixlang-misc-algos",
     );
+}
+
+#[test]
+pub fn test_external_project_binary_heap() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-binary-heap.git",
         "fixlang-binary-heap",
