@@ -18,7 +18,12 @@ use crate::{
     optimization::utils::replace_free_var_of_expr,
 };
 
-use super::{uncurry::internalize_let_to_var_at_head, unify_local_names};
+use super::{
+    find_usage_of_name::{self, UsageType},
+    inline::{self},
+    uncurry::internalize_let_to_var_at_head,
+    unique_local_names,
+};
 
 /*
 # Decapturing optimization
@@ -164,7 +169,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         );
 
         // Perform decapturing optimization
-        let expr = unify_local_names::run_on_expr(sym.expr.as_ref().unwrap(), Set::default()); // Preconditions for decapturing optimization
+        let expr = unique_local_names::run_on_expr(sym.expr.as_ref().unwrap(), Set::default()); // Preconditions for decapturing optimization
         let trav_res = visitor.traverse(&expr);
         if !trav_res.changed {
             // When no optimization is performed,
@@ -189,64 +194,69 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     let mut symbols = new_symbols;
 
     // Process specialization requests
-    for specialize_info in specializations {
-        // Generate the name and type of the specialized function
-        let specialized_func_name = specialize_info.specialized_func_name();
-        let specialized_func_ty = specialize_info.specialized_func_ty();
+    while specializations.len() > 0 {
+        let mut new_specializations = Vec::new();
+        for specialize_info in &specializations {
+            // Generate the name and type of the specialized function
+            let specialized_func_name = specialize_info.specialized_func_name();
+            let specialized_func_ty = specialize_info.specialized_func_ty();
 
-        // If it is already implemented, skip
-        if symbols.contains_key(&specialized_func_name) {
-            continue;
+            // If it is already implemented, skip
+            if symbols.contains_key(&specialized_func_name) {
+                continue;
+            }
+
+            let expr = symbols
+                .get(&specialize_info.org_func_name)
+                .unwrap()
+                .expr
+                .as_ref()
+                .unwrap()
+                .clone();
+            let expr = unique_local_names::run_on_expr(&expr, Set::default()); // Preconditions for decapturing optimization
+
+            // Generate a map from argument names to `DecapturedLambdaInfo`
+            let mut local_decap_lambdas = Map::default();
+            let (args, _) = expr.destructure_lam_sequence();
+            for (i, decap_lam) in &specialize_info.specialized_args {
+                assert!(*i < args.len());
+                assert_eq!(args[*i].len(), 1);
+                let arg_name = &args[*i][0].name;
+                local_decap_lambdas.insert(arg_name.clone(), decap_lam.clone());
+            }
+
+            // Perform specialization
+            let mut visitor = DecapturingVisitor::new(
+                specialized_func_name.clone(),
+                specializable_funcs.clone(),
+                global_names.clone(),
+            );
+            visitor.local_decap_lambdas = local_decap_lambdas;
+            let trav_res = visitor.traverse(&expr);
+            let expr = trav_res.expr.calculate_free_vars();
+
+            // Extract the generated decaptured lambdas and type constructors
+            for decap_lam in visitor.decap_lambdas {
+                let decap_lam_sym = decap_lam.make_symbol();
+                global_names.insert(decap_lam_sym.name.clone());
+                symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
+                new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
+            }
+
+            // Register the specialized function
+            let specialized_func = Symbol {
+                name: specialized_func_name.clone(),
+                generic_name: specialize_info.org_func_name.clone(),
+                ty: specialized_func_ty,
+                expr: Some(expr),
+            };
+            symbols.insert(specialized_func_name.clone(), specialized_func);
+            global_names.insert(specialized_func_name.clone());
+
+            // Register the new specialization requests.
+            new_specializations.append(&mut visitor.required_specializations);
         }
-
-        let expr = symbols
-            .get(&specialize_info.org_func_name)
-            .unwrap()
-            .expr
-            .as_ref()
-            .unwrap()
-            .clone();
-        let expr = unify_local_names::run_on_expr(&expr, Set::default()); // Preconditions for decapturing optimization
-
-        // Generate a map from argument names to `DecapturedLambdaInfo`
-        let mut local_decap_lambdas = Map::default();
-        let (args, _) = expr.destructure_lam_sequence();
-        for (i, decap_lam) in &specialize_info.specialized_args {
-            assert!(*i < args.len());
-            assert_eq!(args[*i].len(), 1);
-            let arg_name = &args[*i][0].name;
-            local_decap_lambdas.insert(arg_name.clone(), decap_lam.clone());
-        }
-
-        // Perform specialization
-        let mut visitor = DecapturingVisitor::new(
-            specialized_func_name.clone(),
-            specializable_funcs.clone(),
-            global_names.clone(),
-        );
-        visitor.local_decap_lambdas = local_decap_lambdas;
-        let trav_res = visitor.traverse(&expr);
-        let expr = trav_res.expr.calculate_free_vars();
-
-        // Extract the generated decaptured lambdas and type constructors
-        for decap_lam in visitor.decap_lambdas {
-            let decap_lam_sym = decap_lam.make_symbol();
-            global_names.insert(decap_lam_sym.name.clone());
-            symbols.insert(decap_lam_sym.name.clone(), decap_lam_sym);
-            new_tycons.insert(decap_lam.tycon, decap_lam.tycon_info);
-        }
-
-        // Register the specialized function
-        let specialized_func = Symbol {
-            name: specialized_func_name.clone(),
-            generic_name: specialize_info.org_func_name.clone(),
-            ty: specialized_func_ty,
-            expr: Some(expr),
-        };
-        symbols.insert(specialized_func_name.clone(), specialized_func);
-        global_names.insert(specialized_func_name.clone());
-
-        // TODO: After more functions become specializable in the future, additional specialization requests may occur here, so it is necessary to process them in a loop.
+        specializations = new_specializations;
     }
 
     prg.type_env.add_tycons(new_tycons);
@@ -254,60 +264,176 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
     changed
 }
 
+// Compute the set of specializable functions.
+//
+// More precisely, it calculates whether a certain parameter of a function is specializable or not.
+//
+// Specialization can cause infinite loops.
+// For example, suppose a function `f` takes a closure `p` as its first parameter. `f` creates a new closure `q` that captures `p` and calls `f(q)`.
+// In this case, if the parameter `p` of `f` is specialized, it will require an infinite number of specializations for different types.
+//
+// To avoid infinite loops, we only specialize a parameter `p` of a function `f` that satisfies the following conditions:
+// - If `f` calls a function `g` other than itself, there should not be a path from `g` to `f` in the call graph.
+// - Assume that `p` is the i-th index of `f`. The call to `f` in `f` must also pass `p` as the i-th index.
+//
+// This is only a sufficient condition to avoid infinite loops. More generally, we should solve the following problem:
+// Consider a graph consisting of all parameters (of function type) of all functions.
+// In other words, each node is a pair `(f, p)` where `f` is a function and `p` is a parameter that has a function type.
+// An edge from `(f, p)` to `(g, q)` exists if `f` calls `g`, and the expression given to parameter `q` directly or indirectly captures lambda `p`.
+// Finally, assign a weight of 0 or 1 to the edge: if the capture list types of `p` and `q` are the same, the weight is 0; otherwise, it is 1.
+//
+// If there is a cycle with positive cost in this graph, an infinite loop will occur.
+// Choosing specializable arguments is equivalent to removing some nodes from this graph so that there is no cycle with positive cost.
+// This is a more difficult problem than the Feedback Vertex Set problem, so we need to rely on heuristics.
+//
+// Finally, even if a parameter is a specializable, if it is not worth specializing or the inline cost of the function is high, it is returned as impossible to specialize.
 fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunctionInfo> {
-    let mut specializable_funcs = Map::default();
-    for (name, sym) in &prg.symbols {
-        if let Some(specialize_info) = is_specializable(sym) {
-            specializable_funcs.insert(name.clone(), specialize_info);
-        }
-    }
-    specializable_funcs
-}
+    let inline_costs = inline::calculate_inline_costs(prg);
+    let call_graph = prg.call_graph();
+    let call_graph_scc = call_graph.compute_sccs();
 
-// Judge whether a symbol is specializable. If it is specializable, generate `SpecializableFunctionInfo`.
-fn is_specializable(sym: &Symbol) -> Option<SpecializableFunctionInfo> {
-    // Prefix of specializable functions and index of specializable arguments.
-    const SPECIALIZABLE_FUNC_TABLE: [(&str, usize); 5] = [
-        ("Std::loop#", 1),
-        ("Std::loop_iter#", 1),
-        ("Std::loop_iter_m#", 1),
-        ("Std::Iterator::fold#", 1),
-        ("Std::Iterator::fold_m#", 1),
-    ];
-    let name = sym.name.clone();
-    let name_str = name.to_string();
-    for (specializable_func, arg_index) in SPECIALIZABLE_FUNC_TABLE.iter() {
-        if !name_str.starts_with(*specializable_func) {
+    // Sort the indices of the nodes in the call graph in the order from downstream to upstream of the SCC to which they belong.
+    let mut call_graph_indices = (0..call_graph.len()).collect::<Vec<_>>();
+    call_graph_indices.sort_by(|a, b| {
+        let a_scc = call_graph_scc[*a];
+        let b_scc = call_graph_scc[*b];
+        b_scc.cmp(&a_scc)
+    });
+
+    let mut specializable_funcs: Map<FullName, SpecializableFunctionInfo> = Map::default();
+    for call_graph_idx in call_graph_indices {
+        let sym_name = call_graph.get(call_graph_idx);
+        let sym = prg.symbols.get(sym_name).unwrap();
+        let expr = sym.expr.as_ref().unwrap();
+
+        // If `sym` calls other nodes in the same SCC, avoid specialization to prevent the risk of an infinite loop.
+        let mut prevent_specialization = false;
+        for other_sym in expr.free_vars() {
+            let other_sym_idx = call_graph.find_index(other_sym).unwrap();
+            if call_graph_scc[call_graph_idx] != call_graph_scc[other_sym_idx] {
+                assert!(call_graph_scc[call_graph_idx] < call_graph_scc[other_sym_idx]);
+                continue;
+            }
+            if call_graph_idx != other_sym_idx {
+                prevent_specialization = true;
+                break;
+            }
+        }
+        if prevent_specialization {
             continue;
         }
-        let param_tys = sym.ty.collect_app_src(usize::MAX).0;
-        if param_tys.len() < 2 || !param_tys[*arg_index].is_closure() {
-            return None;
-        }
-        return Some(SpecializableFunctionInfo {
-            specializable_arg_indices: vec![*arg_index],
-        });
-    }
-    return None;
 
-    // TODO: Plan for future improvement of specializability judgment:
-    //
-    // The following gives sufficient conditions:
-    // Decompose the call graph into strongly connected components.
-    // If only nodes downstream from itself are called, it's OK.
-    // Otherwise, if it only calls itself with the same arguments, it's OK; otherwise, avoid to specialize it.
-    //
-    // Also, inline cost should be considered for specializability.
-    // Reference code:
-    // let complexity = self.inline_costs.get_complexity(func_name);
-    // if complexity.is_none() {
-    //     return StartVisitResult::VisitChildren;
-    // }
-    // let complexity = complexity.unwrap();
-    // let call_count = self.inline_costs.get_call_count(func_name);
-    // if complexity * call_count > INLINE_COST_THRESHOLD {
-    //     return StartVisitResult::VisitChildren;
-    // }
+        // Compute information on how `sym` calls itself.
+        let self_usages = find_usage_of_name::run(expr, &sym_name);
+        let self_recursive = self_usages.len() > 0;
+
+        // Check if each parameter of `sym` is specializable.
+        let (params, body) = expr.destructure_lam_sequence();
+        let params = params
+            .iter()
+            .map(|may_multi_param| {
+                assert_eq!(may_multi_param.len(), 1);
+                may_multi_param[0].name.clone()
+            })
+            .collect::<Vec<_>>();
+        let param_tys = sym.ty.collect_app_src(usize::MAX).0;
+        let mut specializable_arg_indices = Vec::new();
+        for param_idx in 0..params.len() {
+            // Determine whether the parameter of `sym` is specializable.
+
+            // A specializable argument must have a type of function.
+            if !param_tys[param_idx].is_closure() {
+                continue;
+            }
+
+            // If a call to `sym` is made with a different argument than `param`, it is not specializable.
+            let mut specializable = true;
+            for self_usage in self_usages.iter() {
+                match self_usage {
+                    UsageType::FunctionArgument(_, _) => {
+                        continue;
+                    }
+                    UsageType::CalledAsFunction(args) => {
+                        if args.len() <= param_idx {
+                            continue;
+                        }
+                        let arg = &args[param_idx];
+                        if arg.is_var() && arg.get_var().name == params[param_idx] {
+                            continue;
+                        }
+                        specializable = false;
+                        break;
+                    }
+                }
+            }
+            if !specializable {
+                continue;
+            }
+
+            // Collect the usage information of the parameter.
+            let param_name = &params[param_idx];
+            let param_is_shadowd_by_another_param = params[param_idx + 1..]
+                .iter()
+                .any(|name| name == param_name);
+            let usages = if param_is_shadowd_by_another_param {
+                // If the parameter is shadowed by another parameter, it is not used.
+                vec![]
+            } else {
+                find_usage_of_name::run(&body, param_name)
+            };
+
+            // Check each usage of the parameter.
+            let mut passed_to_specializable_parameter = false;
+            let mut called = false;
+            for usage in usages {
+                match usage {
+                    UsageType::CalledAsFunction(_) => {
+                        called = true;
+                        continue;
+                    }
+                    UsageType::FunctionArgument(fun, idx) => {
+                        if fun.is_local() {
+                            continue;
+                        }
+                        if let Some(specialization) = specializable_funcs.get(&fun) {
+                            if specialization.specializable_arg_indices.contains(&idx) {
+                                passed_to_specializable_parameter = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            let inline_cost = inline_costs.costs.get(sym_name).unwrap();
+            let worth_specialized = if self_recursive {
+                // If `sym` is self-recursive, it is worth specializing even if the inline cost is high.
+                true
+            } else {
+                if !inline_cost.inline_at_call_site() {
+                    // If the inline cost is too high, we should not specialize it.
+                    false
+                } else {
+                    called || passed_to_specializable_parameter
+                }
+            };
+            if !worth_specialized {
+                continue;
+            }
+
+            // After all, this parmeter is specializable!
+            specializable_arg_indices.push(param_idx);
+        }
+        if specializable_arg_indices.is_empty() {
+            continue;
+        }
+        specializable_funcs.insert(
+            sym_name.clone(),
+            SpecializableFunctionInfo {
+                specializable_arg_indices,
+            },
+        );
+    }
+    specializable_funcs
 }
 
 // Expression visitor for decapturing optimization
@@ -528,7 +654,7 @@ impl SpecializationRequest {
         func_ty
     }
 
-    // Create an expression to retrieve the specialized function
+    // Create an expression to refer to the specialized function.
     fn specialized_func_expr(&self) -> Arc<ExprNode> {
         expr_var(self.specialized_func_name(), None).set_inferred_type(self.specialized_func_ty())
     }

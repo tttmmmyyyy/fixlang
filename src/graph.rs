@@ -10,7 +10,6 @@ pub struct Graph<T> {
     edges: Vec<Vec<usize>>,
 }
 
-#[allow(dead_code)]
 impl<T> Graph<T> {
     // Create a graph from a vector of elements.
     pub fn new(elems: Vec<T>) -> Self {
@@ -21,10 +20,23 @@ impl<T> Graph<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_with_edges(elems: Vec<T>, edges: Vec<Vec<usize>>) -> Self {
         let len = elems.len();
         assert_eq!(len, edges.len());
         Graph { elems, edges }
+    }
+
+    // Get the number of nodes.
+    pub fn len(&self) -> usize {
+        self.elems.len()
+    }
+
+    pub fn find_index(&self, elem: &T) -> Option<usize>
+    where
+        T: Eq,
+    {
+        self.elems.iter().position(|e| e == elem)
     }
 
     // Create a graph from a set of elements.
