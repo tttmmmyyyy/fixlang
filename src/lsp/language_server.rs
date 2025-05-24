@@ -1,4 +1,4 @@
-use crate::ast::name::FullName;
+use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::Program;
 use crate::constants::chars_allowed_in_identifiers;
 use crate::docgen::MarkdownSection;
@@ -266,7 +266,12 @@ pub fn launch_language_server() {
                 if params.is_none() {
                     continue;
                 }
-                handle_completion(id.unwrap(), &params.unwrap(), program);
+                handle_completion(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    program,
+                    &uri_to_latest_content,
+                );
             } else if method == "completionItem/resolve" {
                 if last_diag.is_none() {
                     continue;
@@ -453,7 +458,7 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
                     " ".to_string(),
                     ".".to_string(),
                     "(".to_string(),
-                    // ":".to_string(),
+                    ":".to_string(),
                 ]),
                 all_commit_characters: None,
                 resolve_provider: Some(true),
@@ -597,7 +602,15 @@ fn uri_to_path(uri: &lsp_types::Uri) -> PathBuf {
 }
 
 // Handle "textDocument/completion" method.
-fn handle_completion(id: u32, params: &CompletionParams, program: &Program) {
+fn handle_completion(
+    id: u32,
+    params: &CompletionParams,
+    program: &Program,
+    uri_to_content: &Map<lsp_types::Uri, String>,
+) {
+    let namespace = infer_namespace_in_completion(params, uri_to_content);
+    let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
+
     let mut items = vec![];
 
     fn create_item(
@@ -642,6 +655,9 @@ fn handle_completion(id: u32, params: &CompletionParams, program: &Program) {
         if full_name.to_string().contains('#') {
             continue;
         }
+        if !is_in_namespace(full_name) {
+            continue;
+        }
         let scheme = gv
             .syn_scm
             .clone()
@@ -660,6 +676,9 @@ fn handle_completion(id: u32, params: &CompletionParams, program: &Program) {
         if tycon.name.to_string().contains('#') {
             continue;
         }
+        if !is_in_namespace(&tycon.name) {
+            continue;
+        }
         let item = create_item(
             &tycon.name,
             CompletionItemKind::CLASS,
@@ -673,6 +692,9 @@ fn handle_completion(id: u32, params: &CompletionParams, program: &Program) {
         if trait_.to_string().contains('#') {
             continue;
         }
+        if !is_in_namespace(&trait_.name) {
+            continue;
+        }
         let item = create_item(
             &trait_.name,
             CompletionItemKind::INTERFACE,
@@ -683,6 +705,53 @@ fn handle_completion(id: u32, params: &CompletionParams, program: &Program) {
         items.push(item);
     }
     send_response(id, Ok::<_, ()>(items));
+}
+
+// Infer the namespace of the completion candidates from the text being typed by the user.
+fn infer_namespace_in_completion(
+    params: &CompletionParams,
+    uri_to_content: &Map<lsp_types::Uri, String>,
+) -> NameSpace {
+    // Get the text being typed by the user.
+    // Example: `typing_text` == "let x = Std::Array:"
+    let current_line =
+        get_line_string_from_position(uri_to_content, &params.text_document_position);
+    let typing_text = current_line
+        .map(|(line, pos)| {
+            let mut line = line.chars().collect::<Vec<_>>();
+            line.truncate(pos as usize);
+            line.into_iter().collect::<String>()
+        })
+        .unwrap_or_default();
+
+    // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
+    // Example: `typing_text` == "Std::Array:"
+    let mut suffix_len = 0;
+    let identifer_chars = chars_allowed_in_identifiers();
+    for c in typing_text.chars().rev() {
+        if identifer_chars.contains(c) || c == ':' {
+            suffix_len += 1;
+        } else {
+            break;
+        }
+    }
+    let typing_text = typing_text.chars().collect::<Vec<_>>();
+    let typing_text = typing_text[typing_text.len() - suffix_len..typing_text.len()]
+        .iter()
+        .collect::<String>();
+
+    // Remove the trailing colon
+    // Example: `typing_text` == "Std::Array"
+    let typing_text = typing_text.trim_end_matches(':').to_string();
+
+    // Parse as a namespace.
+    let typing_text = NameSpace::parse(&typing_text);
+    if typing_text.is_none() {
+        return NameSpace::new(vec![]);
+    }
+    let typing_text = typing_text.unwrap();
+
+    typing_text
 }
 
 // Handle "textDocument/completion" method.
@@ -796,6 +865,30 @@ fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> O
         }
     }
     None
+}
+
+// Given a `TextDocumentPositionParams`, get the line string and the line number.
+// `uri_to_content` is a map to get the source string from the uri of the source file.
+fn get_line_string_from_position(
+    uri_to_content: &Map<lsp_types::Uri, String>,
+    text_position: &TextDocumentPositionParams,
+) -> Option<(String, u32)> {
+    // Get the latest file content.
+    let uri = &text_position.text_document.uri;
+    if !uri_to_content.contains_key(uri) {
+        let msg = format!("No stored content for the uri \"{}\".", uri.to_string());
+        write_log(msg.as_str());
+        let msg = format!("{:?}", uri_to_content);
+        write_log(msg.as_str());
+        return None;
+    }
+    let latest_content = uri_to_content.get(uri).unwrap();
+
+    // Get the string at line `line` in `latest_content`.
+    let line = text_position.position.line;
+    let line = line as usize;
+    let line_str = latest_content.lines().nth(line).unwrap_or("").to_string();
+    Some((line_str, text_position.position.character as u32))
 }
 
 fn get_node_at(
@@ -984,9 +1077,6 @@ fn handle_hover(
 
 // Get the parameters of a global value from its documentation.
 fn parameters_of_global_value(full_name: &FullName, program: &Program) -> Option<Vec<String>> {
-    let msg = format!("parameters_of_global_value: {}", full_name.to_string());
-    write_log(msg.as_str());
-
     // Get the document of the global value, which is a markdown string.
     let opt_gv = program.global_values.get(full_name);
     if opt_gv.is_none() {
@@ -1012,7 +1102,6 @@ fn parameters_of_global_value(full_name: &FullName, program: &Program) -> Option
         }
     });
     if param_section.is_none() {
-        write_log("No parameters section found.");
         return None;
     }
     let param_section = param_section.unwrap();

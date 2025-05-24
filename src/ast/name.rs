@@ -151,6 +151,31 @@ impl NameSpace {
     pub fn push_front(&mut self, name: Name) {
         self.names.insert(0, name);
     }
+
+    pub fn parse(str: &str) -> Option<Self> {
+        if str.is_empty() {
+            return None;
+        }
+        let mut is_absolute = false;
+        let mut names = str
+            .split(NAMESPACE_SEPARATOR)
+            .map(|s| s.to_owned())
+            .collect::<Vec<_>>();
+        if names.is_empty() {
+            return None;
+        }
+        if names[0].is_empty() {
+            is_absolute = true;
+            names.remove(0);
+        }
+        if names.iter().any(|s| s.is_empty()) {
+            return None;
+        }
+        Some(NameSpace {
+            names: names,
+            is_absolute: is_absolute,
+        })
+    }
 }
 
 #[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize)]
@@ -207,29 +232,6 @@ impl FullName {
             self.name.clone()
         } else {
             ns + NAMESPACE_SEPARATOR + &self.name
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn parse(str: &str) -> Option<Self> {
-        let mut names = str
-            .split(NAMESPACE_SEPARATOR)
-            .map(|s| s.to_owned())
-            .collect::<Vec<_>>();
-        if names.is_empty() {
-            return None;
-        }
-        let name = names.pop().unwrap();
-        if names.len() > 0 {
-            Some(FullName::new(
-                &NameSpace {
-                    names,
-                    is_absolute: false,
-                },
-                &name,
-            ))
-        } else {
-            Some(FullName::local(&name))
         }
     }
 
