@@ -744,7 +744,23 @@ fn infer_namespace_in_completion(
     // Example: `typing_text` == "Std::Array"
     let typing_text = typing_text.trim_end_matches(':').to_string();
 
-    // Parse as a namespace.
+    // Split the text by "::". If the last component does not start with a uppercase letter, then drop it.
+    let mut typing_text = typing_text.split("::").collect::<Vec<_>>();
+    if let Some(last_component) = typing_text.last() {
+        let first_char = last_component.chars().nth(0);
+        if let Some(first_char) = first_char {
+            if !first_char.is_ascii_alphabetic() || !first_char.is_uppercase() {
+                typing_text.pop();
+            }
+        }
+    }
+    let typing_text = typing_text
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join("::");
+
+    // Convert the `typing_text` to a `NameSpace`.
     let typing_text = NameSpace::parse(&typing_text);
     if typing_text.is_none() {
         return NameSpace::new(vec![]);
