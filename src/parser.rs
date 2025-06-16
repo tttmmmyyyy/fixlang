@@ -1510,15 +1510,50 @@ fn parse_expr_lit(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     })
 }
 
+// Parse the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
 fn parse_expr_let(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
-    let span = Span::from_pair(&ctx.source, &expr);
-    let mut pairs = expr.into_inner();
-    let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
-    let _eq_of_let = pairs.next().unwrap();
-    let bound = parse_expr(pairs.next().unwrap(), ctx)?;
-    let _in_of_let = pairs.next().unwrap();
-    let val = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
-    Ok(expr_let(pat, bound, val, Some(span)))
+    let pairs = expr.into_inner();
+    parse_expr_let_recursively(pairs, ctx)
+}
+
+// Parse the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
+fn parse_expr_let_recursively(
+    mut pairs: Pairs<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Arc<ExprNode>, Errors> {
+    let pair = pairs.next().unwrap();
+    if pair.as_rule() != Rule::keyword_let {
+        // `pair` is `{value}`.
+        let val = parse_expr(pair, ctx)?;
+        Ok(val)
+    } else {
+        // `pair` is `let` keyword.
+        assert_eq!(pair.as_rule(), Rule::keyword_let);
+        let let_span = Span::from_pair(&ctx.source, &pair);
+
+        // Parse `{pat}` part.
+        let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
+        let _eq = pairs.next().unwrap(); // Skip "=".
+        assert_eq!(_eq.as_rule(), Rule::eq_of_let);
+
+        // Parse `{bound}` part.
+        let bound = parse_expr(pairs.next().unwrap(), ctx)?;
+        let _semicolon = pairs.next().unwrap(); // Skip ";" or "in".
+        assert_eq!(_semicolon.as_rule(), Rule::in_of_let);
+
+        // Parse the rest of the expression recursively.
+        // Here we create a new DoContext.
+        let old_doctx = std::mem::replace(&mut ctx.do_context, DoContext::default());
+        let value = parse_expr_let_recursively(pairs, ctx)?;
+        let value = ctx.do_context.expand_binds(value);
+        ctx.do_context = old_doctx; // Restore old DoContext.
+
+        // Create the let expression.
+        let span = unite_span(&value.source, &Some(let_span));
+        let expr = expr_let(pat, bound, value, span);
+        // Set the source of the expression.
+        Ok(expr)
+    }
 }
 
 fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {

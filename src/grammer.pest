@@ -7,6 +7,8 @@ keywords = _{ ("let" | "eval" | "in" | "if" | "match" | "else" | "do" | "type" |
 
 semicolon = { ";" } // Generate rule for semicolon for better parsing error messages.
 
+keyword_let = { "let" }
+
 in_of_let = { "in" | semicolon }
 
 eq_of_let = { "=" }
@@ -74,7 +76,7 @@ expr_lit = { expr_number_lit | expr_bool_lit | expr_string_lit | expr_array_lit 
 
 expr_var = { fullname }
 
-expr_let = { "let" ~ sep+ ~ pattern_nounion ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep* ~ expr }
+expr_let = { (keyword_let ~ sep+ ~ pattern_nounion ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep*)+ ~ sep* ~ expr }
 
 match_arrow = { "=>" }
 

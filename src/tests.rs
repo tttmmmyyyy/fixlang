@@ -8482,3 +8482,31 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_regression_issue_57() {
+    // The following code should not take too long time to be parsed.
+    let source = r##"
+module Main;
+
+f : I64 -> I64;
+f = |x| (
+    let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;
+    let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;
+    let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;
+    let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;
+    let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;
+    let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;
+    let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;
+    let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;let x = x;
+
+    let x = x // forgot to add semicolon here
+    x
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Expected `;`",
+    );
+}
