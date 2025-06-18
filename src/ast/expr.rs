@@ -1256,12 +1256,7 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
 }
 
 pub fn expr_llvm(generator: LLVMGenerator, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::LLVM(Arc::new(InlineLLVM {
-        generator,
-        ty,
-        borrowed_vars: vec![],
-    })))
-    .into_expr_info(src)
+    Arc::new(Expr::LLVM(Arc::new(InlineLLVM { generator, ty }))).into_expr_info(src)
 }
 
 pub fn expr_let(

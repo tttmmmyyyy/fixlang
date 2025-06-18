@@ -579,7 +579,6 @@ impl InlineLLVMIntLit {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
@@ -624,7 +623,6 @@ impl InlineLLVMFloatLit {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
@@ -667,7 +665,6 @@ impl InlineLLVMNullPtrLit {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("nullptr"));
         let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
@@ -701,7 +698,6 @@ impl InlineLLVMBoolLit {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
@@ -727,7 +723,6 @@ pub fn make_string_from_ptr<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
     buf_with_null_terminator: PointerValue<'c>,
     len_with_null_terminator: IntValue<'c>,
-    _borrowed_vars: &Vec<FullName>,
 ) -> Object<'c> {
     // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
@@ -786,14 +781,13 @@ impl InlineLLVMStringLit {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let string_ptr = gc.add_global_string(&self.string).as_pointer_value();
         let len_with_null_terminator = gc
             .context
             .i64_type()
             .const_int(self.string.as_bytes().len() as u64 + 1, false);
-        make_string_from_ptr(gc, string_ptr, len_with_null_terminator, _borrowed_vars)
+        make_string_from_ptr(gc, string_ptr, len_with_null_terminator)
     }
 }
 
@@ -829,7 +823,7 @@ impl InlineLLVMFixBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
+
         tail: bool,
     ) -> Option<Object<'c>> {
         // Get arguments
@@ -914,7 +908,6 @@ impl InlineLLVMCastIntegralBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         to_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
@@ -1002,8 +995,6 @@ impl InlineLLVMCastFloatBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         to_ty: &Arc<TypeNode>,
-
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
         let from_val = gc
@@ -1087,7 +1078,6 @@ impl InlineLLVMCastIntToFloatBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         to_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
@@ -1179,8 +1169,6 @@ impl InlineLLVMCastFloatToIntBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         to_ty: &Arc<TypeNode>,
-
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
         let from_val = gc
@@ -1279,8 +1267,6 @@ impl InlineLLVMShiftBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
         let val = gc
@@ -1381,7 +1367,6 @@ impl InlineLLVMBitwiseOperationBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get value
         let lhs = gc.get_scoped_obj_field(&self.lhs_name, 0).into_int_value();
@@ -1472,7 +1457,6 @@ impl InlineLLVMFillArrayBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
         let value = gc.get_scoped_obj(&self.value_name);
@@ -1552,7 +1536,6 @@ impl InlineLLVMMakeEmptyArrayBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         arr_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get capacity
         let cap = gc
@@ -1622,7 +1605,6 @@ impl InlineLLVMArrayUnsafeSetBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.arr_name);
@@ -1783,7 +1765,6 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.arr_name);
@@ -1870,7 +1851,6 @@ impl InlineLLVMArrayUnsafeSetSizeBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.arr_name);
@@ -2088,7 +2068,6 @@ impl InlineLLVMArraySetBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.array_name);
@@ -2188,7 +2167,6 @@ impl InlineLLVMArrayModBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.array_name);
@@ -2282,7 +2260,6 @@ impl InlineLLVMArrayForceUniqueBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.arr_name);
@@ -2508,7 +2485,6 @@ impl InlineLLVMStructGetBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get struct object.
         let str = gc.get_scoped_obj(&self.var_name);
@@ -2565,7 +2541,6 @@ impl InlineLLVMStructPunchBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the argument object (the struct value).
         let str = gc.get_scoped_obj(&self.var_name);
@@ -2648,7 +2623,6 @@ impl InlineLLVMStructPlugInBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         struct_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the first argument, a punched struct value, and the second argument, a field value.
         let punched_str = gc.get_scoped_obj(&self.punched_str_name);
@@ -2730,7 +2704,6 @@ impl InlineLLVMStructModBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
         let modfier = gc.get_scoped_obj(&self.f_name);
@@ -3076,7 +3049,6 @@ impl InlineLLVMStructSetBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _str_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
         let value = gc.get_scoped_obj(&self.value_name);
@@ -3153,7 +3125,6 @@ impl InlineLLVMMakeUnionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get field values.
         let field = gc.get_scoped_obj(&self.field_name);
@@ -3268,7 +3239,6 @@ impl InlineLLVMUnionAsBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
         let obj = gc.get_scoped_obj(&self.union_arg_name);
@@ -3345,7 +3315,6 @@ impl InlineLLVMUnionIsBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get union object.
         let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
@@ -3442,7 +3411,6 @@ impl InlineLLVMUnionModBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         union_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments
         let obj = gc.get_scoped_obj(&self.union_name);
@@ -3574,7 +3542,6 @@ impl InlineLLVMUndefinedFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the first argument.
         let msg = gc.get_scoped_obj(&self.msg_name);
@@ -3652,7 +3619,6 @@ impl InlineLLVMWithRetainedFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get the argument "f".
         let f = gc.get_scoped_obj(&self.f_name);
@@ -3732,7 +3698,6 @@ impl InlineLLVMIsUniqueFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let bool_ty = ObjectFieldType::I8
             .to_basic_type(gc, vec![])
@@ -3834,7 +3799,6 @@ impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
         let obj = gc.get_scoped_obj(&self.var_name);
@@ -3898,7 +3862,6 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         assert!(ret_ty.is_box(gc.type_env()));
         // Get argument.
@@ -3953,7 +3916,6 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
         let arg = gc.get_scoped_obj_noretain(&self.var_name);
@@ -4056,7 +4018,6 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument
         let arg = gc.get_scoped_obj_noretain(&self.var_name);
@@ -4158,7 +4119,6 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get argument.
         let obj = gc.get_scoped_obj_noretain(&self.var_name);
@@ -4251,7 +4211,6 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
@@ -4354,7 +4313,6 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
@@ -4459,7 +4417,6 @@ impl InlineLLVMUnsafePerformFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
@@ -4524,7 +4481,6 @@ impl InlineLLVMMarkThreadedFunctionBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         // Check if the `threaded` compiler flag is true.
         if !gc.config.threaded {
@@ -4689,7 +4645,6 @@ impl InlineLLVMIntEqBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
@@ -4756,7 +4711,6 @@ impl InlineLLVMPtrEqBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
@@ -4836,7 +4790,6 @@ impl InlineLLVMFloatEqBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
@@ -4917,7 +4870,6 @@ impl InlineLLVMIntLessThanBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
@@ -4996,8 +4948,6 @@ impl InlineLLVMFloatLessThanBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5078,7 +5028,6 @@ impl InlineLLVMIntLessThanOrEqBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5155,7 +5104,6 @@ impl InlineLLVMFloatLessThanOrEqBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5236,7 +5184,6 @@ impl InlineLLVMIntAddBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5293,7 +5240,6 @@ impl InlineLLVMFloatAddBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5359,7 +5305,6 @@ impl InlineLLVMIntSubBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5416,7 +5361,6 @@ impl InlineLLVMFloatSubBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5482,7 +5426,6 @@ impl InlineLLVMIntMulBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5539,7 +5482,6 @@ impl InlineLLVMFloatMulBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5605,7 +5547,6 @@ impl InlineLLVMIntDivBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5670,7 +5611,6 @@ impl InlineLLVMFloatDivBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5736,7 +5676,6 @@ impl InlineLLVMIntRemBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -5805,7 +5744,6 @@ impl InlineLLVMIntNegBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
@@ -5854,7 +5792,6 @@ impl InlineLLVMFloatNegBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
@@ -5913,8 +5850,6 @@ impl InlineLLVMBoolNegBody {
         &self,
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
-
-        _borrowed_vars: &Vec<FullName>,
     ) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();

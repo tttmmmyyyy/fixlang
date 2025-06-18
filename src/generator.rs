@@ -1692,8 +1692,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ty: Arc<TypeNode>,
         tail: bool,
     ) -> Option<Object<'c>> {
-        llvm.generator
-            .generate(self, &ty, &llvm.borrowed_vars, tail)
+        llvm.generator.generate(self, &ty, tail)
     }
 
     // Calculate captured variables and their types of lambda expression.
