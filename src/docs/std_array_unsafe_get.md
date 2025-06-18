@@ -1,1 +1,5 @@
-Gets a value from an array and returns it paired with the array itself, without bounds checking and retaining the value.
+Gets a value from an array at the specified index.
+
+This function is unsafe in the following sense:
+* Does not check if the array index is within bounds.
+* The returned value is not retained.
