@@ -1307,6 +1307,16 @@ Calculates bitwise AND of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### bit_not
+
+Type: `Std::I16 -> Std::I16`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
+
 #### bit_or
 
 Type: `Std::I16 -> Std::I16 -> Std::I16`
@@ -1513,6 +1523,16 @@ Calculates bitwise AND of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### bit_not
+
+Type: `Std::I32 -> Std::I32`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
 
 #### bit_or
 
@@ -1721,6 +1741,16 @@ Calculates bitwise AND of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### bit_not
+
+Type: `Std::I64 -> Std::I64`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
+
 #### bit_or
 
 Type: `Std::I64 -> Std::I64 -> Std::I64`
@@ -1927,6 +1957,16 @@ Calculates bitwise AND of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### bit_not
+
+Type: `Std::I8 -> Std::I8`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
 
 #### bit_or
 
@@ -3516,6 +3556,16 @@ Calculates bitwise AND of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### bit_not
+
+Type: `Std::U16 -> Std::U16`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
+
 #### bit_or
 
 Type: `Std::U16 -> Std::U16 -> Std::U16`
@@ -3718,6 +3768,16 @@ Calculates bitwise AND of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### bit_not
+
+Type: `Std::U32 -> Std::U32`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
 
 #### bit_or
 
@@ -3922,6 +3982,16 @@ Calculates bitwise AND of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### bit_not
+
+Type: `Std::U64 -> Std::U64`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
+
 #### bit_or
 
 Type: `Std::U64 -> Std::U64 -> Std::U64`
@@ -4124,6 +4194,16 @@ Calculates bitwise AND of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### bit_not
+
+Type: `Std::U8 -> Std::U8`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
 
 #### bit_or
 

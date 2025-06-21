@@ -1434,6 +1434,65 @@ pub fn bitwise_operation_function(
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMBitNotBody {
+    operand_name: FullName,
+}
+
+impl InlineLLVMBitNotBody {
+    pub fn name(&self) -> String {
+        format!("bit_not({})", self.operand_name.to_string())
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.operand_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // Get value
+        let lhs = gc
+            .get_scoped_obj_field(&self.operand_name, 0)
+            .into_int_value();
+
+        // Perform cast.
+        let val = gc
+            .builder()
+            .build_not(lhs, "not@bitwise_not_function")
+            .unwrap();
+
+        // Return result.
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@bit_not"));
+        obj.insert_field(gc, 0, val)
+    }
+}
+
+pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const OPERAND_NAME: &str = "operand";
+
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(ty.clone(), ty.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(OPERAND_NAME)],
+        expr_llvm(
+            LLVMGenerator::BitNotBody(InlineLLVMBitNotBody {
+                operand_name: FullName::local(OPERAND_NAME),
+            }),
+            ty,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMFillArrayBody {
     size_name: FullName,
     value_name: FullName,

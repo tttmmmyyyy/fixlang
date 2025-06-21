@@ -3057,6 +3057,13 @@ pub fn test113() {
             let x = 10.bit_and(12);
             assert_eq(|_|"case 1", x, 8);;
 
+            // Not
+            let x = 0b01000100_U8.bit_not;
+            assert_eq(|_|"case 1", x, 0b10111011_U8);;
+
+            let x = 0b1000000000000000_U16.bit_not;
+            assert_eq(|_|"case 1", x, 0b0111111111111111_U16);;
+
             pure()
         );
     "#;

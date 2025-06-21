@@ -354,6 +354,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     for int_ty in integral_types {
         let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
         errors.eat_err(fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "bit_not"),
+            bit_not_function(int_ty.clone()),
+            None,
+            Some(include_str!("./docs/std_bit_not.md").to_string()),
+        ));
+        errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_left"),
             shift_function(int_ty.clone(), true),
             None,
