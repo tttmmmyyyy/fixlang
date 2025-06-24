@@ -106,6 +106,16 @@ sum_up_by_loop_iter_arr = |arr| (
     )
 );
 
+// Benchmark for `Array::mod`.
+array_mod_benchmark : Array U64 -> U64;
+array_mod_benchmark = |arr| (
+    let n = arr.get_size;
+    let arr = Iterator::range(1, n).fold(arr, |i, arr| 
+        arr.mod(i, add(arr.@(i-1)))
+    );
+    arr.@(n-1)
+);
+
 main : IO ();
 main = (
     assert_eq(|_|"count_primes", prime_table(700000).count_element(true), 56543);;
@@ -119,6 +129,7 @@ main = (
     assert_eq(|_|"sum_by_loop_arr", sum_by_loop_arr(arr), 12468381052418219682_U64);;
     assert_eq(|_|"sum_up_by_fold_arr", sum_up_by_fold_arr(arr), 12468381052418219682_U64);;
     assert_eq(|_|"sum_up_by_loop_iter_arr", sum_up_by_loop_iter_arr(arr), 12468381052418219682_U64);;
+    assert_eq(|_|"array_mod_benchmark", array_mod_benchmark(arr), 12468381052418219682_U64);;
 
     pure()
 );
