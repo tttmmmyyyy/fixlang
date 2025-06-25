@@ -124,6 +124,28 @@ namespace Array {
         ))
     );
 
+
+    // Updates an array by applying a function to the element at the specified index.
+    //
+    // This function clones the given array if it is shared.
+    // 
+    // If you call `arr.mod(i, f)` when both of `arr` and `arr.@(i)` are unique, it is assured that `f` receives the element value which is unique. 
+    // 
+    // # Parameters
+    // 
+    // * `i` - The index of the element to modify.
+    // * `modifier` - The function to apply to the element.
+    // * `array` - The array to modify.
+    mod : I64 -> (a -> a) -> Array a -> Array a;
+    mod = |idx, fun, arr| (
+        let size = arr.get_size;
+        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
+        let arr = arr._unsafe_force_unique;
+        let (arr, elm) = arr._unsafe_get_linear(idx);
+        let elm = fun(elm);
+        arr._unsafe_set(idx, elm)
+    );
+
     // Modifies an array by a functorial action. 
     // 
     // Semantically, `arr.act(idx, fun)` is equivalent to `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))`.
@@ -2108,7 +2130,7 @@ namespace PunchedArray {
     unsafe_punch = |idx, arr| (
         // Bounds check.
         let size = arr.get_size;
-        if !(0 <= idx && idx < size) { undefined("[PunchedArray::punch] Index out of range.") };
+        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
 
         // Decrement the size.
         let (arr, elm) = arr._unsafe_set_size(size - 1)._unsafe_get_linear(idx);

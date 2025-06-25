@@ -454,12 +454,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("./docs/std_array_set.md").to_string()),
     ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
-        mod_array(),
-        None,
-        Some(include_str!("./docs/std_array_mod.md").to_string()),
-    ));
+    // errors.eat_err(fix_module.add_global_value(
+    //     FullName::from_strs(&[STD_NAME, ARRAY_NAME], "mod"),
+    //     mod_array(),
+    //     None,
+    //     Some(include_str!("./docs/std_array_mod.md").to_string()),
+    // ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_capacity"),
         get_capacity_array(),

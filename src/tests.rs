@@ -2505,7 +2505,7 @@ pub fn test100() {
             assert_eq(|_|"case 1", 'A', 65_U8);;
             assert_eq(|_|"case 2", '0', 48_U8);;
             assert_eq(|_|"case 3", '\n', 10_U8);;
-            assert_eq(|_|"case 3", '\x7f', 127_U8);;
+            assert_eq(|_|"case 4", '\x7f', 127_U8);;
             pure()
         );
     "#;

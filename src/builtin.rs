@@ -2197,109 +2197,109 @@ pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common()
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayModBody {
-    array_name: FullName,
-    idx_name: FullName,
-    modifier_name: FullName,
-}
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct InlineLLVMArrayModBody {
+//     array_name: FullName,
+//     idx_name: FullName,
+//     modifier_name: FullName,
+// }
 
-impl InlineLLVMArrayModBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.Array::mod({}, {})",
-            self.array_name.to_string(),
-            self.idx_name.to_string(),
-            self.modifier_name.to_string()
-        )
-    }
+// impl InlineLLVMArrayModBody {
+//     pub fn name(&self) -> String {
+//         format!(
+//             "{}.Array::mod({}, {})",
+//             self.array_name.to_string(),
+//             self.idx_name.to_string(),
+//             self.modifier_name.to_string()
+//         )
+//     }
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![
-            &mut self.array_name,
-            &mut self.idx_name,
-            &mut self.modifier_name,
-        ]
-    }
+//     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+//         vec![
+//             &mut self.array_name,
+//             &mut self.idx_name,
+//             &mut self.modifier_name,
+//         ]
+//     }
 
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        // Get argments
-        let array = gc.get_scoped_obj(&self.array_name);
-        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-        let modifier = gc.get_scoped_obj(&self.modifier_name);
+//     pub fn generate<'c, 'm, 'b>(
+//         &self,
+//         gc: &mut GenerationContext<'c, 'm>,
+//         _ty: &Arc<TypeNode>,
+//     ) -> Object<'c> {
+//         // Get argments
+//         let array = gc.get_scoped_obj(&self.array_name);
+//         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
+//         let modifier = gc.get_scoped_obj(&self.modifier_name);
 
-        // Make array unique
-        let array = make_array_unique(gc, array);
+//         // Make array unique
+//         let array = make_array_unique(gc, array);
 
-        // Get old element without retain.
-        let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-        let elem = ObjectFieldType::read_from_array_buf_noretain(
-            gc,
-            Some(array_len),
-            array_buf,
-            elem_ty,
-            idx,
-        );
+//         // Get old element without retain.
+//         let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+//         let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+//         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+//         let elem = ObjectFieldType::read_from_array_buf_noretain(
+//             gc,
+//             Some(array_len),
+//             array_buf,
+//             elem_ty,
+//             idx,
+//         );
 
-        // Apply modifier to get a new value.
-        let elem = gc.apply_lambda(modifier, vec![elem], false).unwrap();
+//         // Apply modifier to get a new value.
+//         let elem = gc.apply_lambda(modifier, vec![elem], false).unwrap();
 
-        // Perform write and return.
-        ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, elem, false);
-        array
-    }
-}
+//         // Perform write and return.
+//         ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, elem, false);
+//         array
+//     }
+// }
 
-pub fn mod_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const MODIFIED_ARRAY_NAME: &str = "arr";
-    const MODIFIER_NAME: &str = "f";
-    const INDEX_NAME: &str = "idx";
-    const ELEM_TYPE: &str = "a";
+// pub fn mod_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+//     const MODIFIED_ARRAY_NAME: &str = "arr";
+//     const MODIFIER_NAME: &str = "f";
+//     const INDEX_NAME: &str = "idx";
+//     const ELEM_TYPE: &str = "a";
 
-    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+//     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+//     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
 
-    let expr = expr_abs(
-        vec![var_local(INDEX_NAME)],
-        expr_abs(
-            vec![var_local(MODIFIER_NAME)],
-            expr_abs(
-                vec![var_local(MODIFIED_ARRAY_NAME)],
-                expr_llvm(
-                    LLVMGenerator::ArrayModBody(InlineLLVMArrayModBody {
-                        array_name: FullName::local(MODIFIED_ARRAY_NAME),
-                        idx_name: FullName::local(INDEX_NAME),
-                        modifier_name: FullName::local(MODIFIER_NAME),
-                    }),
-                    array_ty.clone(),
-                    None,
-                ),
-                None,
-            ),
-            None,
-        ),
-        None,
-    );
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(
-            make_i64_ty(),
-            type_fun(
-                type_fun(elem_tyvar.clone(), elem_tyvar),
-                type_fun(array_ty.clone(), array_ty),
-            ),
-        ),
-    );
-    (expr, scm)
-}
+//     let expr = expr_abs(
+//         vec![var_local(INDEX_NAME)],
+//         expr_abs(
+//             vec![var_local(MODIFIER_NAME)],
+//             expr_abs(
+//                 vec![var_local(MODIFIED_ARRAY_NAME)],
+//                 expr_llvm(
+//                     LLVMGenerator::ArrayModBody(InlineLLVMArrayModBody {
+//                         array_name: FullName::local(MODIFIED_ARRAY_NAME),
+//                         idx_name: FullName::local(INDEX_NAME),
+//                         modifier_name: FullName::local(MODIFIER_NAME),
+//                     }),
+//                     array_ty.clone(),
+//                     None,
+//                 ),
+//                 None,
+//             ),
+//             None,
+//         ),
+//         None,
+//     );
+//     let scm = Scheme::generalize(
+//         &[],
+//         vec![],
+//         vec![],
+//         type_fun(
+//             make_i64_ty(),
+//             type_fun(
+//                 type_fun(elem_tyvar.clone(), elem_tyvar),
+//                 type_fun(array_ty.clone(), array_ty),
+//             ),
+//         ),
+//     );
+//     (expr, scm)
+// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayForceUniqueBody {

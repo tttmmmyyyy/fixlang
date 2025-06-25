@@ -6,6 +6,7 @@ mod eta_expand;
 mod find_usage_of_name;
 mod inline;
 pub mod optimization;
+mod pull_let;
 mod remove_renaming;
 mod remove_tyanno;
 mod simplify_symbol_names;
