@@ -1,11 +1,5 @@
 use crate::{
-    config_file::ConfigFile,
-    dependency_lockfile::{self, DependecyLockFile, ProjectSource},
-    error::Errors,
-    misc::{info_msg, warn_msg, Set},
-    registry_file::RegistryFile,
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, SourceFile, Span,
-    LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE,
+    config_file::ConfigFile, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH}, dependency_lockfile::{self, DependecyLockFile, ProjectSource}, error::Errors, misc::{info_msg, warn_msg, Set}, registry_file::RegistryFile, Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, SourceFile, Span, LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -670,6 +664,8 @@ impl ProjectFile {
 
     // Creates an example project file in the current directory.
     pub fn create_example_file(proj_name: String) -> Result<(), Errors> {
+        // Create sample "fixproj.toml" file in the current directory.
+
         // If the project file already exists, do not overwrite it.
         if Path::new(PROJECT_FILE_PATH).exists() {
             return Err(Errors::from_msg(format!(
@@ -690,6 +686,34 @@ impl ProjectFile {
             Errors::from_msg(format!(
                 "Failed to create file \"{}\": {:?}.",
                 PROJECT_FILE_PATH, e
+            ))
+        })?;
+
+        // Create sample "main.fix" file in the current directory.
+        if Path::new(SAMPLE_MAIN_FILE_PATH).exists() {
+            return Err(Errors::from_msg(format!(
+                "The file \"main.fix\" already exists."
+            )));
+        }
+        let main_fix_content = include_str!("docs/main_template.fix");
+        std::fs::write(SAMPLE_MAIN_FILE_PATH, main_fix_content).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to create file \"main.fix\": {:?}.",
+                e
+            ))
+        })?;
+
+        // Create sample "test.fix" file in the current directory.
+        if Path::new(SAMPLE_TEST_FILE_PATH).exists() {
+            return Err(Errors::from_msg(format!(
+                "The file \"test.fix\" already exists."
+            )));
+        }
+        let test_fix_content = include_str!("docs/test_template.fix");
+        std::fs::write(SAMPLE_TEST_FILE_PATH, test_fix_content).map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to create file \"test.fix\": {:?}.",
+                e
             ))
         })?;
 

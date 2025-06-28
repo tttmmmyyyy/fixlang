@@ -66,10 +66,10 @@ files = ["main.fix"]
 ## This is useful when you need to get the path to the library dynamically, e.g., using pkg-config.
 # preliminary_commands = [["make", "lib.o"]]
 
-## Additional build options when running `fix test`.
-## Available fields are almost the same as ones in "[build]".
-# [build.test]
-# files = ["test.fix"]
+# Additional build options when running `fix test`.
+# Available fields are almost the same as ones in "[build]".
+[build.test]
+files = ["test.fix"]
 
 ## By "[[dependencies]]" array, you can add a Fix project as a dependency.
 ## Each dependency must have "fixproj.toml" file at the project root directory.
