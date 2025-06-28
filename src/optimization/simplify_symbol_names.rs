@@ -132,6 +132,7 @@ fn test_get_base_name() {
     );
 }
 
+// TODO: Use `FreeVarReplacer`.
 struct SimplifyName {
     old_to_new_names: Map<FullName, FullName>,
 }
@@ -165,6 +166,19 @@ impl ExprVisitor for SimplifyName {
     }
 
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        let mut changed = false;
+        let mut llvm = expr.get_llvm().as_ref().clone();
+        let generator = &mut llvm.generator;
+        for llvm_fv in generator.free_vars_mut() {
+            if let Some(new_name) = self.old_to_new_names.get(llvm_fv) {
+                *llvm_fv = new_name.clone();
+                changed = true;
+            }
+        }
+        if changed {
+            let expr = expr.set_llvm(llvm);
+            return EndVisitResult::changed(expr);
+        }
         EndVisitResult::unchanged(expr)
     }
 
