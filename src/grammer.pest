@@ -76,7 +76,7 @@ expr_lit = { expr_number_lit | expr_bool_lit | expr_string_lit | expr_array_lit 
 
 expr_var = { fullname }
 
-expr_let = { (keyword_let ~ sep+ ~ pattern_nounion ~ sep+ ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep*)+ ~ sep* ~ expr }
+expr_let = { (keyword_let ~ sep+ ~ pattern_nounion ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep*)+ ~ sep* ~ expr }
 
 match_arrow = { "=>" }
 

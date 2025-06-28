@@ -8517,3 +8517,18 @@ f = |x| (
         "Expected `;`",
     );
 }
+
+#[test]
+pub fn test_let_nospace_equal() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let x=42; // No space between `x=` and `42`
+    assert_eq(|_|"", x, 42);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
