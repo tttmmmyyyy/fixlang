@@ -2861,7 +2861,7 @@ pub fn struct_act(
     // The implementation as Fix source code is:
     // ```
     // |f, s| (
-    //     let (unique, s) = s.Debug::unsafe_is_unique;
+    //     let (unique, s) = s.unsafe_is_unique;
     //     if unique {
     //         let (x, ps) = s.#punch_{field};
     //         f(x).map(ps.#plug_in_{field})
