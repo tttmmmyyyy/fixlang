@@ -2689,8 +2689,8 @@ impl InlineLLVMStructPlugInBody {
 
         // Make the punched struct unique before plugging-in the field value.
         //
-        // The uniquness is not assured even if `#plug_x` is only used in the implementation of `act_x` and the `#punch_x` function has uniqueness checking.
-        // In the impelementation of `act_x`, we use `map(#plug_in_x(ps))`, and `map` can be call `#plug_in_x(ps)` multiple times, so the punched struct value `ps` can be shared.
+        // The uniqueness is not assured even if `#plug_x` is only used in the implementation of `act_x` and the `#punch_x` function has uniqueness checking.
+        // In the implementation of `act_x`, we use `map(#plug_in_x(ps))`, and `map` can call `#plug_in_x(ps)` multiple times, so the punched struct value `ps` can be shared.
         let punched_str = make_struct_unique(gc, punched_str);
 
         // Convert type of punched_str into the struct type.
