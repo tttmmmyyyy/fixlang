@@ -2825,7 +2825,7 @@ pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 
 // Field act function for a given struct.
 // If the struct is `S` and the field is `F`, then the function has the type `[f : Functor] (F -> f F) -> S -> f S`.
-// The implementation uses `#punch_{field}` and `#plug_in_{field}`.for the struct.
+// The implementation uses `#punch_{field}` and `#plug_in_{field}` for the struct.
 pub fn struct_act(
     struct_name: &FullName,
     definition: &TypeDefn,
