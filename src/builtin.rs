@@ -2763,31 +2763,74 @@ pub fn struct_plug_in(
 
 // `mod` built-in function for a given struct.
 pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
-    // Find the index of `field_name` in the given struct.
-    let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
-
-    let field_count = definition.fields().len();
+    let (_, field) = definition.get_field_by_name(field_name).unwrap();
     let str_ty = definition.applied_type();
     let ty = type_fun(
         type_fun(field.ty.clone(), field.ty.clone()),
         type_fun(str_ty.clone(), str_ty.clone()),
     );
+    let struct_name = &definition.name;
 
     // The implementation of `mod` function as AST.
     //
     // ```
     // |f, x| (
     //     let (x, p) = x.#punch_fu_{field}; // here, force uniqueness.
-    //     #plug_in_{field}(f(x), p) // uniqueness is guaranteed.
+    //     #plug_in_{field}(f(x), p) // uniqueness is guaranteed here.
     // )
     // ```
+
+    // `#punch_fu_{field}`
+    let punch_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `x.#punch_fu_{field}`
+    let punch_expr = expr_app(punch_func, vec![expr_var(FullName::local("x"), None)], None);
+
+    // `#plug_in_{field}`
+    let plug_in_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `f(x)`
+    let fx = expr_app(
+        expr_var(FullName::local("f"), None),
+        vec![expr_var(FullName::local("x"), None)],
+        None,
+    );
+    // `#plug_in_{field}(f(x), p)`
+    let plug_in_expr = expr_app(
+        expr_app(plug_in_func, vec![fx], None),
+        vec![expr_var(FullName::local("p"), None)],
+        None,
+    );
+
+    // let (x, p) = x.#punch_fu_{field};
+    // #plug_in_{field}(f(x), p)
+    let let_expr = expr_let(
+        PatternNode::make_struct(
+            tycon(make_tuple_name(2)),
+            vec![
+                ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
+                ("1".to_string(), PatternNode::make_var(var_local("p"), None)),
+            ],
+        ),
+        punch_expr,
+        plug_in_expr,
+        None,
+    );
+
+    // The whole expression is `|f, x| let (x, p) = x.#punch_fu_{field}; #plug_in_{field}(f(x), p)`
     let expr = expr_abs(
         vec![var_local("f")],
-        expr_abs(
-            vec![var_local("x")],
-            struct_mod_body("f", "x", field_count, field_idx as usize, definition),
-            None,
-        ),
+        expr_abs(vec![var_local("x")], let_expr, None),
         None,
     );
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
