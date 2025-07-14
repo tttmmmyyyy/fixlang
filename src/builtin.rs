@@ -2776,7 +2776,7 @@ pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
     // ```
     // |f, x| (
     //     let (x, p) = x.#punch_fu_{field}; // here, force uniqueness.
-    //     #plug_in_{field}(f(x), p) // uniqueness is guaranteed here.
+    //     #plug_in_{field}(p, f(x)) // uniqueness is guaranteed here.
     // )
     // ```
 
@@ -2805,15 +2805,19 @@ pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
         vec![expr_var(FullName::local("x"), None)],
         None,
     );
-    // `#plug_in_{field}(f(x), p)`
+    // `#plug_in_{field}(p, f(x))`
     let plug_in_expr = expr_app(
-        expr_app(plug_in_func, vec![fx], None),
-        vec![expr_var(FullName::local("p"), None)],
+        expr_app(
+            plug_in_func,
+            vec![expr_var(FullName::local("p"), None)],
+            None,
+        ),
+        vec![fx],
         None,
     );
 
     // let (x, p) = x.#punch_fu_{field};
-    // #plug_in_{field}(f(x), p)
+    // #plug_in_{field}(p, f(x))
     let let_expr = expr_let(
         PatternNode::make_struct(
             tycon(make_tuple_name(2)),
