@@ -2761,68 +2761,6 @@ pub fn struct_plug_in(
     (expr, scm)
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStructModBody {
-    f_name: FullName,
-    x_name: FullName,
-    field_idx: usize,
-    field_count: usize,
-}
-
-impl InlineLLVMStructModBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.mod_{}({})",
-            self.x_name.to_string(),
-            self.field_idx,
-            self.f_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.f_name, &mut self.x_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        // Get arguments
-        let modfier = gc.get_scoped_obj(&self.f_name);
-        let str = gc.get_scoped_obj(&self.x_name);
-
-        let str = make_struct_unique(gc, str);
-
-        // Modify field
-        let field = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
-        let field = gc.apply_lambda(modfier, vec![field], false).unwrap();
-        ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &field)
-    }
-}
-
-// `mod` built-in function for a given struct.
-pub fn struct_mod_body(
-    f_name: &str,
-    x_name: &str,
-    field_count: usize, // number of fields in this struct
-    field_idx: usize,
-    struct_defn: &TypeDefn,
-) -> Arc<ExprNode> {
-    let f_name = FullName::local(f_name);
-    let x_name = FullName::local(x_name);
-    expr_llvm(
-        LLVMGenerator::StructModBody(InlineLLVMStructModBody {
-            f_name,
-            x_name,
-            field_idx,
-            field_count,
-        }),
-        struct_defn.applied_type(),
-        None,
-    )
-}
-
 // `mod` built-in function for a given struct.
 pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
@@ -2830,6 +2768,19 @@ pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 
     let field_count = definition.fields().len();
     let str_ty = definition.applied_type();
+    let ty = type_fun(
+        type_fun(field.ty.clone(), field.ty.clone()),
+        type_fun(str_ty.clone(), str_ty.clone()),
+    );
+
+    // The implementation of `mod` function as AST.
+    //
+    // ```
+    // |f, x| (
+    //     let (x, p) = x.#punch_fu_{field}; // here, force uniqueness.
+    //     #plug_in_{field}(f(x), p) // uniqueness is guaranteed.
+    // )
+    // ```
     let expr = expr_abs(
         vec![var_local("f")],
         expr_abs(
@@ -2838,10 +2789,6 @@ pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
             None,
         ),
         None,
-    );
-    let ty = type_fun(
-        type_fun(field.ty.clone(), field.ty.clone()),
-        type_fun(str_ty.clone(), str_ty.clone()),
     );
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
@@ -2887,8 +2834,8 @@ pub fn struct_act(
     // |f, s| (
     //     let (unique, s) = s.unsafe_is_unique;
     //     if unique {
-    //         let (x, ps) = s.#punch_{field};
-    //         f(x).map(ps.#plug_in_fu_{field})
+    //         let (x, ps) = s.#punch_{field}; // here, uniqueness is guaranteed.
+    //         f(x).map(ps.#plug_in_fu_{field}) // here use "_fu" version: see the comment below.
     //     } else {
     //         f(s.@{field}).map(|e| s.set_{field}(e))
     //     }
