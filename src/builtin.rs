@@ -2585,11 +2585,17 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 pub struct InlineLLVMStructPunchBody {
     var_name: FullName,
     field_idx: usize,
+    force_unique: bool,
 }
 
 impl InlineLLVMStructPunchBody {
     pub fn name(&self) -> String {
-        format!("{}.#punch_{}", self.var_name.to_string(), self.field_idx)
+        format!(
+            "{}.#punch{}_{}",
+            self.var_name.to_string(),
+            if self.force_unique { "_fu" } else { "" },
+            self.field_idx
+        )
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
@@ -2602,22 +2608,14 @@ impl InlineLLVMStructPunchBody {
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get the argument object (the struct value).
-        let str = gc.get_scoped_obj(&self.var_name);
+        let mut str = gc.get_scoped_obj(&self.var_name);
 
-        // We should force the uniqueness of the struct here.
-        // Actually we omit it because we do uniqueness checking in the `act_x` function.
-        // Following is the comment and code for the uniqueness checking:
-        /*
-        // Make the struct unique.
-        // This is necessary because the punching can be considered as setting the field to `null`.
-        // Consider the case where
-        // - We omit the uniqueness check here.
-        // - The struct is shared (by `s1` and `s2`), but the (boxed) field value itself is unique.
-        // Then, if we `let (x1, _) = s1.punch_x; let (x2, _) = s2.#punch_x;`, then `x1` and `x2` will point to the same object, but still is unique.
-        let str = make_struct_unique(gc, str, false);
-        */
+        if self.force_unique {
+            // If the struct is shared, we should clone it to make it unique.
+            str = make_struct_unique(gc, str);
+        }
 
-        // Move out struct field value without releaseing the struct itself.
+        // Move out struct field value without releasing the struct itself.
         let field = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
 
         // Create the return value.
@@ -2630,8 +2628,24 @@ impl InlineLLVMStructPunchBody {
 }
 
 // Field punching function for a given struct.
-// If the struct is `S` and the field is `F`, then the function has the type `S -> (F, PS)` where `PS` is the punched struct type.
-pub fn struct_punch(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
+//
+// If the struct is `S` and the field is `x` of type `F`, then the function has the type `S -> (F, Sx)` where `Sx` is the punched `S` at the field `x`.
+// i.e., `Sx` has the same memory layout as `S`, but does not contain the field `x`.
+//
+// We are not sure whether we should clone the struct when a shared struct is given to `punch_x`.
+// If we do not clone the struct, it will lead to different types of values sharing the same memory area, which feels dangerous,
+// but we have not found an example that causes a memory management issue yet.
+//
+// There are two use cases for the current `punch_x` function.
+// One is the implementation of `act_x`, where the struct given to `punch_x` is guaranteed to be unique.
+// The other is the implementation of `mod_x`, where it is acceptable to clone the struct if it is shared.
+// So we have two versions of `punch_x`: one that does not clone the struct and one that does.
+// The above problem is unresolved, but the current use cases do not require solving this problem.
+pub fn struct_punch(
+    definition: &TypeDefn,
+    field_name: &str,
+    force_unique: bool,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
@@ -2648,6 +2662,7 @@ pub fn struct_punch(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, 
             LLVMGenerator::StructPunchBody(InlineLLVMStructPunchBody {
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
+                force_unique,
             }),
             dst_ty,
             None,
@@ -2662,13 +2677,15 @@ pub struct InlineLLVMStructPlugInBody {
     punched_str_name: FullName,
     field_name: FullName,
     field_idx: usize,
+    force_unique: bool,
 }
 
 impl InlineLLVMStructPlugInBody {
     pub fn name(&self) -> String {
         format!(
-            "{}.#plug_in_{}({})",
+            "{}.#plug_in_{}{}({})",
             self.punched_str_name.to_string(),
+            if self.force_unique { "_fu" } else { "" },
             self.field_idx,
             self.field_name.to_string(),
         )
@@ -2684,14 +2701,13 @@ impl InlineLLVMStructPlugInBody {
         struct_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get the first argument, a punched struct value, and the second argument, a field value.
-        let punched_str = gc.get_scoped_obj(&self.punched_str_name);
+        let mut punched_str = gc.get_scoped_obj(&self.punched_str_name);
         let field = gc.get_scoped_obj(&self.field_name);
 
         // Make the punched struct unique before plugging-in the field value.
-        //
-        // The uniqueness is not assured even if `#plug_x` is only used in the implementation of `act_x` and the `#punch_x` function has uniqueness checking.
-        // In the implementation of `act_x`, we use `map(#plug_in_x(ps))`, and `map` can call `#plug_in_x(ps)` multiple times, so the punched struct value `ps` can be shared.
-        let punched_str = make_struct_unique(gc, punched_str);
+        if self.force_unique {
+            punched_str = make_struct_unique(gc, punched_str);
+        }
 
         // Convert type of punched_str into the struct type.
         let punched_value = punched_str.value;
@@ -2705,8 +2721,15 @@ impl InlineLLVMStructPlugInBody {
 }
 
 // Field plugging-in function for a given struct.
-// If the struct is `S` and the field is `F`, then the function has the type `PS -> F -> S` where `PS` is the punched struct type.
-pub fn struct_plug_in(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
+// If the struct is `S` and the field is `F`, then the function has the type `Sx -> F -> S` where `Sx` is the punched struct type.
+//
+// In principle, `plug_in_x : Sx -> F -> S` should clone the punched struct if it is shared,
+// because the memory region will be modified by plugging-in the field value.
+pub fn struct_plug_in(
+    definition: &TypeDefn,
+    field_name: &str,
+    force_unique: bool,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
@@ -2726,6 +2749,7 @@ pub fn struct_plug_in(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>
                     punched_str_name: FullName::local(PUNCHED_STR_NAME),
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
+                    force_unique,
                 }),
                 str_ty.clone(),
                 None,
@@ -2737,87 +2761,81 @@ pub fn struct_plug_in(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>
     (expr, scm)
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStructModBody {
-    f_name: FullName,
-    x_name: FullName,
-    field_idx: usize,
-    field_count: usize,
-}
-
-impl InlineLLVMStructModBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.mod_{}({})",
-            self.x_name.to_string(),
-            self.field_idx,
-            self.f_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.f_name, &mut self.x_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut GenerationContext<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        // Get arguments
-        let modfier = gc.get_scoped_obj(&self.f_name);
-        let str = gc.get_scoped_obj(&self.x_name);
-
-        let str = make_struct_unique(gc, str);
-
-        // Modify field
-        let field = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
-        let field = gc.apply_lambda(modfier, vec![field], false).unwrap();
-        ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &field)
-    }
-}
-
-// `mod` built-in function for a given struct.
-pub fn struct_mod_body(
-    f_name: &str,
-    x_name: &str,
-    field_count: usize, // number of fields in this struct
-    field_idx: usize,
-    struct_defn: &TypeDefn,
-) -> Arc<ExprNode> {
-    let f_name = FullName::local(f_name);
-    let x_name = FullName::local(x_name);
-    expr_llvm(
-        LLVMGenerator::StructModBody(InlineLLVMStructModBody {
-            f_name,
-            x_name,
-            field_idx,
-            field_count,
-        }),
-        struct_defn.applied_type(),
-        None,
-    )
-}
-
 // `mod` built-in function for a given struct.
 pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
-    // Find the index of `field_name` in the given struct.
-    let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
-
-    let field_count = definition.fields().len();
+    let (_, field) = definition.get_field_by_name(field_name).unwrap();
     let str_ty = definition.applied_type();
-    let expr = expr_abs(
-        vec![var_local("f")],
-        expr_abs(
-            vec![var_local("x")],
-            struct_mod_body("f", "x", field_count, field_idx as usize, definition),
-            None,
-        ),
-        None,
-    );
     let ty = type_fun(
         type_fun(field.ty.clone(), field.ty.clone()),
         type_fun(str_ty.clone(), str_ty.clone()),
+    );
+    let struct_name = &definition.name;
+
+    // The implementation of `mod` function as AST.
+    //
+    // ```
+    // |f, x| (
+    //     let (x, p) = x.#punch_fu_{field}; // here, force uniqueness.
+    //     #plug_in_{field}(p, f(x)) // uniqueness is guaranteed here.
+    // )
+    // ```
+
+    // `#punch_fu_{field}`
+    let punch_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `x.#punch_fu_{field}`
+    let punch_expr = expr_app(punch_func, vec![expr_var(FullName::local("x"), None)], None);
+
+    // `#plug_in_{field}`
+    let plug_in_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `f(x)`
+    let fx = expr_app(
+        expr_var(FullName::local("f"), None),
+        vec![expr_var(FullName::local("x"), None)],
+        None,
+    );
+    // `#plug_in_{field}(p, f(x))`
+    let plug_in_expr = expr_app(
+        expr_app(
+            plug_in_func,
+            vec![expr_var(FullName::local("p"), None)],
+            None,
+        ),
+        vec![fx],
+        None,
+    );
+
+    // let (x, p) = x.#punch_fu_{field};
+    // #plug_in_{field}(p, f(x))
+    let let_expr = expr_let(
+        PatternNode::make_struct(
+            tycon(make_tuple_name(2)),
+            vec![
+                ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
+                ("1".to_string(), PatternNode::make_var(var_local("p"), None)),
+            ],
+        ),
+        punch_expr,
+        plug_in_expr,
+        None,
+    );
+
+    // The whole expression is `|f, x| let (x, p) = x.#punch_fu_{field}; #plug_in_{field}(f(x), p)`
+    let expr = expr_abs(
+        vec![var_local("f")],
+        expr_abs(vec![var_local("x")], let_expr, None),
+        None,
     );
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
@@ -2825,7 +2843,7 @@ pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 
 // Field act function for a given struct.
 // If the struct is `S` and the field is `F`, then the function has the type `[f : Functor] (F -> f F) -> S -> f S`.
-// The implementation uses `#punch_{field}` and `#plug_in_{field}`.for the struct.
+// The implementation uses `#punch_{field}` and `#plug_in_{field}` for the struct.
 pub fn struct_act(
     struct_name: &FullName,
     definition: &TypeDefn,
@@ -2863,13 +2881,16 @@ pub fn struct_act(
     // |f, s| (
     //     let (unique, s) = s.unsafe_is_unique;
     //     if unique {
-    //         let (x, ps) = s.#punch_{field};
-    //         f(x).map(ps.#plug_in_{field})
+    //         let (x, ps) = s.#punch_{field}; // here, uniqueness is guaranteed.
+    //         f(x).map(ps.#plug_in_fu_{field}) // here use "_fu" version: see the comment below.
     //     } else {
     //         f(s.@{field}).map(|e| s.set_{field}(e))
     //     }
     // );
     // (Here, we cannot use the parser because we are using "#" is not allowed as value name)
+    //
+    // We should use `#plug_in_fu_{field}` here, not `#plug_in_{field}`:
+    // `map` can call `#plug_in_fu_{field}(ps)` multiple times, so the argument to `#plug_in_fu_{field}` can be shared.
     let expr_unique = expr_let(
         PatternNode::make_struct(
             tycon(make_tuple_name(2)),
@@ -2903,7 +2924,7 @@ pub fn struct_act(
                     expr_var(
                         FullName::new(
                             &struct_name.to_namespace(),
-                            &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, field_name),
+                            &format!("{}{}", STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, field_name),
                         ),
                         None,
                     ),

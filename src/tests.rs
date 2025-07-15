@@ -6676,6 +6676,51 @@ pub fn test_struct_act() {
             let s = UU { x : false, y : [1, 2], z : 3 };
             assert_eq(|_|"", s.act_x(actor_bool), Option::none());;
 
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_struct_act2() {
+    let source = r##"
+        module Main;
+                
+        // Boxed struct with a boxed field.
+        type BB = box struct { x : Array Bool, y : Array I64, z : I64 };
+        impl BB : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
+        }
+
+        // Boxed struct with an unboxed field.
+        type BU = box struct { x : Bool, y : Array I64, z : I64 };
+        impl BU : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
+        }
+
+        // Unboxed struct with a boxed field.
+        type UB = unbox struct { x : Array Bool, y : Array I64, z : I64 };
+        impl UB : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
+        }
+
+        // Unboxed struct with an unboxed field.
+        type UU = unbox struct { x : Bool, y : Array I64, z : I64 };
+        impl UU : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
+        }
+
+        // Generic boxed struct with a boxed field.
+        type GB a = box struct { x : Array a, y : Array I64, z : I64 };
+        impl [a : Eq] GB a : Eq {
+            eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y && lhs.@z == rhs.@z;
+        }
+
+        main: IO ();
+        main = (
+            let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
+
             // GB case 1
             let actor_array = |x| if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
             let s = GB { x : [true], y : [1, 2], z : 3 };

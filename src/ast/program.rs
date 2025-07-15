@@ -1868,7 +1868,7 @@ impl Program {
                                 &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_PUNCH_SYMBOL, &field.name),
                             ),
-                            struct_punch(defn, &field.name),
+                            struct_punch(defn, &field.name, false),
                             None,
                         ));
                         // Add plug-in functions.
@@ -1877,7 +1877,25 @@ impl Program {
                                 &defn.name.to_namespace(),
                                 &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, &field.name),
                             ),
-                            struct_plug_in(defn, &field.name),
+                            struct_plug_in(defn, &field.name, false),
+                            None,
+                        ));
+                        // Add punch functions (force-unique version)
+                        errors.eat_err(self.add_compiler_defined_method(
+                            FullName::new(
+                                &defn.name.to_namespace(),
+                                &format!("{}{}", STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, &field.name),
+                            ),
+                            struct_punch(defn, &field.name, true),
+                            None,
+                        ));
+                        // Add plug-in functions (force-unique version)
+                        errors.eat_err(self.add_compiler_defined_method(
+                            FullName::new(
+                                &defn.name.to_namespace(),
+                                &format!("{}{}", STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, &field.name),
+                            ),
+                            struct_plug_in(defn, &field.name, true),
                             None,
                         ));
                     }
