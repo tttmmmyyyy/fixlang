@@ -809,17 +809,31 @@ Type: `Std::F32 -> Std::String`
 
 Converts a floating number to a string of exponential form.
 
+##### Parameters
+
+* `v` - The floating number to be converted to a string.
+
 #### to_string_exp_precision
 
 Type: `Std::U8 -> Std::F32 -> Std::String`
 
 Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
 
+##### Parameters
+
+* `prec` - The number of digits after the decimal point.
+* `v` - The floating number to be converted to a string.
+
 #### to_string_precision
 
 Type: `Std::U8 -> Std::F32 -> Std::String`
 
 Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
+
+##### Parameters
+
+* `prec` - The number of digits after the decimal point.
+* `v` - The floating number to be converted to a string.
 
 ### namespace Std::F64
 
@@ -983,17 +997,31 @@ Type: `Std::F64 -> Std::String`
 
 Converts a floating number to a string of exponential form.
 
+##### Parameters
+
+* `v` - The floating number to be converted to a string.
+
 #### to_string_exp_precision
 
 Type: `Std::U8 -> Std::F64 -> Std::String`
 
 Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
 
+##### Parameters
+
+* `prec` - The number of digits after the decimal point.
+* `v` - The floating number to be converted to a string.
+
 #### to_string_precision
 
 Type: `Std::U8 -> Std::F64 -> Std::String`
 
 Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
+
+##### Parameters
+
+* `prec` - The number of digits after the decimal point.
+* `v` - The floating number to be converted to a string.
 
 ### namespace Std::FFI
 
