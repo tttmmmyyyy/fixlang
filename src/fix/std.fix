@@ -819,8 +819,11 @@ namespace IO {
         ))
     );
 
-    // Reads a line from stdin. If some error occurr, this function aborts the program.
+    // Reads a line from stdin. 
+    //
+    // This function's return value contains a newline code.
     // 
+    // If an error occurs while reading from stdin, this function exits the program.
     // If you want to handle errors, use `read_line(stdin)` instead.
     input_line : IO String;
     input_line = (
@@ -830,6 +833,18 @@ namespace IO {
         } else {
             pure $ undefined(res.as_err.to_string)
         }
+    );
+
+    // Reads a line from stdin. 
+    //
+    // This function strips the newline code at the end of the line.
+    // 
+    // If an error occurs while reading from stdin, this function exits the program.
+    // If you want to handle errors, use `read_line(stdin)` instead.
+    input_line_s : IO String;
+    input_line_s = (
+        let line = *input_line;
+        pure $ line.strip_last_newlines
     );
 
     // Checks if an `IOHandle` reached to the EOF.
