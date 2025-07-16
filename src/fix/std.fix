@@ -3250,6 +3250,9 @@ impl F32 : ToString {
 }
 namespace F32 {
     // Converts a floating number to a string of exponential form.
+    // 
+    // # Parameters
+    // * `v` - The floating number to be converted to a string.
     to_string_exp : F32 -> String;
     to_string_exp = |v| (
         let data = Array::empty(50);
@@ -3258,6 +3261,10 @@ namespace F32 {
     );
 
     // Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
+    // 
+    // # Parameters
+    // * `prec` - The number of digits after the decimal point.
+    // * `v` - The floating number to be converted to a string.
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
@@ -3266,6 +3273,10 @@ namespace F32 {
     );
 
     // Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
+    // 
+    // # Parameters
+    // * `prec` - The number of digits after the decimal point.
+    // * `v` - The floating number to be converted to a string.
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(50 + prec.to_I64);
@@ -3310,6 +3321,9 @@ impl F64 : ToString {
 }
 namespace F64 {
     // Converts a floating number to a string of exponential form.
+    // 
+    // # Parameters
+    // * `v` - The floating number to be converted to a string.
     to_string_exp : F64 -> String;
     to_string_exp = |v| (
         let data = Array::empty(500);
@@ -3318,6 +3332,10 @@ namespace F64 {
     );
 
     // Converts a floating number to a string of exponential form with specified precision (i.e., number of digits after the decimal point).
+    //
+    // # Parameters
+    // * `prec` - The number of digits after the decimal point.
+    // * `v` - The floating number to be converted to a string.
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
@@ -3326,6 +3344,10 @@ namespace F64 {
     );
 
     // Converts a floating number to a string with specified precision (i.e., number of digits after the decimal point).
+    // 
+    // # Parameters
+    // * `prec` - The number of digits after the decimal point.
+    // * `v` - The floating number to be converted to a string.
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
         let data = Array::empty(500 + prec.to_I64);
