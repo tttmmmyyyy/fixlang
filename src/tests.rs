@@ -8332,6 +8332,11 @@ pub fn test_external_project_binary_heap() {
     );
 }
 
+#[test]
+pub fn test_external_project_cp_library() {
+    test_external_project("https://github.com/tttmmmyyyy/cp-library", "cp-library");
+}
+
 // Run `cargo install --locked --path .`.
 pub fn install_fix() {
     let _ = Command::new("cargo")
@@ -8590,7 +8595,7 @@ main = (
     assert_eq(|_|"", [1, 2, 3].to_iter.check_all(is_positive), true);;
     assert_eq(|_|"", [0, 1, 2].to_iter.check_all(is_positive), false);;
     assert_eq(|_|"", [-1, -2, -3].to_iter.check_all(is_positive), false);;
-    
+
     pure()
 );
     "##;
