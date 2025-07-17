@@ -8620,3 +8620,63 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_loop_iter_s() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    // Look at natural numbers, and break when a multiple of 5 is found.
+
+    // 1,2,3,4 => ends with continue(4)
+    let res = range(1, 5).loop_iter_s(0, |n, _| if n % 5 == 0 { break $ n } else { continue $ n } );
+    assert(|_|"loop_iter_s 1", res.is_continue);;
+    assert_eq(|_|"loop_iter_s 1", res.as_continue, 4);;
+
+    // 1,2,3,4,5 => ends with break(5)
+    let res = range(1, 6).loop_iter_s(0, |n, _| if n % 5 == 0 { break $ n } else { continue $ n } );
+    assert(|_|"loop_iter_s 2", res.is_break);;
+    assert_eq(|_|"loop_iter_s 2", res.as_break, 5);;
+
+    // [] => ends with continue(0)
+    let res = range(1, 1).loop_iter_s(0, |n, _| if n % 5 == 0 { break $ n } else { continue $ n } );
+    assert(|_|"loop_iter_s 3", res.is_continue);;
+    assert_eq(|_|"loop_iter_s 3", res.as_continue, 0);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_loop_iter_ms() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    // Look at natural numbers, and break when a multiple of 5 is found.
+
+    // 1,2,3,4 => ends with continue(4)
+    let res = *range(1, 5).loop_iter_ms(0, |n, _| println(n.to_string);; if n % 5 == 0 { break_m $ n } else { continue_m $ n } );
+    assert(|_|"loop_iter_ms 1", res.is_continue);;
+    assert_eq(|_|"loop_iter_ms 1", res.as_continue, 4);;
+
+    // 1,2,3,4,5 => ends with break(5)
+    let res = *range(1, 6).loop_iter_ms(0, |n, _| println(n.to_string);; if n % 5 == 0 { break_m $ n } else { continue_m $ n } );
+    assert(|_|"loop_iter_ms 2", res.is_break);;
+    assert_eq(|_|"loop_iter_ms 2", res.as_break, 5);;
+
+    // [] => ends with continue(0)
+    let res = *range(1, 1).loop_iter_ms(0, |n, _| println(n.to_string);; if n % 5 == 0 { break_m $ n } else { continue_m $ n } );
+    assert(|_|"loop_iter_ms 3", res.is_continue);;
+    assert_eq(|_|"loop_iter_ms 3", res.as_continue, 0);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

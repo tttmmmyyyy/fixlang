@@ -1335,6 +1335,28 @@ namespace Iterator {
         }
     );
 
+    // Loop over the elements of an iterator.
+    // 
+    // This function is similar to `loop_iter`, but it returns a `LoopState`. It allows the caller to know whether the loop ended with `break` or `continue`.
+    // 
+    // Added in v1.1.0.
+    // 
+    // # Parameters
+    //
+    // * `s` - The initial state.
+    // * `body` - The function to be called on the pair of an element and the current state.
+    // * `iter` - The iterator to be looped.
+    loop_iter_s : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s b) -> iter -> LoopState s b;
+    loop_iter_s = |s, body, iter| (
+        match iter.advance {
+            none() => continue(s),
+            some((iter, a)) => match body(a, s) {
+                break(s) => break(s),
+                continue(s) => iter.loop_iter_s(s, body),
+            }
+        }
+    );
+
     // Loop over the elements of an iterator by monadic action.
     // 
     // # Parameters
@@ -1353,11 +1375,33 @@ namespace Iterator {
         }
     );
 
+    // Loop over the elements of an iterator by monadic action.
+    //
+    // This function is similar to `loop_iter_s`, but it returns a `LoopState`. It allows the caller to know whether the loop ended with `break_m` or `continue_m`.
+    //
+    // Added in v1.1.0.
+    // 
+    // # Parameters
+    //
+    // * `s` - The initial state.
+    // * `body` - The function to be called on the pair of an element and the current state.
+    // * `iter` - The iterator to be looped.
+    loop_iter_ms : [m : Monad, iter : Iterator, Item iter = a] s -> (a -> s -> m (LoopState s b)) -> iter -> m (LoopState s b);
+    loop_iter_ms = |s, body, iter| (
+        match iter.advance {
+            none() => pure(continue(s)),
+            some((iter, a)) => body(a, s).bind(|state| match state {
+                break(s) => pure(break(s)),
+                continue(s) => iter.loop_iter_ms(s, body),
+            })
+        }
+    );
+
     // Executes monadic actions and collects the results into an array.
     //
     // # Parameters
     //
-    // * `iter` - The iterator to be collected.
+    // * `iter` - The iterator of monads to be collected.
     collect_m : [m : Monad, iter : Iterator, Item iter = m a] iter -> m (Array a);
     collect_m = |iter| iter.fold_m([], |act, acm| pure $ acm.push_back(*act));
 
@@ -1365,7 +1409,7 @@ namespace Iterator {
     //
     // # Parameters
     //
-    // * `iter` - The iterator to be summed.
+    // * `iter` - The iterator of elements to be summed.
     sum : [iter : Iterator, Item iter = a, a : Additive] iter -> a;
     sum = |iter| iter.fold(zero, |a, acc| acc + a);
 

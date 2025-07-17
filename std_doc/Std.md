@@ -2674,7 +2674,7 @@ Executes monadic actions and collects the results into an array.
 
 ##### Parameters
 
-* `iter` - The iterator to be collected.
+* `iter` - The iterator of monads to be collected.
 
 #### count_up
 
@@ -2897,6 +2897,38 @@ Loop over the elements of an iterator by monadic action.
 * `body` - The function to be called on the pair of an element and the current state.
 * `iter` - The iterator to be looped.
 
+#### loop_iter_ms
+
+Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s b)) -> iter -> m (Std::LoopState s b)`
+
+Loop over the elements of an iterator by monadic action.
+
+This function is similar to `loop_iter_s`, but it returns a `LoopState`. It allows the caller to know whether the loop ended with `break_m` or `continue_m`.
+
+Added in v1.1.0.
+
+##### Parameters
+
+* `s` - The initial state.
+* `body` - The function to be called on the pair of an element and the current state.
+* `iter` - The iterator to be looped.
+
+#### loop_iter_s
+
+Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> Std::LoopState s b) -> iter -> Std::LoopState s b`
+
+Loop over the elements of an iterator.
+
+This function is similar to `loop_iter`, but it returns a `LoopState`. It allows the caller to know whether the loop ended with `break` or `continue`.
+
+Added in v1.1.0.
+
+##### Parameters
+
+* `s` - The initial state.
+* `body` - The function to be called on the pair of an element and the current state.
+* `iter` - The iterator to be looped.
+
 #### map
 
 Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
@@ -2998,7 +3030,7 @@ Calcculate sum of the elements of an iterator.
 
 ##### Parameters
 
-* `iter` - The iterator to be summed.
+* `iter` - The iterator of elements to be summed.
 
 #### take
 
