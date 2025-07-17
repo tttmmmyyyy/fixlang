@@ -1948,6 +1948,36 @@ namespace Iterator {
     zip : [i1 : Iterator, i2 : Iterator] i2 -> i1 -> ZipIterator i1 i2;
     zip = |iter2, iter1| ZipIterator { iter1: iter1, iter2: iter2 };
 
+    // Check if all elements of an iterator satisfy a given predicate.
+    // 
+    // Added in v1.1.0.
+    // 
+    // # Parameters
+    //
+    // * `pred` - The predicate function to be applied to each element of the iterator.
+    check_all : [it : Iterator, Item it = a] (a -> Bool) -> it -> Bool;
+    check_all = |pred, iter| (
+        match iter.advance {
+            none() => true,
+            some((iter, a)) => if pred(a) { iter.check_all(pred) } else { false }
+        }
+    );
+
+    // Check if any element of an iterator satisfies a given predicate.
+    // 
+    // Added in v1.1.0.
+    //
+    // # Parameters
+    // 
+    // * `pred` - The predicate function to be applied to each element of the iterator.
+    check_any : [it : Iterator, Item it = a] (a -> Bool) -> it -> Bool;
+    check_any = |pred, iter| (
+        match iter.advance {
+            none() => false,
+            some((iter, a)) => if pred(a) { true } else { iter.check_any(pred) }
+        }
+    );
+
     /*
         Dynamic iterator.
     */

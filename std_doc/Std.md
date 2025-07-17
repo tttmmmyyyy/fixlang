@@ -2281,8 +2281,22 @@ Gets command line arguments.
 
 Type: `Std::IO Std::String`
 
-Reads a line from stdin. If some error occurr, this function aborts the program.
+Reads a line from stdin.
 
+This function's return value contains a newline code.
+
+If an error occurs while reading from stdin, this function exits the program.
+If you want to handle errors, use `read_line(stdin)` instead.
+
+#### input_line_s
+
+Type: `Std::IO Std::String`
+
+Reads a line from stdin.
+
+This function strips the newline code at the end of the line.
+
+If an error occurs while reading from stdin, this function exits the program.
 If you want to handle errors, use `read_line(stdin)` instead.
 
 #### is_eof
@@ -2627,6 +2641,30 @@ On the other hand, iteration may be faster by banging.
 ##### Parameters
 
 * `iter` - The iterator.
+
+#### check_all
+
+Type: `[it : Std::Iterator, Std::Iterator::Item it = a] (a -> Std::Bool) -> it -> Std::Bool`
+
+Check if all elements of an iterator satisfy a given predicate.
+
+Added in v1.1.0.
+
+##### Parameters
+
+* `pred` - The predicate function to be applied to each element of the iterator.
+
+#### check_any
+
+Type: `[it : Std::Iterator, Std::Iterator::Item it = a] (a -> Std::Bool) -> it -> Std::Bool`
+
+Check if any element of an iterator satisfies a given predicate.
+
+Added in v1.1.0.
+
+##### Parameters
+
+* `pred` - The predicate function to be applied to each element of the iterator.
 
 #### collect_m
 

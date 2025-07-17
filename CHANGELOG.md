@@ -10,6 +10,7 @@
 - Add new optimization ("optimization/decapturing.rs"). This will be applied when the optimization level is `max`.
 - Add `bit_not` functions to each integer types.
 - Add `Std::IO::input_line_s : IO String` function, which reads a line from stdin and strips the last newline characters.
+- Add `Std::Iterator::check_all : [it : Iterator, Item it = a] (a -> Bool) -> it -> Bool` and `Std::Iterator::check_any : [it : Iterator, Item it = a] (a -> Bool) -> it -> Bool`.
 
 ### Changed
 - Update LLVM to 17.0.x.

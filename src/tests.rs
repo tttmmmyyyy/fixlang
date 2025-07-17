@@ -8577,3 +8577,41 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_check_all() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let is_positive = |x| x > 0;
+    assert_eq(|_|"", [].to_iter.check_all(is_positive), true);;
+    assert_eq(|_|"", [1, 2, 3].to_iter.check_all(is_positive), true);;
+    assert_eq(|_|"", [0, 1, 2].to_iter.check_all(is_positive), false);;
+    assert_eq(|_|"", [-1, -2, -3].to_iter.check_all(is_positive), false);;
+    
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_check_any() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let is_positive = |x| x > 0;
+    assert_eq(|_|"", [].to_iter.check_any(is_positive), false);;
+    assert_eq(|_|"", [1, 2, 3].to_iter.check_any(is_positive), true);;
+    assert_eq(|_|"", [0, 1, 2].to_iter.check_any(is_positive), true);;
+    assert_eq(|_|"", [-1, -2, -3].to_iter.check_any(is_positive), false);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
