@@ -57,6 +57,7 @@ mod typecheck;
 mod typecheckcache;
 
 use crate::error::Errors;
+use crate::misc::disable_colored_no_tty;
 use ast::expr::*;
 use ast::inline_llvm::*;
 use ast::name::Name;
@@ -65,6 +66,7 @@ use ast::program::*;
 use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
+use atty::{self, Stream};
 use builtin::*;
 use clap::ArgMatches;
 use clap::PossibleValue;
@@ -102,6 +104,8 @@ use typecheck::*;
 const GIT_VERSION: &str = git_version!(args = ["--abbrev=7", "--always", "--dirty", "--broken"]);
 
 fn main() {
+    disable_colored_no_tty();
+
     // Options
     let source_file = Arg::new("source-files")
         .long("file")

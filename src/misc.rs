@@ -177,6 +177,12 @@ impl Drop for Finally {
     }
 }
 
+pub fn disable_colored_no_tty() {
+    if !atty::is(Stream::Stderr) {
+        colored::control::set_override(false);
+    }
+}
+
 pub fn info_msg(msg: &str) {
     println!("{}: {}", "info".bright_blue(), msg);
 }
