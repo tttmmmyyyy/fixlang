@@ -2243,6 +2243,16 @@ The error message is written to the standard error output.
 * `code` - The error code to be returned.
 * `msg` - The error message to be printed.
 
+#### flush
+
+Type: `Std::IO::IOHandle -> Std::IO Std::I32`
+
+Flushes an `IOHandle`.
+
+##### Parameters
+
+* `handle` - The `IOHandle` to be flushed.
+
 #### from_runner
 
 Type: `(Std::IO::IOState -> (Std::IO::IOState, a)) -> Std::IO a`
@@ -2903,7 +2913,8 @@ Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s ->
 
 Loop over the elements of an iterator by monadic action.
 
-This function is similar to `loop_iter_s`, but it returns a `LoopState`. It allows the caller to know whether the loop ended with `break_m` or `continue_m`.
+This function is similar to `loop_iter_s`, but it returns a `LoopState`.
+This allows you to return different types for `break` and `continue`.
 
 Added in v1.1.0.
 
@@ -2919,7 +2930,8 @@ Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> Std:
 
 Loop over the elements of an iterator.
 
-This function is similar to `loop_iter`, but it returns a `LoopState`. It allows the caller to know whether the loop ended with `break` or `continue`.
+This function is similar to `loop_iter`, but it returns a `LoopState`.
+This allows you to return different types for `break` and `continue`.
 
 Added in v1.1.0.
 
