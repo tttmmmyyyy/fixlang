@@ -4613,8 +4613,8 @@ pub fn infinity_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // `quiet_nan` built-in value
 pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
-    let quet_nan_bits = u64::MAX ^ (1 << 63);
-    let nan_val: f64 = unsafe { std::mem::transmute(quet_nan_bits) };
+    let quiet_nan_bits = u64::MAX ^ (1 << 63);
+    let nan_val: f64 = f64::from_bits(quiet_nan_bits);
 
     let ty = make_floating_ty(type_name).unwrap();
     let expr = expr_llvm(
