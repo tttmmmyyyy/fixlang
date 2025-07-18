@@ -2914,7 +2914,7 @@ Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s ->
 Loop over the elements of an iterator by monadic action.
 
 This function is similar to `loop_iter_s`, but it returns a `LoopState`.
-This allows you to return different types for `break` and `continue`.
+This allows you to return different types for `break_m` and `continue_m`.
 
 Added in v1.1.0.
 

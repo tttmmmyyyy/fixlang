@@ -75,6 +75,7 @@ use constants::*;
 use dependency_lockfile::DependecyLockFile;
 use error::panic_if_err;
 use generator::*;
+use git_version::git_version;
 use graph::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -97,6 +98,8 @@ use std::process;
 use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
+
+const GIT_VERSION: &str = git_version!(args = ["--abbrev=7", "--always", "--dirty", "--broken"]);
 
 fn main() {
     // Options
@@ -209,6 +212,9 @@ fn main() {
         .index(1)
         .takes_value(true)
         .help("Name of this Fix project.");
+
+    // "fix version" subcommand
+    let version_subc = App::new("version").about("Prints the version of the Fix compiler.");
 
     // "fix build" subcommand
     let build_subc = App::new("build")
@@ -341,6 +347,7 @@ fn main() {
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
+        .subcommand(version_subc)
         .subcommand(build_subc)
         .subcommand(run_subc)
         .subcommand(test_subc)
@@ -574,6 +581,10 @@ fn main() {
     let fix_config = panic_if_err(ConfigFile::load());
 
     match app.get_matches().subcommand() {
+        Some(("version", _args)) => {
+            println!("fix {} ({})", env!("CARGO_PKG_VERSION"), GIT_VERSION);
+            process::exit(0);
+        }
         Some(("build", args)) => {
             panic_if_err(build_file(&mut create_config(SubCommand::Build, args)));
         }
