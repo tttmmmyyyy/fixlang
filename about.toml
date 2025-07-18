@@ -1,0 +1,12 @@
+# This file is used by cargo-about to generate the third-party licenses page.
+# `cargo about generate third-party-licenses/about.hbs > third-party-licenses/third-party-licenses.html`
+
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-2-Clause",
+    "MPL-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+]
