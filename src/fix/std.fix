@@ -1348,7 +1348,8 @@ namespace Iterator {
 
     // Loop over the elements of an iterator.
     // 
-    // This function is similar to `loop_iter`, but it returns a `LoopState`. It allows the caller to know whether the loop ended with `break` or `continue`.
+    // This function is similar to `loop_iter`, but it returns a `LoopState`. 
+    // This allows you to return different types for `break` and `continue`.
     // 
     // Added in v1.1.0.
     // 
@@ -1388,7 +1389,8 @@ namespace Iterator {
 
     // Loop over the elements of an iterator by monadic action.
     //
-    // This function is similar to `loop_iter_s`, but it returns a `LoopState`. It allows the caller to know whether the loop ended with `break_m` or `continue_m`.
+    // This function is similar to `loop_iter_s`, but it returns a `LoopState`.
+    // This allows you to return different types for `break` and `continue`.
     //
     // Added in v1.1.0.
     // 
