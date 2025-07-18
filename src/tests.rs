@@ -8680,3 +8680,18 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_flush() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    println("Hello, World!");;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

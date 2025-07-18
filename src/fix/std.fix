@@ -777,6 +777,17 @@ namespace IO {
     exit_with_msg : I64 -> String -> IO a;
     exit_with_msg = |code, msg| eprintln(msg);; exit(code);
 
+    // Flushes an `IOHandle`.
+    // 
+    // # Parameters
+    // * `handle` - The `IOHandle` to be flushed.
+    flush : IOHandle -> IO I32;
+    flush = |handle| (
+        let file_ptr = *handle.get_file_ptr;
+        let res = *FFI_CALL_IO[I32 fflush(Ptr), file_ptr];
+        res.to_I32.pure
+    );
+
     // Creates an IO action from a IO runner function, which is a function of type `IOState -> (IOState, a)`.
     // 
     // # Parameters
@@ -1649,7 +1660,7 @@ namespace Iterator {
     );
 
     // Is an iterator empty?
-    // 
+    //
     // # Parameters
     //
     // * `iter` - The iterator.
