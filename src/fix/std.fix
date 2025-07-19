@@ -2622,6 +2622,69 @@ namespace String {
     // * `str` - The string to be modified.
     strip_spaces : String -> String;
     strip_spaces = |s| s.strip_last_spaces.strip_first_spaces;
+
+    // Populate strings into a template string, similar to "format" function in other languages.
+    //
+    // i-th "{}" in the template string is replaced by i-th string.
+    //
+    // Example:
+    // `"{}, {}!".populate(["Hello", "world"])` => "Hello, world!"
+    //
+    //  "{{" and "}}" are escaped to "{" and "}".
+    // 
+    // Example:
+    // `"{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string])` => "{ x = 1, y = 2 }",
+    // 
+    // If the number of placeholders does not match with the number of strings, this function halts the program.
+    //
+    // # Parameters
+    // - `vs`: The array of strings ("values") to be inserted into the template string.
+    // - `template`: The template string.
+    populate : Array String -> String -> String;
+    populate = |vs, template| (
+        let template = template.get_bytes;
+        let end = template.get_size - 1;
+        let out = [];
+        let (out, vi) = loop((out, 0, 0), |(out, i, vi)|
+            if i == end { break $ (out, vi) };
+            let c = template.@(i);
+
+            // replace "{{" to "{"
+            if c == '{' &&
+            i + 1 < end && template.@(i+1) == '{' {
+                continue $ (out.push_back('{'), i + 2, vi)
+            };
+
+            // replace "}}" to "}"
+            if c == '}' &&
+            i + 1 < end && template.@(i+1) == '}' {
+                continue $ (out.push_back('}'), i + 2, vi)
+            };
+
+            // replace "{}" to `vs.@(vi)`
+            if c == '{' &&
+            i + 1 < end && template.@(i+1) == '}' {
+                if vi >= vs.get_size { undefined("[populate] Too many placeholders!") };
+                let out = out.append(vs.@(vi).get_bytes.pop_back);
+                continue $ (out, i + 2, vi + 1)
+            };
+
+            // raise error for other usage of '{' and '}'
+            if c == '{' || c == '}' {
+                undefined("[populate] Invalid template string!")
+            };
+
+            let out = out.push_back(c);
+            
+            continue $ (out, i + 1, vi)
+        );
+
+        if vi < vs.get_size {
+            undefined("[populate] Not enough placeholders!")
+        };
+
+        String { _data : out.push_back('\0') }
+    );
 }
 
 // The empty string.

@@ -8695,3 +8695,36 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_populate() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    assert_eq(|_|"case 1", "".populate([]), "");;
+    assert_eq(|_|"case 2", "123".populate([]), "123");;
+    assert_eq(|_|"case 3", "{{".populate([]), "{");;
+    assert_eq(|_|"case 4", "123{{".populate([]), "123{");;
+    assert_eq(|_|"case 5", "{{123".populate([]), "{123");;
+    assert_eq(|_|"case 6", "123{{123".populate([]), "123{123");;
+    assert_eq(|_|"case 7", "}}".populate([]), "}");;
+    assert_eq(|_|"case 8", "123}}".populate([]), "123}");;
+    assert_eq(|_|"case 9", "}}123".populate([]), "}123");;
+    assert_eq(|_|"case 10", "123}}123".populate([]), "123}123");;
+    assert_eq(|_|"case 11", "{}".populate(["123"]), "123");;
+    assert_eq(|_|"case 12", "{}{}".populate(["123", "456"]), "123456");;
+    assert_eq(|_|"case 13", "{} {}".populate(["123", "456"]), "123 456");;
+    assert_eq(|_|"case 14", " {} {}".populate(["123", "456"]), " 123 456");;
+    assert_eq(|_|"case 15", " {} {} ".populate(["123", "456"]), " 123 456 ");;
+
+    assert_eq(|_|"case example 1", "{}, {}!".populate(["Hello", "world"]), "Hello, world!");;
+
+    assert_eq(|_|"case example 2", "{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string]), "{ x = 1, y = 2 }");;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
