@@ -2636,6 +2636,8 @@ namespace String {
     // `"{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string])` => "{ x = 1, y = 2 }",
     // 
     // If the number of placeholders does not match with the number of strings, this function halts the program.
+    // 
+    // Added in v1.1.0.
     //
     // # Parameters
     // - `vs`: The array of strings ("values") to be inserted into the template string.
