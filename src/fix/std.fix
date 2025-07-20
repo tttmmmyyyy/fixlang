@@ -289,26 +289,172 @@ namespace Array {
         ))
     );
 
-    // Sorts elements in a vector by "less than" comparator.
+    // Sort by "less than" comparator.
+    //
+    // Note: this is not a stable sort.
+    //
+    // # Parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `arr`: An array of elements to be sorted.
+    sort_by : ((a, a) -> Bool) -> Array a -> Array a;
+    sort_by = |less_than, arr| (
+        let depth = loop((arr.get_size, 0_U8), |(n, depth)| if n == 0 { break $ depth } else { continue $ (n/2, depth+1_U8) } );
+        arr._introsort_by_internal(less_than, 0, arr.get_size, depth)
+    );
+
+    // Quicksort for the specified range in an array.
+    //
+    // # Parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `start`: The starting index of the range to sort.
+    // - `end`: The ending index of the range to sort.
+    // - `arr`: An array of elements to be sorted.
+    // - `depth`: The depth of the recursion.
+    _introsort_by_internal : ((a, a) -> Bool) -> I64 -> I64 -> U8 -> Array a -> Array a;
+    _introsort_by_internal = |less_than, start, end, depth, arr| (
+        if end - start <= 1 { arr };
+        if end - start <= 12 { arr._insertion_sort_by_ranged(less_than, start, end) };
+        if depth == 0_U8 { arr._heap_sort_by_ranged(less_than, start, end) };
+
+        let pivot_i = (start + end) / 2;
+        let pivot = arr.@(pivot_i);
+
+        // Move pivot to the last.
+        let arr = arr._unsafe_swap(pivot_i, end - 1);
+
+        let (arr, pivot_i) = range(start, end).fold((arr, start), |j, (arr, i)|
+            if less_than((arr.@(j), pivot)) {
+                // Found j such that `arr.@(j)` < pivot, then move it to the left.
+                (arr._unsafe_swap(i, j), i + 1)
+            } else {
+                (arr, i)
+            }
+        );
+
+        // Move pivot to pivot_i.
+        let arr = arr._unsafe_swap(pivot_i, end - 1);
+
+        let arr = arr._introsort_by_internal(less_than, start, pivot_i, depth - 1_U8);
+        let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth - 1_U8);
+
+        arr
+    );
+
+    // Insertion sort for the specified range in an array.
+    //
+    // # parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `start`
+    // - `end`
+    // - `arr`: An array of elements to be sorted.
+    _insertion_sort_by_ranged : ((a, a) -> Bool) -> I64 -> I64 -> Array a -> Array a;
+    _insertion_sort_by_ranged = |less_than, start, end, arr| (
+        let n = end - start;
+        if n <= 1 { arr };
+        range(start + 1, start + n).fold(arr, |i, arr| (
+            let v = arr.@(i);
+            loop((arr, i), |(arr, j)|
+                if j == start { 
+                    break $ arr.set(start, v)
+                };
+                let w = arr.@(j-1);
+                if less_than((v, w)) {
+                    continue $ (arr.set(j, w), j-1)
+                } else {
+                    break $ arr.set(j, v)
+                }
+            )
+        ))
+    );
+
+    // Heap sort for the specified range in an array.
     // 
-    // NOTE: Currently this is implemented by merge sort, and so allocates a buffer of the same size as the vector.
+    // # parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `start`
+    // - `end`
+    // - `arr`: An array of elements to be sorted.
+    _heap_sort_by_ranged : ((a, a) -> Bool) -> I64 -> I64 -> Array a -> Array a;
+    _heap_sort_by_ranged = |less_than, start, end, arr| (
+        let n = end - start;
+        if n <= 1 { arr };
+
+        // Build the heap.
+        let heap = range_step(n/2-1, -1, -1).fold(arr, |i, arr| arr._heap_down_ranged(less_than, start + i, start + n, start, end));
+
+        // Extract elements from the heap one by one.
+        range_step(n-1, 0, -1).fold(heap, |i, heap|
+            let heap = heap._unsafe_swap(start + 0, start + i);
+
+            // Call sift down on the reduced heap.
+            heap._heap_down_ranged(less_than, start + 0, start + i, start, end)
+        )
+    );
+
+    // Down-heap (sift down) operation to maintain the heap property.
+    //
+    // # parameters
+    // - `less_than`: A function that takes two elements and returns true if the first is
+    //   less than the second.
+    // - `i`: The index of the element to sift down.
+    // - `n`: The end index of the heap.
+    // - `start`: the range of an array.
+    // - `end`: the range of an array.
+    // - `heap`: An array representing the heap.
+    _heap_down_ranged : ((a, a) -> Bool) -> I64 -> I64 -> I64 -> I64 -> Array a -> Array a;
+    _heap_down_ranged = |less_than, i, n, start, end, heap| (
+        let left = 2 * (i - start) + 1 + start;
+        let right = 2 * (i - start) + 2 + start;
+
+        let largest = i;
+        let largest = if left < n && less_than((heap.@(i), heap.@(left))) { left } else largest;
+        let largest = if right < n && less_than((heap.@(largest), heap.@(right))) { right } else largest;
+
+        if largest == i { heap };
+
+        let heap = heap._unsafe_swap(i, largest);
+        heap._heap_down_ranged(less_than, largest, n, start, end)
+    );
+
+    // Swaps two elements in an array at indices `i` and `j`.
+    //
+    // This function is unsafe because it does not check if `i` and `j` are within bounds of the array.
+    //
+    // # parameters
+    // - `arr`: The array in which to swap elements.
+    // - `i`: The index of the first element to swap.
+    // - `j`: The index of the second element to swap.
+    _unsafe_swap : I64 -> I64 -> Array a -> Array a;
+    _unsafe_swap = |i, j, arr| (
+        let (arr, a) = arr._unsafe_get_linear(i);
+        let (arr, b) = arr._unsafe_get_linear(j);
+        arr._unsafe_set(i, b)._unsafe_set(j, a)
+    );
+
+    // Stable sort by "less than" comparator.
+    // 
+    // Note: Currently this is implemented by merge sort, which is not in-place.
     // 
     // # Parameters
     // 
     // * `less_than` - The comparator function.
     // * `array` - The array to be sorted.
-    sort_by : ((a, a) -> Bool) -> Array a -> Array a;
-    sort_by = |less_than, vec| (
+    sort_stable_by : ((a, a) -> Bool) -> Array a -> Array a;
+    sort_stable_by = |less_than, vec| (
         let buffer = Array::empty(vec.get_size);
-        let (vec, buffer) = vec._sort_range_using_buffer(buffer, 0, vec.get_size, less_than);
+        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, 0, vec.get_size, less_than);
         vec
     );
 
     // Sorts elements in a range of a vector by "less than" comparator.
     // 
     // This function receives a working buffer as the first argument to reduce memory allocation, and returns it as second element.
-    _sort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
-    _sort_range_using_buffer = |buffer, begin, end, less_than, vec| (
+    _mergesort_range_using_buffer : Array a -> I64 -> I64 -> ((a, a) -> Bool) -> Array a -> (Array a, Array a);
+    _mergesort_range_using_buffer = |buffer, begin, end, less_than, vec| (
         // Merge sorting.
         let len = end - begin;
         if len <= 1 { (vec, buffer) };
@@ -319,8 +465,8 @@ namespace Array {
         let latter_len = len - former_len;
         let latter_begin = former_end;
         let latter_end = end;
-        let (vec, buffer) = vec._sort_range_using_buffer(buffer, former_begin, former_end, less_than);
-        let (vec, buffer) = vec._sort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
+        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, former_begin, former_end, less_than);
+        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, latter_begin, latter_end, less_than);
         // Merge former and latter to buffer.
         let buffer = buffer.truncate(0);
         let former_pos = former_begin;
@@ -339,7 +485,7 @@ namespace Array {
             };
             let former_elem = vec.@(former_pos);
             let latter_elem = vec.@(latter_pos);
-            if less_than((former_elem, latter_elem)) {
+            if !less_than((latter_elem, former_elem)) { // Essential for stability.
                 // Copy elements in former to buffer.
                 let buffer = buffer.push_back(former_elem);
                 continue $ (former_pos + 1, latter_pos, buffer)

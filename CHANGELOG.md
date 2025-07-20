@@ -15,6 +15,7 @@
 - Add `Std::IO::flush : IOHandle -> IO I32` to flush an `IOHandle`.
 - Add `fix version` command.
 - Add `populate : Array String -> String -> String` to populate strings into a template string, similar to "format" function in other languages.
+- Improve `Std::Array::sort_by` implementation (now it uses introsort), and added `Std::Array::sort_stable_by` function (currently implemented by merge sort).
 
 ### Changed
 - Update LLVM to 17.0.x.

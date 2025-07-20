@@ -472,7 +472,23 @@ This function clones the given array if it is shared.
 
 Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 
-Sorts elements in a vector by "less than" comparator.
+Sort by "less than" comparator.
+
+Note: this is not a stable sort.
+
+##### Parameters
+
+- `less_than`: A function that takes two elements and returns true if the first is
+  less than the second.
+- `arr`: An array of elements to be sorted.
+
+#### sort_stable_by
+
+Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
+
+Stable sort by "less than" comparator.
+
+Note: Currently this is implemented by merge sort, which is not in-place.
 
 ##### Parameters
 
@@ -3536,6 +3552,31 @@ If the string is empty, this function does nothing.
 ##### Parameters
 
 * `str` - The string to be modified.
+
+#### populate
+
+Type: `Std::Array Std::String -> Std::String -> Std::String`
+
+Populate strings into a template string, similar to "format" function in other languages.
+
+i-th "{}" in the template string is replaced by i-th string.
+
+Example:
+`"{}, {}!".populate(["Hello", "world"])` => "Hello, world!"
+
+ "{{" and "}}" are escaped to "{" and "}".
+
+Example:
+`"{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string])` => "{ x = 1, y = 2 }",
+
+If the number of placeholders does not match with the number of strings, this function halts the program.
+
+Added in v1.1.0.
+
+##### Parameters
+
+- `vs`: The array of strings ("values") to be inserted into the template string.
+- `template`: The template string.
 
 #### split
 
