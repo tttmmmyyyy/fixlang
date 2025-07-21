@@ -3019,7 +3019,7 @@ Create an iterator that generates a range of numbers.
 
 `range(a, b)` generates a range of numbers from `a` to `b - 1`.
 
-If `a` is greater than or equal to `b`, the iterator will an infinite sequence of `a`.
+If `a` is greater than or equal to `b`, the iterator will an empty iterator.
 
 ##### Parameters
 

@@ -6254,15 +6254,35 @@ pub fn test_iterator_collect_m() {
 }
 
 #[test]
+pub fn test_range() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"1", Iterator::range(0, -2).to_array, []);;
+        assert_eq(|_|"1", Iterator::range(0, -1).to_array, []);;
+        assert_eq(|_|"1", Iterator::range(0, 0).to_array, []);;
+        assert_eq(|_|"1", Iterator::range(0, 1).to_array, [0]);;
+        assert_eq(|_|"1", Iterator::range(0, 2).to_array, [0, 1]);;
+        assert_eq(|_|"1", Iterator::range(0, 3).to_array, [0, 1, 2]);;
+
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_range_step_1() {
     let source = r##"
     module Main;
     
     main : IO ();
     main = (
-        assert_eq(|_|"A-2", Iterator::range_step(0, 10, -1).take(100).get_size, 100);;
-        assert_eq(|_|"A-1", Iterator::range_step(0, 10, 0).take(100).get_size, 100);;
-        assert_eq(|_|"A0", Iterator::range_step(0, 10, 0).take(100).get_size, 100);;
+        assert_eq(|_|"A-2", Iterator::range_step(0, 10, -1).get_size, 0);;
+        // assert_eq(|_|"A-1", Iterator::range_step(0, 10, 0).take(100).get_size, 100);;
+        // assert_eq(|_|"A0", Iterator::range_step(0, 10, 0).take(100).get_size, 100);;
         assert_eq(|_|"A1", Iterator::range_step(0, 10, 1).to_array, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);;
         assert_eq(|_|"A2", Iterator::range_step(0, 10, 2).to_array, [0, 2, 4, 6, 8]);;
         assert_eq(|_|"A3", Iterator::range_step(0, 10, 3).to_array, [0, 3, 6, 9]);;
@@ -6289,9 +6309,9 @@ pub fn test_range_step_2() {
     main : IO ();
     main = (
 
-        assert_eq(|_|"B2", Iterator::range_step(10, 0, 2).take(100).get_size, 100);;
-        assert_eq(|_|"B1", Iterator::range_step(10, 0, 1).take(100).get_size, 100);;
-        assert_eq(|_|"B0", Iterator::range_step(10, 0, 0).take(100).get_size, 100);;
+        assert_eq(|_|"B2", Iterator::range_step(10, 0, 2).get_size, 0);;
+        // assert_eq(|_|"B1", Iterator::range_step(10, 0, 1).take(100).get_size, 100);;
+        // assert_eq(|_|"B0", Iterator::range_step(10, 0, 0).take(100).get_size, 100);;
         assert_eq(|_|"B-1", Iterator::range_step(10, 0, -1).to_array, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);;
         assert_eq(|_|"B-2", Iterator::range_step(10, 0, -2).to_array, [10, 8, 6, 4, 2]);;
         assert_eq(|_|"B-3", Iterator::range_step(10, 0, -3).to_array, [10, 7, 4, 1]);;
@@ -6305,7 +6325,7 @@ pub fn test_range_step_2() {
         assert_eq(|_|"B-11", Iterator::range_step(10, 0, -11).to_array, [10]);;
 
         assert_eq(|_|"C1", Iterator::range_step(0, 0, 1).get_size, 0);;
-        assert_eq(|_|"C0", Iterator::range_step(0, 0, 0).get_size, 0);;
+        // assert_eq(|_|"C0", Iterator::range_step(0, 0, 0).get_size, 0);;
         assert_eq(|_|"C-1", Iterator::range_step(0, 0, -1).get_size, 0);;
 
         pure()

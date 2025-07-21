@@ -1668,14 +1668,19 @@ namespace Iterator {
     // 
     // `range(a, b)` generates a range of numbers from `a` to `b - 1`.
     // 
-    // If `a` is greater than or equal to `b`, the iterator will an infinite sequence of `a`.
+    // If `a` is greater than or equal to `b`, the iterator will an empty iterator.
     // 
     // # Parameters
     //
     // * `start` - The start of the range.
     // * `end` - The end of the range.
     range : I64 -> I64 -> RangeIterator;
-    range = |start, end| RangeIterator { next: start, end: end };
+    range = |start, end| (
+        if start >= end {
+            RangeIterator { next: start, end: start } // Return an empty iterator.
+        };
+        RangeIterator { next: start, end: end }
+    );
 
     type RangeStepIterator = unbox struct { next : I64, end : I64, step : I64 };
 
@@ -1696,9 +1701,12 @@ namespace Iterator {
     // * `step` - The step of the range.
     range_step : I64 -> I64 -> I64 -> RangeStepIterator;
     range_step = |start, end, step| (
+        if (step > 0 && (start - end) > 0) || (step < 0 && (start - end) < 0) {
+            RangeStepIterator { next: start, end: start, step: step } // Return an empty iterator.
+        };
         // Adjust end so that `start + n * step == end` for some integer `n` (when `step` is not 0).
         let end = if step == 0 { 
-            end
+            undefined("[range_step] step must not be 0!")
         } else if step > 0 {
             // step > 0
             start + (end - start + step - 1) / step * step
