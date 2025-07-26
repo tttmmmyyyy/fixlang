@@ -32,6 +32,7 @@
 - Fix the issue that the compiler crashes when using NBSP (U+00A0) in the source code.
 - Fix the issue that the parser takes too long to parse some code (#57).
 - Fix the issue that the code `let x= 42; {...}` could not be parsed (since the parser expected a space between `x` and `=`).
+- Fix the issue that compiling some code causes a compiler crash (#59).
 
 ### Fixed
 
