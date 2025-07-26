@@ -459,22 +459,22 @@ pub enum ProjectSource {
 
 impl ProjectSource {
     // Stringify the source for display.
-    fn to_string(&self) -> String {
-        match self {
+    fn to_string(&self) -> Result<String, Errors> {
+        Ok(match self {
             ProjectSource::Local(path_buf) => {
-                to_absolute_path(path_buf).to_string_lossy().to_string()
+                to_absolute_path(path_buf)?.to_string_lossy().to_string()
             }
             ProjectSource::Git(url, _repo) => url.clone(),
-        }
+        })
     }
 
-    fn equivalent(&self, other: &Self) -> bool {
+    fn equivalent(&self, other: &Self) -> Result<bool, Errors> {
         match (self, other) {
             (ProjectSource::Local(path1), ProjectSource::Local(path2)) => {
-                to_absolute_path(path1) == to_absolute_path(path2)
+                Ok(to_absolute_path(path1)? == to_absolute_path(path2)?)
             }
-            (ProjectSource::Git(url1, _), ProjectSource::Git(url2, _)) => url1 == url2,
-            _ => false,
+            (ProjectSource::Git(url1, _), ProjectSource::Git(url2, _)) => Ok(url1 == url2),
+            _ => Ok(false),
         }
     }
 
@@ -579,14 +579,14 @@ fn create_package_retriever(
             let dep_src = proj_file.get_dependency_source(&dep.name);
             if let Some(prj) = projs.iter().find(|pkg| &pkg.name == &dep.name) {
                 // If the project is already in the cache, then check that the sources are the same between `pkg` and `dep`.
-                if prj.source.equivalent(&dep_src) {
+                if prj.source.equivalent(&dep_src)? {
                     continue;
                 }
                 return Err(Errors::from_msg(format!(
                     "\"{}\" is required twice with different sources: \"{}\" and \"{}\".",
                     dep.name,
-                    prj.source.to_string(),
-                    dep_src.to_string()
+                    prj.source.to_string()?,
+                    dep_src.to_string()?
                 )));
             }
             let prj = ProjectInfo {

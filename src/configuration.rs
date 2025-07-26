@@ -204,7 +204,7 @@ impl ExtraCommand {
         for arg in &self.command[1..] {
             com.arg(arg);
         }
-        let work_dir = to_absolute_path(&self.work_dir);
+        let work_dir = to_absolute_path(&self.work_dir)?;
         com.current_dir(&work_dir);
         let status = com.status().map_err(|e| {
             Errors::from_msg(format!(

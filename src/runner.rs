@@ -143,7 +143,7 @@ fn build_object_files<'c>(
     // When running diagnostics, perform type checking of target modules and return here.
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
         let _sw = StopWatch::new("typecheck", config.show_build_times);
-        let modules = program.modules_from_files(&diag_config.files);
+        let modules = program.modules_from_files(&diag_config.files)?;
         let mut errors = Errors::empty();
         errors.eat_err(program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules));
         program.deferred_errors.append(errors);
@@ -541,7 +541,14 @@ pub fn load_source_files(config: &mut Configuration) -> Result<Program, Errors> 
         // In other words, in the following diagnostic process, only the dependent projects are targeted.
         // This allows us to give the language server the information it needs for code completion, even if there is a parse error in the root project.
         if errors.has_error() {
-            modules.retain(|mod_| mod_.modules_from_files(&diag_config.files).is_empty());
+            let mut dependent_projects = vec![];
+            for mod_ in modules {
+                let mods = mod_.modules_from_files(&diag_config.files)?;
+                if mods.is_empty() {
+                    dependent_projects.push(mod_);
+                }
+            }
+            modules = dependent_projects;
         }
         program.deferred_errors.append(errors);
     } else {

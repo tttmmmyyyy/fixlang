@@ -1,5 +1,4 @@
 use super::*;
-use core::panic;
 use std::{fs, hash::Hash};
 
 pub type Map<K, V> = fxhash::FxHashMap<K, V>;
@@ -135,24 +134,29 @@ pub fn number_to_varname(n: usize) -> String {
 }
 
 // Converts a path to an absolute path.
-pub fn to_absolute_path(path: &Path) -> PathBuf {
+pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
         match std::env::current_dir() {
             Err(e) => {
-                panic!("Failed to get the current directory: {}", e);
+                return Err(Errors::from_msg(format!(
+                    "Failed to get the current directory: {}",
+                    e
+                )));
             }
             Ok(cur_dir) => cur_dir.join(path),
         }
     };
-    abs.canonicalize().unwrap_or_else(|e| {
-        panic!(
+    let abs = abs.canonicalize();
+    if let Err(e) = abs {
+        return Err(Errors::from_msg(format!(
             "Failed to canonicalize path \"{}\": {}",
-            abs.to_string_lossy(),
+            path.to_string_lossy(),
             e
-        )
-    })
+        )));
+    }
+    Ok(abs.unwrap())
 }
 
 pub struct Finally {

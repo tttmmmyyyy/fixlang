@@ -287,7 +287,12 @@ impl Span {
 
     // Check if the position is included in the span.
     pub fn includes_pos(&self, pos: &SourcePos) -> bool {
-        if to_absolute_path(&self.input.file_path) != to_absolute_path(&pos.input.file_path) {
+        let file_path_abs = to_absolute_path(&self.input.file_path);
+        let pos_file_path_abs = to_absolute_path(&pos.input.file_path);
+        if file_path_abs.is_err() || pos_file_path_abs.is_err() {
+            return false;
+        }
+        if file_path_abs.ok().unwrap() != pos_file_path_abs.ok().unwrap() {
             return false;
         }
         // Like rust-analyzer, we use not `pos.pos < self.end` but `pos.pos <= self.end`, because VSCode sometimes sends a position that is one character beyond the end of the symbol string.

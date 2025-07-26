@@ -43,9 +43,9 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
         let abs_src_paths = src_files
             .iter()
             .map(|f| to_absolute_path(f))
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, Errors>>()?;
         for mi in program.modules.iter() {
-            let src_file = to_absolute_path(&mi.source.input.file_path);
+            let src_file = to_absolute_path(&mi.source.input.file_path)?;
             if abs_src_paths.iter().any(|f| f == &src_file) {
                 mod_names.push(mi.name.clone());
             }

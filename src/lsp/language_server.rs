@@ -831,13 +831,34 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
     send_response(id, Ok::<_, ()>(item));
 }
 
+// Get the content of the file at the specified path at the time of the last diagnostics
+//
+// - `program`: The `Program` obtained from the last diagnostics result
 fn get_file_content_at_previous_diagnostics(
     program: &Program,
     path: &Path,
 ) -> Result<String, String> {
     for mi in &program.modules {
         let src = &mi.source.input;
-        if to_absolute_path(&src.file_path) == to_absolute_path(&path) {
+        let path_abs = to_absolute_path(&path);
+        if path_abs.is_err() {
+            let msg = format!(
+                "Failed to get the absolute path of the file: \"{}\"",
+                path.to_string_lossy().to_string()
+            );
+            return Err(msg);
+        }
+        let path = path_abs.ok().unwrap();
+        let src_file_path_abs = to_absolute_path(&src.file_path);
+        if src_file_path_abs.is_err() {
+            let msg = format!(
+                "Failed to get the absolute path of the source file: \"{}\"",
+                src.file_path.to_string_lossy().to_string()
+            );
+            return Err(msg);
+        }
+        let src_file_path = src_file_path_abs.ok().unwrap();
+        if src_file_path == path {
             let content = src.string();
             if let Err(_e) = content {
                 let msg = format!(
@@ -1527,7 +1548,12 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
 
 fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
     // URI-encode each component of the path.
-    let path = to_absolute_path(path);
+    let path = to_absolute_path(path).map_err(|_| {
+        format!(
+            "Failed to get the absolute path of the file: \"{}\"",
+            path.to_string_lossy().to_string()
+        )
+    })?;
     let mut components = vec![];
     for comp in path.components() {
         match comp {

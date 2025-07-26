@@ -557,17 +557,19 @@ impl Program {
     }
 
     // Get the list of module names from a list of files.
-    pub fn modules_from_files(&self, files: &[PathBuf]) -> Vec<Name> {
+    pub fn modules_from_files(&self, files: &[PathBuf]) -> Result<Vec<Name>, Errors> {
+        let mut abs_files = vec![];
+        for f in files {
+            abs_files.push(to_absolute_path(f)?);
+        }
         let mut mod_names = vec![];
         for mod_info in &self.modules {
-            if files
-                .iter()
-                .any(|f| to_absolute_path(f) == to_absolute_path(&mod_info.source.input.file_path))
-            {
+            let mod_file = to_absolute_path(&mod_info.source.input.file_path)?;
+            if abs_files.contains(&mod_file) {
                 mod_names.push(mod_info.name.clone());
             }
         }
-        mod_names
+        Ok(mod_names)
     }
 
     // Create a program consists of single module.
@@ -1990,7 +1992,7 @@ impl Program {
                     continue;
                 }
                 let other_file = other_mod.source.input.file_path.clone();
-                if to_absolute_path(&other_file) == to_absolute_path(&file) {
+                if to_absolute_path(&other_file)? == to_absolute_path(&file)? {
                     // If the module is defined in the same file, this is not a problem.
                     continue;
                 }
@@ -2223,6 +2225,7 @@ impl Program {
         }
         let mod_name = self
             .modules_from_files(&vec![pos.input.file_path.clone()])
+            .ok()?
             .pop()?;
         for stmt in self
             .mod_to_import_stmts
