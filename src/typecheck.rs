@@ -1205,7 +1205,7 @@ impl TypeCheckContext {
                 let ty = ty.set_assocty_args(args);
 
                 // Try matching to assumed equality.
-                for assumed_eq in &self.assumed_eqs.get(assoc_ty).unwrap().clone() {
+                for assumed_eq in &self.assumed_eqs.get(assoc_ty).cloned().unwrap_or(vec![]) {
                     // Instantiate `assumed_eq`.
                     let mut subst = Substitution::default();
                     for tv in &assumed_eq.gen_vars {

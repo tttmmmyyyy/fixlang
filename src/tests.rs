@@ -8899,3 +8899,33 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_regression_issue_59() {
+    let source = r##"
+module Main;
+
+trait a : Action {
+    type Set a;
+}
+
+f : [a : Action, Set a = m] (m, a) -> m;
+f = |tree| (
+    undefined("")
+);
+
+g : /*[a : Action, Set a = m]*/ (m, a) -> m; // I forgot to add predicates here.
+g = f;
+
+main : IO ();
+main = (
+    let _ = ((), ()).g;
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "`a : Main::Action` cannot be deduced",
+    );
+}
