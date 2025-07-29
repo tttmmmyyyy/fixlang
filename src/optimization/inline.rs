@@ -139,6 +139,10 @@ impl InlineCost {
             return true;
         }
         return false;
+        // NOTE
+        // * Even values with simple types should not be inlined if the computation is complex.
+        // * Values created using FFI_CALL are heavy.
+        // * Boxed types and Strings also increase memory allocation when inlined, such as string literals.
     }
 
     // Returns true if the symbol can be inlined at a call site.
