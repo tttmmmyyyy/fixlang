@@ -432,7 +432,7 @@ namespace Array {
     _unsafe_swap = |i, j, arr| (
         let (arr, a) = arr._unsafe_get_linear(i);
         let (arr, b) = arr._unsafe_get_linear(j);
-        arr._unsafe_set(i, b)._unsafe_set(j, a)
+        arr.set(i, b)._unsafe_set(j, a) // Uniqueness check is done at the `set`.
     );
 
     // Stable sort by "less than" comparator.
