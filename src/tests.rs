@@ -8929,3 +8929,31 @@ main = (
         "`a : Main::Action` cannot be deduced",
     );
 }
+
+#[test]
+pub fn test_regression_issue_60() {
+    let source = r##"
+module Main;
+
+type FFTDirection = union {
+    forward : (),
+    inverse : (),
+};
+
+fft_zp : FFTDirection -> I64 -> I64;
+fft_zp = |dir, n| (
+    match dir {
+        forward => n, // I forgot to add `()` here, then the compiler panics.
+        inverse => 2*n,
+    }
+);
+
+main : IO ();
+main = (
+    let res = fft_zp(inverse(), 42);
+    assert_eq(|_|"", res, 84);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
