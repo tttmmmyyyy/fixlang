@@ -2289,6 +2289,23 @@ case_random_9 = [4811598823819225076, 945484849661270666, 3974642354777520028, 4
 }
 
 #[test]
+pub fn test_sort_by_immutability() {
+    let source = r#"
+module Main;
+
+main : IO ();
+main = (
+    let x = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10];
+    let y = x.sort_by(|(lhs, rhs)| lhs < rhs);
+    assert_eq(|_|"", y, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
+    assert_eq(|_|"", x, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test92() {
     let source = r#"
     module Main; 

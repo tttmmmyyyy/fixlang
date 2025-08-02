@@ -300,7 +300,7 @@ namespace Array {
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, arr| (
         let depth = loop((arr.get_size, 0_U8), |(n, depth)| if n == 0 { break $ depth } else { continue $ (n/2, depth+1_U8) } );
-        arr._introsort_by_internal(less_than, 0, arr.get_size, depth)
+        arr._unsafe_force_unique._introsort_by_internal(less_than, 0, arr.get_size, depth)
     );
 
     // Quicksort for the specified range in an array.
@@ -422,7 +422,7 @@ namespace Array {
 
     // Swaps two elements in an array at indices `i` and `j`.
     // 
-    // This function is unsafe in the sense that it does not check whether `i` and `j` are within bounds of the array.
+    // This function is unsafe in the sense that it does not check the uniqueness of the array, and it does not check the bounds of `i` and `j`.
     //
     // # parameters
     // - `arr`: The array in which to swap elements.
@@ -430,10 +430,10 @@ namespace Array {
     // - `j`: The index of the second element to swap.
     _unsafe_swap : I64 -> I64 -> Array a -> Array a;
     _unsafe_swap = |i, j, arr| (
-        let arr = arr._unsafe_force_unique;
+        let arr = arr;
         let (arr, a) = arr._unsafe_get_linear(i);
         let (arr, b) = arr._unsafe_get_linear(j);
-        arr._unsafe_set(i, b)._unsafe_set(j, a) // Uniqueness check is done at the `set`.
+        arr._unsafe_set(i, b)._unsafe_set(j, a)
     );
 
     // Stable sort by "less than" comparator.
