@@ -562,17 +562,8 @@ impl Pattern {
         pats: impl Iterator<Item = Arc<PatternNode>>,
     ) -> Result<(), Errors> {
         let mut variants = cond_ti.fields.iter().map(|f| &f.name).collect::<Set<_>>();
-        let mut otherwise: Option<Arc<PatternNode>> = None;
+        let mut found_otherwise = false;
         for pat in pats {
-            if let Some(otherwise) = otherwise {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "Pattern after `{}` is unreachable.",
-                        otherwise.pattern.to_string()
-                    ),
-                    &[&pat.info.source],
-                ));
-            }
             match &pat.pattern {
                 Pattern::Union(variant, _) => {
                     if !variants.contains(&variant.name) {
@@ -588,11 +579,11 @@ impl Pattern {
                     variants.remove(&variant.name);
                 }
                 _ => {
-                    otherwise = Some(pat.clone());
+                    found_otherwise = true;
                 }
             }
         }
-        if otherwise.is_none() && !variants.is_empty() {
+        if !found_otherwise && !variants.is_empty() {
             let msg = if variants.len() == 1 {
                 format!(
                     "Variant `{}` of union `{}` is not covered.",

@@ -8972,5 +8972,5 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::develop_compiler_mode());
+    test_source_fail(&source, Configuration::develop_compiler_mode(), "Pattern after `forward` is unreachable.");
 }

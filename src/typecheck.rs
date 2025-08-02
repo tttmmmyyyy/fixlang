@@ -809,7 +809,18 @@ impl TypeCheckContext {
 
                 // Validate each cases.
                 let mut new_pat_vals = vec![];
+                let mut otherwise: Option<Arc<PatternNode>> = None;
                 for (pat, val) in pat_vals {
+                    if let Some(otherwise) = otherwise {
+                        return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Pattern after `{}` is unreachable.",
+                                otherwise.pattern.to_string()
+                            ),
+                            &[&pat.info.source],
+                        ));
+                    }
+
                     pat.validate(&self.type_env)?;
                     let pat = if pat.is_union() {
                         // Check if the union variant name is valid.
@@ -839,6 +850,8 @@ impl TypeCheckContext {
                         let (cond_tycon, cond_ti) = cond_tc_info.as_ref().unwrap();
                         pat.validate_variant_name(cond_tycon, cond_ti)?
                     } else {
+                        // `pat` is not a union pattern, so we can use it as is.
+                        otherwise = Some(pat.clone());
                         pat.clone()
                     };
 
