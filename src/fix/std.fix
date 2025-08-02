@@ -428,8 +428,8 @@ namespace Array {
     // - `j`: The index of the second element to swap.
     swap : I64 -> I64 -> Array a -> Array a;
     swap = |i, j, arr| (
-        let (arr, a) = arr.@(i);
-        let (arr, b) = arr.@(j);
+        let a = arr.@(i);
+        let b = arr.@(j);
         arr.set(i, b).set(j, a) // Uniqueness check is done at the `set`.
     );
 

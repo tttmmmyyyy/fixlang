@@ -495,6 +495,18 @@ Note: Currently this is implemented by merge sort, which is not in-place.
 * `less_than` - The comparator function.
 * `array` - The array to be sorted.
 
+#### swap
+
+Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
+
+Swaps two elements in an array at indices `i` and `j`.
+
+##### parameters
+
+- `arr`: The array in which to swap elements.
+- `i`: The index of the first element to swap.
+- `j`: The index of the second element to swap.
+
 #### to_iter
 
 Type: `Std::Array a -> Std::Iterator::ArrayIterator a`
