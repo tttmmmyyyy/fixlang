@@ -1,0 +1,16 @@
+module Main;
+
+sum_by_loop_arr : Array I64 -> I64;
+sum_by_loop_arr = |arr| (
+    loop((0, 0), |(i, sum)|
+        if i == arr.get_size { break $ sum };
+        continue $ (i + 1, sum + arr.@(i))
+    )
+);
+
+main : IO ();
+main = (
+    let arr = Array::from_map(100000, |i| i);
+    assert_eq(|_|"sum_by_loop_arr", sum_by_loop_arr(arr), 4999950000);;
+    pure()
+);

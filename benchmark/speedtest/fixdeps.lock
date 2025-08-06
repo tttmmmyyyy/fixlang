@@ -1,10 +1,19 @@
-proj_file_hash = "90d5b2047de8b38bd5de2b2a41c35c3e"
+proj_file_hash = "9a6a24dc0e6f4017985f4affb52bd113"
 
 [[dependencies]]
-name = "random"
-version = "1.1.1"
-path = ".fixlang/deps/random_1.1.1"
+name = "ez-scripting"
+version = "0.1.0"
+path = ".fixlang/deps/ez-scripting_0.1.0"
 
 [dependencies.git]
-repo = "https://github.com/tttmmmyyyy/fixlang-random.git"
-rev = "b4f83ee48564e714c0918513dd431f9135493dce"
+repo = "https://github.com/tttmmmyyyy/ez_scripting.git"
+rev = "1c2e7be5b8d5a97ff475456a0596736bacb6e9e9"
+
+[[dependencies]]
+name = "subprocess"
+version = "1.0.6"
+path = ".fixlang/deps/subprocess_1.0.6"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/fixlang-subprocess.git"
+rev = "f7cf6914889bc8b2631462ca38c343d5deff779a"

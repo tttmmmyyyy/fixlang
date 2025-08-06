@@ -1,0 +1,13 @@
+module Main;
+
+sum_by_fold : Array I64 -> I64;
+sum_by_fold = |arr| (
+    arr.to_iter.fold(0, |acc, x| acc + x)
+);
+
+main : IO ();
+main = (
+    let arr = Array::from_map(100000, |i| i);
+    assert_eq(|_|"sum_by_fold", sum_by_fold(arr), 4999950000);;
+    pure()
+);

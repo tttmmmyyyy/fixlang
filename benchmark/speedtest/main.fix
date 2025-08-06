@@ -1,0 +1,50 @@
+module Main;
+
+import EZS;
+
+_CASES_PATH : String;
+_CASES_PATH = "cases";
+
+_LOG_FILE_PATH : String;
+_LOG_FILE_PATH = "log.csv";
+
+type CSV = Array (Array String);
+
+namespace CSV {
+    // Parse a CSV string into an array of arrays of strings.
+    parse : String -> CSV;
+    parse = |csv_str| csv_str.split("\n")
+        .filter_map(|line| 
+            let line = line.strip_spaces;
+            if line == "" { none() };
+            some(line)
+        )
+        .map(|line| line.split(",").to_array).to_array;
+
+    serialize : CSV -> String;
+    serialize = |csv| (
+        if csv.is_empty { "" };
+        let header_n = csv.@(0).get_size;
+        let csv = csv.map(|row| 
+            if row.get_size > header_n {
+                undefined("Row has more columns than header: " + row.to_string)
+            };
+            row.resize(header_n, "")
+        );
+        undefined("")
+    );
+}
+
+main : IO ();
+main = (
+    let config = EZSConfig::default;
+
+    let log = *["cat", _LOG_FILE_PATH].ez_run_o(config);
+    // log.println;;
+
+    ez_cd(_CASES_PATH);;
+    let dirs = *["find", ".", "-maxdepth", "1", "-type", "d"].ez_run_o(config);
+    let dirs = dirs.split("\n").to_array;
+    dirs.to_string.println;;
+    pure()
+);

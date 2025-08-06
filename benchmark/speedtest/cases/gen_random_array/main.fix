@@ -1,0 +1,27 @@
+module Main;
+
+import Random;
+
+// Common random seed
+g_seed : Array U64;
+g_seed = [/* 0x12345 = */ 74565_U64, /* 0x23456 = */ 144470_U64, /* 0x34567 = */ 214375_U64, /* 0x45678 = */ 284280_U64];
+
+// Generate random numbers
+generate_array : I64 -> Array U64;
+generate_array = |n| (
+    let rng = init_by_array(g_seed);
+    let arr = fill(n, 0_U64);
+    Iterator::range(0, n).fold((arr, rng), |i, (arr, rng)|
+        let (rng, x) = rng.generate_U64;
+        let arr = arr.set(i, x);
+        (arr, rng)
+    ).@0
+);
+
+main : IO ();
+main = (
+    let n = 100000;
+    let arr = generate_array(n);
+    assert_eq(|_|"gen_random_array", arr.@(n-1), 14368538721381355296_U64);;
+    pure()
+);

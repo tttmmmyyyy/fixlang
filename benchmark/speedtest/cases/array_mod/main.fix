@@ -1,0 +1,17 @@
+module Main;
+
+array_mod : Array I64 -> I64;
+array_mod = |arr| (
+    let n = arr.get_size;
+    let arr = Iterator::range(1, n).fold(arr, |i, arr| 
+        arr.mod(i, add(arr.@(i-1)))
+    );
+    arr.@(n-1)
+);
+
+main : IO ();
+main = (
+    let arr = Array::from_map(100000, |i| i);
+    assert_eq(|_|"array_mod", array_mod(arr), 4999950000);;
+    pure()
+);

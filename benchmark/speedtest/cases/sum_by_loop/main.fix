@@ -1,0 +1,15 @@
+module Main;
+
+sum_by_loop : I64 -> I64;
+sum_by_loop = |n| (
+    loop((0, 0), |(i, sum)|
+        if i == n { break $ sum };
+        continue $ (i + 1, sum + i)
+    )
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"sum_by_loop", sum_by_loop(100000), 4999950000);;
+    pure()
+);
