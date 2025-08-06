@@ -2624,6 +2624,7 @@ namespace String {
     //
     // * `start` - The start index of the substring.
     // * `end` - The end index of the substring.
+    // * `str` - The string to be sliced.
     get_sub : I64 -> I64 -> String -> String;
     get_sub = |s, e, str| (
         let len = str.get_size;
