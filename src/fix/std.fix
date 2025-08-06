@@ -522,10 +522,26 @@ namespace Array {
     // * `array` - The array to be truncated.
     truncate : I64 -> Array a -> Array a;
     truncate = |length, vec| (
+        if length < 0 { undefined("[Std::Array::truncate] Negative size is not allowed.") };
         loop(vec, |vec|(
             if length >= vec.get_size { break $ vec };
             continue $ vec.pop_back
         ))
+    );
+
+    // Resizes an array to the given size, filling with the given value if the new size is larger than the current size, 
+    // or truncating if the new size is smaller than the current size.
+    // 
+    // # Parameters
+    // * `new_size` - The new size of the array.
+    // * `fill_value` - The value to fill if the new size is larger than the current size.
+    // * `array` - The array to be resized.
+    resize : I64 -> a -> Array a -> Array a;
+    resize = |n, x, xs| (
+        if n <= xs.get_size { xs.truncate(n) };
+        let m = xs.get_size;
+        let xs = xs.reserve(n)._unsafe_force_unique._unsafe_set_size(n);
+        range(m, n).fold(xs, |i, xs| xs._unsafe_set(i, x) )
     );
 
     // `arr.search_partition_point(pred)` returns an index x such that `pred` is true on [0, x) and false on [x, n) by binary search.
