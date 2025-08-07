@@ -102,18 +102,17 @@ main = (
     let arg_ss = *get_args;
     let args = loop((1, Args::default), |(i, args)|
         if i >= arg_ss.get_size { break $ args };
-        let args = if arg_ss.@(i) == "--no-save" {
-            args.set_no_save(true)
+        if arg_ss.@(i) == "--no-save" {
+            continue $ (i + 1, args.set_no_save(true))
         } else if arg_ss.@(i) == "--llvm-passes-file" {
             if i + 1 >= arg_ss.get_size {
                 undefined("error: --llvm-passes-file requires a file path argument")
             };
             let llvm_passes_file = arg_ss.@(i + 1);
-            args.set_llvm_passes_file(llvm_passes_file)
+            continue $ (i + 2, args.set_llvm_passes_file(llvm_passes_file))
         } else {
             undefined("error: Unknown argument: " + arg_ss.@(i))
-        };
-        continue $ (i + 1, args)
+        }
     );
 
     // Parse the log file.
@@ -159,7 +158,7 @@ main = (
         let com = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols"];
         let com = if args.@llvm_passes_file != "" {
             com.push_back("--llvm-passes-file")
-               .push_back(args.@llvm_passes_file)
+               .push_back("../../" + args.@llvm_passes_file)
         } else {
             com
         };

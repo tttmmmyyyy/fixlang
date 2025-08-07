@@ -8,10 +8,10 @@ import random
 from statsmodels.stats.weightstats import ttest_ind
 import numpy as np
 
-LLVM_PASSES_MAIN_FILE = './src/llvm_passes.txt'
-LLVM_PASSES_TMP_FILE = './llvm_passes_tmp.txt'
+LLVM_PASSES_MAIN_FILE = 'src/llvm_passes.txt'
+LLVM_PASSES_TMP_FILE = 'llvm_passes_tmp.txt'
 
-LOG_FILE = './passes_optimizer.log'
+LOG_FILE = 'passes_optimizer.log'
 
 ADDED_PASSES_NUM = 10
 
@@ -251,7 +251,7 @@ def install_fix():
                    '--path', '.'], capture_output=True)
 
 
-def run_benchmark(timeout=10):
+def run_benchmark(timeout=60):
     work_dir = "./benchmark/speedtest"
     llvm_passes_file_path = '../../' + LLVM_PASSES_TMP_FILE
 
