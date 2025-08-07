@@ -8,6 +8,9 @@ _CASES_PATH = "cases";
 _LOG_FILE_PATH : String;
 _LOG_FILE_PATH = "log.csv";
 
+_COMMIT_HASH : String;
+_COMMIT_HASH = "commit";
+
 type CSV = Array (Array String);
 
 namespace CSV {
@@ -27,24 +30,130 @@ namespace CSV {
         let header_n = csv.@(0).get_size;
         let csv = csv.map(|row| 
             if row.get_size > header_n {
-                undefined("Row has more columns than header: " + row.to_string)
+                undefined("error: Row has more columns than header: " + row.to_string)
             };
             row.resize(header_n, "")
         );
-        undefined("")
+        csv.map(|row| row.to_iter.join(",")).to_iter.join("\n")
+    );
+
+    add_column : String -> CSV -> CSV;
+    add_column = |name, csv| (
+        if csv.is_empty {
+            [[name]]
+        } else {
+            range(0, csv.get_size).fold(csv, |i, csv|
+                csv.mod(i, |row|
+                    if i == 0 {
+                        row.push_back(name)
+                    } else {                    
+                        row.push_back("")
+                    }
+                )
+            )
+        }
+    );
+
+    set : [a : ToString] String -> I64 -> a -> CSV -> CSV;
+    set = |col, row, value, csv| (
+        let value = value.to_string;
+        let csv = if csv.is_empty { [[col]] } else { csv };
+        let col_idx = csv.@(0).find_by(|x| x == col);
+        let (csv, col_idx) = if col_idx.is_none {
+            let col_idx = csv.@(0).get_size;
+            let csv = csv.add_column(col);
+            (csv, col_idx)
+        } else {
+            (csv, col_idx.as_some)
+        };
+        if row < 0 || row >= csv.get_size {
+            undefined("error: Row index out of bounds: " + row.to_string)
+        };
+        csv.mod(row, set(col_idx, value))
+    );
+
+    add_row : CSV -> CSV;
+    add_row = |csv| (
+        if csv.is_empty {
+            undefined("error: Cannot add row to empty CSV")
+        };
+        let header_n = csv.@(0).get_size;
+        csv.push_back(Array::fill(header_n, ""))
     );
 }
 
 main : IO ();
 main = (
-    let config = EZSConfig::default;
+    let config = EZSConfig::default.set_execution_trace(true);
 
+    // Parse the log file.
     let log = *["cat", _LOG_FILE_PATH].ez_run_o(config);
-    // log.println;;
+    let log = CSV::parse(log);
 
+    // If the log file is empty, write the header line "commit_hash"
+    let log = if log.is_empty {
+        log.add_column(_COMMIT_HASH)
+    } else {
+        log
+    };
+
+    // Get the current commit hash.
+    let commit_hash = *["git", "rev-parse", "HEAD"].ez_run_o(config);
+    let commit_hash = commit_hash.strip_spaces;
+
+    // Get if the current repository is dirty.
+    let is_dirty = *["git", "status", "--porcelain"].ez_run_o(config);
+    let is_dirty = is_dirty.strip_spaces != "";
+
+    // Add "(dirty)" to  the `commit_hash` if necessary.
+    let commit_hash = if is_dirty {
+        commit_hash + "(dirty)"
+    } else {
+        commit_hash
+    };
+
+    // Add the new row to the log.
+    let log = log.add_row;
+    let log = log.set(_COMMIT_HASH, log.get_size - 1, commit_hash);
+
+    // See the cases directory.
     ez_cd(_CASES_PATH);;
     let dirs = *["find", ".", "-maxdepth", "1", "-type", "d"].ez_run_o(config);
-    let dirs = dirs.split("\n").to_array;
-    dirs.to_string.println;;
+    let dirs = dirs.split("\n").filter_map(|line|
+        let line = line.strip_spaces;
+        if line == "" || line == "." { none() };
+        some(line)
+    );
+    let log = *dirs.fold_m(log, |dir, log|
+        ez_cd(dir);;
+        ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols"].ez_run_o(config);;
+        let bench = *["python3", "../../cachegrind-benchmarking/cachegrind.py", "./a.out"].ez_run_o(config);
+        // Get the last line
+        let bench = bench.strip_spaces.split("\n").to_array.get_last;
+        if bench.is_none {
+            eprintln("error: No benchmark result found in " + dir);;
+            exit(1)
+        };
+        let bench = bench.as_some;
+        // Split by comma to get "inst" and "mem".
+        let bench = bench.split(",").to_array;
+        let case_name = dir.get_sub(2, dir.get_size);
+        let inst = case_name + "-inst";
+        let mem = case_name + "-mem";
+        // Add to the log.
+        let log = log.set(inst, log.get_size - 1, bench.@(0));
+        let log = log.set(mem, log.get_size - 1, bench.@(1));
+        // Change back to the parent directory.
+        ez_cd("..");;
+        log.pure
+    );
+
+    ez_cd("..");;
+
+    // Save the log to the log file.
+    write_file_string(_LOG_FILE_PATH, log.serialize).try(exit_with_msg(1));;
+
+    // Create the graph
+    ["python3", "graph.py"].ez_run_o(config);;
     pure()
 );

@@ -1,39 +1,78 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# CSVファイルの読み込み
-df = pd.read_csv('log.csv')
 
-# 最新の30件のデータを抽出
-df = df.tail(30)
-print(df)
+def plot_log_data(csv_file="log.csv", output_file="graph.svg", latest_n=30):
+    try:
+        df = pd.read_csv(csv_file)
+    except FileNotFoundError:
+        print(f"error: File '{csv_file}' not found.")
+        return
 
-# コミットハッシュ（最初の7文字）のリスト
-commit_hashes = df['commit_hash'].str[:7]
+    # Get the latest 30 entries
+    recent_df = df.tail(latest_n).copy()
 
-# グラフを作成
-fig, ax1 = plt.subplots(figsize=(10, 6))
+    # Get all columns except 'commit' (data columns)
+    data_columns = [col for col in recent_df.columns if col != 'commit']
 
-# 左側の軸（instructions）のプロット
-ax1.set_xlabel('Commit')
-ax1.set_ylabel('Instructions', color='tab:blue')
-ax1.plot(commit_hashes, df['instructions'],
-         color='tab:blue', marker='o', label='Instructions')
-ax1.tick_params(axis='y', labelcolor='tab:blue')
+    # Create the graph
+    fig, ax1 = plt.subplots(figsize=(15, 8))
 
-# 右側の軸（memory_accesses）のプロット
-ax2 = ax1.twinx()
-ax2.set_ylabel('Memory Accesses', color='tab:red')
-ax2.plot(commit_hashes, df['memory_accesses'],
-         color='tab:red', marker='o', label='Memory Accesses')
-ax2.tick_params(axis='y', labelcolor='tab:red')
+    # List to store information for legend
+    lines = []
+    labels = []
 
-# グラフのタイトル
-plt.title('Speedtest Log')
+    # Use ax1 as Y-axis for the first data column
+    color_map = plt.get_cmap('tab20')  # Automatically assign line colors
 
-# グラフを表示
-plt.xticks(rotation=45)
-plt.tight_layout()
+    # Plot the first data column
+    col = data_columns[0]
+    line1, = ax1.plot(recent_df['commit'], recent_df[col],
+                      label=col, color=color_map(0//2), marker='o')
+    lines.append(line1)
+    labels.append(col)
 
-# 画像として保存
-plt.savefig('graph.svg')
+    ax1.set_xlabel('Commit')
+    ax1.set_ylabel('')  # Make y-axis label empty
+    ax1.tick_params(axis='y', left=False, right=False,
+                    labelleft=False, labelright=False, labelcolor=color_map(0//2))
+
+    # Create new Y-axes using twinx() for remaining data columns
+    for i, col in enumerate(data_columns[1:], start=1):
+        ax = ax1.twinx()
+
+        # Position Y-axes on the right side to prevent graph overlap
+        ax.spines['right'].set_position(('outward', 60 * (i - 1)))
+
+        line_i, = ax.plot(recent_df['commit'], recent_df[col],
+                          label=col, color=color_map(i//2), marker='o')
+        lines.append(line_i)
+        labels.append(col)
+
+        # Hide y-axis ticks and labels
+        ax.set_ylabel('')  # Make y-axis label empty
+        ax.tick_params(axis='y', left=False, right=False,
+                       labelleft=False, labelright=False)
+
+        # Move Y-axis labels to prevent graph overlap
+        ax.spines['right'].set_color(color_map(i//2))
+
+    # Set x-axis labels to first 7 characters of commit hash
+    ax1.set_xticks(range(len(recent_df['commit'])))
+    ax1.set_xticklabels([c[:7]
+                         for c in recent_df['commit']], rotation=90, ha='right')
+
+    # Graph title and legend
+    plt.title(f'Performance Metrics for Last {latest_n} Commits')
+    # Create legend using lines and labels obtained from all axes
+    fig.legend(lines, labels, loc='upper left', bbox_to_anchor=(0.05, 0.95))
+    # Adjust layout
+    fig.tight_layout()
+
+    # Save as SVG file
+    plt.savefig(output_file)
+    print(f"Graph successfully saved as '{output_file}'.")
+
+
+if __name__ == "__main__":
+    plot_log_data()
