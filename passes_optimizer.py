@@ -194,6 +194,33 @@ wholeprogramdevirt
 '''
 
 
+class BenchmarkResult:
+    def __init__(self, scores):
+        self.scores = scores
+
+    def __str__(self):
+        sum_scores = sum(self.scores)
+        return f'BenchmarkResult(sum_scores={sum_scores})'
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __lt__(self, other):
+        differ = False
+        for i in range(len(self.scores)):
+            if self.scores[i] > other.scores[i]:
+                return False
+            if self.scores[i] < other.scores[i]:
+                differ = True
+        return differ
+
+    def __le__(self, other):
+        for i in range(len(self.scores)):
+            if self.scores[i] > other.scores[i]:
+                return False
+        return True
+
+
 def get_all_passes():
     passes = []
     for p in PASSES.split('\n'):
@@ -226,18 +253,10 @@ def install_fix():
 
 def run_benchmark(timeout=10):
     work_dir = "./benchmark/speedtest"
-    cp = subprocess.run(['fix', 'build', '-O', 'experimental', '--llvm-passes-file', '../../' + LLVM_PASSES_TMP_FILE],
-                        capture_output=True, text=True, cwd=work_dir)
-    if cp.returncode != 0:
-        print('build failed.')
-        print('stdout:')
-        print(cp.stdout)
-        print('stderr:')
-        print(cp.stderr)
-        sys.exit(1)
+    llvm_passes_file_path = '../../' + LLVM_PASSES_TMP_FILE
 
     try:
-        cp = subprocess.run(['python3', './cachegrind-benchmarking/cachegrind.py', './a.out'],
+        cp = subprocess.run(['./a.out', '--no-save', '--llvm-passes-file', llvm_passes_file_path],
                             capture_output=True, text=True, timeout=timeout, cwd=work_dir)
         if cp.returncode != 0:
             print('run failed.')
@@ -250,7 +269,8 @@ def run_benchmark(timeout=10):
             # Split the output by comma and take the second element
             costs = cp.stdout.strip().split(',')
             print('Benchmark result:', costs)
-            return int(float(costs[1]) * 0.68 + float(costs[0]))
+            # remove the first element (it is not a number)
+            return BenchmarkResult([float(x) for x in costs[1:]])
 
     except subprocess.TimeoutExpired:
         return None
