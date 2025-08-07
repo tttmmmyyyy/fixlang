@@ -82,9 +82,39 @@ namespace CSV {
     );
 }
 
+type Args = struct {
+    no_save : Bool,
+    llvm_passes_file: String,
+};
+
+namespace Args {
+    default : Args;
+    default = Args {
+        no_save: false,
+        llvm_passes_file: "",
+    };
+}
+
 main : IO ();
 main = (
     let config = EZSConfig::default.set_execution_trace(true);
+
+    let arg_ss = *get_args;
+    let args = loop((1, Args::default), |(i, args)|
+        if i >= arg_ss.get_size { break $ args };
+        let args = if arg_ss.@(i) == "--no-save" {
+            args.set_no_save(true)
+        } else if arg_ss.@(i) == "--llvm-passes-file" {
+            if i + 1 >= arg_ss.get_size {
+                undefined("error: --llvm-passes-file requires a file path argument")
+            };
+            let llvm_passes_file = arg_ss.@(i + 1);
+            args.set_llvm_passes_file(llvm_passes_file)
+        } else {
+            undefined("error: Unknown argument: " + arg_ss.@(i))
+        };
+        continue $ (i + 1, args)
+    );
 
     // Parse the log file.
     let log = *["cat", _LOG_FILE_PATH].ez_run_o(config);
@@ -126,7 +156,14 @@ main = (
     );
     let log = *dirs.fold_m(log, |dir, log|
         ez_cd(dir);;
-        ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols"].ez_run_o(config);;
+        let com = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols"];
+        let com = if args.@llvm_passes_file != "" {
+            com.push_back("--llvm-passes-file")
+               .push_back(args.@llvm_passes_file)
+        } else {
+            com
+        };
+        com.ez_run_o(config);;
         let bench = *["python3", "../../cachegrind-benchmarking/cachegrind.py", "./a.out"].ez_run_o(config);
         // Get the last line
         let bench = bench.strip_spaces.split("\n").to_array.get_last;
@@ -150,10 +187,14 @@ main = (
 
     ez_cd("..");;
 
-    // Save the log to the log file.
-    write_file_string(_LOG_FILE_PATH, log.serialize).try(exit_with_msg(1));;
+    // Save the log to the log file and update the graph.
+    unless(args.@no_save, 
+        write_file_string(_LOG_FILE_PATH, log.serialize).try(exit_with_msg(1));;
+        ["python3", "graph.py"].ez_run_o(config).forget
+    );;
 
-    // Create the graph
-    ["python3", "graph.py"].ez_run_o(config);;
+    // Print the latest log.
+    log.@(log.get_size - 1).to_iter.join(",").println;;
+    
     pure()
 );
