@@ -437,6 +437,19 @@ Reserves the memory region for an array.
 * `capacity` - The capacity to be reserved.
 * `array` - The array to be reserved.
 
+#### resize
+
+Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
+
+Resizes an array to the given size, filling with the given value if the new size is larger than the current size,
+or truncating if the new size is smaller than the current size.
+
+##### Parameters
+
+* `new_size` - The new size of the array.
+* `fill_value` - The value to fill if the new size is larger than the current size.
+* `array` - The array to be resized.
+
 #### search_partition_point
 
 Type: `(a -> Std::Bool) -> Std::Array a -> Std::I64`

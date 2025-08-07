@@ -8972,5 +8972,40 @@ main = (
     pure()
 );
     "##;
-    test_source_fail(&source, Configuration::develop_compiler_mode(), "Pattern after `forward` is unreachable.");
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Pattern after `forward` is unreachable.",
+    );
+}
+
+#[test]
+pub fn test_array_resize() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let arr = [1, 2, 3];
+    let resized = arr.resize(5, 0);
+    assert_eq(|_|"1", resized, [1, 2, 3, 0, 0]);;
+
+    let arr = arr.resize(2, 0);
+    assert_eq(|_|"2", arr, [1, 2]);;
+
+    let arr = [[1], [2], [3]];
+    let resized = arr.resize(5, []);
+    assert_eq(|_|"3", resized, [[1], [2], [3], [], []]);;
+
+    let arr = arr.resize(2, []);
+    assert_eq(|_|"4", arr, [[1], [2]]);;
+
+    let arr = arr.resize(0, []);
+    assert_eq(|_|"5", arr, []);;
+
+   
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
 }
