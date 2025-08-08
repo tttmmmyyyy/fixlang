@@ -11,7 +11,6 @@ constraint-elimination
 globalopt
 scc-oz-module-inliner
 pseudo-probe
-reg2mem
 scc-oz-module-inliner
 iroutliner
 slp-vectorizer
