@@ -7,6 +7,7 @@ import sys
 import random
 from statsmodels.stats.weightstats import ttest_ind
 import numpy as np
+import math
 
 LLVM_PASSES_MAIN_FILE = 'src/llvm_passes.txt'
 LLVM_PASSES_TMP_FILE = 'llvm_passes_tmp.txt'
@@ -206,19 +207,18 @@ class BenchmarkResult:
         return self.__str__()
 
     def __lt__(self, other):
-        differ = False
-        for i in range(len(self.scores)):
-            if self.scores[i] > other.scores[i]:
-                return False
-            if self.scores[i] < other.scores[i]:
-                differ = True
-        return differ
+        """
+        True iff prod(self.scores / other.scores) < 1
+        """
+        if len(self.scores) != len(other.scores):
+            raise ValueError(
+                "self.scores and other.scores must have the same length.")
 
-    def __le__(self, other):
-        for i in range(len(self.scores)):
-            if self.scores[i] > other.scores[i]:
-                return False
-        return True
+        ratios = [s / o for s, o in zip(self.scores, other.scores)]
+
+        product_of_ratios = math.prod(ratios)
+
+        return product_of_ratios < 1
 
 
 def get_all_passes():
@@ -363,7 +363,7 @@ def optimize():
         print_passes(removed_passes)
         write_llvm_passes_file(passes, 'tmp')
         time = run_benchmark()
-        if time is not None and time <= optimum_time:
+        if time is not None and not (time > optimum_time):
             optimum_passes = passes
             optimum_time = time
             print('Minimize success!')
