@@ -3532,6 +3532,7 @@ Type: `Std::I64 -> Std::I64 -> Std::String -> Std::String`
 
 * `start` - The start index of the substring.
 * `end` - The end index of the substring.
+* `str` - The string to be sliced.
 
 #### is_empty
 
