@@ -303,6 +303,18 @@ namespace Array {
         arr._unsafe_force_unique._introsort_by_internal(less_than, 0, arr.get_size, depth)
     );
 
+    // Reverse an array.
+    //
+    // # Parameters
+    // - `array` - The array to be reversed.
+    reverse : Array a -> Array a;
+    reverse = |arr| (
+        if arr.get_size <= 1 { arr };
+        let arr = arr._unsafe_force_unique;
+        let n = arr.get_size;
+        range(0, n/2).fold(arr, |i, arr| arr._unsafe_swap(i, n - 1 - i))
+    );
+
     // Quicksort for the specified range in an array.
     //
     // # Parameters
