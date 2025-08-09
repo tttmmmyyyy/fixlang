@@ -14,9 +14,10 @@
 - Add `Std::Iterator::loop_iter_s` and `Std::Iterator::loop_iter_ms`, which are similar to `Std::Iterator::loop_iter` and `Std::Iterator::loop_iter_m`, but they return a `LoopState` and allow the caller to know whether the loop ended with `break(_m)` or `continue(_m)`.
 - Add `Std::IO::flush : IOHandle -> IO I32` to flush an `IOHandle`.
 - Add `fix version` command.
-- Add `populate : Array String -> String -> String` to populate strings into a template string, similar to "format" function in other languages.
+- Add `populate : Array String -> String -> String` to populate strings into a template string, similar to "format" function in other languages, but you need to stringify values by yourself.
 - Improve `Std::Array::sort_by` implementation (now it uses introsort), and added `Std::Array::sort_stable_by` function (currently implemented by merge sort).
 - Add `Std::Array::resize` to resize an array to a given length, filling the new elements with a given value, or truncating the array if the new length is smaller than the current length.
+- Add `Std::Array::reverse` to reverse an array.
 
 ### Changed
 - Update LLVM to 17.0.x.

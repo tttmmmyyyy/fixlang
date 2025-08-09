@@ -9009,3 +9009,39 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_array_reverse() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    // Basic case
+    let arr = [] : Array I64;
+    let arr = arr.reverse;
+    assert_eq(|_|"1", arr, []);;
+
+    let arr = [1];
+    let arr = arr.reverse;
+    assert_eq(|_|"2", arr, [1]);;
+
+    let arr = [0, 1];
+    let arr = arr.reverse;
+    assert_eq(|_|"3", arr, [1, 0]);;
+
+    let arr = [0, 1, 2];
+    let arr = arr.reverse;
+    assert_eq(|_|"3", arr, [2, 1, 0]);;
+
+    // Boxed & shared case
+    let arr = [[0], [1], [2]];
+    let rev = arr.reverse;
+    assert_eq(|_|"4", rev, [[2], [1], [0]]);;
+    assert_eq(|_|"5", arr, [[0], [1], [2]]);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

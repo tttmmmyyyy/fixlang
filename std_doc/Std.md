@@ -450,6 +450,16 @@ or truncating if the new size is smaller than the current size.
 * `fill_value` - The value to fill if the new size is larger than the current size.
 * `array` - The array to be resized.
 
+#### reverse
+
+Type: `Std::Array a -> Std::Array a`
+
+Reverse an array.
+
+##### Parameters
+
+- `array` - The array to be reversed.
+
 #### search_partition_point
 
 Type: `(a -> Std::Bool) -> Std::Array a -> Std::I64`
