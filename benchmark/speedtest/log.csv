@@ -1,3 +1,0 @@
-commit,sum_by_loop_iter-inst,sum_by_loop_iter-mem,sum_by_loop-inst,sum_by_loop-mem,sum_by_fold_cap-inst,sum_by_fold_cap-mem,gen_random_array-inst,gen_random_array-mem,sum_by_fold-inst,sum_by_fold-mem,array_mod-inst,array_mod-mem,sum_by_loop_arr-inst,sum_by_loop_arr-mem,prime_table-inst,prime_table-mem,sum_by_loop_iter_cap-inst,sum_by_loop_iter_cap-mem
-6f2f5beecd9252787f4d49166d2cd055a07c1d1e,2348162,3579975,547743,703049,2348129,3679735,8217557,11396200,1648145,2579874,2348122,3679778,2448134,3779743,15387561,24097216,2648128,3979768
-f95de9ae5d626fc75b6c198e67a8b73b7460a9bd(dirty),1707537,2864425,547742,703013,2007512,3264300,8021112,11098971,807518,1664322,2207500,3464361,2307515,3664308,15386429,24095050,2507512,3864338

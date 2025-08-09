@@ -8,6 +8,7 @@ import random
 from statsmodels.stats.weightstats import ttest_ind
 import numpy as np
 import math
+import datetime
 
 LLVM_PASSES_MAIN_FILE = 'src/llvm_passes.txt'
 LLVM_PASSES_TMP_FILE = 'llvm_passes_tmp.txt'
@@ -20,7 +21,7 @@ ADDED_PASSES_NUM = 10
 # Can be found in: "opt --print-passes"
 # See also: https://gist.github.com/gingerBill/d889ae03d429653a4a9081ad6dc2a6c3
 # Exclude:
-# attributor, attributor-cgscc: may breaks the program
+# attributor, attributor-cgscc, unify-loop-exits: may breaks the program
 PASSES = '''
 aa-eval
 adce
@@ -189,7 +190,6 @@ tailcallelim
 tlshoist
 transform-warning
 typepromotion
-unify-loop-exits
 vector-combine
 wholeprogramdevirt
 '''
@@ -208,7 +208,7 @@ class BenchmarkResult:
 
     def __lt__(self, other):
         """
-        True iff prod(self.scores / other.scores) < 1
+        True iff prod(self.scores / other.scores) < 0.999
         """
         if len(self.scores) != len(other.scores):
             raise ValueError(
@@ -218,7 +218,7 @@ class BenchmarkResult:
 
         product_of_ratios = math.prod(ratios)
 
-        return product_of_ratios < 1
+        return product_of_ratios < 0.999
 
 
 def get_all_passes():
@@ -251,7 +251,7 @@ def install_fix():
                    '--path', '.'], capture_output=True)
 
 
-def run_benchmark(timeout=60):
+def run_benchmark(timeout=120):
     work_dir = "./benchmark/speedtest"
     llvm_passes_file_path = '../../' + LLVM_PASSES_TMP_FILE
 
@@ -273,6 +273,7 @@ def run_benchmark(timeout=60):
             return BenchmarkResult([float(x) for x in costs[1:]])
 
     except subprocess.TimeoutExpired:
+        print('run timed out.')
         return None
 
 
@@ -297,9 +298,9 @@ def optimize():
 
     optimum_passes = initial_passes
 
-    # Clear log file
-    with open(LOG_FILE, 'w') as f:
-        f.write('')
+    # Add the date and time to the log file
+    with open(LOG_FILE, 'a') as f:
+        f.write(f'Start optimization: {datetime.datetime.now()}\n')
 
     print('Initial passes:')
     print_passes(optimum_passes)
