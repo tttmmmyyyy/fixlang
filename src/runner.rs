@@ -402,9 +402,11 @@ fn optimize_and_verify<'c>(
             run_passes_or_panic(module, &passes, target_machine);
         }
         FixOptimizationLevel::Max => {
+            run_passes_or_panic(module, &["default<O3>"], target_machine);
             run_passes_or_panic(module, &passes, target_machine);
         }
         FixOptimizationLevel::Experimental => {
+            run_passes_or_panic(module, &["default<O3>"], target_machine);
             run_passes_or_panic(module, &passes, target_machine);
         }
     }
