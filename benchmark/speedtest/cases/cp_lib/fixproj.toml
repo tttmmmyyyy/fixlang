@@ -89,3 +89,9 @@ files = ["test.fix"]
 # name = "your-project"
 # version = "1.2.0"
 # git = { url = "https://github.com/tttmmmyyyy/your-project.git" }
+
+
+[[dependencies]]
+name = "cp-library"
+version = "0.4.2"
+git = { url = "https://github.com/tttmmmyyyy/cp-library.git" }

@@ -151,6 +151,8 @@ main = (
     let dirs = dirs.split("\n").filter_map(|line|
         let line = line.strip_spaces;
         if line == "" || line == "." { none() };
+        let line = line.get_sub(2, line.get_size); // Remove "./"
+        if line.get_bytes.@(0) == '_' { none() };
         some(line)
     );
     let log = *dirs.fold_m(log, |dir, log|

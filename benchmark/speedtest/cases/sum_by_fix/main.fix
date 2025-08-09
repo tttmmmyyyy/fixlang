@@ -3,15 +3,30 @@ module Main;
 main : IO ();
 main = (
     let n = 1e5;
-    let g = fix $ |loop, (acm, x)|
-                if x == 0 { 
-                    acm
-                } else {
-                    let acm = acm + x;
-                    let x2 = x + -1;
-                    loop((acm, x2))
-                }
-    in 
-        assert_eq(|_|"", g((0, n)), n*(n+1)/2);;
-        pure()
+    
+    let g = (
+        fix $ |loop, (acm, x)|
+            if x == 0 { 
+                acm
+            } else {
+                let acm = acm + x;
+                let x2 = x + -1;
+                loop((acm, x2))
+            }
+    ); 
+    assert_eq(|_|"", g((0, n)), n*(n+1)/2);;
+
+    let g = (
+        fix $ |loop, a, x|
+            if x == 0 {
+                a 
+            } else {
+                let a2 = a + x;
+                let x2 = x + -1;
+                loop(a2, x2)
+            }
+    );
+    assert_eq(|_|"", g(0, n), n*(n+1)/2);;
+
+    pure()
 );
