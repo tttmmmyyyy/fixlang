@@ -1,0 +1,30 @@
+module Main;
+
+import Random;
+import CPLib.Graph;
+
+main : IO ();
+main = (
+    let n = 1e5;
+    let rng = Random::init_by_seed(0_U64);
+    let graph = Graph::create(n);
+    let (graph, rng) = range(0, n).fold((graph, rng), |i, (graph, rng)|
+        let (rng, j) = rng.generate_I64_nonneg;
+        let j = j % n;
+        let (rng, c) = rng.generate_I64_nonneg;
+        let c = c % 100 + 1; // 1 <= c < 100
+        let graph = graph.add_edge(i, j, c);
+
+        let (rng, j) = rng.generate_I64_nonneg;
+        let j = j % n;
+        let (rng, c) = rng.generate_I64_nonneg;
+        let c = c % 100 + 1; // 1 <= c < 100
+        let graph = graph.add_edge(j, i, c);
+
+        (graph, rng)
+    );
+    let (dist, time) = consumed_time_while_lazy(|_| graph.dijkstra(0, I64::maximum));
+    assert_eq(|_|"test_dijkstra_speed", dist.@(1), 391);;
+    println $ "[CPLib.Graph.Test] dijkstra({}): {}".populate([n.to_string, time.to_string]);;
+    pure()
+);

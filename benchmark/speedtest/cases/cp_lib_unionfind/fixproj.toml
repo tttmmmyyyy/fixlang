@@ -1,0 +1,97 @@
+[general]
+## Project name. This is a required field.
+name = "myproject"
+
+## Project version (in semver). This is a required field.
+version = "0.1.0"
+
+## Fix version requirement. Default is "*".
+fix_version = "1.1.0"
+
+## Project authors.
+# authors = ["Alice", "Bob"]
+
+## Project description.
+# description = "This is a Fix project."
+
+## Project license.
+# license = "MIT"
+
+[build]
+## Fix source files to be compiled.
+## Merged with files specified in the command line argument.
+files = ["main.fix"]
+
+## Object files to be linked.
+## Merged with object files specified in the command line argument.
+# objects = ["lib.o"]
+
+## Libraries to be linked statically.
+## Merged with libraries specified in the command line argument.
+# static_links = ["abc"] # link "libabc.a" statically.
+
+## Libraries to be linked dynamically.
+## Merged with libraries specified in the command line argument.
+# dynamic_links = ["xyz"] # link "libxyz.so" dynamically.
+
+## Library search paths passed to the linker.
+## Merged with paths specified in the command line argument.
+# library_paths = ["."]
+
+## Other linker options.
+# ld_flags = ["-L/usr/lib", "-lijk"]
+
+## Whether to generate debug information.
+## Overwritten by the command line argument.
+# debug = true
+
+## Optimization level.
+## One of "none", "basic", "max".
+## Overwritten by the command line argument.
+# opt_level = "max"
+
+## Output file name.
+## Overwritten by the command line argument.
+# output = "myprogram.out"
+
+## Whether to use the thread-safe reference counting.
+## Overwritten by the command line argument.
+# threaded = false
+
+## Preliminary commands to be executed before the Fix program is compiled.
+## This is useful when you need to compile a object files / library before compiling the Fix program.
+## (Experimental) Furthermore, you can change the Fix compiler options by outputting lines with specific formats in the preliminary commands.
+## At the moment, the following formats are supported.
+## - `fix.ld_flags=(...)`: Specify flags to pass to the linker. Specify flags separated by spaces in `...`. Example: `fix.ld_flags=-L/path/to/lib -lmylib`.
+## This is useful when you need to get the path to the library dynamically, e.g., using pkg-config.
+# preliminary_commands = [["make", "lib.o"]]
+
+# Additional build options when running `fix test`.
+# Available fields are almost the same as ones in "[build]".
+[build.test]
+files = ["test.fix"]
+
+## By "[[dependencies]]" array, you can add a Fix project as a dependency.
+## Each dependency must have "fixproj.toml" file at the project root directory.
+## If a dependency also has their dependencies, "fix" will consider them recursively.
+## NOTE: The syntax for version requirement is the same as in Cargo. See: https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html
+
+## The following is an example of a dependency to a project in the local file system.
+# [[dependencies]]
+# name = "another-project"
+# version = "*"
+# path = "/path/to/project"
+
+## The following is an example of a dependency to a project in a remote git repository.
+## In this case, "fix" searches the tags (each name should be a semver, or semver with "v" prefix) of the repository to find the version that satisfies the requirement.
+## If the repository has no tags, "fix" will use the latest commit of the default branch.
+# [[dependencies]]
+# name = "your-project"
+# version = "1.2.0"
+# git = { url = "https://github.com/tttmmmyyyy/your-project.git" }
+
+
+[[dependencies]]
+name = "cp-library"
+version = "0.4.2"
+git = { url = "https://github.com/tttmmmyyyy/cp-library.git" }

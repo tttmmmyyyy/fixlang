@@ -2,7 +2,7 @@ module Main;
 
 main : IO ();
 main = (
-    let n = 1e5;
+    let n = 1e6;
     
     let g = (
         fix $ |loop, (acm, x)|

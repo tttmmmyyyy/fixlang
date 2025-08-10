@@ -5,8 +5,8 @@ simplifycfg
 inliner-wrapper
 newgvn
 tailcallelim
-loop-rotate
 dse
-pseudo-probe
 inline
-early-cse
+instsimplify
+loop-vectorize
+pseudo-probe

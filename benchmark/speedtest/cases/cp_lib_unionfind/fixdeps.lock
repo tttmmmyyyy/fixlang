@@ -1,0 +1,64 @@
+proj_file_hash = "b0008614552028ccd3840cf7888d3b5a"
+
+[[dependencies]]
+name = "cp-library"
+version = "0.4.2"
+path = ".fixlang/deps/cp-library_0.4.2"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/cp-library.git"
+rev = "f966c531aa9df8cedf2f755a3d4c26909a72fc42"
+
+[[dependencies]]
+name = "random"
+version = "1.1.1"
+path = ".fixlang/deps/random_1.1.1"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/fixlang-random.git"
+rev = "b4f83ee48564e714c0918513dd431f9135493dce"
+
+[[dependencies]]
+name = "hashmap"
+version = "1.1.2"
+path = ".fixlang/deps/hashmap_1.1.2"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/fixlang-hashmap.git"
+rev = "33da33ecb5d95d45c29feaeee5dea454fecc89b9"
+
+[[dependencies]]
+name = "hash"
+version = "1.1.0"
+path = ".fixlang/deps/hash_1.1.0"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/fixlang-hash.git"
+rev = "40d5d04e9b5f5a11c46151d00a98acb6dfdb4e48"
+
+[[dependencies]]
+name = "binary-heap"
+version = "0.1.1"
+path = ".fixlang/deps/binary-heap_0.1.1"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/fixlang-binary-heap.git"
+rev = "3b7972d5ec6ff814db5de4f6ade3c83dd9c8d4e7"
+
+[[dependencies]]
+name = "bool-array"
+version = "0.1.1"
+path = ".fixlang/deps/bool-array_0.1.1"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/bool-array.git"
+rev = "608a7dfded55c6f9373347a5324c28f5ccfabbbf"
+
+[[dependencies]]
+name = "ring-buffer"
+version = "0.1.1"
+path = ".fixlang/deps/ring-buffer_0.1.1"
+
+[dependencies.git]
+repo = "https://github.com/tttmmmyyyy/ring-buffer.git"
+rev = "78e543ca1eb24737659c47fa1253f0f4e92994bf"

@@ -251,7 +251,7 @@ def install_fix():
                    '--path', '.'], capture_output=True)
 
 
-def run_benchmark(timeout=120):
+def run_benchmark(timeout=240):
     work_dir = "./benchmark/speedtest"
     llvm_passes_file_path = '../../' + LLVM_PASSES_TMP_FILE
 

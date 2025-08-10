@@ -1,0 +1,72 @@
+module Main;
+
+import Random;
+import CPLib.Trait;
+import CPLib.LSegtree;
+
+main : IO ();
+main = (
+    // n=10^5個の要素を持つSegtreeを生成し、n回程度ランダムにクエリを投げる。
+    // もしn^2実装になっていたらこのテストは終わらない。
+    let n = 1e5;
+    let rng = Random::init_by_seed(0_U64);
+    let tree = LSegtree::init(n) : LSegtree I64Max I64Add;
+    let ((tree, rng, fold_sum), time) = consumed_time_while_lazy(|_| range(0, n).fold((tree, rng, 0), |_, (tree, rng, fold_sum)| (
+        // set
+        let (rng, i) = rng.generate_I64_nonneg;
+        let (rng, v) = rng.generate_I64_nonneg;
+        let i = i % n; // 0 <= i < n
+        let tree = tree.set(i, I64Max::make(v));
+
+        // act_range
+        let (rng, l) = rng.generate_I64_nonneg;
+        let (rng, r) = rng.generate_I64_nonneg;
+        let l = l % n; // 0 <= l < n
+        let r = l + r % (n - l + 1);
+        let (rng, a) = rng.generate_I64_nonneg;
+        let tree = tree.act_range(l, r, I64Add::make(a));
+
+        // fold
+        let (rng, k) = rng.generate_I64_nonneg;
+        let (rng, l) = rng.generate_I64_nonneg;
+        let k = k % n; // 0 <= k < n
+        let l = l % n; // 0 <= l < n
+        let (tree, v) = tree.fold(k, l);
+
+        let fold_sum = fold_sum.max(v.@v);
+
+        (tree, rng, fold_sum)
+    )));
+    assert_eq(|_|"test_speed", fold_sum, 9223363321965027598);;
+    println $ "[CPLib.LSegtree.Test] LSegtree({}): {}".populate([n.to_string, time.to_string]);;
+
+    pure $ ()
+);
+
+// 最大値モノイド
+type I64Max = struct { v : I64 };
+namespace I64Max {
+    make : I64 -> I64Max;
+    make = |v| I64Max { v : v };
+}
+impl I64Max : Monoid {
+    unit = make(I64::minimum);
+    op = |lhs, rhs| make $ lhs.@v.max(rhs.@v);
+}
+
+// 加法モノイド
+type I64Add = struct { v : I64 };
+namespace I64Add {
+    make : I64 -> I64Add;
+    make = |v| I64Add { v : v };
+}
+impl I64Add : Monoid {
+    unit = make(0);
+    op = |lhs, rhs| make $ lhs.@v + rhs.@v;
+}
+
+// 加法モノイドの最大値モノイドに対する作用
+impl I64Add : Action {
+    type Set I64Add = I64Max; // 作用を受ける集合の型
+    act = |a, x| I64Max::make(x.@v + a.@v);
+}

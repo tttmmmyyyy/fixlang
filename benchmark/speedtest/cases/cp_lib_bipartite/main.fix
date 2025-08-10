@@ -1,0 +1,27 @@
+module Main;
+
+import Random;
+import CPLib.Bipartite;
+
+main : IO ();
+main = (
+    // ベンチマーク
+    let n = 1e4;
+    let m = 1e4;
+    let rng = Random::init_by_seed(0_U64);
+    let bg = BipartiteGraph::create(n, n);
+    let (bg, rng) = range(0, m).fold((bg, rng), |_, (bg, rng)| (
+        let (rng, i) = rng.generate_I64_nonneg;
+        let i = i % n;
+        let (rng, j) = rng.generate_I64_nonneg;
+        let j = j % n;
+        let bg = bg.BipartiteGraph::add_edge(i, j);
+        (bg, rng)
+    ));
+    let (matching, time) = consumed_time_while_lazy(|_| bg.maximize_flow.get_max_matching);
+    assert_eq(|_|"test_speed", matching.to_iter.filter(|v|v).get_size, 5466);;
+    println $ "[CPLib.Bipartite.Test] BipartiteGraph({}, {}): {}".populate([n.to_string, m.to_string, time.to_string]);;
+
+    pure()
+);
+
