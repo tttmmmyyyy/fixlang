@@ -230,8 +230,11 @@ fn parse_global_defns(
                 errors.eat_err_or(parse_type_defn(pair, ctx), |td| type_defns.push(td));
             }
             Rule::global_name_type_sign => {
-                errors.eat_err_or(parse_global_value_decl(pair, ctx), |gvd| {
-                    global_value_decls.push(gvd)
+                errors.eat_err_or(parse_global_value_decl(pair, ctx), |(gvt, gvd)| {
+                    global_value_decls.push(gvt);
+                    if let Some(gvd) = gvd {
+                        global_value_defns.push(gvd)
+                    }
                 });
             }
             Rule::global_name_defn => {
@@ -600,25 +603,48 @@ fn parse_predicate_qualified(
     Ok(qp)
 }
 
+// Parse `name : Type;` or `name : Type = expr;`
 fn parse_global_value_decl(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-) -> Result<GlobalValueDecl, Errors> {
+) -> Result<(GlobalValueDecl, Option<GlobalValueDefn>), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_name_type_sign);
     let span = Span::from_pair(&ctx.source, &pair);
+
+    // Parse name.
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str().to_string();
+    let name = FullName::new(&ctx.namespace, &name);
+
+    // Parse type.
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx)?;
     let kind_sings = qual_type.kind_signs.clone();
     let preds = qual_type.preds.clone();
     let eqs = qual_type.eqs.clone();
     let ty = qual_type.ty.clone();
+    let ty = Scheme::generalize(&kind_sings, preds, eqs, ty);
 
-    Ok(GlobalValueDecl {
-        name: FullName::new(&ctx.namespace, &name),
-        ty: Scheme::generalize(&kind_sings, preds, eqs, ty),
-        src: Some(span),
-    })
+    // Parse expression (if exists).
+    let mut gvd = None;
+    if let Some(pair) = pairs.peek() {
+        if pair.as_rule() == Rule::expr {
+            let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+            gvd = Some(GlobalValueDefn {
+                name: name.clone(),
+                expr,
+                src: Some(span.clone()),
+            });
+        }
+    }
+
+    Ok((
+        GlobalValueDecl {
+            name: name,
+            ty,
+            src: Some(span),
+        },
+        gvd,
+    ))
 }
 
 fn parse_global_name_defn(

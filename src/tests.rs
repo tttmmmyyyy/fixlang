@@ -9045,3 +9045,25 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_concise_defn() {
+    let source = r##"
+module Main;
+
+fib:I64->I64=|n|(
+    if n <= 1 {
+        1
+    } else {
+        fib(n-1) + fib(n-2)
+    }
+);
+
+main : IO () = (
+    let res = fib(5);
+    res.to_string.println;;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

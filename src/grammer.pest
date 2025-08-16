@@ -274,7 +274,7 @@ trait_member_type_impl = { "type" ~ sep+ ~ type_expr ~ sep* ~ "=" ~ sep* ~ type_
 trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ semicolon }
 
 // === Global names === 
-global_name_type_sign = { name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
+global_name_type_sign = { name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr ~ sep*)? ~ semicolon }
 
 global_name_defn = { name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
 

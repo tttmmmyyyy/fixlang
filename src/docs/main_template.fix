@@ -1,7 +1,6 @@
 module Main;
 
-main : IO ();
-main = (
+main : IO () = (
     "Hello, World!".println;;
     pure()
 );

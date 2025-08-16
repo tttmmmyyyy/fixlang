@@ -206,10 +206,10 @@ The following parts are definitions of two global values `calc_fib` and `main`.
 
 ```
 calc_fib : I64 -> Array I64;
-calc_fib = ...{expression A}...;
+calc_fib = {expression A};
 
 main : IO ();
-main = ...{expression B}...;
+main = {expression B};
 ```
 
 These lines means that:
@@ -218,6 +218,11 @@ These lines means that:
 - `main` global value has type `IO ()` and its value is defined by `{expression B}`.
 
 In Fix, you have to specify the type of a global value explicitly. 
+
+NOTE: Since version 1.1.0 of Fix, the above can be written more concisely as follows.
+```
+calc_fib : I64 -> Array I64 = {expression A};
+```
 
 ## Namespaces
 
