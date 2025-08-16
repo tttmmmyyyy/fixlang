@@ -1208,32 +1208,17 @@ namespace IO {
     read_string : IOHandle -> IOFail String;
     read_string = _read_line_inner(false);
 
-    // The handle for standard error.
-    stderr : IOHandle;
-    stderr = (
-        // This implementation is not good because it calls a function with side effects, fdopen, in a pure function.
-        // However, the current implementation works because global values are cached and not inlined.
-        let ptr = "a".borrow_c_str(|mode| FFI_CALL[Ptr fdopen(I32, Ptr), 2_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
-    );
-
     // The handle for standard input.
     stdin : IOHandle;
-    stdin = (
-        // This implementation is not good because it calls a function with side effects, fdopen, in a pure function.
-        // However, the current implementation works because global values are cached and not inlined.
-        let ptr = "r".borrow_c_str(|mode| FFI_CALL[Ptr fdopen(I32, Ptr), 0_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
-    );
+    stdin = IOHandle::from_file_ptr $ FFI_CALL[Ptr fixruntime_c_stdin()];
 
     // The handle for standard output.
     stdout : IOHandle;
-    stdout = (
-        // This implementation is not good because it calls a function with side effects, fdopen, in a pure function.
-        // However, the current implementation works because global values are cached and not inlined.
-        let ptr = "a".borrow_c_str(|mode| FFI_CALL[Ptr fdopen(I32, Ptr), 1_I32, mode]);
-        IOHandle::from_file_ptr $ ptr
-    );
+    stdout = IOHandle::from_file_ptr $ FFI_CALL[Ptr fixruntime_c_stdout()];
+
+    // The handle for standard error.
+    stderr : IOHandle;
+    stderr = IOHandle::from_file_ptr $ FFI_CALL[Ptr fixruntime_c_stderr()];
 
     // Performs a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // 

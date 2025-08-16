@@ -282,6 +282,20 @@ void fixruntime_iohandle_close(IOHandle *handle)
         fclose(file);
     }
 }
+FILE *fixruntime_c_stdin()
+{
+    return stdin;
+}
+
+FILE *fixruntime_c_stdout()
+{
+    return stdout;
+}
+
+FILE *fixruntime_c_stderr()
+{
+    return stderr;
+}
 
 int fixruntime_get_errno()
 {
