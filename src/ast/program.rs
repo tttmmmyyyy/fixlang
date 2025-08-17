@@ -238,9 +238,9 @@ impl SymbolExpr {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TypedExpr {
     // The expression.
+    //
+    // It and its all subexpressions has their types resolved, and these types contains only ones that appear in the context (type signature) of this expression.
     pub expr: Arc<ExprNode>,
-    // Substitution to be applied to the type of this expression or its sub-expressions.
-    pub substitution: Substitution,
     // Equalities to be assumed in the context of this expression.
     //
     // For example, consider the following expression:
@@ -261,7 +261,6 @@ impl TypedExpr {
     pub fn from_expr(expr: Arc<ExprNode>) -> Self {
         TypedExpr {
             expr,
-            substitution: Substitution::default(),
             equalities: vec![],
         }
     }
@@ -276,22 +275,7 @@ impl TypedExpr {
         if node.is_none() {
             return None;
         }
-        let mut node = node.unwrap();
-        match &mut node {
-            EndNode::Expr(_, ty) => {
-                if let Some(ty) = ty {
-                    *ty = self.substitution.substitute_type(ty);
-                }
-            }
-            EndNode::Pattern(_, ty) => {
-                if let Some(ty) = ty {
-                    *ty = self.substitution.substitute_type(ty);
-                }
-            }
-            EndNode::Type(_) => {}
-            EndNode::Trait(_) => {}
-            EndNode::Module(_) => {}
-        }
+        let node = node.unwrap();
         Some(node)
     }
 }
@@ -993,7 +977,6 @@ impl Program {
         // Perform type-checking.
         tc.current_module = Some(def_mod.clone());
         te.expr = tc.check_type(te.expr.clone(), req_scm.clone())?;
-        te.substitution = tc.substitution;
         te.equalities = tc.local_assumed_eqs;
 
         // Save the result to cache file.
@@ -1249,7 +1232,6 @@ impl Program {
                 // Specialize e's type to the required type `sym.ty`.
                 let mut tc = tc.clone();
                 tc.assert_freshness();
-                tc.substitution = e.substitution.clone();
                 tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
                 for eq in &e.equalities {
                     tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
@@ -1268,7 +1250,6 @@ impl Program {
                     // Specialize e's type to the required type `sym.ty`.
                     let mut tc = tc.clone();
                     tc.assert_freshness();
-                    tc.substitution = e.substitution;
                     tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
                     for eq in &e.equalities {
                         tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
@@ -1464,10 +1445,12 @@ impl Program {
                 expr
             }
         };
-        // If the type of an expression contains undetermied type variable after instantiation, raise an error.
+        // If the type of an expression contains indeterminate type variable after instantiation, raise an error.
+        //
+        // NOTE: This check is only for safety's sake, as we are determining whether there are any indeterminate type variables during the type inference phase.
         if !ret.ty.as_ref().unwrap().free_vars().is_empty() {
             return Err(Errors::from_msg_srcs(
-                "The type of an expression cannot be determined. You need to add type annotation to help type inference.".to_string(),
+                "Cannot infer the type of this expression because it contains an indeterminate type variable. Hint: you may fix this by adding a type annotation.".to_string(),
                 &[&ret.source],
             ));
         }
