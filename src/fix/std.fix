@@ -2174,6 +2174,24 @@ namespace Iterator {
     zip : [i1 : Iterator, i2 : Iterator] i2 -> i1 -> ZipIterator i1 i2;
     zip = |iter2, iter1| ZipIterator { iter1: iter1, iter2: iter2 };
 
+    type EnumerateIterator it = unbox struct { it : it, index : I64 };
+    impl [it : Iterator] EnumerateIterator it : Iterator {
+        type Item (EnumerateIterator it) = (I64, Item it);
+        advance = |EnumerateIterator { it : it, index : idx }| (
+            match it.advance {
+                none() => none(),
+                some((it, a)) => some $ (EnumerateIterator { it: it, index: idx + 1 }, (idx, a))
+            }
+        );
+    }
+    
+    // Creates an iterator that yields elements along with their index.
+    // 
+    // # Parameters
+    // * `iter` - The iterator to be enumerated.
+    enumerate : [i : Iterator] i -> EnumerateIterator i;
+    enumerate = |iter| EnumerateIterator { it: iter, index: 0 };
+
     // Check if all elements of an iterator satisfy a given predicate.
     // 
     // Added in v1.1.0.

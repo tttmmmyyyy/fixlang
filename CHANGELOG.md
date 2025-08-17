@@ -18,6 +18,7 @@
 - Improve `Std::Array::sort_by` implementation (now it uses introsort), and added `Std::Array::sort_stable_by` function (currently implemented by merge sort).
 - Add `Std::Array::resize` to resize an array to a given length, filling the new elements with a given value, or truncating the array if the new length is smaller than the current length.
 - Add `Std::Array::reverse` to reverse an array.
+- Add `Std::Iterator::enumerate`.
 
 ### Changed
 - Update LLVM to 17.0.x.

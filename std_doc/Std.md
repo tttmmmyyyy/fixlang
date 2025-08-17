@@ -2745,6 +2745,16 @@ An iterator that yields no elements.
 
 NOTE: When using this iterator, you may need to specify the type of the iterator explicitly, e.g, `(empty : EmptyIterator I64)`.
 
+#### enumerate
+
+Type: `[i : Std::Iterator] i -> Std::Iterator::EnumerateIterator i`
+
+Creates an iterator that yields elements along with their index.
+
+##### Parameters
+
+* `iter` - The iterator to be enumerated.
+
 #### filter
 
 Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::FilterIterator i a`
@@ -5011,6 +5021,18 @@ Defined as: `type EmptyIterator a = unbox struct { ...fields... }`
 
 Iterators that yields no elements.
 
+#### EnumerateIterator
+
+Defined as: `type EnumerateIterator it = unbox struct { ...fields... }`
+
+##### field `it`
+
+Type: `it`
+
+##### field `index`
+
+Type: `Std::I64`
+
 #### FilterIterator
 
 Defined as: `type FilterIterator i a = unbox struct { ...fields... }`
@@ -5746,6 +5768,8 @@ Concatenates two dynamic iterators.
 Creates an empty dynamic iterator.
 
 ### impl `Std::Iterator::EmptyIterator a : Std::Iterator`
+
+### impl `[it : Std::Iterator] Std::Iterator::EnumerateIterator it : Std::Iterator`
 
 ### impl `[i : Std::Iterator] Std::Iterator::FilterIterator i a : Std::Iterator`
 

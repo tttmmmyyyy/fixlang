@@ -6232,6 +6232,21 @@ pub fn test_iterator_zip() {
 }
 
 #[test]
+pub fn test_iterator_enumerate() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", range(0, 0).enumerate.to_array, []);;
+        assert_eq(|_|"", range(2, 5).enumerate.to_array, [(0, 2), (1, 3), (2, 4)]);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_iterator_monad() {
     let source = r##"
     module Main;
