@@ -1099,6 +1099,7 @@ impl TypeCheckContext {
         expect_scm: Arc<Scheme>,
     ) -> Result<Arc<ExprNode>, Errors> {
         // This function should be called when TypeCheckContext is "fresh".
+        assert!(self.tyvar_id == 0);
         assert!(self.substitution.is_empty());
         assert!(self.predicates.is_empty());
         assert!(self.equalities.is_empty());
