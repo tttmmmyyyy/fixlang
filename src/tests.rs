@@ -2299,6 +2299,44 @@ main = (
     let y = x.sort_by(|(lhs, rhs)| lhs < rhs);
     assert_eq(|_|"", y, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
     assert_eq(|_|"", x, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
+
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_sort() {
+    let source = r#"
+module Main;
+
+import Std hiding { FFI::Destructor::make };
+
+type Pair = struct { x : I64, y : String };
+make : I64 -> String -> Pair = |x, y| Pair { x : x, y : y };
+
+impl Pair : LessThan {
+    less_than = |lhs, rhs| (
+        lhs.@x < rhs.@x
+    );
+}
+impl Pair : Eq {
+    eq = |lhs, rhs| lhs.@x == rhs.@x && lhs.@y == rhs.@y;
+}
+
+main : IO ();
+main = (
+    let x = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10];
+    let y = x.sort;
+    assert_eq(|_|"", y, [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);;
+    assert_eq(|_|"", x, [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]);;
+
+    let x = [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k")];
+    let y = x.sort_stable;
+    assert_eq(|_|"", y, [make(1, "i"), make(1, "j"), make(1, "k"), make(2, "g"), make(2, "h"), make(3, "f"), make(4, "c"), make(4, "d"), make(4, "e"), make(5, "a"), make(5, "b")]);;
+    assert_eq(|_|"", x, [make(5, "a"), make(5, "b"), make(4, "c"), make(4, "d"), make(4, "e"), make(3, "f"), make(2, "g"), make(2, "h"), make(1, "i"), make(1, "j"), make(1, "k")]);;
+
     pure()
 );
     "#;

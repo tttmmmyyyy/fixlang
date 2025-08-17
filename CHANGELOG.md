@@ -19,6 +19,7 @@
 - Add `Std::Array::resize` to resize an array to a given length, filling the new elements with a given value, or truncating the array if the new length is smaller than the current length.
 - Add `Std::Array::reverse` to reverse an array.
 - Add `Std::Iterator::enumerate`.
+- Add `Std::Array::sort : [a : LessThan] Array a -> Array a` and `Std::Array::sort_stable : [a : LessThan] Array a -> Array a`;
 
 ### Changed
 - Update LLVM to 17.0.x.

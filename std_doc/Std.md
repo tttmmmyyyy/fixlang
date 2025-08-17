@@ -491,13 +491,25 @@ This function clones the given array if it is shared.
 * `value` - The value to set the element to.
 * `array` - The array to modify.
 
+#### sort
+
+Type: `[a : Std::LessThan] Std::Array a -> Std::Array a`
+
+Sort by `LessThan` trait.
+
+Note: this can be an unstable sort.
+
+##### Parameters
+
+- `arr`: An array of elements to be sorted.
+
 #### sort_by
 
 Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 
-Sort by "less than" comparator.
+Sort by a "less than" comparator.
 
-Note: this is not a stable sort.
+Note: this can be an unstable sort.
 
 ##### Parameters
 
@@ -505,11 +517,23 @@ Note: this is not a stable sort.
   less than the second.
 - `arr`: An array of elements to be sorted.
 
+#### sort_stable
+
+Type: `[a : Std::LessThan] Std::Array a -> Std::Array a`
+
+Stable sort by `LessThan` trait.
+
+Note: Currently this is implemented by merge sort, which is not in-place.
+
+##### Parameters
+
+- `arr`: An array of elements to be sorted.
+
 #### sort_stable_by
 
 Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 
-Stable sort by "less than" comparator.
+Stable sort by a "less than" comparator.
 
 Note: Currently this is implemented by merge sort, which is not in-place.
 
