@@ -1248,7 +1248,7 @@ impl Program {
             SymbolExpr::Simple(e) => {
                 // Specialize e's type to the required type `sym.ty`.
                 let mut tc = tc.clone();
-                assert!(tc.substitution.is_empty());
+                tc.assert_freshness();
                 tc.substitution = e.substitution.clone();
                 tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
                 for eq in &e.equalities {
@@ -1267,7 +1267,7 @@ impl Program {
 
                     // Specialize e's type to the required type `sym.ty`.
                     let mut tc = tc.clone();
-                    assert!(tc.substitution.is_empty());
+                    tc.assert_freshness();
                     tc.substitution = e.substitution;
                     tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
                     for eq in &e.equalities {

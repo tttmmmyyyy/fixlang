@@ -1092,7 +1092,7 @@ impl TypeCheckContext {
     }
 
     // Check that the `TypeCheckContext` is "fresh", i.e., it state variables are default.
-    fn assert_freshness(&self) {
+    pub fn assert_freshness(&self) {
         assert!(self.tyvar_id == 0);
         assert!(self.substitution.is_empty());
         assert!(self.predicates.is_empty());
