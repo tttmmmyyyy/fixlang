@@ -9273,7 +9273,7 @@ main = (
     test_source_fail(
         &source,
         Configuration::develop_compiler_mode(),
-        "Cannot infer the type of this expression or pattern",
+        "Cannot infer the type of this expression",
     );
 }
 
@@ -9290,6 +9290,6 @@ main = (
     test_source_fail(
         &source,
         Configuration::develop_compiler_mode(),
-        "Cannot infer the type of this expression or pattern",
+        "Cannot infer the type of this expression",
     );
 }

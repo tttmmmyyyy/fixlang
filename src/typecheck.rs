@@ -1091,6 +1091,16 @@ impl TypeCheckContext {
         err
     }
 
+    // Check that the `TypeCheckContext` is "fresh", i.e., it state variables are default.
+    fn assert_freshness(&self) {
+        assert!(self.tyvar_id == 0);
+        assert!(self.substitution.is_empty());
+        assert!(self.predicates.is_empty());
+        assert!(self.equalities.is_empty());
+        assert!(self.local_assumed_eqs.is_empty());
+        assert!(self.fixed_tyvars.is_empty());
+    }
+
     // Check if an expression matches the expected type scheme.
     // Returns the given expression with each subexpression annotated with inferred types.
     pub fn check_type(
@@ -1098,12 +1108,7 @@ impl TypeCheckContext {
         expr: Arc<ExprNode>,
         expect_scm: Arc<Scheme>,
     ) -> Result<Arc<ExprNode>, Errors> {
-        // This function should be called when TypeCheckContext is "fresh".
-        assert!(self.tyvar_id == 0);
-        assert!(self.substitution.is_empty());
-        assert!(self.predicates.is_empty());
-        assert!(self.equalities.is_empty());
-        assert!(self.local_assumed_eqs.is_empty());
+        self.assert_freshness();
 
         fn make_error(
             tc: &TypeCheckContext,
