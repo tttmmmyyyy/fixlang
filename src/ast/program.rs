@@ -1447,7 +1447,7 @@ impl Program {
         };
         // If the type of an expression contains indeterminate type variable after instantiation, raise an error.
         //
-        // NOTE: This check is only for safety's sake, as we are determining whether there are any indeterminate type variables during the type inference phase.
+        // NOTE: This check is a precaution, as we are determining whether there are any indeterminate type variables during the type inference phase.
         if !ret.ty.as_ref().unwrap().free_vars().is_empty() {
             return Err(Errors::from_msg_srcs(
                 "Cannot infer the type of this expression because it contains an indeterminate type variable. Hint: you may fix this by adding a type annotation.".to_string(),
