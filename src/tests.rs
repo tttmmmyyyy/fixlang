@@ -9254,3 +9254,42 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_indeterminate_type_variable() {
+    let source = r##"
+module Main;
+
+f : Bool = g == g;
+
+g : Array a;
+g = [];
+
+main : IO ();
+main = (
+    f.to_string.println
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Cannot infer the type of this expression or pattern",
+    );
+}
+
+#[test]
+pub fn test_indeterminate_type_variable2() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    assert_eq(|_|"", [].get_size, 0)
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "Cannot infer the type of this expression or pattern",
+    );
+}

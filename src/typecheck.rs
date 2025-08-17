@@ -1132,7 +1132,14 @@ impl TypeCheckContext {
             return Err(Errors::from_err(make_error(self, e, &expr.source)));
         }
         let specified_ty = specified_ty.ok().unwrap();
+
+        // Check if the type of `expr` is unifiable to the specified type.
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
+
+        // Check if all type variables are fixed.
+        let expr = self.finish_inferred_types(expr)?;
+
+        // Check all predicates and equalities are satisfied.
         let reduction_res = UnifOrOtherErr::extract_others(self.reduce_predicates())?;
         if let Err(e) = reduction_res {
             return Err(Errors::from_err(make_error(self, e, &expr.source)));
@@ -1463,19 +1470,10 @@ impl TypeCheckContext {
         let ty = self.substitute_type(pat.info.inferred_ty.as_ref().unwrap());
         let ty = self.reduce_type_by_equality(ty)?;
 
-        let mut errs = None;
-        if ty.free_vars().len() > 0 {
-            errs = Some(Errors::from_msg_srcs(
-                format!("Cannot determine the type of a pattern. Add type annotation to fix it."),
-                &[&pat.info.source],
-            ));
-            // To raise an error of this kind in the deepest node of the AST, we do not return here.
-        }
+        let errs = self.check_is_type_fixed("pattern", &pat.info.source, &ty);
+        // To raise an error of this kind in the deepest node of the AST, we do not return here.
 
         let pat = pat.set_type(ty);
-        if let Some(errs) = errs {
-            return Err(errs);
-        }
 
         let pat = match &pat.pattern {
             Pattern::Var(_var, _anno_ty) => {
@@ -1496,23 +1494,46 @@ impl TypeCheckContext {
             }
         };
 
+        if let Some(errs) = errs {
+            return Err(errs);
+        }
+
         Ok(pat)
+    }
+
+    fn check_is_type_fixed(
+        &self,
+        src_type: &str,
+        src: &Option<Span>,
+        ty: &Arc<TypeNode>,
+    ) -> Option<Errors> {
+        let mut errs = None;
+        let mut fvs = ty
+            .free_vars()
+            .into_iter()
+            .filter(|(k, _v)| !self.fixed_tyvars.iter().any(|tv| tv.name == *k));
+        if let Some((fv_name, fv)) = fvs.next() {
+            let mut err = Error::from_msg_srcs(
+                format!(
+                    "Cannot infer the type of this {} because it contains an indeterminate type variable `{}`. Hint: you may fix this by adding a type annotation.",
+                    src_type,
+                    fv_name
+                ),
+                &[src],
+            );
+            let tv_loc_msgs = self.create_tyvar_location_messages(&[fv], None);
+            err.add_srcs(tv_loc_msgs);
+            errs = Some(Errors::from_err(err));
+        }
+        errs
     }
 
     pub fn finish_inferred_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ty = self.substitute_type(expr.ty.as_ref().unwrap());
         let ty = self.reduce_type_by_equality(ty)?;
 
-        let mut errs = None;
-        if ty.free_vars().len() > 0 {
-            errs = Some(Errors::from_msg_srcs(
-                format!(
-                    "Cannot determine the type of an expression. Add type annotation to fix it."
-                ),
-                &[&expr.source],
-            ));
-            // To raise an error of this kind in the deepest node of the AST, we do not return here.
-        }
+        let errs = self.check_is_type_fixed("expression", &expr.source, &ty);
+        // To raise an error of this kind in the deepest node of the AST, we do not return here if some error found.
 
         let expr = expr.set_inferred_type(ty);
         let res = Ok(match &*expr.expr {
