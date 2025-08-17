@@ -603,7 +603,7 @@ impl TypeCheckContext {
         ei: &Arc<ExprNode>,
         ty: Arc<TypeNode>,
     ) -> Result<Arc<ExprNode>, Errors> {
-        let ei = ei.set_inferred_type(ty.clone());
+        let ei = ei.set_type(ty.clone());
         match &*ei.expr {
             Expr::Var(var) => {
                 let candidates = self
@@ -785,8 +785,7 @@ impl TypeCheckContext {
             Expr::Let(pat, val, body) => {
                 pat.validate(&self.type_env)?;
                 let (pat, var_ty) = pat.get_typed(self)?;
-                let val =
-                    self.unify_type_of_expr(val, pat.info.inferred_ty.as_ref().unwrap().clone())?;
+                let val = self.unify_type_of_expr(val, pat.info.type_.as_ref().unwrap().clone())?;
                 for (var_name, var_ty) in &var_ty {
                     assert!(var_name.is_local());
                     self.scope
@@ -857,7 +856,7 @@ impl TypeCheckContext {
 
                     // Check if the type of the pattern matches the type of the condition.
                     let (pat, var_ty) = pat.get_typed(self)?;
-                    let pat_ty = pat.info.inferred_ty.as_ref().unwrap().clone();
+                    let pat_ty = pat.info.type_.as_ref().unwrap().clone();
                     if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
                         let err = self.create_type_mismatch_error(
                             &pat_ty,
@@ -1142,7 +1141,7 @@ impl TypeCheckContext {
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
 
         // Check if all type variables are fixed.
-        let expr = self.finish_inferred_types(expr)?;
+        let expr = self.finalize_types(expr)?;
 
         // Check all predicates and equalities are satisfied.
         let reduction_res = UnifOrOtherErr::extract_others(self.reduce_predicates())?;
@@ -1468,11 +1467,11 @@ impl TypeCheckContext {
         return Ok(());
     }
 
-    pub fn finish_inferred_types_for_pattern(
+    pub fn finalize_types_for_pattern(
         &mut self,
         pat: Arc<PatternNode>,
     ) -> Result<Arc<PatternNode>, Errors> {
-        let ty = self.substitute_type(pat.info.inferred_ty.as_ref().unwrap());
+        let ty = self.substitute_type(pat.info.type_.as_ref().unwrap());
         let ty = self.reduce_type_by_equality(ty)?;
 
         let errs = self.check_is_type_fixed("pattern", &pat.info.source, &ty);
@@ -1486,13 +1485,13 @@ impl TypeCheckContext {
                 pat
             }
             Pattern::Union(_, subpat) => {
-                let subpat = self.finish_inferred_types_for_pattern(subpat.clone())?;
+                let subpat = self.finalize_types_for_pattern(subpat.clone())?;
                 pat.set_union_pat(subpat)
             }
             Pattern::Struct(_, fied_to_pat) => {
                 let mut field_to_pat = fied_to_pat.clone();
                 for (_field_name, subpat) in field_to_pat.iter_mut() {
-                    let new_subpat = self.finish_inferred_types_for_pattern(subpat.clone())?;
+                    let new_subpat = self.finalize_types_for_pattern(subpat.clone())?;
                     *subpat = new_subpat;
                 }
                 pat.set_struct_field_to_pat(field_to_pat)
@@ -1533,72 +1532,67 @@ impl TypeCheckContext {
         errs
     }
 
-    pub fn finish_inferred_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
-        let ty = self.substitute_type(expr.ty.as_ref().unwrap());
+    pub fn finalize_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
+        let ty = self.substitute_type(expr.type_.as_ref().unwrap());
         let ty = self.reduce_type_by_equality(ty)?;
 
         let errs = self.check_is_type_fixed("expression", &expr.source, &ty);
         // To raise an error of this kind in the deepest node of the AST, we do not return here if some error found.
 
-        let expr = expr.set_inferred_type(ty);
+        let expr = expr.set_type(ty);
         let res = Ok(match &*expr.expr {
             Expr::Var(_) => expr,
             Expr::LLVM(_) => expr,
             Expr::App(fun, args) => {
-                let args = collect_results(
-                    args.iter()
-                        .map(|arg| self.finish_inferred_types(arg.clone())),
-                )?;
-                let fun = self.finish_inferred_types(fun.clone())?;
+                let args =
+                    collect_results(args.iter().map(|arg| self.finalize_types(arg.clone())))?;
+                let fun = self.finalize_types(fun.clone())?;
                 expr.set_app_func(fun).set_app_args(args)
             }
             Expr::Lam(_args, body) => {
-                let body = self.finish_inferred_types(body.clone())?;
+                let body = self.finalize_types(body.clone())?;
                 expr.set_lam_body(body)
             }
             Expr::Let(pat, val, body) => {
-                let pat = self.finish_inferred_types_for_pattern(pat.clone())?;
-                let val = self.finish_inferred_types(val.clone())?;
-                let body = self.finish_inferred_types(body.clone())?;
+                let pat = self.finalize_types_for_pattern(pat.clone())?;
+                let val = self.finalize_types(val.clone())?;
+                let body = self.finalize_types(body.clone())?;
                 expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.finish_inferred_types(cond.clone())?;
-                let then_expr = self.finish_inferred_types(then_expr.clone())?;
-                let else_expr = self.finish_inferred_types(else_expr.clone())?;
+                let cond = self.finalize_types(cond.clone())?;
+                let then_expr = self.finalize_types(then_expr.clone())?;
+                let else_expr = self.finalize_types(else_expr.clone())?;
                 expr.set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
             Expr::Match(cond, pat_vals) => {
-                let cond = self.finish_inferred_types(cond.clone())?;
+                let cond = self.finalize_types(cond.clone())?;
                 let mut new_pat_vals = vec![];
                 for (pat, val) in pat_vals {
-                    let pat = self.finish_inferred_types_for_pattern(pat.clone())?;
-                    let val = self.finish_inferred_types(val.clone())?;
+                    let pat = self.finalize_types_for_pattern(pat.clone())?;
+                    let val = self.finalize_types(val.clone())?;
                     new_pat_vals.push((pat, val));
                 }
                 expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
             }
-            Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.finish_inferred_types(e.clone())?),
+            Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.finalize_types(e.clone())?),
             Expr::MakeStruct(_tc, fields) => {
                 let mut fields_res = vec![];
                 for (name, e) in fields {
-                    let e = self.finish_inferred_types(e.clone())?;
+                    let e = self.finalize_types(e.clone())?;
                     fields_res.push((name.clone(), e));
                 }
                 expr.set_make_struct_fields(fields_res)
             }
             Expr::ArrayLit(elems) => {
-                let elems =
-                    collect_results(elems.iter().map(|e| self.finish_inferred_types(e.clone())))?;
+                let elems = collect_results(elems.iter().map(|e| self.finalize_types(e.clone())))?;
                 expr.set_array_lit_elems(elems)
             }
             Expr::FFICall(_, _, _, args, _) => {
-                let args = collect_results(
-                    args.iter()
-                        .map(|arg| self.finish_inferred_types(arg.clone())),
-                )?;
+                let args =
+                    collect_results(args.iter().map(|arg| self.finalize_types(arg.clone())))?;
                 expr.set_ffi_call_args(args)
             }
         });

@@ -1595,7 +1595,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // - tail: Whether or not the expression is in tail position, i.e., the result of the expression is the result of the function.
     //         If true, builds return instruction and returns `None`.
     pub fn eval_expr(&mut self, expr: Arc<ExprNode>, tail: bool) -> Option<Object<'c>> {
-        assert!(expr.ty.as_ref().unwrap().free_vars().is_empty());
+        assert!(expr.type_.as_ref().unwrap().free_vars().is_empty());
 
         if self.has_di() {
             self.push_debug_location(expr.source.clone())
@@ -1603,7 +1603,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         let mut ret = match &*expr.expr {
             Expr::Var(var) => self.eval_var(var.clone(), tail),
-            Expr::LLVM(lit) => self.eval_llvm(lit.clone(), expr.ty.clone().unwrap().clone(), tail),
+            Expr::LLVM(lit) => {
+                self.eval_llvm(lit.clone(), expr.type_.clone().unwrap().clone(), tail)
+            }
             Expr::App(lambda, args) => self.eval_app(lambda.clone(), args.clone(), tail),
             Expr::Lam(_, _) => self.eval_lam(expr.clone(), tail),
             Expr::Let(pat, bound, expr) => self.eval_let(pat, bound.clone(), expr.clone(), tail),
@@ -1616,10 +1618,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::Match(cond, pat_vals) => self.eval_match(cond.clone(), pat_vals, tail),
             Expr::TyAnno(e, _) => self.eval_expr(e.clone(), tail),
             Expr::MakeStruct(_, fields) => {
-                let struct_ty = expr.ty.clone().unwrap();
+                let struct_ty = expr.type_.clone().unwrap();
                 self.eval_make_struct(fields.clone(), struct_ty, tail)
             }
-            Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.ty.clone().unwrap(), tail),
+            Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.type_.clone().unwrap(), tail),
             Expr::FFICall(fun_name, ret_ty, param_tys, args, is_io) => {
                 self.eval_ffi_call(&expr, fun_name, ret_ty, param_tys, args, *is_io, tail)
             }
@@ -1630,7 +1632,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
 
         if let Some(ret) = ret.as_mut() {
-            ret.ty = expr.ty.clone().unwrap();
+            ret.ty = expr.type_.clone().unwrap();
         }
         ret
     }
@@ -1724,7 +1726,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             .collect::<Vec<_>>();
 
         // Validation
-        let lam_ty = lam.ty.clone().unwrap();
+        let lam_ty = lam.type_.clone().unwrap();
         assert!(!lam_ty.is_funptr() || cap_vars.len() == 0); // Function poitners cannot capture objects.
 
         cap_vars
@@ -1736,7 +1738,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         lam: Arc<ExprNode>,
         name: Option<&FullName>,
     ) -> FunctionValue<'c> {
-        let lam_ty = lam.ty.clone().unwrap();
+        let lam_ty = lam.type_.clone().unwrap();
         let lam_fn_ty = lambda_function_type(&lam_ty, self);
         let name = if name.is_some() {
             name.unwrap().to_string()
@@ -1826,7 +1828,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         lam_fn: FunctionValue<'c>,
         cap_vars: Option<Vec<(FullName, Arc<TypeNode>)>>,
     ) {
-        let lam_ty = lam.ty.clone().unwrap();
+        let lam_ty = lam.type_.clone().unwrap();
         let (args, body) = lam.destructure_lam();
         let cap_vars = if cap_vars.is_some() {
             cap_vars.unwrap()
@@ -1916,7 +1918,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
     // Evaluate lambda abstraction.
     fn eval_lam(&mut self, lam: Arc<ExprNode>, tail: bool) -> Option<Object<'c>> {
-        let lam_ty = lam.ty.clone().unwrap();
+        let lam_ty = lam.type_.clone().unwrap();
 
         // Calculate captured variables.
         let cap_vars = self.calculate_captured_vars_of_lambda(lam.clone());
@@ -2088,7 +2090,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         else_expr: Arc<ExprNode>,
         tail: bool,
     ) -> Option<Object<'c>> {
-        let res_ty = then_expr.ty.clone().unwrap();
+        let res_ty = then_expr.type_.clone().unwrap();
 
         let mut used_then_or_else = then_expr.free_vars().clone();
         used_then_or_else.extend(else_expr.free_vars().clone());
@@ -2565,7 +2567,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         if obj_ty.is_funptr() {
             // Declare lambda function.
             let lam = sym.expr.as_ref().unwrap().clone();
-            let lam = lam.set_inferred_type(obj_ty.clone());
+            let lam = lam.set_type(obj_ty.clone());
             let lam_fn = self.declare_lambda_function(lam, Some(name));
             self.add_global_object(name.clone(), lam_fn, obj_ty.clone());
             lam_fn
@@ -2614,7 +2616,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Implement lambda function.
             let lam_fn = sym_fn;
             let lam = sym.expr.as_ref().unwrap().clone();
-            let lam = lam.set_inferred_type(obj_ty.clone());
+            let lam = lam.set_type(obj_ty.clone());
             self.implement_lambda_function(lam, lam_fn, None);
         } else {
             // Prepare global variable to store the initialized global value.

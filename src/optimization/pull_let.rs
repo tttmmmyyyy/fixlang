@@ -178,10 +178,10 @@ impl ExprVisitor for PullLet {
         if !arg.is_var() {
             // Apply the transformation (2).
             let f_name = generate_new_names(fun.free_vars(), 1)[0].clone();
-            let arg_ty = arg.ty.as_ref().unwrap();
+            let arg_ty = arg.type_.as_ref().unwrap();
             let f_pat =
                 PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
-            let f_var = expr_var(f_name, None).set_inferred_type(arg_ty.clone());
+            let f_var = expr_var(f_name, None).set_type(arg_ty.clone());
             let expr = expr_let_typed(f_pat, arg.clone(), expr_app_typed(fun, vec![f_var]))
                 .calculate_free_vars();
             return StartVisitResult::ReplaceAndRevisit(expr);

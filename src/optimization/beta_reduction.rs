@@ -81,7 +81,7 @@ impl ExprVisitor for BetaReduction {
                 }
                 let param = &params[0];
                 let pat = PatternNode::make_var(param.clone(), None)
-                    .set_type(arg.ty.as_ref().unwrap().clone());
+                    .set_type(arg.type_.as_ref().unwrap().clone());
                 let expr = expr_let_typed(pat, arg, body.clone());
                 return EndVisitResult::changed(expr).revisit();
             }
@@ -97,8 +97,8 @@ impl ExprVisitor for BetaReduction {
 
                 let x_name = generate_new_names(&black_list, 1)[0].clone();
                 let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
-                    .set_type(arg.ty.as_ref().unwrap().clone());
-                let x = expr_var(x_name, None).set_inferred_type(arg.ty.as_ref().unwrap().clone());
+                    .set_type(arg.type_.as_ref().unwrap().clone());
+                let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
 
                 let expr = expr_app_typed(value.clone(), vec![x]); // {value}(x)
                 let expr = expr_let_typed(pattern.clone(), bound, expr); // let {pat} = {bound} in {value}(x)
@@ -117,8 +117,8 @@ impl ExprVisitor for BetaReduction {
 
                 let x_name = generate_new_names(&black_list, 1)[0].clone();
                 let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
-                    .set_type(arg.ty.as_ref().unwrap().clone());
-                let x = expr_var(x_name, None).set_inferred_type(arg.ty.as_ref().unwrap().clone());
+                    .set_type(arg.type_.as_ref().unwrap().clone());
+                let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
 
                 let then = expr_app_typed(then.clone(), vec![x.clone()]); // {then}(x)
                 let else_ = expr_app_typed(else_.clone(), vec![x.clone()]); // {else}(x)
@@ -141,8 +141,8 @@ impl ExprVisitor for BetaReduction {
 
                 let x_name = generate_new_names(&black_list, 1)[0].clone();
                 let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
-                    .set_type(arg.ty.as_ref().unwrap().clone());
-                let x = expr_var(x_name, None).set_inferred_type(arg.ty.as_ref().unwrap().clone());
+                    .set_type(arg.type_.as_ref().unwrap().clone());
+                let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
 
                 for (_pat, val) in &mut pats_vals {
                     let new_val = expr_app_typed(val.clone(), vec![x.clone()]);

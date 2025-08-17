@@ -574,12 +574,12 @@ impl DecapturingVisitor {
             cap_names_types
                 .iter()
                 .map(|(name, ty)| {
-                    let var = expr_var(name.clone(), None).set_inferred_type(ty.clone());
+                    let var = expr_var(name.clone(), None).set_type(ty.clone());
                     (name.to_string(), var)
                 })
                 .collect(),
         )
-        .set_inferred_type(cap_list_ty.clone());
+        .set_type(cap_list_ty.clone());
 
         // Create the lambda function.
         // To do this, add an argument to lam to receive the capture list, and insert a let expression at the beginning of the body to destructure the capture list.
@@ -595,7 +595,7 @@ impl DecapturingVisitor {
             PatternNode::make_struct(tycon.clone(), cap_pats).set_type(cap_list_ty.clone());
         let new_body = expr_let_typed(
             cap_pat,
-            expr_var(FullName::local(DECAP_NAME), None).set_inferred_type(cap_list_ty.clone()),
+            expr_var(FullName::local(DECAP_NAME), None).set_type(cap_list_ty.clone()),
             lam.clone(),
         );
         let new_arg = var_local(DECAP_NAME);
@@ -668,7 +668,7 @@ impl SpecializationRequest {
 
     // Create an expression to refer to the specialized function.
     fn specialized_func_expr(&self) -> Arc<ExprNode> {
-        expr_var(self.specialized_func_name(), None).set_inferred_type(self.specialized_func_ty())
+        expr_var(self.specialized_func_name(), None).set_type(self.specialized_func_ty())
     }
 }
 
@@ -692,7 +692,7 @@ impl DecapturedLambdaInfo {
         Symbol {
             name: self.lambda_func_name.clone(),
             generic_name: self.lambda_func_name.clone(),
-            ty: self.lambda_func.ty.as_ref().unwrap().clone(),
+            ty: self.lambda_func.type_.as_ref().unwrap().clone(),
             expr: Some(self.lambda_func.clone()),
         }
     }
@@ -724,21 +724,21 @@ impl ExprVisitor for DecapturingVisitor {
         let decap_lambda = decap_lambda.unwrap();
 
         // If the required type for this expression is already the capture list type, do nothing.
-        let expr_ty = expr.ty.as_ref().unwrap().clone();
+        let expr_ty = expr.type_.as_ref().unwrap().clone();
         let cap_list_ty = decap_lambda.cap_list_ty.clone();
         if expr_ty.to_string() == cap_list_ty.to_string() {
             return StartVisitResult::VisitChildren;
         }
 
         // Check that the required type for this expression matches the codomain of the lambda function.
-        let lambda_ty = decap_lambda.lambda_func.ty.as_ref().unwrap();
+        let lambda_ty = decap_lambda.lambda_func.type_.as_ref().unwrap();
         let lambda_codom_ty = lambda_ty.get_lambda_dst();
         assert_eq!(expr_ty.to_string(), lambda_codom_ty.to_string());
 
         // Replace with an expression that applies the lambda function to the capture list.
         let lam = expr_var(decap_lambda.lambda_func_name.clone(), None)
-            .set_inferred_type(lambda_ty.clone());
-        let expr = expr_app_typed(lam, vec![expr.set_inferred_type(cap_list_ty)]);
+            .set_type(lambda_ty.clone());
+        let expr = expr_app_typed(lam, vec![expr.set_type(cap_list_ty)]);
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
@@ -767,11 +767,11 @@ impl ExprVisitor for DecapturingVisitor {
             let decap_lambda = opt_decap_lambda.unwrap();
 
             // Create an expression that applies the lambda function to the capture list.
-            let lambda_ty = decap_lambda.lambda_func.ty.as_ref().unwrap();
+            let lambda_ty = decap_lambda.lambda_func.type_.as_ref().unwrap();
             let lam = expr_var(decap_lambda.lambda_func_name.clone(), None)
-                .set_inferred_type(lambda_ty.clone());
+                .set_type(lambda_ty.clone());
             let name_expr = expr_var(free_name.clone(), None)
-                .set_inferred_type(decap_lambda.cap_list_ty.clone());
+                .set_type(decap_lambda.cap_list_ty.clone());
             let expr = expr_app_typed(lam, vec![name_expr]);
 
             replace.insert(free_name.clone(), expr);
@@ -801,7 +801,7 @@ impl ExprVisitor for DecapturingVisitor {
             let new_name = make_new_name(name);
             expr = expr_let_typed(
                 PatternNode::make_var(var_var(new_name.clone()), None)
-                    .set_type(call_lam_expr.ty.as_ref().unwrap().clone()),
+                    .set_type(call_lam_expr.type_.as_ref().unwrap().clone()),
                 call_lam_expr.clone(),
                 expr.clone(),
             );
@@ -857,7 +857,7 @@ impl ExprVisitor for DecapturingVisitor {
                 let arg_name = &arg.get_var().name;
                 if let Some(decap_info) = self.local_decap_lambdas.get(arg_name) {
                     specialized_args.insert(i, decap_info.clone());
-                    decaptured_args[i] = arg.set_inferred_type(decap_info.cap_list_ty.clone());
+                    decaptured_args[i] = arg.set_type(decap_info.cap_list_ty.clone());
                 }
             } else if DecapturingVisitor::decapturable(arg) {
                 // TODO: maybe we don't need to handle this case, because pull-let transformation converts this argument to a variable?
@@ -873,7 +873,7 @@ impl ExprVisitor for DecapturingVisitor {
         // Request specialization.
         let specialization = SpecializationRequest {
             org_func_name: func_name.clone(),
-            org_func_ty: func.ty.as_ref().unwrap().clone(),
+            org_func_ty: func.type_.as_ref().unwrap().clone(),
             specialized_args,
         };
         let specialized_func_expr = specialization.specialized_func_expr();
@@ -913,7 +913,7 @@ impl ExprVisitor for DecapturingVisitor {
         }
         let local_decap_lambda = opt_local_decap_lambda.unwrap();
         let cap_list_ty = local_decap_lambda.cap_list_ty.clone();
-        let lam_ty = expr.ty.as_ref().unwrap();
+        let lam_ty = expr.type_.as_ref().unwrap();
         let arg_ty = lam_ty.get_lambda_srcs()[0].clone();
         // If the argument type is already correct, do nothing.
         if cap_list_ty.to_string() == arg_ty.to_string() {
@@ -921,7 +921,7 @@ impl ExprVisitor for DecapturingVisitor {
         }
         // Fix the type of this lambda expression
         let new_lambda_ty = type_fun(cap_list_ty, lam_ty.get_lambda_dst());
-        let expr = expr.set_inferred_type(new_lambda_ty);
+        let expr = expr.set_type(new_lambda_ty);
         return StartVisitResult::ReplaceAndRevisit(expr);
     }
 
@@ -932,16 +932,16 @@ impl ExprVisitor for DecapturingVisitor {
     ) -> crate::ast::traverse::EndVisitResult {
         // After visiting children, the codomain type of this expression may have changed, so fix the type if necessary.
         // Example: In `expr` is a lambda `|x| |y| (...)`, if `y` is a decaptured lambda, visiting `|y| (...)` may change its type, so the codomain of `|x| |y| (...)` may need to be fixed.
-        let lam_ty = expr.ty.as_ref().unwrap();
+        let lam_ty = expr.type_.as_ref().unwrap();
         let dom_ty = lam_ty.get_lambda_srcs()[0].clone();
         let codom_ty = lam_ty.get_lambda_dst().clone();
         let lam_body = expr.get_lam_body();
-        let impl_codom_ty = lam_body.ty.as_ref().unwrap();
+        let impl_codom_ty = lam_body.type_.as_ref().unwrap();
         if codom_ty.to_string() == impl_codom_ty.to_string() {
             return EndVisitResult::unchanged(expr);
         }
         let new_lambda_ty = type_fun(dom_ty, impl_codom_ty.clone());
-        let expr = expr.set_inferred_type(new_lambda_ty);
+        let expr = expr.set_type(new_lambda_ty);
         EndVisitResult::changed(expr)
     }
 
@@ -962,7 +962,7 @@ impl ExprVisitor for DecapturingVisitor {
             self.local_decap_lambdas.insert(var_name.clone(), decap_lam);
             let pat = pat
                 .set_var_tyanno(None) // Discard type annotation since it may become incorrect
-                .set_type(cap_list.ty.as_ref().unwrap().clone());
+                .set_type(cap_list.type_.as_ref().unwrap().clone());
             let expr = expr_let_typed(pat, cap_list, value);
             return StartVisitResult::ReplaceAndRevisit(expr);
         } else if bound.is_var() {
@@ -974,7 +974,7 @@ impl ExprVisitor for DecapturingVisitor {
             // The case the bound expression is a variable referring to a decaptured lambda.
             let local_decap_lambda = opt_local_decap_lambda.unwrap();
             // Set the type of bound expression to the capture list type.
-            let bound = bound.set_inferred_type(local_decap_lambda.cap_list_ty.clone());
+            let bound = bound.set_type(local_decap_lambda.cap_list_ty.clone());
             let expr = expr.set_let_bound(bound);
             // Also add the variable introduced by this let binding to `self.local_decap_lambdas`.
             self.local_decap_lambdas

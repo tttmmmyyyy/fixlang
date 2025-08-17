@@ -101,7 +101,7 @@ fn run_on_symbol(sym: &mut Symbol) {
         let var_ty = doms_tys[params.len() + i].clone();
 
         // Create the variable expression of the additional parameter.
-        let var = expr_var(param.clone(), None).set_inferred_type(var_ty);
+        let var = expr_var(param.clone(), None).set_type(var_ty);
 
         // Create the application expression `{body}({var})`.
         body = expr_app_typed(body, vec![var]);

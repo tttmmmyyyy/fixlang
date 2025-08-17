@@ -14,7 +14,7 @@ pub struct PatternNode {
 }
 
 impl PatternNode {
-    // Set `self.info.inferred_ty`.
+    // Set `self.info.type_`.
     // Returns the pattern itself with a map which maps variable names to their types.
     pub fn get_typed(
         self: &Arc<PatternNode>,
@@ -55,7 +55,7 @@ impl PatternNode {
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
                     let unify_res = UnifOrOtherErr::extract_others(typechcker.unify(
-                        &pat.info.inferred_ty.as_ref().unwrap(),
+                        &pat.info.type_.as_ref().unwrap(),
                         field_name_to_ty.get(field_name).unwrap(),
                     ))?;
                     if unify_res.is_err() {
@@ -88,7 +88,7 @@ impl PatternNode {
 
                 // Unify the type of the subpattern with the type of the variant.
                 let unify_res = UnifOrOtherErr::extract_others(
-                    typechcker.unify(&subpat.info.inferred_ty.as_ref().unwrap(), &variant_ty),
+                    typechcker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
                 )?;
                 if unify_res.is_err() {
                     return Err(Errors::from_msg_srcs(
@@ -111,7 +111,7 @@ impl PatternNode {
     // Get the list of names in the pattern with their types (if set).
     pub fn vars_with_types(&self) -> Vec<(FullName, Option<Arc<TypeNode>>)> {
         match &self.pattern {
-            Pattern::Var(var, _) => vec![(var.name.clone(), self.info.inferred_ty.clone())],
+            Pattern::Var(var, _) => vec![(var.name.clone(), self.info.type_.clone())],
             Pattern::Struct(_, pats) => {
                 let mut ret = vec![];
                 for (_, pat) in pats {
@@ -143,7 +143,7 @@ impl PatternNode {
                 }
                 Some(EndNode::Pattern(
                     v.as_ref().clone(),
-                    self.info.inferred_ty.clone(),
+                    self.info.type_.clone(),
                 ))
             }
             Pattern::Struct(tc, field_to_pat) => {
@@ -351,7 +351,7 @@ impl PatternNode {
 
     pub fn set_type(self: &PatternNode, ty: Arc<TypeNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
-        node.info.inferred_ty = Some(ty);
+        node.info.type_ = Some(ty);
         Arc::new(node)
     }
 
@@ -446,7 +446,7 @@ impl PatternNode {
 
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct PatternInfo {
-    pub inferred_ty: Option<Arc<TypeNode>>,
+    pub type_: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
 }
 

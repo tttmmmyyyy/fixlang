@@ -1232,11 +1232,13 @@ impl Program {
                 // Specialize e's type to the required type `sym.ty`.
                 let mut tc = tc.clone();
                 tc.assert_freshness();
-                tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
+                tc.unify(e.expr.type_.as_ref().unwrap(), &sym.ty)
+                    .ok()
+                    .unwrap();
                 for eq in &e.equalities {
                     tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                 }
-                tc.finish_inferred_types(e.expr.clone())?
+                tc.finalize_types(e.expr.clone())?
             }
             SymbolExpr::Method(impls) => {
                 let mut opt_e: Option<Arc<ExprNode>> = None;
@@ -1250,11 +1252,13 @@ impl Program {
                     // Specialize e's type to the required type `sym.ty`.
                     let mut tc = tc.clone();
                     tc.assert_freshness();
-                    tc.unify(e.expr.ty.as_ref().unwrap(), &sym.ty).ok().unwrap();
+                    tc.unify(e.expr.type_.as_ref().unwrap(), &sym.ty)
+                        .ok()
+                        .unwrap();
                     for eq in &e.equalities {
                         tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                     }
-                    opt_e = Some(tc.finish_inferred_types(e.expr)?);
+                    opt_e = Some(tc.finalize_types(e.expr)?);
                     break;
                 }
                 opt_e.unwrap()
@@ -1370,7 +1374,7 @@ impl Program {
         };
         let symbol_name = self.require_instantiation(&value_name, &required_ty)?;
         self.instantiate_symbols(tc)?;
-        let expr = expr_var(symbol_name, None).set_inferred_type(required_ty);
+        let expr = expr_var(symbol_name, None).set_type(required_ty);
         Ok((expr, eft))
     }
 
@@ -1382,7 +1386,7 @@ impl Program {
                     expr.clone()
                 } else {
                     let instance =
-                        self.require_instantiation(&v.name, &expr.ty.as_ref().unwrap())?;
+                        self.require_instantiation(&v.name, &expr.type_.as_ref().unwrap())?;
                     let v = v.set_name(instance);
                     expr.set_var_var(v)
                 }
@@ -1448,7 +1452,7 @@ impl Program {
         // If the type of an expression contains indeterminate type variable after instantiation, raise an error.
         //
         // NOTE: This check is a precaution, as we are determining whether there are any indeterminate type variables during the type inference phase.
-        if !ret.ty.as_ref().unwrap().free_vars().is_empty() {
+        if !ret.type_.as_ref().unwrap().free_vars().is_empty() {
             return Err(Errors::from_msg_srcs(
                 "Cannot infer the type of this expression because it contains an indeterminate type variable. Hint: you may fix this by adding a type annotation.".to_string(),
                 &[&ret.source],

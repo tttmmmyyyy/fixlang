@@ -235,7 +235,7 @@ pub trait ExprVisitor {
                 let res = self.start_visit_lam(&expr, state);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        let arg_tys = expr.ty.as_ref().map(|ty| ty.get_lambda_srcs());
+                        let arg_tys = expr.type_.as_ref().map(|ty| ty.get_lambda_srcs());
                         for (i, arg) in args.iter().enumerate() {
                             state.scope.push(
                                 &arg.name.name,
