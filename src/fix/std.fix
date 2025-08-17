@@ -597,6 +597,31 @@ namespace Array {
             continue $ if pred(arr.@(mid)) { (mid, right) } else { (left, mid) }
         )
     );
+
+    // Remove consecutive duplicates from an array.
+    // 
+    // # Parameters
+    // * `arr` - The input array.
+    // 
+    // # Examples
+    // ```
+    // [1,1,2,2,3].deduplicate == [1,2,3]
+    // [1,2,1,2].deduplicate == [1,2,1,2]  // non-consecutive duplicates are kept
+    // ```
+    dedup : [a : Eq] Array a -> Array a;
+    dedup = |arr| (
+        if arr.is_empty { arr };
+        let (arr, i, _) = range(1, arr.get_size).fold((arr, 1, arr.@(0)), |j, (arr, i, prev)|
+            let now = arr.@(j);
+            if now != prev {
+                let arr = arr.set(i, now);
+                (arr, i+1, now)
+            } else {
+                (arr, i, now)
+            }
+        );
+        arr.truncate(i)
+    );    
 }
 
 // The empty array with zero capacity.

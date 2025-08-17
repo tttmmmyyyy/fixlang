@@ -20,6 +20,7 @@
 - Add `Std::Array::reverse` to reverse an array.
 - Add `Std::Iterator::enumerate`.
 - Add `Std::Array::sort : [a : LessThan] Array a -> Array a` and `Std::Array::sort_stable : [a : LessThan] Array a -> Array a`;
+- Add `Std::Array::dedup : [a : Eq] Array a -> Array a` which removes consecutive duplicate elements from the array.
 
 ### Changed
 - Update LLVM to 17.0.x.

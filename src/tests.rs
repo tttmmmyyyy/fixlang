@@ -9120,3 +9120,137 @@ main : IO () = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_array_dedup1() {
+    let source = r##"
+module Main;
+
+test_unboxed : IO () = (
+    let x = [] : Array I64;
+    let y = x.dedup;
+    assert_eq(|_|"empty", y, []);;
+    assert_eq(|_|"empty,immu", x, []);;
+
+    let x = [1];
+    let y = x.dedup;
+    assert_eq(|_|"single", y, [1]);;
+    assert_eq(|_|"single,immu", x, [1]);;
+
+    let x = [1, 2];
+    let y = x.dedup;
+    assert_eq(|_|"double,nodup", y, [1, 2]);;
+    assert_eq(|_|"double,nodup,immu", x, [1, 2]);;
+
+    let x = [1, 2, 3];
+    let y = x.dedup;
+    assert_eq(|_|"triple,nodup", y, [1, 2, 3]);;
+    assert_eq(|_|"triple,nodup,immu", x, [1, 2, 3]);;
+
+    let x = [1, 1];
+    let y = x.dedup;
+    assert_eq(|_|"double,dup", y, [1]);;
+    assert_eq(|_|"double,dup,immu", x, [1, 1]);;
+
+    let x = [1, 1, 3];
+    let y = x.dedup;
+    assert_eq(|_|"triple,dup1", y, [1, 3]);;
+    assert_eq(|_|"triple,dup1,immu", x, [1, 1, 3]);;
+
+    let x = [1, 2, 1];
+    let y = x.dedup;
+    assert_eq(|_|"triple,nodup2", y, [1, 2, 1]);;
+    assert_eq(|_|"triple,nodup2,immu", x, [1, 2, 1]);;
+
+    let x = [1, 1, 2];
+    let y = x.dedup;
+    assert_eq(|_|"triple,dup2", y, [1, 2]);;
+    assert_eq(|_|"triple,dup2,immu", x, [1, 1, 2]);;
+
+    let x = [1, 1, 1];
+    let y = x.dedup;
+    assert_eq(|_|"triple,dup3", y, [1]);;
+    assert_eq(|_|"triple,dup3,immu", x, [1, 1, 1]);;
+
+    let x = [1, 2, 2, 3, 3, 3, 4];
+    let y = x.dedup;
+    assert_eq(|_|"mixed_dups", y, [1, 2, 3, 4]);;
+    
+    let x = [5, 5, 5, 5, 5];
+    let y = x.dedup;
+    assert_eq(|_|"all_same", y, [5]);;
+
+    pure()
+);
+
+main : IO ();
+main = (
+    test_unboxed;;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_array_dedup2() {
+    let source = r##"
+module Main;
+
+test_boxed : IO () = (
+    let x = [] : Array (Array I64);
+    let y = x.dedup;
+    assert_eq(|_|"empty", y, []);;
+    assert_eq(|_|"empty,immu", x, []);;
+
+    let x = [[1]];
+    let y = x.dedup;
+    assert_eq(|_|"single", y, [[1]]);;
+    assert_eq(|_|"single,immu", x, [[1]]);;
+
+    let x = [[1], [2]];
+    let y = x.dedup;
+    assert_eq(|_|"double,nodup", y, [[1], [2]]);;
+    assert_eq(|_|"double,nodup,immu", x, [[1], [2]]);;
+
+    let x = [[1], [2], [3]];
+    let y = x.dedup;
+    assert_eq(|_|"triple,nodup", y, [[1], [2], [3]]);;
+    assert_eq(|_|"triple,nodup,immu", x, [[1], [2], [3]]);;
+
+    let x = [[1], [1]];
+    let y = x.dedup;
+    assert_eq(|_|"double,dup", y, [[1]]);;
+    assert_eq(|_|"double,dup,immu", x, [[1], [1]]);;
+
+    let x = [[1], [1], [3]];
+    let y = x.dedup;
+    assert_eq(|_|"triple,dup1", y, [[1], [3]]);;
+    assert_eq(|_|"triple,dup1,immu", x, [[1], [1], [3]]);;
+
+    let x = [[1], [2], [1]];
+    let y = x.dedup;
+    assert_eq(|_|"triple,nodup2", y, [[1], [2], [1]]);;
+    assert_eq(|_|"triple,nodup2,immu", x, [[1], [2], [1]]);;
+
+    let x = [[1], [1], [2]];
+    let y = x.dedup;
+    assert_eq(|_|"triple,dup2", y, [[1], [2]]);;
+    assert_eq(|_|"triple,dup2,immu", x, [[1], [1], [2]]);;
+
+    let x = [[1], [1], [1]];
+    let y = x.dedup;
+    assert_eq(|_|"triple,dup3", y, [[1]]);;
+    assert_eq(|_|"triple,dup3,immu", x, [[1], [1], [1]]);;
+
+    pure()
+);
+
+main : IO ();
+main = (
+    test_boxed;;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

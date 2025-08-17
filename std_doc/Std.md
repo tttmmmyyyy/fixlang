@@ -267,6 +267,23 @@ Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` 
 * `second` - The array to be appended.
 * `first` - The array to which `second` is appended.
 
+#### dedup
+
+Type: `[a : Std::Eq] Std::Array a -> Std::Array a`
+
+Remove consecutive duplicates from an array.
+
+##### Parameters
+
+* `arr` - The input array.
+
+##### Examples
+
+```
+[1,1,2,2,3].deduplicate == [1,2,3]
+[1,2,1,2].deduplicate == [1,2,1,2]  // non-consecutive duplicates are kept
+```
+
 #### empty
 
 Type: `Std::I64 -> Std::Array a`
