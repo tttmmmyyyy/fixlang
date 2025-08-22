@@ -9,59 +9,107 @@ use crate::{
     ExprNode, PatternNode,
 };
 
-// Replace a free variable of an expression to another name.
+// Replace free variables of an expression to other names.
 pub fn replace_free_var_of_expr(
     expr: &Arc<ExprNode>,
-    from: &FullName,
-    to: &FullName,
+    mut map: Map<FullName, FullName>,
 ) -> Arc<ExprNode> {
-    if from == to {
+    // If `map` includes a redundant mapping, we can skip the replacement.
+    map.retain(|from, to| from != to);
+    if map.is_empty() {
         return expr.clone();
     }
-    let mut replacer = FreeVarReplacer {
-        from: from.clone(),
-        to: to.clone(),
-    };
+    let mut replacer = FreeVarReplacer::new(map);
     let res = replacer.traverse(expr);
     res.expr.calculate_free_vars()
 }
 
+// Replace free variables of an expression to other names.
+pub fn replace_free_var_of_expr_one(
+    expr: &Arc<ExprNode>,
+    from: &FullName,
+    to: &FullName,
+) -> Arc<ExprNode> {
+    let mut map = Map::default();
+    map.insert(from.clone(), to.clone());
+    let expr = replace_free_var_of_expr(expr, map);
+    expr
+}
+
 pub struct FreeVarReplacer {
-    from: FullName,
-    to: FullName,
+    // The mapping from old names to new names.
+    map: Map<FullName, FullName>,
+    // Local names available at this scope.
+    shadowed: Set<FullName>,
 }
 
 impl FreeVarReplacer {
-    // Should we replace `from` to `to` at this scope?
-    //
-    // If `from` is shadowed, then we should not replace it. so return false.
-    // If `from` is not shadowed but `to` is shadowed, then we should not replace it to avoid name conflict, so return false and set `fail` to true.
-    fn can_replace_at_state(&mut self, state: &VisitState) -> bool {
-        let local_names = state.scope.local_names();
-        // If `from` is shadowed, do nothing.
-        if local_names.contains(&self.from.to_string()) {
-            return false;
+    fn new(map: Map<FullName, FullName>) -> Self {
+        Self {
+            map,
+            shadowed: Set::default(),
+        }
+    }
+
+    // When visiting an expression where a new local name is introduced, determine whether to rename that local name and compute the new name.
+    fn create_rename_of_local_names(
+        &self,
+        introduced_names: &Vec<FullName>,
+        expr: &Arc<ExprNode>,
+    ) -> Map<FullName, FullName> {
+        // If the local name being introduced belongs to `self.to_names`, we need to change the local name to something else.
+        // The conditions that the new name must satisfy are:
+        // - It must not conflict with `self.to_names`.
+        // - It must not conflict with the free names of this expression.
+        // - Additionally, the local names should not conflict with each other.
+
+        let introduced_names_set = introduced_names.iter().cloned().collect::<Set<FullName>>();
+        assert!(
+            introduced_names_set.len() == introduced_names.len(),
+            "Introduced local names are not unique: {}",
+            introduced_names
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        let to_names = self.map.values().cloned().collect::<Set<FullName>>();
+
+        let mut renamed_names = vec![];
+        for introduced_name in introduced_names {
+            if to_names.contains(&introduced_name) {
+                renamed_names.push(introduced_name.clone());
+            }
         }
 
-        // `to` should be free from shadowing.
-        assert!(!state.scope.local_names().contains(&self.to.name));
-        true
+        let expr = expr.calculate_free_vars();
+        let fvs = expr.free_vars();
+        let ng_as_new_name = |name: &FullName| {
+            to_names.contains(&name) || fvs.contains(&name) || introduced_names.contains(name)
+        };
+        let new_names = generate_new_names_pred(ng_as_new_name, renamed_names.len());
+
+        let mut map = Map::default();
+        for (old_name, new_name) in renamed_names.into_iter().zip(new_names) {
+            map.insert(old_name, new_name);
+        }
+
+        map
     }
 }
 
 impl ExprVisitor for FreeVarReplacer {
-    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var = expr.get_var().clone();
-        // If the visited variable is not equal to `from`, do nothing.
-        if var.name != self.from {
+
+        // If the visited variable is not in the map, do nothing.
+        if self.map.get(&var.name).is_none() {
             return EndVisitResult::unchanged(expr);
         }
 
-        if !self.can_replace_at_state(state) {
-            return EndVisitResult::unchanged(expr);
-        }
-
-        let expr = expr.set_var_var(var.set_name(self.to.clone()));
+        let to = self.map.get(&var.name).unwrap();
+        let expr = expr.set_var_var(var.set_name(to.clone()));
         EndVisitResult::changed(expr)
     }
 
@@ -81,20 +129,27 @@ impl ExprVisitor for FreeVarReplacer {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
-        if !self.can_replace_at_state(state) {
-            return EndVisitResult::unchanged(expr);
-        }
-
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        let mut changed = false;
         let mut llvm = expr.get_llvm().as_ref().clone();
 
         let generator = &mut llvm.generator;
         for llvm_fv in generator.free_vars_mut() {
-            // Replace `from` to `to`.
-            if *llvm_fv == self.from {
-                *llvm_fv = self.to.clone();
+            // Replace
+            if let Some(to) = self.map.get(llvm_fv) {
+                if llvm_fv == to {
+                    continue; // No need to replace if they are the same.
+                }
+
+                *llvm_fv = to.clone();
+                changed = true;
             }
         }
+
+        if !changed {
+            return EndVisitResult::unchanged(expr);
+        }
+
         let expr = expr.set_llvm(llvm);
         EndVisitResult::changed(expr)
     }
@@ -116,23 +171,47 @@ impl ExprVisitor for FreeVarReplacer {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        // Check if `to` is going to be shadowed here.
-        let lam_params = expr.get_lam_params();
+        let mut params = expr.get_lam_params();
         assert_eq!(
-            lam_params.len(),
+            params.len(),
             1,
             "This function does not support multi-parameter lambdas."
         );
-        let lam_param = &lam_params[0].clone();
-        if lam_param.name != self.to {
-            return StartVisitResult::VisitChildren;
+        let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
+
+        let bak_map = self.map.clone();
+        let bak_shadowed = self.shadowed.clone();
+
+        for name in &introduced_names {
+            self.map.remove(name);
+            self.shadowed.insert(name.clone());
         }
 
-        // If `to` is going to be shadowed here, we need to avoid shadowing by renaming parameter of the lambda.
-        let mut black_list = Set::default();
-        black_list.insert(self.to.clone());
-        let expr = rename_lam_param_avoiding(&black_list, expr.clone());
-        StartVisitResult::ReplaceAndRevisit(expr)
+        let rename = self.create_rename_of_local_names(&introduced_names, expr);
+        for (org, renamed) in rename.iter() {
+            self.map.insert(org.clone(), renamed.clone());
+        }
+
+        if self.map.is_empty() {
+            self.map = bak_map;
+            self.shadowed = bak_shadowed;
+            return StartVisitResult::Return;
+        }
+
+        // Rename the parameters.
+        for param in &mut params {
+            if let Some(new_name) = rename.get(&param.name) {
+                *param = param.set_name(new_name.clone());
+            }
+        }
+        let body = expr.get_lam_body().clone();
+        let body = self.traverse(&body).expr;
+        let expr = expr.set_lam_params(params).set_lam_body(body);
+
+        self.map = bak_map;
+        self.shadowed = bak_shadowed;
+
+        StartVisitResult::ReplaceAndReturn(expr)
     }
 
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -144,17 +223,53 @@ impl ExprVisitor for FreeVarReplacer {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        // Check if `to` is going to be shadowed here.
-        let pattern_vars = expr.get_let_pat().pattern.vars();
-        if !pattern_vars.contains(&self.to) {
-            return StartVisitResult::VisitChildren;
+        let bound = expr.get_let_bound();
+        let bound_res = self.traverse(&bound);
+        let changed = bound_res.changed;
+        let bound = bound_res.expr;
+        let expr = expr.set_let_bound(bound);
+
+        let introduced_names = expr
+            .get_let_pat()
+            .pattern
+            .vars()
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let bak_map = self.map.clone();
+        let bak_shadowed = self.shadowed.clone();
+
+        for name in &introduced_names {
+            self.map.remove(name);
+            self.shadowed.insert(name.clone());
         }
 
-        // If `to` is going to be shadowed here, we need to avoid shadowing by renaming the pattern.
-        let mut black_list = Set::default();
-        black_list.insert(self.to.clone());
-        let expr = rename_let_pattern_avoiding(&black_list, expr.clone());
-        StartVisitResult::ReplaceAndRevisit(expr)
+        let rename = self.create_rename_of_local_names(&introduced_names, &expr);
+        for (org, renamed) in rename.iter() {
+            self.map.insert(org.clone(), renamed.clone());
+        }
+        if self.map.is_empty() {
+            self.map = bak_map;
+            self.shadowed = bak_shadowed;
+            if changed {
+                return StartVisitResult::ReplaceAndReturn(expr);
+            } else {
+                return StartVisitResult::Return;
+            }
+        }
+
+        // Rename the local names.
+        let pattern = expr.get_let_pat();
+        let pattern = pattern.rename_by_map(&rename);
+        let value = expr.get_let_value();
+        let value = self.traverse(&value).expr;
+        let expr = expr.set_let_pat(pattern).set_let_value(value);
+
+        self.map = bak_map;
+        self.shadowed = bak_shadowed;
+
+        StartVisitResult::ReplaceAndReturn(expr)
     }
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -178,20 +293,50 @@ impl ExprVisitor for FreeVarReplacer {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        // Check if `to` is going to be shadowed here.
-        let shadowed = expr.get_match_pat_vals().iter().any(|(pat, _)| {
-            let pattern_vars = pat.pattern.vars();
-            pattern_vars.contains(&self.to)
-        });
-        if !shadowed {
-            return StartVisitResult::VisitChildren;
-        }
+        let mut changed;
 
-        // If `to` is going to be shadowed here, we need to avoid shadowing by renaming the pattern.
-        let mut black_list = Set::default();
-        black_list.insert(self.to.clone());
-        let expr = rename_match_pattern_avoiding(&black_list, expr.clone());
-        StartVisitResult::ReplaceAndRevisit(expr)
+        let cond = expr.get_match_cond();
+        let cond_res = self.traverse(&cond);
+        changed = cond_res.changed;
+        let cond = cond_res.expr;
+        let expr = expr.set_match_cond(cond);
+
+        let mut pat_vals = expr.get_match_pat_vals();
+
+        for (pat, val) in pat_vals.iter_mut() {
+            let introduced_names = pat.pattern.vars().into_iter().collect::<Vec<_>>();
+
+            let bak_map = self.map.clone();
+            let bak_shadowed = self.shadowed.clone();
+
+            for name in &introduced_names {
+                self.map.remove(name);
+                self.shadowed.insert(name.clone());
+            }
+
+            let rename = self.create_rename_of_local_names(&introduced_names, &expr);
+            for (org, renamed) in rename.iter() {
+                self.map.insert(org.clone(), renamed.clone());
+            }
+            if self.map.is_empty() {
+                self.map = bak_map;
+                self.shadowed = bak_shadowed;
+                continue;
+            }
+            changed = true;
+
+            *pat = pat.rename_by_map(&rename);
+            *val = self.traverse(&val).expr;
+
+            self.map = bak_map;
+            self.shadowed = bak_shadowed;
+        }
+        let expr = expr.set_match_pat_vals(pat_vals);
+
+        if !changed {
+            return StartVisitResult::Return;
+        }
+        StartVisitResult::ReplaceAndReturn(expr)
     }
 
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -265,6 +410,11 @@ impl ExprVisitor for FreeVarReplacer {
 
 // Generate new names that is not in the set `ng_list`.
 pub fn generate_new_names(ng_list: &Set<FullName>, n: usize) -> Vec<FullName> {
+    generate_new_names_pred(|name| ng_list.contains(name), n)
+}
+
+// Generate `n` new names satisfies `!is_ng_name(x)`
+pub fn generate_new_names_pred(is_ng_name: impl Fn(&FullName) -> bool, n: usize) -> Vec<FullName> {
     let mut names = vec![];
     let mut var_name_no = 0;
     for _ in 0..n {
@@ -272,7 +422,7 @@ pub fn generate_new_names(ng_list: &Set<FullName>, n: usize) -> Vec<FullName> {
             let var_name = format!("#v{}", var_name_no);
             var_name_no += 1;
             let var_name = FullName::local(&var_name);
-            if !ng_list.contains(&var_name) {
+            if !is_ng_name(&var_name) {
                 break var_name;
             }
         };
@@ -293,10 +443,8 @@ pub fn rename_pattern_value_avoiding(
         pattern.pattern.vars().into_iter().collect(),
         value.clone(),
     );
-    for (old, new) in renaming.iter() {
-        pattern = pattern.rename_var(old, new);
-        value = replace_free_var_of_expr(&value, old, new);
-    }
+    pattern = pattern.rename_by_map(&renaming);
+    value = replace_free_var_of_expr(&value, renaming);
 
     (pattern, value)
 }
@@ -347,7 +495,7 @@ pub fn rename_lam_param_avoiding(
     } else {
         old_param.clone()
     };
-    let new_value = replace_free_var_of_expr(&old_value, &old_param.name, &new_param.name);
+    let new_value = replace_free_var_of_expr(&old_value, renaming);
     lam_expr
         .set_lam_params(vec![new_param])
         .set_lam_body(new_value)

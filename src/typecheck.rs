@@ -61,6 +61,7 @@ where
     }
 
     // Get a set of local names.
+    #[allow(dead_code)]
     pub fn local_names(&self) -> Set<Name> {
         let mut res: Set<Name> = Default::default();
         for (name, stack) in &self.local {

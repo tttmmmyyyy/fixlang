@@ -6,7 +6,9 @@ use super::{typecheck::Scope, types::TypeNode, Expr, ExprNode};
 
 pub enum StartVisitResult {
     VisitChildren,
+    Return,
     ReplaceAndRevisit(Arc<ExprNode>),
+    ReplaceAndReturn(Arc<ExprNode>),
     // Skip, // to be implemented
     // ReplaceAndSkipChildren(Arc<ExprNode>), // to be implemented
     // ReplaceAndVisitChildren(Arc<ExprNode>), // to be implemented
@@ -180,7 +182,7 @@ pub trait ExprVisitor {
     fn visit_expr(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
         match &*expr.expr {
             Expr::Var(_var) => {
-                let res = self.start_visit_var(expr, state);
+                let res = self.start_visit_var(&expr, state);
                 match res {
                     StartVisitResult::VisitChildren => {
                         // Has no children
@@ -188,12 +190,18 @@ pub trait ExprVisitor {
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
                     }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(expr);
+                    }
                 }
-                let res = self.end_visit_var(expr, state);
+                let res = self.end_visit_var(&expr, state);
                 self.revisit_if_changed(res, state)
             }
             Expr::LLVM(_lit) => {
-                let res = self.start_visit_llvm(expr, state);
+                let res = self.start_visit_llvm(&expr, state);
                 match res {
                     StartVisitResult::VisitChildren => {
                         // Has no children
@@ -201,8 +209,14 @@ pub trait ExprVisitor {
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
                     }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(expr);
+                    }
                 }
-                let res = self.end_visit_llvm(expr, state);
+                let res = self.end_visit_llvm(&expr, state);
                 self.revisit_if_changed(res, state)
             }
             Expr::App(func, args) => {
@@ -224,6 +238,12 @@ pub trait ExprVisitor {
                     }
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
+                    }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
                     }
                 }
                 let res = self.end_visit_app(&expr, state).add_changed(changed);
@@ -253,6 +273,12 @@ pub trait ExprVisitor {
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
                     }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
+                    }
                 }
                 let res = self.end_visit_lam(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
@@ -279,6 +305,12 @@ pub trait ExprVisitor {
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
                     }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
+                    }
                 }
                 let res = self.end_visit_let(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
@@ -301,6 +333,12 @@ pub trait ExprVisitor {
                     }
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
+                    }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
                     }
                 }
                 let res = self.end_visit_if(&expr, state).add_changed(changed);
@@ -332,6 +370,12 @@ pub trait ExprVisitor {
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
                     }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
+                    }
                 }
                 let res = self.end_visit_match(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
@@ -349,6 +393,12 @@ pub trait ExprVisitor {
                     }
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
+                    }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
                     }
                 }
                 let res = self.end_visit_tyanno(&expr, state).add_changed(changed);
@@ -371,6 +421,12 @@ pub trait ExprVisitor {
                     }
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
+                    }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
                     }
                 }
                 let res = self
@@ -396,6 +452,12 @@ pub trait ExprVisitor {
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
                     }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
+                    }
                 }
                 let res = self.end_visit_array_lit(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
@@ -417,6 +479,12 @@ pub trait ExprVisitor {
                     }
                     StartVisitResult::ReplaceAndRevisit(expr) => {
                         return self.visit_expr(&expr, state).add_changed(true);
+                    }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
                     }
                 }
                 let res = self.end_visit_ffi_call(&expr, state).add_changed(changed);

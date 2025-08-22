@@ -24,10 +24,9 @@ and the cost for retaining and releasing an array is saved.
 
 use crate::{
     ast::traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
-    Symbol, Program,
+    optimization::utils::replace_free_var_of_expr_one,
+    Program, Symbol,
 };
-
-use super::utils::replace_free_var_of_expr;
 
 pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.symbols {
@@ -137,7 +136,7 @@ impl ExprVisitor for RenameRemover {
         let pat = &pat.get_var().name;
         let bound = &bound.get_var().name;
         let val = expr.get_let_value();
-        let expr = replace_free_var_of_expr(&val, pat, bound);
+        let expr = replace_free_var_of_expr_one(&val, pat, bound);
         EndVisitResult::changed(expr)
     }
 
@@ -187,7 +186,7 @@ impl ExprVisitor for RenameRemover {
         // Replace all occurrences of `pat` in `expr` with `cond`.
         let pat = &pat.get_var().name;
         let cond = &cond.get_var().name;
-        let expr = replace_free_var_of_expr(&val, pat, cond);
+        let expr = replace_free_var_of_expr_one(&val, pat, cond);
         EndVisitResult::changed(expr)
     }
 

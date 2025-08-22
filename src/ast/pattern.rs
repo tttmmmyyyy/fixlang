@@ -414,33 +414,26 @@ impl PatternNode {
         }
     }
 
-    // Rename a variable name in the pattern.
-    pub fn rename_var(&self, from: &FullName, to: &FullName) -> Arc<PatternNode> {
+    // Rename names in the pattern.
+    pub fn rename_by_map(&self, rename: &Map<FullName, FullName>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &mut node.pattern {
             Pattern::Var(v, _) => {
-                if &v.name == from {
-                    let new_v = v.set_name(to.clone());
+                if let Some(new_name) = rename.get(&v.name) {
+                    let new_v = v.set_name(new_name.clone());
                     *v = new_v;
                 }
             }
             Pattern::Struct(_, fields) => {
                 for (_, pat) in fields {
-                    *pat = pat.rename_var(from, to);
+                    *pat = pat.rename_by_map(rename);
                 }
             }
             Pattern::Union(_, pat) => {
-                *pat = pat.rename_var(from, to);
+                *pat = pat.rename_by_map(rename);
             }
         }
-        let ret = Arc::new(node);
-        if ret.pattern.has_duplicate_vars() {
-            panic!(
-                "Duplicate variable names in pattern: {}",
-                ret.pattern.to_string()
-            );
-        }
-        ret
+        Arc::new(node)
     }
 }
 
