@@ -10,10 +10,7 @@ use crate::{
 };
 
 // Replace free variables of an expression to other names.
-pub fn replace_free_var_of_expr(
-    expr: &Arc<ExprNode>,
-    mut map: Map<FullName, FullName>,
-) -> Arc<ExprNode> {
+pub fn replace_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>) -> Arc<ExprNode> {
     // If `map` includes a redundant mapping, we can skip the replacement.
     map.retain(|from, to| from != to);
     if map.is_empty() {
@@ -25,14 +22,14 @@ pub fn replace_free_var_of_expr(
 }
 
 // Replace free variables of an expression to other names.
-pub fn replace_free_var_of_expr_one(
+pub fn replace_free_names_one(
     expr: &Arc<ExprNode>,
     from: &FullName,
     to: &FullName,
 ) -> Arc<ExprNode> {
     let mut map = Map::default();
     map.insert(from.clone(), to.clone());
-    let expr = replace_free_var_of_expr(expr, map);
+    let expr = replace_free_names(expr, map);
     expr
 }
 
@@ -444,7 +441,7 @@ pub fn rename_pattern_value_avoiding(
         value.clone(),
     );
     pattern = pattern.rename_by_map(&renaming);
-    value = replace_free_var_of_expr(&value, renaming);
+    value = replace_free_names(&value, renaming);
 
     (pattern, value)
 }
@@ -495,7 +492,7 @@ pub fn rename_lam_param_avoiding(
     } else {
         old_param.clone()
     };
-    let new_value = replace_free_var_of_expr(&old_value, renaming);
+    let new_value = replace_free_names(&old_value, renaming);
     lam_expr
         .set_lam_params(vec![new_param])
         .set_lam_body(new_value)

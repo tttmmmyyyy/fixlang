@@ -15,7 +15,7 @@ use crate::{
     },
     constants::{CAP_NAME, DECAP_NAME, STD_NAME},
     misc::{Map, Set},
-    optimization::{pull_let, utils::replace_free_var_of_expr},
+    optimization::{pull_let, utils::replace_free_names},
     stopwatch::StopWatch,
 };
 
@@ -831,7 +831,7 @@ impl ExprVisitor for DecapturingVisitor {
         for (name, _) in replace.iter() {
             rename.insert(name.clone(), make_new_name(name));
         }
-        llvm_expr = replace_free_var_of_expr(&llvm_expr, rename);
+        llvm_expr = replace_free_names(&llvm_expr, rename);
 
         // Insert `let (new name) = (lambda function call);` before the LLVM expression
         let mut expr = llvm_expr.clone();
