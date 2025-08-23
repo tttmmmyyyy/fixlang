@@ -21,6 +21,7 @@
 - Add `Std::Iterator::enumerate`.
 - Add `Std::Array::sort : [a : LessThan] Array a -> Array a` and `Std::Array::sort_stable : [a : LessThan] Array a -> Array a`;
 - Add `Std::Array::dedup : [a : Eq] Array a -> Array a` which removes consecutive duplicate elements from the array.
+- Add support for `textDocument/documentSymbol` request in the language server.
 
 ### Changed
 - Update LLVM to 17.0.x.
