@@ -35,7 +35,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     // Perform inlining optimization.
     if config.enable_inline_optimization() {
         let _sw = StopWatch::new("inline::run", config.show_build_times);
-        inline::run(prg);
+        inline::run(prg, config.show_build_times);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.inline", prg.optimization_step));
             prg.optimization_step += 1;

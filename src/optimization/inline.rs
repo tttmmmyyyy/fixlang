@@ -10,6 +10,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
+    stopwatch::StopWatch,
     ExprNode, Program, Symbol,
 };
 
@@ -17,7 +18,7 @@ use super::{beta_reduction, remove_renaming};
 
 pub const INLINE_COST_THRESHOLD: i32 = 30;
 
-pub fn run(prg: &mut Program) {
+pub fn run(prg: &mut Program, show_build_times: bool) {
     // Calculate free variables of all symbols.
     for (_name, sym) in &mut prg.symbols {
         sym.expr = Some(sym.expr.as_ref().unwrap().calculate_free_vars());
@@ -25,6 +26,7 @@ pub fn run(prg: &mut Program) {
 
     let mut skip_symbols = Set::default();
     while run_one(prg, &mut skip_symbols) {}
+    let _sw = StopWatch::new("inline::run remove_renaming", show_build_times);
     remove_renaming::run(prg);
 }
 
