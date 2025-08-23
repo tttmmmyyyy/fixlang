@@ -25,7 +25,7 @@
 
 name: Release
 
-# Releasesへのファイル追加のために書き込み権限が必要
+# Write permissions required for adding files to Releases
 permissions:
   contents: write
 
@@ -59,18 +59,18 @@ jobs:
               use-cross: false, 
               extension: "" }
           # Reference: https://github.com/actions/runner-images
-          # - { os: ubuntu, image: ubuntu-latest  , target: aarch64-unknown-linux-gnu      , use-cross: true  , extension: ""   } # OpenSSLのクロスコンパイルがうまくできないのでカット
+          # - { os: ubuntu, image: ubuntu-latest  , target: aarch64-unknown-linux-gnu      , use-cross: true  , extension: ""   } # Cross-compilation of OpenSSL doesn't work well, so it's omitted
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
-      # Rustのpackage名を取得して環境変数に入れておく。(後のステップで使用)
+      # Get Rust package name and store it in environment variable (used in later steps)
       - name: Extract crate information
         shell: bash
         run: |
           echo "PROJECT_NAME=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -n1)" >> $GITHUB_ENV
 
-      # LLVM（とOpenSSL）をインストール
+      # Install LLVM (and OpenSSL)
       - name: Install LLVM & OpenSSL
         shell: bash
         run: |
@@ -91,7 +91,7 @@ jobs:
               exit 1
             fi
 
-      # rustcやcargoをインストール
+      # Install rustc and cargo
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -100,7 +100,7 @@ jobs:
           override: true
           profile: minimal
 
-      # targetに応じてcargoもしくはcrossを使用してビルド
+      # Build using cargo or cross depending on target
       - name: Build
         uses: actions-rs/cargo@v1
         with:
@@ -108,13 +108,13 @@ jobs:
           command: build
           args: --release --target ${{ matrix.job.target }}
 
-      # ビルド済みバイナリをリネーム
+      # Rename built binary
       - name: Rename artifacts
         shell: bash
         run: |
           mv target/${{ matrix.job.target }}/release/fix{,-${{ github.ref_name }}-${{ matrix.job.target }}${{ matrix.job.extension }}}
 
-      # ビルド済みバイナリをReleasesに配置
+      # Place built binary in Releases
       - name: Release
         uses: softprops/action-gh-release@v1
         env:
