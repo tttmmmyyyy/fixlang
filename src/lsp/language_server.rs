@@ -29,6 +29,7 @@ use lsp_types::{
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::VecDeque;
 use std::mem;
 use std::path::Path;
 use std::{
@@ -93,6 +94,12 @@ pub struct DiagnosticsResult {
     pub program: Program,
 }
 
+// Document symbol request which are waiting for diagnostics.
+pub struct PendingDocumentSymbolRequest {
+    id: u32,
+    params: DocumentSymbolParams,
+}
+
 static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 
 // Launch the language server
@@ -112,10 +119,21 @@ pub fn launch_language_server() {
     // Maps to get file contents from Uris.
     let mut uri_to_latest_content: Map<lsp_types::Uri, String> = Map::default();
 
+    // The pending document symbol requests.
+    let mut pending_document_symbol_requests: VecDeque<PendingDocumentSymbolRequest> =
+        VecDeque::new();
+
     loop {
         // If new diagnostics are available, send store it to `last_diag`.
-        if let Ok(res) = diag_res_recv.try_recv() {
+        while let Ok(res) = diag_res_recv.try_recv() {
             last_diag = Some(res);
+        }
+        if last_diag.is_some() {
+            // If there are pending document symbol requests, process them.
+            while let Some(req) = pending_document_symbol_requests.pop_front() {
+                let program = &last_diag.as_ref().unwrap().program;
+                handle_document_symbol(req.id, &req.params, program);
+            }
         }
 
         // Read a line to get the content length.
@@ -328,10 +346,6 @@ pub fn launch_language_server() {
                     &uri_to_latest_content,
                 );
             } else if method == "textDocument/documentSymbol" {
-                if last_diag.is_none() {
-                    continue;
-                }
-                let program = &last_diag.as_ref().unwrap().program;
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -340,12 +354,15 @@ pub fn launch_language_server() {
                 if params.is_none() {
                     continue;
                 }
-                handle_document_symbol(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    program,
-                    &uri_to_latest_content,
-                );
+                if last_diag.is_none() {
+                    pending_document_symbol_requests.push_back(PendingDocumentSymbolRequest {
+                        id: id.unwrap(),
+                        params: params.unwrap(),
+                    });
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().program;
+                handle_document_symbol(id.unwrap(), &params.unwrap(), program);
             }
         }
     }
@@ -1109,12 +1126,7 @@ fn handle_goto_definition(
 }
 
 // Handle "textDocument/documentSymbol" method.
-fn handle_document_symbol(
-    id: u32,
-    params: &DocumentSymbolParams,
-    program: &Program,
-    _uri_to_content: &Map<lsp_types::Uri, String>,
-) {
+fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, program: &Program) {
     let canonicalize_path = |path| {
         let path = to_absolute_path(path);
         if let Err(e) = path {
