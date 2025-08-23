@@ -1,6 +1,7 @@
 use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{GlobalValue, Program};
-use crate::ast::typedecl::{TypeDeclValue, TypeDefn};
+use crate::ast::traits::{Trait, TraitAlias, TraitInfo, TraitInstance};
+use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
 use crate::constants::chars_allowed_in_identifiers;
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
@@ -89,7 +90,7 @@ enum DiagnosticsMessage {
 
 // The result of diagnostics.
 pub struct DiagnosticsResult {
-    pub prgoram: Program,
+    pub program: Program,
 }
 
 static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
@@ -259,7 +260,7 @@ pub fn launch_language_server() {
                 if last_diag.is_none() {
                     continue;
                 }
-                let program = &last_diag.as_ref().unwrap().prgoram;
+                let program = &last_diag.as_ref().unwrap().program;
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -278,7 +279,7 @@ pub fn launch_language_server() {
                 if last_diag.is_none() {
                     continue;
                 }
-                let program = &last_diag.as_ref().unwrap().prgoram;
+                let program = &last_diag.as_ref().unwrap().program;
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -292,7 +293,7 @@ pub fn launch_language_server() {
                 if last_diag.is_none() {
                     continue;
                 }
-                let program = &last_diag.as_ref().unwrap().prgoram;
+                let program = &last_diag.as_ref().unwrap().program;
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -311,7 +312,7 @@ pub fn launch_language_server() {
                 if last_diag.is_none() {
                     continue;
                 }
-                let program = &last_diag.as_ref().unwrap().prgoram;
+                let program = &last_diag.as_ref().unwrap().program;
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -330,7 +331,7 @@ pub fn launch_language_server() {
                 if last_diag.is_none() {
                     continue;
                 }
-                let program = &last_diag.as_ref().unwrap().prgoram;
+                let program = &last_diag.as_ref().unwrap().program;
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -1132,16 +1133,39 @@ fn handle_document_symbol(
 
     let mut symbols = Vec::new();
 
-    // Extract type definitions
-    for type_defn in &program.type_defns {
-        if let Some(span) = &type_defn.source {
+    // Extract type constructors from type environment
+    for (tycon, tycon_info) in program.type_env.tycons.as_ref() {
+        // Skip compiler-defined entities
+        if tycon.name.to_string().contains('#') {
+            continue;
+        }
+        if let Some(span) = &tycon_info.source {
             let sym_path = canonicalize_path(&span.input.file_path);
             if sym_path.is_none() {
                 continue;
             }
             let sym_path = sym_path.unwrap();
             if sym_path == path {
-                let symbol = create_symbol_from_type_defn(type_defn);
+                let symbol = create_symbol_from_tycon(tycon, tycon_info);
+                symbols.push(symbol);
+            }
+        }
+    }
+
+    // Extract type aliases from type environment
+    for (tycon, alias_info) in program.type_env.aliases.as_ref() {
+        // Skip compiler-defined entities
+        if tycon.name.to_string().contains('#') {
+            continue;
+        }
+        if let Some(span) = &alias_info.source {
+            let sym_path = canonicalize_path(&span.input.file_path);
+            if sym_path.is_none() {
+                continue;
+            }
+            let sym_path = sym_path.unwrap();
+            if sym_path == path {
+                let symbol = create_symbol_from_type_alias(tycon, alias_info);
                 symbols.push(symbol);
             }
         }
@@ -1149,6 +1173,10 @@ fn handle_document_symbol(
 
     // Extract global values (functions, constants)
     for (full_name, global_value) in &program.global_values {
+        // Skip compiler-defined entities
+        if full_name.to_string().contains('#') {
+            continue;
+        }
         if let Some(span) = &global_value.def_src {
             let sym_path = canonicalize_path(&span.input.file_path);
             if sym_path.is_none() {
@@ -1162,29 +1190,117 @@ fn handle_document_symbol(
         }
     }
 
+    // Extract trait definitions from trait environment
+    for (trait_, trait_info) in &program.trait_env.traits {
+        // Skip compiler-defined entities
+        if trait_.name.to_string().contains('#') {
+            continue;
+        }
+        if let Some(span) = &trait_info.source {
+            let sym_path = canonicalize_path(&span.input.file_path);
+            if sym_path.is_none() {
+                continue;
+            }
+            let sym_path = sym_path.unwrap();
+            if sym_path == path {
+                let symbol = create_symbol_from_trait_info(trait_, trait_info);
+                symbols.push(symbol);
+            }
+        }
+    }
+
+    // Extract trait aliases from trait environment
+    for (trait_, trait_alias) in &program.trait_env.aliases {
+        // Skip compiler-defined entities
+        if trait_.name.to_string().contains('#') {
+            continue;
+        }
+        if let Some(span) = &trait_alias.source {
+            let sym_path = canonicalize_path(&span.input.file_path);
+            if sym_path.is_none() {
+                continue;
+            }
+            let sym_path = sym_path.unwrap();
+            if sym_path == path {
+                let symbol = create_symbol_from_trait_alias(trait_alias);
+                symbols.push(symbol);
+            }
+        }
+    }
+
+    // Extract trait instances from trait environment
+    for (trait_, instances) in &program.trait_env.instances {
+        // Skip compiler-defined entities
+        if trait_.name.to_string().contains('#') {
+            continue;
+        }
+        for instance in instances {
+            // Only include user-defined instances
+            if !instance.is_user_defined {
+                continue;
+            }
+            if let Some(span) = &instance.source {
+                let sym_path = canonicalize_path(&span.input.file_path);
+                if sym_path.is_none() {
+                    continue;
+                }
+                let sym_path = sym_path.unwrap();
+                if sym_path == path {
+                    let symbol = create_symbol_from_trait_instance(trait_, instance);
+                    symbols.push(symbol);
+                }
+            }
+        }
+    }
+
     send_response(id, Ok::<_, ()>(symbols));
 }
 
 #[allow(deprecated)]
-fn create_symbol_from_type_defn(type_defn: &TypeDefn) -> DocumentSymbol {
-    let name = type_defn.name.to_string();
-    let range = type_defn
+fn create_symbol_from_tycon(tycon: &TyCon, tycon_info: &TyConInfo) -> DocumentSymbol {
+    let name = tycon.name.to_string();
+    let range = tycon_info
         .source
         .as_ref()
         .map(span_to_range)
         .unwrap_or_default();
     let selection_range = range.clone();
 
-    let (kind, detail) = match &type_defn.value {
-        TypeDeclValue::Struct(_) => (SymbolKind::STRUCT, Some("struct".to_string())),
-        TypeDeclValue::Union(_) => (SymbolKind::ENUM, Some("union".to_string())),
-        TypeDeclValue::Alias(_) => (SymbolKind::CLASS, Some("type alias".to_string())),
+    let (kind, detail) = match &tycon_info.variant {
+        TyConVariant::Struct => (SymbolKind::STRUCT, Some("struct".to_string())),
+        TyConVariant::Union => (SymbolKind::ENUM, Some("union".to_string())),
+        TyConVariant::Primitive => (SymbolKind::CLASS, Some("primitive type".to_string())),
+        TyConVariant::Arrow => (SymbolKind::CLASS, Some("function type".to_string())),
+        TyConVariant::Array => (SymbolKind::CLASS, Some("array type".to_string())),
+        TyConVariant::DynamicObject => (SymbolKind::CLASS, Some("dynamic object type".to_string())),
     };
 
     DocumentSymbol {
         name,
         detail,
         kind,
+        tags: None,
+        deprecated: Some(false),
+        range,
+        selection_range,
+        children: None,
+    }
+}
+
+#[allow(deprecated)]
+fn create_symbol_from_type_alias(tycon: &TyCon, alias_info: &TyAliasInfo) -> DocumentSymbol {
+    let name = tycon.name.to_string();
+    let range = alias_info
+        .source
+        .as_ref()
+        .map(span_to_range)
+        .unwrap_or_default();
+    let selection_range = range.clone();
+
+    DocumentSymbol {
+        name,
+        detail: Some("type alias".to_string()),
+        kind: SymbolKind::CLASS,
         tags: None,
         deprecated: Some(false),
         range,
@@ -1212,6 +1328,80 @@ fn create_symbol_from_global_value(
         name,
         detail,
         kind: SymbolKind::FUNCTION,
+        tags: None,
+        deprecated: Some(false),
+        range,
+        selection_range,
+        children: None,
+    }
+}
+
+#[allow(deprecated)]
+fn create_symbol_from_trait_info(trait_: &Trait, trait_info: &TraitInfo) -> DocumentSymbol {
+    let name = trait_.name.to_string();
+    let range = trait_info
+        .source
+        .as_ref()
+        .map(span_to_range)
+        .unwrap_or_default();
+    let selection_range = range.clone();
+
+    DocumentSymbol {
+        name,
+        detail: Some("trait".to_string()),
+        kind: SymbolKind::INTERFACE,
+        tags: None,
+        deprecated: Some(false),
+        range,
+        selection_range,
+        children: None,
+    }
+}
+
+#[allow(deprecated)]
+fn create_symbol_from_trait_alias(trait_alias: &TraitAlias) -> DocumentSymbol {
+    let name = trait_alias.id.name.to_string();
+    let range = trait_alias
+        .source
+        .as_ref()
+        .map(span_to_range)
+        .unwrap_or_default();
+    let selection_range = range.clone();
+
+    DocumentSymbol {
+        name,
+        detail: Some("trait".to_string()),
+        kind: SymbolKind::INTERFACE,
+        tags: None,
+        deprecated: Some(false),
+        range,
+        selection_range,
+        children: None,
+    }
+}
+
+#[allow(deprecated)]
+fn create_symbol_from_trait_instance(
+    trait_: &Trait,
+    trait_instance: &TraitInstance,
+) -> DocumentSymbol {
+    let name = format!("impl {}", trait_instance.qual_pred.to_string());
+    let range = trait_instance
+        .source
+        .as_ref()
+        .map(span_to_range)
+        .unwrap_or_default();
+    let selection_range = range.clone();
+
+    let detail = Some(format!(
+        "trait implementation for {}",
+        trait_.name.to_string()
+    ));
+
+    DocumentSymbol {
+        name,
+        detail,
+        kind: SymbolKind::MODULE,
         tags: None,
         deprecated: Some(false),
         range,
@@ -1478,7 +1668,7 @@ fn diagnostics_thread(req_recv: Receiver<DiagnosticsMessage>, res_send: Sender<D
         // Send the result to the main thread and language clinent.
         let errs = match res {
             Ok(mut res) => {
-                let errs = mem::replace(&mut res.prgoram.deferred_errors, Errors::empty());
+                let errs = mem::replace(&mut res.program.deferred_errors, Errors::empty());
                 res_send.send(res).unwrap();
                 errs
             }
@@ -1741,7 +1931,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     // Build the file and get the errors.
     let program = build_file(&mut config)?.program.unwrap();
 
-    Ok(DiagnosticsResult { prgoram: program })
+    Ok(DiagnosticsResult { program })
 }
 
 // Create work done progress.
