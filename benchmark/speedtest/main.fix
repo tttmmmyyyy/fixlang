@@ -175,7 +175,7 @@ main = (
         let bench = bench.as_some;
         // Split by comma to get "inst" and "mem".
         let bench = bench.split(",").to_array;
-        let case_name = dir.get_sub(2, dir.get_size);
+        let case_name = dir;
         let inst = case_name + "-inst";
         let mem = case_name + "-mem";
         // Add to the log.
