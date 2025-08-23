@@ -16,7 +16,7 @@ pub fn replace_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>
     if map.is_empty() {
         return expr.clone();
     }
-    let mut replacer = FreeVarReplacer::new(map);
+    let mut replacer = FreeNameReplacer::new(map);
     let res = replacer.traverse(expr);
     res.expr.calculate_free_vars()
 }
@@ -33,14 +33,14 @@ pub fn replace_free_names_one(
     expr
 }
 
-pub struct FreeVarReplacer {
+pub struct FreeNameReplacer {
     // The mapping from old names to new names.
     map: Map<FullName, FullName>,
     // Local names available at this scope.
     shadowed: Set<FullName>,
 }
 
-impl FreeVarReplacer {
+impl FreeNameReplacer {
     fn new(map: Map<FullName, FullName>) -> Self {
         Self {
             map,
@@ -96,7 +96,7 @@ impl FreeVarReplacer {
     }
 }
 
-impl ExprVisitor for FreeVarReplacer {
+impl ExprVisitor for FreeNameReplacer {
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var = expr.get_var().clone();
 
