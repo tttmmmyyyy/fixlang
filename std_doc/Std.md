@@ -273,6 +273,8 @@ Type: `[a : Std::Eq] Std::Array a -> Std::Array a`
 
 Remove consecutive duplicates from an array.
 
+Added in v1.1.0.
+
 ##### Parameters
 
 * `arr` - The input array.
@@ -461,6 +463,8 @@ Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
 Resizes an array to the given size, filling with the given value if the new size is larger than the current size,
 or truncating if the new size is smaller than the current size.
 
+Added in v1.1.0.
+
 ##### Parameters
 
 * `new_size` - The new size of the array.
@@ -472,6 +476,8 @@ or truncating if the new size is smaller than the current size.
 Type: `Std::Array a -> Std::Array a`
 
 Reverse an array.
+
+Added in v1.1.0.
 
 ##### Parameters
 
@@ -516,6 +522,8 @@ Sort by `LessThan` trait.
 
 Note: this can be an unstable sort.
 
+Added in v1.1.0.
+
 ##### Parameters
 
 - `arr`: An array of elements to be sorted.
@@ -527,6 +535,8 @@ Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 Sort by a "less than" comparator.
 
 Note: this can be an unstable sort.
+
+Added in v1.1.0.
 
 ##### Parameters
 
@@ -541,6 +551,8 @@ Type: `[a : Std::LessThan] Std::Array a -> Std::Array a`
 Stable sort by `LessThan` trait.
 
 Note: Currently this is implemented by merge sort, which is not in-place.
+
+Added in v1.1.0.
 
 ##### Parameters
 
@@ -2791,6 +2803,8 @@ NOTE: When using this iterator, you may need to specify the type of the iterator
 Type: `[i : Std::Iterator] i -> Std::Iterator::EnumerateIterator i`
 
 Creates an iterator that yields elements along with their index.
+
+Added in v1.1.0.
 
 ##### Parameters
 
