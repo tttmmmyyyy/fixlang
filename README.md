@@ -93,7 +93,7 @@ main = (
 
 ## Third-party licenses
 
-See [this page](https://tttmmmyyyy.github.io/fixlang/third-party-licenses/third-party-licenses.html).
+See [this page](https://tttmmmyyyy.github.io/fixlang/third-party-licenses.html).
 
 ## Discord
 
