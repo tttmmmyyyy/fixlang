@@ -1,5 +1,6 @@
 use crate::ast::name::{FullName, NameSpace};
-use crate::ast::program::Program;
+use crate::ast::program::{GlobalValue, Program};
+use crate::ast::typedecl::{TypeDeclValue, TypeDefn};
 use crate::constants::chars_allowed_in_identifiers;
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
@@ -16,9 +17,10 @@ use difference::diff;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
     CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    DidSaveTextDocumentParams, Documentation, GotoDefinitionParams, HoverParams,
-    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MarkupContent,
-    ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, SaveOptions, ServerCapabilities,
+    DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Documentation,
+    GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
+    InitializedParams, MarkupContent, ProgressParams, ProgressParamsValue,
+    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, SymbolKind,
     TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions, WorkDoneProgressBegin,
     WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
@@ -324,6 +326,25 @@ pub fn launch_language_server() {
                     program,
                     &uri_to_latest_content,
                 );
+            } else if method == "textDocument/documentSymbol" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().prgoram;
+                let id = parse_id(&message, method);
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<DocumentSymbolParams> = parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                handle_document_symbol(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    program,
+                    &uri_to_latest_content,
+                );
             }
         }
     }
@@ -471,7 +492,7 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
             implementation_provider: None,
             references_provider: None,
             document_highlight_provider: None,
-            document_symbol_provider: None,
+            document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
             workspace_symbol_provider: None,
             code_action_provider: None,
             code_lens_provider: None,
@@ -1084,6 +1105,119 @@ fn handle_goto_definition(
         range: span_to_range(&def_src),
     };
     send_response(id, Ok::<_, ()>(location));
+}
+
+// Handle "textDocument/documentSymbol" method.
+fn handle_document_symbol(
+    id: u32,
+    params: &DocumentSymbolParams,
+    program: &Program,
+    _uri_to_content: &Map<lsp_types::Uri, String>,
+) {
+    let canonicalize_path = |path| {
+        let path = to_absolute_path(path);
+        if let Err(e) = path {
+            let msg = e.to_string();
+            write_log(&msg);
+            return None;
+        }
+        path.ok()
+    };
+
+    let path = uri_to_path(&params.text_document.uri);
+    let path = match canonicalize_path(&path) {
+        Some(path) => path,
+        None => return,
+    };
+
+    let mut symbols = Vec::new();
+
+    // Extract type definitions
+    for type_defn in &program.type_defns {
+        if let Some(span) = &type_defn.source {
+            let sym_path = canonicalize_path(&span.input.file_path);
+            if sym_path.is_none() {
+                continue;
+            }
+            let sym_path = sym_path.unwrap();
+            if sym_path == path {
+                let symbol = create_symbol_from_type_defn(type_defn);
+                symbols.push(symbol);
+            }
+        }
+    }
+
+    // Extract global values (functions, constants)
+    for (full_name, global_value) in &program.global_values {
+        if let Some(span) = &global_value.def_src {
+            let sym_path = canonicalize_path(&span.input.file_path);
+            if sym_path.is_none() {
+                continue;
+            }
+            let sym_path = sym_path.unwrap();
+            if sym_path == path {
+                let symbol = create_symbol_from_global_value(full_name, global_value);
+                symbols.push(symbol);
+            }
+        }
+    }
+
+    send_response(id, Ok::<_, ()>(symbols));
+}
+
+#[allow(deprecated)]
+fn create_symbol_from_type_defn(type_defn: &TypeDefn) -> DocumentSymbol {
+    let name = type_defn.name.to_string();
+    let range = type_defn
+        .source
+        .as_ref()
+        .map(span_to_range)
+        .unwrap_or_default();
+    let selection_range = range.clone();
+
+    let (kind, detail) = match &type_defn.value {
+        TypeDeclValue::Struct(_) => (SymbolKind::STRUCT, Some("struct".to_string())),
+        TypeDeclValue::Union(_) => (SymbolKind::ENUM, Some("union".to_string())),
+        TypeDeclValue::Alias(_) => (SymbolKind::CLASS, Some("type alias".to_string())),
+    };
+
+    DocumentSymbol {
+        name,
+        detail,
+        kind,
+        tags: None,
+        deprecated: Some(false),
+        range,
+        selection_range,
+        children: None,
+    }
+}
+
+#[allow(deprecated)]
+fn create_symbol_from_global_value(
+    full_name: &FullName,
+    global_value: &GlobalValue,
+) -> DocumentSymbol {
+    let name = full_name.to_string();
+    let range = global_value
+        .def_src
+        .as_ref()
+        .map(span_to_range)
+        .unwrap_or_default();
+    let selection_range = range.clone();
+
+    let detail = Some(global_value.scm.to_string_normalize());
+
+    DocumentSymbol {
+        name,
+        detail,
+        kind: SymbolKind::FUNCTION,
+        tags: None,
+        deprecated: Some(false),
+        range,
+        selection_range,
+        children: None,
+    }
 }
 
 // Handle "textDocument/hover" method.
