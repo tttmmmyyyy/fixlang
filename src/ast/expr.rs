@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 use core::panic;
-use std::{sync::Arc, vec};
+use std::{
+    sync::{Arc, Mutex},
+    vec,
+};
 
 // The ways of apply a function to an argument in source code.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -18,7 +21,8 @@ pub enum AppSourceCodeOrderType {
 #[derive(Serialize, Deserialize)]
 pub struct ExprNode {
     pub expr: Arc<Expr>,
-    free_vars: Option<Set<FullName>>,
+    #[serde(skip)]
+    free_vars: Arc<Mutex<Option<Set<FullName>>>>,
     pub source: Option<Span>,
     // The source of the parameter of a lambda expression.
     pub param_src: Option<Span>,
@@ -29,10 +33,10 @@ pub struct ExprNode {
 
 impl ExprNode {
     // Clone all fields except the set of free variables.
-    fn clone_without_fvs(&self) -> ExprNode {
+    fn clone_except_fvs(&self) -> ExprNode {
         ExprNode {
             expr: self.expr.clone(),
-            free_vars: None,
+            free_vars: Arc::new(Mutex::new(None)),
             source: self.source.clone(),
             param_src: self.param_src.clone(),
             app_order: self.app_order.clone(),
@@ -50,25 +54,6 @@ impl ExprNode {
             app_order: self.app_order.clone(),
             type_: self.type_.clone(),
         }
-    }
-
-    // Set free vars
-    fn set_free_vars(&self, free_vars: Set<FullName>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
-        ret.free_vars = Some(free_vars);
-        Arc::new(ret)
-    }
-
-    // Get free vars.
-    pub fn free_vars(self: &Self) -> &Set<FullName> {
-        self.free_vars.as_ref().unwrap()
-    }
-
-    // Get sorted free vars
-    pub fn free_vars_sorted(self: &Self) -> Vec<FullName> {
-        let mut free_vars = self.free_vars().iter().cloned().collect::<Vec<_>>();
-        free_vars.sort();
-        free_vars
     }
 
     // Set source
@@ -107,7 +92,7 @@ impl ExprNode {
     }
 
     pub fn set_var_namespace(&self, ns: NameSpace) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Var(var) => {
                 let var = var.set_namsapce(ns);
@@ -121,7 +106,7 @@ impl ExprNode {
     }
 
     pub fn set_var_var(&self, v: Arc<Var>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Var(_) => ret.expr = Arc::new(Expr::Var(v)),
             _ => {
@@ -148,7 +133,7 @@ impl ExprNode {
     }
 
     pub fn set_app_func(&self, func: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::App(_, arg) => {
                 ret.expr = Arc::new(Expr::App(func, arg.clone()));
@@ -161,7 +146,7 @@ impl ExprNode {
     }
 
     pub fn set_app_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::App(func, _) => {
                 ret.expr = Arc::new(Expr::App(func.clone(), args));
@@ -234,7 +219,7 @@ impl ExprNode {
 
     #[allow(dead_code)]
     pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Lam(_, body) => {
                 ret.expr = Arc::new(Expr::Lam(params, body.clone()));
@@ -247,7 +232,7 @@ impl ExprNode {
     }
 
     pub fn set_lam_body(&self, body: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Lam(arg, _) => {
                 ret.expr = Arc::new(Expr::Lam(arg.clone(), body));
@@ -301,7 +286,7 @@ impl ExprNode {
     }
 
     pub fn set_let_pat(&self, pat: Arc<PatternNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Let(_, bound, val) => {
                 ret.expr = Arc::new(Expr::Let(pat, bound.clone(), val.clone()));
@@ -323,7 +308,7 @@ impl ExprNode {
     }
 
     pub fn set_let_bound(&self, bound: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Let(var, _, val) => {
                 ret.expr = Arc::new(Expr::Let(var.clone(), bound, val.clone()));
@@ -345,7 +330,7 @@ impl ExprNode {
     }
 
     pub fn set_let_value(&self, value: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Let(var, bound, _) => {
                 ret.expr = Arc::new(Expr::Let(var.clone(), bound.clone(), value));
@@ -365,7 +350,7 @@ impl ExprNode {
     }
 
     pub fn set_if_cond(&self, cond: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::If(_, then_expr, else_expr) => {
                 ret.expr = Arc::new(Expr::If(cond, then_expr.clone(), else_expr.clone()));
@@ -378,7 +363,7 @@ impl ExprNode {
     }
 
     pub fn set_if_then(&self, then_expr: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::If(cond, _, else_expr) => {
                 ret.expr = Arc::new(Expr::If(cond.clone(), then_expr, else_expr.clone()));
@@ -391,7 +376,7 @@ impl ExprNode {
     }
 
     pub fn set_if_else(&self, else_expr: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::If(cond, then_expr, _) => {
                 ret.expr = Arc::new(Expr::If(cond.clone(), then_expr.clone(), else_expr));
@@ -405,7 +390,7 @@ impl ExprNode {
 
     #[allow(dead_code)]
     pub fn set_if_then_else(&self, then: Arc<ExprNode>, else_: Arc<ExprNode>) -> Arc<ExprNode> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::If(cond, _, _) => {
                 ret.expr = Arc::new(Expr::If(cond.clone(), then, else_));
@@ -439,7 +424,7 @@ impl ExprNode {
     }
 
     pub fn set_match_cond(&self, cond_expr: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Match(_, pat_vals) => {
                 ret.expr = Arc::new(Expr::Match(cond_expr, pat_vals.clone()));
@@ -464,7 +449,7 @@ impl ExprNode {
         &self,
         pat_vals: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
     ) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Match(cond, _) => {
                 ret.expr = Arc::new(Expr::Match(cond.clone(), pat_vals));
@@ -503,7 +488,7 @@ impl ExprNode {
     }
 
     pub fn set_tyanno_expr(&self, expr: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::TyAnno(_, t) => {
                 ret.expr = Arc::new(Expr::TyAnno(expr, t.clone()));
@@ -542,7 +527,7 @@ impl ExprNode {
     }
 
     pub fn set_make_struct_field(&self, field_name: &Name, field_expr: Arc<ExprNode>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::MakeStruct(tc, fields) => {
                 let mut fields = fields.clone();
@@ -561,7 +546,7 @@ impl ExprNode {
     }
 
     pub fn set_make_struct_fields(&self, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<Self> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::MakeStruct(tc, _) => {
                 ret.expr = Arc::new(Expr::MakeStruct(tc.clone(), fields));
@@ -574,7 +559,7 @@ impl ExprNode {
     }
 
     pub fn set_array_lit_elem(&self, elem: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::ArrayLit(elems) => {
                 let mut elems = elems.clone();
@@ -589,7 +574,7 @@ impl ExprNode {
     }
 
     pub fn set_array_lit_elems(&self, elems: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::ArrayLit(_) => {
                 ret.expr = Arc::new(Expr::ArrayLit(elems));
@@ -602,7 +587,7 @@ impl ExprNode {
     }
 
     pub fn set_ffi_call_arg(&self, arg: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::FFICall(fun_name, ret_ty, param_tys, args, is_io) => {
                 let mut args = args.clone();
@@ -623,7 +608,7 @@ impl ExprNode {
     }
 
     pub fn set_ffi_call_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::FFICall(fun_name, ret_ty, param_tys, _, is_io) => {
                 ret.expr = Arc::new(Expr::FFICall(
@@ -642,7 +627,7 @@ impl ExprNode {
     }
 
     pub fn set_llvm(&self, llvm: InlineLLVM) -> Arc<ExprNode> {
-        let mut ret = self.clone_without_fvs();
+        let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::LLVM(_) => {
                 ret.expr = Arc::new(Expr::LLVM(Arc::new(llvm)));
@@ -936,119 +921,91 @@ impl ExprNode {
         free_vars
     }
 
-    pub fn calculate_free_vars(self: &Arc<ExprNode>) -> Arc<ExprNode> {
+    fn calc_free_vars(&self) -> Set<FullName> {
         match &*self.expr {
-            Expr::Var(var) => {
-                let free_vars = vec![var.name.clone()].into_iter().collect();
-                self.set_free_vars(free_vars)
-            }
-            Expr::LLVM(llvm) => {
-                let free_vars = llvm.generator.free_vars().into_iter().collect();
-                self.set_free_vars(free_vars)
-            }
+            Expr::Var(var) => vec![var.name.clone()].into_iter().collect(),
+            Expr::LLVM(llvm) => llvm.generator.free_vars().into_iter().collect(),
             Expr::App(func, args) => {
-                let func = func.calculate_free_vars();
-                let args = args
-                    .iter()
-                    .map(|arg| arg.calculate_free_vars())
-                    .collect::<Vec<_>>();
-                let mut free_vars = func.free_vars.clone().unwrap();
-                for arg in &args {
-                    free_vars.extend(arg.free_vars.clone().unwrap());
+                let mut free_vars = func.free_vars();
+                for arg in args {
+                    free_vars.extend(arg.free_vars());
                 }
-                self.set_app_func(func)
-                    .set_app_args(args)
-                    .set_free_vars(free_vars)
+                free_vars
             }
             Expr::Lam(args, body) => {
-                let body = body.calculate_free_vars();
-                let mut free_vars = body.free_vars.clone().unwrap();
+                let mut free_vars = body.free_vars();
                 for arg in args {
                     free_vars.remove(&arg.name);
                 }
                 free_vars.remove(&FullName::local(CAP_NAME));
-                self.set_lam_body(body).set_free_vars(free_vars)
+                free_vars
             }
             Expr::Let(pat, bound, val) => {
                 // NOTE: Our let is non-recursive let, i.e.,
                 // "let x = f x in g x" is equal to "let y = f x in g y",
                 // and x ∈ FreeVars("let x = f x in g x") = (FreeVars(g x) - {x}) + FreeVars(f x) != (FreeVars(g x) + FreeVars(f x)) - {x}.
-                let bound = bound.calculate_free_vars();
-                let val = val.calculate_free_vars();
-                let mut free_vars = val.free_vars.clone().unwrap();
+                let mut free_vars = val.free_vars();
                 for v in pat.pattern.vars() {
                     free_vars.remove(&v);
                 }
-                free_vars.extend(bound.free_vars.clone().unwrap());
-                self.set_let_bound(bound)
-                    .set_let_value(val)
-                    .set_free_vars(free_vars)
+                free_vars.extend(bound.free_vars());
+                free_vars
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = cond.calculate_free_vars();
-                let then_expr = then_expr.calculate_free_vars();
-                let else_expr = else_expr.calculate_free_vars();
-                let mut free_vars = cond.free_vars.clone().unwrap();
-                free_vars.extend(then_expr.free_vars.clone().unwrap());
-                free_vars.extend(else_expr.free_vars.clone().unwrap());
-                self.set_if_cond(cond)
-                    .set_if_then(then_expr)
-                    .set_if_else(else_expr)
-                    .set_free_vars(free_vars)
+                let mut free_vars = cond.free_vars();
+                free_vars.extend(then_expr.free_vars());
+                free_vars.extend(else_expr.free_vars());
+                free_vars
             }
             Expr::Match(cond, pat_vals) => {
-                let mut free_vars = Set::default();
-                let cond = cond.calculate_free_vars();
-                free_vars.extend(cond.free_vars.clone().unwrap());
-                let mut pat_vals_res = vec![];
+                let mut free_vars = cond.free_vars();
                 for (pat, val) in pat_vals {
-                    let val = val.calculate_free_vars();
-                    let mut free_vars_shadowed = val.free_vars.clone().unwrap();
+                    let mut fvs = val.free_vars();
                     let pat_vars = pat.pattern.vars();
-                    free_vars_shadowed.retain(|v| !pat_vars.contains(v));
-                    free_vars.extend(free_vars_shadowed);
-                    pat_vals_res.push((pat.clone(), val));
+                    fvs.retain(|v| !pat_vars.contains(v));
+                    free_vars.extend(fvs);
                 }
-                self.set_match_cond(cond)
-                    .set_match_pat_vals(pat_vals_res)
-                    .set_free_vars(free_vars)
+                free_vars
             }
-            Expr::TyAnno(e, _) => {
-                let e = e.calculate_free_vars();
-                let free_vars = e.free_vars.clone().unwrap();
-                self.set_tyanno_expr(e).set_free_vars(free_vars)
-            }
+            Expr::TyAnno(e, _) => e.free_vars(),
             Expr::MakeStruct(_, fields) => {
-                let mut free_vars: Set<FullName> = Default::default();
-                let mut ei = self.clone();
-                for (field_name, field_expr) in fields {
-                    let field_expr = field_expr.calculate_free_vars();
-                    free_vars.extend(field_expr.free_vars.clone().unwrap());
-                    ei = ei.set_make_struct_field(field_name, field_expr);
+                let mut free_vars = Set::default();
+                for (_field_name, field_expr) in fields {
+                    free_vars.extend(field_expr.free_vars());
                 }
-                ei.set_free_vars(free_vars)
+                free_vars
             }
             Expr::ArrayLit(elems) => {
-                let mut free_vars: Set<FullName> = Default::default();
-                let mut ei = self.clone();
-                for (i, e) in elems.iter().enumerate() {
-                    let e = e.calculate_free_vars();
-                    ei = ei.set_array_lit_elem(e.clone(), i);
-                    free_vars.extend(e.free_vars.clone().unwrap());
+                let mut free_vars = Set::default();
+                for (_i, e) in elems.iter().enumerate() {
+                    free_vars.extend(e.free_vars());
                 }
-                ei.set_free_vars(free_vars)
+                free_vars
             }
             Expr::FFICall(_, _, _, args, _) => {
-                let mut free_vars: Set<FullName> = Default::default();
-                let mut ei = self.clone();
-                for (i, e) in args.iter().enumerate() {
-                    let e = e.calculate_free_vars();
-                    ei = ei.set_ffi_call_arg(e.clone(), i);
-                    free_vars.extend(e.free_vars.clone().unwrap());
+                let mut free_vars = Set::default();
+                for (_i, e) in args.iter().enumerate() {
+                    free_vars.extend(e.free_vars());
                 }
-                ei.set_free_vars(free_vars)
+                free_vars
             }
         }
+    }
+
+    // Get the set of free vars.
+    pub fn free_vars(&self) -> Set<FullName> {
+        let mut lock = self.free_vars.lock().unwrap();
+        if lock.is_none() {
+            *lock = Some(self.calc_free_vars());
+        }
+        lock.as_ref().unwrap().clone()
+    }
+
+    // Get sorted free vars
+    pub fn free_vars_sorted(&self) -> Vec<FullName> {
+        let mut free_vars = self.free_vars().into_iter().collect::<Vec<_>>();
+        free_vars.sort();
+        free_vars
     }
 
     // Get the names which are captured by a lambda expressions.

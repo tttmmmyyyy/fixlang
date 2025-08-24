@@ -265,10 +265,6 @@ impl TypedExpr {
         }
     }
 
-    pub fn calculate_free_vars(&mut self) {
-        self.expr = self.expr.calculate_free_vars();
-    }
-
     // Find the minimum expression node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let node = self.expr.find_node_at(pos);
@@ -1072,7 +1068,7 @@ impl Program {
                     let tc = tc.clone();
                     let task = Box::new(move || -> Result<TypedExpr, Errors> {
                         // Perform type-checking.
-                        let mut te = Program::resolve_namespace_and_check_type_sub(
+                        let te = Program::resolve_namespace_and_check_type_sub(
                             te,
                             &scm,
                             &val_name_clone,
@@ -1081,8 +1077,6 @@ impl Program {
                             &ver_hash,
                             tc,
                         )?;
-                        // Calculate free vars.
-                        te.calculate_free_vars();
                         Ok(te)
                     });
 
@@ -1109,7 +1103,7 @@ impl Program {
                         let tc = tc.clone();
                         let task = Box::new(move || -> Result<TypedExpr, Errors> {
                             // Perform type-checking.
-                            let mut te = Program::resolve_namespace_and_check_type_sub(
+                            let te = Program::resolve_namespace_and_check_type_sub(
                                 te,
                                 &method_ty,
                                 &val_name_clone,
@@ -1118,8 +1112,6 @@ impl Program {
                                 &ver_hash,
                                 tc,
                             )?;
-                            // Calculate free vars.
-                            te.calculate_free_vars();
                             Ok(te)
                         });
 
@@ -1458,7 +1450,7 @@ impl Program {
                 &[&ret.source],
             ));
         }
-        Ok(ret.calculate_free_vars())
+        Ok(ret)
     }
 
     // Require instantiating a generic value such to a specified type.
@@ -2279,10 +2271,9 @@ impl Program {
         let mut graph = Graph::new(syms);
         for (callee, sym) in &self.symbols {
             let expr = sym.expr.as_ref().unwrap();
-            let expr = expr.calculate_free_vars();
             let called = expr.free_vars();
             for called in called {
-                graph.connect(callee, called);
+                graph.connect(callee, &called);
             }
         }
         graph

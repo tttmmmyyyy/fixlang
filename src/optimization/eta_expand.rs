@@ -120,6 +120,5 @@ fn run_on_symbol(sym: &mut Symbol) {
         expr = expr_abs_typed(var, ty, expr);
     }
 
-    let expr = expr.calculate_free_vars();
     sym.expr = Some(expr);
 }

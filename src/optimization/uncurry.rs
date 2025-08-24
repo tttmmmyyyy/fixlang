@@ -30,7 +30,7 @@ pub fn run(fix_mod: &mut Program) {
             if expr.is_none() {
                 break;
             }
-            let expr = expr.take().unwrap().calculate_free_vars();
+            let expr = expr.take().unwrap();
             let ty = expr.type_.clone().unwrap();
             let mut name = sym_name.clone();
             convert_to_funptr_name(name.name_as_mut(), arg_cnt as usize);
@@ -56,7 +56,6 @@ pub fn run(fix_mod: &mut Program) {
     for (_name, sym) in &mut fix_mod.symbols {
         let expr =
             replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
-        let expr = expr.calculate_free_vars();
         sym.expr = Some(expr);
     }
 
@@ -85,10 +84,8 @@ pub fn run(fix_mod: &mut Program) {
         }
         let uncurried_value = uncurried_value.unwrap();
         export.value_name = uncurried_value.name.clone();
-        export.value_expr = Some(
-            expr_var(uncurried_value.name.clone(), None)
-                .set_type(uncurried_value.ty.clone()),
-        );
+        export.value_expr =
+            Some(expr_var(uncurried_value.name.clone(), None).set_type(uncurried_value.ty.clone()));
     }
 }
 
@@ -285,7 +282,7 @@ fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
 
     // Rename the parameter of the lambda so that it is not contained in `FV(bound_x) + FV(pat_a)`.
     let mut black_list = pat_a.pattern.vars();
-    black_list.extend(&mut bound_x.calculate_free_vars().free_vars().iter().cloned());
+    black_list.extend(&mut bound_x.free_vars().into_iter());
     let lam = rename_lam_param_avoiding(&black_list, lam);
 
     // Construct the expression.

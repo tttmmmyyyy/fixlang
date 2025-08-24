@@ -53,7 +53,7 @@ pub fn run_on_symbol(sym: &mut Symbol) {
     let mut optimizer = BetaReduction {};
     let res = optimizer.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
-        sym.expr = Some(res.expr.calculate_free_vars());
+        sym.expr = Some(res.expr);
     }
 }
 
@@ -89,11 +89,9 @@ impl ExprVisitor for BetaReduction {
                 // The expression is of the form `(let {pat} = {bound} in {value})({a})`.
                 // Replace it with `let x = {a} in let {pat} = {bound} in {value}(x)`.
 
-                let bound = bound.calculate_free_vars();
-                let value = value.calculate_free_vars();
                 let mut black_list = pattern.pattern.vars();
-                black_list.extend(bound.free_vars().iter().cloned());
-                black_list.extend(value.free_vars().iter().cloned());
+                black_list.extend(bound.free_vars().into_iter());
+                black_list.extend(value.free_vars().into_iter());
 
                 let x_name = generate_new_names(&black_list, 1)[0].clone();
                 let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
@@ -101,19 +99,16 @@ impl ExprVisitor for BetaReduction {
                 let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
 
                 let expr = expr_app_typed(value.clone(), vec![x]); // {value}(x)
-                let expr = expr_let_typed(pattern.clone(), bound, expr); // let {pat} = {bound} in {value}(x)
+                let expr = expr_let_typed(pattern.clone(), bound.clone(), expr); // let {pat} = {bound} in {value}(x)
                 let expr = expr_let_typed(x_pat, arg.clone(), expr); // let x = {a} in let {pat} = {bound} in {value}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::If(cond, then, else_) => {
                 // The expression is of the form `(if {cond} then {then} else {else})({a})`.
                 // Replace it with `let x = {a} in if {cond} then {then}(x) else {else}(x)`.
-                let cond = cond.calculate_free_vars();
-                let then = then.calculate_free_vars();
-                let else_ = else_.calculate_free_vars();
                 let mut black_list = cond.free_vars().clone();
-                black_list.extend(then.free_vars().iter().cloned());
-                black_list.extend(else_.free_vars().iter().cloned());
+                black_list.extend(then.free_vars().into_iter());
+                black_list.extend(else_.free_vars().into_iter());
 
                 let x_name = generate_new_names(&black_list, 1)[0].clone();
                 let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
@@ -128,27 +123,23 @@ impl ExprVisitor for BetaReduction {
             }
             Expr::Match(cond, pats_vals) => {
                 // Similar to `if` and `let` cases.
-                let cond = cond.calculate_free_vars();
                 let mut black_list = cond.free_vars().clone();
-                let mut new_pats_vals = vec![];
                 for (pat, val) in pats_vals {
-                    let val = val.calculate_free_vars();
                     black_list.extend(pat.pattern.vars());
-                    black_list.extend(val.free_vars().iter().cloned());
-                    new_pats_vals.push((pat.clone(), val));
+                    black_list.extend(val.free_vars().into_iter());
                 }
-                let mut pats_vals = new_pats_vals;
 
                 let x_name = generate_new_names(&black_list, 1)[0].clone();
                 let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
                     .set_type(arg.type_.as_ref().unwrap().clone());
                 let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
 
+                let mut pats_vals = pats_vals.clone();
                 for (_pat, val) in &mut pats_vals {
                     let new_val = expr_app_typed(val.clone(), vec![x.clone()]);
                     *val = new_val;
                 }
-                let expr = expr_match_typed(cond, pats_vals);
+                let expr = expr_match_typed(cond.clone(), pats_vals);
                 let expr = expr_let_typed(x_pat, arg.clone(), expr);
                 return EndVisitResult::changed(expr).revisit();
             }

@@ -38,7 +38,7 @@ fn run_on_symbol(sym: &mut Symbol) {
     let mut remover = RenameRemover {};
     let res = remover.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
-        sym.expr = Some(res.expr.calculate_free_vars());
+        sym.expr = Some(res.expr);
     }
 }
 

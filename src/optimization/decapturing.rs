@@ -216,7 +216,7 @@ pub fn run_one(
         }
 
         changed = true;
-        sym.expr = Some(trav_res.expr.calculate_free_vars());
+        sym.expr = Some(trav_res.expr);
         specializations.append(&mut visitor.required_specializations); // Specialization requests are processed later
 
         // Extract the generated decaptured lambdas and type constructors
@@ -274,7 +274,7 @@ pub fn run_one(
             );
             visitor.local_decap_lambdas = local_decap_lambdas;
             let trav_res = visitor.traverse(&expr);
-            let expr = trav_res.expr.calculate_free_vars();
+            let expr = trav_res.expr;
 
             // Extract the generated decaptured lambdas and type constructors
             for decap_lam in visitor.decap_lambdas {
@@ -347,12 +347,11 @@ fn specializable_functions(prg: &Program) -> Map<FullName, SpecializableFunction
         let sym_name = call_graph.get(call_graph_idx);
         let sym = prg.symbols.get(sym_name).unwrap();
         let expr = sym.expr.as_ref().unwrap();
-        let expr = &expr.calculate_free_vars();
 
         // If `sym` calls other nodes in the same SCC, avoid specialization to prevent the risk of an infinite loop.
         let mut prevent_specialization = false;
         for other_sym in expr.free_vars() {
-            let other_sym_idx = call_graph.find_index(other_sym).unwrap();
+            let other_sym_idx = call_graph.find_index(&other_sym).unwrap();
             if call_graph_scc[call_graph_idx] != call_graph_scc[other_sym_idx] {
                 assert!(call_graph_scc[call_graph_idx] < call_graph_scc[other_sym_idx]);
                 continue;
@@ -558,10 +557,7 @@ impl DecapturingVisitor {
         for cap_name in &cap_names {
             if self.local_decap_lambdas.contains_key(cap_name) {
                 let lam_visit_res = self.visit_expr(&lam, state);
-                lam = self
-                    .revisit_if_changed(lam_visit_res, state)
-                    .expr
-                    .calculate_free_vars();
+                lam = self.revisit_if_changed(lam_visit_res, state).expr;
                 break;
             }
         }
@@ -797,7 +793,7 @@ impl ExprVisitor for DecapturingVisitor {
 
         let mut replace = Map::default(); // Data for replacing free variables in the LLVM expression
         for free_name in llvm_expr.free_vars() {
-            let opt_decap_lambda = self.local_decap_lambdas.get(free_name);
+            let opt_decap_lambda = self.local_decap_lambdas.get(&free_name);
             if opt_decap_lambda.is_none() {
                 continue;
             }

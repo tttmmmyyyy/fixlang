@@ -1667,7 +1667,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     ) -> Option<Object<'c>> {
         // Before evaluating `fun`, we lock all variables in arguments as used later.
         for arg in &args {
-            self.scope_lock_as_used_later(arg.free_vars());
+            self.scope_lock_as_used_later(&arg.free_vars());
         }
 
         // Evaluate the function object.
@@ -1676,7 +1676,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         // Evaluate arguments.
         let mut arg_objs = vec![];
         for arg in args.iter() {
-            self.scope_unlock_as_used_later(arg.free_vars());
+            self.scope_unlock_as_used_later(&arg.free_vars());
 
             // Evaluate the argument expression.
             let arg_obj = self.eval_expr(arg.clone(), false).unwrap();
@@ -2352,10 +2352,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         assert_eq!(field_types.len(), fields.len());
 
         for i in 0..fields.len() {
-            self.scope_lock_as_used_later(fields[i].1.free_vars());
+            self.scope_lock_as_used_later(&fields[i].1.free_vars());
         }
         for i in 0..fields.len() {
-            self.scope_unlock_as_used_later(fields[i].1.free_vars());
+            self.scope_unlock_as_used_later(&fields[i].1.free_vars());
             let field_expr = fields[i].1.clone();
             let field_obj = self.eval_expr(field_expr, false).unwrap();
             let field_val = field_obj.value;
@@ -2426,10 +2426,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         }
         let mut arg_objs = vec![];
         for i in 0..args.len() {
-            self.scope_lock_as_used_later(args[i].free_vars());
+            self.scope_lock_as_used_later(&args[i].free_vars());
         }
         for i in 0..args.len() {
-            self.scope_unlock_as_used_later(args[i].free_vars());
+            self.scope_unlock_as_used_later(&args[i].free_vars());
             arg_objs.push(self.eval_expr(args[i].clone(), false).unwrap());
         }
 
@@ -2488,10 +2488,10 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Evaluate each element and store to the array
         for i in 0..elems.len() {
-            self.scope_lock_as_used_later(elems[i].free_vars());
+            self.scope_lock_as_used_later(&elems[i].free_vars());
         }
         for i in 0..elems.len() {
-            self.scope_unlock_as_used_later(elems[i].free_vars());
+            self.scope_unlock_as_used_later(&elems[i].free_vars());
 
             // Evaluate element
             let value = self.eval_expr(elems[i].clone(), false).unwrap();

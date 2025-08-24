@@ -120,9 +120,9 @@ use crate::{
 
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let mut pull_let = PullLet {};
-    let mut expr = expr.calculate_free_vars();
+    let mut expr = expr.clone();
     loop {
-        let res = pull_let.traverse(&expr.calculate_free_vars());
+        let res = pull_let.traverse(&expr);
         if !res.changed {
             return expr;
         }
@@ -177,13 +177,12 @@ impl ExprVisitor for PullLet {
 
         if !arg.is_var() {
             // Apply the transformation (2).
-            let f_name = generate_new_names(fun.free_vars(), 1)[0].clone();
+            let f_name = generate_new_names(&fun.free_vars(), 1)[0].clone();
             let arg_ty = arg.type_.as_ref().unwrap();
             let f_pat =
                 PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
             let f_var = expr_var(f_name, None).set_type(arg_ty.clone());
-            let expr = expr_let_typed(f_pat, arg.clone(), expr_app_typed(fun, vec![f_var]))
-                .calculate_free_vars();
+            let expr = expr_let_typed(f_pat, arg.clone(), expr_app_typed(fun, vec![f_var]));
             return StartVisitResult::ReplaceAndRevisit(expr);
         }
 
@@ -196,11 +195,10 @@ impl ExprVisitor for PullLet {
 
             // Rename `pat` and `expr1` to avoid conflicts with free variables in `expr2`.
             let ng_names = expr2.free_vars();
-            let (pat, expr1) = rename_pattern_value_avoiding(ng_names, pat, expr1);
+            let (pat, expr1) = rename_pattern_value_avoiding(&ng_names, pat, expr1);
 
             // Construct the new expression.
-            let expr = expr_let_typed(pat, expr0, expr_app_typed(expr1, vec![expr2]))
-                .calculate_free_vars();
+            let expr = expr_let_typed(pat, expr0, expr_app_typed(expr1, vec![expr2]));
 
             return StartVisitResult::ReplaceAndRevisit(expr);
         }
@@ -252,11 +250,10 @@ impl ExprVisitor for PullLet {
 
         // Rename `pat1` and `expr1` to avoid conflicts with free variables in `expr2`.
         let ng_names = expr2.free_vars();
-        let (pat1, expr1) = rename_pattern_value_avoiding(ng_names, pat1, expr1);
+        let (pat1, expr1) = rename_pattern_value_avoiding(&ng_names, pat1, expr1);
 
         // Construct the new expression.
-        let expr =
-            expr_let_typed(pat1, expr0, expr_let_typed(pat0, expr1, expr2)).calculate_free_vars();
+        let expr = expr_let_typed(pat1, expr0, expr_let_typed(pat0, expr1, expr2));
 
         StartVisitResult::ReplaceAndRevisit(expr)
     }

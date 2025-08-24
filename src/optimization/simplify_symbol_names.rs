@@ -55,7 +55,7 @@ pub fn run(prg: &mut Program) {
     for (old_name, mut sym) in old_symbols {
         let res = visitor.traverse(sym.expr.as_ref().unwrap());
         if res.changed {
-            sym.expr = Some(res.expr.calculate_free_vars());
+            sym.expr = Some(res.expr);
         }
         let new_name = old_to_new_names.get(&old_name).unwrap();
         sym.name = new_name.clone();
@@ -65,11 +65,11 @@ pub fn run(prg: &mut Program) {
 
     // Rename exported values.
     if let Some(entry_io) = &mut prg.entry_io_value {
-        *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names).calculate_free_vars();
+        *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names);
     }
     for export_stmt in &mut prg.export_statements {
         if let Some(entry_io) = &mut export_stmt.value_expr {
-            *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names).calculate_free_vars();
+            *entry_io = rename_var_expr(entry_io.clone(), &old_to_new_names);
         }
     }
 }

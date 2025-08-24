@@ -18,7 +18,7 @@ pub fn replace_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>
     }
     let mut replacer = FreeNameReplacer::new(map);
     let res = replacer.traverse(expr);
-    res.expr.calculate_free_vars()
+    res.expr
 }
 
 // Replace free variables of an expression to other names.
@@ -80,7 +80,6 @@ impl FreeNameReplacer {
             }
         }
 
-        let expr = expr.calculate_free_vars();
         let fvs = expr.free_vars();
         let ng_as_new_name = |name: &FullName| {
             to_names.contains(&name) || fvs.contains(&name) || introduced_names.contains(name)
@@ -517,7 +516,6 @@ fn calculate_renaming_bound_vars_avoiding(
 
     // Calculate the set of names that should be avoided when we decide new names.
     let mut black_list = black_list.clone();
-    let value = value.calculate_free_vars();
     for var in value.free_vars() {
         black_list.insert(var.clone()); // Avoid shadowing free variables by bound variables.
     }

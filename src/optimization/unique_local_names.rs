@@ -12,7 +12,6 @@ use crate::{
 };
 
 pub fn run_on_expr(expr: &Arc<ExprNode>, mut occupied: Set<FullName>) -> Arc<ExprNode> {
-    let expr = &expr.calculate_free_vars();
     let free_vars = expr.free_vars();
     occupied.extend(free_vars.iter().cloned());
     let mut renamer = Renamer {
@@ -20,7 +19,7 @@ pub fn run_on_expr(expr: &Arc<ExprNode>, mut occupied: Set<FullName>) -> Arc<Exp
         occupied: occupied,
         name_no: 0,
     };
-    renamer.traverse(expr).expr.calculate_free_vars()
+    renamer.traverse(expr).expr
 }
 
 struct Renamer {

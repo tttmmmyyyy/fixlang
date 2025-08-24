@@ -21,7 +21,7 @@ pub const INLINE_COST_THRESHOLD: i32 = 30;
 pub fn run(prg: &mut Program, show_build_times: bool) {
     // Calculate free variables of all symbols.
     for (_name, sym) in &mut prg.symbols {
-        sym.expr = Some(sym.expr.as_ref().unwrap().calculate_free_vars());
+        sym.expr = Some(sym.expr.as_ref().unwrap().clone());
     }
 
     let mut skip_symbols = Set::default();
@@ -69,7 +69,7 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         if res.changed {
             // If inlining was done, run beta reduction.
             changed = true;
-            sym.expr = Some(res.expr.calculate_free_vars());
+            sym.expr = Some(res.expr);
             beta_reduction::run_on_symbol(&mut sym);
         } else {
             // If inlining was not done, it cannot be inlined furthermore.
