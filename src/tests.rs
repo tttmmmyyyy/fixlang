@@ -4816,6 +4816,8 @@ pub fn test_hex_oct_bin_lit() {
         assert_eq(|_|"", 0x7FFFFFFF_I32, 2147483647_I32);;
         assert_eq(|_|"", -0x80000000_I32, -2147483648_I32);;
         assert_eq(|_|"", 0xFFFFFFFF_U32, 4294967295_U32);;
+        assert_eq(|_|"", 0xffffffffffffffff, -1);;
+        assert_eq(|_|"", 0b11111111_I8, -1_I8);;
         pure()
     );
     "##;

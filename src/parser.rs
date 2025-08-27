@@ -1845,8 +1845,8 @@ fn parse_expr_number_lit(
         Ok(expr_float_lit(val, ty, Some(span)))
     } else {
         // Integral literal
-        let val = parse_integral_string_lit(val_str);
-        if val.is_none() {
+        let opt_val_radix = parse_integer_literal_string(val_str);
+        if opt_val_radix.is_none() {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "A literal string `{}` cannot be parsed as an integer.",
@@ -1855,49 +1855,73 @@ fn parse_expr_number_lit(
                 &[&Some(span)],
             ));
         }
-        let val = val.unwrap();
+        let (val, radix) = opt_val_radix.unwrap();
 
         // Check size.
-        let (ty_min, ty_max) = integral_ty_range(ty_name);
-        if !(ty_min <= val && val <= ty_max) {
-            return Err(Errors::from_msg_srcs(
-                format!(
-                    "The value of an integer literal `{}` is out of range of `{}`.",
-                    val_str, ty_name
-                ),
-                &[&Some(span)],
-            ));
+        if radix == 10 || radix == 8 {
+            // Decimal or octal
+            let (ty_min, ty_max) = integral_ty_range(ty_name);
+            if !(ty_min <= val && val <= ty_max) {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "The value of an integer literal `{}` is out of range of `{}`.",
+                        val_str, ty_name
+                    ),
+                    &[&Some(span)],
+                ));
+            }
+        } else {
+            // Binary or hexadecimal
+            // In this case, 0b1111111_I8 should be successfully parsed to -1, so check the range as the unsigned value.
+            let val_abs = if val < BigInt::parse_bytes(b"0", 10).unwrap() {
+                -val.clone()
+            } else {
+                val.clone()
+            };
+            let ty_name_unsigned = if ty_name.starts_with('I') {
+                ty_name.replacen('I', "U", 1)
+            } else {
+                ty_name.to_string()
+            };
+            let (ty_min_unsigned, ty_max_unsigned) = integral_ty_range(&ty_name_unsigned);
+            if !(ty_min_unsigned <= val_abs && val_abs <= ty_max_unsigned) {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "The value of an integer literal `{}` is out of range of `{}`.",
+                        val_str, ty_name_unsigned
+                    ),
+                    &[&Some(span)],
+                ));
+            }
         }
-
         // Now stringify val and parse it again as i128.
         let val = val.to_str_radix(10).parse::<i128>().unwrap();
         Ok(expr_int_lit(val as u64, ty, Some(span)))
     }
 }
 
-fn parse_integral_string_lit(s: &str) -> Option<BigInt> {
+// Parse integer literal string such as "-5", "-0xff" or "123e4", and return its value and radix.
+fn parse_integer_literal_string(s: &str) -> Option<(BigInt, usize)> {
     if s.len() == 0 {
         return None;
     }
-    if s.starts_with("0") || s.starts_with("-0") {
-        if s.starts_with("0x") {
-            return BigInt::parse_bytes(s.trim_start_matches("0x").as_bytes(), 16);
-        }
-        if s.starts_with("-0x") {
-            return BigInt::parse_bytes(s.trim_start_matches("-0x").as_bytes(), 16).map(|x| -x);
-        }
-        if s.starts_with("0o") {
-            return BigInt::parse_bytes(s.trim_start_matches("0o").as_bytes(), 8);
-        }
-        if s.starts_with("-0o") {
-            return BigInt::parse_bytes(s.trim_start_matches("-0o").as_bytes(), 8).map(|x| -x);
-        }
-        if s.starts_with("0b") {
-            return BigInt::parse_bytes(s.trim_start_matches("0b").as_bytes(), 2);
-        }
-        if s.starts_with("-0b") {
-            return BigInt::parse_bytes(s.trim_start_matches("-0b").as_bytes(), 2).map(|x| -x);
-        }
+    if s.starts_with("0x") {
+        return BigInt::parse_bytes(s.trim_start_matches("0x").as_bytes(), 16).map(|x| (x, 16));
+    }
+    if s.starts_with("-0x") {
+        return BigInt::parse_bytes(s.trim_start_matches("-0x").as_bytes(), 16).map(|x| (-x, 16));
+    }
+    if s.starts_with("0o") {
+        return BigInt::parse_bytes(s.trim_start_matches("0o").as_bytes(), 8).map(|x| (x, 8));
+    }
+    if s.starts_with("-0o") {
+        return BigInt::parse_bytes(s.trim_start_matches("-0o").as_bytes(), 8).map(|x| (-x, 8));
+    }
+    if s.starts_with("0b") {
+        return BigInt::parse_bytes(s.trim_start_matches("0b").as_bytes(), 2).map(|x| (x, 2));
+    }
+    if s.starts_with("-0b") {
+        return BigInt::parse_bytes(s.trim_start_matches("-0b").as_bytes(), 2).map(|x| (-x, 2));
     }
     let split = s.split('e').collect::<Vec<_>>();
     if split.len() > 2 {
@@ -1905,7 +1929,7 @@ fn parse_integral_string_lit(s: &str) -> Option<BigInt> {
     }
     if split.len() == 1 {
         // 'e' is not contained.
-        return BigInt::parse_bytes(s.as_bytes(), 10);
+        return BigInt::parse_bytes(s.as_bytes(), 10).map(|x| (x, 10));
     }
     assert_eq!(split.len(), 2);
     let num = BigInt::parse_bytes(split[0].as_bytes(), 10);
@@ -1929,7 +1953,7 @@ fn parse_integral_string_lit(s: &str) -> Option<BigInt> {
         ret *= 10;
         i += 1;
     }
-    Some(ret)
+    Some((ret, 10))
 }
 
 fn parse_expr_nullptr_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
