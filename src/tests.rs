@@ -4820,6 +4820,7 @@ pub fn test_hex_oct_bin_lit() {
         assert_eq(|_|"", 0b11111111_I8, -1_I8);;
         assert_eq(|_|"", 0x000ffffffffffffffff, -1);;
         assert_eq(|_|"", 0b00011111111_I8, -1_I8);;
+        assert_eq(|_|"", 0o377_U8, 255_U8);;
         pure()
     );
     "##;
@@ -4888,6 +4889,24 @@ pub fn test_integer_string_literal_error3() {
     main : IO ();
     main = (
         assert_eq(|_|"", 256_U8, -1);; // out of range of `I8`
+        pure()
+    );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_compiler_mode(),
+        "out of range",
+    );
+}
+
+#[test]
+pub fn test_integer_string_literal_error4() {
+    let source = r##"
+    module Main;
+        
+    main : IO ();
+    main = (
+        assert_eq(|_|"", 0o377_I8, -1);; // out of range of `I8`
         pure()
     );
     "##;
