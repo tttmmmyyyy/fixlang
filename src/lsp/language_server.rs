@@ -647,8 +647,12 @@ fn handle_completion(
     program: &Program,
     uri_to_content: &Map<lsp_types::Uri, String>,
 ) {
-    let namespace = infer_namespace_in_completion(params, uri_to_content);
+    let typing_text = get_typing_text(&params.text_document_position, uri_to_content);
+
+    let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
+
+    let has_dot = is_dot_function(&typing_text);
 
     let mut items = vec![];
 
@@ -657,13 +661,8 @@ fn handle_completion(
         kind: CompletionItemKind,
         detail: Option<String>,
         end_node: &EndNode,
-        params: &CompletionParams,
+        has_dot: bool,
     ) -> CompletionItem {
-        let trigger_char = params
-            .context
-            .as_ref()
-            .and_then(|ctx| ctx.trigger_character.clone());
-
         CompletionItem {
             label: name.to_string(),
             label_details: Some(CompletionItemLabelDetails {
@@ -684,7 +683,7 @@ fn handle_completion(
             additional_text_edits: None,
             command: None,
             commit_characters: None,
-            data: Some(serde_json::to_value((end_node, trigger_char)).unwrap()),
+            data: Some(serde_json::to_value((end_node, has_dot)).unwrap()),
             tags: None,
         }
     }
@@ -707,7 +706,7 @@ fn handle_completion(
             CompletionItemKind::FUNCTION,
             Some(scheme),
             &EndNode::Expr(Var::create(full_name.clone()), None),
-            params,
+            has_dot,
         );
         items.push(item);
     }
@@ -723,7 +722,7 @@ fn handle_completion(
             CompletionItemKind::CLASS,
             None,
             &EndNode::Type(tycon.clone()),
-            params,
+            has_dot,
         );
         items.push(item);
     }
@@ -739,11 +738,26 @@ fn handle_completion(
             CompletionItemKind::INTERFACE,
             None,
             &EndNode::Trait(trait_.clone()),
-            params,
+            has_dot,
         );
         items.push(item);
     }
     send_response(id, Ok::<_, ()>(items));
+}
+
+// Check if the user's typing text is in the form of a dot followed by namespaces or a function name
+fn is_dot_function(typing_text: &str) -> bool {
+    let mut chars = typing_text.chars().rev();
+    let identifer_chars = chars_allowed_in_identifiers();
+    while let Some(c) = chars.next() {
+        if c == '.' {
+            return true;
+        }
+        if !identifer_chars.contains(c) && c != ':' {
+            return false;
+        }
+    }
+    false
 }
 
 // Extract namespace from typing text string.
@@ -793,15 +807,16 @@ fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     namespace.unwrap()
 }
 
-// Infer the namespace of the completion candidates from the text being typed by the user.
-fn infer_namespace_in_completion(
-    params: &CompletionParams,
-    uri_to_content: &Map<lsp_types::Uri, String>,
-) -> NameSpace {
-    // Get the text being typed by the user.
-    // Example: `typing_text` == "let x = Std::Array:"
-    let current_line =
-        get_line_string_from_position(uri_to_content, &params.text_document_position);
+// Get the text of the line being typed by the user up to the cursor position.
+fn get_typing_text(
+    text_document_position: &lsp_types::TextDocumentPositionParams,
+    uri_to_content: &std::collections::HashMap<
+        lsp_types::Uri,
+        String,
+        std::hash::BuildHasherDefault<fxhash::FxHasher>,
+    >,
+) -> String {
+    let current_line = get_line_string_from_position(uri_to_content, &text_document_position);
     let typing_text = current_line
         .map(|(line, pos)| {
             let mut line = line.chars().collect::<Vec<_>>();
@@ -809,9 +824,7 @@ fn infer_namespace_in_completion(
             line.into_iter().collect::<String>()
         })
         .unwrap_or_default();
-
-    // Extract namespace from the typing text using string manipulation.
-    extract_namespace_from_typing_text(&typing_text)
+    typing_text
 }
 
 // Handle "textDocument/completion" method.
@@ -824,7 +837,7 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
         return;
     }
     let data = params.data.as_ref().unwrap();
-    let data = serde_json::from_value::<(EndNode, Option<String>)>(data.clone());
+    let data = serde_json::from_value::<(EndNode, Option<bool>)>(data.clone());
     if let Err(e) = data {
         let msg = format!(
             "In textDocument/completion, failed to parse params.data as EndNode: {}",
@@ -834,7 +847,7 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
-    let (node, trigger_char) = data.unwrap();
+    let (node, has_dot) = data.unwrap();
 
     // Get the documentation.
     let docs = document_from_endnode(&node, program);
@@ -851,8 +864,8 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
                 let params = parameters_of_global_value(&var.name, program);
                 if let Some(mut params) = params {
                     // If the trigger character is ".", then remove the last parameter.
-                    if let Some(trigger_char) = trigger_char {
-                        if trigger_char == "." {
+                    if let Some(has_dot) = has_dot {
+                        if has_dot {
                             params.pop();
                         }
                     }
