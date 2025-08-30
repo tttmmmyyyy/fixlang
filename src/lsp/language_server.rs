@@ -746,6 +746,53 @@ fn handle_completion(
     send_response(id, Ok::<_, ()>(items));
 }
 
+// Extract namespace from typing text string.
+// This function performs string manipulation to extract namespace components from user input.
+fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
+    // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
+    // Example: input "let x = Std::Array:" -> "Std::Array:"
+    let mut suffix_len = 0;
+    let identifer_chars = chars_allowed_in_identifiers();
+    for c in typing_text.chars().rev() {
+        if identifer_chars.contains(c) || c == ':' {
+            suffix_len += 1;
+        } else {
+            break;
+        }
+    }
+    let typing_text = typing_text.chars().collect::<Vec<_>>();
+    let namespace_part = typing_text[typing_text.len() - suffix_len..typing_text.len()]
+        .iter()
+        .collect::<String>();
+
+    // Remove the trailing colon
+    // Example: "Std::Array:" -> "Std::Array"
+    let namespace_part = namespace_part.trim_end_matches(':').to_string();
+
+    // Split the text by "::". If the last component does not start with a uppercase letter, then drop it.
+    let mut components = namespace_part.split("::").collect::<Vec<_>>();
+    if let Some(last_component) = components.last() {
+        let first_char = last_component.chars().nth(0);
+        if let Some(first_char) = first_char {
+            if !first_char.is_ascii_alphabetic() || !first_char.is_uppercase() {
+                components.pop();
+            }
+        }
+    }
+    let namespace_str = components
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join("::");
+
+    // Convert the namespace string to a `NameSpace`.
+    let namespace = NameSpace::parse(&namespace_str);
+    if namespace.is_none() {
+        return NameSpace::new(vec![]);
+    }
+    namespace.unwrap()
+}
+
 // Infer the namespace of the completion candidates from the text being typed by the user.
 fn infer_namespace_in_completion(
     params: &CompletionParams,
@@ -763,50 +810,8 @@ fn infer_namespace_in_completion(
         })
         .unwrap_or_default();
 
-    // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
-    // Example: `typing_text` == "Std::Array:"
-    let mut suffix_len = 0;
-    let identifer_chars = chars_allowed_in_identifiers();
-    for c in typing_text.chars().rev() {
-        if identifer_chars.contains(c) || c == ':' {
-            suffix_len += 1;
-        } else {
-            break;
-        }
-    }
-    let typing_text = typing_text.chars().collect::<Vec<_>>();
-    let typing_text = typing_text[typing_text.len() - suffix_len..typing_text.len()]
-        .iter()
-        .collect::<String>();
-
-    // Remove the trailing colon
-    // Example: `typing_text` == "Std::Array"
-    let typing_text = typing_text.trim_end_matches(':').to_string();
-
-    // Split the text by "::". If the last component does not start with a uppercase letter, then drop it.
-    let mut typing_text = typing_text.split("::").collect::<Vec<_>>();
-    if let Some(last_component) = typing_text.last() {
-        let first_char = last_component.chars().nth(0);
-        if let Some(first_char) = first_char {
-            if !first_char.is_ascii_alphabetic() || !first_char.is_uppercase() {
-                typing_text.pop();
-            }
-        }
-    }
-    let typing_text = typing_text
-        .iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>()
-        .join("::");
-
-    // Convert the `typing_text` to a `NameSpace`.
-    let typing_text = NameSpace::parse(&typing_text);
-    if typing_text.is_none() {
-        return NameSpace::new(vec![]);
-    }
-    let typing_text = typing_text.unwrap();
-
-    typing_text
+    // Extract namespace from the typing text using string manipulation.
+    extract_namespace_from_typing_text(&typing_text)
 }
 
 // Handle "textDocument/completion" method.
@@ -1981,4 +1986,102 @@ pub fn send_work_done_progress_end(token: &str) {
         value: ProgressParamsValue::WorkDone(lsp_types::WorkDoneProgress::End(end)),
     };
     send_notification("$/progress".to_string(), Some(params));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_basic() {
+        // Test case based on comment: "let x = Std::Array:"
+        let result = extract_namespace_from_typing_text("let x = Std::Array:");
+        assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+        assert_eq!(result.is_absolute, false);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_simple() {
+        // Test case: "Std::Array:"
+        let result = extract_namespace_from_typing_text("Std::Array:");
+        assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_single() {
+        // Test case: "Std:"
+        let result = extract_namespace_from_typing_text("Std:");
+        assert_eq!(result.names, vec!["Std".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_no_colon() {
+        // Test case: "Std::Array" (no trailing colon)
+        let result = extract_namespace_from_typing_text("Std::Array");
+        assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_lowercase_last() {
+        // Test case: "Std::Array::get" - last component starts with lowercase, should be dropped
+        let result = extract_namespace_from_typing_text("Std::Array::get");
+        assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_empty() {
+        // Test case: empty string
+        let result = extract_namespace_from_typing_text("");
+        assert_eq!(result.names, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_no_namespace() {
+        // Test case: "SomeVariable" - no namespace separator
+        let result = extract_namespace_from_typing_text("SomeVariable");
+        assert_eq!(result.names, vec!["SomeVariable".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_with_special_chars() {
+        // Test case: "func(Std::Array:" - function call with namespace
+        let result = extract_namespace_from_typing_text("func(Std::Array:");
+        assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_nested() {
+        // Test case: "A::B::C::D:" - deeply nested namespace
+        let result = extract_namespace_from_typing_text("A::B::C::D:");
+        assert_eq!(
+            result.names,
+            vec![
+                "A".to_string(),
+                "B".to_string(),
+                "C".to_string(),
+                "D".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_partial() {
+        // Test case: "Std::arr" - partial typing with lowercase
+        let result = extract_namespace_from_typing_text("Std::arr");
+        assert_eq!(result.names, vec!["Std".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_with_operators() {
+        // Test case: "x + Std::Array:" - with operators before
+        let result = extract_namespace_from_typing_text("x + Std::Array:");
+        assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_whitespace() {
+        // Test case: "    Std::Array:" - with leading whitespace
+        let result = extract_namespace_from_typing_text("    Std::Array:");
+        assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+    }
 }
