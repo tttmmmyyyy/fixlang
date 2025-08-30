@@ -9388,3 +9388,34 @@ main = (
         "Cannot infer the type of this expression",
     );
 }
+
+#[test]
+pub fn test_regression_issue_62() {
+    let source = r##"
+module Main;
+
+test : IO ();
+test = (
+    let x = FFI_CALL[CUnsignedShort f(CUnsignedShort), undefined("")];
+    let x = FFI_CALL[CUnsignedLongLong f(CUnsignedLongLong), undefined("")];
+    let x = FFI_CALL[CUnsignedLong f(CUnsignedLong), undefined("")];
+    let x = FFI_CALL[CUnsignedInt f(CUnsignedInt), undefined("")];
+    let x = FFI_CALL[CUnsignedChar f(CUnsignedChar), undefined("")];
+    let x = FFI_CALL[CSizeT f(CSizeT), undefined("")];
+    let x = FFI_CALL[CShort f(CShort), undefined("")];
+    let x = FFI_CALL[CLongLong f(CLongLong), undefined("")];
+    let x = FFI_CALL[CLong f(CLong), undefined("")];
+    let x = FFI_CALL[CInt f(CInt), undefined("")];
+    let x = FFI_CALL[CFloat f(CFloat), undefined("")];
+    let x = FFI_CALL[CDouble f(CDouble), undefined("")];
+    let x = FFI_CALL[CChar f(CChar), undefined("")];
+    pure()
+);
+
+main : IO ();
+main = (
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
