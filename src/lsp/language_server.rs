@@ -25,7 +25,7 @@ use lsp_types::{
     InitializedParams, MarkupContent, ProgressParams, ProgressParamsValue,
     PublishDiagnosticsParams, SaveOptions, ServerCapabilities, SymbolKind,
     TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressBegin,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Uri, WorkDoneProgressBegin,
     WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
 };
 use once_cell::sync::Lazy;
@@ -967,7 +967,10 @@ fn handle_completion_resolve_document(
     };
     if let Some(import_item_name) = import_item_name {
         if let Some(latest_content) = uri_to_content.get_mut(&uri) {
-            let edit = create_text_edit_import_to_use(&import_item_name, latest_content);
+            let edits = create_text_edit_import_to_use(&import_item_name, latest_content);
+            if edits.len() > 0 {
+                item.additional_text_edits = Some(edits);
+            }
         }
     }
 
@@ -975,41 +978,98 @@ fn handle_completion_resolve_document(
     send_response(id, Ok::<_, ()>(item));
 }
 
-fn create_text_edit_import_to_use(item_name: &FullName, latest_content: &mut LatestContent) {
+fn create_text_edit_import_to_use(
+    item_name: &FullName,
+    latest_content: &mut LatestContent,
+) -> Vec<TextEdit> {
     if !item_name.is_global() {
-        return;
+        return vec![];
     }
     let mod_info = latest_content.get_module_info();
     if mod_info.is_none() {
-        return;
+        return vec![];
     }
-    let mod_name = mod_info.as_ref().unwrap().name.clone();
+    let mod_info = mod_info.as_ref().unwrap().clone();
+    let mod_name = mod_info.name.clone();
     // No need to import if the item is defined in the same module.
     if item_name.module() == mod_name {
-        return;
+        return vec![];
     }
     let import_stmts = latest_content.get_import_stmts();
     if import_stmts.is_none() {
-        return;
+        return vec![];
     }
     let mut import_stmts = import_stmts.as_ref().unwrap().clone();
 
     // Unless the user explicitly imports the standard library, we add it implicitly.
     let import_std_explicitly = import_stmts
         .iter()
-        .any(|imp| &imp.module.0 == STD_NAME && !imp.implicit);
-    if !import_std_explicitly {
-        import_stmts.push(ImportStatement::implicit_std_import(mod_name.clone()));
-    }
+        .any(|imp: &ImportStatement| &imp.module.0 == STD_NAME && !imp.implicit);
 
     // If the item is already accessible, we don't need to import it.
+    if !import_std_explicitly && item_name.module() == STD_NAME {
+        return vec![];
+    }
     if is_accessible(&import_stmts, &item_name) {
-        return;
+        return vec![];
+    }
+
+    // If any import_statement's source is None, it is abnormal, so return.
+    if import_stmts.iter().any(|imp| imp.source.is_none()) {
+        let msg = format!(
+            "In create_text_edit_import_to_use, found an import statement with None source.",
+        );
+        write_log(msg.as_str());
+        return vec![];
+    }
+    let opt_first_import_source = if import_stmts.len() >= 1 {
+        Some(
+            import_stmts[0]
+                .source
+                .as_ref()
+                .unwrap()
+                .clone()
+                .to_head_position(),
+        )
+    } else {
+        None
+    };
+    let mut text_edits = vec![];
+    // Erase all existing import statements.
+    for import_stmt in &import_stmts {
+        let range = span_to_range(&import_stmt.source.as_ref().unwrap());
+        text_edits.push(TextEdit {
+            range,
+            new_text: "".to_string(),
+        });
     }
 
     // Add import statement.
     let import_stmt = ImportStatement::import_to_use(mod_name, item_name.clone());
     import_stmts.push(import_stmt);
+    let mut inserted_text = import_stmts
+        .iter()
+        .map(|stmt| stmt.stringify())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Decide where to insert the new import statements.
+    let range = if let Some(first_import_source) = opt_first_import_source {
+        // If there is at least one import statement, then insert into the beginning of the first import statement.
+        span_to_range(&first_import_source)
+    } else {
+        // If there is no import statement, the insert at the end of the module definition.
+        // Additionally, add two newlines in front of `inserted_text`.
+        inserted_text = format!("\n\n{}", inserted_text);
+        let span = mod_info.source.to_end_position();
+        span_to_range(&span)
+    };
+    text_edits.push(TextEdit {
+        range,
+        new_text: inserted_text,
+    });
+
+    text_edits
 }
 
 // Get the content of the file at the specified path at the time of the last diagnostics

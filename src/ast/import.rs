@@ -67,10 +67,12 @@ impl ImportStatement {
     }
 
     pub fn import_to_use(importer: Name, name: FullName) -> ImportStatement {
-        let names = name.to_namespace().names.clone();
+        let module = name.module();
+        let mut names = name.to_namespace().names.clone();
+        let names = names.split_off(1);
         ImportStatement {
             importer,
-            module: (name.module(), None),
+            module: (module, None),
             items: vec![ImportTreeNode::from_names(names)],
             hiding: vec![],
             source: None,
@@ -92,6 +94,44 @@ impl ImportStatement {
             item.push_front(self.module.0.clone());
         }
         result
+    }
+
+    pub fn stringify(&self) -> String {
+        let mut res = format!("import {}", self.module.0);
+        if self.items.len() >= 1 {
+            if self.items.len() >= 2 {
+                res += "::{";
+            }
+            res += self
+                .items
+                .iter()
+                .map(|item| item.stringify())
+                .collect::<Vec<_>>()
+                .join(", ")
+                .as_str();
+            if self.items.len() >= 2 {
+                res += "}";
+            }
+        }
+        if self.hiding.len() >= 1 {
+            if self.hiding.len() >= 2 {
+                res += " hiding {";
+            } else {
+                res += " hiding ";
+            }
+            res += self
+                .hiding
+                .iter()
+                .map(|item| item.stringify())
+                .collect::<Vec<_>>()
+                .join(", ")
+                .as_str();
+            if self.hiding.len() >= 2 {
+                res += "}";
+            }
+        }
+        res += ";";
+        res
     }
 }
 
@@ -167,6 +207,33 @@ impl ImportTreeNode {
                     result.append(&mut childs);
                 }
                 result
+            }
+        }
+    }
+
+    fn stringify(&self) -> String {
+        match self {
+            ImportTreeNode::Any(_) => "*".to_string(),
+            ImportTreeNode::Symbol(name, _) => name.clone(),
+            ImportTreeNode::TypeOrTrait(name, _) => name.clone(),
+            ImportTreeNode::NameSpace(name, items, _) => {
+                let mut res = name.clone();
+                if items.len() >= 1 {
+                    if items.len() >= 2 {
+                        res += "::{";
+                    } else {
+                        res += "::";
+                    }
+                    res += &items
+                        .iter()
+                        .map(|item| item.stringify())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if items.len() >= 2 {
+                        res += "}";
+                    }
+                }
+                res
             }
         }
     }

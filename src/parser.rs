@@ -152,15 +152,13 @@ pub fn parse_str_import_statements(
 }
 
 pub fn parse_str_module_defn(file_path: PathBuf, src: &str) -> Result<ModuleInfo, Errors> {
-    parse_str_as_rule(
-        file_path,
-        src,
-        Rule::file_only_import_statements,
-        |rule, ctx| Ok(parse_module_defn(rule, ctx)),
-    )
+    parse_str_as_rule(file_path, src, Rule::file_only_module_defn, |rule, ctx| {
+        let rule = rule.into_inner().next().unwrap();
+        Ok(parse_module_defn(rule, ctx))
+    })
 }
 
-pub fn parse_str_as_rule<T>(
+fn parse_str_as_rule<T>(
     file_path: PathBuf,
     src: &str,
     rule: Rule,
@@ -2392,9 +2390,14 @@ fn parse_import_statements(
     let mut pairs = pair.into_inner();
     let mod_info = parse_module_defn(pairs.next().unwrap(), ctx);
     ctx.module_name = mod_info.name;
-    Ok(pairs
-        .map(|pair| parse_import_statement(pair, ctx))
-        .collect())
+    let mut import_stmts = vec![];
+    for pair in pairs {
+        if pair.as_rule() != Rule::import_statement {
+            break;
+        }
+        import_stmts.push(parse_import_statement(pair, ctx));
+    }
+    Ok(import_stmts)
 }
 
 fn rule_to_string(r: &Rule) -> String {

@@ -133,6 +133,22 @@ impl Span {
         }
     }
 
+    pub fn to_head_position(&self) -> Self {
+        Self {
+            input: self.input.clone(),
+            start: self.start,
+            end: self.start,
+        }
+    }
+
+    pub fn to_end_position(&self) -> Self {
+        Self {
+            input: self.input.clone(),
+            start: self.end,
+            end: self.end,
+        }
+    }
+
     pub fn offset(&self, offset: usize) -> Self {
         Self {
             input: self.input.clone(),
