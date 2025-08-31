@@ -37,6 +37,14 @@ impl SourceFile {
         }
     }
 
+    pub fn from_file_path_and_content(file_path: PathBuf, content: String) -> Self {
+        Self {
+            string: Arc::new(Mutex::new(Some(content))),
+            hash: Arc::new(Mutex::new(None)),
+            file_path,
+        }
+    }
+
     fn read_file(&self) -> Result<(), Errors> {
         match read_file(&self.file_path) {
             Ok(source) => {

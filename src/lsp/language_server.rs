@@ -1,10 +1,12 @@
+use crate::ast::import::{is_accessible, ImportStatement};
 use crate::ast::name::{FullName, NameSpace};
-use crate::ast::program::{GlobalValue, Program};
+use crate::ast::program::{GlobalValue, ModuleInfo, Program};
 use crate::ast::traits::{Trait, TraitAlias, TraitInfo, TraitInstance};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
-use crate::constants::chars_allowed_in_identifiers;
+use crate::constants::{chars_allowed_in_identifiers, STD_NAME};
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
+use crate::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::{
     constants::LOG_FILE_PATH,
@@ -23,7 +25,7 @@ use lsp_types::{
     InitializedParams, MarkupContent, ProgressParams, ProgressParamsValue,
     PublishDiagnosticsParams, SaveOptions, ServerCapabilities, SymbolKind,
     TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, WorkDoneProgressBegin,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressBegin,
     WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
 };
 use once_cell::sync::Lazy;
@@ -102,6 +104,53 @@ pub struct PendingDocumentSymbolRequest {
 
 static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 
+// The latest content of each file (which may not have been saved to disk yet) and its associated information
+pub struct LatestContent {
+    // The path.
+    path: PathBuf,
+    // The latest content of the file.
+    pub content: String,
+    // Module name. None if not parsed yet or failed to parse.
+    pub module_info: Option<ModuleInfo>,
+    // Import statements. None if not parsed yet or failed to parse.
+    pub import_stmts: Option<Vec<ImportStatement>>,
+}
+
+impl LatestContent {
+    fn new(path: PathBuf, content: String) -> Self {
+        LatestContent {
+            path,
+            content,
+            module_info: None,
+            import_stmts: None,
+        }
+    }
+
+    fn get_import_stmts(&mut self) -> &Option<Vec<ImportStatement>> {
+        if self.import_stmts.is_none() {
+            let import_stmts = parse_str_import_statements(self.path.clone(), &self.content);
+            if let Ok(import_stmts) = import_stmts {
+                self.import_stmts = Some(import_stmts);
+            } else {
+                self.import_stmts = None;
+            }
+        }
+        &self.import_stmts
+    }
+
+    fn get_module_info(&mut self) -> &Option<ModuleInfo> {
+        if self.module_info.is_none() {
+            let module_info = parse_str_module_defn(self.path.clone(), &self.content);
+            if let Ok(module_info) = module_info {
+                self.module_info = Some(module_info);
+            } else {
+                self.module_info = None;
+            }
+        }
+        &self.module_info
+    }
+}
+
 // Launch the language server
 pub fn launch_language_server() {
     let mut stdin = std::io::stdin();
@@ -117,7 +166,7 @@ pub fn launch_language_server() {
     let mut last_diag: Option<DiagnosticsResult> = None;
 
     // Maps to get file contents from Uris.
-    let mut uri_to_latest_content: Map<lsp_types::Uri, String> = Map::default();
+    let mut uri_to_latest_content: Map<Uri, LatestContent> = Map::default();
 
     // The pending document symbol requests.
     let mut pending_document_symbol_requests: VecDeque<PendingDocumentSymbolRequest> =
@@ -306,7 +355,12 @@ pub fn launch_language_server() {
                 if params.is_none() {
                     continue;
                 }
-                handle_completion_resolve_document(id.unwrap(), &params.unwrap(), program);
+                handle_completion_resolve_document(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    &mut uri_to_latest_content,
+                    program,
+                );
             } else if method == "textDocument/hover" {
                 if last_diag.is_none() {
                     continue;
@@ -586,23 +640,28 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>) {
 // Handle "textDocument/didOpen" method.
 fn handle_textdocument_did_open(
     params: &DidOpenTextDocumentParams,
-    uri_to_latest_content: &mut Map<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut Map<lsp_types::Uri, LatestContent>,
 ) {
     // Store the content of the file into the maps.
+    let path = uri_to_path(&params.text_document.uri);
     uri_to_latest_content.insert(
         params.text_document.uri.clone(),
-        params.text_document.text.clone(),
+        LatestContent::new(path, params.text_document.text.clone()),
     );
 }
 
 // Handle "textDocument/didChange" method.
 fn handle_textdocument_did_change(
     params: &DidChangeTextDocumentParams,
-    uri_to_latest_content: &mut Map<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut Map<lsp_types::Uri, LatestContent>,
 ) {
     // Store the content of the file into `uri_to_content`.
     if let Some(change) = params.content_changes.last() {
-        uri_to_latest_content.insert(params.text_document.uri.clone(), change.text.clone());
+        let path = uri_to_path(&params.text_document.uri);
+        uri_to_latest_content.insert(
+            params.text_document.uri.clone(),
+            LatestContent::new(path, change.text.clone()),
+        );
     }
 }
 
@@ -610,11 +669,15 @@ fn handle_textdocument_did_change(
 fn handle_textdocument_did_save(
     diag_send: Sender<DiagnosticsMessage>,
     params: &DidSaveTextDocumentParams,
-    uri_to_latest_content: &mut Map<lsp_types::Uri, String>,
+    uri_to_latest_content: &mut Map<lsp_types::Uri, LatestContent>,
 ) {
     // Store the content of the file into maps.
     if let Some(text) = &params.text {
-        uri_to_latest_content.insert(params.text_document.uri.clone(), text.clone());
+        let path = uri_to_path(&params.text_document.uri);
+        uri_to_latest_content.insert(
+            params.text_document.uri.clone(),
+            LatestContent::new(path, text.clone()),
+        );
     } else {
         let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
         write_log(msg.as_str());
@@ -645,8 +708,9 @@ fn handle_completion(
     id: u32,
     params: &CompletionParams,
     program: &Program,
-    uri_to_content: &Map<lsp_types::Uri, String>,
+    uri_to_content: &Map<Uri, LatestContent>,
 ) {
+    let uri = params.text_document_position.text_document.uri.clone();
     let typing_text = get_typing_text(&params.text_document_position, uri_to_content);
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
@@ -662,6 +726,7 @@ fn handle_completion(
         detail: Option<String>,
         end_node: &EndNode,
         has_dot: bool,
+        uri: &Uri,
     ) -> CompletionItem {
         CompletionItem {
             label: name.to_string(),
@@ -683,7 +748,7 @@ fn handle_completion(
             additional_text_edits: None,
             command: None,
             commit_characters: None,
-            data: Some(serde_json::to_value((end_node, has_dot)).unwrap()),
+            data: Some(serde_json::to_value((end_node, has_dot, uri)).unwrap()),
             tags: None,
         }
     }
@@ -707,6 +772,7 @@ fn handle_completion(
             Some(scheme),
             &EndNode::Expr(Var::create(full_name.clone()), None),
             has_dot,
+            &uri,
         );
         items.push(item);
     }
@@ -723,6 +789,7 @@ fn handle_completion(
             None,
             &EndNode::Type(tycon.clone()),
             has_dot,
+            &uri,
         );
         items.push(item);
     }
@@ -739,6 +806,7 @@ fn handle_completion(
             None,
             &EndNode::Trait(trait_.clone()),
             has_dot,
+            &uri,
         );
         items.push(item);
     }
@@ -811,8 +879,8 @@ fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
 fn get_typing_text(
     text_document_position: &lsp_types::TextDocumentPositionParams,
     uri_to_content: &std::collections::HashMap<
-        lsp_types::Uri,
-        String,
+        Uri,
+        LatestContent,
         std::hash::BuildHasherDefault<fxhash::FxHasher>,
     >,
 ) -> String {
@@ -829,7 +897,12 @@ fn get_typing_text(
 
 // Handle "textDocument/completion" method.
 // Add documentation to the completion item.
-fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program: &Program) {
+fn handle_completion_resolve_document(
+    id: u32,
+    params: &CompletionItem,
+    uri_to_content: &mut Map<Uri, LatestContent>,
+    program: &Program,
+) {
     if params.data.is_none() {
         let msg = "In textDocument/completion, params.data is null.".to_string();
         write_log(msg.as_str());
@@ -837,7 +910,7 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
         return;
     }
     let data = params.data.as_ref().unwrap();
-    let data = serde_json::from_value::<(EndNode, Option<bool>)>(data.clone());
+    let data = serde_json::from_value::<(EndNode, Option<bool>, Uri)>(data.clone());
     if let Err(e) = data {
         let msg = format!(
             "In textDocument/completion, failed to parse params.data as EndNode: {}",
@@ -847,7 +920,7 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
-    let (node, has_dot) = data.unwrap();
+    let (node, has_dot, uri) = data.unwrap();
 
     // Get the documentation.
     let docs = document_from_endnode(&node, program);
@@ -884,8 +957,59 @@ fn handle_completion_resolve_document(id: u32, params: &CompletionItem, program:
         _ => {}
     };
 
+    // Create TextEdits of import statements.
+    let import_item_name = match node {
+        EndNode::Expr(var, _) => Some(var.name.clone()),
+        EndNode::Pattern(_, _) => None,
+        EndNode::Type(ty) => Some(ty.name.clone()),
+        EndNode::Trait(trait_) => Some(trait_.name.clone()),
+        EndNode::Module(_) => None, // Do not auto-import module name by completion.
+    };
+    if let Some(import_item_name) = import_item_name {
+        if let Some(latest_content) = uri_to_content.get_mut(&uri) {
+            let edit = create_text_edit_import_to_use(&import_item_name, latest_content);
+        }
+    }
+
     // Send the completion item.
     send_response(id, Ok::<_, ()>(item));
+}
+
+fn create_text_edit_import_to_use(item_name: &FullName, latest_content: &mut LatestContent) {
+    if !item_name.is_global() {
+        return;
+    }
+    let mod_info = latest_content.get_module_info();
+    if mod_info.is_none() {
+        return;
+    }
+    let mod_name = mod_info.as_ref().unwrap().name.clone();
+    // No need to import if the item is defined in the same module.
+    if item_name.module() == mod_name {
+        return;
+    }
+    let import_stmts = latest_content.get_import_stmts();
+    if import_stmts.is_none() {
+        return;
+    }
+    let mut import_stmts = import_stmts.as_ref().unwrap().clone();
+
+    // Unless the user explicitly imports the standard library, we add it implicitly.
+    let import_std_explicitly = import_stmts
+        .iter()
+        .any(|imp| &imp.module.0 == STD_NAME && !imp.implicit);
+    if !import_std_explicitly {
+        import_stmts.push(ImportStatement::implicit_std_import(mod_name.clone()));
+    }
+
+    // If the item is already accessible, we don't need to import it.
+    if is_accessible(&import_stmts, &item_name) {
+        return;
+    }
+
+    // Add import statement.
+    let import_stmt = ImportStatement::import_to_use(mod_name, item_name.clone());
+    import_stmts.push(import_stmt);
 }
 
 // Get the content of the file at the specified path at the time of the last diagnostics
@@ -964,7 +1088,7 @@ fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> O
 // Given a `TextDocumentPositionParams`, get the line string and the line number.
 // `uri_to_content` is a map to get the source string from the uri of the source file.
 fn get_line_string_from_position(
-    uri_to_content: &Map<lsp_types::Uri, String>,
+    uri_to_content: &Map<lsp_types::Uri, LatestContent>,
     text_position: &TextDocumentPositionParams,
 ) -> Option<(String, u32)> {
     // Get the latest file content.
@@ -972,11 +1096,10 @@ fn get_line_string_from_position(
     if !uri_to_content.contains_key(uri) {
         let msg = format!("No stored content for the uri \"{}\".", uri.to_string());
         write_log(msg.as_str());
-        let msg = format!("{:?}", uri_to_content);
-        write_log(msg.as_str());
         return None;
     }
     let latest_content = uri_to_content.get(uri).unwrap();
+    let latest_content = &latest_content.content;
 
     // Get the string at line `line` in `latest_content`.
     let line = text_position.position.line;
@@ -988,14 +1111,12 @@ fn get_line_string_from_position(
 fn get_node_at(
     text_position: &TextDocumentPositionParams,
     program: &Program,
-    uri_to_content: &Map<lsp_types::Uri, String>,
+    uri_to_content: &Map<lsp_types::Uri, LatestContent>,
 ) -> Option<EndNode> {
     // Get the latest file content.
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
         let msg = format!("No stored content for the uri \"{}\".", uri.to_string());
-        write_log(msg.as_str());
-        let msg = format!("{:?}", uri_to_content);
         write_log(msg.as_str());
         return None;
     }
@@ -1015,7 +1136,7 @@ fn get_node_at(
     // Get the position of the cursor in `saved_content`.
     let pos_in_latest = text_position.position;
     let line_in_saved =
-        calculate_corresponding_line(latest_content, &saved_content, pos_in_latest.line);
+        calculate_corresponding_line(&latest_content.content, &saved_content, pos_in_latest.line);
     if line_in_saved.is_none() {
         return None;
     }
@@ -1037,7 +1158,7 @@ fn handle_goto_definition(
     id: u32,
     params: &GotoDefinitionParams,
     program: &Program,
-    uri_to_content: &Map<lsp_types::Uri, String>,
+    uri_to_content: &Map<lsp_types::Uri, LatestContent>,
 ) {
     // Get the node at the cursor position.
     let node = get_node_at(
@@ -1445,7 +1566,7 @@ fn handle_hover(
     id: u32,
     params: &HoverParams,
     program: &Program,
-    uri_to_content: &Map<lsp_types::Uri, String>,
+    uri_to_content: &Map<lsp_types::Uri, LatestContent>,
 ) {
     // Get the node at the cursor position.
     let node = get_node_at(

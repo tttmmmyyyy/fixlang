@@ -139,6 +139,48 @@ fn parse_file(
     }
 }
 
+pub fn parse_str_import_statements(
+    file_path: PathBuf,
+    src: &str,
+) -> Result<Vec<ImportStatement>, Errors> {
+    parse_str_as_rule(
+        file_path,
+        src,
+        Rule::file_only_import_statements,
+        parse_import_statements,
+    )
+}
+
+pub fn parse_str_module_defn(file_path: PathBuf, src: &str) -> Result<ModuleInfo, Errors> {
+    parse_str_as_rule(
+        file_path,
+        src,
+        Rule::file_only_import_statements,
+        |rule, ctx| Ok(parse_module_defn(rule, ctx)),
+    )
+}
+
+pub fn parse_str_as_rule<T>(
+    file_path: PathBuf,
+    src: &str,
+    rule: Rule,
+    parser: impl Fn(Pair<Rule>, &mut ParseContext) -> Result<T, Errors>,
+) -> Result<T, Errors> {
+    let mut file = match FixParser::parse(rule, src) {
+        Ok(res) => res,
+        Err(e) => {
+            return Err(Errors::from_msg(format!(
+                "Failed to parse string as rule {:?}: {}",
+                rule, e
+            )));
+        }
+    };
+    let source = SourceFile::from_file_path_and_content(file_path, src.to_string());
+    let config = Configuration::diagnostics_mode(DiagnosticsConfig::default())?; // Use any Configuration
+    let mut ctx = ParseContext::from_source(source, &config);
+    parser(file.next().unwrap(), &mut ctx)
+}
+
 fn parse_module(
     pair: Pair<Rule>,
     src: SourceFile,
@@ -2340,6 +2382,19 @@ fn parse_import_item_node(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportTre
         }
         _ => unreachable!(),
     }
+}
+
+fn parse_import_statements(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Vec<ImportStatement>, Errors> {
+    assert_eq!(pair.as_rule(), Rule::file_only_import_statements);
+    let mut pairs = pair.into_inner();
+    let mod_info = parse_module_defn(pairs.next().unwrap(), ctx);
+    ctx.module_name = mod_info.name;
+    Ok(pairs
+        .map(|pair| parse_import_statement(pair, ctx))
+        .collect())
 }
 
 fn rule_to_string(r: &Rule) -> String {

@@ -66,6 +66,18 @@ impl ImportStatement {
         }
     }
 
+    pub fn import_to_use(importer: Name, name: FullName) -> ImportStatement {
+        let names = name.to_namespace().names.clone();
+        ImportStatement {
+            importer,
+            module: (name.module(), None),
+            items: vec![ImportTreeNode::from_names(names)],
+            hiding: vec![],
+            source: None,
+            implicit: false,
+        }
+    }
+
     // Returns the items that are referred by this import statement.
     // Includes items that are hidden.
     pub fn referred_items(&self) -> Vec<ImportItem> {
@@ -92,6 +104,29 @@ pub enum ImportTreeNode {
 }
 
 impl ImportTreeNode {
+    // From a list of names, for example ["A", "B", "f"], create `Namespace("A", [Namespace("B", [Symbol("f")])])`.
+    fn from_names(mut names: Vec<Name>) -> ImportTreeNode {
+        if names.len() == 0 {
+            return ImportTreeNode::Any(None);
+        }
+        if names.len() == 1 {
+            let name = names.pop().unwrap();
+            // If the first letter of `name` is lowercase, create a symbol node.
+            if name.chars().next().unwrap().is_lowercase() {
+                return ImportTreeNode::Symbol(name, None);
+            }
+            // If the first letter of `name` is uppercase, create a type or trait node.
+            return ImportTreeNode::TypeOrTrait(name, None);
+        }
+        let next_names = names.split_off(1);
+        let namespace = names.pop().unwrap();
+        ImportTreeNode::NameSpace(
+            namespace,
+            vec![ImportTreeNode::from_names(next_names)],
+            None,
+        )
+    }
+
     pub fn is_accessible(&self, name: &FullName) -> bool {
         match self {
             ImportTreeNode::Any(_) => true,

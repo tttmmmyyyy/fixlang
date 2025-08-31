@@ -363,3 +363,7 @@ line_commented_character = _{ !(NEWLINE | EOI) ~ ANY }
 
 // === File ===
 file = _{ SOI ~ sep* ~ module ~ sep* ~ EOI }
+
+file_only_import_statements = { SOI ~ sep* ~ module_defn ~ sep* ~ (import_statement | ANY)* ~ EOI }
+
+file_only_module_defn = { SOI ~ sep* ~ module_defn ~ ANY* ~ EOI }
