@@ -73,7 +73,7 @@ impl ImportStatement {
         ImportStatement {
             importer,
             module: (module, None),
-            items: vec![ImportTreeNode::from_names(names)],
+            items: vec![ImportTreeNode::from_names(&names)],
             hiding: vec![],
             source: None,
             implicit: false,
@@ -141,6 +141,36 @@ impl ImportStatement {
         res += ";";
         res
     }
+
+    // Adds a new import statement for the given name.
+    pub fn add_import(imports: &mut Vec<ImportStatement>, importer: Name, name: FullName) {
+        // If it's already accessible, do nothing.
+        if is_accessible(&imports, &name) {
+            return;
+        }
+        // Find an import statement which has the same module name to `name` no hiding items.
+        let module = name.module();
+        let import = imports
+            .iter()
+            .enumerate()
+            .find(|(_i, import)| import.module.0 == module && import.hiding.is_empty());
+        // If there is no such import, create a new one.
+        if import.is_none() {
+            let new_import = ImportStatement::import_to_use(importer, name);
+            imports.push(new_import);
+            return;
+        }
+        // If found, add the name to the import statement.
+        let idx = import.unwrap().0;
+        let import = &mut imports[idx];
+        import.add_item(&name.to_namespace().names[1..]);
+    }
+
+    fn add_item(&mut self, names: &[Name]) {
+        assert!(names.len() >= 1);
+        assert!(self.hiding.is_empty());
+        ImportTreeNode::add_item_internal(&mut self.items, names);
+    }
 }
 
 #[derive(Clone)]
@@ -153,26 +183,66 @@ pub enum ImportTreeNode {
 
 impl ImportTreeNode {
     // From a list of names, for example ["A", "B", "f"], create `Namespace("A", [Namespace("B", [Symbol("f")])])`.
-    fn from_names(mut names: Vec<Name>) -> ImportTreeNode {
+    fn from_names(names: &[Name]) -> ImportTreeNode {
         if names.len() == 0 {
             return ImportTreeNode::Any(None);
         }
         if names.len() == 1 {
-            let name = names.pop().unwrap();
+            let name = &names[0];
             // If the first letter of `name` is lowercase, create a symbol node.
             if name.chars().next().unwrap().is_lowercase() {
-                return ImportTreeNode::Symbol(name, None);
+                return ImportTreeNode::Symbol(name.clone(), None);
             }
             // If the first letter of `name` is uppercase, create a type or trait node.
-            return ImportTreeNode::TypeOrTrait(name, None);
+            return ImportTreeNode::TypeOrTrait(name.clone(), None);
         }
-        let next_names = names.split_off(1);
-        let namespace = names.pop().unwrap();
+        let namespace = &names[0];
         ImportTreeNode::NameSpace(
-            namespace,
-            vec![ImportTreeNode::from_names(next_names)],
+            namespace.clone(),
+            vec![ImportTreeNode::from_names(&names[1..])],
             None,
         )
+    }
+
+    fn add_item(&mut self, names: &[Name]) {
+        assert!(names.len() >= 1);
+        assert!(matches!(self, ImportTreeNode::NameSpace(_, _, _)));
+        if let ImportTreeNode::NameSpace(_, items, _) = self {
+            ImportTreeNode::add_item_internal(items, names);
+            return;
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn add_item_internal(items: &mut Vec<ImportTreeNode>, names: &[Name]) {
+        assert!(names.len() >= 1);
+        if names.len() >= 2 {
+            let namespace = &names[0];
+            // If `items` already includes the `namespace`, then add the `names` to it.
+            if let Some(item) = items.iter_mut().find(|item| match item {
+                ImportTreeNode::NameSpace(name, _, _) => name == namespace,
+                _ => false,
+            }) {
+                item.add_item(&names[1..]);
+                return;
+            }
+            // If `items` does not include the `namespace`, then add the `names`.
+            items.push(ImportTreeNode::from_names(names));
+            return;
+        }
+        // `names` has no namespace.
+        let name = &names[0];
+        // If `name` is already included in `items`, do nothing.
+        if items.iter().any(|item| match item {
+            ImportTreeNode::Symbol(symbol, _) => symbol == name,
+            ImportTreeNode::TypeOrTrait(symbol, _) => symbol == name,
+            _ => false,
+        }) {
+            return;
+        }
+        // If `name` is not already included in `items`, then add it.
+        items.push(ImportTreeNode::from_names(names));
     }
 
     pub fn is_accessible(&self, name: &FullName) -> bool {

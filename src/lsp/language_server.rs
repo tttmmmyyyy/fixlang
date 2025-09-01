@@ -1045,8 +1045,7 @@ fn create_text_edit_import_to_use(
     }
 
     // Add import statement.
-    let import_stmt = ImportStatement::import_to_use(mod_name, item_name.clone());
-    import_stmts.push(import_stmt);
+    ImportStatement::add_import(&mut import_stmts, mod_name, item_name.clone());
     let mut inserted_text = import_stmts
         .iter()
         .map(|stmt| stmt.stringify())
