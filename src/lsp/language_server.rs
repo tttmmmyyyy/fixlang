@@ -967,7 +967,7 @@ fn handle_completion_resolve_document(
     };
     if let Some(import_item_name) = import_item_name {
         if let Some(latest_content) = uri_to_content.get_mut(&uri) {
-            let edits = create_text_edit_import_to_use(&import_item_name, latest_content);
+            let edits = create_text_edit_to_import(&import_item_name, latest_content);
             if edits.len() > 0 {
                 item.additional_text_edits = Some(edits);
             }
@@ -978,7 +978,7 @@ fn handle_completion_resolve_document(
     send_response(id, Ok::<_, ()>(item));
 }
 
-fn create_text_edit_import_to_use(
+fn create_text_edit_to_import(
     item_name: &FullName,
     latest_content: &mut LatestContent,
 ) -> Vec<TextEdit> {
