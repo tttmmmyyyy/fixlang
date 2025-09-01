@@ -98,20 +98,27 @@ impl ImportStatement {
 
     pub fn stringify(&self) -> String {
         let mut res = format!("import {}", self.module.0);
-        if self.items.len() >= 1 {
-            res += "::";
-            if self.items.len() >= 2 {
-                res += "{";
-            }
-            res += self
-                .items
-                .iter()
-                .map(|item| item.stringify())
-                .collect::<Vec<_>>()
-                .join(", ")
-                .as_str();
-            if self.items.len() >= 2 {
-                res += "}";
+        if self.items.len() == 0 {
+            res += "::{}"
+        }
+        if self.items.len() == 1 && matches!(self.items[0], ImportTreeNode::Any(_)) {
+            // "import Std::*" can be written as "import Std"
+        } else {
+            if self.items.len() >= 1 {
+                res += "::";
+                if self.items.len() >= 2 {
+                    res += "{";
+                }
+                res += self
+                    .items
+                    .iter()
+                    .map(|item| item.stringify())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+                    .as_str();
+                if self.items.len() >= 2 {
+                    res += "}";
+                }
             }
         }
         if self.hiding.len() >= 1 {
