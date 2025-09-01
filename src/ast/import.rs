@@ -99,8 +99,9 @@ impl ImportStatement {
     pub fn stringify(&self) -> String {
         let mut res = format!("import {}", self.module.0);
         if self.items.len() >= 1 {
+            res += "::";
             if self.items.len() >= 2 {
-                res += "::{";
+                res += "{";
             }
             res += self
                 .items
