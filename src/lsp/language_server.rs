@@ -999,9 +999,9 @@ fn create_text_edit_to_import(
     if import_stmts.is_none() {
         return vec![];
     }
-    let mut import_stmts = import_stmts.as_ref().unwrap().clone();
+    let import_stmts = import_stmts.as_ref().unwrap().clone();
 
-    // Unless the user explicitly imports the standard library, we add it implicitly.
+    // Check if the standard library is imported explicitly.
     let import_std_explicitly = import_stmts
         .iter()
         .any(|imp: &ImportStatement| &imp.module.0 == STD_NAME && !imp.implicit);
@@ -1022,51 +1022,55 @@ fn create_text_edit_to_import(
         write_log(msg.as_str());
         return vec![];
     }
-    let opt_first_import_source = if import_stmts.len() >= 1 {
-        Some(
-            import_stmts[0]
-                .source
-                .as_ref()
-                .unwrap()
-                .clone()
-                .to_head_position(),
-        )
-    } else {
-        None
-    };
-    let mut text_edits = vec![];
-    // Erase all existing import statements.
-    for import_stmt in &import_stmts {
-        let range = span_to_range(&import_stmt.source.as_ref().unwrap());
-        text_edits.push(TextEdit {
-            range,
-            new_text: "".to_string(),
-        });
-    }
 
-    // Add import statement.
-    ImportStatement::add_import(&mut import_stmts, mod_name, item_name.clone());
-    let mut inserted_text = import_stmts
+    // Generate text for new import statements.
+    let mut new_import_stmts = import_stmts.clone();
+    ImportStatement::add_import(&mut new_import_stmts, mod_name, item_name.clone());
+    let inserted_text = new_import_stmts
         .iter()
         .map(|stmt| stmt.stringify())
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Decide where to insert the new import statements.
-    let range = if let Some(first_import_source) = opt_first_import_source {
-        // If there is at least one import statement, then insert into the beginning of the first import statement.
-        span_to_range(&first_import_source)
-    } else {
-        // If there is no import statement, the insert at the end of the module definition.
-        // Additionally, add two newlines in front of `inserted_text`.
-        inserted_text = format!("\n\n{}", inserted_text);
-        let span = mod_info.source.to_end_position();
-        span_to_range(&span)
-    };
+    // Calculate text edits.
+    let mut text_edits = vec![];
+
+    // Insert the import statement at the end of the module definition.
+    let inserted_text = format!("\n\n{}", inserted_text);
+    let span = mod_info.source.to_end_position();
+    let range = span_to_range(&span);
     text_edits.push(TextEdit {
         range,
         new_text: inserted_text,
     });
+
+    // Erase all existing import statements;
+    let content_lines = latest_content.content.lines().collect::<Vec<_>>();
+    for import_stmt in &import_stmts {
+        let mut range = span_to_range(&import_stmt.source.as_ref().unwrap());
+        // If there are no whitespace characters and line breaks after range.end, expand the range to remove whitespace characters and line breaks as well.
+        loop {
+            let end_line_content = content_lines.get(range.end.line as usize);
+            if let Some(end_line_content) = end_line_content {
+                let end_col_content = &end_line_content[range.end.character as usize..];
+                if end_col_content.trim().is_empty() {
+                    range.end.line += 1;
+                    range.end.character = 0;
+                    write_log(&format!(
+                        "Expanding the range to remove trailing whitespace and line breaks: {:?}",
+                        range
+                    ));
+                    continue;
+                }
+            }
+            break;
+        }
+
+        text_edits.push(TextEdit {
+            range,
+            new_text: "".to_string(),
+        });
+    }
 
     text_edits
 }
