@@ -22,7 +22,7 @@ use lsp_types::{
     CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
     DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Documentation,
     GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
-    InitializedParams, MarkupContent, ProgressParams, ProgressParamsValue,
+    InitializedParams, MarkupContent, Position, ProgressParams, ProgressParamsValue,
     PublishDiagnosticsParams, SaveOptions, ServerCapabilities, SymbolKind,
     TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Uri, WorkDoneProgressBegin,
@@ -711,11 +711,13 @@ fn handle_completion(
     uri_to_content: &Map<Uri, LatestContent>,
 ) {
     let uri = params.text_document_position.text_document.uri.clone();
+    let cursor = params.text_document_position.position;
     let typing_text = get_typing_text(&params.text_document_position, uri_to_content);
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
 
+    // Is the user completing a function call after a dot?
     let has_dot = is_dot_function(&typing_text);
 
     let mut items = vec![];
@@ -727,6 +729,7 @@ fn handle_completion(
         end_node: &EndNode,
         has_dot: bool,
         uri: &Uri,
+        cursor: &Position,
     ) -> CompletionItem {
         CompletionItem {
             label: name.to_string(),
@@ -748,7 +751,7 @@ fn handle_completion(
             additional_text_edits: None,
             command: None,
             commit_characters: None,
-            data: Some(serde_json::to_value((end_node, has_dot, uri)).unwrap()),
+            data: Some(serde_json::to_value((end_node, has_dot, uri, cursor)).unwrap()),
             tags: None,
         }
     }
@@ -773,6 +776,7 @@ fn handle_completion(
             &EndNode::Expr(Var::create(full_name.clone()), None),
             has_dot,
             &uri,
+            &cursor,
         );
         items.push(item);
     }
@@ -790,6 +794,7 @@ fn handle_completion(
             &EndNode::Type(tycon.clone()),
             has_dot,
             &uri,
+            &cursor,
         );
         items.push(item);
     }
@@ -807,6 +812,7 @@ fn handle_completion(
             &EndNode::Trait(trait_.clone()),
             has_dot,
             &uri,
+            &cursor,
         );
         items.push(item);
     }
@@ -910,7 +916,7 @@ fn handle_completion_resolve_document(
         return;
     }
     let data = params.data.as_ref().unwrap();
-    let data = serde_json::from_value::<(EndNode, Option<bool>, Uri)>(data.clone());
+    let data = serde_json::from_value::<(EndNode, Option<bool>, Uri, Position)>(data.clone());
     if let Err(e) = data {
         let msg = format!(
             "In textDocument/completion, failed to parse params.data as EndNode: {}",
@@ -920,7 +926,7 @@ fn handle_completion_resolve_document(
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
-    let (node, has_dot, uri) = data.unwrap();
+    let (node, has_dot, uri, cursor) = data.unwrap();
 
     // Get the documentation.
     let docs = document_from_endnode(&node, program);
@@ -967,7 +973,7 @@ fn handle_completion_resolve_document(
     };
     if let Some(import_item_name) = import_item_name {
         if let Some(latest_content) = uri_to_content.get_mut(&uri) {
-            let edits = create_text_edit_to_import(&import_item_name, latest_content);
+            let edits = create_text_edit_to_import(&import_item_name, latest_content, &cursor);
             if edits.len() > 0 {
                 item.additional_text_edits = Some(edits);
             }
@@ -981,6 +987,7 @@ fn handle_completion_resolve_document(
 fn create_text_edit_to_import(
     item_name: &FullName,
     latest_content: &mut LatestContent,
+    cursor: &Position,
 ) -> Vec<TextEdit> {
     if !item_name.is_global() {
         return vec![];
@@ -1023,6 +1030,14 @@ fn create_text_edit_to_import(
         return vec![];
     }
 
+    // If the cursor position is included in any of the import statements, do no text edits.
+    if import_stmts.iter().any(|imp| {
+        let range = span_to_range(&imp.source.as_ref().unwrap());
+        cursor.line <= range.start.line && cursor.line <= range.end.line
+    }) {
+        return vec![];
+    }
+
     // Generate text for new import statements.
     let mut new_import_stmts = import_stmts.clone();
     ImportStatement::add_import(&mut new_import_stmts, mod_name, item_name.clone());
@@ -1032,7 +1047,6 @@ fn create_text_edit_to_import(
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Calculate text edits.
     let mut text_edits = vec![];
 
     // Insert the import statement at the end of the module definition.
@@ -1044,7 +1058,7 @@ fn create_text_edit_to_import(
         new_text: inserted_text,
     });
 
-    // Erase all existing import statements;
+    // Erase all existing import statements.
     let content_lines = latest_content.content.lines().collect::<Vec<_>>();
     for import_stmt in &import_stmts {
         let mut range = span_to_range(&import_stmt.source.as_ref().unwrap());
@@ -1056,10 +1070,6 @@ fn create_text_edit_to_import(
                 if end_col_content.trim().is_empty() {
                     range.end.line += 1;
                     range.end.character = 0;
-                    write_log(&format!(
-                        "Expanding the range to remove trailing whitespace and line breaks: {:?}",
-                        range
-                    ));
                     continue;
                 }
             }
