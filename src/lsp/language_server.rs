@@ -949,7 +949,7 @@ fn handle_completion_resolve_document(
                         }
                     }
 
-                    // Mutate the insert text of the completion item.
+                    // Append argument list to the insert text.
                     if let Some(insert_text) = &mut item.insert_text {
                         if params.len() > 0 {
                             *insert_text += "(";
@@ -963,7 +963,7 @@ fn handle_completion_resolve_document(
         _ => {}
     };
 
-    // Create TextEdits of import statements.
+    // Create TextEdits of import statements to import the completion item.
     let import_item_name = match node {
         EndNode::Expr(var, _) => Some(var.name.clone()),
         EndNode::Pattern(_, _) => None,
@@ -1033,7 +1033,7 @@ fn create_text_edit_to_import(
     // If the cursor position is included in any of the import statements, do no text edits.
     if import_stmts.iter().any(|imp| {
         let range = span_to_range(&imp.source.as_ref().unwrap());
-        cursor.line <= range.start.line && cursor.line <= range.end.line
+        range.start.line <= cursor.line && cursor.line <= range.end.line
     }) {
         return vec![];
     }
