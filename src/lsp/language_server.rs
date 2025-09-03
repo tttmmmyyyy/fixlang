@@ -710,15 +710,11 @@ fn handle_completion(
     program: &Program,
     uri_to_content: &Map<Uri, LatestContent>,
 ) {
-    let uri = params.text_document_position.text_document.uri.clone();
-    let cursor = params.text_document_position.position;
-    let typing_text = get_typing_text(&params.text_document_position, uri_to_content);
+    let text_document_position = &params.text_document_position;
+    let typing_text = get_typing_text(text_document_position, uri_to_content);
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
-
-    // Is the user completing a function call after a dot?
-    let has_dot = is_dot_function(&typing_text);
 
     let mut items = vec![];
 
@@ -727,9 +723,8 @@ fn handle_completion(
         kind: CompletionItemKind,
         detail: Option<String>,
         end_node: &EndNode,
-        has_dot: bool,
-        uri: &Uri,
-        cursor: &Position,
+        typing_text: &str,
+        text_document_position: &TextDocumentPositionParams,
     ) -> CompletionItem {
         CompletionItem {
             label: name.to_string(),
@@ -751,7 +746,9 @@ fn handle_completion(
             additional_text_edits: None,
             command: None,
             commit_characters: None,
-            data: Some(serde_json::to_value((end_node, has_dot, uri, cursor)).unwrap()),
+            data: Some(
+                serde_json::to_value((end_node, typing_text, text_document_position)).unwrap(),
+            ),
             tags: None,
         }
     }
@@ -774,9 +771,8 @@ fn handle_completion(
             CompletionItemKind::FUNCTION,
             Some(scheme),
             &EndNode::Expr(Var::create(full_name.clone()), None),
-            has_dot,
-            &uri,
-            &cursor,
+            &typing_text,
+            &text_document_position,
         );
         items.push(item);
     }
@@ -792,9 +788,8 @@ fn handle_completion(
             CompletionItemKind::CLASS,
             None,
             &EndNode::Type(tycon.clone()),
-            has_dot,
-            &uri,
-            &cursor,
+            &typing_text,
+            &text_document_position,
         );
         items.push(item);
     }
@@ -810,9 +805,8 @@ fn handle_completion(
             CompletionItemKind::INTERFACE,
             None,
             &EndNode::Trait(trait_.clone()),
-            has_dot,
-            &uri,
-            &cursor,
+            &typing_text,
+            &text_document_position,
         );
         items.push(item);
     }
@@ -916,7 +910,8 @@ fn handle_completion_resolve_document(
         return;
     }
     let data = params.data.as_ref().unwrap();
-    let data = serde_json::from_value::<(EndNode, Option<bool>, Uri, Position)>(data.clone());
+    let data =
+        serde_json::from_value::<(EndNode, String, TextDocumentPositionParams)>(data.clone());
     if let Err(e) = data {
         let msg = format!(
             "In textDocument/completion, failed to parse params.data as EndNode: {}",
@@ -926,7 +921,11 @@ fn handle_completion_resolve_document(
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
-    let (node, has_dot, uri, cursor) = data.unwrap();
+
+    let (node, typing_text, text_document_position) = data.unwrap();
+
+    // Is the user completing a function call after a dot?
+    let has_dot = is_dot_function(&typing_text);
 
     // Get the documentation.
     let docs = document_from_endnode(&node, program);
@@ -943,10 +942,8 @@ fn handle_completion_resolve_document(
                 let params = parameters_of_global_value(&var.name, program);
                 if let Some(mut params) = params {
                     // If the trigger character is ".", then remove the last parameter.
-                    if let Some(has_dot) = has_dot {
-                        if has_dot {
-                            params.pop();
-                        }
+                    if has_dot {
+                        params.pop();
                     }
 
                     // Append argument list to the insert text.
@@ -972,8 +969,14 @@ fn handle_completion_resolve_document(
         EndNode::Module(_) => None, // Do not auto-import module name by completion.
     };
     if let Some(import_item_name) = import_item_name {
-        if let Some(latest_content) = uri_to_content.get_mut(&uri) {
-            let edits = create_text_edit_to_import(&import_item_name, latest_content, &cursor);
+        if let Some(latest_content) =
+            uri_to_content.get_mut(&text_document_position.text_document.uri)
+        {
+            let edits = create_text_edit_to_import(
+                &import_item_name,
+                latest_content,
+                &text_document_position.position,
+            );
             if edits.len() > 0 {
                 item.additional_text_edits = Some(edits);
             }
@@ -1031,11 +1034,19 @@ fn create_text_edit_to_import(
     }
 
     // If the cursor position is included in any of the import statements, do no text edits.
-    if import_stmts.iter().any(|imp| {
-        let range = span_to_range(&imp.source.as_ref().unwrap());
-        range.start.line <= cursor.line && cursor.line <= range.end.line
-    }) {
-        return vec![];
+    let import_stmt_spans = import_stmts
+        .iter()
+        .map(|imp| imp.source.as_ref().unwrap())
+        .collect::<Vec<_>>();
+    if import_stmt_spans.len() > 0 {
+        let mut span = import_stmt_spans[0].clone();
+        for s in &import_stmt_spans[1..] {
+            span = span.unite(s);
+        }
+        let range = span_to_range(&span);
+        if range.start.line - 1 <= cursor.line && cursor.line <= range.end.line + 1 {
+            return vec![];
+        };
     }
 
     // Generate text for new import statements.
