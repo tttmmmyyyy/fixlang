@@ -612,7 +612,7 @@ impl TypeCheckContext {
                     .overloaded_candidates(&var.name, self.imported_statements());
                 if candidates.is_empty() {
                     return Err(Errors::from_msg_srcs(
-                        format!("`{}` is not defined.", var.name.to_string()),
+                        format!("Unknown name `{}`.", var.name.to_string()),
                         &[&ei.source],
                     ));
                 }
