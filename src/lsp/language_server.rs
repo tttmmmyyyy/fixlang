@@ -22,7 +22,7 @@ use lsp_types::{
     CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
     DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Documentation,
     GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
-    InitializedParams, MarkupContent, Position, ProgressParams, ProgressParamsValue,
+    InitializedParams, MarkupContent, ProgressParams, ProgressParamsValue,
     PublishDiagnosticsParams, SaveOptions, ServerCapabilities, SymbolKind,
     TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Uri, WorkDoneProgressBegin,
@@ -1037,6 +1037,7 @@ fn create_text_edit_to_import(
     // Generate text for new import statements.
     let mut new_import_stmts = import_stmts.clone();
     ImportStatement::add_import(&mut new_import_stmts, mod_name, item_name.clone());
+    ImportStatement::sort(&mut new_import_stmts);
     let inserted_text = new_import_stmts
         .iter()
         .map(|stmt| stmt.stringify())
@@ -1077,7 +1078,6 @@ fn create_text_edit_to_import(
             new_text: "".to_string(),
         });
     }
-
     text_edits
 }
 

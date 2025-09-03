@@ -19,6 +19,14 @@ pub struct ImportStatement {
 }
 
 impl ImportStatement {
+    pub fn sort(stmts: &mut [ImportStatement]) {
+        stmts.sort_by(|a, b| a.module.0.cmp(&b.module.0));
+        for stmt in stmts {
+            ImportTreeNode::sort(&mut stmt.items);
+            ImportTreeNode::sort(&mut stmt.hiding);
+        }
+    }
+
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let span = self.module.1.as_ref()?;
         if !span.includes_pos(pos) {
@@ -182,6 +190,37 @@ pub enum ImportTreeNode {
 }
 
 impl ImportTreeNode {
+    fn sort(nodes: &mut [ImportTreeNode]) {
+        nodes.sort_by(|a, b| {
+            // Any < Symbol (cmp by name) < TypeOrTrait (cmp by name) < Namespace (cmp by name)
+            match (a, b) {
+                (ImportTreeNode::Any(_), ImportTreeNode::Any(_)) => std::cmp::Ordering::Equal,
+                (ImportTreeNode::Any(_), _) => std::cmp::Ordering::Less,
+                (_, ImportTreeNode::Any(_)) => std::cmp::Ordering::Greater,
+                (ImportTreeNode::Symbol(name_a, _), ImportTreeNode::Symbol(name_b, _)) => {
+                    name_a.cmp(name_b)
+                }
+                (ImportTreeNode::Symbol(_, _), _) => std::cmp::Ordering::Less,
+                (_, ImportTreeNode::Symbol(_, _)) => std::cmp::Ordering::Greater,
+                (
+                    ImportTreeNode::TypeOrTrait(name_a, _),
+                    ImportTreeNode::TypeOrTrait(name_b, _),
+                ) => name_a.cmp(name_b),
+                (ImportTreeNode::TypeOrTrait(_, _), _) => std::cmp::Ordering::Less,
+                (_, ImportTreeNode::TypeOrTrait(_, _)) => std::cmp::Ordering::Less,
+                (
+                    ImportTreeNode::NameSpace(name_a, _, _),
+                    ImportTreeNode::NameSpace(name_b, _, _),
+                ) => name_a.cmp(name_b),
+            }
+        });
+        for node in nodes {
+            if let ImportTreeNode::NameSpace(_, items, _) = node {
+                Self::sort(items);
+            }
+        }
+    }
+
     // From a list of names, for example ["A", "B", "f"], create `Namespace("A", [Namespace("B", [Symbol("f")])])`.
     fn from_names(names: &[Name]) -> ImportTreeNode {
         if names.len() == 0 {
