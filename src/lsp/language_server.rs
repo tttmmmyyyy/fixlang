@@ -972,13 +972,15 @@ fn handle_completion_resolve_document(
         if let Some(latest_content) =
             uri_to_content.get_mut(&text_document_position.text_document.uri)
         {
-            let edits = create_text_edit_to_import(
-                &import_item_name,
-                latest_content,
-                &text_document_position.position,
-            );
+            let edits = create_text_edit_to_import(&import_item_name, latest_content);
             if edits.len() > 0 {
-                item.additional_text_edits = Some(edits);
+                // If the cursor position is included in or near to any of the range of the text edits, do not apply the edits.
+                let cursor = &text_document_position.position;
+                if !edits.iter().any(|edit| {
+                    edit.range.start.line <= cursor.line && cursor.line <= edit.range.end.line
+                }) {
+                    item.additional_text_edits = Some(edits);
+                }
             }
         }
     }
@@ -990,7 +992,6 @@ fn handle_completion_resolve_document(
 fn create_text_edit_to_import(
     item_name: &FullName,
     latest_content: &mut LatestContent,
-    cursor: &Position,
 ) -> Vec<TextEdit> {
     if !item_name.is_global() {
         return vec![];
@@ -1031,22 +1032,6 @@ fn create_text_edit_to_import(
         );
         write_log(msg.as_str());
         return vec![];
-    }
-
-    // If the cursor position is included in any of the import statements, do no text edits.
-    let import_stmt_spans = import_stmts
-        .iter()
-        .map(|imp| imp.source.as_ref().unwrap())
-        .collect::<Vec<_>>();
-    if import_stmt_spans.len() > 0 {
-        let mut span = import_stmt_spans[0].clone();
-        for s in &import_stmt_spans[1..] {
-            span = span.unite(s);
-        }
-        let range = span_to_range(&span);
-        if range.start.line - 1 <= cursor.line && cursor.line <= range.end.line + 1 {
-            return vec![];
-        };
     }
 
     // Generate text for new import statements.
