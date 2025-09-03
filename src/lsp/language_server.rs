@@ -607,7 +607,7 @@ fn handle_initialized(
         if res.is_err() {
             // If a panic occurs in the diagnostics thread,
             send_diagnostics_error_message(
-                "Diagnostics stopped. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this! Repo: https://github.com/tttmmmyyyy/fixlang".to_string(),
+                "Diagnostics stopped. This may be a bug of \"fix\" command. I would be happy if you report how to reproduce this at https://github.com/tttmmmyyyy/fixlang".to_string(),
             );
             let mut msg = "Panic occurred in the diagnostics thread: \n".to_string();
             msg.push_str(&format!("{}", any_to_string(res.err().as_ref().unwrap())));
