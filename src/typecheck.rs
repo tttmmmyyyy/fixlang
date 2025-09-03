@@ -611,10 +611,12 @@ impl TypeCheckContext {
                     .scope
                     .overloaded_candidates(&var.name, self.imported_statements());
                 if candidates.is_empty() {
-                    return Err(Errors::from_msg_srcs(
+                    let mut err = Error::from_msg_srcs(
                         format!("Unknown name `{}`.", var.name.to_string()),
                         &[&ei.source],
-                    ));
+                    );
+                    err.code = Some(ERR_UNKNOWN_NAME);
+                    return Err(Errors::from_err(err));
                 }
                 let mut candidates_check_res: Vec<
                     Result<

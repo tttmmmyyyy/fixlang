@@ -2080,7 +2080,9 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
     lsp_types::Diagnostic {
         range,
         severity: Some(DiagnosticSeverity::ERROR),
-        code: None,
+        code: err
+            .code
+            .map(|c| lsp_types::NumberOrString::String(c.to_string())),
         code_description: None,
         source: None,
         message: err.msg.clone(),

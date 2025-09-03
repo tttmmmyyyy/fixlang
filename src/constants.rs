@@ -212,3 +212,6 @@ pub fn chars_allowed_in_identifiers() -> String {
     chars.push_str("_@");
     chars
 }
+
+// Error codes.
+pub const ERR_UNKNOWN_NAME: &str = "unknown-name";

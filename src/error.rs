@@ -123,11 +123,17 @@ pub struct Error {
     // The list of source locations.
     // The first element is the description of the source code location such as "The error occurs at:" or "The value is defined at:".
     pub srcs: Vec<(String, Span)>,
+    // The error code.
+    pub code: Option<&'static str>,
 }
 
 impl Error {
     pub fn from_msg(msg: String) -> Error {
-        Error { msg, srcs: vec![] }
+        Error {
+            msg,
+            srcs: vec![],
+            code: None,
+        }
     }
 
     pub fn from_msg_srcs(msg: String, srcs: &[&Option<Span>]) -> Error {
@@ -137,6 +143,7 @@ impl Error {
                 .iter()
                 .filter_map(|x| x.as_ref().map(|x| (String::default(), (*x).clone())))
                 .collect(),
+            code: None,
         }
     }
 
