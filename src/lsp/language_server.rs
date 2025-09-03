@@ -2242,8 +2242,26 @@ fn handle_code_action(
                 continue;
             }
             let latest_content = latest_content.unwrap();
-            // Search for the symbol in the program's global values.
+            let mut available_names = vec![];
             for symbol in program.global_values.keys() {
+                available_names.push(symbol.clone());
+            }
+            for tycon in program.type_env.tycons.keys() {
+                available_names.push(tycon.name.clone());
+            }
+            for ty_alias in program.type_env.aliases.keys() {
+                available_names.push(ty_alias.name.clone());
+            }
+            for trait_ in program.trait_env.traits.keys() {
+                available_names.push(trait_.name.clone());
+            }
+            for trait_alias in program.trait_env.aliases.keys() {
+                available_names.push(trait_alias.name.clone());
+            }
+            available_names.sort();
+            available_names.dedup();
+            // Search for the symbol in the program's global values.
+            for symbol in &available_names {
                 if name.name != symbol.name {
                     continue;
                 }

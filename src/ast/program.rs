@@ -1,5 +1,5 @@
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType};
-use crate::error::Errors;
+use crate::error::{Error, Errors};
 use import::{ImportItem, ImportStatement};
 use misc::{collect_results, to_absolute_path, Map, Set};
 use name::{FullName, Name};
@@ -370,14 +370,17 @@ impl<'a> NameResolutionContext {
             })
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
-            Err(Errors::from_msg_srcs(
+            let mut err = Error::from_msg_srcs(
                 format!(
                     "Unknown {} name `{}`.",
                     accept_type_string,
                     short_name.to_string()
                 ),
                 &[span],
-            ))
+            );
+            err.code = Some(ERR_UNKNOWN_NAME);
+            err.data = Some(serde_json::Value::String(short_name.to_string()));
+            Err(Errors::from_err(err))
         } else if candidates.len() == 1 {
             Ok(candidates[0].clone())
         } else {
