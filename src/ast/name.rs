@@ -269,4 +269,19 @@ impl FullName {
     pub fn is_in_namespace(&self, namespace: &NameSpace) -> bool {
         namespace.is_prefix_of(&self.namespace)
     }
+
+    pub fn parse(s: &str) -> Option<FullName> {
+        if s.is_empty() {
+            return None;
+        }
+        let mut names = NameSpace::parse(s)?;
+        if names.names.is_empty() {
+            return None;
+        }
+        let name = names.names.pop();
+        Some(FullName {
+            namespace: names,
+            name: name.unwrap(),
+        })
+    }
 }

@@ -3,7 +3,7 @@ use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{GlobalValue, ModuleInfo, Program};
 use crate::ast::traits::{Trait, TraitAlias, TraitInfo, TraitInstance};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
-use crate::constants::{chars_allowed_in_identifiers, STD_NAME};
+use crate::constants::{chars_allowed_in_identifiers, ERR_UNKNOWN_NAME, STD_NAME};
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
@@ -18,15 +18,16 @@ use crate::{
 use crate::{DiagnosticsConfig, EndNode, SourceFile, SourcePos, Var};
 use difference::diff;
 use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionOptions,
-    CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Documentation,
-    GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
-    InitializedParams, MarkupContent, ProgressParams, ProgressParamsValue,
-    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, SymbolKind,
-    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Uri, WorkDoneProgressBegin,
-    WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
+    CodeAction, CodeActionKind, CodeActionParams, CompletionItem, CompletionItemKind,
+    CompletionItemLabelDetails, CompletionOptions, CompletionParams, DiagnosticSeverity,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
+    DocumentSymbol, DocumentSymbolParams, Documentation, GotoDefinitionParams, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MarkupContent,
+    NumberOrString, ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, SaveOptions,
+    ServerCapabilities, SymbolKind, TextDocumentPositionParams, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Uri,
+    WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
+    WorkDoneProgressOptions, WorkspaceEdit,
 };
 use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -417,6 +418,26 @@ pub fn launch_language_server() {
                 }
                 let program = &last_diag.as_ref().unwrap().program;
                 handle_document_symbol(id.unwrap(), &params.unwrap(), program);
+            } else if method == "textDocument/codeAction" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().program;
+                let id = parse_id(&message, method);
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<lsp_types::CodeActionParams> =
+                    parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                handle_code_action(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    program,
+                    &mut uri_to_latest_content,
+                );
             }
         }
     }
@@ -566,7 +587,7 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
             document_highlight_provider: None,
             document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
             workspace_symbol_provider: None,
-            code_action_provider: None,
+            code_action_provider: Some(lsp_types::CodeActionProviderCapability::Simple(true)),
             code_lens_provider: None,
             document_formatting_provider: None,
             document_range_formatting_provider: None,
@@ -2088,7 +2109,7 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
         message: err.msg.clone(),
         tags: None,
         related_information,
-        data: None,
+        data: err.data.clone(),
     }
 }
 
@@ -2191,6 +2212,69 @@ pub fn send_work_done_progress_end(token: &str) {
         value: ProgressParamsValue::WorkDone(lsp_types::WorkDoneProgress::End(end)),
     };
     send_notification("$/progress".to_string(), Some(params));
+}
+
+fn handle_code_action(
+    id: u32,
+    params: &CodeActionParams,
+    program: &Program,
+    uri_to_content: &mut Map<Uri, LatestContent>,
+) {
+    let mut actions: Vec<CodeAction> = vec![];
+    for diag in &params.context.diagnostics {
+        if diag.code == Some(NumberOrString::String(ERR_UNKNOWN_NAME.to_string())) {
+            // Extract the name from the diagnostic data.
+            if diag.data.is_none() {
+                continue;
+            }
+            let name = serde_json::from_value::<String>(diag.data.as_ref().unwrap().clone());
+            if name.is_err() {
+                continue;
+            }
+            let name = FullName::parse(name.unwrap().as_str());
+            if name.is_none() {
+                continue;
+            }
+            let name = name.unwrap();
+            let uri = &params.text_document.uri;
+            let latest_content = uri_to_content.get_mut(uri);
+            if latest_content.is_none() {
+                continue;
+            }
+            let latest_content = latest_content.unwrap();
+            // Search for the symbol in the program's global values.
+            for symbol in program.global_values.keys() {
+                if name.name != symbol.name {
+                    continue;
+                }
+                if !name.namespace.is_suffix_of(&symbol.namespace) {
+                    continue;
+                }
+                // Suggest importing this symbol.
+                let edits = create_text_edit_to_import(symbol, latest_content);
+                let action = CodeAction {
+                    title: format!("Import `{}`", symbol.to_string()),
+                    kind: Some(CodeActionKind::QUICKFIX),
+                    diagnostics: Some(vec![diag.clone()]),
+                    edit: Some(WorkspaceEdit {
+                        changes: Some({
+                            let mut map = std::collections::HashMap::new();
+                            map.insert(uri.clone(), edits);
+                            map
+                        }),
+                        document_changes: None,
+                        change_annotations: None,
+                    }),
+                    command: None,
+                    is_preferred: None,
+                    disabled: None,
+                    data: None,
+                };
+                actions.push(action);
+            }
+        }
+    }
+    send_response(id, Ok::<_, ()>(actions));
 }
 
 #[cfg(test)]

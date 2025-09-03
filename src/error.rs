@@ -1,6 +1,7 @@
 use std::{fmt::Display, path::PathBuf};
 
 use colored::Colorize;
+use serde_json::Value;
 
 use crate::misc::{Map, Set};
 use crate::{misc, sourcefile::Span};
@@ -125,6 +126,8 @@ pub struct Error {
     pub srcs: Vec<(String, Span)>,
     // The error code.
     pub code: Option<&'static str>,
+    // The metadata. Content depends on the error code.
+    pub data: Option<Value>,
 }
 
 impl Error {
@@ -133,6 +136,7 @@ impl Error {
             msg,
             srcs: vec![],
             code: None,
+            data: None,
         }
     }
 
@@ -144,6 +148,7 @@ impl Error {
                 .filter_map(|x| x.as_ref().map(|x| (String::default(), (*x).clone())))
                 .collect(),
             code: None,
+            data: None,
         }
     }
 

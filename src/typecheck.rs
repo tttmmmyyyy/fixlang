@@ -616,6 +616,7 @@ impl TypeCheckContext {
                         &[&ei.source],
                     );
                     err.code = Some(ERR_UNKNOWN_NAME);
+                    err.data = Some(serde_json::Value::String(var.name.to_string()));
                     return Err(Errors::from_err(err));
                 }
                 let mut candidates_check_res: Vec<
