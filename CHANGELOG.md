@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [1.1.0] - 2025-09-04
+
+### Added
 - Add `fix_version` field to `fixproj.toml` file. You can specify the version of Fix necessary to compile your project.
 - Add `Std::String::unsafe_from_c_str_ptr : Ptr -> String` function.
 - Implement `String : FromBytes` and `String : ToBytes`. You can convert a string to a (null-terminated) byte array and vice versa.
@@ -42,8 +50,6 @@
 - Fix the issue that the code `let x= 42; {...}` could not be parsed (since the parser expected a space between `x` and `=`).
 - Fix the issue that compiling some code causes a compiler crash (#59).
 - Fix the issue that `FFI_CALL[() f(CLongLong)]` (or some of other similar expressions) could not be parsed (#62).
-
-### Fixed
 
 ## [1.0.1] - 2025-02-26
 
