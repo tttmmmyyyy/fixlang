@@ -1058,7 +1058,7 @@ fn create_text_edit_to_import(
     // Generate text for new import statements.
     let mut new_import_stmts = import_stmts.clone();
     ImportStatement::add_import(&mut new_import_stmts, mod_name, item_name.clone());
-    ImportStatement::sort(&mut new_import_stmts);
+    // ImportStatement::sort(&mut new_import_stmts); // Sorting is the job of the formatter
     let inserted_text = new_import_stmts
         .iter()
         .map(|stmt| stmt.stringify())

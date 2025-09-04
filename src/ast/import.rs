@@ -19,6 +19,7 @@ pub struct ImportStatement {
 }
 
 impl ImportStatement {
+    #[allow(dead_code)]
     pub fn sort(stmts: &mut [ImportStatement]) {
         stmts.sort_by(|a, b| a.module.0.cmp(&b.module.0));
         for stmt in stmts {
