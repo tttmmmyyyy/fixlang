@@ -195,7 +195,9 @@ type_nlr = { type_tycon | type_var | type_tuple }
 
 type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)* }
 
-type_fun = { type_tyapp ~ (sep* ~ "->" ~ sep* ~ type_expr)? }
+type_arrow = { "->" }
+
+type_fun = { type_tyapp ~ (sep* ~ type_arrow ~ sep* ~ type_expr)? }
 
 type_tycon = { capital_fullname }
 

@@ -1463,9 +1463,20 @@ pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
 }
 
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    type_fun_with_arrow_src(src, dst, None)
+}
+
+pub fn type_fun_with_arrow_src(
+    src: Arc<TypeNode>,
+    dst: Arc<TypeNode>,
+    arrow_src: Option<Span>,
+) -> Arc<TypeNode> {
     let src_span = src.get_source().clone();
-    let partial =
-        type_tyapp(type_tycon(&tycon(make_arrow_name())), src).set_source_if_none(src_span);
+    let partial = type_tyapp(
+        type_tycon(&tycon(make_arrow_name())).set_source(arrow_src),
+        src,
+    )
+    .set_source_if_none(src_span);
     type_tyapp(partial, dst)
 }
 

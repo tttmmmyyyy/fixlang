@@ -794,7 +794,7 @@ impl InlineLLVMStringLit {
 pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::StringLit(InlineLLVMStringLit { string }),
-        make_string_ty(),
+        make_string_ty().set_source(source.clone()),
         source,
     )
 }

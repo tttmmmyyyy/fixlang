@@ -2140,12 +2140,15 @@ fn parse_type_fun(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let src_ty = parse_type_tyapp(pairs.next().unwrap(), ctx);
-    match pairs.next() {
-        Some(pair) => {
-            let dst_ty = parse_type(pair, ctx);
-            type_fun(src_ty, dst_ty)
-        }
-        None => src_ty,
+    if pairs.peek().is_some() {
+        let pair = pairs.next().unwrap();
+        assert_eq!(pair.as_rule(), Rule::type_arrow);
+        let arrow_span = Span::from_pair(&ctx.source, &pair);
+        let pair = pairs.next().unwrap();
+        let dst_ty = parse_type(pair, ctx);
+        type_fun_with_arrow_src(src_ty, dst_ty, Some(arrow_span))
+    } else {
+        src_ty
     }
     .set_source(Some(span))
 }
