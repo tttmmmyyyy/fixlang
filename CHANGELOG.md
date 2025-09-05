@@ -6,6 +6,7 @@
 
 - LSP: Added a feature to automatically add import statements when completing entity names, if necessary.
 - LSP: Added Quick Fix for "Unknown name" and "Unknown type" errors to add import statements.
+- LSP: You can now search documents and jump to definitions from entities written in import statements.
 
 ### Changed
 

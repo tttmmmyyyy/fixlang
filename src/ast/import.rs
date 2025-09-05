@@ -30,10 +30,23 @@ impl ImportStatement {
 
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let span = self.module.1.as_ref()?;
-        if !span.includes_pos(pos) {
-            return None;
+        if span.includes_pos(pos) {
+            return Some(EndNode::Module(self.module.0.clone()));
         }
-        return Some(EndNode::Module(self.module.0.clone()));
+        let namespace = NameSpace::new(vec![self.module.0.clone()]);
+        for item in &self.items {
+            let node = item.find_node_at(pos, &namespace);
+            if node.is_some() {
+                return node;
+            }
+        }
+        for item in &self.hiding {
+            let node = item.find_node_at(pos, &namespace);
+            if node.is_some() {
+                return node;
+            }
+        }
+        return None;
     }
 
     // Checks if the given name is made accessible by this import statement.
@@ -191,6 +204,56 @@ pub enum ImportTreeNode {
 }
 
 impl ImportTreeNode {
+    // Finds a node at the given position.
+    //
+    // - `namespace` represents the namespace traversed so far in this recursive function. It is necessary to include it in the returned EndNode.
+    fn find_node_at(&self, pos: &SourcePos, namespace: &NameSpace) -> Option<EndNode> {
+        match self {
+            ImportTreeNode::Any(_span) => {}
+            ImportTreeNode::Symbol(name, span) => {
+                if span.is_none() {
+                    return None;
+                }
+                let span = span.as_ref().unwrap();
+                if !span.includes_pos(pos) {
+                    return None;
+                }
+                let name = FullName::new(namespace, name);
+                let var = Var::create(name);
+                return Some(EndNode::Expr(var, None));
+            }
+            ImportTreeNode::TypeOrTrait(name, span) => {
+                if span.is_none() {
+                    return None;
+                }
+                let span = span.as_ref().unwrap();
+                if !span.includes_pos(pos) {
+                    return None;
+                }
+                let name = FullName::new(namespace, name);
+                return Some(EndNode::TypeOrTrait(name));
+            }
+            ImportTreeNode::NameSpace(name, items, span) => {
+                if span.is_none() {
+                    return None;
+                }
+                let span = span.as_ref().unwrap();
+                if !span.includes_pos(pos) {
+                    return None;
+                }
+                let mut namespace = namespace.clone();
+                namespace.push_baack(name.clone());
+                for item in items {
+                    let node = item.find_node_at(pos, &namespace);
+                    if node.is_some() {
+                        return node;
+                    }
+                }
+            }
+        }
+        None
+    }
+
     fn sort(nodes: &mut [ImportTreeNode]) {
         nodes.sort_by(|a, b| {
             // Any < Symbol (cmp by name) < TypeOrTrait (cmp by name) < Namespace (cmp by name)

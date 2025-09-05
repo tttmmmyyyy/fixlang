@@ -152,6 +152,10 @@ impl NameSpace {
         self.names.insert(0, name);
     }
 
+    pub fn push_baack(&mut self, name: Name) {
+        self.names.push(name);
+    }
+
     pub fn parse(str: &str) -> Option<Self> {
         if str.is_empty() {
             return None;

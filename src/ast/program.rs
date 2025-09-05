@@ -2289,5 +2289,6 @@ pub enum EndNode {
     Pattern(Var, Option<Arc<TypeNode>>),
     Type(TyCon),
     Trait(Trait),
+    TypeOrTrait(FullName), // Unknown whether Type or Trait
     Module(Name),
 }

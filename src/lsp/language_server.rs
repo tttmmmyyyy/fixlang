@@ -989,7 +989,8 @@ fn handle_completion_resolve_document(
         EndNode::Pattern(_, _) => None,
         EndNode::Type(ty) => Some(ty.name.clone()),
         EndNode::Trait(trait_) => Some(trait_.name.clone()),
-        EndNode::Module(_) => None, // Do not auto-import module name by completion.
+        EndNode::Module(_) => None,
+        EndNode::TypeOrTrait(name) => Some(name),
     };
     if let Some(import_item_name) = import_item_name {
         if let Some(latest_content) =
@@ -1274,6 +1275,7 @@ fn handle_goto_definition(
         EndNode::Type(_) => None,
         EndNode::Trait(_) => None,
         EndNode::Module(_) => None,
+        EndNode::TypeOrTrait(_) => None,
     };
     if let Some(var_name) = var_name {
         // If the variable is local, do nothing.
@@ -1296,24 +1298,15 @@ fn handle_goto_definition(
                 unreachable!()
             }
             EndNode::Type(tycon) => {
-                def_src = program
-                    .type_env
-                    .tycons
-                    .get(&tycon)
-                    .and_then(|ti| ti.source.clone());
+                def_src = find_tycon_def_src(program, tycon);
             }
             EndNode::Trait(trait_) => {
-                def_src = program
-                    .trait_env
-                    .traits
-                    .get(&trait_)
-                    .and_then(|ti| ti.source.clone());
+                def_src = find_trait_or_alias_def_src(program, trait_);
+            }
+            EndNode::TypeOrTrait(name) => {
+                def_src = find_tycon_def_src(program, TyCon { name: name.clone() });
                 if def_src.is_none() {
-                    def_src = program
-                        .trait_env
-                        .aliases
-                        .get(&trait_)
-                        .and_then(|ta| ta.source.clone());
+                    def_src = find_trait_or_alias_def_src(program, Trait::from_fullname(name));
                 }
             }
             EndNode::Module(mod_name) => {
@@ -1354,6 +1347,31 @@ fn handle_goto_definition(
         range: span_to_range(&def_src),
     };
     send_response(id, Ok::<_, ()>(location));
+}
+
+fn find_trait_or_alias_def_src(program: &Program, trait_: Trait) -> Option<Span> {
+    let mut def_src = program
+        .trait_env
+        .traits
+        .get(&trait_)
+        .and_then(|ti| ti.source.clone());
+    if def_src.is_none() {
+        def_src = program
+            .trait_env
+            .aliases
+            .get(&trait_)
+            .and_then(|ta| ta.source.clone());
+    }
+    def_src
+}
+
+// Find the source location where the type constructor is defined.
+fn find_tycon_def_src(program: &Program, tycon: TyCon) -> Option<Span> {
+    program
+        .type_env
+        .tycons
+        .get(&tycon)
+        .and_then(|ti| ti.source.clone())
 }
 
 // Handle "textDocument/documentSymbol" method.
@@ -1761,6 +1779,24 @@ fn parameters_of_global_value(full_name: &FullName, program: &Program) -> Option
 }
 
 fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
+    fn document_tycon(program: &Program, docs: &mut String, tycon: &TyCon) {
+        *docs += &format!("```\n{}\n```", tycon.to_string());
+        if let Some(ti) = program.type_env.tycons.get(&tycon) {
+            if let Some(document) = ti.get_document() {
+                *docs += &format!("\n\n{}", document);
+            }
+        }
+    }
+
+    fn document_trait_or_alias(program: &Program, docs: &mut String, trait_id: &Trait) {
+        *docs += &format!("```\n{}\n```", trait_id.to_string());
+        if let Some(ti) = program.trait_env.traits.get(&trait_id) {
+            if let Some(document) = ti.get_document() {
+                *docs += &format!("\n\n{}", document);
+            }
+        }
+    }
+
     // Create a hover message.
     let mut docs = String::new();
     match node {
@@ -1818,20 +1854,10 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
             }
         }
         EndNode::Type(tycon) => {
-            docs += &format!("```\n{}\n```", tycon.to_string());
-            if let Some(ti) = program.type_env.tycons.get(&tycon) {
-                if let Some(document) = ti.get_document() {
-                    docs += &format!("\n\n{}", document);
-                }
-            }
+            document_tycon(program, &mut docs, tycon);
         }
         EndNode::Trait(trait_id) => {
-            docs += &format!("```\n{}\n```", trait_id.to_string());
-            if let Some(ti) = program.trait_env.traits.get(&trait_id) {
-                if let Some(document) = ti.get_document() {
-                    docs += &format!("\n\n{}", document);
-                }
-            }
+            document_trait_or_alias(program, &mut docs, trait_id);
         }
         EndNode::Module(mod_name) => {
             docs += &format!("```\nmodule {}\n```", mod_name.to_string());
@@ -1841,6 +1867,15 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
                         docs += &format!("\n\n{}", document);
                     }
                 }
+            }
+        }
+        EndNode::TypeOrTrait(name) => {
+            let tycon = TyCon { name: name.clone() };
+            let trait_ = Trait::from_fullname(name.clone());
+            if program.type_env.tycons.contains_key(&tycon) {
+                document_tycon(program, &mut docs, &tycon);
+            } else if program.trait_env.traits.contains_key(&trait_) {
+                document_trait_or_alias(program, &mut docs, &trait_);
             }
         }
     }
