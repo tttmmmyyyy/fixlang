@@ -12,6 +12,8 @@
 
 ### Fixed
 
+- LSP: Fixed an issue where documents were not displayed when hovering over type aliases and trait aliases.
+
 ## [1.1.0] - 2025-09-04
 
 ### Added

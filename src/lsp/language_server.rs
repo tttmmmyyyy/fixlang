@@ -1779,10 +1779,14 @@ fn parameters_of_global_value(full_name: &FullName, program: &Program) -> Option
 }
 
 fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
-    fn document_tycon(program: &Program, docs: &mut String, tycon: &TyCon) {
+    fn document_tycon_or_alias(program: &Program, docs: &mut String, tycon: &TyCon) {
         *docs += &format!("```\n{}\n```", tycon.to_string());
         if let Some(ti) = program.type_env.tycons.get(&tycon) {
             if let Some(document) = ti.get_document() {
+                *docs += &format!("\n\n{}", document);
+            }
+        } else if let Some(ta) = program.type_env.aliases.get(&tycon) {
+            if let Some(document) = ta.get_document() {
                 *docs += &format!("\n\n{}", document);
             }
         }
@@ -1792,6 +1796,10 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
         *docs += &format!("```\n{}\n```", trait_id.to_string());
         if let Some(ti) = program.trait_env.traits.get(&trait_id) {
             if let Some(document) = ti.get_document() {
+                *docs += &format!("\n\n{}", document);
+            }
+        } else if let Some(ta) = program.trait_env.aliases.get(&trait_id) {
+            if let Some(document) = ta.get_document() {
                 *docs += &format!("\n\n{}", document);
             }
         }
@@ -1854,7 +1862,7 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
             }
         }
         EndNode::Type(tycon) => {
-            document_tycon(program, &mut docs, tycon);
+            document_tycon_or_alias(program, &mut docs, tycon);
         }
         EndNode::Trait(trait_id) => {
             document_trait_or_alias(program, &mut docs, trait_id);
@@ -1873,7 +1881,7 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
             let tycon = TyCon { name: name.clone() };
             let trait_ = Trait::from_fullname(name.clone());
             if program.type_env.tycons.contains_key(&tycon) {
-                document_tycon(program, &mut docs, &tycon);
+                document_tycon_or_alias(program, &mut docs, &tycon);
             } else if program.trait_env.traits.contains_key(&trait_) {
                 document_trait_or_alias(program, &mut docs, &trait_);
             }

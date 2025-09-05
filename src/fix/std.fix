@@ -2541,6 +2541,9 @@ impl [e : ToString, a : ToString] Result e a : ToString {
     to_string = |res| if res.is_ok { "ok(" + res.as_ok.to_string + ")" } else { "err(" + res.as_err.to_string + ")" };
 }
 
+// The string type. 
+// 
+// A string is represented as a null-terminated byte array.
 type String = unbox struct { _data : Array U8 };
 
 namespace String {
@@ -3233,6 +3236,7 @@ trait a : Rem {
     rem : a -> a -> a;
 }
 
+// The trait (alias) for types that support addition and have zero element.
 trait Additive = Add + Zero;
 
 trait a : FromBytes {

@@ -301,6 +301,11 @@ pub struct TyAliasInfo {
 }
 
 impl TyAliasInfo {
+    // Get the document of this type alias.
+    pub fn get_document(&self) -> Option<String> {
+        self.source.as_ref().and_then(|src| src.get_document().ok())
+    }
+
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         self.value = self.value.resolve_namespace(ctx)?;
         Ok(())

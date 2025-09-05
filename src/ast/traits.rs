@@ -223,7 +223,7 @@ impl TraitInfo {
         None
     }
 
-    // Get the document of this type.
+    // Get the document of this trait.
     pub fn get_document(&self) -> Option<String> {
         // Try to get document from the source code.
         let docs = self.source.as_ref().and_then(|src| src.get_document().ok());
@@ -509,6 +509,11 @@ pub struct TraitAlias {
 }
 
 impl TraitAlias {
+    // Get the document of this trait.
+    pub fn get_document(&self) -> Option<String> {
+        self.source.as_ref().and_then(|src| src.get_document().ok())
+    }
+
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for (t, s) in &self.value {
