@@ -3,7 +3,9 @@ use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{GlobalValue, ModuleInfo, Program};
 use crate::ast::traits::{Trait, TraitAlias, TraitInfo, TraitInstance};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
-use crate::constants::{chars_allowed_in_identifiers, ERR_UNKNOWN_NAME, STD_NAME};
+use crate::constants::{
+    chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
+};
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
@@ -2222,7 +2224,9 @@ fn handle_code_action(
 ) {
     let mut actions: Vec<CodeAction> = vec![];
     for diag in &params.context.diagnostics {
-        if diag.code == Some(NumberOrString::String(ERR_UNKNOWN_NAME.to_string())) {
+        if diag.code == Some(NumberOrString::String(ERR_UNKNOWN_NAME.to_string()))
+            || diag.code == Some(NumberOrString::String(ERR_NO_VALUE_MATCH.to_string()))
+        {
             // Extract the name from the diagnostic data.
             if diag.data.is_none() {
                 continue;

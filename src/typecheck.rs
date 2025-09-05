@@ -715,6 +715,8 @@ impl TypeCheckContext {
                         msg
                     };
                     let mut error = Error::from_msg_srcs(msg, &[&ei.source]);
+                    error.code = Some(ERR_NO_VALUE_MATCH);
+                    error.data = Some(serde_json::Value::String(var.name.to_string()));
                     error.add_srcs(extra_srcs);
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
