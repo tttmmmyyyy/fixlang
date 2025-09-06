@@ -4809,6 +4809,10 @@ Type: `e`
 
 Defined as: `type String = unbox struct { ...fields... }`
 
+The string type.
+
+A string is represented as a null-terminated byte array.
+
 ##### field `_data`
 
 Type: `Std::Array Std::U8`
@@ -5320,6 +5324,12 @@ Adds two values. An expression `x + y` is translated to `add(x, y)`.
 
 * `lhs`
 * `rhs`
+
+#### trait `Additive = Std::Add + Std::Zero`
+
+Kind: `*`
+
+The trait (alias) for types that support addition and have zero element.
 
 #### trait `a : Boxed`
 

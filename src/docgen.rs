@@ -682,6 +682,44 @@ fn trait_entries(
         entries.push(entry);
     }
 
+    for (id, info) in &program.trait_env.aliases {
+        let name = id.name.clone();
+
+        if !is_entry_should_be_documented(&name, mod_name, config) {
+            continue;
+        }
+
+        let title = format!(
+            "trait `{} = {}`",
+            name.name,
+            info.value
+                .iter()
+                .map(|(tr, _span)| tr.to_string())
+                .collect::<Vec<_>>()
+                .join(" + ")
+        );
+        let mut doc = MarkdownSection::new(title);
+
+        let kind = format!("Kind: `{}`", info.kind.to_string());
+        doc.add_paragraph(kind);
+
+        let docstring = &info
+            .source
+            .as_ref()
+            .map(|src| src.get_document())
+            .transpose()?
+            .unwrap_or_default();
+        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        doc.concatenate_many(docstring);
+
+        let entry = Entry {
+            name: id.name.clone(),
+            sort_key: "".to_string(),
+            doc,
+        };
+        entries.push(entry);
+    }
+
     Ok(entries)
 }
 
