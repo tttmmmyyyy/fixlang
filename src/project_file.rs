@@ -63,6 +63,7 @@ pub struct ProjectFileBuild {
     ld_flags: Vec<String>,
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
+    backtrace: Option<bool>,
     test: Option<ProjectFileBuildTest>,
 }
 
@@ -83,6 +84,7 @@ pub struct ProjectFileBuildTest {
     ld_flags: Vec<String>,
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
+    backtrace: Option<bool>,
     memcheck: Option<bool>,
 }
 
@@ -471,6 +473,20 @@ impl ProjectFile {
             if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
                 if threaded {
                     config.set_threaded();
+                }
+            }
+        }
+
+        // Set backtrace mode.
+        if let Some(backtrace) = self.build.backtrace {
+            if backtrace {
+                config.set_backtrace();
+            }
+        }
+        if use_build_test {
+            if let Some(backtrace) = self.build.test.as_ref().and_then(|test| test.backtrace) {
+                if backtrace {
+                    config.set_backtrace();
                 }
             }
         }

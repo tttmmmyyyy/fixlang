@@ -16,10 +16,14 @@ When running program by `fix build`, then this source file will be compiled into
 #include <unistd.h>
 #include <pthread.h>
 
+#ifdef BACKTRACE
+#include <backtrace.h>
+#endif // BACKTRACE
+
 // Print message to stderr, and flush it.
-void fixruntime_eprint(const char *msg)
+void fixruntime_eprintln(const char *msg)
 {
-    fprintf(stderr, "%s", msg);
+    fprintf(stderr, "%s\n", msg);
     fflush(stderr);
 }
 
@@ -304,4 +308,50 @@ int fixruntime_get_errno()
 void fixruntime_clear_errno()
 {
     errno = 0;
+}
+
+#ifdef BACKTRACE
+static struct backtrace_state *fixruntime_backtrace_state = NULL;
+
+// Callback for error handling in libbacktrace
+static void fixruntime_backtrace_error_callback(void *data, const char *msg, int errnum)
+{
+    (void)data;
+    fprintf(stderr, "libbacktrace error: %s (err=%d)\n", msg, errnum);
+}
+
+// Callback for each frame in backtrace
+static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
+                                              const char *filename, int lineno,
+                                              const char *function)
+{
+    int *index = (int *)data;
+    fprintf(stderr, "  #%02d  %s at %s:%d (pc=0x%lx)\n",
+            (*index)++, function ? function : "??",
+            filename ? filename : "??", lineno,
+            (unsigned long)pc);
+    return 0; // 0 = continue, non-zero = stop
+}
+#endif // BACKTRACE
+
+// Abort function that prints backtrace if BACKTRACE is defined
+__attribute__((noreturn)) void fixruntime_abort(void)
+{
+#ifdef BACKTRACE
+    fprintf(stderr, "Backtrace:\n");
+
+    if (!fixruntime_backtrace_state)
+    {
+        fixruntime_backtrace_state = backtrace_create_state(NULL, /*thread-safe=*/1,
+                                                            fixruntime_backtrace_error_callback, NULL);
+    }
+
+    int frame_index = 0;
+    backtrace_full(fixruntime_backtrace_state,
+                   /*skip=*/1,
+                   fixruntime_backtrace_full_callback,
+                   fixruntime_backtrace_error_callback,
+                   &frame_index);
+#endif // BACKTRACE
+    abort();
 }

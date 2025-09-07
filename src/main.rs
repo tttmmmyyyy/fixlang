@@ -154,6 +154,10 @@ fn main() {
         .takes_value(false)
         .help("Generate debugging information. \n\
               This option automatically turns on `-O none`. You can override this by explicitly specifying another optimization level.");
+    let backtrace = Arg::new("backtrace")
+        .long("backtrace")
+        .takes_value(false)
+        .help("Displays a backtrace when the program aborts abnormally. Requires libbacktrace to be installed. Compiling with \"-g\" to add debug information yields better results.");
     let opt_level = Arg::new("opt-level")
         .long("opt-level")
         .short('O')
@@ -238,7 +242,8 @@ fn main() {
         .arg(verbose.clone())
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
-        .arg(emit_symbols.clone());
+        .arg(emit_symbols.clone())
+        .arg(backtrace.clone());
 
     // "fix run" subcommand
     let run_subc = App::new("run")
@@ -259,7 +264,8 @@ fn main() {
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
-        .arg(program_args.clone());
+        .arg(program_args.clone())
+        .arg(backtrace.clone());
 
     // "fix test" subcommand
     let test_subc = App::new("test")
@@ -280,7 +286,8 @@ fn main() {
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
-        .arg(program_args.clone());
+        .arg(program_args.clone())
+        .arg(backtrace.clone());
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
@@ -548,6 +555,11 @@ fn main() {
         // Set `emit_symbols`.
         if args.contains_id("emit-symbols") {
             config.emit_symbols = true;
+        }
+
+        // Set `backtrace`.
+        if args.contains_id("backtrace") {
+            config.set_backtrace();
         }
 
         // Set `run_program_args`.

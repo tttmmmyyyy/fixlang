@@ -2,8 +2,8 @@ use inkwell::module::Linkage;
 
 use super::*;
 
-pub const RUNTIME_ABORT: &str = "abort";
-pub const RUNTIME_EPRINT: &str = "fixruntime_eprint";
+pub const RUNTIME_ABORT: &str = "fixruntime_abort";
+pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
 // pub const RUNTIME_RETAIN_BOXED_OBJECT: &str = "fixruntime_retain_obj";
 // pub const RUNTIME_RELEASE_BOXED_OBJECT: &str = "fixruntime_release_obj";
@@ -57,7 +57,7 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: Buil
     if mode != BuildMode::Declare {
         return;
     }
-    if let Some(_func) = gc.module.get_function(RUNTIME_EPRINT) {
+    if let Some(_func) = gc.module.get_function(RUNTIME_EPRINTLN) {
         return;
     }
 
@@ -67,7 +67,7 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: Buil
     let ptr_type = context.ptr_type(inkwell::AddressSpace::from(0));
 
     let fn_type = context.void_type().fn_type(&[ptr_type.into()], true);
-    module.add_function(RUNTIME_EPRINT, fn_type, None);
+    module.add_function(RUNTIME_EPRINTLN, fn_type, None);
 
     return;
 }

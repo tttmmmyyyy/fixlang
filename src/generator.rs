@@ -1567,7 +1567,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     fn eprint(&mut self, string: &str) {
         let string_ptr = self.add_global_string(string);
         let string_ptr = string_ptr.as_pointer_value();
-        self.call_runtime(RUNTIME_EPRINT, &[string_ptr.into()]);
+        self.call_runtime(RUNTIME_EPRINTLN, &[string_ptr.into()]);
     }
 
     // Panic with Rust's &str (i.e, print string and abort.)

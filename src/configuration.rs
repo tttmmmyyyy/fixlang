@@ -464,6 +464,11 @@ impl Configuration {
         self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    pub fn set_backtrace(&mut self) {
+        self.runtime_c_macro.push("BACKTRACE".to_string());
+        self.add_dyanmic_library("backtrace");
+    }
+
     // Get hash value of the configurations that affect the object file generation.
     pub fn object_generation_hash(&self) -> String {
         let mut data = String::new();

@@ -3631,7 +3631,7 @@ impl InlineLLVMUndefinedFunctionBody {
         let c_str = str.gep_boxed(gc, ARRAY_BUF_IDX);
 
         // Write it to stderr, and flush.
-        gc.call_runtime(RUNTIME_EPRINT, &[c_str.into()]);
+        gc.call_runtime(RUNTIME_EPRINTLN, &[c_str.into()]);
 
         // Abort the program.
         gc.call_runtime(RUNTIME_ABORT, &[]);
