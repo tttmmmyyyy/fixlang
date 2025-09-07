@@ -1,7 +1,6 @@
 /*
 C functions / values for implementing Fix standard library.
-- When running program by `fix run`, then this source file will be compiled into shared library and loaded to the JIT environment.
-- When running program by `fix build`, then this source file will be compiled into object file and linked to the binary.
+When running program by `fix build`, then this source file will be compiled into object file and linked to the binary.
 */
 
 #include <ctype.h>
