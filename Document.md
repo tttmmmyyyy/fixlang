@@ -82,7 +82,7 @@
   - [Generating documentation](#generating-documentation)
   - [Language Server Protocol](#language-server-protocol)
     - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
-  - [Debugging](#debugging)
+  - [Debugging Fix program](#debugging-fix-program)
 - [Other documents](#other-documents)
 
 # Tutorial
@@ -2034,14 +2034,17 @@ Here, we explain the specification of the documentation comment in more detail.
 - The parameter names should be enclosed in backquotes ("`").
 - You can contain type annotations in the backquotes, e.g., `x : I64`, which will be ignored by the language server.
 
-## Debugging
+## Debugging Fix program
 
-Running `fix build` with `-g` option generates executable binary with DWARF debugging information. Then you can debug the binary by lldb, gdb or other GUI debuggers such as [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb). 
+Running `fix build`, `fix run` or `fix test` with `-g` option generates executable binary with DWARF debugging information. 
+Then you can debug the binary by lldb, gdb or other GUI debuggers such as [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb). 
 
 In VSCode, you cannot put a breakpoint in *.fix files by default. As a workaround, open "Preferences" and turn "Allow Breakpoints Everywhere" ON.
 
-There are some notes on debugging Fix program:
-- Unlike other languages, Fix does not release local variables at the end of their scope, but at the last point of use. So if you break after the last use of a local variable, the debugger may show you an invalid value.
+Moreover, if you add `--backtrace` option to `fix build`, `fix run` or `fix test`, a stack trace will be printed when a panic occurs. If you use it with `-g` option, function names and line numbers will be shown in the stack trace.
+
+Other notes on debugging Fix program:
+- Unlike other languages, Fix does not release local variables at the end of their scope, but at the last point of use. So if you break after the last use of a local variable, the debugger may show an invalid value.
 - Currently, we are not able to tell the debugger the size of an array which is determined at run time. So we are always setting the array size to 100 in the debug information. You cannot show elements indexed after 100, and if the array is shorter than 100, invalid values are shown.
 
 # Other documents
