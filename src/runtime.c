@@ -16,10 +16,6 @@ When running program by `fix build`, then this source file will be compiled into
 #include <unistd.h>
 #include <pthread.h>
 
-#ifdef BACKTRACE
-#include <backtrace.h>
-#endif // BACKTRACE
-
 // Print message to stderr, and flush it.
 void fixruntime_eprintln(const char *msg)
 {
@@ -310,7 +306,10 @@ void fixruntime_clear_errno()
     errno = 0;
 }
 
-#ifdef BACKTRACE
+#if defined(BACKTRACE)
+#if defined(__linux__)
+#include <backtrace.h>
+
 static struct backtrace_state *fixruntime_backtrace_state = NULL;
 
 // Callback for error handling in libbacktrace
@@ -332,12 +331,22 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
             (unsigned long)pc);
     return 0; // 0 = continue, non-zero = stop
 }
+
+#elif defined(__APPLE__)
+
+#include <execinfo.h>
+#define MAX_BACKTRACE_FRAMES 128
+
+#endif
+
 #endif // BACKTRACE
 
 // Abort function that prints backtrace if BACKTRACE is defined
 __attribute__((noreturn)) void fixruntime_abort(void)
 {
-#ifdef BACKTRACE
+#if defined(BACKTRACE)
+#if defined(__linux__)
+
     fprintf(stderr, "Backtrace:\n");
 
     if (!fixruntime_backtrace_state)
@@ -352,6 +361,22 @@ __attribute__((noreturn)) void fixruntime_abort(void)
                    fixruntime_backtrace_full_callback,
                    fixruntime_backtrace_error_callback,
                    &frame_index);
+
+#elif defined(__APPLE__)
+
+    void *callstack[MAX_BACKTRACE_FRAMES];
+    int frames = backtrace(callstack, MAX_BACKTRACE_FRAMES);
+    char **strs = backtrace_symbols(callstack, frames);
+    if (strs)
+    {
+        for (int i = 1; i < frames; ++i)
+        { // Skip frame 0 (current function)
+            fprintf(stderr, "  #%02d  %s\n", i - 1, strs[i]);
+        }
+        free(strs);
+    }
+
+#endif // __linux__
 #endif // BACKTRACE
     abort();
 }
