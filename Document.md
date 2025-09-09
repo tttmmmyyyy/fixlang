@@ -1620,14 +1620,17 @@ Using the more concise operator `*` for `bind`, the above can be written as:
 
 ```
 echo : IO ();
-echo = let input = *read; print(input);
+echo = print(*read);
 ```
 
-Or even more concisely, it can be written as:
+This can be interpreted as the `*` operator extracting the content of the `read` monad value and passing it to `print`. In fact, writing it this way produces the same result:
 
 ```
 echo : IO ();
-echo = print(*read);
+echo = (
+    let s = *read;
+    print(s)
+);
 ```
 
 Similarly,

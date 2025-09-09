@@ -1648,14 +1648,17 @@ echo = read.bind(|s| print(s));
 
 ```
 echo : IO ();
-echo = let input = *read; print(input);
+echo = print(*read);
 ```
 
-あるいは、
+これは、演算子`*`が`read`というモナド値の内容を取り出し、その内容を`print`に渡している、と解釈することができます。実際、以下のように書いても同じです。
 
 ```
 echo : IO ();
-echo = print(*read);
+echo = (
+    let s = *read;
+    print(s)
+);
 ```
 
 同様に、
