@@ -5,7 +5,7 @@
   - [Set up the tools](#set-up-the-tools)
     - [Fix compiler](#fix-compiler)
       - [Use pre-built binary](#use-pre-built-binary)
-      - [Bulid from source](#bulid-from-source)
+      - [Build from source](#build-from-source)
       - [Use Docker image](#use-docker-image)
     - [(Optional) VScode extensions](#optional-vscode-extensions)
   - [Run the first Fix program](#run-the-first-fix-program)
@@ -46,6 +46,7 @@
   - [Modules and import statements](#modules-and-import-statements)
   - [Namespaces and overloading](#namespaces-and-overloading)
   - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
+  - [Which is better: importing whole module or only necessary entities?](#which-is-better-importing-whole-module-or-only-necessary-entities)
   - [Recursion](#recursion)
   - [Type annotation](#type-annotation)
   - [Pattern matching](#pattern-matching)
@@ -55,11 +56,12 @@
   - [Type alias](#type-alias)
   - [Monads](#monads)
     - [What is monad?](#what-is-monad)
-      - [State-like monads](#state-like-monads)
-      - [Result-like monads](#result-like-monads)
-      - [Array-like monads](#array-like-monads)
-    - [`do` block and monadic bind operator `*`](#do-block-and-monadic-bind-operator-)
-    - [Chaining monadic actions by `;;` syntax](#chaining-monadic-actions-by--syntax)
+    - [Stateful Monads](#stateful-monads)
+    - [Failure Monads](#failure-monads)
+    - [Sequence Monads](#sequence-monads)
+    - [`do` Blocks and the Monadic Bind Operator `*`](#do-blocks-and-the-monadic-bind-operator-)
+    - [When an explicit `do` block is necessary](#when-an-explicit-do-block-is-necessary)
+    - [Chaining Monadic Actions with the `;;` Syntax](#chaining-monadic-actions-with-the--syntax)
     - [Note on iterators](#note-on-iterators)
   - [Boxed and unboxed types](#boxed-and-unboxed-types)
     - [Functions](#functions)
@@ -91,21 +93,22 @@
 
 ### Fix compiler
 
-Currently, Fix compiler is supported on macOS / Linux / Windows (via WSL). You can prepare the compiler one of the following ways:
+Currently, Fix compiler is supported on macOS / Linux / Windows (via WSL). You can prepare the compiler one of the following ways.
 
 #### Use pre-built binary
 
 You can download pre-built compiler binary from [Releases](https://github.com/tttmmmyyyy/fixlang/releases/).
+Download it, rename it to "fix", and place it to /usr/local/bin or somewhere else.
 
-#### Bulid from source
+#### Build from source
 
-Fix compiler is written in Rust. Thanks to Cargo, it is relatively easy to build the compiler from source.
+Fix compiler is written in Rust. Thanks to Cargo, it is easy to build the compiler from source.
 
 1. Install [Rust](https://www.rust-lang.org/tools/install).
 2. Install LLVM 17.0.x.
 - In Linux / WSL, you can download prebuilt binary of LLVM from [LLVM Download Page](https://releases.llvm.org/download.html).
 - In macOS, you can get LLVM by `brew install llvm@17`.
-3. Set LLVM_SYS_170_PREFIX variable to the directory to which LLVM is installed.
+3. Set `LLVM_SYS_170_PREFIX` variable to the directory to which LLVM is installed.
 - If you installed LLVM by `brew`, you can set it by `export LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)`. 
 4. `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
 5. `cargo install --locked --path .`. Then the command `fix` will be installed to `~/.cargo/bin`.
@@ -125,7 +128,7 @@ If you are using VScode, we recommend you to install the following extensions:
 
 The following is a Fix program that calculates the first 30 numbers of Fibonacci sequence. 
 
-```
+```fix
 module Main;
 
 calc_fib : I64 -> Array I64;
@@ -156,6 +159,7 @@ main = (
 
 To run the program, create a working directory for your first Fix project, and save the above source code to a file "main.fix" in it.
 Next, run `fix init` in the same directory to create a file "fixproj.toml".
+This is the project file of Fix.
 The project file tells the compiler where the Fix source files are located.
 The default project file created by `fix init` contains the following lines:
 
@@ -179,7 +183,7 @@ As another way, run `fix build`, then the compiler will generate an executable b
 
 These are the basic uses of Fix compiler. For more on the compiler feature, see [Compiler features](#compiler-features).
 
-In the followings, I will explain the syntax and semantics of the above example program.
+In the followings, we will explain the syntax and semantics of the above example program.
 
 ## Modules
 
@@ -204,7 +208,7 @@ This grammar will be useful to express the hierarchy of modules.
 
 The following parts are definitions of two global values `calc_fib` and `main`.
 
-```
+```fix
 calc_fib : I64 -> Array I64;
 calc_fib = {expression A};
 
@@ -220,7 +224,8 @@ These lines means that:
 In Fix, you have to specify the type of a global value explicitly. 
 
 NOTE: Since version 1.1.0 of Fix, the above can be written more concisely as follows.
-```
+
+```fix
 calc_fib : I64 -> Array I64 = {expression A};
 ```
 
@@ -228,16 +233,17 @@ calc_fib : I64 -> Array I64 = {expression A};
 
 The `Array` in `Array::fill` is the namespace. Namespace is the "address" of a name and used to distinguish two values (or types or traits, anything you define globally) with the same name.
 
-Namespaces of a name can be omitted if the value specified by the name is unique, or can be inferred from the context. In fact, you can write simply `fill(n, 0)` instead of `Array::fill(n, 0)` because there is only one function named `fill` at the current version of standard library. The reasons I wrote `Array::fill(n, 0)` here are:
+Namespaces of a name can be omitted if the value specified by the name is unique, or can be inferred from the context. In fact, you can write simply `fill(n, 0)` instead of `Array::fill(n, 0)` because there is only one function named `fill` at the current version of standard library. 
+The reasons I wrote `Array::fill(n, 0)` in the sample program are as follows:
 
-- `Array::fill(n, 0)` is more readable than `fill(n, 0)`, because it expresses that `fill` function is related to `Array` type. A reader may be able to infer that `Array::fill` will generate an array of specified length filled by a specified initial value.
+- `Array::fill(n, 0)` is more readable than `fill(n, 0)` since it expresses that the `fill` function creates an `Array`.
 - In the future, another function named `fill` may be added to a namespace other than `Array`. After that, the name `fill` may become ambiguous and the compile of the example program may start to fail.
 
-Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `Std` is a module to put entities provided by standard library. Module is nothing but a top-level namespace. The namespace `Array` is defined as the sub-namespace of `Std` and used to put functions related to arrays. Similarly, full name of `calc_fib` function is `Main::calc_fib`. You can omit (possibly full) prefix of namespaces of a name as long as the value referred to is uniquely inferred by compiler from the context.
+Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `Std` is a module to put entities provided by standard library. Module is nothing but a top-level namespace. The namespace `Array` is defined as the sub-namespace of `Std` and used to put functions related to arrays. Similarly, full name of `calc_fib` function is `Main::calc_fib`. 
 
 ## Types
 
-Each value in Fix has its type. You can consider that a type is a set in mathematics, and value in Fix is an element of its type. 
+Each value in Fix has a type. Using the terminology of mathematics, a type can be considered as a set, and a value in Fix is an element of that set.
 
 The followings are examples of types:
 
@@ -250,7 +256,7 @@ The followings are examples of types:
 - `(a, b)`: the type of pairs of values of `a` and `b`, where `a` and `b` are type parameters.
 - `IO a`: the type whose value corresponds to an I/O action such as printing a string, opening a file and reading its content, etc. The type variable `a` is for the type of values returned by the I/O action. For example, if an I/O action reads the standard input as a `String` (and if we assume it never fails), it should have type `IO String`.
 - `IO ()`: the type of I/O actions which returns no value. It is the type of `main` function of Fix program.
-- `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from its length and initial value has this type. In Fix, there is no concept of "two-variable functions". A function in Fix is a (partial) function in mathematical sense: it converts an element of a set into an element of another set (or fails). The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
+- `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from its length and initial value has this type. In Fix, there is no concept of "two-variable functions". The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
 
 In Fix, the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) must starts with a capital letter.
 A type that starts with a lowercase letter is interpreted as a type parameter. 
@@ -276,9 +282,10 @@ Expression is a sentence which describes a value. The followings are examples of
 
 To define a local name by a value, use `let`-expression. The syntax is `let {name} = {expression_0} in {expression_1}` or `let {name} = {expression_0}; {expression_1}`.
 
-If you write the whole let-expression in one line, it is preferred to use `in`: For example, `let x = 5 in 2 + x`. Of course, you can also write it as `let x = 5; 2 + x`.
+This `in` and `;` are synonymous. Use the one you prefer.
 
-On the other hand, if you want to put `{epxression_0}` and `{expression_1}` in other lines, it is better to use semicolon:
+If you want to put `{epxression_0}` and `{expression_1}` in other lines, it is better to use semicolon:
+
 ```
 let x = 3;
 let y = 5;
@@ -286,6 +293,7 @@ x + y
 ```
 
 If `{expression_0}` ranges several lines, it is preferred to indent `{expression_0}` with parenthes. For example, the following expression:
+
 ```
 let sixty_four = (
     let n = 3 + 5;
@@ -293,13 +301,16 @@ let sixty_four = (
 );
 sixty_four + sixty_four
 ```
-which is evaluated to 128, can also be written as 
+
+which is evaluated to `128`, can also be written as 
+
 ```
 let sixty_four = 
 let n = 3 + 5;
 n * n;
 sixty_four + sixty_four
 ```
+
 because the indent and parenthes are not mandatory, but the latter is less readable and not recommended.
 
 Fix's `let`-expression doesn't allow recursive definition. For example, a program
@@ -412,7 +423,7 @@ calc_fib = |n| (
 );
 ```
 
-is more readable than the following: 
+and the program
 
 ```
 calc_fib = |n| 
@@ -431,6 +442,8 @@ let arr = loop((2, arr), |(idx, arr)|
 );
 arr;
 ```
+
+has the same meaning, but the former is more readable and recommended.
 
 ## Operator `.` and `$`
 
@@ -511,7 +524,7 @@ loop((2, arr), |(idx, arr)|
 );
 ```
 
-The initial value of this loop is `(2, arr)`. The loop body takes a tuple `(idx, arr)`, that is, the index of an array to be updated next, and an array to store the Fibonacci sequence whose values are already right at indices 0, ..., idx-1. If `idx` is less than `arr.get_size`, it calculates the value of Fibonacci sequence at `idx`, stores it to `arr`, and returns `continue $ (idx+1, arr)` to proceed to the next step. If `idx` has reached to `arr.get_size`, it returns `break $ arr` to end the loop. The return value of the `loop` function is an array.
+The initial value of this loop is `(2, arr)`. The loop body takes a tuple `(idx, arr)`, that is, the index of an array to be updated next, and an array to store the Fibonacci sequence whose values are already right at indices `0`, ..., `idx-1`. If `idx` is less than `arr.get_size`, it calculates the value of Fibonacci sequence at `idx`, stores it to `arr`, and returns `continue $ (idx+1, arr)` to proceed to the next step. If `idx` has reached to `arr.get_size`, it returns `break $ arr` to end the loop. The return value of the `loop` function is an array.
 
 ## Unions
 
@@ -532,10 +545,10 @@ For each union type, some basic methods are automatically defined. For example, 
 - `as_continue : LoopState s b -> s`: extracts a value of type `s` from a `LoopState` value if it is created by `continue`. If not, this function aborts the program.
 - `as_break : LoopState s b -> s`: extracts a value of type `b` from a `LoopState` value if it is created by `break`. If not, this function aborts the program.
 
-Another example of union is `Option` which is used to represent a value "which may not contain a value". It can be defined as follows: 
+Another example of union is `Option` which is used to represent a value "which may not contain a value". It is defined as follows: 
 
 ```
-type Option a = union { none : (), some : s };
+type Option a = union { none : (), some : a };
 ```
 
 Note that, if you want to create a none value of `Option`, you need to write `none()`, because `none` is a function of type `() -> Option a`. (Remember that the syntax sugar `f() == f(())`.)
@@ -550,7 +563,7 @@ For example, you can define a struct called `Product` with two fields `price`  o
 type Product = struct { price: I64, sold: Bool };
 ```
 
-You can construct a struct value by the syntax `{struct_name} { ({field_name}: {field_value}) } `:
+You can construct a struct value by the syntax `{struct_name} { {field_name}: {field_value} } `:
 
 ```
 let product = Product { price: 100, sold: false };
@@ -729,7 +742,7 @@ to_dyn : [iter : Iterator, Item iter = a] iter -> DynIterator a;
 
 Therefore, by converting a complicated iterator into a `DynIterator`, you can simplify the type of the iterator.
 
-`DynIterator` is similar to lazy evaluation lists in Haskell in Fix.
+`DynIterator` is similar to lazy evaluation lists in Haskell.
 Therefore, if you insert `to_dyn` appropriately, you can write programs in Fix that are similar to list operations in Haskell.
 
 Why does the standard library of Fix adopt the design of defining `Iterator` as a trait rather than simply defining `DynIterator` as `Iterator` type?
@@ -969,6 +982,7 @@ There is one special module: `Std`. This is a module of built-in entities. `Std`
 
 Entities (global values, types and traits) in Fix can be overloaded in the sense that they can have conflicting name. 
 All entities must be distinguished uniquely by their full name (name and namespaces).
+
 Module name is used as the top-level namespace of entities defined in a source file. 
 In addition, you can create a namespace explicitly by `namespace TheNameSpace { ... }`.
 
@@ -1132,6 +1146,28 @@ main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
 
 You can hide multiple entities by writing such as `import Std hiding {symbol0, Type1, Namespace2::*}`.
 
+## Which is better: importing whole module or only necessary entities?
+
+Importing an entire module like this:
+
+```
+import Lib;
+```
+
+or importing only the necessary entities like this:
+
+```
+import Lib::{value0, Type1};
+```
+
+The latter requires you to update the import statement every time you want to use a new entity from `Lib`. The former avoids this extra work.
+
+On the other hand, the latter has an advantage from a maintenance perspective. For example, suppose your code defines a value named `value`, and then the `Lib` library is updated to include a value with the same name. If you had imported the entire `Lib` module, the compiler would flag `value` as ambiguous, which could lead to a compilation error in your code. In contrast, if you only imported the necessary entities from `Lib`, you wouldn't automatically import the new value, and your code would continue to compile.
+
+Currently, the Language Server Protocol (LSP) functionality in the fix compiler allows you to automatically update import statements by completing entity names or using a Quick Fix for "Unknown name" errors.
+
+Therefore, we recommend importing only the necessary entities, except in situations like competitive programming where you need to write code as quickly as possible.
+
 ## Recursion
 
 You can make recursive global function as in usual programming languages.
@@ -1170,7 +1206,7 @@ main : IO ();
 main = (
     let x = 42 : I64; // Type annotation on expression.
     let y : I64 = 42; // Type annotation on let-binding.
-    let f = |v : I64| v * 3; // Type annotation on a variable of function.
+    let f = |v : I64| v * 3; // Type annotation on the parameter of a function.
     
     println $ x.to_string;;
     println $ y.to_string;;
@@ -1182,7 +1218,7 @@ main = (
 
 ## Pattern matching
 
-Pattern matching is a syntax for extracting values from structs (especially, tuples) or unions.
+Pattern matching is a syntax for extracting values from structs (including tuples) or unions.
 Pattern matching for structs can be used in function arguments or let-bindings. 
 Pattern matching for unions can be used in `match` expressions.
 
@@ -1313,7 +1349,7 @@ main = (
 
 ## Associated types
 
-An associated type is a type level function whose domain is the types implementing a trait.
+Associated types can be thought of as type-level functions that take a trait (considered as a set of types) as their domain and return a new type.
 A representative example is the `Iterator` trait in the standard library.
 
 ```
@@ -1408,7 +1444,7 @@ type Name = String;
 
 Type alias does NOT define a new type: it is merely another name of the aliased type.
 
-You can also define higher-kinded type alias. The following is an example of such type alias defined in "Std":
+You can also define higher-kinded type alias. The following is an example of such type alias defined in `Std`:
 
 ```
 type Lazy a = () -> a;
@@ -1432,51 +1468,89 @@ trait [m : *->*] m : Monad {
 This is the definition of monad. To learn monads, it is important to know examples.
 In the following sections, we introduce 3 typical kinds of monads used practically.
 
-#### State-like monads
+### Stateful Monads
 
-A type which represents an "action" (a computation in an environment) becomes often a monad.
-In Fix's standard library, `IO` is a state-like monad where `IO a` represents an I/O action that returns a value of type `a`. 
-As another example, the following definition
+A type that represents "actions (computations that acts on the state)" is often a monad. We'll refer to such a monad as a stateful monad.
+
+Consider the following definition:
 
 ```
 type State s a = unbox struct { run : s -> (s, a) }
 ```
 
-produces a monad `State s`. This monad represents a computation which reads and updates the "state", which ia a value of `s`.
+`State s` represents a computation that takes a value of type `s` (the "state") and returns a value of type `a` (the "result") along with a new state.
 
-For state-like monads, `bind` provides a way to combine two actions. An action `x.bind(f)` represents the following action:
-- First, perform the action `x`. Let `r` denote the result of the action `x`.
-- Then, perform the action `f(r)`.
- 
-An action `pure(v)` represents a computation that returns `v` with no interaction with the environment.
+The following shows how to implement `State s : Monad` for any type `s`. Therefore, `State s` provides an example of a stateful monad.
 
-For example, `print(str) : IO ()` is an I/O action that prints `str` to the standard output. Assume that `read : IO String` is an I/O action that reads a content of standard input as a string. Then, the I/O action `echo` that reads standard input and just prints it can be written as:
+In a stateful monad, `bind` represents the combination of two actions. More specifically, the action `x.bind(f)` represents a combined action that performs the following two steps:
+- First, it executes action `x`. Let the result of action `x` be `r`.
+- Next, it executes action `f(r)`.
+
+Next, the action `pure(v)` represents a computation that simply returns `v` without any interaction with the state.
+
+To summarize, `State s : Monad` can be implemented as follows:
+
+```
+impl State s : Monad {
+    bind = |f, x| State { run : |state| (
+        let (state, r) = (x.@run)(state);
+        (f(r).@run)(state)
+    )};
+    pure = |v| State { run : |state| (state, v) };
+}
+```
+
+`IO`, defined in Fix's standard library, is also an example of a stateful monad. 
+`IO a` can be thought of as an "I/O action" that returns a value of type `a` while interacting with the state of the computer.
+
+Let's look at how to use `bind` with `IO` as an example. 
+`print(str) : IO ()` is an I/O action that prints `str` to standard output. 
+Assuming there is an I/O action `read : IO String` that reads the contents of standard input as a string, you can write an `echo` I/O action that reads standard input and prints it as-is, like this:
 
 ```
 echo : IO ();
 echo = read.bind(|s| print(s));
 ```
 
-NOTE: Actually there is no `read : IO String` defined in Fix's standard library. It can be defined as `read_content(stdin).map(as_ok)`.
+Note: In reality, `read : IO String` is not defined in Fix's standard library. It can be implemented as `read_content(stdin).map(as_ok)`.
 
-#### Result-like monads
+### Failure Monads
 
-This kind of monad represents a value that may fail to be calculated. 
-In Fix's standard library, `Result e` is a monad with an error `e`:
+This type of monad represents a value that may have failed during a computation. In the Fix standard library, `Result` is defined as follows:
 
 ```
 type Result e o = unbox union { ok : o, err: e };
 ```
 
-`Result e o` contains a successful value of type `o`, or an error value of type `e`. Another example is the `Option` monad:
+A `Result e o` contains either a value of type `o` or an error value of type `e`.
+
+Another example is `Option`:
 
 ```
 type Option a = union { none: (), some: a };
 ```
 
-For result-like monads, `bind` provides a way to do short-circuit evaluation. `x.bind(f)` should immediately return an error (or "none") value if `x` is an error. Only when `x` is an ok (or "some") value `v`, the function `f` is called and `x.bind(f)` should evaluates to `f(v)`. `pure(v)` represents an ok value `v`.
+An `Option a` represents a value that may or may not exist.
 
-As an example, consider a function `add_opt : Option I64 -> Option I64 -> Option I64` which adds two integers only when both are "some" values. Naively, it can defined as follows:
+`Result e` for any type `e`, and `Option`, both implement the `Monad` trait, serving as examples of failure monads.
+
+In a failure monad, `bind` provides a way to perform short-circuiting evaluation. `x.bind(f)` returns an error immediately if `x` is an error (or "none") value. The function `f` is called only if `x` is an "ok" (or "some") value `v`, and `x.bind(f)` becomes `f(v)`. Furthermore, `pure(v)` represents an "ok" value `v`.
+
+Here is an example implementation of `Monad` for `Option`:
+
+```
+impl Option : Monad {
+    bind = |f, opt| match opt {
+        none(_) => none(),
+        some(v) => f(v)
+    };
+    pure = Option::some;
+}
+```
+
+As a usage example for `bind`, consider the function `add_opt : Option I64 -> Option I64 -> Option I64`, which adds two integers wrapped in `Option`. This function is intended to perform addition only if both values are `some`; otherwise, it returns `none`.
+
+The function can be written verbosely as follows:
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
@@ -1489,31 +1563,29 @@ add_opt = |x, y| (
 );
 ```
 
-Using `bind`, the above program can be rewritten as:
+By using `bind`, the same function can be written concisely:
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
 add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
 ```
 
-#### Array-like monads
+### Sequence Monads
 
-Types representing sequences like arrays are also monads.
-In Fix's standard library, `Array` and `DynIterator` implement `Monad` trait.
+Types that represent a sequence of elements, like an array, can also be instances of a monad. In the Fix standard library, both `Array` and `DynIterator` implement the `Monad` trait.
 
-For array-like moads, `[x, y, z, ...].bind(f)` represents `f(x) + f(y) + f(z) + ...`, where `+` concatenates two array-like values. 
-`bind` is sometimes called "flat_map" in other languages.
+In a sequence monad, `[x, y, z, ...].bind(f)` represents `f(x) + f(y) + f(z) + ...`, where `+` denotes the concatenation of two sequences. This `bind` operation is often called **"flat\_map"** in other languages.
 
-`pure(x)` represents an singleton value `[x]`. 
+The `pure(x)` operation represents a single-element sequence `[x]`.
 
-For example, consider a function `product : Array a -> Array b -> Array (a, b)` that calculates a cartesian product. It can be implemented as:
+For example, consider a function `product : Array a -> Array b -> Array (a, b)` that computes the Cartesian product. It can be implemented like this:
 
 ```
 product : Array a -> Array b -> Array (a, b);
 product = |xs, ys| xs.bind(|x| ys.bind(|y| pure $ (x, y)));
 ```
 
-because, if `xs == [x0, x1, ...]` and `ys == [y0, y1, ...]`, then 
+If we let `xs == [x0, x1, ...]` and `ys == [y0, y1, ...]`, we can see how `product(xs, ys)` expands to compute the Cartesian product:
 
 ```
 xs.bind(|x| ys.bind(|y| pure $ (x, y)))
@@ -1523,69 +1595,129 @@ xs.bind(|x| ys.bind(|y| pure $ (x, y)))
 == [(x0, y0), (x0, y1), ..., (x1, y0), (x1, y1), ..., ...]
 ```
 
-### `do` block and monadic bind operator `*`
+### `do` Blocks and the Monadic Bind Operator `*`
 
-A prefix unary operator `*` provides a way to use `bind` in more concise way. 
-A code `B(*x)` is expanded to `x.bind(|v| B(v))`. 
-Here, `B(*x)` is the minimal `do` block that encloses the expression `*x`. 
-Here, `do` blocks are defined as follows:
+Fix's prefix unary operator `*` provides a more concise way to use `bind`. The code `B(*x)` expands to `x.bind(|v| B(v))`.
 
-- A `do` block can be created explicitly by `do { ... }`.
-- Lambda-expression `|arg| ...` defines a `do` block `...` implicitly.
-- Let-definition `let name = val (in|;) ...` defines a `do` block `...` implicitly.
-- Double semicolon syntax (described later) `act;; ...` defines a `do` block `...` implicitly.
-- If-expression `if cond { ... } else { ... }` defines two `do` blocks  `...` implicitly.
-- Match-expression `match val { pat => (...) }` defines `do` blocks `...` implicitly.
-- Global definition `name = ...` defines a `do` block `...` implicitly.
+Here, `B(*x)` is the smallest `do` block enclosing the expression `*x`. `do` blocks are created either explicitly or implicitly as follows:
 
-Examples in previous sections can be written using `*` as follows:
+  - You can explicitly create a `do` block with `do { ... }`.
+  - A global definition `name = ...` implicitly defines a `do` block `...`.
+  - A `let` definition `let name = val (in|;) ...` implicitly defines a `do` block `...`.
+  - A lambda expression `|arg| ...` implicitly defines a `do` block `...`.
+  - An `if` expression `if cond { ... } else { ... }` implicitly defines two `do` blocks `...`.
+  - A `match` expression `match val { pat => ... }` implicitly defines a `do` block `...`.
+  - The double-semicolon syntax (discussed later) `act;; ...` implicitly defines a `do` block `...`.
+
+In a previous section, we showed an example of creating `echo : IO ()` from `read : IO String` and `print : String -> IO ()` using `bind` in the stateful monad `IO`:
+
+```
+echo : IO ();
+echo = read.bind(|s| print(s));
+```
+
+Using the more concise operator `*` for `bind`, the above can be written as:
+
+```
+echo : IO ();
+echo = let input = *read; print(input);
+```
+
+Or even more concisely, it can be written as:
 
 ```
 echo : IO ();
 echo = print(*read);
 ```
 
+Similarly,
+
+```
+add_opt : Option I64 -> Option I64 -> Option I64;
+add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
+```
+
+can be written as:
+
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
 add_opt = |x, y| pure $ *x + *y;
 ```
+
+And
+
+```
+product : Array a -> Array b -> Array (a, b);
+product = |xs, ys| xs.bind(|x| ys.bind(|y| pure $ (x, y)));
+```
+
+can be written as:
 
 ```
 product : Array a -> Array b -> Array (a, b);
 product = |xs, ys| pure $ (*xs, *ys);
 ```
 
-The following is an example where you need to make `do` block explicitly.
+### When an explicit `do` block is necessary
+
+In the examples so far, you didn't need to explicitly create a `do` block when using `*`. Here is an example where an explicit `do` block is necessary.
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
 add_opt_unwrap = |x, y| do { pure $ *x + *y }.as_some;
 ```
 
-In the above, the definition of `add_opt_unwrap` will be appropriately expanded to 
+In the above, the definition of `add_opt_unwrap` correctly expands to the following and compiles successfully:
 
 ```
 add_opt_unwrap = x.bind(|x| y.bind(|y| pure $ x + y)).as_some;
 ```
 
-On the other hand, if you write 
+In contrast, if you don't explicitly create a `do` block like this:
 
 ```
+add_opt_unwrap : Option I64 -> Option I64 -> I64;
 add_opt_unwrap = |x, y| (pure $ *x + *y).as_some;
 ```
 
-it will be expanded to 
+it expands as follows:
 
 ```
 add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
 ```
 
-which won't be compiled, because the inner `bind` requires a function that returns `Option I64` but the function `|y| (pure $ x + y).as_some` has type `I64 -> I64`.
+The latter code, which doesn't use a `do` block, results in a type error and won't compile. In fact, the return type of the outer `bind` is `Option I64`, but the function `add_opt_unwrap` is required to return `I64`.
 
-### Chaining monadic actions by `;;` syntax
+While this may seem complex, if you understand that **"the scope of a `do` block is the monad value,"** it's relatively easy to decide when you need to explicitly create a `do` block when using `*`.
 
-The `println : String -> IO ()` function takes a string and returns an IO action which prints the string to the standard output.
-If you want to perform `println` multiple times, you can write as follows using operator `*`.
+The code that compiles successfully:
+
+```
+add_opt_unwrap : Option I64 -> Option I64 -> I64;
+add_opt_unwrap = |x, y| do { pure $ *x + *y }.as_some;
+```
+
+works because the explicit `do` block's scope becomes the monad `Option I64`, and you can then apply `as_some` to it.
+
+For the code that fails to compile:
+
+```
+add_opt_unwrap : Option I64 -> Option I64 -> I64;
+add_opt_unwrap = |x, y| (pure $ *x + *y).as_some;
+```
+
+If you make the scope of the implicitly created `do` block explicit, it looks like this:
+
+```
+add_opt_unwrap : Option I64 -> Option I64 -> I64;
+add_opt_unwrap = |x, y| do { (pure $ *x + *y).as_some };
+```
+
+This results in a type error because the scope of the `do` block becomes type `Option I64`, but the function is required to return `I64`.
+
+### Chaining Monadic Actions with the `;;` Syntax
+
+The function `println : String -> IO ()` creates an IO action that takes a string and prints it to standard output. If you want to perform `println` multiple times, you can use the `*` operator as shown below:
 
 ```
 module Main;
@@ -1598,10 +1730,9 @@ main = (
 );
 ```
 
-Here, `pure() : IO ()` is an IO action which does nothing and just returns `()`. 
-Since we don't need the result of the IO action `print(...)`, we get the result by a variable named `_` and forget about it.
+Since the result of the `println(...)` IO action isn't needed, we assign it to the variable `_` to ignore it. Additionally, `pure() : IO ()` represents a "do nothing" IO action.
 
-Actually, the syntax `{expr0};; {expr1}` is equivalent to `let _ = *{expr0}; {expr1}`. Therefore, the above code can be written as follows.
+The double-semicolon syntax `{expr0};; {expr1}` is equivalent to `let _ = *{expr0}; {expr1}`. Therefore, the code above can be written like this:
 
 ```
 module Main;
