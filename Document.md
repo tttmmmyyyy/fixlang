@@ -8,26 +8,25 @@
       - [Build from source](#build-from-source)
       - [Use Docker image](#use-docker-image)
     - [(Optional) VScode extensions](#optional-vscode-extensions)
-  - [Run the first Fix program](#run-the-first-fix-program)
+  - [Running Your First Fix Program](#running-your-first-fix-program)
   - [Modules](#modules)
   - [Global values](#global-values)
-  - [Namespaces](#namespaces)
+    - [Namespaces](#namespaces)
   - [Types](#types)
   - [Expressions](#expressions)
   - [Let-expressions](#let-expressions)
   - [If-expressions](#if-expressions)
   - [Function application](#function-application)
   - [Function definition](#function-definition)
-  - [Operator `.` and `$`](#operator--and-)
+  - [The `.` and `$` Operators](#the--and--operators)
   - [Patterns](#patterns)
-  - [`loop`, `continue` and `break` function](#loop-continue-and-break-function)
+  - [The `loop`, `continue`, and `break` Functions](#the-loop-continue-and-break-functions)
   - [Unions](#unions)
   - [Structs](#structs)
   - [Iterators](#iterators)
-    - [Side note: Dynamic iterators](#side-note-dynamic-iterators)
-  - [Mutation in Fix and reference counter](#mutation-in-fix-and-reference-counter)
+  - [Mutability and Reference Counting in Fix](#mutability-and-reference-counting-in-fix)
   - [A bit on IO (or monads)](#a-bit-on-io-or-monads)
-- [More on language](#more-on-language)
+- [More on language and standard library](#more-on-language-and-standard-library)
   - [Booleans and literals](#booleans-and-literals)
   - [Numbers and literals](#numbers-and-literals)
   - [Strings and literals](#strings-and-literals)
@@ -54,6 +53,7 @@
   - [Associated types](#associated-types)
   - [Trait alias](#trait-alias)
   - [Type alias](#type-alias)
+    - [Dynamic Iterators](#dynamic-iterators)
   - [Monads](#monads)
     - [What is monad?](#what-is-monad)
     - [Stateful Monads](#stateful-monads)
@@ -62,17 +62,17 @@
     - [`do` Blocks and the Monadic Bind Operator `*`](#do-blocks-and-the-monadic-bind-operator-)
     - [When an explicit `do` block is necessary](#when-an-explicit-do-block-is-necessary)
     - [Chaining Monadic Actions with the `;;` Syntax](#chaining-monadic-actions-with-the--syntax)
-    - [Note on iterators](#note-on-iterators)
-  - [Boxed and unboxed types](#boxed-and-unboxed-types)
+    - [Fix's Iterator Is Not a Monad](#fixs-iterator-is-not-a-monad)
+  - [Boxed and Unboxed Types](#boxed-and-unboxed-types)
     - [Functions](#functions)
     - [Tuples and unit](#tuples-and-unit)
     - [Array](#array)
     - [Structs](#structs-2)
     - [Unions](#unions-2)
-  - [Foreign function interface (FFI)](#foreign-function-interface-ffi)
-    - [Call a foreign function in Fix](#call-a-foreign-function-in-fix)
-    - [Export a Fix value or function to a foreign language](#export-a-fix-value-or-function-to-a-foreign-language)
-    - [Managing a foreign resource in Fix](#managing-a-foreign-resource-in-fix)
+  - [Foreign Function Interface (FFI)](#foreign-function-interface-ffi)
+    - [Calling External Functions from Fix](#calling-external-functions-from-fix)
+    - [Exporting Fix Values and Functions to External Languages](#exporting-fix-values-and-functions-to-external-languages)
+    - [Managing External Resources in Fix](#managing-external-resources-in-fix)
     - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
     - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
   - [`eval` syntax](#eval-syntax)
@@ -98,7 +98,7 @@ Currently, Fix compiler is supported on macOS / Linux / Windows (via WSL). You c
 #### Use pre-built binary
 
 You can download pre-built compiler binary from [Releases](https://github.com/tttmmmyyyy/fixlang/releases/).
-Download it, rename it to "fix", and place it to /usr/local/bin or somewhere else.
+Download it, rename it to "fix", and place it to "/usr/local/bin" or somewhere else.
 
 #### Build from source
 
@@ -124,9 +124,9 @@ If you are using VScode, we recommend you to install the following extensions:
 - [Syntax highlighting](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlangsyntax)
 - [Language client](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)
 
-## Run the first Fix program
+## Running Your First Fix Program
 
-The following is a Fix program that calculates the first 30 numbers of Fibonacci sequence. 
+Below is a Fix program that calculates the first 30 numbers of the Fibonacci sequence.
 
 ```fix
 module Main;
@@ -157,52 +157,41 @@ main = (
 );
 ```
 
-To run the program, create a working directory for your first Fix project, and save the above source code to a file "main.fix" in it.
-Next, run `fix init` in the same directory to create a file "fixproj.toml".
-This is the project file of Fix.
-The project file tells the compiler where the Fix source files are located.
-The default project file created by `fix init` contains the following lines:
+To run this program, first create a working directory for your Fix project. In that directory, run `fix init` to create the Fix project templates (`"fixproj.toml"`, `"main.fix"`, and `"test.fix"`). Next, copy the source code above into the `"main.fix"` file.
+
+The project file `"fixproj.toml"` tells the Fix compiler about your project's configuration and how to build it. The default project file created by `fix init` includes the following, so the `"main.fix"` source file is recognized as a build target:
 
 ```toml
 [build]
 files = ["main.fix"]
 ```
 
-so the compiler will recognize "main.fix" as the (unique) source file of this project.
-
-Now run `fix run` in the working directory. The program will be compiled and executed. You will see the following output:
+Running `fix run` in your working directory will compile and execute the program. The following output should be displayed on standard output:
 
 ```
 The first 30 numbers of Fibonacci sequence are: 
 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040
 ```
 
-to the standard output.
+Alternatively, you can run `fix build` to have the compiler generate an executable binary (`"a.out"`), which you can then run with `./a.out`.
 
-As another way, run `fix build`, then the compiler will generate an executable binary ("a.out") which can be run by `./a.out`.
+This is the basic usage of the Fix compiler. For more details on the compiler's features, refer to the [Compiler Features](https://www.google.com/search?q=%23compiler-features) section.
 
-These are the basic uses of Fix compiler. For more on the compiler feature, see [Compiler features](#compiler-features).
-
-In the followings, we will explain the syntax and semantics of the above example program.
+Below, we'll explain the syntax and meaning of the sample program above.
 
 ## Modules
 
-The first line is the module definition:
+The first line of "main.fix" is a module definition.
 
 ```
 module Main;
 ```
 
-In Fix, values, functions, types and traits defined in a source file is collected to a "module". 
-Each source file has to declare the name of the module it defines by `module {module_name};`. 
+In Fix, values, functions, types, and traits defined in a source file are grouped into a single **module**. Each source file must specify the name of the module it defines using `module {module_name};`.
 
-When Fix program runs, it calls `main` function defined in the `Main` module.
+When a Fix program is executed, the `main` function defined in the `Main` module is called.
 
-The usefulness of modules is hard to see in this example. They are useful when you construct a program from multiple source files.
-
-A module name must starts with a capital letter.
-Moreover, you can use a sequence of such strings concatenated by periods (e.g. `Main.Model.Impl`) as a module name. 
-This grammar will be useful to express the hierarchy of modules.
+Module names must begin with a capital letter. Additionally, you can use a string of these names concatenated with a period (e.g., `Main.Model.Impl`) as a module name, which is useful for representing a hierarchical module structure.
 
 ## Global values
 
@@ -229,17 +218,20 @@ NOTE: Since version 1.1.0 of Fix, the above can be written more concisely as fol
 calc_fib : I64 -> Array I64 = {expression A};
 ```
 
-## Namespaces
+### Namespaces
 
-The `Array` in `Array::fill` is the namespace. Namespace is the "address" of a name and used to distinguish two values (or types or traits, anything you define globally) with the same name.
+In `Array::fill`, `Array` is a namespace. A namespace is like an address for a name, used to distinguish between two values (or types, traits, or anything defined globally) that have the same name.
 
-Namespaces of a name can be omitted if the value specified by the name is unique, or can be inferred from the context. In fact, you can write simply `fill(n, 0)` instead of `Array::fill(n, 0)` because there is only one function named `fill` at the current version of standard library. 
-The reasons I wrote `Array::fill(n, 0)` in the sample program are as follows:
+In many cases, the namespace can be omitted. In fact, with the current version of the standard library, you can write `fill(n, 0)` instead of `Array::fill(n, 0)`. This is because the compiler can infer from the context that the value written as `fill` refers to `Array::fill`.
 
-- `Array::fill(n, 0)` is more readable than `fill(n, 0)` since it expresses that the `fill` function creates an `Array`.
-- In the future, another function named `fill` may be added to a namespace other than `Array`. After that, the name `fill` may become ambiguous and the compile of the example program may start to fail.
+Actually, the "full name" of `fill` is `Std::Array::fill`, not just `Array::fill`. `Std` is the module for the standard library. Modules are used as top-level namespaces. `Std::Array::fill` means that the function `fill` is defined in the namespace `Array`, which is inside the module `Std`.
 
-Actually, the full name of `fill` is not `Array::fill` but `Std::Array::fill`. `Std` is a module to put entities provided by standard library. Module is nothing but a top-level namespace. The namespace `Array` is defined as the sub-namespace of `Std` and used to put functions related to arrays. Similarly, full name of `calc_fib` function is `Main::calc_fib`. 
+Even though you can simply write `fill(n, 0)`, the sample program uses `Array::fill(n, 0)` for the following reasons:
+
+- `Array::fill(n, 0)` is considered more readable than `fill(n, 0)` because it expresses that this `fill` function creates an `Array` type.
+- In the future, a function named `fill` might be added to a different namespace besides `Array`. In this case, the name `fill` would become ambiguous, and the sample program might fail to compile.
+
+Similarly, the "full name" of the `calc_fib` function is `Main::calc_fib`.
 
 ## Types
 
@@ -445,32 +437,34 @@ arr;
 
 has the same meaning, but the former is more readable and recommended.
 
-## Operator `.` and `$`
+## The `.` and `$` Operators
 
-The operator `.` is another way of applying function to a value. It is defined as `x.f == f(x)`.
+The `.` operator is another way to apply a function to a value. It is defined as `x.f == f(x)`.
 
-The precedence of the operator `.` is lower than function application by parenthes. So, if a function `method` has a type `Param -> Obj -> Result`, then `obj.method(arg)` is interpreted as `obj.(method(arg)) == method(arg)(obj) == method(arg, obj)`, not as `(obj.method)(arg)`.
+The precedence of the `.` operator is lower than that of function application using parentheses. Therefore, if a function `method` has the type `Param -> Obj -> Result`, `obj.method(arg)` is interpreted as `obj.(method(arg)) == method(arg)(obj) == method(arg, obj)`, not `(obj.method)(arg)`.
 
-In the program of Fibonacci sequence, the followings are examples of use of operator `.`:
+In the Fibonacci program, here are examples of the `.` operator's usage:
 
-- `arr.get_size`: `get_size` is a function of type `Array a -> I64`, which returns the length of an array. Note that you should not write `arr.get_size()` as if you call a method of a class on an instance in other languages. Remembering syntax sugars `f() == f(())` and `x.f == f(x)`, you can desugar the expression `arr.get_size()` to `get_size((), arr)`, which raises an error because `get_size` takes only one argument.
-- `arr.set(0, 1)`: `set` is a function of type `I64 -> a -> Array a -> Array a`, which updates an element of an array to the specified value. 
-- `arr.@(idx-1)`: `@` is a function of type `I64 -> Array a -> a`, which returns the element at the specified index.
+* `arr.get_size`: `get_size` is a function of type `Array a -> I64` that returns the length of an array. You should not write `arr.get_size()` like in other languages. Simply writing `arr.get_size` has the same meaning as `get_size(arr)`.
+* `arr.set(0, 1)`: `set` is a function of type `I64 -> a -> Array a -> Array a` that updates an array's element with a specified value.
+* `arr.@(idx-1)`: `@` is a function of type `I64 -> Array a -> a` that returns the element at a specified index.
 
-We sometimes call a function of type `Param0 -> ... -> ParamN -> Obj -> Result` as a "method" on the type `Obj` that has N+1 parameters and returns a value of type `Result`. A method can be called by `obj.method(arg0, ..., argN)` as if writing OOP languages.
+A function of type `Param0 -> ... -> ParamN -> Obj -> Result` is sometimes called a "method" of type `Obj` that takes N+1 parameters and returns a value of type `Result`. A method can be called by writing `obj.method(arg0, ..., argN)` like in OOP languages.
 
-Another way of function application is operator `$`: `f $ x = f(x)`. This operator is right associative: `f $ g $ x = f(g(x))`. This operator is useful for reducing parenthes. In the program of Fibonacci sequence, the followings are examples of use of operator `$`:
+Another way to apply a function is the `$` operator: `f $x = f(x)`. This operator is right-associative: `f$ g $ x = f(g(x))`.
 
-- `continue $ (idx+1, arr)`: the application of the `continue` function to the tuple value `(idx+1, arr)`. In Fix, `continue` and `break` are usual functions, not syntaxes. So you can write this expression as `continue((idx+1, arr))` or `(idx+1, arr).continue`, but I prefer to write `continue $ (idx+1, arr)`. More explanation of `continue` and `break` functions will be given later. 
-- `println $ fib.to_iter.map(to_string).join(", ")`: the application of the `println` function to the string expressed by `fib.to_iter.map(to_string).join(", ")`. The `println` function has type `String -> IO ()`, so applying to `println` to a string produces a value of `IO ()`, which is equal to the type of `main` function. This expression can also be written as `println(fib.to_iter.map(to_string).join(", "))`, but using operator `$` you can reduce parenthes around the long string expression.
+The `$` operator is useful for reducing parentheses. In the Fibonacci program, here are examples of its usage:
 
-The precedence between three ways of function application is `f(x)` > `x.f` > `f $ x`. By this, it is illegal to write `obj.method $ arg`. It is equivalent to `method(obj) $ arg" == method(obj, arg)`, which is trying to call `method` on two arguments in the wrong ordering. It is ok to write `method(arg) $ obj`, which can be read as "apply `method` to `arg` to obtain a function of type `Obj -> Result`, and apply it to `obj`" to get a result.
+* `continue $ (idx+1, arr)`: This applies the `continue` function to the tuple value `(idx+1, arr)`. In Fix, `continue` and `break` are regular functions, not keywords. Therefore, this expression could also be written as `continue((idx+1, arr))` or `(idx+1, arr).continue`. A detailed explanation of the `continue` and `break` functions is provided later.
+* `println $ fib.to_iter.map(to_string).join(", ")`: This applies the `println` function to the string expression `fib.to_iter.map(to_string).join(", ")`. Since the `println` function has the type `String -> IO ()`, applying it to a string produces a value of type `IO ()`. This expression could also be written as `println(fib.to_iter.map(to_string).join(", "))`, but using the `$` operator can reduce parentheses around long string expressions.
+
+The precedence of the three function application methods is `f(x)` > `x.f` > `f $x`. For this reason, you cannot write `obj.method$ arg`. This would be equivalent to `method(obj) $arg == method(obj, arg)`, which tries to call the method with two arguments in the wrong order. On the other hand, you can write `method(arg)$ obj`, which reads as "apply `method` to `arg` to get a function of type `Obj -> Result`, and then apply that to `obj`."
 
 ## Patterns
 
-Both of let-expression and function expression introduces local names. If the type of the local name is tuple (or, more generally, structs), you can use patterns to destructure the passed value.
+In Fix, you can use pattern matching for structs and tuples in `let` expressions, `match` expressions, and function expressions.
 
-For example, let's define a function that takes a value of tuple type `(I64, Bool)`, and returns a value of `(Bool, I64)` by swapping two components. Using built-in functions `@0 : (a, b) -> a` and `@1 : (a, b) -> b` to extract the component from a tuple, you can write:
+For example, let's define a function `swap` that takes a value of the tuple type `(I64, Bool)` and returns a value of type `(Bool, I64)`. Without using patterns, you could write it like this, using the built-in functions `@0 : (a, b) -> a` and `@1 : (a, b) -> b` to extract elements from the tuple:
 
 ```
 swap : (I64, Bool) -> (Bool, I64);
@@ -481,7 +475,7 @@ swap = |tuple| (
 );
 ```
 
-Using pattern, this program can be written as:
+By using a pattern in a `let` expression, the program can be written as follows:
 
 ```
 swap : (I64, Bool) -> (Bool, I64);
@@ -491,25 +485,28 @@ swap = |tuple| (
 );
 ```
 
-or more shortly, 
+Alternatively, you can use a pattern in the function expression to write it like this:
 
 ```
 swap : (I64, Bool) -> (Bool, I64);
 swap = |(fst, snd)| (snd, fst);
 ```
 
-Don't confuse `|(x, y)| ...` with `|x, y| ...`. The former defines a function that receives a tuple, where the latter defines a two-variable function.
+Note: Do not confuse `|(x, y)| ...` with `|x, y| ...`. The former defines a function that accepts a single tuple, while the latter defines a function that accepts two separate arguments.
 
-## `loop`, `continue` and `break` function
+## The `loop`, `continue`, and `break` Functions
 
-The `loop` built-in function has type `s -> (s -> LoopState s b) -> b`. The value of `LoopState` type can be constructed from `continue` or `break` function.
+The built-in `loop` function is used to implement loops in Fix. To continue or break a loop, you use the `continue` and `break` functions.
 
-- `continue : s -> LoopState s b`
-- `break : b -> LoopState s b`
+The types of `loop`, `continue`, and `break` are as follows:
 
-The `loop` function takes two arguments: the initial state of the loop `s0` and the loop body function `body`. It first calls `body` on `s0`. If `body` returns a value `break(r)`, then the `loop` function ends and returns `r` as the result. If `body` returns `continue(s)`, then the `loop` function calls again `body` on `s`.
+  - `loop : s -> (s -> LoopState s b) -> b`
+  - `continue : s -> LoopState s b`
+  - `break : b -> LoopState s b`
 
-In the program of Fibonacci sequence, the `loop` function is used in the following expression:
+The `loop` function takes two arguments: an initial state `s0` for the loop and a loop body function `body`. The `loop` function first calls `body` with `s0`. If `body` returns a `break(r)` value, the `loop` function terminates and returns `r` as the result. If `body` returns a `continue(s)` value, the `loop` function calls `body` again with `s`.
+
+In the Fibonacci program, the `loop` function is used in the following expression:
 
 ```
 loop((2, arr), |(idx, arr)|
@@ -524,7 +521,9 @@ loop((2, arr), |(idx, arr)|
 );
 ```
 
-The initial value of this loop is `(2, arr)`. The loop body takes a tuple `(idx, arr)`, that is, the index of an array to be updated next, and an array to store the Fibonacci sequence whose values are already right at indices `0`, ..., `idx-1`. If `idx` is less than `arr.get_size`, it calculates the value of Fibonacci sequence at `idx`, stores it to `arr`, and returns `continue $ (idx+1, arr)` to proceed to the next step. If `idx` has reached to `arr.get_size`, it returns `break $ arr` to end the loop. The return value of the `loop` function is an array.
+The initial state of this loop is `(2, arr)`. The loop body accepts a state of tuple type `(idx, arr)`. Here, `idx` is the index of the array to be updated next, and `arr` is the array of Fibonacci numbers where indices from `0` to `idx-1` have already been computed.
+
+If `idx` reaches `arr.get_size`, the loop terminates by returning `break $arr`. Otherwise, it computes the Fibonacci number at index `idx`, stores it in `arr`, and then returns `continue$ (idx+1, arr)` to continue the loop.
 
 ## Unions
 
@@ -716,43 +715,11 @@ Note that `fold` cannot break in the middle of the loop. If you need to break in
 loop_iter : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s s) -> iter -> s;
 ```
 
-### Side note: Dynamic iterators
+## Mutability and Reference Counting in Fix
 
-In Fix, the type of an iterator depends on how it is created.
+Remember that Fix expressions are just strings describing values. They are essentially the same as a mathematical expression like "1 + cos(pi/5)^2". The concept of "changing a variable's value," which is widely used in conventional languages, does not exist. All values in Fix are **immutable**.
 
-For example, the type of an iterator created from `Array a` is `ArrayIterator a`, but the type of an iterator created from `count_up` is `CountUpIterator`.
-Also, using `map` creates an iterator of a more complex type.
-The type of `fib.to_iter.map(to_string)` in the above code example is `MapIterator (ArrayIterator I64) I64 String`.
-
-This design of iterators greatly contributes to performance improvement.
-On the other hand, complicated iterator types can be an obstacle (e.g., when an iterator appears in a function's type signature, or when the method of creating an iterator is determined at runtime rather than at compile time).
-
-To avoid the problem of the complexity of iterator types, you can use the following iterator.
-
-```
-type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
-```
-
-You can convert any iterator into a `DynIterator` using the `to_dyn` function.
-
-```
-// Convert an iterator into a dynamic iterator.
-to_dyn : [iter : Iterator, Item iter = a] iter -> DynIterator a;
-```
-
-Therefore, by converting a complicated iterator into a `DynIterator`, you can simplify the type of the iterator.
-
-`DynIterator` is similar to lazy evaluation lists in Haskell.
-Therefore, if you insert `to_dyn` appropriately, you can write programs in Fix that are similar to list operations in Haskell.
-
-Why does the standard library of Fix adopt the design of defining `Iterator` as a trait rather than simply defining `DynIterator` as `Iterator` type?
-This is because the state transition function of an trait can be determined by its type, and by this, the compiler can perform optimizations such as inlining at compile time, which greatly improves performance.
-On the other hand, `DynIterator` has a state transition function as its data, so the state transition function is determined at runtime. Therefore, optimization at compile time is restricted.
-
-## Mutation in Fix and reference counter
-
-Remember that an expression in Fix is only a sentence that describes a value. It is essentially the same as a mathematical expression such as "1 + cos(pi/5)^2". There is no concept of "changing the value of a variable" which is ubiquitous in usual languages. In short, all values in Fix are immutable. 
-For example, consider
+For example, consider the following code:
 
 ```
 main = (
@@ -762,9 +729,11 @@ main = (
 );
 ```
 
-The above prints `arr0.@(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is merely an expression that says "an array which is almost identical to `arr0` but with the 0th element replaced by `2`", and it is NOT a command "update the 0th element of `arr0` to `2`". To realize this behavior, `set` function in the above program has to clone `arr0` before updating the 0th element of an array.
+The code above will print `arr0.@(0): 1.`, not `2`. This is because `arr0.set(0, 2)` is an expression that represents "another array with the 0th element of `arr0` changed to `2`," not a command to "update the 0th element of `arr0` to `2`."
 
-Now consider the implementation of `calc_fib`.
+To achieve this behavior, the `set` function in the program above must create a copy of `arr0`, update its 0th element to `2`, and then return the new array.
+
+Now, let's consider the implementation of `calc_fib`:
 
 ```
 calc_fib : I64 -> Array I64;
@@ -786,12 +755,11 @@ calc_fib = |n| (
 );
 ```
 
-The optimum time complexity of calculating Fibonacci sequence of length N is O(N). 
-But if Fix had cloned the array at `let arr = arr.set(idx, x+y);` in the loop, it takes O(N) time for each loop step and the total time complexity becomes O(N^2).
+The optimal time complexity for calculating an N-length Fibonacci sequence is O(N). However, if Fix were to copy the array in `let arr = arr.set(idx, x+y);` within the loop, each loop step would take O(N) time, and the total time complexity would become O(N^2).
 
-In fact, `set` in the above program doesn't clone the array and `calc_fib` works in O(N) time, as expected. 
-This is because if the given array will no longer be used, `set` omits cloning and just updates the given array. 
-Let's consider a program which 
+In reality, the `set` in the program above does not copy the array, and `calc_fib` runs in the expected O(N) time. This is because `set` performs an optimization: it skips the copy and modifies the given array in place, but only if the given array will not be used again.
+
+Consider the following program:
 
 ```
 main = (
@@ -801,27 +769,22 @@ main = (
 );
 ```
 
-(Note that `println` prints the 0th element of `arr1`, not of `arr0`.)
-In this program, the call of `set` is the last usage of `arr0`. 
-In such a case, `set` updates the given array without cloning, because the mutation of `arr0` will never be observed.
+(Note that `println` prints the 0th element of `arr1`, not `arr0`.) In this program, the call to `set` is the last use of `arr0`. In such a case, `set` updates the given array in place without copying it. This does not compromise Fix's immutability because the modification of `arr0` is never observed.
 
-Go back to the `calc_fib` function. 
-At the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and set as pointing to the new array returned by `set` function. 
-This ensures that the old array given to `set` function will never be referenced after this line. So it is evident that `set` function doesn't need to clone the given array, and in fact it doesn't.
+Let's return to the `calc_fib` function. In the line `let arr = arr.set(idx, x+y);`, the name `arr` is redefined and set to point to the new array returned by the `set` function. This ensures that the old array passed to the `set` function is never referenced after this line. Therefore, it is clear that the `set` function does not need to copy the given array, and in practice, no copy is made.
 
-As a summary, since values in Fix are immutable, the `set : I64 -> a -> Array a -> Array a` function basically returns a new array with one element replaced, but it omits cloning an array if the array will not be used later.
+To summarize:
 
-Fix judges whether a value may be used later or not by it's *reference counter*. Fix assigns reference counters to all boxed values - values which are always allocated on heap memory, and referenced by names or struct fields by pointers. Fix tracks the number of references to a boxed value using reference counter. A value is called "unique" if the reference counter is one, and called "shared" if otherwise. For convenience, an unboxed value is considered to be always unique.
+- Since Fix values are immutable, the `set : I64 -> a -> Array a -> Array a` function can fundamentally be interpreted as returning a new array.
+- However, if the array is not used later, the copy is omitted, and the given array is updated in place.
 
-Using terminologies introduced above, the `set` function directly mutates the array if and only if it is unique.
+Fix determines whether a value may be used later by its **reference count**. Fix assigns a reference counter to all boxed values (values that are always allocated on the heap and referenced by a pointer from a name or a struct field). Fix uses the reference counter to track the number of references to a boxed value. When the reference counter is 1, the value is called "unique"; otherwise, it is called "shared." For convenience, an unboxed value is always considered unique.
 
-In implementing algorithms which depends on mutating arrays in `O(1)` time, such as dynamic programming, passing an unique array to `set` is quite important.
-How to assure that an array is unique?
-As I mentioned above, if `arr.set(idx, v)` is the last usage of `arr`, then `arr` is unique at the call of `set`(*).
-In particular, writing `let arr = arr.set(idx, v);` assures that `set` receives an unique array, because 
-since the updated array has the same name which was given to the old array, the old array will never be used after the call of `set`.
+Using these terms, the `set` function modifies the array directly if it is unique but copies it before modifying it if it is shared.
 
-(*): This statement is true only when the array is referenced by a single thread.
+When implementing algorithms like dynamic programming that depend on modifying an array in O(1) time, it is critical to pass a unique array to `set`. So, how can you guarantee that the array passed to `set` is unique? As we saw, when `arr.set(idx, v)` is the last use of `arr`, `arr` is unique at the call to `set` (\*). Specifically, by writing `let arr = arr.set(idx, v);`, you guarantee that `set` receives a unique array, because the new, updated array shadows the old array's name, so the old array is never used after the call to `set`.
+
+(\*): An exception is when `arr` is referenced by multiple threads.
 
 ## A bit on IO (or monads)
 
@@ -841,7 +804,7 @@ In this code, two IO actions created by two `println` are combined by double-sem
 
 How to combine IO actions and more generally, how to combine monads to create more complex monads are explained in [Monads](#monads).
 
-# More on language
+# More on language and standard library
 
 ## Booleans and literals
 
@@ -1452,6 +1415,97 @@ type Lazy a = () -> a;
 
 which defines a type alias `Lazy` of kind `* -> *`.
 
+### Dynamic Iterators
+
+In Fix, `Iterator` is a trait, and many types implement it. Therefore, there's no single "iterator" type; instead, each function that generates an iterator produces an iterator of a different type.
+
+For example, the type of an iterator created from `Array a` by `to_iter` is `ArrayIterator a`, while the type of an iterator created by `range` is `CountUpIterator`. Additionally, applying `map` to an existing iterator creates an iterator of a more complex type. For instance, the type of `fib.to_iter.map(to_string)` in the tutorial's code example is `MapIterator (ArrayIterator I64) I64 String`.
+
+This iterator design contributes significantly to improved performance. This is because the implementation of the `advance` function (a method of the `Iterator` trait) is uniquely determined by the iterator's type, allowing the compiler to perform optimizations such as inlining the `advance` function.
+
+On the other hand, complex iterator types can be a hindrance to programming. For example, when defining a function that creates and returns an iterator, you would need to write a very complex iterator type for the function's return type. This becomes impossible, especially if the function returns an iterator created in a different way depending on the situation (its arguments).
+
+To avoid the problem of complex iterator types, the following type is provided:
+
+```
+type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
+```
+
+`DynIterator` implements the `Iterator` trait.
+
+You can use the `to_dyn` function to convert any iterator into a `DynIterator`.
+
+```
+// Converts an iterator into a dynamic iterator.
+to_dyn : [iter : Iterator, Item iter = a] iter -> DynIterator a;
+```
+
+When defining a function that creates and returns an iterator, you can convert the complex iterator you've created into a `DynIterator` using `to_dyn` and then return it, simplifying the function's return type to a straightforward `DynIterator a`.
+
+`DynIterator` is similar to Haskell's lazy lists. If you're porting beautiful Haskell code that uses lists to Fix, `to_dyn` might come in handy.
+
+However, we recommend avoiding `DynIterator` if performance is critical. Here's one workaround for implementing a function that creates and returns an iterator while avoiding `DynIterator`.
+
+As an example, consider the following function:
+
+```
+pythagorean_triples : I64 -> DynIterator (I64, I64, I64);
+pythagorean_triples = |limit| (
+    Iterator::range(1, limit+1).flat_map(|a| (
+        Iterator::range(a, limit+1).flat_map(|b| (
+            Iterator::range(b, limit+1).filter(|c| (
+                a*a + b*b == c*c
+            )).map(|c| (a, b, c))
+        ))
+    )).to_dyn
+);
+```
+
+You don't need to understand the details of the code. Just note that it combines `range`, `flat_map`, `filter`, and `map` to create a complex iterator, which is then converted to a `DynIterator` using `to_dyn` before being returned.
+
+To remove the `DynIterator` from this code, copy the code above into a text editor with the `fix` Language Server Protocol running. Next, hover your mouse over `to_dyn` to display its type. It should show something like this:
+
+```
+Std::Iterator::to_dyn : [a : Std::Iterator, Std::Iterator::Item a = b] a -> Std::Iterator::DynIterator b
+Instantiated as:
+
+(A very complex iterator type) -> Std::Iterator::DynIterator (Std::I64, Std::I64, Std::I64)
+```
+
+Since the display shows which iterator `to_dyn` is converting to a `DynIterator`, define that type as a type alias. Then, change the return type of `pythagorean_triples` to that type alias and remove `to_dyn`.
+
+```
+pythagorean_triples : I64 -> PythagorasIterator;
+pythagorean_triples = |limit| (
+    Iterator::range(1, limit+1).flat_map(|a| (
+        Iterator::range(a, limit+1).flat_map(|b| (
+            Iterator::range(b, limit+1).filter(|c| (
+                a*a + b*b == c*c
+            )).map(|c| (a, b, c))
+        ))
+    ))
+);
+
+type PythagorasIterator = (A very complex iterator type);
+```
+
+With this, you have successfully avoided `DynIterator`.
+
+While this isn't the most elegant method, it's a practical way to avoid `DynIterator` for now. In a future version of Fix, we would like to enable writing code like this:
+
+```
+pythagorean_triples : I64 -> impl Iterator<Item = (I64, I64, I64)>;
+pythagorean_triples = |limit| (
+    Iterator::range(1, limit+1).flat_map(|a| (
+        Iterator::range(a, limit+1).flat_map(|b| (
+            Iterator::range(b, limit+1).filter(|c| (
+                a*a + b*b == c*c
+            )).map(|c| (a, b, c))
+        ))
+    ))
+);
+```
+
 ## Monads
 
 ### What is monad?
@@ -1748,13 +1802,13 @@ main = (
 );
 ```
 
-### Note on iterators
+### Fix's Iterator Is Not a Monad
 
-As already explained in the tutorial, `Iterator` is defined as a trait in Fix's standard library, not a type.
-Therefore, `Iterator` cannot implement `Monad` trait.
+As previously mentioned, types that represent a sequence of elements often become "sequence monads." However, `Iterator` is not a type in the Fix standard library but a trait, so `Iterator` itself is not a monad.
 
-The type `DynIterator` implements `Monad`, so you need to use `DynIterator` if you want to create and manipulate iterators using monadic syntax.
-The following is a program that enumerates Pythagorean triples `(a, b, c)` by exhaustive search for all tuples satisfying `1 <= a <= b <= c <= limit`.
+Among the iterators defined in `Std`, only `DynIterator` implements the `Monad` trait, making it a sequence monad. Therefore, you can use the `*` operator to manipulate a `DynIterator`.
+
+The following program finds and lists all Pythagorean triples `(a, b, c)` that satisfy the condition `1 <= a <= b <= c <= limit`. The `to_dyn` method is used to convert an iterator created by `range(a, b)` into a `DynIterator`.
 
 ```
 pythagorean_triples : I64 -> DynIterator (I64, I64, I64);
@@ -1765,13 +1819,15 @@ pythagorean_triples = |limit| (
     if a*a + b*b != c*c {
         DynIterator::empty
     };
-    [(a, b, c)].to_iter.to_dyn
+    (a, b, c).pure
 );
 ```
 
-As already explained, `bind` for array-like monads is an operation known as `flat_map`.
-The standard library provides `flat_map` for iterators.
-Therefore, using `flat_map` can avoid using `DynIterator` and improve performance.
+As stated in [Appendix: Dynamic Iterators](https://www.google.com/search?q=%23appendix-dynamic-iterators), `DynIterator` has inferior performance compared to other iterators. Therefore, here's how to rewrite the code above without using `DynIterator`.
+
+As previously mentioned, `bind` in a sequence monad is known as the "flat map" operation. Fix's standard library provides `flat_map` for iterators. By recalling the definition of the `*` operator, rewriting the code above using explicit `bind`, and then replacing `bind` with `flat_map`, we can get a version of the code that doesn't use `DynIterator`.
+
+The result is as follows. Since the result of an iterator computation can have a very complex type, we use the `to_array` method at the end to convert it into an array.
 
 ```
 pythagorean_triples : I64 -> Array (I64, I64, I64);
@@ -1786,14 +1842,14 @@ pythagorean_triples = |limit| (
 );
 ```
 
-## Boxed and unboxed types
+## Boxed and Unboxed Types
 
-Types in Fix are divided into boxed types and unboxed types. Boxed types and unboxed types are similar to things called as "reference types" and "value types" in other languages, respectively.
+Fix types are divided into **boxed** and **unboxed** types, which are similar to what other languages call "reference types" and "value types."
 
-* Value of boxed types are allocated in heap memory. Local names and struct / union fields whose types are boxed are compiled as pointers to the values. 
-* Values of unboxed types are directly embedded into the stack memory, structs and unions. 
+* **Boxed** type values are allocated on the heap. A local variable or a field in a struct/union with a boxed type is compiled as a pointer to the value.
+* **Unboxed** type values are directly embedded in stack memory, structs, or unions.
 
-In general, types that contain a lot of data (such as `Array`) are suited to be boxed because boxed types have lower copying costs. On the other hand, types containing small data (such as `I64`) can be unboxed to reduce the cost of increasing or decreasing the reference counter.
+In general, it's recommended that types containing a large amount of data (e.g., `Array a`) be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.
 
 ### Functions
 
@@ -1827,16 +1883,17 @@ Unions are unboxed by default. To define boxed union type, write `box` specifier
 type Weight = box union { pound: I64, kilograms: I64 };
 ```
 
-## Foreign function interface (FFI)
+## Foreign Function Interface (FFI)
 
-You can link a static or shared library to a Fix program by `--static-link` (`-s`) or `--dynamic-link` (`-s`) compiler flag, and call native functions in the Fix program or call Fix functions in the library.
+By linking a static or shared library to a Fix program using the `--static-link` (`-s`) or `--dynamic-link` (`-s`) compiler flags, you can call native functions within a Fix program and call Fix functions within a library.
 
-Note that using FFI can easily break Fix's assurance such as immutability or memory safety.
-The programmer has a responsibility to hide the side effect of a foreign function into `IO`, and manage resources properly to avoid segmentation fault or memory leak.
+However, using FFI can allow external functions to break Fix's guarantees of immutability and memory safety. Programmers are responsible for hiding the side effects of external functions in `IO` and properly managing resources to avoid segmentation faults and memory leaks.
 
-### Call a foreign function in Fix
+-----
 
-Use the `FFI_CALL(_IO|_IOS)[...]` expression to call a foreign function in Fix. The syntax is as follows:
+### Calling External Functions from Fix
+
+To call an external function from Fix, you use the `FFI_CALL(_IO|_IOS)[...]` expression. The syntax is as follows:
 
 ```
 FFI_CALL[{function_signature}, {arg_0}, {arg_1}, ...]
@@ -1850,17 +1907,22 @@ FFI_CALL_IO[{function_signature}, {arg_0}, {arg_1}, ...]
 FFI_CALL_IOS[{function_signature}, {arg_0}, {arg_1}, ..., {iostate}]
 ```
 
-Use `FFI_CALL` to call a pure foreign function. `FFI_CALL[...]` takes the same arguments as the foreign function and returns a value of Fix corresponding to the return value of the foreign function.
+Use `FFI_CALL` to call a pure external function. `FFI_CALL[...]` takes the same arguments as the external function and returns a Fix value corresponding to the external function's return value.
 
-If the foreign function has side effects, use `FFI_CALL_IO`. This returns an `IO` monad value.
+If the external function has side effects, use `FFI_CALL_IO`, which returns an `IO` monad value.
 
-You can use `FFI_CALL_IOS` also to call a foreign function with side effects. 
-This function takes an additional argument of type `IOState` and returns a value of type `(IOState, a)`, where `a` is the return type of the foreign function.
+You can also use `FFI_CALL_IOS` instead of `FFI_CALL_IO`. This function takes an additional argument of type `IOState` and returns a value of type `(IOState, a)`, where `a` is the return type of the external function.
 
-A good example of these is the implementation of `Std::consumed_time_while_io`.
+Note: `IOState` is a type defined in the Fix standard library that represents the internal state of the `IO` monad. In fact, `IO` is defined as follows:
 
 ```
-// Get clocks (cpu time) elapsed while executing an I/O action.
+type IO a = unbox struct { runner : IOState -> (IOState, a) };
+```
+
+As an example of `FFI_CALL` and `FFI_CALL_IO` usage, here is the implementation of `Std::consumed_time_while_io`.
+
+```
+// Gets the elapsed clock (CPU time) while an I/O action is running.
 consumed_time_while_io : IO a -> IO (a, F64);
 consumed_time_while_io = |io| (
     let s = *FFI_CALL_IO[I64 fixruntime_clock()];
@@ -1871,28 +1933,32 @@ consumed_time_while_io = |io| (
 );
 ```
 
-In `{c_function_signature}`, you need to specify the name and the signature of the foreign function to call.
-The signature should be written in the form of `{return_type} {function_name}({arg_type_0}, {arg_type_1}, ...)`.
-For `{return_type}` or `{arg_type_i}`, you can use the following types:
+`fixruntime_clock` and `fixruntime_clocks_to_sec` are C language functions defined in the Fix runtime library.
 
-- `Ptr` for pointers.
-- `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64` for primitive numeric types.
-- `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble` for C's primitive numeric types.
-- `()` instead of `void` for a function that returns nothing.
+Because `fixruntime_clock` is a function with side effects, it's called using `FFI_CALL_IO`. In contrast, `fixruntime_clocks_to_sec` is a pure function, so it's called using `FFI_CALL`.
 
-### Export a Fix value or function to a foreign language
+In the `{c_function_signature}` of `FFI_CALL` (or `FFI_CALL_IO`, `FFI_CALL_IOS`), you specify the name and signature of the external function to be called. The signature is written in the format `{return_type} {function_name}({arg_type_0}, {arg_type_1}, ...)`.
 
-You can export a value of Fix using `FFI_EXPORT[{fix_value_name}, {c_function_name}];` to make it available from a foreign language.
+The following types can be used for `{return_type}` or `{arg_type_i}`:
+
+* Pointers: `Ptr`
+* Numeric types with explicit bit widths: `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64`
+* C numeric types: `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble`
+* Substitute for `void`: `()`
+
+### Exporting Fix Values and Functions to External Languages
+
+To use a Fix value from an external language, you use the `FFI_EXPORT[{fix_value_name}, {c_function_name}];` syntax.
 
 ```
 fix_increment : CInt -> CInt;
 fix_increment = |x| x + 1.to_CInt;
-FFI_EXPORT[fix_increment, increment]; // Define a function `int increment(int)`.
+FFI_EXPORT[fix_increment, increment]; // Defines the function `int increment(int);`
 ```
 
-If the foreign language is C, you should declare `int increment(int);` and call it to use `fix_increment` in the C program.
+For example, to call the `fix_increment` function from a C library, you would declare `int increment(int);` in your C source code and call `increment` where needed.
 
-The signature of the exported function is automatically determined by the type of the exported Fix value, as demonstrated in the following code:
+The signature of the exported function is automatically determined by the type of the Fix value. The following examples show how the C function signature is determined from the Fix value's type.
 
 ```
 x : CInt; 
@@ -1914,19 +1980,15 @@ x : CInt -> IO CInt;
 FFI_EXPORT[x, f]; // int f(int);
 ```
 
-### Managing a foreign resource in Fix
+### Managing External Resources in Fix
 
-Some C functions allocate a resource which should be deallocated by another C function in the end. 
-Most famous examples may be `malloc` / `free` and `fopen` / `fclose`.
+Some C functions allocate resources that must eventually be freed by another C function. The most famous examples are `malloc` / `free` and `fopen` / `fclose`. If you use `FFI_CALL` from Fix to allocate a resource, you must call the freeing function again using `FFI_CALL` at the end of that resource's lifetime.
 
-If you allocate a resource using `FFI_CALL`, then you need to call the deallocation function again by `FFI_CALL` at the end of the resource's lifetime.
+To manage such resources, you can use `Std::FFI::Destructor`. A `Destructor a` is a boxed type that, as its data, holds a `value` of type `a` and a `dtor` of type `a -> IO a`. When the Fix compiler deallocates a `Destructor a` from heap memory, it calls `dtor` on `value`.
 
-A useful way to manage the resource properly is to use `Std::FFI::Destructor` type.
-This is a boxed wrapper type of a specified type associated with a deallocation function.
-When a value of `Destructor` type is dropped, the deallocation function is called automatically.
-So you can use `Destructor` to wrap a "handle" to a foreign resource and to call the deallocation function automatically when the `Destructor` value is no longer used in Fix code.
+A typical use case is to store a pointer to a resource obtained with `malloc` or `fopen` in the `value` field of a `Destructor Ptr` and store the IO operation that calls `free` or `fclose` in the `dtor` field. This ensures the resource is automatically freed when the `Destructor Ptr` value goes out of scope.
 
-For details, see [the document for `Destructor`](/std_doc/Std.md#type-destructor-a--box-struct--fields-).
+However, using `Destructor` properly is not easy and requires attention to various details. Please also check the functions in the documentation for [`Destructor`](https://www.google.com/search?q=/std_doc/Std.md%23Destructor) and [namespace Destructor](https://www.google.com/search?q=/std_doc/Std.md%23namespace_Std::FFI::Destructor).
 
 ### Managing ownership of Fix's boxed value in a foreign language
 
