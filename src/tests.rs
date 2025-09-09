@@ -8772,7 +8772,7 @@ fn test_fix_linked_with_c(fix_src: &str, c_src: &str, test_name: &str) {
 
     // Link the shared library to the Fix program.
     let mut config = Configuration::develop_compiler_mode();
-    config.add_dyanmic_library(lib_name);
+    config.add_dynamic_library(lib_name);
     // Add the library search path.
     config.library_search_paths.push(PathBuf::from("."));
 

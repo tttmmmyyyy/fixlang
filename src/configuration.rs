@@ -350,7 +350,7 @@ impl Configuration {
 
     // Add dynamically linked library.
     // To link libabc.so, provide library name "abc".
-    pub fn add_dyanmic_library(&mut self, name: &str) {
+    pub fn add_dynamic_library(&mut self, name: &str) {
         self.linked_libraries
             .push((name.to_string(), LinkType::Dynamic));
     }
@@ -415,7 +415,7 @@ impl Configuration {
     // Set threaded = true, and add ptherad library to linked_libraries.
     pub fn set_threaded(&mut self) {
         self.threaded = true;
-        self.add_dyanmic_library("pthread");
+        self.add_dynamic_library("pthread");
     }
 
     pub fn set_debug_info(&mut self) {
@@ -466,7 +466,9 @@ impl Configuration {
 
     pub fn set_backtrace(&mut self) {
         self.runtime_c_macro.push("BACKTRACE".to_string());
-        self.add_dyanmic_library("backtrace");
+        if env::consts::OS == "linux" {
+            self.add_dynamic_library("backtrace");
+        }
     }
 
     // Get hash value of the configurations that affect the object file generation.
