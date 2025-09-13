@@ -1663,6 +1663,7 @@ echo = read.bind(|s| print(s));
 #### 失敗系モナド
 
 この種のモナドは、計算に失敗した可能性のある値を表します。
+
 Fixの標準ライブラリでは、`Result`は以下のように定義されています。
 
 ```
@@ -1681,7 +1682,11 @@ type Option a = union { none: (), some: a };
 
 任意の型`e`に対する`Result e`、および`Option`は、`Monad`を実装しており、失敗系モナドの例を提供します。
 
-結果系モナドでは、`bind`はショートサーキット評価を行う方法を提供します。`x.bind(f)`は、`x`がエラー（または"none"）値の場合、直ちにエラーを返します。`x`がok（または"some"）値`v`の場合にのみ、関数`f`が呼び出され、`x.bind(f)`は`f(v)`となります。また、`pure(v)`はok値`v`を表します。
+結果系モナドでは、`bind`はショートサーキット評価を行う方法を提供します。
+`x.bind(f)`は、`x`がエラー（または"none"）値の場合、直ちにエラーを返します。
+`x`がok（または"some"）値`v`の場合にのみ、関数`f`が呼び出され、`x.bind(f)`は`f(v)`となります。
+
+また、`pure(v)`は値`v`を持つ成功した計算を表します。
 
 `Option`に対する`Monad`の実装例を以下に示します。
 
@@ -1691,7 +1696,7 @@ impl Option : Monad {
         none(_) => none(),
         some(v) => f(v)
     };
-    pure = Option::some;
+    pure = some;
 }
 ```
 
@@ -1701,11 +1706,11 @@ impl Option : Monad {
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
 add_opt = |x, y| (
-    if x.is_none { Option::none() };
+    if x.is_none { none() };
     let x = x.as_some;
-    if y.is_none { Option::none() };
+    if y.is_none { none() };
     let y = y.as_some;
-    Option::some(x+y)
+    some(x+y)
 );
 ```
 
@@ -1713,7 +1718,7 @@ add_opt = |x, y| (
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
-add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
+add_opt = |x, y| x.bind(|x| y.bind(|y| some(x+y)));
 ```
 
 #### シーケンス系モナド
@@ -1726,7 +1731,7 @@ Fixの標準ライブラリでは、`Array`と`DynIterator`が`Monad`トレイ�
 
 `pure(x)`は単一の値`[x]`を表します。
 
-例えば、デカルト積を計算する関数`product : Array a -> Array b -> Array (a, b)`を考えます。それは次のように実装できます：
+例えば、デカルト積を計算する関数`product : Array a -> Array b -> Array (a, b)`は、`bind`を用いて以下のように実装できます。
 
 ```
 product : Array a -> Array b -> Array (a, b);
@@ -1794,10 +1799,11 @@ add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
-add_opt = |x, y| pure $ *x + *y;
+add_opt = |x, y| some $ *x + *y;
 ```
 
 と書けます。
+ここでも、演算子`*`でモナド値`x`と`y`の内容を取り出し、その内容を加算して`some`に渡すことで最終的な`Option I64`値を作成しています。
 
 ```
 product : Array a -> Array b -> Array (a, b);
@@ -1812,6 +1818,7 @@ product = |xs, ys| pure $ (*xs, *ys);
 ```
 
 と書くことができます。
+ここでは、`*xs`と`*ys`でそれぞれのシーケンスの要素を一つずつ取り出し、その組を`pure`に渡すことでデカルト積を計算しています。
 
 ### 明示的な`do`ブロックが必要な場合
 
@@ -1820,26 +1827,28 @@ product = |xs, ys| pure $ (*xs, *ys);
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| do { pure $ *x + *y }.as_some;
+add_opt_unwrap = |x, y| do { some $ *x + *y }.as_some;
 ```
 
-上記では、`add_opt_unwrap`の定義は適切に次のように展開され、コンパイルできます。
+これは、受け取った2つの`Option I64`値を加算し、その結果を`I64`として返す関数です。どちらかが`none`の場合はプログラムが停止します。
+
+上記の`add_opt_unwrap`の定義は次のように展開され、コンパイルできます。
 
 ```
-add_opt_unwrap = x.bind(|x| y.bind(|y| pure $ x + y)).as_some;
+add_opt_unwrap = x.bind(|x| y.bind(|y| some $ x + y)).as_some;
 ```
 
 一方、次のように、明示的に`do`ブロックを作成しない場合、
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| (pure $ *x + *y).as_some;
+add_opt_unwrap = |x, y| (some $ *x + *y).as_some;
 ```
 
 これは次のように展開されます。
 
 ```
-add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
+add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (some $ x + y).as_some));
 ```
 
 `do`を使わない後者のコードは型エラーとなり、コンパイルできません。
@@ -1851,7 +1860,7 @@ add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| do { pure $ *x + *y }.as_some;
+add_opt_unwrap = |x, y| do { some $ *x + *y }.as_some;
 ```
 
 は、明示的な`do`の範囲がモナド`Option I64`となり、それに`as_some`を適用することができるため、問題ありません。
@@ -1860,14 +1869,14 @@ add_opt_unwrap = |x, y| do { pure $ *x + *y }.as_some;
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| (pure $ *x + *y).as_some;
+add_opt_unwrap = |x, y| (some $ *x + *y).as_some;
 ```
 
 に暗黙的に作成される`do`ブロックの範囲を明示すると、以下のようになります。
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| do { (pure $ *x + *y).as_some };
+add_opt_unwrap = |x, y| do { (some $ *x + *y).as_some };
 ```
 
 これは、`do`ブロックの範囲が型`Option I64`となりますが、この関数は`I64`を返す必要があるため、型エラーとなります。

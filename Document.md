@@ -57,12 +57,12 @@
   - [Monads](#monads)
     - [What is monad?](#what-is-monad)
     - [Stateful Monads](#stateful-monads)
-    - [Failure Monads](#failure-monads)
+      - [Failure Monads](#failure-monads)
     - [Sequence Monads](#sequence-monads)
-    - [`do` Blocks and the Monadic Bind Operator `*`](#do-blocks-and-the-monadic-bind-operator-)
-    - [When an explicit `do` block is necessary](#when-an-explicit-do-block-is-necessary)
-    - [Chaining Monadic Actions with the `;;` Syntax](#chaining-monadic-actions-with-the--syntax)
-    - [Fix's Iterator Is Not a Monad](#fixs-iterator-is-not-a-monad)
+    - [`do` Blocks and the monadic bind operator `*`](#do-blocks-and-the-monadic-bind-operator-)
+    - [When an explicit `do` block is needed](#when-an-explicit-do-block-is-needed)
+    - [Chaining monadic actions with the `;;` Syntax](#chaining-monadic-actions-with-the--syntax)
+    - [Fix's Iterator is not a monad](#fixs-iterator-is-not-a-monad)
   - [Boxed and Unboxed Types](#boxed-and-unboxed-types)
     - [Functions](#functions)
     - [Tuples and unit](#tuples-and-unit)
@@ -1567,15 +1567,17 @@ echo = read.bind(|s| print(s));
 
 Note: In reality, `read : IO String` is not defined in Fix's standard library. It can be implemented as `read_content(stdin).map(as_ok)`.
 
-### Failure Monads
+#### Failure Monads
 
-This type of monad represents a value that may have failed during a computation. In the Fix standard library, `Result` is defined as follows:
+This type of monad represents a value that might have failed to compute.
+
+In Fix's standard library, `Result` is defined as follows:
 
 ```
 type Result e o = unbox union { ok : o, err: e };
 ```
 
-A `Result e o` contains either a value of type `o` or an error value of type `e`.
+`Result e o` contains either a value of type `o` or an error value of type `e`.
 
 Another example is `Option`:
 
@@ -1583,13 +1585,15 @@ Another example is `Option`:
 type Option a = union { none: (), some: a };
 ```
 
-An `Option a` represents a value that may or may not exist.
+`Option a` represents a value that may or may not exist.
 
-`Result e` for any type `e`, and `Option`, both implement the `Monad` trait, serving as examples of failure monads.
+For any type `e`, `Result e` and `Option` implement `Monad`, providing examples of the failure monad.
 
-In a failure monad, `bind` provides a way to perform short-circuiting evaluation. `x.bind(f)` returns an error immediately if `x` is an error (or "none") value. The function `f` is called only if `x` is an "ok" (or "some") value `v`, and `x.bind(f)` becomes `f(v)`. Furthermore, `pure(v)` represents an "ok" value `v`.
+In the failure monad, `bind` provides a way to perform short-circuit evaluation. `x.bind(f)` immediately returns a failure if `x` is a failure (or "none") value. The function `f` is called only if `x` is an "ok" (or "some") value `v`, and `x.bind(f)` becomes `f(v)`.
 
-Here is an example implementation of `Monad` for `Option`:
+Additionally, `pure(v)` represents a successful computation with the value `v`.
+
+Here is an example of the `Monad` implementation for `Option`:
 
 ```
 impl Option : Monad {
@@ -1597,30 +1601,28 @@ impl Option : Monad {
         none(_) => none(),
         some(v) => f(v)
     };
-    pure = Option::some;
+    pure = some;
 }
 ```
 
-As a usage example for `bind`, consider the function `add_opt : Option I64 -> Option I64 -> Option I64`, which adds two integers wrapped in `Option`. This function is intended to perform addition only if both values are `some`; otherwise, it returns `none`.
-
-The function can be written verbosely as follows:
+As an example of `bind`'s usage, consider a function `add_opt : Option I64 -> Option I64 -> Option I64` that adds two integers wrapped in `Option`. This function is intended to perform the addition only if both are `some` values; otherwise, it should return `none`.
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
 add_opt = |x, y| (
-    if x.is_none { Option::none() };
+    if x.is_none { none() };
     let x = x.as_some;
-    if y.is_none { Option::none() };
+    if y.is_none { none() };
     let y = y.as_some;
-    Option::some(x+y)
+    some(x+y)
 );
 ```
 
-By using `bind`, the same function can be written concisely:
+Using `bind` for `Option`, the function above can be written concisely as:
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
-add_opt = |x, y| x.bind(|x| y.bind(|y| Option::some(x+y)));
+add_opt = |x, y| x.bind(|x| y.bind(|y| some(x+y)));
 ```
 
 ### Sequence Monads
@@ -1648,35 +1650,35 @@ xs.bind(|x| ys.bind(|y| pure $ (x, y)))
 == [(x0, y0), (x0, y1), ..., (x1, y0), (x1, y1), ..., ...]
 ```
 
-### `do` Blocks and the Monadic Bind Operator `*`
+### `do` Blocks and the monadic bind operator `*`
 
-Fix's prefix unary operator `*` provides a more concise way to use `bind`. The code `B(*x)` expands to `x.bind(|v| B(v))`.
+The Fix prefix unary operator `*` provides a more concise way to use `bind`. The code `B(*x)` is expanded to `x.bind(|v| B(v))`.
 
-Here, `B(*x)` is the smallest `do` block enclosing the expression `*x`. `do` blocks are created either explicitly or implicitly as follows:
+Here, `B(*x)` is the smallest **do block** that encloses the expression `*x`. A do block is created either explicitly or implicitly as follows:
 
-  - You can explicitly create a `do` block with `do { ... }`.
-  - A global definition `name = ...` implicitly defines a `do` block `...`.
-  - A `let` definition `let name = val (in|;) ...` implicitly defines a `do` block `...`.
-  - A lambda expression `|arg| ...` implicitly defines a `do` block `...`.
-  - An `if` expression `if cond { ... } else { ... }` implicitly defines two `do` blocks `...`.
-  - A `match` expression `match val { pat => ... }` implicitly defines a `do` block `...`.
-  - The double-semicolon syntax (discussed later) `act;; ...` implicitly defines a `do` block `...`.
+  - You can explicitly create a do block with `do { ... }`.
+  - A global definition `name = ...` implicitly defines a do block `...`.
+  - A let definition `let name = val (in|;) ...` implicitly defines a do block `...`.
+  - A lambda expression `|arg| ...` implicitly defines a do block `...`.
+  - An if expression `if cond { ... } else { ... }` implicitly defines two do blocks `...`.
+  - A match expression `match val { pat => ... }` implicitly defines a do block `...`.
+  - The double semicolon syntax (explained later) `act;; ...` implicitly defines a do block `...`.
 
-In a previous section, we showed an example of creating `echo : IO ()` from `read : IO String` and `print : String -> IO ()` using `bind` in the stateful monad `IO`:
+In a previous section, we showed an example of creating `echo : IO ()` from `read : IO String` and `print : String -> IO ()` using `bind` in the stateful monad `IO`.
 
 ```
 echo : IO ();
 echo = read.bind(|s| print(s));
 ```
 
-Using the more concise operator `*` for `bind`, the above can be written as:
+Using the `*` operator for a more concise way to use `bind`, the code above can be written as:
 
 ```
 echo : IO ();
 echo = print(*read);
 ```
 
-This can be interpreted as the `*` operator extracting the content of the `read` monad value and passing it to `print`. In fact, writing it this way produces the same result:
+This can be interpreted as the `*` operator taking the content of the `read` monad value and passing it to `print`. In fact, writing it like this is the same:
 
 ```
 echo : IO ();
@@ -1697,10 +1699,10 @@ can be written as:
 
 ```
 add_opt : Option I64 -> Option I64 -> Option I64;
-add_opt = |x, y| pure $ *x + *y;
+add_opt = |x, y| some $ *x + *y;
 ```
 
-And
+Here again, the `*` operator takes the content of the monad values `x` and `y`, adds them, and passes the result to `some` to create the final `Option I64` value.
 
 ```
 product : Array a -> Array b -> Array (a, b);
@@ -1714,64 +1716,68 @@ product : Array a -> Array b -> Array (a, b);
 product = |xs, ys| pure $ (*xs, *ys);
 ```
 
-### When an explicit `do` block is necessary
+Here, `*xs` and `*ys` take one element at a time from each sequence and pass the pair to `pure` to compute the Cartesian product.
 
-In the examples so far, you didn't need to explicitly create a `do` block when using `*`. Here is an example where an explicit `do` block is necessary.
+### When an explicit `do` block is needed
 
-```
-add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| do { pure $ *x + *y }.as_some;
-```
-
-In the above, the definition of `add_opt_unwrap` correctly expands to the following and compiles successfully:
-
-```
-add_opt_unwrap = x.bind(|x| y.bind(|y| pure $ x + y)).as_some;
-```
-
-In contrast, if you don't explicitly create a `do` block like this:
+In the examples so far, you didn't need to explicitly create a `do` block when using the `*` operator. Here's an example where you do.
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| (pure $ *x + *y).as_some;
+add_opt_unwrap = |x, y| do { some $ *x + *y }.as_some;
 ```
 
-it expands as follows:
+This function adds two `Option I64` values and returns the result as an `I64`. If either value is `none`, the program will halt.
+
+The `add_opt_unwrap` definition above expands to the following and compiles successfully:
 
 ```
-add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (pure $ x + y).as_some));
+add_opt_unwrap = x.bind(|x| y.bind(|y| some $ x + y)).as_some;
 ```
 
-The latter code, which doesn't use a `do` block, results in a type error and won't compile. In fact, the return type of the outer `bind` is `Option I64`, but the function `add_opt_unwrap` is required to return `I64`.
+On the other hand, if you don't create an explicit `do` block, like this:
 
-While this may seem complex, if you understand that **"the scope of a `do` block is the monad value,"** it's relatively easy to decide when you need to explicitly create a `do` block when using `*`.
+```
+add_opt_unwrap : Option I64 -> Option I64 -> I64;
+add_opt_unwrap = |x, y| (some $ *x + *y).as_some;
+```
+
+it expands to:
+
+```
+add_opt_unwrap = |x, y| x.bind(|x| y.bind(|y| (some $ x + y).as_some));
+```
+
+The latter code, which doesn't use `do`, results in a type error and won't compile. In fact, the return value of the outer `bind` is of type `Option I64`, but the function `add_opt_unwrap` is required to return an `I64`.
+
+While this may seem complex, once you get the feel that "the scope of a `do` block becomes a monad value," it becomes relatively easy to decide whether you need to explicitly create a `do` block when using `*`.
 
 The code that compiles successfully:
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| do { pure $ *x + *y }.as_some;
+add_opt_unwrap = |x, y| do { some $ *x + *y }.as_some;
 ```
 
-works because the explicit `do` block's scope becomes the monad `Option I64`, and you can then apply `as_some` to it.
+is fine because the explicit `do`'s scope becomes an `Option I64` monad, and you can then apply `as_some` to it.
 
-For the code that fails to compile:
-
-```
-add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| (pure $ *x + *y).as_some;
-```
-
-If you make the scope of the implicitly created `do` block explicit, it looks like this:
+If we explicitly show the scope of the implicitly created `do` block for the code that fails to compile:
 
 ```
 add_opt_unwrap : Option I64 -> Option I64 -> I64;
-add_opt_unwrap = |x, y| do { (pure $ *x + *y).as_some };
+add_opt_unwrap = |x, y| (some $ *x + *y).as_some;
 ```
 
-This results in a type error because the scope of the `do` block becomes type `Option I64`, but the function is required to return `I64`.
+it would look like this:
 
-### Chaining Monadic Actions with the `;;` Syntax
+```
+add_opt_unwrap : Option I64 -> Option I64 -> I64;
+add_opt_unwrap = |x, y| do { (some $ *x + *y).as_some };
+```
+
+Here, the scope of the `do` block becomes a value of type `Option I64`, but this function needs to return an `I64`, causing a type error.
+
+### Chaining monadic actions with the `;;` Syntax
 
 The function `println : String -> IO ()` creates an IO action that takes a string and prints it to standard output. If you want to perform `println` multiple times, you can use the `*` operator as shown below:
 
@@ -1801,7 +1807,7 @@ main = (
 );
 ```
 
-### Fix's Iterator Is Not a Monad
+### Fix's Iterator is not a monad
 
 As previously mentioned, types that represent a sequence of elements often become "sequence monads." However, `Iterator` is not a type in the Fix standard library but a trait, so `Iterator` itself is not a monad.
 
@@ -1822,7 +1828,7 @@ pythagorean_triples = |limit| (
 );
 ```
 
-As stated in [Appendix: Dynamic Iterators](https://www.google.com/search?q=%23appendix-dynamic-iterators), `DynIterator` has inferior performance compared to other iterators. Therefore, here's how to rewrite the code above without using `DynIterator`.
+As stated in [Dynamic Iterators](#dynamic-iterators), `DynIterator` has inferior performance compared to other iterators. Therefore, here's how to rewrite the code above without using `DynIterator`.
 
 As previously mentioned, `bind` in a sequence monad is known as the "flat map" operation. Fix's standard library provides `flat_map` for iterators. By recalling the definition of the `*` operator, rewriting the code above using explicit `bind`, and then replacing `bind` with `flat_map`, we can get a version of the code that doesn't use `DynIterator`.
 
