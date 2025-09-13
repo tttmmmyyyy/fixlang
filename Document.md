@@ -1510,7 +1510,7 @@ pythagorean_triples = |limit| (
 
 ### What is monad?
 
-The trait `Monad` is defined as follows:
+A Monad is a trait defined as follows:
 
 ```
 trait [m : *->*] m : Monad {
@@ -1519,8 +1519,9 @@ trait [m : *->*] m : Monad {
 }
 ```
 
-This is the definition of monad. To learn monads, it is important to know examples.
-In the following sections, we introduce 3 typical kinds of monads used practically.
+In other words, a monad is a mapping `m` that creates a type from a type (like `Array` or `Option`), and it has two functions defined on it: `bind` and `pure`.
+
+This is the only definition of a monad. To truly understand monads, it's crucial to know some examples. The following sections introduce three typical monads that are used in practice.
 
 ### Stateful Monads
 
