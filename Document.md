@@ -1525,7 +1525,7 @@ This is the only definition of a monad. To truly understand monads, it's crucial
 
 ### Stateful Monads
 
-A type that represents "actions (computations that acts on the state)" is often a monad. We'll refer to such a monad as a stateful monad.
+A type that represents an "action (a computation that affects state)" is often a monad. We'll call such a monad a **"stateful monad."**
 
 Consider the following definition:
 
@@ -1535,13 +1535,14 @@ type State s a = unbox struct { run : s -> (s, a) }
 
 `State s` represents a computation that takes a value of type `s` (the "state") and returns a value of type `a` (the "result") along with a new state.
 
-The following shows how to implement `State s : Monad` for any type `s`. Therefore, `State s` provides an example of a stateful monad.
+The following shows how to implement `State s : Monad` for any type `s`. Therefore, this `State s` provides an example of a stateful monad.
 
-In a stateful monad, `bind` represents the combination of two actions. More specifically, the action `x.bind(f)` represents a combined action that performs the following two steps:
-- First, it executes action `x`. Let the result of action `x` be `r`.
-- Next, it executes action `f(r)`.
+In a stateful monad, `bind` represents the combination of two actions. More specifically, the action `x.bind(f)` represents an action that does the following:
 
-Next, the action `pure(v)` represents a computation that simply returns `v` without any interaction with the state.
+  * First, it executes action `x` (which updates the state). Let the result of action `x` be `r`.
+  * Next, it executes action `f(r)` (which also updates the state).
+
+The action `pure(v)` represents a computation that simply returns `v` without any interaction with the state.
 
 To summarize, `State s : Monad` can be implemented as follows:
 
@@ -1555,12 +1556,9 @@ impl State s : Monad {
 }
 ```
 
-`IO`, defined in Fix's standard library, is also an example of a stateful monad. 
-`IO a` can be thought of as an "I/O action" that returns a value of type `a` while interacting with the state of the computer.
+`IO`, as defined in Fix's standard library, is also an example of a stateful monad. `IO a` can be thought of as an "I/O action" that returns a value of type `a` while interacting with the computer's state. In fact, `IO` is defined as a wrapper for the type `IOState -> (IOState, a)`, where `IOState` should be imagined as a type that represents the "computer's state" (though it is actually defined as an empty struct).
 
-Let's look at how to use `bind` with `IO` as an example. 
-`print(str) : IO ()` is an I/O action that prints `str` to standard output. 
-Assuming there is an I/O action `read : IO String` that reads the contents of standard input as a string, you can write an `echo` I/O action that reads standard input and prints it as-is, like this:
+Using `IO` as an example, let's see how `bind` works. `print(str) : IO ()` is an I/O action that prints `str` to standard output. Assuming there's an I/O action `read : IO String` that reads the contents of standard input as a string, you can write an `echo` I/O action that reads standard input and then prints it directly, as follows:
 
 ```
 echo : IO ();
