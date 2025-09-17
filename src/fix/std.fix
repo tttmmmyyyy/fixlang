@@ -2425,7 +2425,10 @@ impl Option : Functor {
 
 impl Option : Monad {
     pure = Option::some;
-    bind = |f, opt| if opt.is_none { Option::none() } else { f(opt.as_some) };
+    bind = |f, opt| match opt {
+        none() => none(),
+        some(a) => f(a)
+    };
 }
 
 // The type for file path.
@@ -2534,7 +2537,10 @@ impl Result e : Functor {
 
 impl Result e : Monad {
     pure = Result::ok;
-    bind = |f, res| if res.is_err { Result::err $ res.as_err } else { f(res.as_ok) };
+    bind = |f, res| match res {
+        err(e) => err(e),
+        ok(a) => f(a)
+    };
 }
 
 impl [e : ToString, a : ToString] Result e a : ToString {
