@@ -176,6 +176,7 @@ fn build_object_files<'c>(
     {
         let module_dependency_hash = program.module_dependency_hash_map();
         let module_dependency_map = program.module_dependency_map();
+        let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
         if config.enable_separated_compilation() {
             units = CompileUnit::split_symbols(
                 symbols,
@@ -184,14 +185,15 @@ fn build_object_files<'c>(
                 &config,
             );
             // Also add main compilation unit.
-            let mut main_unit = CompileUnit::new(vec![], vec![]);
-            main_unit.set_random_unit_hash(); // Recompile main unit every time.
+            // The main unit implements the entry point of exported functions.
+            // Therefore, the main unit is treated as depending on all modules.
+            let mut main_unit = CompileUnit::new(vec![], modules);
+            main_unit.update_unit_hash(&module_dependency_hash, &config);
             units.push(main_unit);
         } else {
             // Add main compilation unit, which includes all symbols.
-            let modules = program.linked_mods().iter().cloned().collect::<Vec<_>>();
             let mut main_unit = CompileUnit::new(symbols, modules);
-            main_unit.set_random_unit_hash(); // Recompile main unit every time.
+            main_unit.update_unit_hash(&module_dependency_hash, &config);
             units.push(main_unit);
         }
     }
@@ -270,8 +272,6 @@ fn build_object_files<'c>(
             }
 
             if is_main_unit {
-                assert!(!unit.is_cached()); // Main unit should not be cached.
-
                 // Implement runtime functions.
                 build_runtime(&mut gc, BuildMode::Implement);
 

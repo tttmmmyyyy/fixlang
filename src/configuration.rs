@@ -115,6 +115,16 @@ impl SubCommand {
             SubCommand::Docs(_) => false,
         }
     }
+
+    pub fn command_type_string(&self) -> &str {
+        match self {
+            SubCommand::Build => "build",
+            SubCommand::Run => "run",
+            SubCommand::Test => "test",
+            SubCommand::Diagnostics(_) => "diagnostics",
+            SubCommand::Docs(_) => "docs",
+        }
+    }
 }
 
 // Configuration for diagnostics subcommand.
@@ -478,7 +488,14 @@ impl Configuration {
         data.push_str(&self.debug_info.to_string());
         data.push_str(&self.threaded.to_string());
         data.push_str(&self.c_type_sizes.to_string());
-        data.push_str(build_time_utc!()); // Also add build time of the compiler.
+
+        // Command type.
+        // The implementation of the entry point function differs depending on the command type.
+        data.push_str(self.subcommand.command_type_string());
+
+        // Build time of the compiler.
+        data.push_str(build_time_utc!());
+
         format!("{:x}", md5::compute(data))
     }
 

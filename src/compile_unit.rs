@@ -72,7 +72,7 @@ impl CompileUnit {
     }
 
     // Calculate the hash of this compilation unit and set it to `self`.
-    fn update_unit_hash(
+    pub fn update_unit_hash(
         &mut self,
         module_dependency_hash: &Map<Name, String>,
         config: &Configuration,
@@ -80,14 +80,9 @@ impl CompileUnit {
         if self.unit_hash.len() > 0 {
             return;
         }
-        assert!(self.symbols.len() > 0);
-        assert!(self.dependent_modules.len() > 0);
 
-        self.symbols.sort_by(|a, b| {
-            a.name
-                .to_string()
-                .cmp(&b.name.to_string())
-        });
+        self.symbols
+            .sort_by(|a, b| a.name.to_string().cmp(&b.name.to_string()));
         self.dependent_modules.sort();
 
         // Add dependency to the configuration.
@@ -112,6 +107,7 @@ impl CompileUnit {
 
     // Set the hash of this compilation unit to a random value.
     // This makes the compilation unit to be recompiled always.
+    #[allow(dead_code)]
     pub fn set_random_unit_hash(&mut self) {
         assert!(self.unit_hash.len() == 0);
         self.unit_hash = format!(
@@ -166,12 +162,8 @@ impl CompileUnit {
         }
         let mut units = units.into_iter().map(|(_, unit)| unit).collect::<Vec<_>>();
         for unit in &mut units {
-            unit.symbols.sort_by(|a, b| {
-                a.name
-                    .to_string()
-                    .partial_cmp(&b.name.to_string())
-                    .unwrap()
-            });
+            unit.symbols
+                .sort_by(|a, b| a.name.to_string().partial_cmp(&b.name.to_string()).unwrap());
         }
 
         // Split compilation units into smaller ones if they are too large.
