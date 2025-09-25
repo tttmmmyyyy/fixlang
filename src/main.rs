@@ -25,6 +25,7 @@ extern crate toml;
 extern crate urlencoding;
 
 mod ast;
+mod build_object_files;
 mod builtin;
 mod compile_unit;
 mod config_file;
