@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     misc::{function_name, number_to_varname, split_by_max_size},
-    run_file, test_source, test_source_fail, Configuration, SubCommand, COMPILER_TEST_WORKING_PATH,
+    run, test_source, test_source_fail, Configuration, SubCommand, COMPILER_TEST_WORKING_PATH,
     I16_NAME, I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use rand::Rng;
@@ -4733,7 +4733,7 @@ pub fn test_files_in_directory(path: &Path) {
             config.source_files.push(path.clone());
         }
         println!("[{}]:", path.to_string_lossy().to_string());
-        run_file(config);
+        run(config);
         remove_file("test_process_text_file.txt").unwrap_or(());
     }
 }

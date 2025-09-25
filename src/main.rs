@@ -602,13 +602,13 @@ fn main() {
             process::exit(0);
         }
         Some(("build", args)) => {
-            panic_if_err(build_file(&mut create_config(SubCommand::Build, args)));
+            panic_if_err(build(&mut create_config(SubCommand::Build, args)));
         }
         Some(("run", args)) => {
-            process::exit(run_file(create_config(SubCommand::Run, args)));
+            process::exit(run(create_config(SubCommand::Run, args)));
         }
         Some(("test", args)) => {
-            process::exit(run_file(create_config(SubCommand::Test, args)));
+            process::exit(run(create_config(SubCommand::Test, args)));
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", _args)) => {

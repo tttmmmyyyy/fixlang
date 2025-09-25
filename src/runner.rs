@@ -464,7 +464,7 @@ pub fn test_source(source: &str, mut config: Configuration) {
     config
         .source_files
         .push(temporary_source_path(MAIN_RUN, &source_hash));
-    assert_eq!(run_file(config), 0);
+    assert_eq!(run(config), 0);
 }
 
 #[allow(dead_code)]
@@ -566,7 +566,7 @@ pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
 }
 
 // Run the program specified in the configuration, and return the exit code.
-pub fn run_file(mut config: Configuration) -> i32 {
+pub fn run(mut config: Configuration) -> i32 {
     fs::create_dir_all(DOT_FIXLANG)
         .expect(format!("Failed to create \"{}\" directory.", DOT_FIXLANG).as_str());
     fs::create_dir_all(RUN_PATH)
@@ -580,7 +580,7 @@ pub fn run_file(mut config: Configuration) -> i32 {
     );
 
     // Build executable file.
-    panic_if_err(build_file(&mut config));
+    panic_if_err(build(&mut config));
 
     // Run the executable file.
     let mut com = if config.valgrind_tool == ValgrindTool::None {
@@ -670,7 +670,7 @@ pub fn check_program_via_config(config: &Configuration) -> Result<Program, Error
 }
 
 // Build the program specified in the configuration.
-pub fn build_file(config: &Configuration) -> Result<(), Errors> {
+pub fn build(config: &Configuration) -> Result<(), Errors> {
     assert!(config.subcommand.build_binary());
 
     let mut config = config.clone();
