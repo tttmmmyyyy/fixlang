@@ -160,7 +160,7 @@ fn check_program(mut program: Program, config: &Configuration) -> Result<Program
 // Compile the program, and returns the path of object files to be linked.
 fn build_object_files<'c>(
     mut program: Program,
-    config: Configuration,
+    config: &Configuration,
 ) -> Result<BuildObjFilesResult, Errors> {
     let _sw = StopWatch::new("build_object_files", config.show_build_times);
 
@@ -683,7 +683,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     }
 
     let program = check_program_via_config(&config)?;
-    let obj_files = build_object_files(program, config.clone())?;
+    let obj_files = build_object_files(program, &config)?;
 
     let mut library_search_path_opts: Vec<String> = vec![];
     for path in &config.library_search_paths {
