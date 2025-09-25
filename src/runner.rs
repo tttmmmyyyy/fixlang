@@ -48,18 +48,12 @@ pub struct BuildObjFilesResult {
     // Paths of object files generated.
     // If the function is running for language server, this will be empty.
     obj_paths: Vec<PathBuf>,
-
-    // The program parsed.
-    // This field is only set when the function is running for language server.
-    program: Option<Program>,
 }
 
-// Compile the program, and returns the path of object files to be linked.
-fn build_object_files<'c>(
-    mut program: Program,
-    config: Configuration,
-) -> Result<BuildObjFilesResult, Errors> {
-    let _sw = StopWatch::new("build_module", config.show_build_times);
+// Perform validations and type checking on the program, and return the updated program.
+// Changes made to the program include instantiation of symbols and setting of entry points.
+fn check_program(mut program: Program, config: &Configuration) -> Result<Program, Errors> {
+    let _sw = StopWatch::new("check_program", config.show_build_times);
 
     // Add tuple definitions.
     program.add_tuple_defns();
@@ -114,10 +108,7 @@ fn build_object_files<'c>(
     // If typechecking is not needed, return here.
     if !config.subcommand.typecheck() {
         assert!(!config.subcommand.build_binary());
-        return Ok(BuildObjFilesResult {
-            obj_paths: vec![],
-            program: Some(program),
-        });
+        return Ok(program);
     }
 
     // Create typeckecker.
@@ -147,10 +138,7 @@ fn build_object_files<'c>(
         let mut errors = Errors::empty();
         errors.eat_err(program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules));
         program.deferred_errors.append(errors);
-        return Ok(BuildObjFilesResult {
-            obj_paths: vec![],
-            program: Some(program),
-        });
+        return Ok(program);
     }
 
     // Instantiate Main::main (or Test::test).
@@ -164,6 +152,16 @@ fn build_object_files<'c>(
 
     // Instantiate all exported values and values called from them.
     program.instantiate_exported_values(&typechecker)?;
+
+    Ok(program)
+}
+
+// Compile the program, and returns the path of object files to be linked.
+fn build_object_files<'c>(
+    mut program: Program,
+    config: Configuration,
+) -> Result<BuildObjFilesResult, Errors> {
+    let _sw = StopWatch::new("build_object_files", config.show_build_times);
 
     // Run optimizations.
     optimization::optimization::run(&mut program, &config);
@@ -311,10 +309,7 @@ fn build_object_files<'c>(
         }
     }
 
-    Ok(BuildObjFilesResult {
-        obj_paths,
-        program: None,
-    })
+    Ok(BuildObjFilesResult { obj_paths })
 }
 
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
@@ -525,7 +520,7 @@ where
 }
 
 // Load all source files specified in the configuration, link them, and return the resulting `Program`.
-pub fn load_source_files(config: &mut Configuration) -> Result<Program, Errors> {
+pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     // Create `Std` module.
     let mut program = make_std_mod(config)?;
 
@@ -663,15 +658,19 @@ fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> T
     }
 }
 
-// The result of `build_file` function.
-#[derive(Default)]
-pub struct BuildFileResult {
-    // The program parsed.
-    // This field is only set when the function is running for language server.
-    pub program: Option<Program>,
+// Load the program specified by the Configuration, perform validations and type checking.
+pub fn check_program_via_config(config: &Configuration) -> Result<Program, Errors> {
+    let program = load_source_files(&config)?;
+    let program = check_program(program, config)?;
+    Ok(program)
 }
 
-pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors> {
+// Build the program specified in the configuration.
+pub fn build_file(config: &Configuration) -> Result<(), Errors> {
+    assert!(config.subcommand.build_binary());
+
+    let mut config = config.clone();
+
     let out_path = config.get_output_file_path();
 
     // Run extra commands.
@@ -679,24 +678,8 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
         config.run_extra_commands()?;
     }
 
-    // Create intermediate directory.
-    fs::create_dir_all(INTERMEDIATE_PATH).map_err(|e| {
-        Errors::from_msg(format!(
-            "Failed to create directory \"{}\": {:?}",
-            INTERMEDIATE_PATH, e
-        ))
-    })?;
-
-    let program = load_source_files(config)?;
-    let build_res = build_object_files(program, config.clone())?;
-
-    // In case we don't need to build binary file, return here.
-    if !config.subcommand.build_binary() {
-        let program = build_res.program.unwrap();
-        return Ok(BuildFileResult {
-            program: Some(program),
-        });
-    }
+    let program = check_program_via_config(&config)?;
+    let obj_files = build_object_files(program, config.clone())?;
 
     let mut library_search_path_opts: Vec<String> = vec![];
     for path in &config.library_search_paths {
@@ -794,7 +777,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
     }
     com.arg("-o").arg(out_path.to_str().unwrap());
 
-    let mut obj_paths = build_res.obj_paths;
+    let mut obj_paths = obj_files.obj_paths;
     obj_paths.append(&mut config.object_files.clone());
     for obj_path in obj_paths {
         com.arg(obj_path.to_str().unwrap());
@@ -811,7 +794,7 @@ pub fn build_file(config: &mut Configuration) -> Result<BuildFileResult, Errors>
         );
     }
 
-    Ok(BuildFileResult::default())
+    Ok(())
 }
 
 // A function implementing `fix clean` command.

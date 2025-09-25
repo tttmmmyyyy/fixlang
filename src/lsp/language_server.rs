@@ -9,12 +9,12 @@ use crate::constants::{
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
+use crate::runner::check_program_via_config;
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::{
     constants::LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
     project_file::ProjectFile,
-    runner::build_file,
     Configuration, Span,
 };
 use crate::{DiagnosticsConfig, EndNode, SourceFile, SourcePos, Var};
@@ -2217,7 +2217,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     proj_file.open_lock_file()?.set_config(&mut config)?;
 
     // Build the file and get the errors.
-    let program = build_file(&mut config)?.program.unwrap();
+    let program = check_program_via_config(&config)?;
 
     Ok(DiagnosticsResult { program })
 }

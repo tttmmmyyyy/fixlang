@@ -5,11 +5,11 @@ use crate::{
         name::{FullName, Name, NameSpace},
         typedecl::Field,
     },
-    build_file,
     error::Errors,
     kind_star,
     misc::to_absolute_path,
     project_file::ProjectFile,
+    runner::check_program_via_config,
     Configuration, DocsConfig, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
 };
 
@@ -24,7 +24,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     proj_file.open_lock_file()?.set_config(&mut config)?;
 
     // Build the file and get the errors.
-    let program = build_file(&mut config)?.program.unwrap();
+    let program = check_program_via_config(&config)?;
     println!("Generating documentation...");
 
     let docs_config = match &config.subcommand {
