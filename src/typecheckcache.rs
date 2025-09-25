@@ -48,7 +48,7 @@ impl FileCache {
         // To make it filename-safe, take md5 hash.
         let type_ = format!("{:x}", md5::compute(type_));
 
-        format!("{}_{}_{}.cache", name, type_, version_hash)
+        format!("{}_{}_{}", name, type_, version_hash)
     }
 }
 
