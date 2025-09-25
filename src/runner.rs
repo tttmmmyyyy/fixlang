@@ -20,6 +20,7 @@ use std::{
 
 use crate::ast::export_statement::ExportStatement;
 use crate::compile_unit::CompileUnit;
+use crate::constants::RUN_PATH;
 use crate::cpu_features::CpuFeatures;
 use crate::error::{any_to_string, panic_if_err, panic_with_err, Errors};
 use crate::misc::{info_msg, save_temporary_source, temporary_source_path};
@@ -566,10 +567,13 @@ pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
 
 // Run the program specified in the configuration, and return the exit code.
 pub fn run_file(mut config: Configuration) -> i32 {
-    fs::create_dir_all(DOT_FIXLANG).expect("Failed to create \".fixlang\" directory.");
+    fs::create_dir_all(DOT_FIXLANG)
+        .expect(format!("Failed to create \"{}\" directory.", DOT_FIXLANG).as_str());
+    fs::create_dir_all(RUN_PATH)
+        .expect(format!("Failed to create \"{}\" directory.", RUN_PATH).as_str());
 
     // For parallel execution, use different file name for each execution.
-    let exec_path: String = format!("./{}/a{}.out", DOT_FIXLANG, rand::thread_rng().gen::<u64>());
+    let exec_path: String = format!("{}/a{}.out", RUN_PATH, rand::thread_rng().gen::<u64>());
     let user_specified_out_path = std::mem::replace(
         &mut config.out_file_path,
         Some(PathBuf::from(exec_path.clone())),
