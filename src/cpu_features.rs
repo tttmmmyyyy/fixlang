@@ -38,10 +38,19 @@ impl CpuFeatures {
             .join(",")
     }
 
-    pub fn disable_avx512(&mut self) {
+    // Disable CPU features whose names match any of the given regexes.
+    pub fn disable_by_regexes(&mut self, regexes: &[String]) {
+        // All regexes are valid because they are validated by `validate_disable_cpu_features()`
+        let regexes = regexes
+            .iter()
+            .map(|s| regex::Regex::new(s).unwrap())
+            .collect::<Vec<_>>();
         for (name, state) in &mut self.data {
-            if name.starts_with("avx512") {
-                *state = FeatureState::Disabled;
+            for re in &regexes {
+                if re.is_match(name) {
+                    *state = FeatureState::Disabled;
+                    break;
+                }
             }
         }
     }

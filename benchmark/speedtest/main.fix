@@ -157,7 +157,7 @@ main = (
     );
     let log = *dirs.fold_m(log, |dir, log|
         ez_cd(dir);;
-        let com = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols"];
+        let com = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols", "--disable-cpu-feature", "avx512.*"];
         let com = if args.@llvm_passes_file != "" {
             com.push_back("--llvm-passes-file")
                .push_back("../../" + args.@llvm_passes_file)

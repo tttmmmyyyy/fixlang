@@ -184,11 +184,13 @@ pub struct Configuration {
     pub valgrind_tool: ValgrindTool,
     // Sizes of C types.
     pub c_type_sizes: CTypeSizes,
+    // Regex patterns of disabled CPU features.
+    pub disable_cpu_features_regex: Vec<String>,
     // Subcommand of the `fix` command.
     pub subcommand: SubCommand,
     // Extra build commands.
     pub extra_commands: Vec<ExtraCommand>,
-    // Type chech cache.
+    // Typecheck cache.
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
     // Number of worker threads.
     pub num_worker_thread: usize,
@@ -306,6 +308,7 @@ impl Configuration {
             valgrind_tool: ValgrindTool::None,
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
+            disable_cpu_features_regex: vec![],
             extra_commands: vec![],
             type_check_cache: Arc::new(typecheckcache::FileCache::new()),
             num_worker_thread: 0,
@@ -355,6 +358,10 @@ impl Configuration {
 
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         self.valgrind_tool = tool;
+        if tool != ValgrindTool::None {
+            // Valgrind-3.22.0 does not support AVX-512 (#41).
+            self.disable_cpu_features_regex.push("avx512.*".to_string());
+        }
         self
     }
 
@@ -488,6 +495,10 @@ impl Configuration {
         data.push_str(&self.debug_info.to_string());
         data.push_str(&self.threaded.to_string());
         data.push_str(&self.c_type_sizes.to_string());
+        for disabled_cpu_feature in &self.disable_cpu_features_regex {
+            // To ensure that the arrays ["xy", "x"] and ["x", "xy"] produce different hash values, we hash each element before concatenation instead of simply joining them.
+            data.push_str(&format!("{:x}", md5::compute(disabled_cpu_feature)));
+        }
 
         // Command type.
         // The implementation of the entry point function differs depending on the command type.
@@ -499,10 +510,9 @@ impl Configuration {
         format!("{:x}", md5::compute(data))
     }
 
-    pub fn edit_features(&self, features: &mut CpuFeatures) {
-        if self.valgrind_tool != ValgrindTool::None {
-            features.disable_avx512(); // Valgrind-3.22.0 does not support AVX-512 (#41).
-        }
+    // Edit CPU features according to the configuration.
+    pub fn edit_cpu_features(&self, features: &mut CpuFeatures) {
+        features.disable_by_regexes(&self.disable_cpu_features_regex);
     }
 
     pub fn valgrind_command(&self) -> Command {

@@ -64,6 +64,8 @@ pub struct ProjectFileBuild {
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
     backtrace: Option<bool>,
+    #[serde(default)]
+    disable_cpu_features: Vec<String>,
     test: Option<ProjectFileBuildTest>,
 }
 
@@ -85,6 +87,8 @@ pub struct ProjectFileBuildTest {
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
     backtrace: Option<bool>,
+    #[serde(default)]
+    disable_cpu_features: Vec<String>,    
     memcheck: Option<bool>,
 }
 
@@ -288,6 +292,23 @@ impl ProjectFile {
             }
         }
 
+        // Validate disable_cpu_features.
+        Self::validate_disable_cpu_features(&self.build.disable_cpu_features)?;
+
+        Ok(())
+    }
+
+    // Validate `disable_cpu_features`.
+    pub fn validate_disable_cpu_features(dcfs: &[String]) -> Result<(), Errors> {
+        for feature in dcfs {
+            // Check if each feature is a valid regex.
+            if let Err(e) = regex::Regex::new(feature) {
+                return Err(Errors::from_msg(format!(
+                    "Invalid regex in `disable-cpu-feature`: {}",
+                    e
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -477,20 +498,6 @@ impl ProjectFile {
             }
         }
 
-        // Set backtrace mode.
-        if let Some(backtrace) = self.build.backtrace {
-            if backtrace {
-                config.set_backtrace();
-            }
-        }
-        if use_build_test {
-            if let Some(backtrace) = self.build.test.as_ref().and_then(|test| test.backtrace) {
-                if backtrace {
-                    config.set_backtrace();
-                }
-            }
-        }
-
         // Set extra commands.
         for command in &self.build.preliminary_commands {
             config.extra_commands.push(ExtraCommand {
@@ -521,6 +528,7 @@ impl ProjectFile {
             }
         }
 
+        // From here on, only the settings in the project file of the root project are reflected.
         if is_dependent_proj {
             return Ok(());
         }
@@ -571,6 +579,32 @@ impl ProjectFile {
         // Set output file.
         if let Some(output) = self.build.output.as_ref() {
             config.out_file_path = Some(PathBuf::from(output));
+        }
+
+        // Set backtrace mode.
+        if let Some(backtrace) = self.build.backtrace {
+            if backtrace {
+                config.set_backtrace();
+            }
+        }
+        if use_build_test {
+            if let Some(backtrace) = self.build.test.as_ref().and_then(|test| test.backtrace) {
+                if backtrace {
+                    config.set_backtrace();
+                }
+            }
+        }
+
+        // Set disable_cpu_features.
+        config.disable_cpu_features_regex.append(&mut self.build.disable_cpu_features.clone());
+        if use_build_test {
+            config.disable_cpu_features_regex.append(
+                &mut self
+                    .build
+                    .test
+                    .as_ref()
+                    .map_or(vec![], |test| test.disable_cpu_features.clone()),
+            );
         }
 
         Ok(())

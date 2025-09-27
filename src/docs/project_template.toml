@@ -68,6 +68,10 @@ files = ["main.fix"]
 ## This is useful when you need to get the path to the library dynamically, e.g., using pkg-config.
 # preliminary_commands = [["make", "lib.o"]]
 
+## Disable specific CPU features. 
+# This option takes regex patterns, e.g., "avx.*" disables all AVX-related features.
+# disable_cpu_features = ["avx512.*"]
+
 # Additional build options when running `fix test`.
 # Available fields are almost the same as ones in "[build]".
 [build.test]

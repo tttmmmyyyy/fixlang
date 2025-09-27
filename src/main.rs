@@ -169,6 +169,16 @@ fn main() {
         .possible_value(PossibleValue::new(OPTIMIZATION_LEVEL_EXPERIMENTAL).help("Enables all optimizations, including experimental ones (intended for compiler development)."))
         // .default_value(OPTIMIZATION_LEVEL_MAX) // we do not set default value because we want to check whether this option is specified by user explicitly.
         .help("Optimization level.");
+    let disable_cpu_feature = Arg::new("disable-cpu-feature")
+        .long("disable-cpu-feature")
+        .action(clap::ArgAction::Append)
+        .multiple_values(true)
+        .takes_value(true)
+        .help(
+            "Disable specific CPU features (e.g., \"sse4.2\", \"avx\", \"avx2\").\n\
+            This option takes regex patterns, e.g., \"avx.*\" disables all AVX-related features.\n\
+            By default, Fix enables all CPU features supported by the host CPU.\n",
+        );
     let emit_llvm = Arg::new("emit-llvm")
         .long("emit-llvm")
         .takes_value(false)
@@ -238,6 +248,7 @@ fn main() {
         .arg(ld_flags.clone())
         .arg(debug_info.clone())
         .arg(opt_level.clone())
+        .arg(disable_cpu_feature.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
         .arg(verbose.clone())
@@ -259,6 +270,7 @@ fn main() {
         .arg(ld_flags.clone())
         .arg(debug_info.clone())
         .arg(opt_level.clone())
+        .arg(disable_cpu_feature.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
         .arg(verbose.clone())
@@ -281,6 +293,7 @@ fn main() {
         .arg(ld_flags.clone())
         .arg(debug_info.clone())
         .arg(opt_level.clone())
+        .arg(disable_cpu_feature.clone())
         .arg(emit_llvm.clone())
         .arg(threaded.clone())
         .arg(verbose.clone())
@@ -470,6 +483,17 @@ fn main() {
             .collect::<Vec<_>>()
     }
 
+    fn read_disable_cpu_feature_option(m: &ArgMatches) -> Result<Vec<String>, Errors> {
+        let features = m
+            .try_get_many::<String>("disable-cpu-feature")
+            .unwrap_or_default()
+            .unwrap_or_default()
+            .cloned()
+            .collect::<Vec<_>>();
+        project_file::ProjectFile::validate_disable_cpu_features(&features)?;
+        Ok(features)
+    }
+
     fn read_projects_option(m: &ArgMatches) -> Vec<String> {
         m.try_get_many::<String>("projects")
             .unwrap_or_default()
@@ -536,6 +560,13 @@ fn main() {
                 }
                 _ => panic!("Unknown optimization level: {}", opt_level),
             }
+        }
+
+        // Set `disable_cpu_features_regex`.
+        if args.contains_id("disable-cpu-feature") {
+            config
+                .disable_cpu_features_regex
+                .append(&mut read_disable_cpu_feature_option(args)?);
         }
 
         // Set `verbose`.

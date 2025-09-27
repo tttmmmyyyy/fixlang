@@ -324,7 +324,7 @@ fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> T
         .unwrap();
     let cpu_name = TargetMachine::get_host_cpu_name();
     let mut features = CpuFeatures::parse(TargetMachine::get_host_cpu_features().to_str().unwrap());
-    config.edit_features(&mut features);
+    config.edit_cpu_features(&mut features);
     let reloc_mode = if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
         RelocMode::PIC
     } else {
