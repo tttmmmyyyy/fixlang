@@ -768,13 +768,13 @@ impl TypeNode {
         env: &TypeEnv,
     ) -> Result<Arc<TypeNode>, Errors> {
         let self_src = self.get_source().clone();
-        self.resolve_type_aliases_inner(env, vec![], &self_src)
+        self.resolve_type_aliases_internal(env, vec![], &self_src)
     }
 
     // Remove type aliases in a type.
     // * `type_name_path` - argument to detect circular aliasing.
     // * `entry_type` - argument to show good error message.
-    fn resolve_type_aliases_inner(
+    fn resolve_type_aliases_internal(
         self: &Arc<TypeNode>,
         env: &TypeEnv,
         mut type_name_path: Vec<String>,
@@ -826,7 +826,7 @@ impl TypeNode {
                     let src = Span::unite_opt(resolved.get_source(), arg.get_source());
                     resolved = type_tyapp(resolved, arg).set_source(src);
                 }
-                return resolved.resolve_type_aliases_inner(env, type_name_path, entry_type_src);
+                return resolved.resolve_type_aliases_internal(env, type_name_path, entry_type_src);
             }
         }
         // Treat other cases.
@@ -834,19 +834,19 @@ impl TypeNode {
             Type::TyVar(_) => Ok(self.clone()),
             Type::TyCon(_) => Ok(self.clone()),
             Type::TyApp(fun_ty, arg_ty) => Ok(self
-                .set_tyapp_fun(fun_ty.resolve_type_aliases_inner(
+                .set_tyapp_fun(fun_ty.resolve_type_aliases_internal(
                     env,
                     type_name_path.clone(),
                     entry_type_src,
                 )?)
-                .set_tyapp_arg(arg_ty.resolve_type_aliases_inner(
+                .set_tyapp_arg(arg_ty.resolve_type_aliases_internal(
                     env,
                     type_name_path,
                     entry_type_src,
                 )?)),
             Type::AssocTy(_, args) => {
                 let args = collect_results(args.iter().map(|arg| {
-                    arg.resolve_type_aliases_inner(env, type_name_path.clone(), entry_type_src)
+                    arg.resolve_type_aliases_internal(env, type_name_path.clone(), entry_type_src)
                 }))?;
                 Ok(self.set_assocty_args(args))
             }

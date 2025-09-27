@@ -12,4 +12,5 @@ mod remove_tyanno;
 mod simplify_symbol_names;
 mod uncurry;
 mod unique_local_names;
+mod unwrap_newtype;
 mod utils;

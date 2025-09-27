@@ -2,6 +2,7 @@ use crate::{stopwatch::StopWatch, Configuration, Program};
 
 use super::{
     dead_symbol_elimination, decapturing, inline, remove_tyanno, simplify_symbol_names, uncurry,
+    unwrap_newtype,
 };
 
 pub fn run(prg: &mut Program, config: &Configuration) {
@@ -28,6 +29,16 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         remove_tyanno::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.remove_tyanno", prg.optimization_step));
+            prg.optimization_step += 1;
+        }
+    }
+
+    // Perform unwrap_newtype optimization.
+    if config.enable_unwrap_newtype_optimization() {
+        let _sw = StopWatch::new("unwrap_newtype::run", config.show_build_times);
+        unwrap_newtype::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.unwrap_newtype", prg.optimization_step));
             prg.optimization_step += 1;
         }
     }
