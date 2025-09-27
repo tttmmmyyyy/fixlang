@@ -14,6 +14,7 @@
 ### Changed
 
 - When `undefined` is reached, a newline is now added after the user-specified message.
+- Changed the condition for inlining optimization. A function will be inlined if its complexity is below a certain threshold, regardless of the number of times it is called.
 
 ### Fixed
 

@@ -158,8 +158,7 @@ impl InlineCost {
         if !self.is_lambda {
             return false;
         }
-        (self.call_count as i32 - 1) * self.complexity as i32 <= INLINE_COST_THRESHOLD
-        // If call count is 1, then inline always regardless of complexity.
+        self.complexity as i32 <= INLINE_COST_THRESHOLD
     }
 }
 
