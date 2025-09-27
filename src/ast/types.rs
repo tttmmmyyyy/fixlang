@@ -290,6 +290,11 @@ impl TyConInfo {
             _ => docs,
         }
     }
+
+    // Is this type constructor a "newtype pattern", i.e., is it an unbox struct type with only one field?
+    pub fn is_newtype_pattern(&self) -> bool {
+        self.is_unbox && self.variant == TyConVariant::Struct && self.fields.len() == 1
+    }
 }
 
 #[derive(Clone)]
@@ -849,6 +854,46 @@ impl TypeNode {
                     arg.resolve_type_aliases_internal(env, type_name_path.clone(), entry_type_src)
                 }))?;
                 Ok(self.set_assocty_args(args))
+            }
+        }
+    }
+
+    // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
+    //
+    // This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
+    //
+    // This function is supposed to be called after type aliases are resolved.
+    pub fn unwrap_newtype(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
+        // First, treat the case where top-level type constructor is a type alias.
+        // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`. Then `Foo Bool` should be resolved to `() -> Bool`.
+        let app_seq = self.flatten_type_application();
+        let toplevel_ty = &app_seq[0];
+        if let Type::TyCon(tc) = &toplevel_ty.ty {
+            let ti = env.tycons.get(&tc).unwrap();
+            if ti.is_newtype_pattern() {
+                let mut s = Substitution::default();
+                for i in 0..ti.tyvars.len() {
+                    let param = &ti.tyvars[i].name;
+                    let arg = app_seq[i + 1].clone();
+                    s.add_substitution(&Substitution::single(&param, arg));
+                }
+                let resolved = s.substitute_type(&ti.fields[0].ty);
+                return resolved.unwrap_newtype(env);
+            }
+        }
+        // Treat other cases.
+        match &self.ty {
+            Type::TyVar(_) => self.clone(),
+            Type::TyCon(_) => self.clone(),
+            Type::TyApp(fun_ty, arg_ty) => self
+                .set_tyapp_fun(fun_ty.unwrap_newtype(env))
+                .set_tyapp_arg(arg_ty.unwrap_newtype(env)),
+            Type::AssocTy(_, args) => {
+                let args = args
+                    .iter()
+                    .map(|arg| arg.unwrap_newtype(env))
+                    .collect::<Vec<_>>();
+                self.set_assocty_args(args)
             }
         }
     }
