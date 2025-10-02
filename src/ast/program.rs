@@ -54,6 +54,38 @@ impl TypeEnv {
         }
         res
     }
+
+    // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
+    //
+    // This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
+    //
+    // This function is supposed to be called after type aliases are resolved.
+    pub fn unwrap_newtype_tycons(&mut self) {
+        let mut new_tycons = (*self.tycons).clone();
+
+        // First, remove newtype pattern types from the tycons map
+        let mut to_remove = Vec::new();
+        for (name, tycon_info) in new_tycons.iter() {
+            if tycon_info.is_newtype_pattern() {
+                to_remove.push(name.clone());
+            }
+        }
+        for name in to_remove {
+            new_tycons.remove(&name);
+        }
+
+        // Then, unwrap newtype patterns in the remaining types
+        for (_name, tycon_info) in new_tycons.iter_mut() {
+            for field in &mut tycon_info.fields {
+                let new_ty = field.ty.unwrap_newtype(&self);
+                field.ty = new_ty;
+            }
+        }
+
+        self.tycons = Arc::new(new_tycons);
+
+        todo!("remove punched structs definition");
+    }
 }
 
 // Symbols are Fix values that are instantiated:

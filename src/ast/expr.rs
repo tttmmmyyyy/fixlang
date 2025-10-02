@@ -500,6 +500,15 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn get_tyanno_ty(&self) -> Arc<TypeNode> {
+        match &*self.expr {
+            Expr::TyAnno(_, ty) => ty.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
     pub fn set_tyanno_ty(&self, ty: Arc<TypeNode>) -> Arc<Self> {
         let mut ret = self.clone_all();
         match &*self.expr {

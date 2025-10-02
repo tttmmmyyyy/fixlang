@@ -864,21 +864,29 @@ impl TypeNode {
     //
     // This function is supposed to be called after type aliases are resolved.
     pub fn unwrap_newtype(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-        // First, treat the case where top-level type constructor is a type alias.
+        // First, treat the case where top-level type constructor is a newtype pattern.
         // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`. Then `Foo Bool` should be resolved to `() -> Bool`.
         let app_seq = self.flatten_type_application();
         let toplevel_ty = &app_seq[0];
         if let Type::TyCon(tc) = &toplevel_ty.ty {
-            let ti = env.tycons.get(&tc).unwrap();
-            if ti.is_newtype_pattern() {
-                let mut s = Substitution::default();
-                for i in 0..ti.tyvars.len() {
-                    let param = &ti.tyvars[i].name;
-                    let arg = app_seq[i + 1].clone();
-                    s.add_substitution(&Substitution::single(&param, arg));
+            if let Some(ti) = env.tycons.get(&tc) {
+                if ti.is_newtype_pattern() {
+                    // Check if this is a punched struct of a newtype pattern
+                    if ti.fields[0].is_punched {
+                        // Convert punched struct of newtype pattern to unit type
+                        return make_unit_ty();
+                    }
+
+                    // This is a newtype pattern itself
+                    let mut s = Substitution::default();
+                    for i in 0..ti.tyvars.len() {
+                        let param = &ti.tyvars[i].name;
+                        let arg = app_seq[i + 1].clone();
+                        s.add_substitution(&Substitution::single(&param, arg));
+                    }
+                    let resolved = s.substitute_type(&ti.fields[0].ty);
+                    return resolved.unwrap_newtype(env);
                 }
-                let resolved = s.substitute_type(&ti.fields[0].ty);
-                return resolved.unwrap_newtype(env);
             }
         }
         // Treat other cases.
