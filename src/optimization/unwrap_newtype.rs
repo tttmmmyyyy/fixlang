@@ -1,7 +1,8 @@
 // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
 
 use crate::ast::{
-    expr::{self, Expr, ExprNode},
+    expr::{expr_let, expr_let_typed, expr_llvm, expr_match_typed, Expr, ExprNode},
+    inline_llvm::LLVMGenerator,
     program::{Program, Symbol, TypeEnv},
     traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
 };
@@ -78,8 +79,30 @@ impl ExprVisitor for NewtypeUnwrapper {
     }
 
     fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, &self.type_env);
-        todo!("replace builtin, llvm's type");
+        let mut expr = run_on_inferred_type(&expr, &self.type_env);
+        if let Expr::LLVM(llvm) = expr.expr.as_ref() {
+            let mut llvm = llvm.as_ref().clone();
+            llvm.ty = llvm.ty.unwrap_newtype(&self.type_env);
+            match &mut llvm.generator {
+                LLVMGenerator::StructGetBody(body) => {
+                    todo!()
+                }
+                LLVMGenerator::StructSetBody(body) => {
+                    todo!()
+                }
+                LLVMGenerator::StructPunchBody(body) => {
+                    todo!()
+                }
+                LLVMGenerator::StructPlugInBody(body) => {
+                    todo!()
+                }
+                _ => {}
+            }
+            expr = expr.set_llvm(llvm);
+        } else {
+            unreachable!()
+        }
+
         EndVisitResult::changed(expr)
     }
 
@@ -118,8 +141,13 @@ impl ExprVisitor for NewtypeUnwrapper {
     }
 
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, &self.type_env);
-        todo!("replace pattern");
+        let mut expr = run_on_inferred_type(&expr, &self.type_env);
+        if let Expr::Let(pat, body, val) = expr.expr.as_ref() {
+            let pat = pat.unwrap_newtype(&self.type_env);
+            expr = expr_let_typed(pat, body.clone(), val.clone());
+        } else {
+            unreachable!()
+        }
         EndVisitResult::changed(expr)
     }
 
@@ -145,8 +173,16 @@ impl ExprVisitor for NewtypeUnwrapper {
     }
 
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        let expr = run_on_inferred_type(&expr, &self.type_env);
-        todo!("replace pattern");
+        let mut expr = run_on_inferred_type(&expr, &self.type_env);
+        if let Expr::Match(scrut, arms) = expr.expr.as_ref() {
+            let arms = arms
+                .iter()
+                .map(|(pat, arm_expr)| (pat.unwrap_newtype(&self.type_env), arm_expr.clone()))
+                .collect();
+            expr = expr_match_typed(scrut.clone(), arms);
+        } else {
+            unreachable!()
+        }
         EndVisitResult::changed(expr)
     }
 
@@ -169,6 +205,8 @@ impl ExprVisitor for NewtypeUnwrapper {
             if ti.is_newtype_pattern() {
                 expr = fields[0].1.clone();
             }
+        } else {
+            unreachable!()
         }
         EndVisitResult::changed(expr)
     }

@@ -14,6 +14,52 @@ pub struct PatternNode {
 }
 
 impl PatternNode {
+    // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
+    //
+    // This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
+    //
+    // This function is supposed to be called after type aliases are resolved.
+    pub fn unwrap_newtype(self: &Arc<PatternNode>, env: &TypeEnv) -> Arc<PatternNode> {
+        match &self.pattern {
+            Pattern::Var(v, ty) => {
+                let ty = ty.as_ref().map(|ty| ty.unwrap_newtype(env));
+                let mut info = self.info.clone();
+                info.unwrap_newtype(env);
+                Arc::new(PatternNode {
+                    pattern: Pattern::Var(v.clone(), ty),
+                    info,
+                })
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                let ti = env.tycons.get(tc).unwrap();
+                if ti.is_newtype_pattern() {
+                    assert_eq!(field_to_pat.len(), 1);
+                    let (_, pat) = &field_to_pat[0];
+                    pat.unwrap_newtype(env)
+                } else {
+                    let mut field_to_pat = field_to_pat.clone();
+                    for (_, pat) in &mut field_to_pat {
+                        *pat = pat.unwrap_newtype(env);
+                    }
+                    let mut info = self.info.clone();
+                    info.unwrap_newtype(env);
+                    Arc::new(PatternNode {
+                        pattern: Pattern::Struct(tc.clone(), field_to_pat),
+                        info,
+                    })
+                }
+            }
+            Pattern::Union(variant, subpat) => {
+                let mut info = self.info.clone();
+                info.unwrap_newtype(env);
+                Arc::new(PatternNode {
+                    pattern: Pattern::Union(variant.clone(), subpat.unwrap_newtype(env)),
+                    info: info,
+                })
+            }
+        }
+    }
+
     // Set `self.info.type_`.
     // Returns the pattern itself with a map which maps variable names to their types.
     pub fn get_typed(
@@ -441,6 +487,19 @@ impl PatternNode {
 pub struct PatternInfo {
     pub type_: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
+}
+
+impl PatternInfo {
+    // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
+    //
+    // This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
+    //
+    // This function is supposed to be called after type aliases are resolved.
+    pub fn unwrap_newtype(self: &mut PatternInfo, env: &TypeEnv) {
+        if let Some(ty) = &mut self.type_ {
+            *ty = ty.unwrap_newtype(env);
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
