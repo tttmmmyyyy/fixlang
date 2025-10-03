@@ -1,10 +1,14 @@
 // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
 
-use crate::ast::{
-    expr::{expr_let, expr_let_typed, expr_llvm, expr_match_typed, Expr, ExprNode},
-    inline_llvm::LLVMGenerator,
-    program::{Program, Symbol, TypeEnv},
-    traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+use crate::{
+    ast::{
+        expr::{expr_let_typed, expr_make_struct, expr_match_typed, expr_var, Expr, ExprNode},
+        inline_llvm::LLVMGenerator,
+        program::{Program, Symbol, TypeEnv},
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+        types::tycon,
+    },
+    builtin::{make_tuple_name, make_unit_ty},
 };
 use std::sync::Arc;
 
@@ -78,29 +82,82 @@ impl ExprVisitor for NewtypeUnwrapper {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
+        let old_ty = expr.type_.as_ref().unwrap().clone();
         let mut expr = run_on_inferred_type(&expr, &self.type_env);
-        if let Expr::LLVM(llvm) = expr.expr.as_ref() {
-            let mut llvm = llvm.as_ref().clone();
-            llvm.ty = llvm.ty.unwrap_newtype(&self.type_env);
-            match &mut llvm.generator {
-                LLVMGenerator::StructGetBody(body) => {
-                    todo!()
-                }
-                LLVMGenerator::StructSetBody(body) => {
-                    todo!()
-                }
-                LLVMGenerator::StructPunchBody(body) => {
-                    todo!()
-                }
-                LLVMGenerator::StructPlugInBody(body) => {
-                    todo!()
-                }
-                _ => {}
-            }
-            expr = expr.set_llvm(llvm);
+        let new_ty = expr.type_.as_ref().unwrap().clone();
+
+        let mut llvm = if let Expr::LLVM(llvm) = expr.expr.as_ref() {
+            llvm.as_ref().clone()
         } else {
             unreachable!()
+        };
+        llvm.ty = llvm.ty.unwrap_newtype(&self.type_env);
+        expr = expr.set_llvm(llvm.clone());
+
+        // Replace StructGetBody, StructSetBody, StructPunchBody, and StructPlugInBody for structures defined by the newtype pattern.
+        match &llvm.generator {
+            LLVMGenerator::StructGetBody(body) => {
+                // @ : S -> F = |s| GetBody(s)
+                // =>
+                // @ : F -> F = |s| s
+                let field_ty = new_ty;
+                let struct_name = body.var_name.clone();
+                assert!(struct_name.is_local());
+                let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
+                let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
+                if struct_ti.is_newtype_pattern() {
+                    expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
+                }
+            }
+            LLVMGenerator::StructSetBody(body) => {
+                // set : F -> S -> S = |f, s| SetBody(f)
+                // =>
+                // set : F -> F -> F = |f, s| f
+                let field_ty = new_ty;
+                let struct_ty = old_ty;
+                let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
+                if struct_ti.is_newtype_pattern() {
+                    let field_name = body.value_name.clone();
+                    expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
+                }
+            }
+            LLVMGenerator::StructPunchBody(body) => {
+                // punch : S -> (F, S*) = |s| Punch(s)
+                // =>
+                // punch : F -> (F, ()) = |s| (s, ())
+                let field_unit_ty = new_ty;
+                let struct_name = body.var_name.clone();
+                assert!(struct_name.is_local());
+                let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
+                let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
+                if struct_ti.is_newtype_pattern() {
+                    let field_ty = struct_ty.unwrap_newtype(&self.type_env);
+                    let unit_ty = make_unit_ty();
+                    let struct_expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
+                    let unit_expr =
+                        expr_make_struct(tycon(make_tuple_name(0)), vec![]).set_type(unit_ty);
+                    expr = expr_make_struct(
+                        tycon(make_tuple_name(2)),
+                        vec![("0".to_string(), struct_expr), ("1".to_string(), unit_expr)],
+                    )
+                    .set_type(field_unit_ty);
+                }
+            }
+            LLVMGenerator::StructPlugInBody(body) => {
+                // plug_in : S* -> F -> S = |s, f| PlugIn(s, f)
+                // =>
+                // plug_in : () -> F -> F = |_, f| f
+                let struct_ty = old_ty;
+                let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
+                if struct_ti.is_newtype_pattern() {
+                    let field_ty = new_ty;
+                    let field_name = body.field_name.clone();
+                    assert!(field_name.is_local());
+                    expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
+                }
+            }
+            _ => {}
         }
 
         EndVisitResult::changed(expr)

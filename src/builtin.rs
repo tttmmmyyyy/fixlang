@@ -2527,7 +2527,7 @@ pub fn get_capacity_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructGetBody {
-    var_name: FullName,
+    pub var_name: FullName,
     field_idx: usize,
 }
 
@@ -2583,7 +2583,7 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPunchBody {
-    var_name: FullName,
+    pub var_name: FullName,
     field_idx: usize,
     force_unique: bool,
 }
@@ -2675,7 +2675,7 @@ pub fn struct_punch(
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPlugInBody {
     punched_str_name: FullName,
-    field_name: FullName,
+    pub field_name: FullName,
     field_idx: usize,
     force_unique: bool,
 }
@@ -3105,8 +3105,8 @@ fn make_struct_union_unique<'c, 'm>(
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructSetBody {
-    value_name: FullName,
-    struct_name: FullName,
+    pub value_name: FullName,
+    pub struct_name: FullName,
     field_count: u32,
     field_idx: u32,
 }
