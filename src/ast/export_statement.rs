@@ -82,7 +82,11 @@ impl ExportStatement {
     // Implement the exported c function.
     // This function requires `self.exported_function_type` and `self.instantiated_value_expr` to already be set.
     pub fn implement<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) {
-        let ExportedFunctionType { doms, codom, is_io } = self.function_type.clone().unwrap();
+        let ExportedFunctionType {
+            doms,
+            codom,
+            io_type,
+        } = self.function_type.clone().unwrap();
 
         // Create the LLVM type of the exported C function.
         let dom_llvm_tys = doms
@@ -128,8 +132,14 @@ impl ExportStatement {
         }
 
         // If the `fix_value` is `IO C`, then run it.
-        if is_io {
-            fix_value = run_io_value(gc, &fix_value);
+        match io_type {
+            IOType::Pure => {}
+            IOType::IO => {
+                fix_value = run_io_value(gc, &fix_value);
+            }
+            IOType::IOState => {
+                fix_value = run_ios_value(gc, &fix_value).1;
+            }
         }
 
         // Return the result.
@@ -148,7 +158,15 @@ impl ExportStatement {
 pub struct ExportedFunctionType {
     pub doms: Vec<Arc<TypeNode>>,
     pub codom: Arc<TypeNode>,
-    pub is_io: bool,
+    pub io_type: IOType,
+}
+
+// Pure, IO a or IOState -> (IOState, a).
+#[derive(Clone)]
+pub enum IOType {
+    Pure,
+    IO,
+    IOState, // The user cannot export a function of this type, but optimization may convert `IO a` to `IOState -> (IOState, a)`.
 }
 
 impl ExportedFunctionType {
@@ -185,61 +203,23 @@ impl ExportedFunctionType {
         // Split the type `A1 -> A2 -> ... -> An -> B` into `([A1, A2, ..., An], C)`.
         let (doms, mut codom) = ty.collect_app_src(usize::MAX);
 
-        // The unit type `()` should not appear in the type of the exported value if the arguments are greater than 1.
-
-        // // If the unit type `()` is in `doms`, then `n` should be 1.
-        // let unit_ty = make_unit_ty();
-        // if doms.iter().any(|ty| ty.to_string() == unit_ty.to_string()) {
-        //     if doms.len() != 1 {
-        //         return Result::Err(
-        //             "the unit type should not appear in the type of the exported value if the arguments are greater than 1.".to_string(),
-        //         );
-        //     }
-        // }
-
-        // Each `Ai` should be fully unboxed and free from union.
-        // for dom in doms.iter() {
-        //     if !dom.is_fully_unboxed(type_env) {
-        //         return Result::Err(
-        //                 "the type of an exported value should be constructed without using any boxed type."
-        //                     .to_string(),
-        //             );
-        //     }
-        //     if !dom.is_free_from_union(type_env) {
-        //         return Result::Err(
-        //                 "the type of an exported value should be constructed without using any union type."
-        //                     .to_string(),
-        //             );
-        //     }
-        // }
-
         // If `B` is `IO C`, then replace `B` with `C` and set `is_io` to `true`.
-        let mut is_io = false;
+        let mut io_type = IOType::Pure;
         match &codom.ty {
             Type::TyApp(fun, arg) => {
                 if fun.to_string() == make_io_ty().to_string() {
                     codom = arg.clone();
-                    is_io = true;
+                    io_type = IOType::IO;
                 }
             }
             _ => {}
         }
 
-        // `B` should be fully unboxed and free from union.
-        // if !codom.is_fully_unboxed(type_env) {
-        //     return Result::Err(
-        //         "the type of an exported value should be constructed without using any boxed type."
-        //             .to_string(),
-        //     );
-        // }
-        // if !codom.is_free_from_union(type_env) {
-        //     return Result::Err(
-        //         "the type of an exported value should be constructed without using any union type."
-        //             .to_string(),
-        //     );
-        // }
-
         // Return the result.
-        Result::Ok(ExportedFunctionType { doms, codom, is_io })
+        Result::Ok(ExportedFunctionType {
+            doms,
+            codom,
+            io_type,
+        })
     }
 }

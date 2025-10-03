@@ -132,7 +132,7 @@ impl ExprVisitor for NewtypeUnwrapper {
                 let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
                 let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
                 if struct_ti.is_newtype_pattern() {
-                    let field_ty = struct_ty.unwrap_newtype(&self.type_env);
+                    let field_ty = field_unit_ty.collect_type_argments()[0].clone();
                     let unit_ty = make_unit_ty();
                     let struct_expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
                     let unit_expr =

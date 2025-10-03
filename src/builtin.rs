@@ -4535,12 +4535,20 @@ pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<
         make_tuple_ty(vec![make_iostate_ty(), res_ty.clone()]),
     );
     let runner_obj = Object::new(runner, runner_ty, gc);
+    run_ios_value(gc, &runner_obj).1
+}
+
+// Given an value of type `IOState -> (IOState, a)`, run it with an initial IO state and return the result `IOState` and `a`.
+pub fn run_ios_value<'b, 'm, 'c>(
+    gc: &mut GenerationContext<'c, 'm>,
+    runner: &Object<'c>,
+) -> (Object<'c>, Object<'c>) {
     let ios = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
-    let ios_res_pair = gc.apply_lambda(runner_obj, vec![ios], false).unwrap();
-    ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[1])
-        .into_iter()
-        .next()
-        .unwrap()
+    let ios_res_pair = gc.apply_lambda(runner.clone(), vec![ios], false).unwrap();
+    let iostate_res = ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[0, 1]);
+    let ios = iostate_res[0].clone();
+    let res = iostate_res[1].clone();
+    (ios, res)
 }
 
 #[derive(Clone, Serialize, Deserialize)]

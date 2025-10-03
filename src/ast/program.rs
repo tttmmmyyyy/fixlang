@@ -1,4 +1,4 @@
-use crate::ast::export_statement::{ExportStatement, ExportedFunctionType};
+use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
 use crate::error::{Error, Errors};
 use import::{ImportItem, ImportStatement};
 use misc::{collect_results, to_absolute_path, Map, Set};
@@ -1346,7 +1346,7 @@ impl Program {
     }
 
     // Instantiate a global value.
-    // - required_ty: for `Main::main`, pass `IO ()` to check that the specified type is correct. If none, then use the type specified by user.
+    // - required_ty: for `Main::main`, pass `IO ()` to check that the specified type is correct. If None, then use the type specified by user.
     // - required_src: source place where the value is exported. Used to show error message.
     pub fn instantiate_exported_value(
         &mut self,
@@ -1382,7 +1382,7 @@ impl Program {
             let eft = ExportedFunctionType {
                 doms: vec![],
                 codom: make_unit_ty(),
-                is_io: true,
+                io_type: IOType::IO,
             };
             (required_ty, eft)
         } else {
