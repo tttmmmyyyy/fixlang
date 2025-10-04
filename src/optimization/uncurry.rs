@@ -87,6 +87,22 @@ pub fn run(fix_mod: &mut Program) {
         export.value_expr =
             Some(expr_var(uncurried_value.name.clone(), None).set_type(uncurried_value.ty.clone()));
     }
+
+    // Replace entry IO value so that it uses uncurried function.
+    if let Some(entry_io_value) = &fix_mod.entry_io_value {
+        let entry_io_value_name = &entry_io_value.get_var().name;
+        let entry_io_value_ty = entry_io_value.type_.as_ref().unwrap();
+        if entry_io_value_ty.is_closure() {
+            // In this case, entry_io_value is expected to be the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type.
+            // Therefore, the number of arguments must be 1.
+            let mut name = entry_io_value_name.clone();
+            convert_to_funptr_name(name.name_as_mut(), 1);
+            if let Some(sym) = fix_mod.symbols.get(&name) {
+                fix_mod.entry_io_value =
+                    Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
+            }
+        }
+    }
 }
 
 // Is this symbol a Std::fix or its instance?

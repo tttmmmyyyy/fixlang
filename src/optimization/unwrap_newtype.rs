@@ -2,6 +2,7 @@
 
 use crate::{
     ast::{
+        export_statement::IOType,
         expr::{expr_let_typed, expr_make_struct, expr_match_typed, expr_var, Expr, ExprNode},
         inline_llvm::LLVMGenerator,
         program::{Program, Symbol, TypeEnv},
@@ -16,7 +17,30 @@ pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym, prg.type_env.clone());
     }
+    run_on_exported_statements(prg);
+    run_on_entry_io_value(prg);
     prg.type_env.unwrap_newtype_tycons();
+}
+
+fn run_on_exported_statements(prg: &mut Program) {
+    for export in &mut prg.export_statements {
+        if let Some(expr) = &export.value_expr {
+            let expr = run_on_inferred_type(expr, &prg.type_env);
+            export.value_expr = Some(expr);
+        }
+        if let Some(ft) = &mut export.function_type {
+            if matches!(ft.io_type, IOType::IO) {
+                ft.io_type = IOType::IOState;
+            }
+        }
+    }
+}
+
+fn run_on_entry_io_value(prg: &mut Program) {
+    if let Some(entry_io_value) = &mut prg.entry_io_value {
+        let expr = run_on_inferred_type(entry_io_value, &prg.type_env);
+        prg.entry_io_value = Some(expr);
+    }
 }
 
 fn run_on_symbol(sym: &mut Symbol, type_env: TypeEnv) {

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ast::{export_statement::ExportStatement, expr::ExprNode, program::Program},
-    builtin::run_io_value,
+    builtin::{make_io_tycon, run_io_value, run_ios_value},
     compile_unit::CompileUnit,
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
     constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
@@ -479,7 +479,11 @@ fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Ar
 
     // Run main object.
     let main_obj = gc.eval_expr(main_expr, false).unwrap(); // A value of type `IO ()`.
-    run_io_value(gc, &main_obj);
+    if main_obj.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
+        run_io_value(gc, &main_obj);
+    } else {
+        run_ios_value(gc, &main_obj);
+    }
 
     // Return main function.
     gc.builder()
