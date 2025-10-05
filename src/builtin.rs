@@ -399,13 +399,13 @@ pub fn make_array_ty() -> Arc<TypeNode> {
 
 // Get String type.
 pub fn make_string_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], STRING_NAME)))
+    type_tycon(&make_string_tycon())
 }
 
-// // Get LoopState type.
-// pub fn make_loop_result_ty() -> Arc<TypeNode> {
-//     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], LOOP_RESULT_NAME)))
-// }
+// Get the TyCon of String type.
+pub fn make_string_tycon() -> Arc<TyCon> {
+    tycon(FullName::from_strs(&[STD_NAME], STRING_NAME))
+}
 
 // Get integral types from its name.
 pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
@@ -719,58 +719,44 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     )
 }
 
-pub fn make_string_from_ptr<'c, 'm>(
+// Create a byte array by copying from given pointer.
+pub fn make_byte_array_copy<'c, 'm>(
     gc: &mut GenerationContext<'c, 'm>,
-    buf_with_null_terminator: PointerValue<'c>,
-    len_with_null_terminator: IntValue<'c>,
+    buf: PointerValue<'c>,
+    len: IntValue<'c>,
 ) -> Object<'c> {
     // Create `Array U8` which contains null-terminated string.
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
     let array = create_obj(
         array_ty,
         &vec![],
-        Some(len_with_null_terminator),
+        Some(len),
         gc,
-        Some("array@make_string_from_ptr"),
+        Some("array@make_byte_array_copy"),
     );
-    let array = array.insert_field(gc, ARRAY_LEN_IDX, len_with_null_terminator);
+    let array = array.insert_field(gc, ARRAY_LEN_IDX, len);
     let dst = array.gep_boxed(gc, ARRAY_BUF_IDX);
     let len = gc
         .builder()
         .build_int_cast(
-            len_with_null_terminator,
+            len,
             gc.context.ptr_sized_int_type(&gc.target_data, None),
-            "len_ptr@make_string_from_ptr",
+            "len_ptr@make_byte_array_copy",
         )
         .unwrap();
-    gc.builder()
-        .build_memcpy(dst, 1, buf_with_null_terminator, 1, len)
-        .ok()
-        .unwrap();
+    gc.builder().build_memcpy(dst, 1, buf, 1, len).ok().unwrap();
 
-    // Allocate String and store the array into it.
-    let string = create_obj(
-        make_string_ty(),
-        &vec![],
-        None,
-        gc,
-        Some(&format!("string@make_string_from_ptr")),
-    );
-    assert!(string.is_unbox(gc.type_env()));
-
-    // Store array to data.
-    let array_ptr = array.value;
-    string.insert_field(gc, 0, array_ptr)
+    array
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStringLit {
+pub struct InlineLLVMStringBuf {
     string: String,
 }
 
-impl InlineLLVMStringLit {
+impl InlineLLVMStringBuf {
     pub fn name(&self) -> String {
-        format!("string(\"{}\")", self.string)
+        format!("string_buf(\"{}\")", self.string)
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
@@ -787,16 +773,23 @@ impl InlineLLVMStringLit {
             .context
             .i64_type()
             .const_int(self.string.as_bytes().len() as u64 + 1, false);
-        make_string_from_ptr(gc, string_ptr, len_with_null_terminator)
+        make_byte_array_copy(gc, string_ptr, len_with_null_terminator)
     }
 }
 
-pub fn make_string_from_rust_string(string: String, source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(
-        LLVMGenerator::StringLit(InlineLLVMStringLit { string }),
-        make_string_ty().set_source(source.clone()),
-        source,
+pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
+    expr_make_struct(
+        make_string_tycon(),
+        vec![(
+            "_data".to_string(),
+            expr_llvm(
+                LLVMGenerator::StringBuf(InlineLLVMStringBuf { string }),
+                make_string_ty().set_source(source.clone()),
+                source.clone(),
+            ),
+        )],
     )
+    .set_source(source)
 }
 
 #[derive(Clone, Serialize, Deserialize)]

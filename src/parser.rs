@@ -2071,7 +2071,7 @@ fn parse_expr_string_lit(
         }
     }
     let string = String::from_iter(out_string.iter());
-    Ok(make_string_from_rust_string(string, Some(span)))
+    Ok(make_string_lit(string, Some(span)))
 }
 
 fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
