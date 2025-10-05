@@ -784,7 +784,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
             "_data".to_string(),
             expr_llvm(
                 LLVMGenerator::StringBuf(InlineLLVMStringBuf { string }),
-                make_string_ty().set_source(source.clone()),
+                type_tyapp(make_array_ty(), make_u8_ty()).set_source(source.clone()),
                 source.clone(),
             ),
         )],
