@@ -1005,15 +1005,21 @@ impl ExprVisitor for DecapturingVisitor {
             if opt_local_decap_lambda.is_none() {
                 return StartVisitResult::VisitChildren;
             }
-            // The case the bound expression is a variable referring to a decaptured lambda.
-            let local_decap_lambda = opt_local_decap_lambda.unwrap();
-            // Set the type of bound expression to the capture list type.
-            let bound = bound.set_type(local_decap_lambda.cap_list_ty.clone());
-            let expr = expr.set_let_bound(bound);
-            // Also add the variable introduced by this let binding to `self.local_decap_lambdas`.
+            // In the case the bound expression is a variable referring to a decaptured lambda,
+            // add the variable introduced by this let binding to `self.local_decap_lambdas`.
+            let local_decap_lambda = opt_local_decap_lambda.unwrap().clone();
             self.local_decap_lambdas
                 .insert(pat.get_var().name.clone(), local_decap_lambda.clone());
-            return StartVisitResult::ReplaceAndRevisit(expr);
+
+            // Set the type of bound expression to the capture list type.
+            let bound_old_ty = bound.type_.as_ref().unwrap();
+            if bound_old_ty.to_string() == local_decap_lambda.cap_list_ty.to_string() {
+                return StartVisitResult::VisitChildren;
+            } else {
+                let bound = bound.set_type(local_decap_lambda.cap_list_ty);
+                let expr = expr.set_let_bound(bound);
+                return StartVisitResult::ReplaceAndRevisit(expr);
+            }
         } else {
             return StartVisitResult::VisitChildren;
         }
