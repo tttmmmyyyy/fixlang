@@ -860,12 +860,22 @@ impl TypeNode {
 
     // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
     //
-    // This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
+    // This function detects circular newtype patterns and avoids infinite loops.
     //
     // This function is supposed to be called after type aliases are resolved.
     pub fn unwrap_newtype(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-        // First, treat the case where top-level type constructor is a newtype pattern.
-        // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`. Then `Foo Bool` should be resolved to `() -> Bool`.
+        self.unwrap_newtype_with_visited(env, &mut Set::default())
+    }
+
+    // Internal implementation of unwrap_newtype with visited TyCons tracking.
+    fn unwrap_newtype_with_visited(
+        self: &Arc<TypeNode>,
+        env: &TypeEnv,
+        visited: &mut Set<TyCon>,
+    ) -> Arc<TypeNode> {
+        // First, replace the top-level type constructor if it is a newtype pattern.
+        // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`.
+        // Then `Foo Bool` should be resolved to `() -> Bool`.
         let app_seq = self.flatten_type_application();
         let toplevel_ty = &app_seq[0];
         if let Type::TyCon(tc) = &toplevel_ty.ty {
@@ -876,30 +886,41 @@ impl TypeNode {
                         // Convert punched struct of newtype pattern to unit type
                         return make_unit_ty();
                     }
+                    // Check if this TyCon is already being processed (circular dependency)
+                    if !visited.contains(&(**tc)) {
+                        // Add this TyCon to the visited set
+                        visited.insert((**tc).clone());
 
-                    // This is a newtype pattern itself
-                    let mut s = Substitution::default();
-                    for i in 0..ti.tyvars.len() {
-                        let param = &ti.tyvars[i].name;
-                        let arg = app_seq[i + 1].clone();
-                        s.add_substitution(&Substitution::single(&param, arg));
+                        // This is a newtype pattern itself
+                        let mut s = Substitution::default();
+                        for i in 0..ti.tyvars.len() {
+                            let param = &ti.tyvars[i].name;
+                            let arg = app_seq[i + 1].clone();
+                            s.add_substitution(&Substitution::single(&param, arg));
+                        }
+                        let resolved = s.substitute_type(&ti.fields[0].ty);
+                        let result = resolved.unwrap_newtype_with_visited(env, visited);
+
+                        // Remove this TyCon from the visited set before returning
+                        visited.remove(&(**tc));
+
+                        return result;
                     }
-                    let resolved = s.substitute_type(&ti.fields[0].ty);
-                    return resolved.unwrap_newtype(env);
+                    // If TyCon is already visited (circular), fall through to treat other cases
                 }
             }
         }
-        // Treat other cases.
+        // If the top-level is not a newtype pattern, recursively process type arguments
         match &self.ty {
             Type::TyVar(_) => self.clone(),
             Type::TyCon(_) => self.clone(),
             Type::TyApp(fun_ty, arg_ty) => self
-                .set_tyapp_fun(fun_ty.unwrap_newtype(env))
-                .set_tyapp_arg(arg_ty.unwrap_newtype(env)),
+                .set_tyapp_fun(fun_ty.unwrap_newtype_with_visited(env, visited))
+                .set_tyapp_arg(arg_ty.unwrap_newtype_with_visited(env, visited)),
             Type::AssocTy(_, args) => {
                 let args = args
                     .iter()
-                    .map(|arg| arg.unwrap_newtype(env))
+                    .map(|arg| arg.unwrap_newtype_with_visited(env, visited))
                     .collect::<Vec<_>>();
                 self.set_assocty_args(args)
             }

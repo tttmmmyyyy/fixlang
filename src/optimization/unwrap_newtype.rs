@@ -47,9 +47,9 @@ fn run_on_symbol(sym: &mut Symbol, type_env: TypeEnv) {
     let mut remover = NewtypeUnwrapper { type_env: type_env };
     let res = remover.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
+        sym.ty = sym.ty.unwrap_newtype(&remover.type_env);
         sym.expr = Some(res.expr);
     }
-    todo!("replace symbol's type")
 }
 
 fn run_on_inferred_type(expr: &Arc<ExprNode>, type_env: &TypeEnv) -> Arc<ExprNode> {

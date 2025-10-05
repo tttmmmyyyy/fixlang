@@ -63,16 +63,17 @@ impl TypeEnv {
     pub fn unwrap_newtype_tycons(&mut self) {
         let mut new_tycons = (*self.tycons).clone();
 
-        // First, remove newtype pattern types from the tycons map
-        let mut to_remove = Vec::new();
-        for (name, tycon_info) in new_tycons.iter() {
-            if tycon_info.is_newtype_pattern() {
-                to_remove.push(name.clone());
-            }
-        }
-        for name in to_remove {
-            new_tycons.remove(&name);
-        }
+        // // First, remove newtype pattern types from the tycons map
+        // let mut to_remove = Vec::new();
+        // for (name, tycon_info) in new_tycons.iter() {
+        //     if tycon_info.is_newtype_pattern() {
+        //         to_remove.push(name.clone());
+        //     }
+        // }
+        // for name in to_remove {
+        //     new_tycons.remove(&name);
+        // }
+        // todo!("remove punched structs definition");
 
         // Then, unwrap newtype patterns in the remaining types
         for (_name, tycon_info) in new_tycons.iter_mut() {
@@ -83,8 +84,6 @@ impl TypeEnv {
         }
 
         self.tycons = Arc::new(new_tycons);
-
-        todo!("remove punched structs definition");
     }
 }
 
