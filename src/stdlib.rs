@@ -491,10 +491,10 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_array_fill.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME], "undefined"),
-        undefined_function(),
+        FullName::from_strs(&[STD_NAME], "_undefined_internal"),
+        undefined_internal_function(),
         None,
-        Some(include_str!("./docs/std_undefined.md").to_string()),
+        Some(include_str!("./docs/std_undefined_internal.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         make_with_retained_name(),

@@ -3598,13 +3598,13 @@ pub fn union_mod_function(
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUndefinedFunctionBody {
+pub struct InlineLLVMUndefinedInternalBody {
     msg_name: FullName,
 }
 
-impl InlineLLVMUndefinedFunctionBody {
+impl InlineLLVMUndefinedInternalBody {
     pub fn name(&self) -> String {
-        format!("undefined({})", self.msg_name.to_string())
+        format!("_undefined_internal({})", self.msg_name.to_string())
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
@@ -3620,8 +3620,7 @@ impl InlineLLVMUndefinedFunctionBody {
         let msg = gc.get_scoped_obj(&self.msg_name);
 
         // Get the pointer to the message.
-        let str = ObjectFieldType::move_out_struct_field(gc, &msg, 0);
-        let c_str = str.gep_boxed(gc, ARRAY_BUF_IDX);
+        let c_str = msg.gep_boxed(gc, ARRAY_BUF_IDX);
 
         // Write it to stderr, and flush.
         gc.call_runtime(RUNTIME_EPRINTLN, &[c_str.into()]);
@@ -3644,15 +3643,15 @@ impl InlineLLVMUndefinedFunctionBody {
     }
 }
 
-// `undefined` built-in function
-pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+// `_undefined_internal` built-in function
+pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
     const UNDEFINED_ARG_NAME: &str = "msg";
 
     let expr = expr_abs(
         vec![var_local(UNDEFINED_ARG_NAME)],
         expr_llvm(
-            LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedFunctionBody {
+            LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedInternalBody {
                 msg_name: FullName::local(UNDEFINED_ARG_NAME),
             }),
             type_tyvar_star(A_NAME),
@@ -3664,7 +3663,10 @@ pub fn undefined_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(make_string_ty(), type_tyvar_star(A_NAME)),
+        type_fun(
+            type_tyapp(make_array_ty(), make_u8_ty()),
+            type_tyvar_star(A_NAME),
+        ),
     );
     (expr, scm)
 }

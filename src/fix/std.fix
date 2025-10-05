@@ -11,6 +11,32 @@
 // The document for `Std` module describes about them up to N=3, but you can use larger tuples in the same way.
 module Std;
 
+// Generates an undefined value.
+//
+// Calling this function prints `msg` to the stderr, flush stderr, and aborts the program (calls `abort` in libc).
+// Since `undefined(msg)` has generic type `a`, you can put it anywhere and it will be type-checked.
+// 
+// This is useful when you want to write a placeholder that will be implemented later:
+// 
+// ```
+// truth : I64;
+// truth = undefined("I will implement the truth later.");
+// ```
+// 
+// Another use case is aborting the program when a certain branch of the code should not be reached:
+// 
+// ```
+// if condition {
+//     // Do something.
+// } else {
+//     undefined("This branch should not be reached.");
+// }
+// ```
+// 
+// # Parameters
+// * `msg` - The message to print to the stderr when the undefined value is reached.
+undefined : String -> a = |msg| msg.@_data._undefined_internal;
+
 // A union type with variants `continue` and `break`.
 // 
 // This type is used to represent the result of a loop body function passed to `Std::loop` or other similar functions.
