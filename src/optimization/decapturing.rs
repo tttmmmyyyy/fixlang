@@ -999,7 +999,7 @@ impl ExprVisitor for DecapturingVisitor {
                 .set_type(cap_list.type_.as_ref().unwrap().clone());
             let expr = expr_let_typed(pat, cap_list, value);
             return StartVisitResult::ReplaceAndRevisit(expr);
-        } else if bound.is_var() {
+        } else if pat.is_var() && bound.is_var() {
             let name = &bound.get_var().name;
             let opt_local_decap_lambda = self.local_decap_lambdas.get(name);
             if opt_local_decap_lambda.is_none() {
@@ -1011,15 +1011,21 @@ impl ExprVisitor for DecapturingVisitor {
             self.local_decap_lambdas
                 .insert(pat.get_var().name.clone(), local_decap_lambda.clone());
 
-            // Set the type of bound expression to the capture list type.
+            // Set the type of the pattern and the bound expression to the capture list type.
             let bound_old_ty = bound.type_.as_ref().unwrap();
-            if bound_old_ty.to_string() == local_decap_lambda.cap_list_ty.to_string() {
+            let pat_old_ty = pat.info.type_.as_ref().unwrap();
+            let cap_list_ty = local_decap_lambda.cap_list_ty.clone();
+            if bound_old_ty.to_string() == cap_list_ty.to_string()
+                && pat_old_ty.to_string() == cap_list_ty.to_string()
+            {
+                // If the types are already correct, do nothing.
                 return StartVisitResult::VisitChildren;
-            } else {
-                let bound = bound.set_type(local_decap_lambda.cap_list_ty);
-                let expr = expr.set_let_bound(bound);
-                return StartVisitResult::ReplaceAndRevisit(expr);
             }
+            // Fix the types in this let expression.
+            let pat = pat.set_type(cap_list_ty.clone());
+            let bound = bound.set_type(cap_list_ty);
+            let expr = expr_let_typed(pat, bound, value);
+            return StartVisitResult::ReplaceAndRevisit(expr);
         } else {
             return StartVisitResult::VisitChildren;
         }
