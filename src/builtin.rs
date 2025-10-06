@@ -397,11 +397,6 @@ pub fn make_array_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
-// Get String type.
-pub fn make_string_ty() -> Arc<TypeNode> {
-    type_tycon(&make_string_tycon())
-}
-
 // Get the TyCon of String type.
 pub fn make_string_tycon() -> Arc<TyCon> {
     tycon(FullName::from_strs(&[STD_NAME], STRING_NAME))
