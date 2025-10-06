@@ -280,7 +280,7 @@ impl ExprVisitor for NewtypeUnwrapper {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-        let mut expr = expr.clone();
+        let mut expr = run_on_inferred_type(&expr, &self.type_env);
         if let Expr::MakeStruct(tycon, fields) = expr.expr.as_ref() {
             let ti = self.type_env.tycons.get(tycon).unwrap();
             if ti.is_newtype_pattern() {
