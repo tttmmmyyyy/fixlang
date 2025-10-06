@@ -113,12 +113,6 @@ Example: `let f = |acm, i| acm + i; iter.fold(s0, f)`
 However, if the path from defining a lambda to using it is more complex than this, this optimization is not applied.
 Example: `let (_, f) = (0, |acm, i| acm + i); iter.fold(s0, f)`
 
-### Specializable functions
-
-Specializable functions are determined by `is_specializable_func`.
-Currently, we explicitly specify a few functions in `Std` as specializable functions.
-The determination of whether a function is specializable is somewhat difficult (it may lead to an infinite loop) and is under consideration.
-
 ## Relations to other optimizations
 
 * We perform `pull-let` transformation before decapturing optimization.
