@@ -1128,7 +1128,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX);
             self.build_retain(dtor.clone());
             let io_act = self.apply_lambda(dtor, vec![value], false).unwrap();
-            let res = run_io_value(self, &io_act);
+            let res = run_io_or_ios_runner(self, &io_act);
             ObjectFieldType::move_into_struct_field(
                 self,
                 obj.clone(), // Since `obj` is boxed, it is ok to clone it and discard the result of `move_into_struct_field`.

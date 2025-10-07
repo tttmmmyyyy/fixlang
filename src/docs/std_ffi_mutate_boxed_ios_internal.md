@@ -1,4 +1,4 @@
-Internal implementation of the `mutate_boxed_io` function.
+Internal implementation of the `mutate_boxed_ios` function.
 
 # Parameters
 

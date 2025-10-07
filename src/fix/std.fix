@@ -796,6 +796,23 @@ type ErrMsg = String;
 
 namespace FFI {
 
+    // `x.mutate_boxed(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of ``io(ptr)``.
+    // 
+    // The IO action `io(ptr)` is expected to modify the value of `x` through the obtained pointer. 
+    // Do not perform any IO operations other than mutating the value of `x`.
+    // 
+    // For more details on the pointer passed to `io`, see the document of `borrow_boxed`.
+    // 
+    // This function first clones the value if `x` is not unique.
+    //
+    // See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
+    // 
+    // # Parameters
+    // * `act` - The action to perform on the pointer to the boxed value.
+    // * `value` - The boxed value to mutate.
+    mutate_boxed : [a : Boxed] (Ptr -> IO b) -> a -> (a, b);
+    mutate_boxed = |act, val| val._mutate_boxed_internal(|ptr| act(ptr).@runner);
+
     // `x.mutate_boxed_io(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of `io(ptr)`.
     // 
     // Similar to `mutate_boxed`, but this function is used when you want to run the IO action in the existing IO context.
@@ -812,6 +829,16 @@ namespace FFI {
     // * `value` - The boxed value to be mutated.
     mutate_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO (a, b);
     mutate_boxed_io = |act, val| IO::from_runner $ |ios| mutate_boxed_ios(act, val, ios);
+
+    // Internal implementation of the `mutate_boxed_io` function.
+    // 
+    // # Parameters
+    // 
+    // * `act` - The action to perform on the pointer to the boxed value.
+    // * `value` - The boxed value to mutate.
+    // * `ios` - The `IOState` to use for the action.
+    mutate_boxed_ios : [a : Boxed] (Ptr -> IO b) -> a -> IOState -> (IOState, (a, b));
+    mutate_boxed_ios = |act, val, ios| ios._mutate_boxed_ios_internal(|ptr| act(ptr).@runner, val);
 
     // Borrows a pointer to the data of a boxed value.
     // 
@@ -867,7 +894,7 @@ namespace FFI {
     // 
     // NOTE: Of course, if the value stored in `Destructor` also exists outside of `Destructor`, the value still exists in the Fix program even after the destructor function is called, 
     // and there is a possibility that the value is used after the destructor function is called.
-    type Destructor a = box struct { _value : a, dtor : a -> IO a };    
+    type Destructor a = box struct { _value : a, dtor : a -> IO a };
 
     namespace Destructor {
         // Borrow the contained value.

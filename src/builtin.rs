@@ -507,6 +507,14 @@ pub fn make_io_ty() -> Arc<TypeNode> {
     type_tycon(&make_io_tycon())
 }
 
+// Make type `IOState -> (IOState, a)`
+pub fn make_io_runner_ty(res_ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    type_fun(
+        make_iostate_ty(),
+        make_tuple_ty(vec![make_iostate_ty(), res_ty]),
+    )
+}
+
 // Make tycon `IO`
 pub fn make_io_tycon() -> Arc<TyCon> {
     tycon(FullName::from_strs(&[STD_NAME], IO_NAME))
@@ -4259,12 +4267,12 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafeMutateBoxedDataFunctionBody {
+pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     val_name: FullName,
     io_act_name: FullName,
 }
 
-impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
+impl InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     pub fn name(&self) -> String {
         format!(
             "{}.mutate_boxed({})",
@@ -4304,7 +4312,7 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
 
         // Run the IO action.
         let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
-        let io_res = run_io_value(gc, &io_act);
+        let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
 
         // Construct the return value.
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
@@ -4315,22 +4323,22 @@ impl InlineLLVMUnsafeMutateBoxedDataFunctionBody {
     }
 }
 
-// mutate_boxed_data : (Ptr -> IO b) -> a -> (a, b)
-pub fn get_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
+// _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
+pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_A_NAME: &str = "a";
     const TYPE_B_NAME: &str = "b";
     const IO_ACT_NAME: &str = "a";
     const VAL_NAME: &str = "x";
-    let val_ty = type_tyvar(TYPE_A_NAME, &kind_star());
-    let io_res_ty = type_tyvar(TYPE_B_NAME, &kind_star());
-    let res_ty = make_tuple_ty(vec![val_ty.clone(), io_res_ty.clone()]);
+    let a_ty = type_tyvar(TYPE_A_NAME, &kind_star());
+    let b_ty = type_tyvar(TYPE_B_NAME, &kind_star());
+    let ab_ty = make_tuple_ty(vec![a_ty.clone(), b_ty.clone()]);
     let scm = Scheme::generalize(
         &[],
-        vec![Predicate::make(make_boxed_trait(), val_ty.clone())],
+        vec![Predicate::make(make_boxed_trait(), a_ty.clone())],
         vec![],
         type_fun(
-            type_fun(make_ptr_ty(), type_tyapp(make_io_ty(), io_res_ty.clone())),
-            type_fun(val_ty.clone(), res_ty.clone()),
+            type_fun(make_ptr_ty(), make_io_runner_ty(b_ty.clone())),
+            type_fun(a_ty.clone(), ab_ty.clone()),
         ),
     );
     let expr = expr_abs(
@@ -4338,13 +4346,13 @@ pub fn get_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(VAL_NAME)],
             expr_llvm(
-                LLVMGenerator::UnsafeMutateBoxedDataFunctionBody(
-                    InlineLLVMUnsafeMutateBoxedDataFunctionBody {
+                LLVMGenerator::UnsafeMutateBoxedInternalBody(
+                    InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
                         val_name: FullName::local(VAL_NAME),
                         io_act_name: FullName::local(IO_ACT_NAME),
                     },
                 ),
-                res_ty,
+                ab_ty,
                 None,
             ),
             None,
@@ -4355,16 +4363,16 @@ pub fn get_mutate_boxed() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
+pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     val_name: FullName,
     io_act_name: FullName,
     iostate_name: FullName,
 }
 
-impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
+impl InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     pub fn name(&self) -> String {
         format!(
-            "mutate_boxed_ios({}, {}, {})",
+            "_mutate_boxed_ios_internal({}, {}, {})",
             self.io_act_name.to_string(),
             self.val_name.to_string(),
             self.iostate_name.to_string(),
@@ -4407,7 +4415,7 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
 
         // Run the IO action.
         let io_act = gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap();
-        let io_res = run_io_value(gc, &io_act);
+        let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
 
         // Construct the return value.
         let pair_ab = create_obj(
@@ -4427,25 +4435,25 @@ impl InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
     }
 }
 
-// mutate_boxed_ios : (Ptr -> IO b) -> a -> IOState -> (IOState, (a, b))
-pub fn get_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const VAL_TYPE_NAME: &str = "a";
-    const IO_RES_TYPE_NAME: &str = "b";
-    const IO_ACT_NAME: &str = "a";
+// _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> IOState -> (IOState, (a, b))
+pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const A_TYPE_NAME: &str = "a";
+    const B_TYPE_NAME: &str = "b";
+    const IO_ACT_NAME: &str = "act";
     const VAL_NAME: &str = "x";
     const IOSTATE_NAME: &str = "ios";
-    let val_ty = type_tyvar(VAL_TYPE_NAME, &kind_star());
+    let a_ty = type_tyvar(A_TYPE_NAME, &kind_star());
     let iostate_ty = make_iostate_ty();
-    let io_res_ty = type_tyvar(IO_RES_TYPE_NAME, &kind_star());
-    let pair_ty = make_tuple_ty(vec![val_ty.clone(), io_res_ty.clone()]);
-    let ret_ty = make_tuple_ty(vec![iostate_ty.clone(), pair_ty.clone()]);
+    let b_ty = type_tyvar(B_TYPE_NAME, &kind_star());
+    let ab_ty = make_tuple_ty(vec![a_ty.clone(), b_ty.clone()]);
+    let ret_ty = make_tuple_ty(vec![iostate_ty.clone(), ab_ty.clone()]);
     let scm = Scheme::generalize(
         &[],
-        vec![Predicate::make(make_boxed_trait(), val_ty.clone())],
+        vec![Predicate::make(make_boxed_trait(), a_ty.clone())],
         vec![],
         type_fun(
-            type_fun(make_ptr_ty(), type_tyapp(make_io_ty(), io_res_ty.clone())),
-            type_fun(val_ty.clone(), type_fun(iostate_ty, ret_ty.clone())),
+            type_fun(make_ptr_ty(), make_io_runner_ty(b_ty.clone())),
+            type_fun(a_ty.clone(), make_io_runner_ty(ab_ty.clone())),
         ),
     );
     let expr = expr_abs_many(
@@ -4455,8 +4463,8 @@ pub fn get_mutate_boxed_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
             var_local(IOSTATE_NAME),
         ],
         expr_llvm(
-            LLVMGenerator::UnsafeMutateBoxedDataIOStateFunctionBody(
-                InlineLLVMUnsafeMutateBoxedDataIOStateFunctionBody {
+            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(
+                InlineLLVMUnsafeMutateBoxedIOSInternalBody {
                     io_act_name: FullName::local(IO_ACT_NAME),
                     val_name: FullName::local(VAL_NAME),
                     iostate_name: FullName::local(IOSTATE_NAME),
@@ -4492,7 +4500,7 @@ impl InlineLLVMUnsafePerformFunctionBody {
         let io_act = gc.get_scoped_obj(&self.io_act_name);
 
         // Run the IO action.
-        run_io_value(gc, &io_act)
+        run_io(gc, &io_act)
     }
 }
 
@@ -4516,8 +4524,20 @@ pub fn get_unsafe_perform() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+// Run either an IO or an IOState runner based on the type of the given value.
+pub fn run_io_or_ios_runner<'b, 'm, 'c>(
+    gc: &mut GenerationContext<'c, 'm>,
+    io: &Object<'c>,
+) -> Object<'c> {
+    if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
+        run_io(gc, io)
+    } else {
+        run_ios_runner(gc, io, None).1
+    }
+}
+
 // Run an IO runner in the IO monad and return the result.
-pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<'c>) -> Object<'c> {
+pub fn run_io<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
     let runner = io.extract_field(gc, 0);
     let runner_ty = type_fun(
@@ -4525,15 +4545,20 @@ pub fn run_io_value<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<
         make_tuple_ty(vec![make_iostate_ty(), res_ty.clone()]),
     );
     let runner_obj = Object::new(runner, runner_ty, gc);
-    run_ios_value(gc, &runner_obj).1
+    run_ios_runner(gc, &runner_obj, None).1
 }
 
 // Given an value of type `IOState -> (IOState, a)`, run it with an initial IO state and return the result `IOState` and `a`.
-pub fn run_ios_value<'b, 'm, 'c>(
+pub fn run_ios_runner<'b, 'm, 'c>(
     gc: &mut GenerationContext<'c, 'm>,
     runner: &Object<'c>,
+    ios: Option<&Object<'c>>,
 ) -> (Object<'c>, Object<'c>) {
-    let ios = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+    let ios = if let Some(ios) = ios {
+        ios.clone()
+    } else {
+        create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
+    };
     let ios_res_pair = gc.apply_lambda(runner.clone(), vec![ios], false).unwrap();
     let iostate_res = ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[0, 1]);
     let ios = iostate_res[0].clone();

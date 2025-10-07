@@ -551,16 +551,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_ffi_get_boxed_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "mutate_boxed"),
-        get_mutate_boxed(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "_mutate_boxed_internal"),
+        get_mutate_boxed_internal(),
         None,
-        Some(include_str!("./docs/std_ffi_mutate_boxed.md").to_string()),
+        Some(include_str!("./docs/std_ffi_mutate_boxed_internal.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "mutate_boxed_ios"),
-        get_mutate_boxed_ios(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "_mutate_boxed_ios_internal"),
+        get_mutate_boxed_ios_internal(),
         None,
-        Some(include_str!("./docs/std_ffi_mutate_boxed_ios.md").to_string()),
+        Some(include_str!("./docs/std_ffi_mutate_boxed_ios_internal.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, IO_NAME], "unsafe_perform"),

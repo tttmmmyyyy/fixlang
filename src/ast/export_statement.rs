@@ -135,10 +135,10 @@ impl ExportStatement {
         match io_type {
             IOType::Pure => {}
             IOType::IO => {
-                fix_value = run_io_value(gc, &fix_value);
+                fix_value = run_io(gc, &fix_value);
             }
             IOType::IOState => {
-                fix_value = run_ios_value(gc, &fix_value).1;
+                fix_value = run_ios_runner(gc, &fix_value, None).1;
             }
         }
 
