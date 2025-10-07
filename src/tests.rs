@@ -5758,7 +5758,7 @@ pub fn test_import_hiding_any() {
 pub fn test_import_only_necessary() {
     let source = r##"
     module Main;
-    import Std::{IO, Tuple0, String, IO::println};
+    import Std::{IO, Tuple0, String, IO::println, Array, U8};
 
     main : IO ();
     main = (
@@ -5768,10 +5768,10 @@ pub fn test_import_only_necessary() {
     test_source(&source, Configuration::develop_compiler_mode());
 }
 #[test]
-pub fn test_import_recursive_group() {
+pub fn test_import_hierarchy() {
     let source = r##"
     module Main;
-    import Std::{IO, Tuple0, String, IO::{println, eprintln}};
+    import Std::{IO, Tuple0, String, Array, U8, IO::{println, eprintln}};
 
     main : IO ();
     main = (
@@ -5785,7 +5785,7 @@ pub fn test_import_recursive_group() {
 pub fn test_import_any_in_namespace() {
     let source = r##"
     module Main;
-    import Std::{IO, Tuple0, String, IO::*};
+    import Std::{IO, Tuple0, String, IO::*, Array, U8};
 
     main : IO ();
     main = (

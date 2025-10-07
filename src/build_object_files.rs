@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ast::{export_statement::ExportStatement, expr::ExprNode, program::Program},
-    builtin::{make_io_tycon, run_io, run_io_or_ios_runner, run_ios_runner},
+    builtin::run_io_or_ios_runner,
     compile_unit::CompileUnit,
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
     constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
