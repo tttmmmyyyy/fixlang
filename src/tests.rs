@@ -5767,6 +5767,7 @@ pub fn test_import_only_necessary() {
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
 #[test]
 pub fn test_import_hierarchy() {
     let source = r##"

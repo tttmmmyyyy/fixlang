@@ -290,11 +290,6 @@ impl TyConInfo {
             _ => docs,
         }
     }
-
-    // Is this type constructor a "newtype pattern", i.e., is it an unbox struct type with only one field?
-    pub fn is_newtype_pattern(&self) -> bool {
-        self.is_unbox && self.variant == TyConVariant::Struct && self.fields.len() == 1
-    }
 }
 
 #[derive(Clone)]
@@ -879,35 +874,34 @@ impl TypeNode {
         let app_seq = self.flatten_type_application();
         let toplevel_ty = &app_seq[0];
         if let Type::TyCon(tc) = &toplevel_ty.ty {
-            if let Some(ti) = env.tycons.get(&tc) {
-                if ti.is_newtype_pattern() {
-                    // Check if this is a punched struct of a newtype pattern
-                    if ti.fields[0].is_punched {
-                        // Convert punched struct of newtype pattern to unit type
-                        return make_unit_ty();
-                    }
-                    // Check if this TyCon is already being processed (circular dependency)
-                    if !visited.contains(&(**tc)) {
-                        // Add this TyCon to the visited set
-                        visited.insert((**tc).clone());
-
-                        // This is a newtype pattern itself
-                        let mut s = Substitution::default();
-                        for i in 0..ti.tyvars.len() {
-                            let param = &ti.tyvars[i].name;
-                            let arg = app_seq[i + 1].clone();
-                            s.add_substitution(&Substitution::single(&param, arg));
-                        }
-                        let resolved = s.substitute_type(&ti.fields[0].ty);
-                        let result = resolved.unwrap_newtype_with_visited(env, visited);
-
-                        // Remove this TyCon from the visited set before returning
-                        visited.remove(&(**tc));
-
-                        return result;
-                    }
-                    // If TyCon is already visited (circular), fall through to treat other cases
+            if env.is_unwrappable_newtype(tc) {
+                let ti = env.tycons.get(tc).unwrap();
+                // Check if this is a punched struct of a newtype pattern
+                if ti.fields[0].is_punched {
+                    // Convert punched struct of newtype pattern to unit type
+                    return make_unit_ty();
                 }
+                // Check if this TyCon is already being processed (circular dependency)
+                if !visited.contains(&(**tc)) {
+                    // Add this TyCon to the visited set
+                    visited.insert((**tc).clone());
+
+                    // This is a newtype pattern itself
+                    let mut s = Substitution::default();
+                    for i in 0..ti.tyvars.len() {
+                        let param = &ti.tyvars[i].name;
+                        let arg = app_seq[i + 1].clone();
+                        s.add_substitution(&Substitution::single(&param, arg));
+                    }
+                    let resolved = s.substitute_type(&ti.fields[0].ty);
+                    let result = resolved.unwrap_newtype_with_visited(env, visited);
+
+                    // Remove this TyCon from the visited set before returning
+                    visited.remove(&(**tc));
+
+                    return result;
+                }
+                // If TyCon is already visited (circular), fall through to treat other cases
             }
         }
         // If the top-level is not a newtype pattern, recursively process type arguments
@@ -1638,6 +1632,27 @@ impl TypeNode {
         let mut buf = vec![];
         self.free_vars_to_vec(&mut buf);
         buf
+    }
+
+    // Collect all TyCons that appear in this type.
+    pub fn collect_tycons(&self, tycons: &mut Set<TyCon>) {
+        match &self.ty {
+            Type::TyVar(_) => {
+                // Type variables don't contain TyCons
+            }
+            Type::TyCon(tycon) => {
+                tycons.insert(tycon.as_ref().clone());
+            }
+            Type::TyApp(tyfun, arg) => {
+                tyfun.collect_tycons(tycons);
+                arg.collect_tycons(tycons);
+            }
+            Type::AssocTy(_, args) => {
+                for arg in args {
+                    arg.collect_tycons(tycons);
+                }
+            }
+        }
     }
 }
 

@@ -31,8 +31,7 @@ impl PatternNode {
                 })
             }
             Pattern::Struct(tc, field_to_pat) => {
-                let ti = env.tycons.get(tc).unwrap();
-                if ti.is_newtype_pattern() {
+                if env.is_unwrappable_newtype(tc) {
                     assert_eq!(field_to_pat.len(), 1);
                     let (_, pat) = &field_to_pat[0];
                     pat.unwrap_newtype(env)
