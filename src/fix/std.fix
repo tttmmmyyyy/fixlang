@@ -976,6 +976,14 @@ namespace FFI {
 type IO a = unbox struct { runner : IOState -> (IOState, a) };
 
 namespace IO {
+    // Executes an IO action and returns the result.
+    // 
+    // This function is unsafe because it breaks the purity of Fix.
+    // 
+    // # Parameters
+    // - `io` - An IO action to be performed.
+    unsafe_perform : IO a -> a = |io| io.@runner._unsafe_perform_internal;
+
     // Reads characters from an IOHandle.
     // 
     // If the first argument `upto_newline` is true, this function reads a file upto newline or EOF.

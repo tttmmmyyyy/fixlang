@@ -4478,13 +4478,13 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafePerformFunctionBody {
+pub struct InlineLLVMUnsafePerformInternalBody {
     io_act_name: FullName,
 }
 
-impl InlineLLVMUnsafePerformFunctionBody {
+impl InlineLLVMUnsafePerformInternalBody {
     pub fn name(&self) -> String {
-        format!("{}.unsafe_perform", self.io_act_name.to_string())
+        format!("{}._unsafe_perform_internal", self.io_act_name.to_string())
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
@@ -4500,24 +4500,24 @@ impl InlineLLVMUnsafePerformFunctionBody {
         let io_act = gc.get_scoped_obj(&self.io_act_name);
 
         // Run the IO action.
-        run_io(gc, &io_act)
+        run_ios_runner(gc, &io_act, None).1
     }
 }
 
-// unsafe_perform : IO a -> a
-pub fn get_unsafe_perform() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const VAL_TYPE_NAME: &str = "a";
-    const IO_ACT_NAME: &str = "act";
-    let val_ty = type_tyvar(VAL_TYPE_NAME, &kind_star());
-    let io_ty = type_tyapp(make_io_ty(), val_ty.clone());
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(io_ty, val_ty.clone()));
+// _unsafe_perform_internal : (IOState -> (IOState, a)) -> a
+pub fn make_unsafe_perform_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const A_TYPE_NAME: &str = "a";
+    const IO_ACT_NAME: &str = "io";
+    let a_ty = type_tyvar(A_TYPE_NAME, &kind_star());
+    let io_ty = make_io_runner_ty(a_ty.clone());
+    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(io_ty, a_ty.clone()));
     let expr = expr_abs_many(
         vec![var_local(IO_ACT_NAME)],
         expr_llvm(
-            LLVMGenerator::UnsafePerformFunctionBody(InlineLLVMUnsafePerformFunctionBody {
+            LLVMGenerator::UnsafePerformInternalBody(InlineLLVMUnsafePerformInternalBody {
                 io_act_name: FullName::local(IO_ACT_NAME),
             }),
-            val_ty,
+            a_ty,
             None,
         ),
     );

@@ -72,7 +72,7 @@ pub enum LLVMGenerator {
     UnsafeMutateBoxedInternalBody(InlineLLVMUnsafeMutateBoxedInternalFunctionBody),
     UnsafeMutateBoxedIOSInternalBody(InlineLLVMUnsafeMutateBoxedIOSInternalBody),
     ArrayUnsafeGetLinearFunctionBody(InlineLLVMArrayUnsafeGetLinearFunctionBody),
-    UnsafePerformFunctionBody(InlineLLVMUnsafePerformFunctionBody),
+    UnsafePerformInternalBody(InlineLLVMUnsafePerformInternalBody),
 }
 
 impl LLVMGenerator {
@@ -148,7 +148,7 @@ impl LLVMGenerator {
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::UnsafePerformFunctionBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::UnsafePerformInternalBody(x) => Some(x.generate(gc, ty)),
         };
         match obj {
             None => {
@@ -242,7 +242,7 @@ impl LLVMGenerator {
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.free_vars(),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.free_vars(),
             LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::UnsafePerformFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::UnsafePerformInternalBody(x) => x.free_vars(),
         }
     }
 
@@ -278,7 +278,7 @@ impl LLVMGenerator {
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.name(),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.name(),
             LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.name(),
-            LLVMGenerator::UnsafePerformFunctionBody(x) => x.name(),
+            LLVMGenerator::UnsafePerformInternalBody(x) => x.name(),
             LLVMGenerator::IntLit(x) => x.name(),
             LLVMGenerator::FloatLit(x) => x.name(),
             LLVMGenerator::NullPtrLit(x) => x.name(),

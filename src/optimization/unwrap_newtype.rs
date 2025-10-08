@@ -129,8 +129,8 @@ impl ExprVisitor for NewtypeUnwrapper {
                 let struct_name = body.var_name.clone();
                 assert!(struct_name.is_local());
                 let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
-                let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
-                if struct_ti.is_newtype_pattern() {
+                let struct_tc = struct_ty.toplevel_tycon().unwrap();
+                if self.type_env.is_unwrappable_newtype(struct_tc.as_ref()) {
                     expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
                 }
             }
@@ -140,8 +140,8 @@ impl ExprVisitor for NewtypeUnwrapper {
                 // set : F -> F -> F = |f, s| f
                 let field_ty = new_ty;
                 let struct_ty = old_ty;
-                let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
-                if struct_ti.is_newtype_pattern() {
+                let struct_tc = struct_ty.toplevel_tycon().unwrap();
+                if self.type_env.is_unwrappable_newtype(struct_tc.as_ref()) {
                     let field_name = body.value_name.clone();
                     expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
                 }
@@ -154,8 +154,9 @@ impl ExprVisitor for NewtypeUnwrapper {
                 let struct_name = body.var_name.clone();
                 assert!(struct_name.is_local());
                 let struct_ty = state.scope.get_local(&struct_name.name).unwrap().unwrap();
-                let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
-                if struct_ti.is_newtype_pattern() {
+                // let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
+                let struct_tc = struct_ty.toplevel_tycon().unwrap();
+                if self.type_env.is_unwrappable_newtype(struct_tc.as_ref()) {
                     let field_ty = field_unit_ty.collect_type_argments()[0].clone();
                     let unit_ty = make_unit_ty();
                     let struct_expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
@@ -173,8 +174,8 @@ impl ExprVisitor for NewtypeUnwrapper {
                 // =>
                 // plug_in : () -> F -> F = |_, f| f
                 let struct_ty = old_ty;
-                let struct_ti = struct_ty.toplevel_tycon_info(&self.type_env);
-                if struct_ti.is_newtype_pattern() {
+                let struct_tc = struct_ty.toplevel_tycon().unwrap();
+                if self.type_env.is_unwrappable_newtype(struct_tc.as_ref()) {
                     let field_ty = new_ty;
                     let field_name = body.field_name.clone();
                     assert!(field_name.is_local());
@@ -282,8 +283,7 @@ impl ExprVisitor for NewtypeUnwrapper {
     ) -> EndVisitResult {
         let mut expr = run_on_inferred_type(&expr, &self.type_env);
         if let Expr::MakeStruct(tycon, fields) = expr.expr.as_ref() {
-            let ti = self.type_env.tycons.get(tycon).unwrap();
-            if ti.is_newtype_pattern() {
+            if self.type_env.is_unwrappable_newtype(tycon) {
                 expr = fields[0].1.clone();
             }
         } else {
