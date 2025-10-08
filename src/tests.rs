@@ -9429,6 +9429,7 @@ module Main;
 type Foo a b = struct { data : a -> b };
 
 type [f : *->*] Bar f = struct { data : f Bool, dummy : () };
+// By having `dummy`, `Bar` is no longer a newtype, and `unwrap_newtype` in types.rs is called for `Foo I64`.
 
 main : IO () = (
     let f : Bar (Foo I64) = Bar { data : Foo { data : |x| (x + 1) > 0 }, dummy : () };
