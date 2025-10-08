@@ -2558,6 +2558,14 @@ The handle for standard output.
 
 Type: `Std::IO a -> a`
 
+Executes an IO action and returns the result.
+
+This function is unsafe because it breaks the purity of Fix.
+
+##### Parameters
+
+- `io` - An IO action to be performed.
+
 #### with_file
 
 Type: `Std::Path -> Std::String -> (Std::IO::IOHandle -> Std::IO::IOFail a) -> Std::IO::IOFail a`
