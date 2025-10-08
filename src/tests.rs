@@ -9420,3 +9420,22 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_unwrap_newtype_partial_application() {
+    let source = r##"
+module Main;
+
+type Foo a b = struct { data : a -> b };
+
+type [f : *->*] Bar f = struct { data : f Bool, dummy : () };
+
+main : IO () = (
+    let f : Bar (Foo I64) = Bar { data : Foo { data : |x| (x + 1) > 0 }, dummy : () };
+    assert_eq(|_|"", (f.@data.@data)(1), true);;
+    assert_eq(|_|"", (f.@data.@data)(-1), false);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
