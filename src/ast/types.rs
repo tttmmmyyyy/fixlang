@@ -888,7 +888,7 @@ impl TypeNode {
 
                     // This is a newtype pattern itself
                     let mut s = Substitution::default();
-                    for i in 0..ti.tyvars.len() {
+                    for i in 0..(app_seq.len() - 1) {
                         let param = &ti.tyvars[i].name;
                         let arg = app_seq[i + 1].clone();
                         s.add_substitution(&Substitution::single(&param, arg));
