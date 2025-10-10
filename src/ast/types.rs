@@ -2,6 +2,7 @@ use core::panic;
 use std::sync::Arc;
 
 use crate::error::Errors;
+
 use inkwell::types::BasicType;
 use misc::collect_results;
 use misc::number_to_varname;
@@ -859,21 +860,17 @@ impl TypeNode {
     //
     // This function is supposed to be called after type aliases are resolved.
     pub fn unwrap_newtype(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-        self.unwrap_newtype_with_visited(env, &mut Set::default())
+        self.unwrap_newtype_with_internal(env)
     }
 
-    // Internal implementation of unwrap_newtype with visited TyCons tracking.
-    fn unwrap_newtype_with_visited(
-        self: &Arc<TypeNode>,
-        env: &TypeEnv,
-        visited: &mut Set<TyCon>,
-    ) -> Arc<TypeNode> {
+    // Internal implementation of unwrap_newtype
+    fn unwrap_newtype_with_internal(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
         // First, replace the top-level type constructor if it is a newtype pattern.
         // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`.
         // Then `Foo Bool` should be resolved to `() -> Bool`.
-        let app_seq = self.flatten_type_application();
-        let toplevel_ty = &app_seq[0];
-        if let Type::TyCon(tc) = &toplevel_ty.ty {
+        let toplevel_tc = self.toplevel_tycon();
+        if let Some(tc) = toplevel_tc {
+            let tc = tc.as_ref();
             if env.is_unwrappable_newtype(tc) {
                 let ti = env.tycons.get(tc).unwrap();
                 // Check if this is a punched struct of a newtype pattern
@@ -881,27 +878,10 @@ impl TypeNode {
                     // Convert punched struct of newtype pattern to unit type
                     return make_unit_ty();
                 }
-                // Check if this TyCon is already being processed (circular dependency)
-                if !visited.contains(&(**tc)) {
-                    // Add this TyCon to the visited set
-                    visited.insert((**tc).clone());
+                let field_ty = self.field_types(env)[0].clone();
+                let result = field_ty.unwrap_newtype_with_internal(env);
 
-                    // This is a newtype pattern itself
-                    let mut s = Substitution::default();
-                    for i in 0..(app_seq.len() - 1) {
-                        let param = &ti.tyvars[i].name;
-                        let arg = app_seq[i + 1].clone();
-                        s.add_substitution(&Substitution::single(&param, arg));
-                    }
-                    let resolved = s.substitute_type(&ti.fields[0].ty);
-                    let result = resolved.unwrap_newtype_with_visited(env, visited);
-
-                    // Remove this TyCon from the visited set before returning
-                    visited.remove(&(**tc));
-
-                    return result;
-                }
-                // If TyCon is already visited (circular), fall through to treat other cases
+                return result;
             }
         }
         // If the top-level is not a newtype pattern, recursively process type arguments
@@ -909,12 +889,12 @@ impl TypeNode {
             Type::TyVar(_) => self.clone(),
             Type::TyCon(_) => self.clone(),
             Type::TyApp(fun_ty, arg_ty) => self
-                .set_tyapp_fun(fun_ty.unwrap_newtype_with_visited(env, visited))
-                .set_tyapp_arg(arg_ty.unwrap_newtype_with_visited(env, visited)),
+                .set_tyapp_fun(fun_ty.unwrap_newtype_with_internal(env))
+                .set_tyapp_arg(arg_ty.unwrap_newtype_with_internal(env)),
             Type::AssocTy(_, args) => {
                 let args = args
                     .iter()
-                    .map(|arg| arg.unwrap_newtype_with_visited(env, visited))
+                    .map(|arg| arg.unwrap_newtype_with_internal(env))
                     .collect::<Vec<_>>();
                 self.set_assocty_args(args)
             }

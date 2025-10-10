@@ -10,6 +10,7 @@ use crate::{
         types::tycon,
     },
     builtin::{make_tuple_name, make_unit_ty},
+    lsp::language_server::write_log,
 };
 use std::sync::Arc;
 
@@ -225,7 +226,10 @@ impl ExprVisitor for NewtypeUnwrapper {
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let mut expr = run_on_inferred_type(&expr, &self.type_env);
         if let Expr::Let(pat, body, val) = expr.expr.as_ref() {
-            let pat = pat.unwrap_newtype(&self.type_env);
+            let pat = pat
+                .unwrap_newtype(&self.type_env)
+                .get_typed_matching(body.type_.as_ref().unwrap(), &self.type_env)
+                .unwrap();
             expr = expr_let_typed(pat, body.clone(), val.clone());
         } else {
             unreachable!()
@@ -259,7 +263,14 @@ impl ExprVisitor for NewtypeUnwrapper {
         if let Expr::Match(scrut, arms) = expr.expr.as_ref() {
             let arms = arms
                 .iter()
-                .map(|(pat, arm_expr)| (pat.unwrap_newtype(&self.type_env), arm_expr.clone()))
+                .map(|(pat, arm_expr)| {
+                    (
+                        pat.unwrap_newtype(&self.type_env)
+                            .get_typed_matching(scrut.type_.as_ref().unwrap(), &self.type_env)
+                            .unwrap(),
+                        arm_expr.clone(),
+                    )
+                })
                 .collect();
             expr = expr_match_typed(scrut.clone(), arms);
         } else {

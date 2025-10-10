@@ -59,6 +59,91 @@ impl PatternNode {
         }
     }
 
+    // Assign types to the pattern so that it has the given type.
+    //
+    // All types must have their type aliases resolved and associated types expanded.
+    //
+    // Note:
+    // This function ignores user-provided type annotations.
+    // Specifically, if the pattern is `v : A` and the type `B` is given, then type `B` is assigned to `v` even if `A != B`.
+    // Therefore, this function must not be used for type checking. It is used in a process after type checking has succeeded.
+    pub fn get_typed_matching(
+        &self,
+        type_: &Arc<TypeNode>,
+        type_env: &TypeEnv,
+    ) -> Option<Arc<PatternNode>> {
+        match &self.pattern {
+            Pattern::Var(_v, _ty) => {
+                // IGNORES user-provided type annotation!
+                // if let Some(ty) = ty {
+                //     if ty.to_string_normalize() != type_.to_string_normalize() {
+                //         return None;
+                //     }
+                // }
+                let pat = self.set_type(type_.clone());
+                Some(pat)
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                let type_tc = type_.toplevel_tycon();
+                if type_tc.is_none() {
+                    return None;
+                }
+                let type_tc = type_tc.unwrap();
+                if type_tc.as_ref() != tc.as_ref() {
+                    return None;
+                }
+
+                let type_ti = type_env.tycons.get(&type_tc)?;
+                let mut field_name_to_idx = Map::default();
+                for (i, field) in type_ti.fields.iter().enumerate() {
+                    field_name_to_idx.insert(field.name.clone(), i);
+                }
+
+                // Recursively match each field pattern with its expected type
+                let field_types = type_.field_types(type_env);
+                let mut field_to_pat = field_to_pat.clone();
+                for (field_name, pat) in field_to_pat.iter_mut() {
+                    let field_idx = *field_name_to_idx.get(field_name)?;
+                    let field_ty = &field_types[field_idx];
+                    let matched_pat = pat.get_typed_matching(field_ty, type_env)?;
+                    *pat = matched_pat;
+                }
+
+                Some(
+                    self.set_type(type_.clone())
+                        .set_struct_field_to_pat(field_to_pat),
+                )
+            }
+            Pattern::Union(variant_name, subpat) => {
+                let tc = TyCon::new(variant_name.namespace.clone().to_fullname());
+                let variant_name = &variant_name.name;
+
+                let type_tc = type_.toplevel_tycon();
+                if type_tc.is_none() {
+                    return None;
+                }
+                let type_tc = type_tc.unwrap();
+                if type_tc.as_ref() != &tc {
+                    return None;
+                }
+
+                let type_ti = type_env.tycons.get(&type_tc)?;
+                let mut variant_name_to_idx = Map::default();
+                for (i, field) in type_ti.fields.iter().enumerate() {
+                    variant_name_to_idx.insert(field.name.clone(), i);
+                }
+
+                // Recursively match each field pattern with its expected type
+                let variant_types = type_.field_types(type_env);
+                let variant_idx = *variant_name_to_idx.get(variant_name)?;
+                let variant_ty = &variant_types[variant_idx];
+                let subpat = subpat.get_typed_matching(variant_ty, type_env)?;
+
+                Some(self.set_type(type_.clone()).set_union_pat(subpat))
+            }
+        }
+    }
+
     // Set `self.info.type_`.
     // Returns the pattern itself with a map which maps variable names to their types.
     pub fn get_typed(

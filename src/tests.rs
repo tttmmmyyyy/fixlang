@@ -9440,3 +9440,30 @@ main : IO () = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_unwrap_newtype_bug_regression() {
+    // A regression test for a bug that existed in the implementation of `unwrap-newtype`.
+    let source = r##"
+module Main;
+
+type [m: * -> *] Reader e a = unbox struct {
+    data: e -> a
+};
+
+reader: (e -> a) -> Reader e a;
+reader = |f| Reader { data: f };
+
+run_reader: e -> Reader e a -> a;
+run_reader = |e, ra| (ra.@data)(e);
+
+main : IO () = (
+    let r_sub  = |p:I64| reader $ |q:I64| (p,q);
+    let r_main  = reader $ |p:I64| r_sub(p);
+    let actual = r_main.run_reader(3).run_reader(4);
+    
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
