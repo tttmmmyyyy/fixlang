@@ -568,12 +568,13 @@ impl DecapturingVisitor {
         // Create the type for the capture list struct.
         let tycon_hash_data = cap_names_types
             .iter()
-            .map(|(name, ty)| format!("{},{}", name.to_string(), ty.to_string()))
+            .map(|(name, ty)| format!("{}:{}", name.to_string(), ty.to_string()))
             .collect::<Vec<_>>()
             .join(",");
-        let tycon_hash = format!("{:x}", md5::compute(tycon_hash_data));
+        // let tycon_hash = format!("{:x}", md5::compute(tycon_hash_data));
+        let tycon_hash = tycon_hash_data;
         let tycon_name = TyCon {
-            name: FullName::from_strs(&[STD_NAME], &format!("#DecapList_{}", tycon_hash)),
+            name: FullName::from_strs(&[STD_NAME], &format!("#DecapList<{}>", tycon_hash)),
         };
         let tycon = Arc::new(tycon_name);
         let tycon_info = TyConInfo {
