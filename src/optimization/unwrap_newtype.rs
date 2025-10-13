@@ -21,7 +21,7 @@ pub fn run(prg: &mut Program) {
     }
     run_on_exported_statements(prg);
     run_on_entry_io_value(prg);
-    unwrap_newtype_type_env(&mut prg.type_env);
+    unwrap_newtype_on_type_env(&mut prg.type_env);
 }
 
 fn run_on_exported_statements(prg: &mut Program) {
@@ -49,14 +49,14 @@ fn run_on_symbol(sym: &mut Symbol, type_env: TypeEnv) {
     let mut remover = NewtypeUnwrapper { type_env: type_env };
     let res = remover.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
-        sym.ty = unwrap_newtype_type(&sym.ty, &remover.type_env);
+        sym.ty = unwrap_newtype_on_type(&sym.ty, &remover.type_env);
         sym.expr = Some(res.expr);
     }
 }
 
 fn run_on_inferred_type(expr: &Arc<ExprNode>, type_env: &TypeEnv) -> Arc<ExprNode> {
     let type_ = expr.type_.as_ref().unwrap();
-    let type_ = unwrap_newtype_type(type_, type_env);
+    let type_ = unwrap_newtype_on_type(type_, type_env);
     expr.set_type(type_)
 }
 
@@ -81,7 +81,7 @@ impl ExprVisitor for NewtypeUnwrapper {
         let expr = run_on_inferred_type(&expr, &self.type_env);
 
         let ty = expr.get_tyanno_ty();
-        let ty = unwrap_newtype_type(&ty, &self.type_env);
+        let ty = unwrap_newtype_on_type(&ty, &self.type_env);
         let expr = expr.set_tyanno_ty(ty);
 
         EndVisitResult::changed(expr)
@@ -118,7 +118,7 @@ impl ExprVisitor for NewtypeUnwrapper {
         } else {
             unreachable!()
         };
-        llvm.ty = unwrap_newtype_type(&llvm.ty, &self.type_env);
+        llvm.ty = unwrap_newtype_on_type(&llvm.ty, &self.type_env);
         expr = expr.set_llvm(llvm.clone());
 
         // Replace StructGetBody, StructSetBody, StructPunchBody, and StructPlugInBody for structures defined by the newtype pattern.
@@ -227,7 +227,7 @@ impl ExprVisitor for NewtypeUnwrapper {
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let mut expr = run_on_inferred_type(&expr, &self.type_env);
         if let Expr::Let(pat, body, val) = expr.expr.as_ref() {
-            let pat = unwrap_newtype_pattern(pat, &self.type_env);
+            let pat = unwrap_newtype_on_pattern(pat, &self.type_env);
             // let pat = pat
             //     .get_typed_matching(body.type_.as_ref().unwrap(), &self.type_env)
             //     .unwrap();
@@ -265,7 +265,7 @@ impl ExprVisitor for NewtypeUnwrapper {
             let arms = arms
                 .iter()
                 .map(|(pat, arm_expr)| {
-                    let pat = unwrap_newtype_pattern(pat, &self.type_env);
+                    let pat = unwrap_newtype_on_pattern(pat, &self.type_env);
                     // let pat = pat
                     //     .get_typed_matching(scrut.type_.as_ref().unwrap(), &self.type_env)
                     //     .unwrap();
@@ -343,12 +343,12 @@ impl ExprVisitor for NewtypeUnwrapper {
 // This function detects circular newtype patterns and avoids infinite loops.
 //
 // This function is supposed to be called after type aliases are resolved.
-fn unwrap_newtype_type(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-    unwrap_newtype_type_internal(ty, env)
+fn unwrap_newtype_on_type(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
+    unwrap_newtype_on_type_internal(ty, env)
 }
 
 // Internal implementation of unwrap_newtype
-fn unwrap_newtype_type_internal(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
+fn unwrap_newtype_on_type_internal(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
     // First, replace the top-level type constructor if it is a newtype pattern.
     // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`.
     // Then `Foo Bool` should be resolved to `() -> Bool`.
@@ -363,7 +363,7 @@ fn unwrap_newtype_type_internal(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNo
                 return make_unit_ty();
             }
             let field_ty = ty.field_types(env)[0].clone();
-            let result = unwrap_newtype_type_internal(&field_ty, env);
+            let result = unwrap_newtype_on_type_internal(&field_ty, env);
 
             return result;
         }
@@ -373,12 +373,12 @@ fn unwrap_newtype_type_internal(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNo
         Type::TyVar(_) => ty.clone(),
         Type::TyCon(_) => ty.clone(),
         Type::TyApp(fun_ty, arg_ty) => ty
-            .set_tyapp_fun(unwrap_newtype_type_internal(fun_ty, env))
-            .set_tyapp_arg(unwrap_newtype_type_internal(arg_ty, env)),
+            .set_tyapp_fun(unwrap_newtype_on_type_internal(fun_ty, env))
+            .set_tyapp_arg(unwrap_newtype_on_type_internal(arg_ty, env)),
         Type::AssocTy(_, args) => {
             let args = args
                 .iter()
-                .map(|arg| unwrap_newtype_type_internal(arg, env))
+                .map(|arg| unwrap_newtype_on_type_internal(arg, env))
                 .collect::<Vec<_>>();
             ty.set_assocty_args(args)
         }
@@ -390,12 +390,12 @@ fn unwrap_newtype_type_internal(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNo
 // This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
 //
 // This function is supposed to be called after type aliases are resolved.
-fn unwrap_newtype_pattern(pat: &Arc<PatternNode>, env: &TypeEnv) -> Arc<PatternNode> {
+fn unwrap_newtype_on_pattern(pat: &Arc<PatternNode>, env: &TypeEnv) -> Arc<PatternNode> {
     match &pat.pattern {
         Pattern::Var(v, ty) => {
-            let ty = ty.as_ref().map(|ty| unwrap_newtype_type(ty, env));
+            let ty = ty.as_ref().map(|ty| unwrap_newtype_on_type(ty, env));
             let mut info = pat.info.clone();
-            unwrap_newtype_pattern_info(&mut info, env);
+            unwrap_newtype_on_pattern_info(&mut info, env);
             Arc::new(PatternNode {
                 pattern: Pattern::Var(v.clone(), ty),
                 info,
@@ -405,14 +405,14 @@ fn unwrap_newtype_pattern(pat: &Arc<PatternNode>, env: &TypeEnv) -> Arc<PatternN
             if is_unwrappable_newtype(tc, env) {
                 assert_eq!(field_to_pat.len(), 1);
                 let (_, pat) = &field_to_pat[0];
-                unwrap_newtype_pattern(pat, env)
+                unwrap_newtype_on_pattern(pat, env)
             } else {
                 let mut field_to_pat = field_to_pat.clone();
                 for (_, pat) in &mut field_to_pat {
-                    *pat = unwrap_newtype_pattern(pat, env);
+                    *pat = unwrap_newtype_on_pattern(pat, env);
                 }
                 let mut info = pat.info.clone();
-                unwrap_newtype_pattern_info(&mut info, env);
+                unwrap_newtype_on_pattern_info(&mut info, env);
                 Arc::new(PatternNode {
                     pattern: Pattern::Struct(tc.clone(), field_to_pat),
                     info,
@@ -421,9 +421,9 @@ fn unwrap_newtype_pattern(pat: &Arc<PatternNode>, env: &TypeEnv) -> Arc<PatternN
         }
         Pattern::Union(variant, subpat) => {
             let mut info = pat.info.clone();
-            unwrap_newtype_pattern_info(&mut info, env);
+            unwrap_newtype_on_pattern_info(&mut info, env);
             Arc::new(PatternNode {
-                pattern: Pattern::Union(variant.clone(), unwrap_newtype_pattern(subpat, env)),
+                pattern: Pattern::Union(variant.clone(), unwrap_newtype_on_pattern(subpat, env)),
                 info,
             })
         }
@@ -435,9 +435,9 @@ fn unwrap_newtype_pattern(pat: &Arc<PatternNode>, env: &TypeEnv) -> Arc<PatternN
 // This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
 //
 // This function is supposed to be called after type aliases are resolved.
-fn unwrap_newtype_pattern_info(pat_info: &mut PatternInfo, env: &TypeEnv) {
+fn unwrap_newtype_on_pattern_info(pat_info: &mut PatternInfo, env: &TypeEnv) {
     if let Some(ty) = &mut pat_info.type_ {
-        *ty = unwrap_newtype_type(ty, env);
+        *ty = unwrap_newtype_on_type(ty, env);
     }
 }
 
@@ -446,13 +446,13 @@ fn unwrap_newtype_pattern_info(pat_info: &mut PatternInfo, env: &TypeEnv) {
 // This function does not detect circular newtype patterns. If a circular newtype pattern is included, it may fall into an infinite loop.
 //
 // This function is supposed to be called after type aliases are resolved.
-pub fn unwrap_newtype_type_env(env: &mut TypeEnv) {
+pub fn unwrap_newtype_on_type_env(env: &mut TypeEnv) {
     let mut new_tycons = (*env.tycons).clone();
 
     // Unwrap newtype patterns in the remaining types
     for (_name, tycon_info) in new_tycons.iter_mut() {
         for field in &mut tycon_info.fields {
-            let new_ty = unwrap_newtype_type(&field.ty, &env);
+            let new_ty = unwrap_newtype_on_type(&field.ty, &env);
             field.ty = new_ty;
         }
     }
