@@ -854,53 +854,6 @@ impl TypeNode {
         }
     }
 
-    // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
-    //
-    // This function detects circular newtype patterns and avoids infinite loops.
-    //
-    // This function is supposed to be called after type aliases are resolved.
-    pub fn unwrap_newtype(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-        self.unwrap_newtype_with_internal(env)
-    }
-
-    // Internal implementation of unwrap_newtype
-    fn unwrap_newtype_with_internal(self: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-        // First, replace the top-level type constructor if it is a newtype pattern.
-        // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`.
-        // Then `Foo Bool` should be resolved to `() -> Bool`.
-        let toplevel_tc = self.toplevel_tycon();
-        if let Some(tc) = toplevel_tc {
-            let tc = tc.as_ref();
-            if env.is_unwrappable_newtype(tc) {
-                let ti = env.tycons.get(tc).unwrap();
-                // Check if this is a punched struct of a newtype pattern
-                if ti.fields[0].is_punched {
-                    // Convert punched struct of newtype pattern to unit type
-                    return make_unit_ty();
-                }
-                let field_ty = self.field_types(env)[0].clone();
-                let result = field_ty.unwrap_newtype_with_internal(env);
-
-                return result;
-            }
-        }
-        // If the top-level is not a newtype pattern, recursively process type arguments
-        match &self.ty {
-            Type::TyVar(_) => self.clone(),
-            Type::TyCon(_) => self.clone(),
-            Type::TyApp(fun_ty, arg_ty) => self
-                .set_tyapp_fun(fun_ty.unwrap_newtype_with_internal(env))
-                .set_tyapp_arg(arg_ty.unwrap_newtype_with_internal(env)),
-            Type::AssocTy(_, args) => {
-                let args = args
-                    .iter()
-                    .map(|arg| arg.unwrap_newtype_with_internal(env))
-                    .collect::<Vec<_>>();
-                self.set_assocty_args(args)
-            }
-        }
-    }
-
     // Get top-level type constructor of a type.
     pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
         match &self.ty {
