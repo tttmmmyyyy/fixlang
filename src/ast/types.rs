@@ -682,7 +682,7 @@ impl TypeNode {
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_argments();
         let ti = self.toplevel_tycon_info(type_env);
-        assert_eq!(args.len(), ti.tyvars.len());
+        assert_eq!(args.len(), ti.tyvars.len()); // Assumes fully applied
         let mut s = Substitution::default();
         for (i, tv) in ti.tyvars.iter().enumerate() {
             s.add_substitution(&Substitution::single(&tv.name, args[i].clone()));

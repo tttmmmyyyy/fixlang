@@ -8,10 +8,11 @@ use crate::{
         pattern::{Pattern, PatternInfo, PatternNode},
         program::{Program, Symbol, TypeEnv},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-        types::{tycon, TyCon, TyConVariant, Type, TypeNode},
+        typedecl::Field,
+        types::{kind_star, tycon, type_tycon, TyCon, TyConInfo, TyConVariant, Type, TypeNode},
     },
     builtin::{make_tuple_name, make_unit_ty},
-    misc::Set,
+    misc::{Map, Set},
 };
 use std::sync::Arc;
 
@@ -338,51 +339,165 @@ impl ExprVisitor for NewtypeUnwrapper {
     }
 }
 
+// Determine whether the type is to be replaced with a new type constructor, such as `Foo IO` in the comment of `unwrap_newtype_on_type`.
+fn should_converted_to_tycon(ty: &Arc<TypeNode>, env: &TypeEnv) -> Option<(TyCon, TyConInfo)> {
+    // This function supposes that `ty` is fully applied.
+    let top_tc = ty.toplevel_tycon().unwrap();
+    let top_ti = env.tycons.get(&top_tc).unwrap();
+    assert_eq!(top_ti.tyvars.len(), ty.collect_type_argments().len());
+
+    // If the top-level type constructor is a newtype pattern, it should not be converted to a new type constructor.
+    if is_unwrappable_newtype(&top_tc, env) {
+        return None;
+    }
+
+    let type_args = ty.collect_type_argments();
+    let mut has_arg_partially_applied_newtype = false;
+    for arg in type_args {
+        let arg_top_tc = arg.toplevel_tycon().unwrap();
+        if !is_unwrappable_newtype(&arg_top_tc, env) {
+            continue;
+        }
+        let arg_top_ti = env.tycons.get(&arg_top_tc).unwrap();
+        let arg_top_arity = arg_top_ti.tyvars.len();
+        let arg_top_args = arg.collect_type_argments();
+        assert!(arg_top_arity <= arg_top_args.len());
+        if arg_top_arity < arg_top_args.len() {
+            // If the type argument is a partially applied newtype pattern, it should be converted to a new type constructor.
+            has_arg_partially_applied_newtype = true;
+            break;
+        }
+    }
+    if !has_arg_partially_applied_newtype {
+        return None;
+    }
+
+    // In this case, convert `ty` to a new type constructor.
+    let name = format!("#UnwrapNewtype<{}>", ty.to_string());
+    let mut new_tc = top_tc.as_ref().clone();
+    *new_tc.name.name_as_mut() = name;
+
+    let mut new_ti = TyConInfo {
+        kind: kind_star(),
+        variant: top_ti.variant.clone(),
+        is_unbox: top_ti.is_unbox,
+        tyvars: vec![],
+        fields: vec![],
+        source: top_ti.source.clone(),
+        document: top_ti.document.clone(),
+    };
+    let field_types = ty.field_types(env);
+    for (i, field) in top_ti.fields.iter().enumerate() {
+        let new_field = Field {
+            name: field.name.clone(),
+            ty: field_types[i].clone(),
+            syn_ty: field.syn_ty.clone(),
+            is_punched: field.is_punched,
+            source: field.source.clone(),
+        };
+        new_ti.fields.push(new_field);
+    }
+    Some((new_tc, new_ti))
+}
+
 // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
 //
 // This function detects circular newtype patterns and avoids infinite loops.
 //
 // This function is supposed to be called after type aliases are resolved.
-fn unwrap_newtype_on_type(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-    unwrap_newtype_on_type_internal(ty, env)
+//
+// If there is a type to be newly defined, add it to `types_to_add`.
+// For example, consider `type [f : *->*] Foo f = struct { data : f (), dummy : () };`.
+// Note that `Foo` itself is not a newtype, so it is not unwrapped.
+// When the type `Foo IO` is used in the program, the `IO` in this type cannot be unwrapped because there is no type like `Foo (IOState -> (IOState, *))`.
+// Therefore, define a new type `type #UnwrapNewtype<Foo IO> = struct { data : IO (), dummy : () }` and convert `Foo IO` into `#UnwrapNewtype<Foo IO>`.
+fn unwrap_newtype_on_type(
+    ty: &Arc<TypeNode>,
+    env: &TypeEnv,
+    types_to_add: &mut Map<TyCon, TyConInfo>,
+) -> Arc<TypeNode> {
+    unwrap_newtype_on_type_internal(ty, env, types_to_add)
 }
 
 // Internal implementation of unwrap_newtype
-fn unwrap_newtype_on_type_internal(ty: &Arc<TypeNode>, env: &TypeEnv) -> Arc<TypeNode> {
-    // First, replace the top-level type constructor if it is a newtype pattern.
+fn unwrap_newtype_on_type_internal(
+    ty: &Arc<TypeNode>,
+    env: &TypeEnv,
+    types_to_add: &mut Map<TyCon, TyConInfo>,
+) -> Arc<TypeNode> {
+    // First, replace the top-level type constructor if it is a newtype.
     // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`.
     // Then `Foo Bool` should be resolved to `() -> Bool`.
-    let toplevel_tc = ty.toplevel_tycon();
-    if let Some(tc) = toplevel_tc {
-        let tc = tc.as_ref();
-        if is_unwrappable_newtype(tc, env) {
-            let ti = env.tycons.get(tc).unwrap();
-            // Check if this is a punched struct of a newtype pattern
-            if ti.fields[0].is_punched {
-                // Convert punched struct of newtype pattern to unit type
-                return make_unit_ty();
-            }
-            let field_ty = ty.field_types(env)[0].clone();
-            let result = unwrap_newtype_on_type_internal(&field_ty, env);
+    let top_tc = ty.toplevel_tycon().unwrap();
+    let top_tc = top_tc.as_ref();
+    let top_ti = env.tycons.get(top_tc).unwrap();
+    let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
 
-            return result;
+    if is_fully_applied && is_unwrappable_newtype(top_tc, env) {
+        // If the top-level tycon is a fully applied newtype, unwrap it.
+        let ti = env.tycons.get(top_tc).unwrap();
+        // Check if this is a punched struct of a newtype pattern
+        if ti.fields[0].is_punched {
+            // Convert punched struct of newtype pattern to unit type
+            return make_unit_ty();
         }
+        let field_ty = ty.field_types(env)[0].clone();
+        let result = unwrap_newtype_on_type_internal(&field_ty, env, types_to_add);
+
+        return result;
     }
-    // If the top-level is not a newtype pattern, recursively process type arguments
-    match &ty.ty {
-        Type::TyVar(_) => ty.clone(),
+
+    // If the top-level tycon is not a newtype, recursively process type arguments
+    let mut ty = match &ty.ty {
+        Type::TyVar(_) => {
+            unimplemented!("TyVar is not supported in unwrap_newtype_on_type")
+        }
         Type::TyCon(_) => ty.clone(),
         Type::TyApp(fun_ty, arg_ty) => ty
-            .set_tyapp_fun(unwrap_newtype_on_type_internal(fun_ty, env))
-            .set_tyapp_arg(unwrap_newtype_on_type_internal(arg_ty, env)),
-        Type::AssocTy(_, args) => {
-            let args = args
-                .iter()
-                .map(|arg| unwrap_newtype_on_type_internal(arg, env))
-                .collect::<Vec<_>>();
-            ty.set_assocty_args(args)
+            .set_tyapp_fun(unwrap_newtype_on_type_internal(fun_ty, env, types_to_add))
+            .set_tyapp_arg(unwrap_newtype_on_type_internal(arg_ty, env, types_to_add)),
+        Type::AssocTy(_, _args) => {
+            unimplemented!("AssocTy is not supported in unwrap_newtype_on_type")
+        }
+    };
+
+    if is_fully_applied {
+        // Check if there is still an unwrappable newtype being used.
+        let mut tycons = Set::default();
+        ty.collect_tycons(&mut tycons);
+        if tycons.iter().any(|tc| is_unwrappable_newtype(tc, env)) {
+            // In this case, there is a newtype that cannot be resolved any further, such as `Foo IO` mentioned in the comment.
+            // In this case, convert `ty` to a new type constructor.
+            let name = format!("#UnwrapNewtype<{}>", ty.to_string());
+            let mut new_tc = top_tc.clone();
+            *new_tc.name.name_as_mut() = name;
+
+            let mut new_ti = TyConInfo {
+                kind: kind_star(),
+                variant: top_ti.variant.clone(),
+                is_unbox: top_ti.is_unbox,
+                tyvars: vec![],
+                fields: vec![],
+                source: top_ti.source.clone(),
+                document: top_ti.document.clone(),
+            };
+            let field_types = ty.field_types(env);
+            for (i, field) in top_ti.fields.iter().enumerate() {
+                let new_field = Field {
+                    name: field.name.clone(),
+                    ty: field_types[i].clone(),
+                    syn_ty: field.syn_ty.clone(),
+                    is_punched: field.is_punched,
+                    source: field.source.clone(),
+                };
+                new_ti.fields.push(new_field);
+            }
+            types_to_add.insert(new_tc.clone(), new_ti.clone());
+            ty = type_tycon(&tycon(new_tc.name));
         }
     }
+
+    ty
 }
 
 // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
