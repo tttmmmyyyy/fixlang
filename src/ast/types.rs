@@ -680,8 +680,12 @@ impl TypeNode {
     // For structs and unions, return types of fields.
     // For Array, return the element type.
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
+        self.field_types_via_tycons(&type_env.tycons)
+    }
+
+    pub fn field_types_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_argments();
-        let ti = self.toplevel_tycon_info(type_env);
+        let ti = self.toplevel_tycon_info_via_tycons(tycons);
         assert_eq!(args.len(), ti.tyvars.len()); // Assumes fully applied
         let mut s = Substitution::default();
         for (i, tv) in ti.tyvars.iter().enumerate() {
@@ -944,12 +948,12 @@ impl TypeNode {
     }
 
     pub fn toplevel_tycon_info(&self, type_env: &TypeEnv) -> TyConInfo {
+        self.toplevel_tycon_info_via_tycons(&type_env.tycons)
+    }
+
+    pub fn toplevel_tycon_info_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> TyConInfo {
         assert!(!self.is_closure());
-        type_env
-            .tycons
-            .get(&self.toplevel_tycon().unwrap())
-            .unwrap()
-            .clone()
+        tycons.get(&self.toplevel_tycon().unwrap()).unwrap().clone()
     }
 
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
