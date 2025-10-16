@@ -1,4 +1,4 @@
-use crate::{optimization::remove_generic_typedefn, stopwatch::StopWatch, Configuration, Program};
+use crate::{optimization::remove_hk_tyvar, stopwatch::StopWatch, Configuration, Program};
 
 use super::{
     dead_symbol_elimination, decapturing, inline, remove_tyanno, simplify_symbol_names, uncurry,
@@ -37,7 +37,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     if config.enable_unwrap_newtype_optimization() {
         {
             let _sw = StopWatch::new("remove_generic_typedefn::run", config.show_build_times);
-            remove_generic_typedefn::run(prg);
+            remove_hk_tyvar::run(prg);
             if config.emit_symbols {
                 prg.emit_symbols(&format!(
                     "{}.remove_generic_typedefn",
@@ -46,14 +46,14 @@ pub fn run(prg: &mut Program, config: &Configuration) {
                 prg.optimization_step += 1;
             }
         }
-        {
-            let _sw = StopWatch::new("unwrap_newtype::run", config.show_build_times);
-            unwrap_newtype::run(prg);
-            if config.emit_symbols {
-                prg.emit_symbols(&format!("{}.unwrap_newtype", prg.optimization_step));
-                prg.optimization_step += 1;
-            }
-        }
+        // {
+        //     let _sw = StopWatch::new("unwrap_newtype::run", config.show_build_times);
+        //     unwrap_newtype::run(prg);
+        //     if config.emit_symbols {
+        //         prg.emit_symbols(&format!("{}.unwrap_newtype", prg.optimization_step));
+        //         prg.optimization_step += 1;
+        //     }
+        // }
     }
 
     // Perform inlining optimization.

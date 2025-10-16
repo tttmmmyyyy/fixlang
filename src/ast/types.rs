@@ -961,7 +961,8 @@ impl TypeNode {
 
     pub fn toplevel_tycon_info_via_tycons(&self, tycons: &Map<TyCon, TyConInfo>) -> TyConInfo {
         assert!(!self.is_closure());
-        tycons.get(&self.toplevel_tycon().unwrap()).unwrap().clone()
+        let tycon = self.toplevel_tycon().unwrap();
+        tycons.get(&tycon).unwrap().clone()
     }
 
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {

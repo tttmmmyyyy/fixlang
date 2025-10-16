@@ -4,11 +4,9 @@
 //
 // If there is a circular definition of newtype, the optimization is skipped (it will result in an error in the code generation phase).
 //
-// This optimization should be run after the remove-generic-typedefn transform.
+// This optimization should be run after the remove-hk-tyvar transform.
 // The unwrap-newtype optimization cannot be applied to programs with generic type definitions such as `type [f : * -> *] Foo f = box struct { data : f () };`.
 // This is because if there is an expression with a type like `Foo IO`, `IO` is a partially applied type and cannot be unwrapped.
-// Also, Arrow and Array are not subject to the remove-generic-typedefn transform, but since the type parameters of these type constructors have kind `*`,
-// partially applied types do not appear here.
 
 use crate::{
     ast::{
@@ -18,11 +16,9 @@ use crate::{
         pattern::{Pattern, PatternInfo, PatternNode},
         program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-        typedecl::Field,
-        types::{kind_star, tycon, type_tycon, TyCon, TyConInfo, TyConVariant, Type, TypeNode},
+        types::{tycon, TyCon, TyConInfo, TyConVariant, Type, TypeNode},
     },
     builtin::{make_tuple_name, make_unit_ty},
-    lsp::language_server::write_log,
     misc::{Map, Set},
 };
 use std::sync::Arc;
@@ -132,7 +128,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
         let mut expr = run_on_inferred_type(&expr, self.type_env);
         let new_ty = expr.type_.as_ref().unwrap().clone();
 
-        let mut llvm = if let Expr::LLVM(llvm) = expr.expr.as_ref() {
+        let llvm = if let Expr::LLVM(llvm) = expr.expr.as_ref() {
             llvm.as_ref().clone()
         } else {
             unreachable!()
@@ -451,27 +447,25 @@ fn unwrap_newtype_on_type_internal(
     // First, replace the top-level type constructor if it is a newtype.
     // As an example, consider type alias `type Foo a = unbox struct { data : () -> a }`.
     // Then `Foo Bool` should be resolved to `() -> Bool`.
-    if let Some(top_tc) = ty.toplevel_tycon() {
-        let top_tc = top_tc.as_ref();
-        let top_ti = env.get(top_tc).unwrap().clone();
-        let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
-        if is_fully_applied && is_unwrappable_newtype(top_tc, env) {
-            // If the top-level tycon is a fully applied newtype, unwrap it.
-            let ti = env.get(top_tc).unwrap();
-            // Check if this is a punched struct of a newtype pattern
-            if ti.fields[0].is_punched {
-                // Convert punched struct of newtype pattern to unit type
-                return make_unit_ty();
-            }
-            let field_ty = ty.field_types_via_tycons(env)[0].clone();
-            let result = unwrap_newtype_on_type_internal(&field_ty, env);
-
-            return result;
+    let top_tc = ty.toplevel_tycon().clone().unwrap();
+    let top_ti = env.get(&top_tc).unwrap().clone();
+    let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
+    if is_fully_applied && is_unwrappable_newtype(&top_tc, env) {
+        // If the top-level tycon is a fully applied newtype, unwrap it.
+        let ti = env.get(&top_tc).unwrap();
+        // Check if this is a punched struct of a newtype pattern
+        if ti.fields[0].is_punched {
+            // Convert punched struct of newtype pattern to unit type
+            return make_unit_ty();
         }
+        let field_ty = ty.field_types_via_tycons(env)[0].clone();
+        let result = unwrap_newtype_on_type_internal(&field_ty, env);
+
+        return result;
     }
 
     // If the top-level tycon is not a newtype, recursively process type arguments
-    let mut ty = match &ty.ty {
+    let ty = match &ty.ty {
         Type::TyVar(_) => ty.clone(),
         Type::TyCon(_) => ty.clone(),
         Type::TyApp(fun_ty, arg_ty) => ty
@@ -481,47 +475,47 @@ fn unwrap_newtype_on_type_internal(
             unimplemented!("AssocTy is not supported in unwrap_newtype_on_type")
         }
     };
-    if let Some(top_tc) = ty.toplevel_tycon() {
-        let top_tc = top_tc.as_ref();
-        let top_ti = env.get(top_tc).unwrap().clone();
-        let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
-        // Check if there is still an unwrappable newtype being used.
-        let mut tycons = Set::default();
-        ty.collect_tycons(&mut tycons);
-        if is_fully_applied && tycons.iter().any(|tc| is_unwrappable_newtype(tc, env)) {
-            // There is a newtype that cannot be resolved any further, such as `Foo IO` mentioned in the comment.
-            // In this case, convert `ty` to a new type constructor.
-            let name = format!("#UnwrapNewtype<{}>", ty.to_string());
-            let mut new_tc = top_tc.clone();
-            *new_tc.name.name_as_mut() = name;
+    // if let Some(top_tc) = ty.toplevel_tycon() {
+    //     let top_tc = top_tc.as_ref();
+    //     let top_ti = env.get(top_tc).unwrap().clone();
+    //     let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
+    //     // Check if there is still an unwrappable newtype being used.
+    //     let mut tycons = Set::default();
+    //     ty.collect_tycons(&mut tycons);
+    //     if is_fully_applied && tycons.iter().any(|tc| is_unwrappable_newtype(tc, env)) {
+    //         // There is a newtype that cannot be resolved any further, such as `Foo IO` mentioned in the comment.
+    //         // In this case, convert `ty` to a new type constructor.
+    //         let name = format!("#UnwrapNewtype<{}>", ty.to_string());
+    //         let mut new_tc = top_tc.clone();
+    //         *new_tc.name.name_as_mut() = name;
 
-            let mut new_ti = TyConInfo {
-                kind: kind_star(),
-                variant: top_ti.variant.clone(),
-                is_unbox: top_ti.is_unbox,
-                tyvars: vec![],
-                fields: vec![],
-                source: top_ti.source.clone(),
-                document: top_ti.document.clone(),
-            };
-            let mut field_types = ty.field_types_via_tycons(env);
-            for field_ty in &mut field_types {
-                *field_ty = unwrap_newtype_on_type_internal(field_ty, env);
-            }
-            for (i, field) in top_ti.fields.iter().enumerate() {
-                let new_field = Field {
-                    name: field.name.clone(),
-                    ty: field_types[i].clone(),
-                    syn_ty: field.syn_ty.clone(),
-                    is_punched: field.is_punched,
-                    source: field.source.clone(),
-                };
-                new_ti.fields.push(new_field);
-            }
-            env.insert(new_tc.clone(), new_ti.clone());
-            ty = type_tycon(&tycon(new_tc.name));
-        }
-    }
+    //         let mut new_ti = TyConInfo {
+    //             kind: kind_star(),
+    //             variant: top_ti.variant.clone(),
+    //             is_unbox: top_ti.is_unbox,
+    //             tyvars: vec![],
+    //             fields: vec![],
+    //             source: top_ti.source.clone(),
+    //             document: top_ti.document.clone(),
+    //         };
+    //         let mut field_types = ty.field_types_via_tycons(env);
+    //         for field_ty in &mut field_types {
+    //             *field_ty = unwrap_newtype_on_type_internal(field_ty, env);
+    //         }
+    //         for (i, field) in top_ti.fields.iter().enumerate() {
+    //             let new_field = Field {
+    //                 name: field.name.clone(),
+    //                 ty: field_types[i].clone(),
+    //                 syn_ty: field.syn_ty.clone(),
+    //                 is_punched: field.is_punched,
+    //                 source: field.source.clone(),
+    //             };
+    //             new_ti.fields.push(new_field);
+    //         }
+    //         env.insert(new_tc.clone(), new_ti.clone());
+    //         ty = type_tycon(&tycon(new_tc.name));
+    //     }
+    // }
 
     ty
 }

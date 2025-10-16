@@ -520,6 +520,26 @@ impl PatternNode {
         }
         Arc::new(node)
     }
+
+    fn to_string_internal(&self, with_type: bool) -> String {
+        let pat_str = self.pattern.to_string_internal(with_type);
+        if with_type {
+            format!(
+                "{}<{}>",
+                pat_str,
+                self.info
+                    .type_
+                    .as_ref()
+                    .map_or("na".to_string(), |t| t.to_string())
+            )
+        } else {
+            pat_str
+        }
+    }
+
+    pub fn to_string_with_type(&self) -> String {
+        self.to_string_internal(true)
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Default)]
@@ -579,6 +599,10 @@ impl Pattern {
     }
 
     pub fn to_string(&self) -> String {
+        self.to_string_internal(false)
+    }
+
+    fn to_string_internal(&self, with_type: bool) -> String {
         let mut ret = "".to_string();
         match self {
             Pattern::Var(v, t) => {
@@ -596,7 +620,7 @@ impl Pattern {
                 if let Some(n) = get_tuple_n(&tc.name) {
                     let pats = fields
                         .iter()
-                        .map(|(_, pat)| pat.pattern.to_string())
+                        .map(|(_, pat)| pat.to_string_internal(with_type))
                         .collect::<Vec<_>>();
                     if n == 1 {
                         format!("({},)", pats[0])
@@ -606,13 +630,19 @@ impl Pattern {
                 } else {
                     let pats = fields
                         .iter()
-                        .map(|(name, pat)| format!("{}: {}", name, pat.pattern.to_string()))
+                        .map(|(name, pat)| {
+                            format!("{}: {}", name, pat.to_string_internal(with_type))
+                        })
                         .collect::<Vec<_>>();
                     format!("{} {{{}}}", tc.to_string(), pats.join(", "))
                 }
             }
             Pattern::Union(variant, pat) => {
-                format!("{}({})", variant.to_string(), pat.pattern.to_string())
+                format!(
+                    "{}({})",
+                    variant.to_string(),
+                    pat.to_string_internal(with_type)
+                )
             }
         }
     }
