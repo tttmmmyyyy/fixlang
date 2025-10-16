@@ -1,4 +1,14 @@
 // Unwrap newtype pattern, i.e., type A = unbox struct { data : B } to B.
+//
+// The boxed struct is not treated as a newtype pattern.
+//
+// If there is a circular definition of newtype, the optimization is skipped (it will result in an error in the code generation phase).
+//
+// This optimization should be run after the remove-generic-typedefn transform.
+// The unwrap-newtype optimization cannot be applied to programs with generic type definitions such as `type [f : * -> *] Foo f = box struct { data : f () };`.
+// This is because if there is an expression with a type like `Foo IO`, `IO` is a partially applied type and cannot be unwrapped.
+// Also, Arrow and Array are not subject to the remove-generic-typedefn transform, but since the type parameters of these type constructors have kind `*`,
+// partially applied types do not appear here.
 
 use crate::{
     ast::{

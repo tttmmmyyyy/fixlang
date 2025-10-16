@@ -233,6 +233,14 @@ impl TyCon {
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
+
+    pub fn is_arrow(&self) -> bool {
+        self == &make_arrow_tycon()
+    }
+
+    pub fn is_array(&self) -> bool {
+        self == &make_array_tycon()
+    }
 }
 
 // Information of type constructor.

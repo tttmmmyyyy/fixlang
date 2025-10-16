@@ -7,6 +7,7 @@ mod find_usage_of_name;
 mod inline;
 pub mod optimization;
 mod pull_let;
+mod remove_generic_typedefn;
 mod remove_renaming;
 mod remove_tyanno;
 mod simplify_symbol_names;
