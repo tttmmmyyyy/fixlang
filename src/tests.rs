@@ -9470,13 +9470,14 @@ main : IO () = (
 
 #[test]
 pub fn test_regression_issue_64() {
-    // A regression test for a bug that existed in the implementation of `unwrap-newtype`.
     let source = r##"
 module Main;
 
 type [f : (* -> *) -> *] Foo f = box struct { data : f IO };
+type [f : * -> *] Bar f = struct { data : f () };
 
 main : IO () = (
+    let foobar : Foo Bar = Foo { data : Bar { data : println("Hello, World!") } };
     pure()
 );
     "##;
