@@ -465,6 +465,10 @@ impl Configuration {
         self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    pub fn enable_remove_hktvs_transformation(&self) -> bool {
+        self.enable_unwrap_newtype_optimization()
+    }
+
     pub fn enable_unwrap_newtype_optimization(&self) -> bool {
         self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
