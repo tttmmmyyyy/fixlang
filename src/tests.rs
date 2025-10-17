@@ -9467,3 +9467,18 @@ main : IO () = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_regression_issue_64() {
+    // A regression test for a bug that existed in the implementation of `unwrap-newtype`.
+    let source = r##"
+module Main;
+
+type [f : (* -> *) -> *] Foo f = box struct { data : f IO };
+
+main : IO () = (
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

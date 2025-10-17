@@ -34,7 +34,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Perform remove-hktvs transformation.
-    if config.enable_remove_hktvs_optimization() {
+    if config.enable_remove_hktvs_transformation() {
         let _sw = StopWatch::new("remove_hktvs::run", config.show_build_times);
         remove_hktvs::run(prg);
         if config.emit_symbols {
