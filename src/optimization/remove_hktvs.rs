@@ -1,5 +1,5 @@
 /*
-remove-hk-tyvar transform
+remove-hktvs transform
 
 Overview:
 This transformation removes higher-kinded type variables from the program (expressions, patterns, and TypeEnv).
@@ -57,13 +57,7 @@ fn run_on_type_env(env: &mut Map<TyCon, TyConInfo>) {
     }
     let mut done = Set::default();
     while todo.len() > 0 {
-        // write_log(&format!("RGT processing tycon: {}", tc.to_string()));
-        // write_log(&format!("RGT todo size: {}", todo.len()));
-        // write_log(&format!(
-        //     "RGT todo: {:?}",
-        //     todo.iter().map(|tc| tc.to_string()).collect::<Vec<_>>()
-        // ));
-        // Apply remove_generic_type_on_type to the right-hand side of the type definition
+        // Apply run_on_type to the right-hand side of the type definition
         for tc in &todo {
             done.insert(tc.clone());
             if is_subject_to_removal(tc, env) {
