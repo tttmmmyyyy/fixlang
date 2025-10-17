@@ -531,11 +531,11 @@ fn unwrap_newtype_on_pattern(
 ) -> Arc<PatternNode> {
     match &pat.pattern {
         Pattern::Var(v, ty) => {
-            let ty = ty.as_ref().map(|ty| unwrap_newtype_on_type(ty, env));
+            // Ignore user-provided type annotation for variable patterns
             let mut info = pat.info.clone();
             unwrap_newtype_on_pattern_info(&mut info, env);
             Arc::new(PatternNode {
-                pattern: Pattern::Var(v.clone(), ty),
+                pattern: Pattern::Var(v.clone(), ty.clone()),
                 info,
             })
         }
