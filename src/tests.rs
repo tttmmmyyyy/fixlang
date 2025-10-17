@@ -9478,6 +9478,7 @@ type [f : * -> *] Bar f = struct { data : f () };
 
 main : IO () = (
     let foobar : Foo Bar = Foo { data : Bar { data : println("Hello, World!") } };
+    foobar.@data.@data;;
     pure()
 );
     "##;

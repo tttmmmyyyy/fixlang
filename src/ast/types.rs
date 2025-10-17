@@ -1600,6 +1600,26 @@ impl TypeNode {
             }
         }
     }
+
+    pub fn collect_tyvar_names(&self, tyvar_names: &mut Set<Name>) {
+        match &self.ty {
+            Type::TyVar(tv) => {
+                tyvar_names.insert(tv.name.clone());
+            }
+            Type::TyCon(_) => {
+                // Type constructors don't contain type variables
+            }
+            Type::TyApp(tyfun, arg) => {
+                tyfun.collect_tyvar_names(tyvar_names);
+                arg.collect_tyvar_names(tyvar_names);
+            }
+            Type::AssocTy(_, args) => {
+                for arg in args {
+                    arg.collect_tyvar_names(tyvar_names);
+                }
+            }
+        }
+    }
 }
 
 // Type scheme.

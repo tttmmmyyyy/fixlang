@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::error::panic_with_err;
+use crate::{error::panic_with_err, misc::Set};
 use ast::name::{FullName, Name, NameSpace};
 use inkwell::module::Linkage;
 use misc::{make_map, Map};
@@ -2851,7 +2851,18 @@ pub fn struct_act(
     // Create type scheme of this function.
     let str_ty = definition.applied_type();
     let field_ty = field.ty.clone();
-    let functor_ty = type_tyvar("f", &kind_arrow(kind_star(), kind_star()));
+    // To determine the name of the type variable for Functor, avoid names used in `str_ty` and `field_ty`.
+    let mut used_tyvar_namess = Set::default();
+    str_ty.collect_tyvar_names(&mut used_tyvar_namess);
+    field_ty.collect_tyvar_names(&mut used_tyvar_namess);
+    let used_tyvar_names: Set<FullName> = used_tyvar_namess
+        .into_iter()
+        .map(|name| FullName::local(&name))
+        .collect();
+    let new_name = crate::optimization::utils::generate_new_names(&used_tyvar_names, 1)[0]
+        .name
+        .clone();
+    let functor_ty = type_tyvar(&new_name, &kind_arrow(kind_star(), kind_star()));
     let src_ty = type_fun(
         field_ty.clone(),
         type_tyapp(functor_ty.clone(), field_ty.clone()),
