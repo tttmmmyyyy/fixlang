@@ -116,7 +116,6 @@ fn is_subject_to_removal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
 }
 
 fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeNode> {
-    write_log(&format!("RGT processing type: {}", ty.to_string()));
     assert!(ty.free_vars_vec().is_empty());
     let top_tc = ty.toplevel_tycon().as_ref().unwrap().clone();
     let top_ti = env.get(top_tc.as_ref()).unwrap();
@@ -143,7 +142,7 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeN
         return res;
     }
     let top_ti = env.get(top_tc.as_ref()).unwrap().clone();
-    let name = format!("#RGT<{}>", ty.to_string());
+    let name = format!("#RHKTV<{}>", ty.to_string());
     let mut new_tc = top_tc.as_ref().clone();
     *new_tc.name.name_as_mut() = name;
 
