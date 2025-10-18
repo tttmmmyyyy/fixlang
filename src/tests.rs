@@ -9470,6 +9470,25 @@ main : IO () = (
 
 #[test]
 pub fn test_regression_issue_64() {
+    // This is also a test for remove-hktvs and unwrap-newtype.
+    let source = r##"
+module Main;
+
+type [f : (* -> *) -> *] Foo f = struct { data : f IO };
+type [f : * -> *] Bar f = struct { data : f () };
+
+main : IO () = (
+    let foobar : Foo Bar = Foo { data : Bar { data : println("Hello, World!") } };
+    foobar.@data.@data;;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_regression_issue_64_boxed() {
+    // This is also a test for remove-hktvs and unwrap-newtype.
     let source = r##"
 module Main;
 
@@ -9487,6 +9506,66 @@ main : IO () = (
 
 #[test]
 pub fn test_regression_issue_64_more_complex() {
+    // This is also a test for remove-hktvs and unwrap-newtype.
+    let source = r##"
+module Main;
+
+type [f : (* -> *) -> *] Foo f = struct { data : f (Reader I64) }; 
+type [f : * -> *] Bar f = struct { data : f I64 };
+// → Foo Bar is isomorphic to Reader I64 I64
+
+type [m: * -> *] Reader e a = unbox struct {
+    data: e -> a
+};
+
+impl Reader e : Monad {
+    pure = |a| Reader { data: |_| a };
+    bind = |f, ra| Reader { data: |e|
+        let a = (ra.@data)(e);
+        let rb = f(a);
+        (rb.@data)(e)
+    };
+}   
+
+impl Reader e : Functor {
+    map = |f, ra| Reader { data: |e| f((ra.@data)(e)) };
+}
+
+reader: (e -> a) -> Reader e a;
+reader = |f| Reader { data: f };
+
+run_reader: e -> Reader e a -> a;
+run_reader = |e, ra| (ra.@data)(e);
+
+get_env : Reader e e;
+get_env = Reader { data: |e| e };
+
+main : IO () = (
+    let foobar : Foo Bar = Foo { data : Bar { data : get_env } };
+    let res = (foobar.@data.@data).run_reader(42);
+    assert_eq(|_|"1", res, 42);;
+
+    let foobar = foobar.mod_data(mod_data(map(|x| x / 6)));
+    let res = (foobar.@data.@data).run_reader(42);
+    assert_eq(|_|"2", res, 7);;
+
+    let foobar = foobar.mod_data(set_data(reader $ |r| r + 1));
+    let res = (foobar.@data.@data).run_reader(41);
+    assert_eq(|_|"2", res, 42);;    
+
+    let foobar = foobar.(Foo::act_data << Bar::act_data $ |r| some(r));
+    let res = (foobar.as_some.@data.@data).run_reader(41);
+    assert_eq(|_|"3", res, 42);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_regression_issue_64_more_complex_boxed() {
+    // This is also a test for remove-hktvs and unwrap-newtype.
     let source = r##"
 module Main;
 
