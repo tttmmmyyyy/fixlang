@@ -34,7 +34,6 @@ use crate::{
             kind_star, tycon, type_tyapp, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode,
         },
     },
-    lsp::language_server::write_log,
     misc::{Map, Set},
 };
 

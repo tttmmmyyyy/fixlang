@@ -22,6 +22,7 @@ impl PatternNode {
     // This function ignores user-provided type annotations.
     // Specifically, if the pattern is `v : A` and the type `B` is given, then type `B` is assigned to `v` even if `A != B`.
     // Therefore, this function must not be used for type checking. It is used in a process after type checking has succeeded.
+    #[allow(dead_code)]
     pub fn get_typed_matching(
         &self,
         type_: &Arc<TypeNode>,

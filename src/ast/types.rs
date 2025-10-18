@@ -234,10 +234,12 @@ impl TyCon {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
 
+    #[allow(dead_code)]
     pub fn is_arrow(&self) -> bool {
         self == &make_arrow_tycon()
     }
 
+    #[allow(dead_code)]
     pub fn is_array(&self) -> bool {
         self == &make_array_tycon()
     }
