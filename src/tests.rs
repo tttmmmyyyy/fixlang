@@ -9621,3 +9621,119 @@ main : IO () = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_unwrap_newtye_cont() {
+    let source = r##"
+// This test code is based on the continuation monad transformer implementation in:
+// https://github.com/pt9999/fixlang-minilib-monad/blob/4f1b67d9f4328ce6ae8ec14f38cde5b4bea1737a/lib/monad/cont.fix
+// 
+// MIT License
+// 
+// Copyright (c) 2024 pt9999
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+module Main;
+
+type [m: * -> *] ContT r m a = unbox struct {
+    data: (a -> m r) -> m r
+};
+
+trait MonadCont = Monad + MonadContIF;
+
+// A trait for generic continuation  monads.
+trait [cm: * -> *] cm: MonadContIF {
+    // `call_cc(f)` calls `f` with the current continuation, and returns a continuation monad.
+    // `f` takes the current continuation (the exit function) and should return a continuation monad.
+    // For example, `call_cc(|exit| ... if condition { exit(false) }; ... pure(true))`.
+    // The exit function can be passed to another function.
+    call_cc: ((a -> cm b) -> cm a) -> cm a;
+}
+
+type [cm: * -> *] JmpBuf cm a b = box struct {
+    // the argument of a jump
+    arg: a,
+    // current continuation of a jump
+    cc: JmpBuf cm a b -> cm b
+};
+
+namespace JmpBuf {
+    setjmp: [cm: MonadCont] a -> cm (JmpBuf cm a b);
+    setjmp = |arg| (
+        call_cc(|cc| pure $ JmpBuf { arg: arg, cc: cc })
+    );
+
+    longjmp: [cm: MonadCont] a -> JmpBuf cm a b -> cm b;
+    longjmp = |arg, jmpbuf| (
+        (jmpbuf.@cc)(jmpbuf.set_arg(arg))
+    );
+}
+
+impl [m: Monad] ContT r m: MonadContIF {
+    //call_cc: ((a -> cm b) -> cm a) -> cm a;
+    call_cc = |fa_cmb_cma| (            // fa_cmb_cma: (a -> ContT r m b) -> ContT r m a
+        cont_t $ |fa_mr|                // fa_mr: a -> m r
+        let fa_cmb = |a| (              // fa_cmb: a -> ContT r m b  (exit function)
+            cont_t $ |fb_mr|            // fb_mr: b -> m r (ignored)
+            fa_mr(a)                    // ignores fb_mr and calls the final continuation function
+        );
+        let cma = fa_cmb_cma(fa_cmb);
+        cma.run_cont_t(fa_mr)
+    );
+}
+
+impl [m: Monad] ContT r m: Monad {
+    pure = |a| cont_t $ |famr| famr(a);
+    bind = |facmb, cma| (           // facmb: a -> ContT r m b, cma: ContT r m a
+        cont_t $ |fbmr|             // fbmr: b -> m r
+        cma.run_cont_t(|a|
+            let cmb = facmb(a);     // cmb: ContT r m b
+            cmb.run_cont_t(fbmr)
+        )
+    );
+}
+
+// Creates a ContT monad from a function which receives a continuation function and returns the monadic value of the result.
+cont_t: [m: Monad] ((a -> m r) -> m r) -> ContT r m a;
+cont_t = |f| ContT { data: f };
+
+// Runs a ContT monad with the supplied continuation function.
+run_cont_t: [m: Monad] (a -> m r) -> ContT r m a -> m r;
+run_cont_t = |fa_mr, cma| (
+    (cma.@data)(fa_mr)
+);
+
+main: IO ();
+main = (
+    let cma: ContT String IOFail String = do {
+        let jmpbuf = *setjmp(0);
+        let i = jmpbuf.@arg;
+        //eval *eprintln("i=" + i.to_string).lift.lift_t;
+        if i < 5 { jmpbuf.longjmp(i + 1) };
+        pure(i.to_string)
+    };
+    let actual = *cma.run_cont_t(|i| pure $ i).try(exit_with_msg(1));
+    let expected = "5";
+    assert_eq(|_|"", actual, expected)
+);
+
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

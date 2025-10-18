@@ -2,7 +2,7 @@
 remove-hktvs transform
 
 Overview:
-This transformation removes higher-kinded type variables from the program (expressions, patterns, and TypeEnv).
+This transformation removes type constructors with higher-kinded type variables from the program.
 
 Example:
 Suppose we have the following type definitions.
@@ -145,30 +145,36 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeN
     let mut new_tc = top_tc.as_ref().clone();
     *new_tc.name.name_as_mut() = name;
 
-    let mut new_ti = TyConInfo {
-        kind: kind_star(),
-        variant: top_ti.variant.clone(),
-        is_unbox: top_ti.is_unbox,
-        tyvars: vec![],
-        fields: vec![],
-        source: top_ti.source.clone(),
-        document: top_ti.document.clone(),
-    };
-    let mut field_types = ty.field_types_via_tycons(env);
-    for field_type in &mut field_types {
-        *field_type = run_on_type(field_type, env);
-    }
-    for (i, field) in top_ti.fields.iter().enumerate() {
-        let new_field = Field {
-            name: field.name.clone(),
-            ty: field_types[i].clone(),
-            syn_ty: field.syn_ty.clone(),
-            is_punched: field.is_punched,
-            source: field.source.clone(),
+    if !env.contains_key(&new_tc) {
+        let mut new_ti = TyConInfo {
+            kind: kind_star(),
+            variant: top_ti.variant.clone(),
+            is_unbox: top_ti.is_unbox,
+            tyvars: vec![],
+            fields: vec![],
+            source: top_ti.source.clone(),
+            document: top_ti.document.clone(),
         };
-        new_ti.fields.push(new_field);
+        // Register the new type constructor before processing field types to handle recursive types.
+        env.insert(new_tc.clone(), new_ti.clone());
+
+        let mut field_types = ty.field_types_via_tycons(env);
+        for field_type in &mut field_types {
+            *field_type = run_on_type(field_type, env);
+        }
+        for (i, field) in top_ti.fields.iter().enumerate() {
+            let new_field = Field {
+                name: field.name.clone(),
+                ty: field_types[i].clone(),
+                syn_ty: field.syn_ty.clone(),
+                is_punched: field.is_punched,
+                source: field.source.clone(),
+            };
+            new_ti.fields.push(new_field);
+        }
+        env.insert(new_tc.clone(), new_ti.clone());
     }
-    env.insert(new_tc.clone(), new_ti.clone());
+
     return type_tycon(&tycon(new_tc.name));
 }
 
