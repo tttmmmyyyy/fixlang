@@ -9623,7 +9623,7 @@ main : IO () = (
 }
 
 #[test]
-pub fn test_unwrap_newtye_cont() {
+pub fn test_unwrap_newtype_cont() {
     let source = r##"
 // This test code is based on the continuation monad transformer implementation in:
 // https://github.com/pt9999/fixlang-minilib-monad/blob/4f1b67d9f4328ce6ae8ec14f38cde5b4bea1737a/lib/monad/cont.fix
@@ -9732,6 +9732,25 @@ main = (
     let actual = *cma.run_cont_t(|i| pure $ i).try(exit_with_msg(1));
     let expected = "5";
     assert_eq(|_|"", actual, expected)
+);
+
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_generic_type_annotation() {
+    let source = r##"
+module Main;
+
+apply : (a -> b) -> a -> b;
+apply = |f : a -> b, x : a| f(x : a) : b;
+
+main: IO ();
+main = (
+    let x = apply(|y| y + 1, 41);
+    assert_eq(|_|"", x, 42);;
+    pure()
 );
 
     "##;

@@ -115,7 +115,11 @@ fn is_subject_to_removal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
 }
 
 fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeNode> {
-    assert!(ty.free_vars_vec().is_empty());
+    assert!(
+        ty.free_vars_vec().is_empty(),
+        "A type `{}` with free type variables.",
+        ty.to_string()
+    );
     let top_tc = ty.toplevel_tycon().as_ref().unwrap().clone();
     let top_ti = env.get(top_tc.as_ref()).unwrap();
     let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
@@ -254,11 +258,6 @@ impl<'a> ExprVisitor for RGT<'a> {
         _state: &mut VisitState,
     ) -> EndVisitResult {
         let expr = run_on_inferred_type(&expr, &mut self.env);
-
-        let ty = expr.get_tyanno_ty();
-        let ty = run_on_type(&ty, &mut self.env);
-        let expr = expr.set_tyanno_ty(ty);
-
         EndVisitResult::changed(expr)
     }
 

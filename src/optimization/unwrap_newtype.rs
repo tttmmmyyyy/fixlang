@@ -91,11 +91,6 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
         _state: &mut VisitState,
     ) -> EndVisitResult {
         let expr = run_on_inferred_type(&expr, self.type_env);
-
-        let ty = expr.get_tyanno_ty();
-        let ty = unwrap_newtype_on_type(&ty, self.type_env);
-        let expr = expr.set_tyanno_ty(ty);
-
         EndVisitResult::changed(expr)
     }
 
