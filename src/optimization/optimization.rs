@@ -1,4 +1,8 @@
-use crate::{optimization::remove_hktvs, stopwatch::StopWatch, Configuration, Program};
+use crate::{
+    optimization::{beta_reduction, eta_expand, remove_hktvs},
+    stopwatch::StopWatch,
+    Configuration, Program,
+};
 
 use super::{
     dead_symbol_elimination, decapturing, inline, remove_tyanno, simplify_symbol_names, uncurry,
@@ -49,6 +53,28 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         unwrap_newtype::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.unwrap_newtype", prg.optimization_step));
+            prg.optimization_step += 1;
+        }
+    }
+
+    // Perform eta expansion and beta reduction optimizations.
+    if config.enable_eta_beta_optimization() {
+        // By combining unwrap_newtype with eta and beta,
+        // we can transform `main : IO () = (...)` into `main : IOState -> (IOState, ()) = |ios| (...ios appears...)`.
+
+        // Perform eta expansion optimization.
+        let _sw = StopWatch::new("eta_expand::run", config.show_build_times);
+        eta_expand::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.eta_expand", prg.optimization_step));
+            prg.optimization_step += 1;
+        }
+
+        // Perform beta reduction optimization.
+        let _sw = StopWatch::new("beta_reduction::run", config.show_build_times);
+        beta_reduction::run(prg);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.beta_reduction", prg.optimization_step));
             prg.optimization_step += 1;
         }
     }
