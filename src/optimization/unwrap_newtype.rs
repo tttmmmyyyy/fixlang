@@ -19,6 +19,7 @@ use crate::{
         types::{tycon, TyCon, TyConInfo, TyConVariant, Type, TypeNode},
     },
     builtin::{make_tuple_name, make_unit_ty},
+    lsp::language_server::write_log,
     misc::{Map, Set},
 };
 use std::sync::Arc;
@@ -491,63 +492,45 @@ pub fn unwrap_newtype_on_type_env(env: &mut Map<TyCon, TyConInfo>) {
     }
 }
 
-// Is this type constructor a "newtype pattern", i.e., is it an unbox struct type with only one field?
+// Is this type constructor a "newtype", i.e., is it an unbox struct type with only one field?
 fn is_newtype(tycon: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
     let ti = env.get(tycon).unwrap();
     ti.is_unbox && ti.variant == TyConVariant::Struct && ti.fields.len() == 1
 }
 
-// Is this type constructor a newtype pattern and unwrappable?
+// Is this type constructor a newtype and unwrappable?
 fn is_unwrappable_newtype(tycon: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
-    let mut visited: Set<TyCon> = Set::default();
-    is_unwrappable_newtype_internal(tycon, env, &mut visited)
+    is_unwrappable_newtype_internal(tycon, env)
 }
 
-// Is this type constructor a newtype pattern and unwrappable?
-fn is_unwrappable_newtype_internal(
-    tc: &TyCon,
-    env: &Map<TyCon, TyConInfo>,
-    visited: &mut Set<TyCon>,
-) -> bool {
-    // If this TyCon is not a newtype pattern, return false.
+// Is this type constructor a newtype and unwrappable?
+fn is_unwrappable_newtype_internal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
+    // If this TyCon is not a newtype, return false.
     if !is_newtype(tc, env) {
         return false;
     }
 
-    // If this TyCon is already being processed (circular dependency), return false
-    if visited.contains(tc) {
-        return false;
+    let mut visited = Set::default();
+    let mut seed_tcs = vec![tc.clone()];
+    while let Some(now_tc) = seed_tcs.pop() {
+        visited.insert(now_tc.clone());
+        if !is_newtype(&now_tc, env) {
+            continue;
+        }
+        let ti = env.get(&now_tc).unwrap();
+        let field_ty = &ti.fields[0].ty;
+        let mut tycons = Set::default();
+        field_ty.collect_tycons(&mut tycons);
+        for tycon in tycons {
+            if tycon == *tc {
+                return false;
+            }
+            if visited.contains(&tycon) {
+                continue;
+            }
+            seed_tcs.push(tycon);
+        }
     }
 
-    // Add this TyCon to the visited set
-    visited.insert(tc.clone());
-
-    let ti = env.get(tc).unwrap();
-
-    // Check the field type of the newtype pattern
-    let field_ty = &ti.fields[0].ty;
-
-    // Collect all TyCons that appear in the field type, which is not punched.
-    let referenced_tycons = if ti.fields[0].is_punched {
-        Set::default()
-    } else {
-        let mut s = Set::default();
-        field_ty.collect_tycons(&mut s);
-        s
-    };
-
-    // All referenced TyCons should satisfy the unwrappability conditions
-    let result = referenced_tycons.iter().all(|referenced_tycon| {
-        if !is_newtype(referenced_tycon, env) {
-            // If it's not a newtype pattern, it's always safe
-            return true;
-        }
-        // It's a newtype pattern - check if it's unwrappable and not already in the chain
-        is_unwrappable_newtype_internal(referenced_tycon, env, visited)
-    });
-
-    // Remove this TyCon from the visited set before returning
-    visited.remove(tc);
-
-    result
+    return true;
 }

@@ -9752,6 +9752,30 @@ main = (
     assert_eq(|_|"", x, 42);;
     pure()
 );
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_unwrap_newtype() {
+    let source = r##"
+module Main;
+
+type Header = (String, String);
+
+type Headers = unbox struct {
+    iter: DynIterator Header
+};
+
+main: IO ();
+main = (
+    let headers = Headers { iter : DynIterator::empty };
+    let headers = headers.mod_iter(|iter| iter.push_front(("Content-Type", "text/plain")).to_dyn);
+    let (_, (key, value)) = headers.@iter.advance.as_some;
+    assert_eq(|_|"", key, "Content-Type");;
+    assert_eq(|_|"", value, "text/plain");;
+    pure()
+);
 
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
