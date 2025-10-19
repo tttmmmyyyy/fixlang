@@ -453,40 +453,44 @@ impl Configuration {
         }
     }
 
+    pub fn force_all_optimizations(&self) -> bool {
+        false
+    }
+
     pub fn enable_separated_compilation(&self) -> bool {
-        self.fix_opt_level <= FixOptimizationLevel::Basic
+        !self.force_all_optimizations() && self.fix_opt_level <= FixOptimizationLevel::Basic
     }
 
     pub fn enable_uncurry_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Basic
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Basic
     }
 
     pub fn enable_remove_tyanno_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Max
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     pub fn enable_remove_hktvs_transformation(&self) -> bool {
-        self.enable_unwrap_newtype_optimization()
+        self.force_all_optimizations() || self.enable_unwrap_newtype_optimization()
     }
 
     pub fn enable_unwrap_newtype_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Experimental
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
     pub fn enable_inline_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Max
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     pub fn enable_decapturing_optimization(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Max
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     pub fn enable_simplify_symbol_names(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Experimental
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
     pub fn enable_dead_symbol_elimination(&self) -> bool {
-        self.fix_opt_level >= FixOptimizationLevel::Max
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     pub fn set_backtrace(&mut self) {

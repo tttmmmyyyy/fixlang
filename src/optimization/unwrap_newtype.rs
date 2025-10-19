@@ -19,7 +19,6 @@ use crate::{
         types::{tycon, TyCon, TyConInfo, TyConVariant, Type, TypeNode},
     },
     builtin::{make_tuple_name, make_unit_ty},
-    lsp::language_server::write_log,
     misc::{Map, Set},
 };
 use std::sync::Arc;

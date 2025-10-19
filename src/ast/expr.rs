@@ -500,6 +500,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    #[allow(dead_code)]
     pub fn get_tyanno_ty(&self) -> Arc<TypeNode> {
         match &*self.expr {
             Expr::TyAnno(_, ty) => ty.clone(),
