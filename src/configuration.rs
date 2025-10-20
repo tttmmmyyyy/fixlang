@@ -336,9 +336,9 @@ impl Configuration {
         config.set_valgrind(ValgrindTool::MemCheck);
         config.fix_opt_level = FixOptimizationLevel::Experimental;
         // config.set_sanitize_memory();
-        // config.emit_llvm = true;
+        config.emit_llvm = true;
         // config.debug_info = true;
-        // config.emit_symbols = true;
+        config.emit_symbols = true;
         config
     }
 
