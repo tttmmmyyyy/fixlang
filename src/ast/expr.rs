@@ -1127,7 +1127,7 @@ impl Expr {
                     .insert_to_first_line(&args)
             }
             Expr::Let(p, b, v) => Text::from_str("let ")
-                .append_to_last_line(&p.to_string_with_type())
+                .append_to_last_line(&p.to_string())
                 .append_to_last_line(" = ")
                 .append_nobreak(b.expr.stringify().brace_if_multiline())
                 .append_to_last_line(";")
@@ -1142,7 +1142,7 @@ impl Expr {
             Expr::Match(cond, pat_vals) => {
                 let mut branches = Text::empty();
                 for (pat, val) in pat_vals {
-                    let branch = Text::from_str(&pat.to_string_with_type())
+                    let branch = Text::from_str(&pat.to_string())
                         .append_to_last_line(" => ")
                         .append_nobreak(val.expr.stringify().brace_if_multiline())
                         .append_to_last_line(",");

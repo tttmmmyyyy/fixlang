@@ -538,6 +538,11 @@ impl PatternNode {
         }
     }
 
+    pub fn to_string(&self) -> String {
+        self.to_string_internal(false)
+    }
+
+    #[allow(dead_code)]
     pub fn to_string_with_type(&self) -> String {
         self.to_string_internal(true)
     }
