@@ -14,6 +14,8 @@ use crate::ast::Type;
 use crate::builtin::*;
 use crate::generator::GenerationContext;
 use crate::generator::Object;
+use crate::object::create_obj;
+use crate::object::ObjectFieldType;
 use crate::sourcefile::Span;
 
 use super::error::Errors;
@@ -124,21 +126,27 @@ impl ExportStatement {
         let mut fix_value = gc.eval_expr(fix_expr, false).unwrap();
 
         // Pass the arguments to the Fix value.
+        match io_type {
+            IOType::Pure => {}
+            IOType::IO => {}
+            IOType::IOState => {
+                let ios = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+                args.push(ios);
+            }
+        }
         while args.len() > 0 {
             let arity = fix_value.ty.get_lambda_srcs().len();
             let rest = args.split_off(arity);
             fix_value = gc.apply_lambda(fix_value, args, false).unwrap();
             args = rest;
         }
-
-        // If the `fix_value` is `IO C`, then run it.
         match io_type {
             IOType::Pure => {}
             IOType::IO => {
                 fix_value = run_io(gc, &fix_value);
             }
             IOType::IOState => {
-                fix_value = run_ios_runner(gc, &fix_value, None).1;
+                fix_value = ObjectFieldType::get_struct_fields(gc, &fix_value, &[1])[0].clone();
             }
         }
 
