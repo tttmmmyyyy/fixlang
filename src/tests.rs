@@ -9780,3 +9780,36 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_regression_issue_63() {
+    let source = r##"
+module Main;
+
+type State s a = unbox struct { run : s -> (s, a) };
+
+impl State s : Monad {
+    bind = |f, x| State { run : |state| (
+        let (state, r) = (x.@run)(state);
+        (f(r).@run)(state)
+    )};
+    pure = |v| State { run : |state| (state, v) };
+}
+
+eval_state : s -> State s a -> a;
+eval_state = |s, ma| let (s, a) = (ma.@run)(s); a;
+
+type LargeState = (U64, U64, U64, U64, U64, U64, U64, U64, U64, U64, U64, U64);
+
+init : LargeState = (0_U64, 0_U64, 0_U64, 0_U64, 0_U64, 0_U64, 0_U64, 0_U64, 0_U64, 0_U64, 0_U64, 0_U64);
+
+type MyStateM = State LargeState;
+
+main : IO ();
+main = (
+    let state = range(0, 100000000).fold_m(false, |_, x| x.pure : MyStateM Bool).eval_state(init);
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
