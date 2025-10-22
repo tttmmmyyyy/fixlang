@@ -37,16 +37,16 @@ pub fn run(prg: &mut Program) {
 }
 
 fn run_on_symbol(sym: &mut Symbol) {
-    let mut remover = RenameRemover {};
+    let mut remover = LetEliminator {};
     let res = remover.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
         sym.expr = Some(res.expr);
     }
 }
 
-struct RenameRemover {}
+struct LetEliminator {}
 
-impl ExprVisitor for RenameRemover {
+impl ExprVisitor for LetEliminator {
     fn start_visit_var(
         &mut self,
         _expr: &std::sync::Arc<crate::ExprNode>,
