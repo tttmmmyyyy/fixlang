@@ -14,7 +14,7 @@ use crate::{
     ExprNode, Program, Symbol,
 };
 
-use super::{application_inlining, remove_renaming};
+use super::{application_inlining, let_elimination};
 
 pub const INLINE_COST_THRESHOLD: i32 = 30;
 
@@ -27,7 +27,7 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
     let mut skip_symbols = Set::default();
     while run_one(prg, &mut skip_symbols) {}
     let _sw = StopWatch::new("inline::run remove_renaming", show_build_times);
-    remove_renaming::run(prg);
+    let_elimination::run(prg);
 }
 
 // Run inlining optimization once.
