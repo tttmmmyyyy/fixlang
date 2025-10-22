@@ -27,15 +27,24 @@ pub fn rename_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>)
 }
 
 // Replace free variables of an expression to other names.
-pub fn rename_free_names_one(
-    expr: &Arc<ExprNode>,
-    from: &FullName,
-    to: &FullName,
-) -> Arc<ExprNode> {
+pub fn rename_free_name(expr: &Arc<ExprNode>, from: &FullName, to: &FullName) -> Arc<ExprNode> {
     let mut map = Map::default();
     map.insert(from.clone(), to.clone());
     let expr = rename_free_names(expr, map);
     expr
+}
+
+// Substitute a free name of an expression with another expression, i.e., computes `{expr0}[x:={expr1}]`.
+pub fn substitute_free_name(
+    expr: &Arc<ExprNode>,
+    from: &FullName,
+    to: &Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    let mut map = Map::default();
+    map.insert(from.clone(), to.clone());
+    let mut substitutor = Substitutor::new(map);
+    let res = substitutor.traverse(expr);
+    res.expr
 }
 
 // An ExprVisitor that performs substitution of free names in an expression, i.e. `{expr0}[x:={expr1}]`

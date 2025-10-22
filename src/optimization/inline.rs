@@ -27,7 +27,11 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
     let mut skip_symbols = Set::default();
     while run_one(prg, &mut skip_symbols) {}
     let _sw = StopWatch::new("inline::run remove_renaming", show_build_times);
+
+    // Perform let elimination and application inlining as "inlining of local functions."
+    // This transforms expressions like `let f = |x| {e0}; in f(y)` to `{e0}[x:=y]`.
     let_elimination::run(prg);
+    application_inlining::run(prg);
 }
 
 // Run inlining optimization once.
