@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     ast::{
+        expr::{expr_let_typed, expr_var, var_var},
         name::FullName,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
@@ -16,7 +17,11 @@ pub fn replace_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>
     if map.is_empty() {
         return expr.clone();
     }
-    let mut replacer = FreeNameReplacer::new(map);
+    let map = map
+        .into_iter()
+        .map(|(from, to)| (from, expr_var(to, None)))
+        .collect::<Map<FullName, Arc<ExprNode>>>();
+    let mut replacer = Substitutor::new(map);
     let res = replacer.traverse(expr);
     res.expr
 }
@@ -33,15 +38,16 @@ pub fn replace_free_names_one(
     expr
 }
 
-pub struct FreeNameReplacer {
-    // The mapping from old names to new names.
-    map: Map<FullName, FullName>,
+// An ExprVisitor that performs substitution of free names in an expression, i.e. `{expr0}[x:={expr1}]`
+pub struct Substitutor {
+    // The mapping from names to expressions.
+    map: Map<FullName, Arc<ExprNode>>,
     // Local names available at this scope.
     shadowed: Set<FullName>,
 }
 
-impl FreeNameReplacer {
-    fn new(map: Map<FullName, FullName>) -> Self {
+impl Substitutor {
+    fn new(map: Map<FullName, Arc<ExprNode>>) -> Self {
         Self {
             map,
             shadowed: Set::default(),
@@ -54,7 +60,7 @@ impl FreeNameReplacer {
         introduced_names: &Vec<FullName>,
         expr: &Arc<ExprNode>,
     ) -> Map<FullName, FullName> {
-        // If the local name being introduced belongs to `self.to_names`, we need to change the local name to something else.
+        // If the local name being introduced belongs to free names of values of `self.map`, we need to change the local name to something else.
         // The conditions that the new name must satisfy are:
         // - It must not conflict with `self.to_names`.
         // - It must not conflict with the free names of this expression.
@@ -71,7 +77,10 @@ impl FreeNameReplacer {
                 .join(", ")
         );
 
-        let to_names = self.map.values().cloned().collect::<Set<FullName>>();
+        let mut to_names = Set::default();
+        for to in self.map.values() {
+            to_names.extend(to.free_vars());
+        }
 
         let mut renamed_names = vec![];
         for introduced_name in introduced_names {
@@ -95,7 +104,7 @@ impl FreeNameReplacer {
     }
 }
 
-impl ExprVisitor for FreeNameReplacer {
+impl ExprVisitor for Substitutor {
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var = expr.get_var().clone();
 
@@ -104,9 +113,11 @@ impl ExprVisitor for FreeNameReplacer {
             return EndVisitResult::unchanged(expr);
         }
 
-        let to = self.map.get(&var.name).unwrap();
-        let expr = expr.set_var_var(var.set_name(to.clone()));
-        EndVisitResult::changed(expr)
+        let mut new_expr = self.map.get(&var.name).unwrap().clone();
+        if new_expr.type_.is_none() && expr.type_.is_some() {
+            new_expr = new_expr.set_type(expr.type_.clone().unwrap());
+        }
+        EndVisitResult::changed(new_expr)
     }
 
     fn start_visit_var(
@@ -130,23 +141,48 @@ impl ExprVisitor for FreeNameReplacer {
         let mut llvm = expr.get_llvm().as_ref().clone();
 
         let generator = &mut llvm.generator;
-        for llvm_fv in generator.free_vars_mut() {
-            // Replace
-            if let Some(to) = self.map.get(llvm_fv) {
-                if llvm_fv == to {
-                    continue; // No need to replace if they are the same.
-                }
 
-                *llvm_fv = to.clone();
+        // Substitute free names in LLVM.
+        // (1) First, consider the case where a free name `x` in LLVM is replaced with another name `y`.
+        //     This can be done by simply replacing it in the list of free names in LLVM.
+        // (2) Next, consider the case where a free name `x` in LLVM is replaced with a Fix expression `e`.
+        //     This is transformed into the form `let x = e in {llvm}`.
+
+        // (1)
+        for llvm_fv in generator.free_vars_mut() {
+            if let Some(to) = self.map.get(llvm_fv) {
+                if !to.is_var() {
+                    continue;
+                }
+                let to_name = to.get_var().name.clone();
+                changed = *llvm_fv != to_name;
+                *llvm_fv = to_name;
+            }
+        }
+        let mut expr = expr.set_llvm(llvm.clone());
+
+        // (2)
+        let mut llvm_fvs = llvm.generator.free_vars().clone();
+        llvm_fvs.sort();
+        llvm_fvs.dedup();
+        for llvm_fv in llvm_fvs {
+            if let Some(to) = self.map.get(&llvm_fv) {
+                if to.is_var() {
+                    continue;
+                }
                 changed = true;
+                // Create a let-binding.
+                let bound = to.clone();
+                let pat = PatternNode::make_var(var_var(llvm_fv), None)
+                    .set_type(bound.type_.as_ref().unwrap().clone());
+                expr = expr_let_typed(pat, bound, expr);
             }
         }
 
         if !changed {
-            return EndVisitResult::unchanged(expr);
+            return EndVisitResult::unchanged(&expr);
         }
 
-        let expr = expr.set_llvm(llvm);
         EndVisitResult::changed(expr)
     }
 
@@ -185,7 +221,8 @@ impl ExprVisitor for FreeNameReplacer {
 
         let rename = self.create_rename_of_local_names(&introduced_names, expr);
         for (org, renamed) in rename.iter() {
-            self.map.insert(org.clone(), renamed.clone());
+            self.map
+                .insert(org.clone(), expr_var(renamed.clone(), None));
         }
 
         if self.map.is_empty() {
@@ -243,7 +280,8 @@ impl ExprVisitor for FreeNameReplacer {
 
         let rename = self.create_rename_of_local_names(&introduced_names, &expr);
         for (org, renamed) in rename.iter() {
-            self.map.insert(org.clone(), renamed.clone());
+            self.map
+                .insert(org.clone(), expr_var(renamed.clone(), None));
         }
         if self.map.is_empty() {
             self.map = bak_map;
@@ -312,7 +350,8 @@ impl ExprVisitor for FreeNameReplacer {
 
             let rename = self.create_rename_of_local_names(&introduced_names, &expr);
             for (org, renamed) in rename.iter() {
-                self.map.insert(org.clone(), renamed.clone());
+                self.map
+                    .insert(org.clone(), expr_var(renamed.clone(), None));
             }
             if self.map.is_empty() {
                 self.map = bak_map;
