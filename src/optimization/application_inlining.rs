@@ -1,5 +1,5 @@
 /*
-Beta reduction optimization.
+Application inlining.
 
 This optimization tries to reduce cost of "create lambda and apply" expressions.
 
@@ -49,16 +49,16 @@ pub fn run(prg: &mut Program) {
 }
 
 pub fn run_on_symbol(sym: &mut Symbol) {
-    let mut optimizer = BetaReduction {};
+    let mut optimizer = AppInliner {};
     let res = optimizer.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
         sym.expr = Some(res.expr);
     }
 }
 
-struct BetaReduction {}
+struct AppInliner {}
 
-impl ExprVisitor for BetaReduction {
+impl ExprVisitor for AppInliner {
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application.
         let args = expr.get_app_args();

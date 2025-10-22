@@ -14,7 +14,7 @@ use crate::{
     ExprNode, Program, Symbol,
 };
 
-use super::{beta_reduction, remove_renaming};
+use super::{application_inlining, remove_renaming};
 
 pub const INLINE_COST_THRESHOLD: i32 = 30;
 
@@ -67,10 +67,10 @@ pub fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         let res = inliner.traverse(&sym.expr.as_ref().unwrap());
 
         if res.changed {
-            // If inlining was done, run beta reduction.
+            // If inlining was done, inline application.
             changed = true;
             sym.expr = Some(res.expr);
-            beta_reduction::run_on_symbol(&mut sym);
+            application_inlining::run_on_symbol(&mut sym);
         } else {
             // If inlining was not done, it cannot be inlined furthermore.
             stable_symbols.insert(name.clone());

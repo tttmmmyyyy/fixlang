@@ -1,5 +1,5 @@
 use crate::{
-    optimization::{beta_reduction, eta_expand, remove_hktvs},
+    optimization::{application_inlining, eta_expand, remove_hktvs},
     stopwatch::StopWatch,
     Configuration, Program,
 };
@@ -57,9 +57,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         }
     }
 
-    // Perform eta expansion and beta reduction optimizations.
-    if config.enable_eta_beta_optimization() {
-        // By combining unwrap_newtype with eta and beta,
+    // Perform eta expansion and application inlining optimizations.
+    if config.enable_eta_and_app_inline_optimization() {
+        // By combining unwrap_newtype with eta and application inlining,
         // we can transform `main : IO () = (...)` into `main : IOState -> (IOState, ()) = |ios| (...ios appears...)`.
 
         // Perform eta expansion optimization.
@@ -70,11 +70,11 @@ pub fn run(prg: &mut Program, config: &Configuration) {
             prg.optimization_step += 1;
         }
 
-        // Perform beta reduction optimization.
-        let _sw = StopWatch::new("beta_reduction::run", config.show_build_times);
-        beta_reduction::run(prg);
+        // Perform application inlining optimization.
+        let _sw = StopWatch::new("application_inlining::run", config.show_build_times);
+        application_inlining::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.beta_reduction", prg.optimization_step));
+            prg.emit_symbols(&format!("{}.application_inlining", prg.optimization_step));
             prg.optimization_step += 1;
         }
     }

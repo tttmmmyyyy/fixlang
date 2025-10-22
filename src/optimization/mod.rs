@@ -1,4 +1,4 @@
-mod beta_reduction;
+mod application_inlining;
 mod dead_symbol_elimination;
 mod decapturing;
 #[allow(dead_code)]

@@ -477,7 +477,7 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
-    pub fn enable_eta_beta_optimization(&self) -> bool {
+    pub fn enable_eta_and_app_inline_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
