@@ -1177,14 +1177,14 @@ impl Expr {
                 }
                 Text::join(elem_lines, ", ").square_brace()
             }
-            Expr::FFICall(fun_name, _, _, args, is_io) => {
+            Expr::FFICall(fun_name, _, _, args, is_ios) => {
                 let mut arg_texts: Vec<Text> = vec![];
                 arg_texts.push(Text::from_str(&fun_name));
                 for arg in args {
                     arg_texts.push(arg.expr.stringify());
                 }
                 let args = Text::join(arg_texts, ", ").square_brace();
-                Text::from_str(&format!("FFI_CALL{}", if *is_io { "_IO" } else { "" }))
+                Text::from_str(&format!("FFI_CALL{}", if *is_ios { "_IOS" } else { "" }))
                     .append_nobreak(args)
             }
         }

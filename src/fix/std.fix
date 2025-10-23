@@ -3698,14 +3698,14 @@ impl I64 : ToString {
 }
 impl I64 : FromString {
     from_string = |str| (
-        str.borrow_c_str(|c_str| (
-            let v = FFI_CALL[I64 fixruntime_strtoll_10(Ptr), c_str];
-            let err = FFI_CALL[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str) };
-            let err = FFI_CALL[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str) };
-            Result::ok(v)
-        ))
+        str.borrow_c_str_io(|c_str| (
+            let v = *FFI_CALL_IO[I64 fixruntime_strtoll_10(Ptr), c_str];
+            let err = *FFI_CALL_IO[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str).pure };
+            let err = *FFI_CALL_IO[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str).pure };
+            Result::ok(v).pure
+        )).unsafe_perform
     );
 }
 
