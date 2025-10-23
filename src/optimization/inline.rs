@@ -10,6 +10,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
+    optimization::uncurry::is_std_fix,
     stopwatch::StopWatch,
     ExprNode, Program, Symbol,
 };
@@ -111,6 +112,9 @@ pub fn calculate_inline_costs(prg: &Program) -> InlineCosts {
             let is_primitive_literal = expr.get_llvm().generator.is_primitve_literal();
             costs.costs.get_mut(name).unwrap().is_primitive_literal = is_primitive_literal;
         }
+
+        // If the expression is instantiated by `Std::fix`, set as `is_std_fix`.
+        costs.costs.get_mut(name).unwrap().is_std_fix = is_std_fix(name);
     }
     costs
 }
@@ -129,11 +133,16 @@ pub struct InlineCost {
     is_llvm_lam: bool,
     // Is the expression primitive literal?
     is_primitive_literal: bool,
+    // Is the expression instantiated by Std::fix?
+    is_std_fix: bool,
 }
 
 impl InlineCost {
     // Returns true if the symbol can be inlined even at a non-call site.
     fn inline_at_non_call_site(&self) -> bool {
+        if self.is_std_fix {
+            return false;
+        }
         if self.is_primitive_literal {
             // TODO: Allow (not only literals but) constant primitives to be inlined too.
             return true;
@@ -153,6 +162,9 @@ impl InlineCost {
 
     // Returns true if the symbol can be inlined at a call site.
     pub fn inline_at_call_site(&self) -> bool {
+        if self.is_std_fix {
+            return false;
+        }
         if self.is_self_recursive {
             return false;
         }
@@ -197,6 +209,7 @@ impl InlineCosts {
                         is_lambda: false,
                         is_llvm_lam: false,
                         is_primitive_literal: false,
+                        is_std_fix: false,
                     },
                 );
             }
@@ -217,6 +230,7 @@ impl InlineCosts {
                     is_lambda: cost.is_lambda,
                     is_primitive_literal: false,
                     is_llvm_lam: false,
+                    is_std_fix: false,
                 },
             );
         }

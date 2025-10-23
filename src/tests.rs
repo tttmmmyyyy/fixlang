@@ -377,6 +377,20 @@ pub fn test21() {
 }
 
 #[test]
+pub fn test_fix_direct_call() {
+    let source = r#"
+            module Main; 
+            main : IO ();
+            main = (
+                let fact5 = fix(|loop, n| if n == 0 { 1 } else { n * loop(n-1) }, 5);
+                assert_eq(|_|"", fact5, 5 * 4 * 3 * 2 * 1);;
+                pure()
+            );
+        "#;
+    test_source(source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test22() {
     // Test recursion function defined by fix with two variables that is tail call.
     let n: i64 = 1000000;
