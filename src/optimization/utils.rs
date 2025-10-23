@@ -158,6 +158,7 @@ impl ExprVisitor for Substitutor {
         //     This is transformed into the form `let x = e in {llvm}`.
 
         // (1)
+        let mut llvm_fvs = generator.free_vars().clone(); // Before updating, save free_vars for use in (2)
         for llvm_fv in generator.free_vars_mut() {
             if let Some(to) = self.map.get(llvm_fv) {
                 if !to.is_var() {
@@ -171,7 +172,6 @@ impl ExprVisitor for Substitutor {
         let mut expr = expr.set_llvm(llvm.clone());
 
         // (2)
-        let mut llvm_fvs = llvm.generator.free_vars().clone();
         llvm_fvs.sort();
         llvm_fvs.dedup();
         for llvm_fv in llvm_fvs {
