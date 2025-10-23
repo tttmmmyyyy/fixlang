@@ -3,7 +3,16 @@ let-elimination optimization
 
 This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one of the following conditions hold:
 1. `e0` is just a name (variable).
-2. `x` is used only once in `e1`.
+2. `x` is used only once in `e1`, AND
+2-a. {e0} is a lambda expression and the occurrence of `x` is in an application, OR
+2-b. {e0} is a global lambda expression with n-arguments `f = |a1,...,an| ...` or strictly partial application of name expressions to it, and the occurrence of `x` is in an application.
+
+Why conditions 2-a and 2-b are necessary:
+These conditions are to prevent the lifetime of values referenced by expression {e0} from being extended due to the evaluation of expression {e0} being delayed.
+In 2-a, the only variables whose lifetimes can change are those captured by the lambda expression, and these were already alive until the call site of the lambda expression,
+so their lifetimes do not extend.
+In 2-b, the name expressions partially applied to the global lambda expression were also already alive until the call site of the lambda expression,
+so their lifetimes do not extend.
 
 (1) itself improves the performance of the program. Consider the following example which contains InlineLLVM nodes:
 
@@ -24,33 +33,50 @@ let m = LLVM<arr.Array::@(j)>;
 and the cost for retaining and releasing an array is saved.
 */
 
+use std::sync::Arc;
+
 use crate::{
     ast::{
+        expr::ExprNode,
         name::FullName,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
     },
-    misc::Set,
+    misc::{Map, Set},
     optimization::utils::{rename_free_name, substitute_free_name},
     Program, Symbol,
 };
 
 pub fn run(prg: &mut Program) {
+    // Collect global lambda functions and their arities.
+    let mut global_lambda_to_arity: Map<FullName, usize> = Map::default();
+    for (name, sym) in &prg.symbols {
+        let expr = sym.expr.as_ref().unwrap();
+        if expr.is_lam() {
+            let args = expr.destructure_lam_sequence().0;
+            let arity = args.iter().map(|args| args.len()).sum();
+            global_lambda_to_arity.insert(name.clone(), arity);
+        }
+    }
     for (_name, sym) in &mut prg.symbols {
-        run_on_symbol(sym);
+        run_on_symbol(sym, &global_lambda_to_arity);
     }
 }
 
-fn run_on_symbol(sym: &mut Symbol) {
-    let mut remover = LetEliminator {};
+fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
+    let mut remover = LetEliminator {
+        global_lambda_to_arity: global_lambda_to_arity,
+    };
     let res = remover.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
         sym.expr = Some(res.expr);
     }
 }
 
-struct LetEliminator {}
+struct LetEliminator<'a> {
+    global_lambda_to_arity: &'a Map<FullName, usize>,
+}
 
-impl ExprVisitor for LetEliminator {
+impl<'a> ExprVisitor for LetEliminator<'a> {
     fn start_visit_var(
         &mut self,
         _expr: &std::sync::Arc<crate::ExprNode>,
@@ -145,13 +171,22 @@ impl ExprVisitor for LetEliminator {
             // Count the number of occurrences of `x` in `{e1}`.
             let x = &x.get_var().name;
             let e1 = expr.get_let_value();
-            let mut counter = FreeOccurrenceCounter::new(x.clone());
-            let count = counter.count_occurrences(&e1);
-            if count == 1 {
-                // If `x` is used exactly once in `{e1}`, substitute `x` with `{e0}` in `{e1}`.
+            let mut probe = FreeOccurrenceProbe::new(x.clone());
+            probe.traverse(&e1);
+            if probe.count == 1 && probe.is_applied {
                 // TODO: in a future, we remove let bindings if count == 0.
-                let expr = substitute_free_name(&e1, x, &e0);
-                return EndVisitResult::changed(expr);
+                // Case (2) of the documentation at the top.
+                // Check if conditions 2-a or 2-b hold.
+                let cond = e0.is_lam(); // 2-a
+                let cond = cond
+                    || is_global_lambda_strictly_partially_applied_to_names(
+                        &e0,
+                        &self.global_lambda_to_arity,
+                    ); // 2-b
+                if cond {
+                    let expr = substitute_free_name(&e1, x, &e0);
+                    return EndVisitResult::changed(expr);
+                }
             }
         }
         EndVisitResult::unchanged(expr)
@@ -273,31 +308,29 @@ impl ExprVisitor for LetEliminator {
 }
 
 // An ExprVisitor that counts the number of free occurrences of a given name in an expression.
-pub struct FreeOccurrenceCounter {
+pub struct FreeOccurrenceProbe {
     // The name to count occurrences of.
     target_name: FullName,
     // Local names that are currently shadowed (i.e., not free).
     shadowed: Set<FullName>,
     // Count of free occurrences found so far.
     count: usize,
+    // Is the name occurrs as an application function?
+    is_applied: bool,
 }
 
-impl FreeOccurrenceCounter {
+impl FreeOccurrenceProbe {
     fn new(target_name: FullName) -> Self {
         Self {
             target_name,
             shadowed: Set::default(),
             count: 0,
+            is_applied: false,
         }
-    }
-
-    fn count_occurrences(&mut self, expr: &std::sync::Arc<crate::ExprNode>) -> usize {
-        self.traverse(expr);
-        self.count
     }
 }
 
-impl ExprVisitor for FreeOccurrenceCounter {
+impl ExprVisitor for FreeOccurrenceProbe {
     fn start_visit_var(
         &mut self,
         _expr: &std::sync::Arc<crate::ExprNode>,
@@ -369,6 +402,16 @@ impl ExprVisitor for FreeOccurrenceCounter {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
+        // Check if the applied function is the target name
+        if self.shadowed.contains(&self.target_name) {
+            let func = expr.get_app_func();
+            if func.is_var() {
+                let var = func.get_var();
+                if var.name == self.target_name {
+                    self.is_applied = true;
+                }
+            }
+        }
         EndVisitResult::unchanged(expr)
     }
 
@@ -560,4 +603,31 @@ impl ExprVisitor for FreeOccurrenceCounter {
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
+}
+
+// Check if the expression is a global lambda expression or strictly partial application of name expressions to it.
+fn is_global_lambda_strictly_partially_applied_to_names(
+    expr: &Arc<ExprNode>,
+    global_lambda_to_arity: &Map<FullName, usize>,
+) -> bool {
+    if expr.is_var() {
+        let name = &expr.get_var().name;
+        if let Some(_arity) = global_lambda_to_arity.get(name) {
+            return true;
+        }
+    } else if expr.is_app() {
+        let (func, args) = expr.destructure_app();
+        if func.is_var() {
+            let name = &func.get_var().name;
+            if let Some(arity) = global_lambda_to_arity.get(name) {
+                // Check if the number of arguments is less than the arity (strictly partial application).
+                if *arity <= args.len() {
+                    return false;
+                }
+                // Check if all arguments are name expressions.
+                return args.iter().all(|arg| arg.is_var());
+            }
+        }
+    }
+    false
 }
