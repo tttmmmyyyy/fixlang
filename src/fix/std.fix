@@ -3585,14 +3585,14 @@ impl U64 : ToString {
 }
 impl U64 : FromString {
     from_string = |str| (
-        str.borrow_c_str(|c_str| (
-            let v = FFI_CALL[U64 fixruntime_strtoull_10(Ptr), c_str];
-            let err = FFI_CALL[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str) };
-            let err = FFI_CALL[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str) };
-            Result::ok(v)
-        ))
+        str.borrow_c_str_io(|c_str| (
+            let v = *FFI_CALL_IO[U64 fixruntime_strtoull_10(Ptr), c_str];
+            let err = *FFI_CALL_IO[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str).pure };
+            let err = *FFI_CALL_IO[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str).pure };
+            Result::ok(v).pure
+        )).unsafe_perform
     );
 }
 
@@ -3769,14 +3769,14 @@ namespace F32 {
 }
 impl F32 : FromString {
     from_string = |str| (
-        str.borrow_c_str(|c_str| (
-            let v = FFI_CALL[F32 fixruntime_strtof(Ptr), c_str];
-            let err = FFI_CALL[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
-            let err = FFI_CALL[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
-            Result::ok(v)
-        ))
+        str.borrow_c_str_io(|c_str| (
+            let v = *FFI_CALL_IO[F32 fixruntime_strtof(Ptr), c_str];
+            let err = *FFI_CALL_IO[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
+            let err = *FFI_CALL_IO[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
+            Result::ok(v).pure
+        )).unsafe_perform
     );
 }
 
@@ -3840,14 +3840,14 @@ namespace F64 {
 }
 impl F64 : FromString {
     from_string = |str| (
-        str.borrow_c_str(|c_str| (
-            let v = FFI_CALL[F64 fixruntime_strtod(Ptr), c_str];
-            let err = FFI_CALL[U8 fixruntime_is_einval()];
-            if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
-            let err = FFI_CALL[U8 fixruntime_is_erange()];
-            if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
-            Result::ok(v)
-        ))
+        str.borrow_c_str_io(|c_str| (
+            let v = *FFI_CALL_IO[F64 fixruntime_strtod(Ptr), c_str];
+            let err = *FFI_CALL_IO[U8 fixruntime_is_einval()];
+            if err != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
+            let err = *FFI_CALL_IO[U8 fixruntime_is_erange()];
+            if err != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
+            Result::ok(v).pure
+        )).unsafe_perform
     );
 }
 
