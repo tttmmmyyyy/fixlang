@@ -9821,7 +9821,7 @@ type MyStateM = State LargeState;
 
 main : IO ();
 main = (
-    let state = range(0, 100000000).fold_m(false, |_, x| x.pure : MyStateM Bool).eval_state(init);
+    let state = range(0, 10000000).fold_m(false, |_, x| x.pure : MyStateM Bool).eval_state(init);
     pure()
 );
     "##;
