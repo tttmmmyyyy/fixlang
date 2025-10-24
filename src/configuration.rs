@@ -485,7 +485,7 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn enable_local_inline_optimization(&self) -> bool {
+    pub fn enable_inline_local_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 

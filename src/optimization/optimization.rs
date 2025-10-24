@@ -1,5 +1,5 @@
 use crate::{
-    optimization::{application_inlining, eta_expand, local_inline, remove_hktvs},
+    optimization::{application_inlining, eta_expand, inline_local, remove_hktvs},
     stopwatch::StopWatch,
     Configuration, Program,
 };
@@ -90,11 +90,11 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     }
 
     // Perform local inlining optimization.
-    if config.enable_local_inline_optimization() {
-        let _sw = StopWatch::new("local_inline", config.show_build_times);
-        local_inline::run(prg);
+    if config.enable_inline_local_optimization() {
+        let _sw = StopWatch::new("inline_local::run", config.show_build_times);
+        inline_local::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.local_inline", prg.optimization_step));
+            prg.emit_symbols(&format!("{}.inline_local", prg.optimization_step));
             prg.optimization_step += 1;
         }
     }
