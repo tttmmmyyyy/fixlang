@@ -6,6 +6,7 @@ mod eta_expand;
 mod find_usage_of_name;
 mod inline;
 mod let_elimination;
+mod local_inline;
 pub mod optimization;
 mod pull_let;
 mod remove_hktvs;

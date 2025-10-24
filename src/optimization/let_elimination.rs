@@ -44,11 +44,27 @@ use crate::{
     lsp::language_server::write_log,
     misc::{Map, Set},
     optimization::utils::{rename_free_name, substitute_free_name},
-    Program, Symbol,
+    Program,
 };
 
-pub fn run(prg: &mut Program) {
-    // Collect global lambda functions and their arities.
+// pub fn run(prg: &mut Program) {
+//     let global_lambda_to_arity = create_global_lambda_to_arity_map(prg);
+//     for (_name, sym) in &mut prg.symbols {
+//         run_on_symbol(sym, &global_lambda_to_arity);
+//     }
+// }
+
+// fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
+//     let mut remover = LetEliminator {
+//         global_lambda_to_arity: global_lambda_to_arity,
+//     };
+//     let res = remover.traverse(&sym.expr.as_ref().unwrap());
+//     if res.changed {
+//         sym.expr = Some(res.expr);
+//     }
+// }
+
+pub fn create_global_lambda_to_arity_map(prg: &Program) -> Map<FullName, usize> {
     let mut global_lambda_to_arity: Map<FullName, usize> = Map::default();
     for (name, sym) in &prg.symbols {
         let expr = sym.expr.as_ref().unwrap();
@@ -58,19 +74,22 @@ pub fn run(prg: &mut Program) {
             global_lambda_to_arity.insert(name.clone(), arity);
         }
     }
-    for (_name, sym) in &mut prg.symbols {
-        run_on_symbol(sym, &global_lambda_to_arity);
-    }
+    global_lambda_to_arity
 }
 
-fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
+// Run let-elimination transformation once on the given expression.
+//
+// If any transformation is applied, returns true.
+pub fn run_on_expr_once(
+    expr: &mut Arc<ExprNode>,
+    global_lambda_to_arity: &Map<FullName, usize>,
+) -> bool {
     let mut remover = LetEliminator {
-        global_lambda_to_arity: global_lambda_to_arity,
+        global_lambda_to_arity,
     };
-    let res = remover.traverse(&sym.expr.as_ref().unwrap());
-    if res.changed {
-        sym.expr = Some(res.expr);
-    }
+    let res = remover.traverse(expr);
+    *expr = res.expr;
+    res.changed
 }
 
 struct LetEliminator<'a> {

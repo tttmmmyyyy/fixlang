@@ -118,16 +118,35 @@ use crate::{
     optimization::utils::{generate_new_names, rename_pattern_value_avoiding},
 };
 
+// pub fn run(prg: &mut Program) {
+//     for (_name, sym) in prg.symbols.iter_mut() {
+//         let expr = sym.expr.as_ref().unwrap();
+//         sym.expr = Some(run_on_expr(expr));
+//     }
+// }
+
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    let mut pull_let = PullLet {};
     let mut expr = expr.clone();
-    loop {
-        let res = pull_let.traverse(&expr);
-        if !res.changed {
-            return expr;
-        }
-        expr = res.expr;
-    }
+    while run_on_expr_once(&mut expr) {}
+    expr
+
+    // loop {
+    //     let res = pull_let.traverse(&expr);
+    //     if !res.changed {
+    //         return expr;
+    //     }
+    //     expr = res.expr;
+    // }
+}
+
+// Run pull-let transformation once on the given expression.
+//
+// If any transformation is applied, returns true.
+pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
+    let mut pull_let = PullLet {};
+    let res = pull_let.traverse(expr);
+    *expr = res.expr;
+    res.changed
 }
 
 struct PullLet {}

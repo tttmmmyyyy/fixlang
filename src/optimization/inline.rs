@@ -11,15 +11,14 @@ use crate::{
     },
     misc::{Map, Set},
     optimization::uncurry::is_std_fix,
-    stopwatch::StopWatch,
     ExprNode, Program, Symbol,
 };
 
-use super::{application_inlining, let_elimination};
+use super::application_inlining;
 
 pub const INLINE_COST_THRESHOLD: i32 = 30;
 
-pub fn run(prg: &mut Program, show_build_times: bool) {
+pub fn run(prg: &mut Program) {
     // Calculate free variables of all symbols.
     for (_name, sym) in &mut prg.symbols {
         sym.expr = Some(sym.expr.as_ref().unwrap().clone());
@@ -27,12 +26,6 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 
     let mut skip_symbols = Set::default();
     while run_one(prg, &mut skip_symbols) {}
-    let _sw = StopWatch::new("inline::run remove_renaming", show_build_times);
-
-    // Perform let elimination and application inlining as "inlining of local functions."
-    // This transforms expressions like `let f = |x| {e0}; in f(y)` to `{e0}[x:=y]`.
-    let_elimination::run(prg);
-    application_inlining::run(prg);
 }
 
 // Run inlining optimization once.

@@ -49,11 +49,16 @@ pub fn run(prg: &mut Program) {
 }
 
 pub fn run_on_symbol(sym: &mut Symbol) {
+    let mut expr = sym.expr.as_ref().unwrap().clone();
+    while run_on_expr_once(&mut expr) {}
+    sym.expr = Some(expr);
+}
+
+pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
     let mut optimizer = AppInliner {};
-    let res = optimizer.traverse(&sym.expr.as_ref().unwrap());
-    if res.changed {
-        sym.expr = Some(res.expr);
-    }
+    let res = optimizer.traverse(expr);
+    *expr = res.expr;
+    res.changed
 }
 
 struct AppInliner {}
