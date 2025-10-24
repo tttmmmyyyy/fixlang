@@ -43,6 +43,11 @@ def plot_log_data(csv_file="log.csv", output_file="graph.svg", latest_n=30):
 
     # Fix y-axis range: 0.5 (50%) to 2.0 (200%)
     ax.set_ylim(0.5, 2.0)
+    
+    # Set custom y-axis ticks from 0.5 to 2.0 in 0.1 increments
+    y_ticks = np.arange(0.5, 2.1, 0.1)
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels([f"{tick:.1f}" for tick in y_ticks])
 
     ax.set_xlabel('Commit')
     ax.set_ylabel('Performance Ratio (relative to oldest commit)')
