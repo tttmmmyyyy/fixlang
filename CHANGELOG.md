@@ -10,7 +10,8 @@
 - Added `--backtrace` option to `build`, `run`, `test` commands to enable printing backtrace when a runtime error occurs.
 - Added `backtrace` field to `build` and `build.test` section of `fixproj.toml` file. If it is true, backtrace will be enabled by default.
 - Added `--disable-cpu-feature <feature>` option to `build`, `run`, `test` commands to disable specific CPU features. Add `disable_cpu_features` field to `build` and `build.test` section of `fixproj.toml` file.
-- (Experimental) Added `unwrap-newtype` optimization, which removes unnecessary newtype wrappers, e.g., `type Foo = unbox struct { data : Bar }`. This optimization is applied when the optimization level is `experimental`.
+- Optimization: Added `unwrap-newtype` optimization, which removes unnecessary newtype wrappers, e.g., `type Foo = unbox struct { data : Bar }`.
+- Optimization: Added `inline-local` optimization, which tries to inline local functions.
 
 ### Changed
 
