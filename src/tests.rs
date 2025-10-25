@@ -9834,7 +9834,6 @@ pub fn test_index_syntax_poc() {
 module Main;
 
 import Std hiding {Iterator::fold_m};
-import Random::{Random, init_by_seed};
 
 type Identity a = struct { data : a };
 impl Identity : Functor {
