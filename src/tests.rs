@@ -9827,3 +9827,57 @@ main = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_index_syntax_poc() {
+    let source = r##"
+module Main;
+
+import Std hiding {Iterator::fold_m};
+import Random::{Random, init_by_seed};
+
+type Identity a = struct { data : a };
+impl Identity : Functor {
+    map = |f, Identity { data : x }| ( Identity { data : f(x) } );
+}
+
+// `arr[i]` == `arr.idx(i)`
+idx : [f : Functor] I64 -> Array a -> (a -> f a) -> f (Array a);
+idx = |i, arr, f| arr.act(i)(f);
+
+// `arr[i][j]` == `arr.idx2(i, j)`
+idx2 : [f : Functor] I64 -> I64 -> Array (Array a) -> (a -> f a) -> f (Array (Array a));
+idx2 = |i, j, arr, f| arr.(act(i) << act(j))(f);
+
+iset : a -> ((a -> Identity a) -> Identity b) -> b;
+iset = |x, f| f(|_| Identity { data : x }).@data;
+
+imod : (a -> a) -> ((a -> Identity a) -> Identity b) -> b;
+imod = |g, f| f(|x| Identity { data : g(x) }).@data;
+
+iact : [f : Functor] (a -> f a) -> ((a -> f a) -> f b) -> f b;
+iact = |g, f| f(g);
+
+main : IO () = (
+    let arr = [0, 0, 0];
+    let arr = arr.idx(1).iset(42);
+    assert_eq(|_|"arr.idx(1).iset(42)", arr, [0, 42, 0]);;
+
+    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    let arr2 = arr2.idx2(1, 1).iset(42);
+    assert_eq(|_|"arr.idx2(1, 1).iset(42)", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
+
+    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    let arr2 = arr2.idx2(1, 1).imod(add(42));
+    assert_eq(|_|"arr2.idx2(1, 1).imod(add(42))", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
+
+    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    let arr2 = arr2.idx2(1, 1).iact(some);
+    assert(|_|"arr2.idx2(1, 1).iact(some)", arr2.is_some);;
+    assert_eq(|_|"arr2.idx2(1, 1).iact(some).as_some", arr2.as_some, [[0, 0, 0], [0, 0, 0], [0, 0, 0]]);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
