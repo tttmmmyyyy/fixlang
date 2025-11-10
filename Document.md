@@ -2,89 +2,89 @@
 
 - [Table of contents](#table-of-contents)
 - [Tutorial](#tutorial)
-  - [Set up the tools](#set-up-the-tools)
-    - [Fix compiler](#fix-compiler)
-      - [Use pre-built binary](#use-pre-built-binary)
-      - [Build from source](#build-from-source)
-      - [Use Docker image](#use-docker-image)
-    - [(Optional) VScode extensions](#optional-vscode-extensions)
-  - [Running Your First Fix Program](#running-your-first-fix-program)
-  - [Modules](#modules)
-  - [Global values](#global-values)
-    - [Namespaces](#namespaces)
-  - [Types](#types)
-  - [Expressions](#expressions)
-  - [Let-expressions](#let-expressions)
-  - [If-expressions](#if-expressions)
-  - [Function application](#function-application)
-  - [Function definition](#function-definition)
-  - [The `.` and `$` Operators](#the--and--operators)
-  - [Patterns](#patterns)
-  - [The `loop`, `continue`, and `break` Functions](#the-loop-continue-and-break-functions)
-  - [Unions](#unions)
-  - [Structs](#structs)
-  - [Iterators](#iterators)
-  - [Mutability and Reference Counting in Fix](#mutability-and-reference-counting-in-fix)
-  - [A bit on IO (or monads)](#a-bit-on-io-or-monads)
+    - [Set up the tools](#set-up-the-tools)
+        - [Fix compiler](#fix-compiler)
+            - [Use pre-built binary](#use-pre-built-binary)
+            - [Build from source](#build-from-source)
+            - [Use Docker image](#use-docker-image)
+        - [(Optional) VScode extensions](#optional-vscode-extensions)
+    - [Running Your First Fix Program](#running-your-first-fix-program)
+    - [Modules](#modules)
+    - [Global values](#global-values)
+        - [Namespaces](#namespaces)
+    - [Types](#types)
+    - [Expressions](#expressions)
+    - [Let-expressions](#let-expressions)
+    - [If-expressions](#if-expressions)
+    - [Function application](#function-application)
+    - [Function definition](#function-definition)
+    - [The `.` and `$` Operators](#the--and--operators)
+    - [Patterns](#patterns)
+    - [The `loop`, `continue`, and `break` Functions](#the-loop-continue-and-break-functions)
+    - [Unions](#unions)
+    - [Structs](#structs)
+    - [Iterators](#iterators)
+    - [Mutability and Reference Counting in Fix](#mutability-and-reference-counting-in-fix)
+    - [A bit on IO (or monads)](#a-bit-on-io-or-monads)
 - [More on language and standard library](#more-on-language-and-standard-library)
-  - [Booleans and literals](#booleans-and-literals)
-  - [Numbers and literals](#numbers-and-literals)
-  - [Strings and literals](#strings-and-literals)
-  - [Arrays and literals](#arrays-and-literals)
-  - [Unit and tuples](#unit-and-tuples)
-  - [Structs](#structs-1)
-    - [`@f : S -> F`](#f--s---f)
-    - [`set_f : F -> S -> S`](#set_f--f---s---s)
-    - [`mod_f : (F -> F) -> S -> S`](#mod_f--f---f---s---s)
-    - [`act_f : [f : Functor] (F -> f F) -> S -> f S`](#act_f--f--functor-f---f-f---s---f-s)
-  - [Unions](#unions-1)
-    - [`v : V -> U`](#v--v---u)
-    - [`is_v : U -> Bool`](#is_v--u---bool)
-    - [`as_v : U -> V`](#as_v--u---v)
-    - [`mod_v : (V -> V) -> U -> U`](#mod_v--v---v---u---u)
-  - [Modules and import statements](#modules-and-import-statements)
-  - [Namespaces and overloading](#namespaces-and-overloading)
-  - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
-  - [Which is better: importing whole module or only necessary entities?](#which-is-better-importing-whole-module-or-only-necessary-entities)
-  - [Recursion](#recursion)
-  - [Type annotation](#type-annotation)
-  - [Pattern matching](#pattern-matching)
-  - [Traits](#traits)
-  - [Associated types](#associated-types)
-  - [Trait alias](#trait-alias)
-  - [Type alias](#type-alias)
-    - [Dynamic Iterators](#dynamic-iterators)
-  - [Monads](#monads)
-    - [What is monad?](#what-is-monad)
-    - [Stateful Monads](#stateful-monads)
-      - [Failure Monads](#failure-monads)
-    - [Sequence Monads](#sequence-monads)
-    - [`do` Blocks and the monadic bind operator `*`](#do-blocks-and-the-monadic-bind-operator-)
-    - [When an explicit `do` block is needed](#when-an-explicit-do-block-is-needed)
-    - [Chaining monadic actions with the `;;` Syntax](#chaining-monadic-actions-with-the--syntax)
-    - [Fix's Iterator is not a monad](#fixs-iterator-is-not-a-monad)
-  - [Boxed and Unboxed Types](#boxed-and-unboxed-types)
-    - [Functions](#functions)
-    - [Tuples and unit](#tuples-and-unit)
-    - [Array](#array)
-    - [Structs](#structs-2)
-    - [Unions](#unions-2)
-  - [Foreign Function Interface (FFI)](#foreign-function-interface-ffi)
-    - [Calling External Functions from Fix](#calling-external-functions-from-fix)
-    - [Exporting Fix Values and Functions to External Languages](#exporting-fix-values-and-functions-to-external-languages)
-    - [Managing External Resources in Fix](#managing-external-resources-in-fix)
-    - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
-    - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
-  - [`eval` syntax](#eval-syntax)
-  - [Operators](#operators)
+    - [Booleans and literals](#booleans-and-literals)
+    - [Numbers and literals](#numbers-and-literals)
+    - [Strings and literals](#strings-and-literals)
+    - [Arrays and literals](#arrays-and-literals)
+    - [Unit and tuples](#unit-and-tuples)
+    - [Structs](#structs-1)
+        - [`@f : S -> F`](#f--s---f)
+        - [`set_f : F -> S -> S`](#set_f--f---s---s)
+        - [`mod_f : (F -> F) -> S -> S`](#mod_f--f---f---s---s)
+        - [`act_f : [f : Functor] (F -> f F) -> S -> f S`](#act_f--f--functor-f---f-f---s---f-s)
+    - [Unions](#unions-1)
+        - [`v : V -> U`](#v--v---u)
+        - [`is_v : U -> Bool`](#is_v--u---bool)
+        - [`as_v : U -> V`](#as_v--u---v)
+        - [`mod_v : (V -> V) -> U -> U`](#mod_v--v---v---u---u)
+    - [Modules and import statements](#modules-and-import-statements)
+    - [Namespaces and overloading](#namespaces-and-overloading)
+    - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
+    - [Which is better: importing whole module or only necessary entities?](#which-is-better-importing-whole-module-or-only-necessary-entities)
+    - [Recursion](#recursion)
+    - [Type annotation](#type-annotation)
+    - [Pattern matching](#pattern-matching)
+    - [Traits](#traits)
+    - [Associated types](#associated-types)
+    - [Trait alias](#trait-alias)
+    - [Type alias](#type-alias)
+        - [Dynamic Iterators](#dynamic-iterators)
+    - [Monads](#monads)
+        - [What is monad?](#what-is-monad)
+        - [Stateful Monads](#stateful-monads)
+            - [Failure Monads](#failure-monads)
+        - [Sequence Monads](#sequence-monads)
+        - [`do` Blocks and the monadic bind operator `*`](#do-blocks-and-the-monadic-bind-operator-)
+        - [When an explicit `do` block is needed](#when-an-explicit-do-block-is-needed)
+        - [Chaining monadic actions with the `;;` Syntax](#chaining-monadic-actions-with-the--syntax)
+        - [Fix's Iterator is not a monad](#fixs-iterator-is-not-a-monad)
+    - [Boxed and Unboxed Types](#boxed-and-unboxed-types)
+        - [Functions](#functions)
+        - [Tuples and unit](#tuples-and-unit)
+        - [Array](#array)
+        - [Structs](#structs-2)
+        - [Unions](#unions-2)
+    - [Foreign Function Interface (FFI)](#foreign-function-interface-ffi)
+        - [Calling External Functions from Fix](#calling-external-functions-from-fix)
+        - [Exporting Fix Values and Functions to External Languages](#exporting-fix-values-and-functions-to-external-languages)
+        - [Managing External Resources in Fix](#managing-external-resources-in-fix)
+        - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
+        - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
+    - [`eval` syntax](#eval-syntax)
+    - [Operators](#operators)
 - [Compiler features](#compiler-features)
-  - [Project file](#project-file)
-  - [Managing dependencies](#managing-dependencies)
-  - [Configuration file](#configuration-file)
-  - [Generating documentation](#generating-documentation)
-  - [Language Server Protocol](#language-server-protocol)
-    - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
-  - [Debugging Fix program](#debugging-fix-program)
+    - [Project file](#project-file)
+    - [Managing dependencies](#managing-dependencies)
+    - [Configuration file](#configuration-file)
+    - [Generating documentation](#generating-documentation)
+    - [Language Server Protocol](#language-server-protocol)
+        - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
+    - [Debugging Fix program](#debugging-fix-program)
 - [Other documents](#other-documents)
 
 # Tutorial
@@ -2045,15 +2045,34 @@ In a future version, the situation may be changed. I may introduce a specifier (
 
 ## `eval` syntax
 
-An expression `eval {expr0}; {expr1}` evaluates both of `{expr0}` and `{expr1}`, and returns value of `{expr1}`.
+The expression `eval {expr0}; {expr1}` evaluates both `{expr0}` and `{expr1}`, and returns the value of `{expr1}`.
 
-This syntax is rarely used. In Fix, evaluating an expression has no effect in most cases. Currently, it is used to call functions with side-effects, such as `debug_eprint : String -> ()`.
+Fix may omit the evaluation of unnecessary expressions during optimization. For example, in a program like:
+```
+main : IO () = (
+    let x = 1 + 2;
+    println("Hello, World!");
+);
+```
+the evaluation of `x = 1 + 2` does not affect the program's behavior, so the Fix compiler may omit this evaluation.
 
-If you write `let _ = {expr0}; {expr1}`, the code may be optimized to evaluate only `{expr1}`. By using `eval`, you can ensure that `{expr0}` is evaluated.
+The `eval` syntax is used to instruct the Fix compiler not to omit the evaluation of expressions.
 
-NOTE: When you write `eval debug_eprint("Hello"); eval debug_eprint("Hello"); {expr1}`, the common subexpression optimization may cause `debug_eprint("Hello")` to be called only once.
+This syntax is primarily used for debugging purposes.
+For example, `debug_eprint : String -> ()` is a function that outputs a message to standard error without using the `IO` monad.
+This function should be used with the `eval` syntax like:
+```
+my_add : I64 -> I64 -> I64 = |x, y| (
+    let z = x + y
+    eval debug_eprint("The sum is: " + z.to_string);
+    z
+);
+```
+In this example, the call to `debug_eprint(...)` does not affect the result of `my_add`, but using `eval` guarantees that the message will be output.
 
-NOTE: The order of evaluation of `{expr0}` and `{expr1}` is unspecified.
+Notes:
+- If a program does not use the result of the entire `eval` expression (i.e., the result of `{expr1}`), the Fix compiler may omit the entire `eval` expression, resulting in `{expr0}` not being evaluated.
+- Currently, the evaluation order of `{expr0}` and `{expr1}` is not guaranteed.
 
 ## Operators
 
