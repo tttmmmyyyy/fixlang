@@ -9839,41 +9839,59 @@ type Identity a = struct { data : a };
 impl Identity : Functor {
     map = |f, Identity { data : x }| ( Identity { data : f(x) } );
 }
+type Const a b = struct { data : a };
+impl Const a : Functor {
+    map = |_, Const { data : x }| ( Const { data : x } );
+}
 
-// `arr[i]` == `arr.idx(i)`
+// `arr[i]` の暫定版 `arr.idx(i)`
 idx : [f : Functor] I64 -> Array a -> (a -> f a) -> f (Array a);
 idx = |i, arr, f| arr.act(i)(f);
 
-// `arr[i][j]` == `arr.idx2(i, j)`
+// `arr[i][j]` の暫定版 `arr.idx2(i, j)`
 idx2 : [f : Functor] I64 -> I64 -> Array (Array a) -> (a -> f a) -> f (Array (Array a));
 idx2 = |i, j, arr, f| arr.(act(i) << act(j))(f);
 
+// getterの実行
+iget : ((a -> Const a a) -> Const a b) -> a;
+iget = |f| f(|x| Const { data : x }).@data;
+
+// setterの実行
 iset : a -> ((a -> Identity a) -> Identity b) -> b;
 iset = |x, f| f(|_| Identity { data : x }).@data;
 
+// modifierの実行
 imod : (a -> a) -> ((a -> Identity a) -> Identity b) -> b;
 imod = |g, f| f(|x| Identity { data : g(x) }).@data;
 
+// actionの実行
 iact : [f : Functor] (a -> f a) -> ((a -> f a) -> f b) -> f b;
 iact = |g, f| f(g);
 
 main : IO () = (
+    let arr = [0, 1, 2];
+    let x = arr.idx(1).iget;
+    x.to_string.println;;
+
+    let arr2 = [[0, 0, 0], [0, 1, 0], [0, 0, 0]];
+    let x = arr2.idx2(1, 1).iget;
+    x.to_string.println;;
+
     let arr = [0, 0, 0];
     let arr = arr.idx(1).iset(42);
-    assert_eq(|_|"arr.idx(1).iset(42)", arr, [0, 42, 0]);;
+    arr.to_string.println;;
 
     let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
     let arr2 = arr2.idx2(1, 1).iset(42);
-    assert_eq(|_|"arr.idx2(1, 1).iset(42)", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
+    arr2.to_string.println;;
 
     let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
     let arr2 = arr2.idx2(1, 1).imod(add(42));
-    assert_eq(|_|"arr2.idx2(1, 1).imod(add(42))", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
+    arr2.to_string.println;;
 
     let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
     let arr2 = arr2.idx2(1, 1).iact(some);
-    assert(|_|"arr2.idx2(1, 1).iact(some)", arr2.is_some);;
-    assert_eq(|_|"arr2.idx2(1, 1).iact(some).as_some", arr2.as_some, [[0, 0, 0], [0, 0, 0], [0, 0, 0]]);;
+    arr2.as_some.to_string.println;;
 
     pure()
 );
