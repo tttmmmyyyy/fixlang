@@ -1443,6 +1443,11 @@ impl Program {
                 }
                 expr
             }
+            Expr::Eval(side, main) => {
+                let side = self.instantiate_expr(side)?;
+                let main = self.instantiate_expr(main)?;
+                expr.set_eval_side(side).set_eval_main(main)
+            }
         };
         // If the type of an expression contains indeterminate type variable after instantiation, raise an error.
         //

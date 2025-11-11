@@ -41,7 +41,6 @@ use crate::{
         name::FullName,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
     },
-    lsp::language_server::write_log,
     misc::{Map, Set},
     optimization::utils::{rename_free_name, substitute_free_name},
     Program,
@@ -193,13 +192,6 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
             let e1 = expr.get_let_value();
             let mut probe = FreeOccurrenceProbe::new(x.clone());
             probe.traverse(&e1);
-            write_log(&format!(
-                "Free occurrences of {} in {}: count = {}, is_applied = {}",
-                x.to_string(),
-                e1.expr.stringify().to_string(),
-                probe.count,
-                probe.is_applied
-            ));
             if probe.count == 1 && probe.is_applied {
                 // TODO: in a future, we remove let bindings if count == 0.
                 // Case (2) of the documentation at the top.
@@ -330,6 +322,22 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut crate::ast::traverse::VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut crate::ast::traverse::VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }
@@ -628,6 +636,22 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut crate::ast::traverse::VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut crate::ast::traverse::VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

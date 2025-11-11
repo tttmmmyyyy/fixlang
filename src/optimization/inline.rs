@@ -469,6 +469,19 @@ impl ExprVisitor for InlineCostCalculator {
         self.complexity += 1;
         EndVisitResult::unchanged(expr)
     }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        self.is_lambda = false;
+        EndVisitResult::unchanged(expr)
+    }
 }
 
 struct Inliner<'c> {
@@ -657,6 +670,18 @@ impl<'c> ExprVisitor for Inliner<'c> {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

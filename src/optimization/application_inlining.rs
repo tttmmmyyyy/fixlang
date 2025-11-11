@@ -35,7 +35,10 @@ let x = {expr1} in {expr0}
 use std::sync::Arc;
 
 use crate::{
-    ast::traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+    ast::{
+        expr::expr_eval_typed,
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+    },
     expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var, Expr,
     ExprNode, PatternNode, Program, Symbol,
 };
@@ -145,6 +148,20 @@ impl ExprVisitor for AppInliner {
                 }
                 let expr = expr_match_typed(cond.clone(), pats_vals);
                 let expr = expr_let_typed(x_pat, arg.clone(), expr);
+                return EndVisitResult::changed(expr).revisit();
+            }
+            Expr::Eval(side, main) => {
+                // The expression is of the form `(eval {side} in {main})({a})`.
+                // Replace it with `let x = {a} in eval {side} in {main}(x)`.
+                let mut black_list = side.free_vars().clone();
+                black_list.extend(main.free_vars().into_iter());
+                let x_name = generate_new_names(&black_list, 1)[0].clone();
+                let x_pat = PatternNode::make_var(var_var(x_name.clone()), None)
+                    .set_type(arg.type_.as_ref().unwrap().clone());
+                let x = expr_var(x_name, None).set_type(arg.type_.as_ref().unwrap().clone());
+                let main_x = expr_app_typed(main.clone(), vec![x]); // {main}(x)
+                let eval_expr = expr_eval_typed(side.clone(), main_x); // eval {side} in {main}(x)
+                let expr = expr_let_typed(x_pat, arg.clone(), eval_expr); // let x = {a} in eval {side} in {main}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
             Expr::App(_, _) => {
@@ -313,6 +330,18 @@ impl ExprVisitor for AppInliner {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

@@ -162,6 +162,13 @@ pub trait ExprVisitor {
         _state: &mut VisitState,
     ) -> EndVisitResult;
 
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult;
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult;
+
     fn traverse(&mut self, expr: &Arc<ExprNode>) -> EndVisitResult {
         let mut state = VisitState::default();
         self.visit_expr(expr, &mut state)
@@ -488,6 +495,31 @@ pub trait ExprVisitor {
                     }
                 }
                 let res = self.end_visit_ffi_call(&expr, state).add_changed(changed);
+                self.revisit_if_changed(res, state)
+            }
+            Expr::Eval(side, main) => {
+                let mut changed = false;
+                let mut expr = expr.clone();
+                let res = self.start_visit_eval(&expr, state);
+                match res {
+                    StartVisitResult::VisitChildren => {
+                        let side = self.visit_expr(side, state).unwrap(&mut changed);
+                        let main = self.visit_expr(main, state).unwrap(&mut changed);
+                        if changed {
+                            expr = expr.set_eval_side(side).set_eval_main(main);
+                        }
+                    }
+                    StartVisitResult::ReplaceAndRevisit(expr) => {
+                        return self.visit_expr(&expr, state).add_changed(true);
+                    }
+                    StartVisitResult::ReplaceAndReturn(expr) => {
+                        return EndVisitResult::changed(expr);
+                    }
+                    StartVisitResult::Return => {
+                        return EndVisitResult::unchanged(&expr);
+                    }
+                }
+                let res = self.end_visit_eval(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
             }
         }

@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::{
     ast::traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-    ExprNode, Symbol, Program,
+    ExprNode, Program, Symbol,
 };
 
 pub fn run(prg: &mut Program) {
@@ -174,6 +174,18 @@ impl ExprVisitor for TyAnnoRemover {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

@@ -277,6 +277,9 @@ fn replace_closure_call_to_funptr_call_subexprs(
             }
             expr
         }
+        Expr::Eval(side, main) => expr
+            .set_eval_side(replace_closure_call_to_funptr_call_subexprs(side, symbols))
+            .set_eval_main(replace_closure_call_to_funptr_call_subexprs(main, symbols)),
     }
 }
 

@@ -450,6 +450,18 @@ impl ExprVisitor for Substitutor {
     ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
 }
 
 // Generate new names that is not in the set `ng_list`.

@@ -1037,6 +1037,13 @@ impl TypeCheckContext {
                 }
                 Ok(ei)
             }
+            Expr::Eval(side, main) => {
+                let side_tv = self.new_tyvar_star();
+                self.add_tyvar_source(side_tv.name.clone(), side.source.clone());
+                let side = self.unify_type_of_expr(side, type_from_tyvar(side_tv))?;
+                let main = self.unify_type_of_expr(main, ty)?;
+                Ok(ei.set_eval_main(main).set_eval_side(side))
+            }
         }
     }
 
@@ -1600,6 +1607,11 @@ impl TypeCheckContext {
                 let args =
                     collect_results(args.iter().map(|arg| self.finalize_types(arg.clone())))?;
                 expr.set_ffi_call_args(args)
+            }
+            Expr::Eval(side, main) => {
+                let side = self.finalize_types(side.clone())?;
+                let main = self.finalize_types(main.clone())?;
+                expr.set_eval_side(side).set_eval_main(main)
             }
         });
 

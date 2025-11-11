@@ -2073,6 +2073,7 @@ In this example, the call to `debug_eprint(...)` does not affect the result of `
 Notes:
 - If a program does not use the result of the entire `eval` expression (i.e., the result of `{expr1}`), the Fix compiler may omit the entire `eval` expression, resulting in `{expr0}` not being evaluated.
 - Currently, the evaluation order of `{expr0}` and `{expr1}` is not guaranteed.
+- While the compiler guarantees that `{expr0}` will be evaluated in order to evaluate the `eval` expression, it does not guarantee how many times it will be evaluated. For example, `eval debug_eprint("X"); eval debug_eprint("X"); ...` may be transformed into `let x = debug_eprint("X"); eval x; eval x; ...` through common subexpression elimination. In this case, `debug_eprint("X")` would only be evaluated once.
 
 ## Operators
 

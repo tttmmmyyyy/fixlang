@@ -229,4 +229,20 @@ impl ExprVisitor for UsageFinder<'_> {
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut crate::ast::traverse::VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut crate::ast::traverse::VisitState,
+    ) -> EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
 }

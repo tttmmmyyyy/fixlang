@@ -342,6 +342,32 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn set_eval_side(&self, side: Arc<ExprNode>) -> Arc<ExprNode> {
+        let mut ret = self.clone_except_fvs();
+        match &*self.expr {
+            Expr::Eval(_, main_expr) => {
+                ret.expr = Arc::new(Expr::Eval(side, main_expr.clone()));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
+    pub fn set_eval_main(&self, main: Arc<ExprNode>) -> Arc<ExprNode> {
+        let mut ret = self.clone_except_fvs();
+        match &*self.expr {
+            Expr::Eval(side_expr, _) => {
+                ret.expr = Arc::new(Expr::Eval(side_expr.clone(), main));
+            }
+            _ => {
+                panic!()
+            }
+        }
+        Arc::new(ret)
+    }
+
     // Set the value of let expression, and update the type of the let expression to the type of the value.
     #[allow(dead_code)]
     pub fn set_let_value_typed(&self, value: Arc<ExprNode>) -> Arc<Self> {
@@ -739,6 +765,10 @@ impl ExprNode {
                 }
                 Ok(expr)
             }
+            Expr::Eval(side_expr, main_expr) => Ok(self
+                .clone()
+                .set_eval_side(side_expr.resolve_namespace(ctx)?)
+                .set_eval_main(main_expr.resolve_namespace(ctx)?)),
         }
     }
 
@@ -820,6 +850,10 @@ impl ExprNode {
                 }
                 Ok(expr)
             }
+            Expr::Eval(side, main) => Ok(self
+                .clone()
+                .set_eval_side(side.resolve_type_aliases(type_env)?)
+                .set_eval_main(main.resolve_type_aliases(type_env)?)),
         }
     }
 
@@ -922,6 +956,13 @@ impl ExprNode {
                 }
                 None
             }
+            Expr::Eval(side, main) => {
+                let node = side.find_node_at(pos);
+                if node.is_some() {
+                    return node;
+                }
+                main.find_node_at(pos)
+            }
         }
     }
 
@@ -999,6 +1040,11 @@ impl ExprNode {
                 }
                 free_vars
             }
+            Expr::Eval(side, main) => {
+                let mut free_vars = side.free_vars();
+                free_vars.extend(main.free_vars());
+                free_vars
+            }
         }
     }
 
@@ -1060,6 +1106,7 @@ pub enum Expr {
         Vec<Arc<ExprNode>>, /* Arguments */
         bool,               /* is_ios */
     ),
+    Eval(Arc<ExprNode>, Arc<ExprNode>),
 }
 
 impl Expr {
@@ -1187,6 +1234,10 @@ impl Expr {
                 Text::from_str(&format!("FFI_CALL{}", if *is_ios { "_IOS" } else { "" }))
                     .append_nobreak(args)
             }
+            Expr::Eval(side, main) => Text::from_str("eval ")
+                .append_nobreak(side.expr.stringify().brace_if_multiline())
+                .append_to_last_line(";")
+                .append(main.expr.stringify()),
         }
     }
 }
@@ -1308,6 +1359,15 @@ pub fn expr_if_typed(
     let else_ty = else_expr.type_.as_ref().unwrap().clone();
     assert_eq!(then_ty.to_string(), else_ty.to_string());
     expr_if(cond, then_expr, else_expr, None).set_type(then_ty)
+}
+
+pub fn expr_eval(side: Arc<ExprNode>, main: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
+    Arc::new(Expr::Eval(side, main)).into_expr_info(src)
+}
+
+pub fn expr_eval_typed(side: Arc<ExprNode>, main: Arc<ExprNode>) -> Arc<ExprNode> {
+    let ty = main.type_.as_ref().unwrap().clone();
+    expr_eval(side, main, None).set_type(ty)
 }
 
 pub fn expr_match(

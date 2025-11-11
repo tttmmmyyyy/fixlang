@@ -118,25 +118,10 @@ use crate::{
     optimization::utils::{generate_new_names, rename_pattern_value_avoiding},
 };
 
-// pub fn run(prg: &mut Program) {
-//     for (_name, sym) in prg.symbols.iter_mut() {
-//         let expr = sym.expr.as_ref().unwrap();
-//         sym.expr = Some(run_on_expr(expr));
-//     }
-// }
-
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let mut expr = expr.clone();
     while run_on_expr_once(&mut expr) {}
     expr
-
-    // loop {
-    //     let res = pull_let.traverse(&expr);
-    //     if !res.changed {
-    //         return expr;
-    //     }
-    //     expr = res.expr;
-    // }
 }
 
 // Run pull-let transformation once on the given expression.
@@ -378,6 +363,22 @@ impl ExprVisitor for PullLet {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
+        EndVisitResult::unchanged(expr)
+    }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut crate::ast::traverse::VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut crate::ast::traverse::VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

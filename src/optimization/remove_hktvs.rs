@@ -422,4 +422,17 @@ impl<'a> ExprVisitor for RGT<'a> {
         let expr = run_on_inferred_type(&expr, &mut self.env);
         EndVisitResult::changed(expr)
     }
+
+    fn start_visit_eval(
+        &mut self,
+        _expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        StartVisitResult::VisitChildren
+    }
+
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+        let expr = run_on_inferred_type(&expr, &mut self.env);
+        EndVisitResult::changed(expr)
+    }
 }

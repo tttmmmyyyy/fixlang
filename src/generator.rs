@@ -1625,6 +1625,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Expr::FFICall(fun_name, ret_ty, param_tys, args, is_io) => {
                 self.eval_ffi_call(&expr, fun_name, ret_ty, param_tys, args, *is_io, tail)
             }
+            Expr::Eval(side, main) => self.eval_eval(side.clone(), main.clone(), tail),
         };
 
         if self.has_di() {
@@ -1991,6 +1992,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
 
         // Return lambda object
         self.build_tail(lam, tail)
+    }
+
+    // Evaluate eval
+    fn eval_eval(
+        &mut self,
+        side: Arc<ExprNode>,
+        main: Arc<ExprNode>,
+        tail: bool,
+    ) -> Option<Object<'c>> {
+        // Evaluate side effect expression.
+        let _side_obj = self.eval_expr(side.clone(), false).unwrap();
+        // Evaluate main expression.
+        self.eval_expr(main.clone(), tail)
     }
 
     // Evaluate let
