@@ -1,0 +1,31 @@
+module Main;
+
+import Random::{Random, generate_U64, init_by_seed};
+
+type State s a = unbox struct { run : s -> (s, a) };
+
+impl State s : Monad {
+    bind = |f, x| State { run : |state| (
+        let (state, r) = (x.@run)(state);
+        (f(r).@run)(state)
+    )};
+    pure = |v| State { run : |state| (state, v) };
+}
+
+eval_state : s -> State s a -> a;
+eval_state = |s, ma| let (s, a) = (ma.@run)(s); a;
+
+type RandomState = State Random;
+
+uniform : RandomState U64;
+uniform = State { run : |rng| (
+    let (rng, value) = rng.generate_U64;
+    (rng, value)
+)};
+
+main : IO ();
+main = (
+    let sum = range(0, 10000000).fold_m(0_U64, |_, sum| pure $ sum + *uniform).eval_state(init_by_seed(0_U64));
+    sum.to_string.println;;
+    pure()
+);
