@@ -9904,3 +9904,29 @@ main : IO () = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_eval_0() {
+    // This program verifies memory management of GenerationContext::eval_eval.
+    let source = r##"
+module Main;
+
+create_array : Array I64 = (
+    let arr = [1,2,3,4,5];
+    eval debug_println(arr.to_string); // eval unboxed value
+    eval arr; // eval boxed value
+    arr
+);
+
+main : IO () = (
+    let sum = range(0, 100).fold(0, |_, sum| 
+        let arr = create_array;
+        sum + arr.get_size
+    );
+    assert_eq(|_|"", sum, 5*100);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}

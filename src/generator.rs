@@ -2002,7 +2002,12 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         tail: bool,
     ) -> Option<Object<'c>> {
         // Evaluate side effect expression.
-        let _side_obj = self.eval_expr(side.clone(), false).unwrap();
+        let used_in_main = main.free_vars().clone();
+        self.scope_lock_as_used_later(&used_in_main);
+        let side_obj = self.eval_expr(side.clone(), false).unwrap();
+        self.scope_unlock_as_used_later(&used_in_main);
+        // Release side effect object.
+        self.release(side_obj);
         // Evaluate main expression.
         self.eval_expr(main.clone(), tail)
     }
