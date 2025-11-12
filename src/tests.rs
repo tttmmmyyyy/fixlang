@@ -2458,27 +2458,32 @@ pub fn test95() {
                 let int_val = 42;
                 let (unique, _) = int_val.unsafe_is_unique;
                 let use = int_val + 1;
+                eval use;
                 assert_eq(|_|"fail: int_val is shared", unique, true);;
 
                 // For boxed value, it returns true if the value isn't used later.
                 let arr = Array::fill(10, 10);
                 let (unique, arr) = arr.unsafe_is_unique;
                 let use = arr.@(0); // This `arr` is not the one passed to `is_unique`, but the one returned by `is_unique`.
+                eval use;
                 assert_eq(|_|"fail: arr is shared", unique, true);;
 
                 // Fox boxed value, it returns false if the value will be used later.
                 let arr = Array::fill(10, 10);
                 let (unique, _) = arr.unsafe_is_unique;
                 let use = arr.@(0);
+                eval use;
                 assert_eq(|_|"fail: arr is unique", unique, false);;
 
                 let int_val = 42;
                 eval int_val.assert_unique(|_|"fail: int_val is shared (2)");
                 let use = int_val + 1;
+                eval use;
 
                 let arr = Array::fill(10, 10);
                 let arr = arr.assert_unique(|_|"fail: arr is shared (2)");
                 let use = arr.@(0);
+                eval use;
 
                 pure()
             );
@@ -8385,6 +8390,7 @@ main = (
     let pipe: Pipe I64 String () = do {
         write((*read).to_string)
     };
+    eval pipe;
     pure()
 );
     "##;

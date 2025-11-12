@@ -6,6 +6,7 @@ This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one 
 2. `x` is used only once in `e1`, AND
 2-a. {e0} is a lambda expression and the occurrence of `x` is in an application, OR
 2-b. {e0} is a global lambda expression with n-arguments `f = |a1,...,an| ...` or strictly partial application of name expressions to it, and the occurrence of `x` is in an application.
+3. `x`  does not appear in {e1}
 
 Why conditions 2-a and 2-b are necessary:
 These conditions are to prevent the lifetime of values referenced by expression {e0} from being extended due to the evaluation of expression {e0} being delayed.
@@ -45,23 +46,6 @@ use crate::{
     optimization::utils::{rename_free_name, substitute_free_name},
     Program,
 };
-
-// pub fn run(prg: &mut Program) {
-//     let global_lambda_to_arity = create_global_lambda_to_arity_map(prg);
-//     for (_name, sym) in &mut prg.symbols {
-//         run_on_symbol(sym, &global_lambda_to_arity);
-//     }
-// }
-
-// fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
-//     let mut remover = LetEliminator {
-//         global_lambda_to_arity: global_lambda_to_arity,
-//     };
-//     let res = remover.traverse(&sym.expr.as_ref().unwrap());
-//     if res.changed {
-//         sym.expr = Some(res.expr);
-//     }
-// }
 
 pub fn create_global_lambda_to_arity_map(prg: &Program) -> Map<FullName, usize> {
     let mut global_lambda_to_arity: Map<FullName, usize> = Map::default();
@@ -193,7 +177,6 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
             let mut probe = FreeOccurrenceProbe::new(x.clone());
             probe.traverse(&e1);
             if probe.count == 1 && probe.is_applied {
-                // TODO: in a future, we remove let bindings if count == 0.
                 // Case (2) of the documentation at the top.
                 // Check if conditions 2-a or 2-b hold.
                 let cond = e0.is_lam(); // 2-a
@@ -206,6 +189,11 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
                     let expr = substitute_free_name(&e1, x, &e0);
                     return EndVisitResult::changed(expr);
                 }
+            }
+            if probe.count == 0 {
+                // Case (3) of the documentation at the top.
+                let e1 = expr.get_let_value();
+                return EndVisitResult::changed(e1);
             }
         }
         EndVisitResult::unchanged(expr)

@@ -1626,11 +1626,10 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     assert_eq!(pair.as_rule(), Rule::expr_eval);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let bound = parse_expr(pairs.next().unwrap(), ctx)?;
+    let sub = parse_expr(pairs.next().unwrap(), ctx)?;
     pairs.next().unwrap(); // Skip `Rule::semicolon`.
-    let val = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
-    let pat = PatternNode::make_var(var_local(EVAL_VAR_NAME), None);
-    Ok(expr_let(pat, bound, val, Some(span)))
+    let main = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+    Ok(expr_eval(sub, main, Some(span)))
 }
 
 fn parse_expr_lam(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {

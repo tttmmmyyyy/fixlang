@@ -636,7 +636,12 @@ Type: `Std::Lazy Std::String -> a -> a`
 Asserts that the given value is unique, and returns the given value.
 If the assertion failed, prints a message to the stderr and aborts the program.
 
-The main use of this function is to check whether a boxed value given as an argument is unique.
+This function is used to verify that functions such as `Array::set` do not perform array copying.
+For example, in the code `let arr2 = arr.set(0, 42);`, to verify that `set` does not perform copying,
+rewrite it as `let arr2 = arr.assert_unique(|_|"arr copied!").set(0, 42);` and run the program.
+If the `arr` originally passed to `set` was not unique, the program will output an error and terminate.
+
+This function should be limited to temporary use for debugging purposes and should be removed from the final code.
 
 ##### Parameters
 
