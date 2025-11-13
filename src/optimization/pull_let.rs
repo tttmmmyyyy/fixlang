@@ -115,7 +115,7 @@ use crate::{
         pattern::PatternNode,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
     },
-    optimization::utils::{generate_new_names, rename_pattern_value_avoiding},
+    optimization::rename::{generate_new_names, rename_pattern_value_avoiding},
 };
 
 pub fn run_on_expr(expr: &Arc<ExprNode>) -> Arc<ExprNode> {

@@ -43,7 +43,7 @@ use crate::{
     ExprNode, PatternNode, Program, Symbol,
 };
 
-use super::utils::generate_new_names;
+use super::rename::generate_new_names;
 
 pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.symbols {

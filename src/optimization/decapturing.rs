@@ -15,7 +15,7 @@ use crate::{
     },
     constants::{CAP_NAME, DECAP_NAME, STD_NAME},
     misc::{Map, Set},
-    optimization::{pull_let, utils::rename_free_names},
+    optimization::{pull_let, rename::rename_free_names},
     stopwatch::StopWatch,
 };
 

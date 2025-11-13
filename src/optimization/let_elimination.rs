@@ -43,7 +43,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
     },
     misc::{Map, Set},
-    optimization::utils::{rename_free_name, substitute_free_name},
+    optimization::rename::{rename_free_name, substitute_free_name},
     Program,
 };
 

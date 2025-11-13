@@ -2859,7 +2859,7 @@ pub fn struct_act(
         .into_iter()
         .map(|name| FullName::local(&name))
         .collect();
-    let new_name = crate::optimization::utils::generate_new_names(&used_tyvar_names, 1)[0]
+    let new_name = crate::optimization::rename::generate_new_names(&used_tyvar_names, 1)[0]
         .name
         .clone();
     let functor_ty = type_tyvar(&new_name, &kind_arrow(kind_star(), kind_star()));

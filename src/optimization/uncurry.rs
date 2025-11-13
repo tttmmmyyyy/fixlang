@@ -8,7 +8,7 @@ use crate::{
     INSTANCIATED_NAME_SEPARATOR, STD_NAME,
 };
 
-use super::utils::rename_lam_param_avoiding;
+use super::rename::rename_lam_param_avoiding;
 
 // First-order uncurrying optimizaion:
 // Global closures are uncurried as long as possible, and converted to function pointers (= has no field for captured values).

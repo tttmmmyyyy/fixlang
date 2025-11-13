@@ -63,20 +63,22 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         // we can transform `main : IO () = (...)` into `main : IOState -> (IOState, ()) = |ios| (...ios appears...)`.
 
         // Perform eta expansion optimization.
-        let _sw = StopWatch::new("eta_expand::run", config.show_build_times);
+        let sw = StopWatch::new("eta_expand::run", config.show_build_times);
         eta_expand::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.eta_expand", prg.optimization_step));
             prg.optimization_step += 1;
         }
+        sw.end();
 
         // Perform application inlining optimization.
-        let _sw = StopWatch::new("application_inlining::run", config.show_build_times);
+        let sw = StopWatch::new("application_inlining::run", config.show_build_times);
         application_inlining::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.application_inlining", prg.optimization_step));
             prg.optimization_step += 1;
         }
+        sw.end();
     }
 
     // Perform inlining optimization.
