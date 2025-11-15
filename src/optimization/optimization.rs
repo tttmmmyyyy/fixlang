@@ -57,28 +57,19 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         }
     }
 
-    // Perform eta expansion and application inlining optimizations.
-    if config.enable_eta_and_app_inline_optimization() {
-        // By combining unwrap_newtype with eta and application inlining,
+    // Perform eta transformation
+    if config.enable_eta_transformation() {
+        // By combining unwrap_newtype with eta transformation,
         // we can transform `main : IO () = (...)` into `main : IOState -> (IOState, ()) = |ios| (...ios appears...)`.
 
-        // Perform eta expansion optimization.
-        let sw = StopWatch::new("eta_expand::run", config.show_build_times);
-        eta_expand::run(prg);
-        if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.eta_expand", prg.optimization_step));
-            prg.optimization_step += 1;
-        }
-        sw.end();
-
-        // Perform application inlining optimization.
-        let sw = StopWatch::new("application_inlining::run", config.show_build_times);
-        application_inlining::run(prg);
-        if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.application_inlining", prg.optimization_step));
-            prg.optimization_step += 1;
-        }
-        sw.end();
+        // // Perform eta transformation.
+        // let sw = StopWatch::new("eta_expand::run", config.show_build_times);
+        // eta_expand::run(prg);
+        // if config.emit_symbols {
+        //     prg.emit_symbols(&format!("{}.eta_expand", prg.optimization_step));
+        //     prg.optimization_step += 1;
+        // }
+        // sw.end();
     }
 
     // Perform inlining optimization.
