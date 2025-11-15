@@ -20,9 +20,17 @@ def plot_log_data(csv_file="log.csv", output_file="graph.svg", latest_n=30):
         print("error: No instruction columns found in the data.")
         return
 
-    # Calculate ratios relative to the oldest commit (first row) for each column
+    # Calculate ratios relative to the first non-empty value for each column
     for col in inst_columns:
-        baseline_value = recent_df[col].iloc[0]  # First (oldest) commit value
+        # Find the first non-empty, non-zero value as baseline
+        non_empty_values = recent_df[col].dropna()
+        non_empty_values = non_empty_values[non_empty_values != 0]
+
+        if len(non_empty_values) == 0:
+            print(f"warning: No valid data for {col}. Skipping.")
+            continue
+
+        baseline_value = non_empty_values.iloc[0]
         if baseline_value != 0:
             recent_df[col] = recent_df[col] / baseline_value
         else:
@@ -43,7 +51,7 @@ def plot_log_data(csv_file="log.csv", output_file="graph.svg", latest_n=30):
 
     # Fix y-axis range: 0.5 (50%) to 2.0 (200%)
     ax.set_ylim(0.5, 2.0)
-    
+
     # Set custom y-axis ticks from 0.5 to 2.0 in 0.1 increments
     y_ticks = np.arange(0.5, 2.1, 0.1)
     ax.set_yticks(y_ticks)
