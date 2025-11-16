@@ -9827,7 +9827,7 @@ type MyStateM = State LargeState;
 
 main : IO ();
 main = (
-    let state = range(0, 10000000).fold_m(false, |_, x| x.pure : MyStateM Bool).eval_state(init);
+    eval range(0, 10000000).fold_m(false, |_, x| x.pure : MyStateM Bool).eval_state(init);
     pure()
 );
     "##;
@@ -9877,27 +9877,27 @@ iact = |g, f| f(g);
 main : IO () = (
     let arr = [0, 1, 2];
     let x = arr.idx(1).iget;
-    x.to_string.println;;
+    assert_eq(|_|"", x, 1);;
 
     let arr2 = [[0, 0, 0], [0, 1, 0], [0, 0, 0]];
     let x = arr2.idx2(1, 1).iget;
-    x.to_string.println;;
+    assert_eq(|_|"", x, 1);;
 
     let arr = [0, 0, 0];
     let arr = arr.idx(1).iset(42);
-    arr.to_string.println;;
+    assert_eq(|_|"", arr, [0, 42, 0]);;
 
     let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
     let arr2 = arr2.idx2(1, 1).iset(42);
-    arr2.to_string.println;;
+    assert_eq(|_|"", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
 
     let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
     let arr2 = arr2.idx2(1, 1).imod(add(42));
-    arr2.to_string.println;;
+    assert_eq(|_|"", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
 
     let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
     let arr2 = arr2.idx2(1, 1).iact(some);
-    arr2.as_some.to_string.println;;
+    assert_eq(|_|"", arr2, some $ [[0, 0, 0], [0, 0, 0], [0, 0, 0]]);;
 
     pure()
 );

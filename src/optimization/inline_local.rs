@@ -1,6 +1,6 @@
 use crate::{
     ast::program::Program,
-    optimization::{application_inlining, let_elimination, pull_let},
+    optimization::{application_inlining, let_elimination},
 };
 
 pub fn run(prg: &mut Program) {
@@ -11,7 +11,7 @@ pub fn run(prg: &mut Program) {
         let mut expr = sym.expr.as_ref().unwrap().clone();
         loop {
             let mut changed = false;
-            changed |= pull_let::run_on_expr_once(&mut expr);
+            // changed |= pull_let::run_on_expr_once(&mut expr);
             changed |= let_elimination::run_on_expr_once(&mut expr, &global_lambda_to_arity);
             changed |= application_inlining::run_on_expr_once(&mut expr);
             if !changed {

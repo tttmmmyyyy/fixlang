@@ -5,7 +5,7 @@
 
 This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one of the following conditions hold:
 1. `e0` is just a name (variable).
-2. `x` is used only once in `e1`, not captured by a lambda expression, AND any of the following sub-conditions hold:
+2. `x` is used only once in `e1`, not appear as arguments to LLVM expression, and any of the following sub-conditions hold:
 2-a. {e0} is a lambda expression and the occurrence of `x` is in an application
 2-b. {e0} is strictly partial application (i.e. # of args < n) of names to a global lambda expression with n-arguments `f = |a1,...,an| ...`,
      and the occurrence of `x` is in an application
@@ -193,7 +193,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         let mut probe = FreeOccurrenceProbe::new(x.clone());
         probe.traverse(&e1);
 
-        if probe.count == 1 && !probe.is_captured_by_lambda {
+        if probe.count == 1 && !probe.is_argument_to_llvm {
             // Case 2 of the documentation at the top.
             let mut any_sub_condition_holds = false;
 
@@ -376,6 +376,8 @@ pub struct FreeOccurrenceProbe {
     used_before_any_other_local_names: bool,
     // Is any occurrence of `target_name` captured by a lambda expression?
     is_captured_by_lambda: bool,
+    // Is any occurrence of `target_name` appear as arguments to LLVM expression?
+    is_argument_to_llvm: bool,
 
     // Local names that are currently shadowed (i.e., not free).
     shadowed: Set<FullName>,
@@ -390,6 +392,7 @@ impl FreeOccurrenceProbe {
             is_applied: false,
             used_before_any_other_local_names: true,
             is_captured_by_lambda: false,
+            is_argument_to_llvm: false,
         }
     }
 
@@ -446,6 +449,14 @@ impl ExprVisitor for FreeOccurrenceProbe {
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         let llvm = expr.get_llvm();
+
+        if !self.shadowed.contains(&self.target_name) {
+            for fv in llvm.generator.free_vars() {
+                if fv == self.target_name {
+                    self.is_argument_to_llvm = true;
+                }
+            }
+        }
 
         // If the target name is shadowed, do nothing
         if self.shadowed.contains(&self.target_name) {
