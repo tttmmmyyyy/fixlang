@@ -1,18 +1,27 @@
+/*
+Uncurrying optimizaion
+
+Convert globally defined lambda expressions `|x1,...,xn| (...) : T1 -> ... -> Tn -> R` to function pointer expressions `[x1,...,xn] (...) : [T1,...,Tn] R`.
+Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to function pointer expression call expressions `f[a1,a2,...,an]`.
+
+en For each lambda expression, define multiple function pointer expressions such as one-variable function pointer expression, two-variable function pointer expression, etc.,
+and select the appropriate one according to the call site.
+
+NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
+*/
+
 use std::{sync::Arc, usize};
 
 use crate::{
     ast::name::{FullName, Name},
     collect_app, expr_abs, expr_app, expr_let_typed, expr_var,
     misc::Set,
+    optimization::eta_expansion,
     type_funptr, Expr, ExprNode, Program, Symbol, Var, FIX_NAME, FUNPTR_ARGS_MAX,
     INSTANCIATED_NAME_SEPARATOR, STD_NAME,
 };
 
 use super::rename::rename_lam_param_avoiding;
-
-// First-order uncurrying optimizaion:
-// Global closures are uncurried as long as possible, and converted to function pointers (= has no field for captured values).
-// NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
 
 pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.
@@ -116,12 +125,8 @@ fn convert_to_funptr_name(name: &mut Name, var_count: usize) {
     *name += &format!("#funptr{}", var_count);
 }
 
-// Convert lambda expression to function pointer.
-fn funptr_lambda(
-    generic_name: &FullName,
-    expr: &Arc<ExprNode>,
-    vars_count: usize,
-) -> Option<Arc<ExprNode>> {
+// Convert lambda expression to function pointer taking `n` arguments.
+fn funptr_lambda(generic_name: &FullName, expr: &Arc<ExprNode>, n: usize) -> Option<Arc<ExprNode>> {
     if is_std_fix(generic_name) {
         return None;
     }
@@ -131,18 +136,15 @@ fn funptr_lambda(
         return None;
     }
 
-    // Extract abstractions from expr.
-    let expr = internalize_let_to_var_at_head(expr);
-    let (args, body) = collect_abs(&expr, vars_count);
-    if args.len() != vars_count {
-        return None;
-    }
+    // Eta expand the expression to take `n` arguments.
+    let expr = eta_expansion::run_on_expr(expr.clone(), n)?;
+    let (args, body) = collect_abs(&expr, n);
 
     // Collect types of argments.
-    let (arg_types, body_ty) = expr_type.collect_app_src(vars_count);
+    let (arg_types, body_ty) = expr_type.collect_app_src(n);
     assert_eq!(*body.type_.as_ref().unwrap(), body_ty);
 
-    // Construct function pointer.
+    // Construct function pointer expression.
     let funptr_ty = type_funptr(arg_types, body_ty);
     let funptr = expr_abs(args, body, None).set_type(funptr_ty);
 

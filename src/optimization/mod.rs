@@ -2,7 +2,7 @@ mod application_inlining;
 mod dead_symbol_elimination;
 mod decapturing;
 #[allow(dead_code)]
-mod eta_expand;
+mod eta_expansion;
 mod find_usage_of_name;
 mod inline;
 mod inline_local;

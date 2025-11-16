@@ -57,21 +57,6 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         }
     }
 
-    // Perform eta transformation
-    if config.enable_eta_transformation() {
-        // By combining unwrap_newtype with eta transformation,
-        // we can transform `main : IO () = (...)` into `main : IOState -> (IOState, ()) = |ios| (...ios appears...)`.
-
-        // // Perform eta transformation.
-        // let sw = StopWatch::new("eta_expand::run", config.show_build_times);
-        // eta_expand::run(prg);
-        // if config.emit_symbols {
-        //     prg.emit_symbols(&format!("{}.eta_expand", prg.optimization_step));
-        //     prg.optimization_step += 1;
-        // }
-        // sw.end();
-    }
-
     // Perform inlining optimization.
     if config.enable_inline_optimization() {
         let _sw = StopWatch::new("inline::run", config.show_build_times);

@@ -75,6 +75,8 @@ pub fn create_global_lambda_to_arity_map(prg: &Program) -> Map<FullName, usize> 
 // Run let-elimination transformation once on the given expression.
 //
 // If any transformation is applied, returns true.
+//
+// - `global_lambda_to_arity`: a map from global lambda names to their arities. If given empty map, conditions 2-b will not be applied.
 pub fn run_on_expr_once(
     expr: &mut Arc<ExprNode>,
     global_lambda_to_arity: &Map<FullName, usize>,

@@ -53,9 +53,14 @@ pub fn run(prg: &mut Program) {
 }
 
 pub fn run_on_symbol(sym: &mut Symbol) {
-    let mut expr = sym.expr.as_ref().unwrap().clone();
-    while run_on_expr_once(&mut expr) {}
+    let expr = sym.expr.as_ref().unwrap().clone();
+    let expr = run_on_expr(expr);
     sym.expr = Some(expr);
+}
+
+pub fn run_on_expr(mut expr: Arc<ExprNode>) -> Arc<ExprNode> {
+    while run_on_expr_once(&mut expr) {}
+    expr
 }
 
 pub fn run_on_expr_once(expr: &mut Arc<ExprNode>) -> bool {
