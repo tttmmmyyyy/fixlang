@@ -49,8 +49,8 @@ def plot_log_data(csv_file="log.csv", output_file="graph.svg", latest_n=30):
     # Set logarithmic scale for y-axis
     ax.set_yscale('log')
 
-    # Fix y-axis range: 0.5 (50%) to 2.0 (200%)
-    ax.set_ylim(0.5, 2.0)
+    # Fix y-axis range: 0.2 to 5.0
+    ax.set_ylim(0.2, 5.0)
 
     # Set custom y-axis ticks from 0.5 to 2.0 in 0.1 increments
     y_ticks = np.arange(0.5, 2.1, 0.1)
