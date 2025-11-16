@@ -472,9 +472,10 @@ pub fn test22_7() {
 pub fn test23() {
     // Test Array::fill of size 0.
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
         main = (
-            let arr = Array::fill(0, 42);
+            eval Array::fill(0, 42);
             pure()
         );
         "#;
@@ -499,7 +500,8 @@ pub fn test24() {
 pub fn test25() {
     // Test Array::get.
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
         main = (
             let arr = Array::fill(100, 42);
             let elem = arr.@(50);
@@ -514,7 +516,8 @@ pub fn test25() {
 pub fn test26() {
     // Test Array::set (unique case).
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
         main = (
             let arr = Array::fill(100, 42);
             let arr = arr.set(50, 21);
@@ -529,7 +532,8 @@ pub fn test26() {
 pub fn test27() {
     // Test Array::set (shared case).
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
         main = (
             let arr0 = Array::fill(100, 42);
             let arr1 = arr0.set(50, 21);
@@ -544,7 +548,8 @@ pub fn test27() {
 pub fn test27_5() {
     // Test Array of boxed object.
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
         main = (
             let arr = Array::from_map(100) $ |i| add(i);
             let arr = arr.set(99, |x| x - 100);
@@ -604,7 +609,8 @@ pub fn test29() {
 pub fn test30() {
     // Test dollar combinator
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
         main = (
             let f = |x| x + 3;
             let g = |x| x == 8;
@@ -620,7 +626,8 @@ pub fn test30() {
 pub fn test31() {
     // Test . combinator
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
         main = (
             let f = |x| x + 3;
             let g = |x| x == 8;
@@ -636,7 +643,8 @@ pub fn test31() {
 pub fn test32() {
     // Test . and $ combinator
     let source = r#"
-        module Main;         main : IO ();
+        module Main;
+        main : IO ();
         main = (
             let f = |x| x + 10;
             assert_eq(|_|"", 5.add $ 3.f, 18);;
@@ -668,7 +676,8 @@ pub fn test33() {
 pub fn test34_5() {
     // Test unboxed struct declaration and new, mod.
     let source = r#"
-        module Main;         type I64Bool = unbox struct {x: I64, y: Bool};
+        module Main;
+        type I64Bool = unbox struct {x: I64, y: Bool};
 
         main : IO ();
         main = (
@@ -2365,8 +2374,8 @@ pub fn test92() {
     main = (
         let buf = [].reserve(5);
         let vec = buf;
-        let vec = vec.push_back(0);
-        let buf = buf.push_back(1);
+        eval vec.push_back(0);
+        eval buf.push_back(1);
         pure()
     );
 
@@ -2386,7 +2395,7 @@ pub fn test93() {
     main = (
         let leaker = Leaker { data : Option::none() };
         // let leaker = leaker.set_data!(Option::some(leaker)); // panics
-        let leaker = leaker.set_data(Option::some(leaker)); // doesn't make circular reference in fact.
+        eval leaker.set_data(Option::some(leaker)); // doesn't make circular reference in fact.
         pure()
     );
 
