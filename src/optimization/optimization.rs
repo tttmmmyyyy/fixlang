@@ -1,5 +1,5 @@
 use crate::{
-    optimization::{application_inlining, eta_expand, inline_local, remove_hktvs},
+    optimization::{inline_local, remove_hktvs},
     stopwatch::StopWatch,
     Configuration, Program,
 };

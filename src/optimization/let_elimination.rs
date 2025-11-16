@@ -1,21 +1,33 @@
 /*
-let-elimination optimization
+# let-elimination optimization
+
+## Overview
 
 This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one of the following conditions hold:
 1. `e0` is just a name (variable).
-2. `x` is used only once in `e1`, AND
-2-a. {e0} is a lambda expression and the occurrence of `x` is in an application, OR
-2-b. {e0} is a global lambda expression with n-arguments `f = |a1,...,an| ...` or strictly partial application of name expressions to it, and the occurrence of `x` is in an application.
+2. `x` is used only once in `e1`, not captured by a lambda expression, AND any of the following sub-conditions hold:
+2-a. {e0} is a lambda expression and the occurrence of `x` is in an application
+2-b. {e0} is strictly partial application (i.e. # of args < n) of names to a global lambda expression with n-arguments `f = |a1,...,an| ...`,
+     and the occurrence of `x` is in an application
+2-c. {e1} evaluates `x` "before any other local names"
 3. `x`  does not appear in {e1}
 
-Why conditions 2-a and 2-b are necessary:
+## Why conditions 2-* are necessary
+
 These conditions are to prevent the lifetime of values referenced by expression {e0} from being extended due to the evaluation of expression {e0} being delayed.
+
 In 2-a, the only variables whose lifetimes can change are those captured by the lambda expression, and these were already alive until the call site of the lambda expression,
 so their lifetimes do not extend.
+
 In 2-b, the name expressions partially applied to the global lambda expression were also already alive until the call site of the lambda expression,
 so their lifetimes do not extend.
 
-(1) itself improves the performance of the program. Consider the following example which contains InlineLLVM nodes:
+For the definition of "evaluates before any other local names", see the implementation of `FreeOccurrenceProbe`.
+
+## Effects
+
+This transformation in case 1., i.e., transforming `let x = y in {e1}` into `{e1}[x:=y]` even improves the performance of the program.
+Consider the following example which contains InlineLLVM nodes:
 
 ```
 let x = arr; // Retain `arr` here, because it will be used later.
@@ -162,40 +174,62 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         if !x.is_var() {
             return EndVisitResult::unchanged(expr);
         }
+        // The pattern is just a name.
+
         let e0 = expr.get_let_bound();
         if e0.is_var() {
+            // Case 1 of the documentation at the top.
+
             // Replace all occurrences of `x` in `{e1}` with `{e0}`.
             let x = &x.get_var().name;
             let e0 = &e0.get_var().name;
             let e1 = expr.get_let_value();
             let expr = rename_free_name(&e1, x, e0);
             return EndVisitResult::changed(expr);
-        } else {
-            // Count the number of occurrences of `x` in `{e1}`.
-            let x = &x.get_var().name;
-            let e1 = expr.get_let_value();
-            let mut probe = FreeOccurrenceProbe::new(x.clone());
-            probe.traverse(&e1);
-            if probe.count == 1 && probe.is_applied {
-                // Case (2) of the documentation at the top.
-                // Check if conditions 2-a or 2-b hold.
-                let cond = e0.is_lam(); // 2-a
-                let cond = cond
-                    || is_global_lambda_strictly_partially_applied_to_names(
-                        &e0,
-                        &self.global_lambda_to_arity,
-                    ); // 2-b
-                if cond {
-                    let expr = substitute_free_name(&e1, x, &e0);
-                    return EndVisitResult::changed(expr);
-                }
+        }
+        // Inspect occurrences of `x` in `{e1}`.
+        let x = &x.get_var().name;
+        let e1 = expr.get_let_value();
+        let mut probe = FreeOccurrenceProbe::new(x.clone());
+        probe.traverse(&e1);
+
+        if probe.count == 1 && !probe.is_captured_by_lambda {
+            // Case 2 of the documentation at the top.
+            let mut any_sub_condition_holds = false;
+
+            if e0.is_lam() && probe.is_applied {
+                // Case 2-a of the documentation at the top.
+                any_sub_condition_holds = true;
             }
-            if probe.count == 0 {
-                // Case (3) of the documentation at the top.
-                let e1 = expr.get_let_value();
-                return EndVisitResult::changed(e1);
+
+            if !any_sub_condition_holds
+                && is_global_lambda_strictly_partially_applied_to_names(
+                    &e0,
+                    &self.global_lambda_to_arity,
+                )
+                && probe.is_applied
+            {
+                // Case 2-b of the documentation at the top.
+                any_sub_condition_holds = true;
+            }
+
+            if probe.used_before_any_other_local_names {
+                // Case 2-c of the documentation at the top.
+                any_sub_condition_holds = true;
+            }
+
+            if any_sub_condition_holds {
+                let expr = substitute_free_name(&e1, x, &e0);
+                return EndVisitResult::changed(expr);
             }
         }
+
+        if probe.count == 0 {
+            // Case 3 of the documentation at the top.
+            let e1 = expr.get_let_value();
+            return EndVisitResult::changed(e1);
+        }
+
         EndVisitResult::unchanged(expr)
     }
 
@@ -334,12 +368,17 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 pub struct FreeOccurrenceProbe {
     // The name to count occurrences of.
     target_name: FullName,
-    // Local names that are currently shadowed (i.e., not free).
-    shadowed: Set<FullName>,
     // Count of free occurrences found so far.
     count: usize,
     // Is the name occurrs as an application function?
     is_applied: bool,
+    // Is all occurrences of `target_name` evaluated "before any other local names"?
+    used_before_any_other_local_names: bool,
+    // Is any occurrence of `target_name` captured by a lambda expression?
+    is_captured_by_lambda: bool,
+
+    // Local names that are currently shadowed (i.e., not free).
+    shadowed: Set<FullName>,
 }
 
 impl FreeOccurrenceProbe {
@@ -349,7 +388,18 @@ impl FreeOccurrenceProbe {
             shadowed: Set::default(),
             count: 0,
             is_applied: false,
+            used_before_any_other_local_names: true,
+            is_captured_by_lambda: false,
         }
+    }
+
+    fn contains_local_name(expr: &Arc<ExprNode>) -> bool {
+        for name in expr.free_vars() {
+            if name.is_local() {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -414,9 +464,24 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_app(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // Function application expression {f}({x}).
+
+        // If {x} contains the target name, and {f} contains local name, then set `used_before_any_other_local_names` to false.
+        if !self.shadowed.contains(&self.target_name) {
+            if expr
+                .get_app_args()
+                .iter()
+                .any(|arg| arg.free_vars().contains(&self.target_name))
+            {
+                if FreeOccurrenceProbe::contains_local_name(&expr.get_app_func()) {
+                    self.used_before_any_other_local_names = false;
+                }
+            }
+        }
+
         StartVisitResult::VisitChildren
     }
 
@@ -443,6 +508,14 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // Set is_captured_by_lambda if the target name is free in this lambda.
+        if !self.shadowed.contains(&self.target_name) {
+            let lam_names = expr.free_vars();
+            if lam_names.contains(&self.target_name) {
+                self.is_captured_by_lambda = true;
+            }
+        }
+
         let params = expr.get_lam_params();
 
         // Save the current shadowed state
@@ -476,6 +549,20 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // Let expression `let {pat} = {bound} in {value}`.
+
+        // If {value} contains the target name, and {bound} contains local name, then set `used_before_any_other_local_names` to false.
+        if !self.shadowed.contains(&self.target_name) {
+            let pat_names = expr.get_let_pat().pattern.vars();
+            let val_names = expr.get_let_value().free_vars();
+            if !pat_names.contains(&self.target_name) && val_names.contains(&self.target_name) {
+                // Then the target name appears in {value}.
+                if FreeOccurrenceProbe::contains_local_name(&expr.get_let_bound()) {
+                    self.used_before_any_other_local_names = false;
+                }
+            }
+        }
+
         // Visit the bound expression first (where the target name is still free)
         let bound = expr.get_let_bound();
         self.traverse(&bound);
@@ -510,9 +597,23 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_if(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // If expression `if {cond} { {then} } else { {else} }`.
+
+        // if the target name appears in {then} or {else}, and {cond} contains local name, then set `used_before_any_other_local_names` to false.
+        if !self.shadowed.contains(&self.target_name) {
+            let then_expr = expr.get_if_then();
+            let else_expr = expr.get_if_else();
+            if (then_expr.free_vars().contains(&self.target_name)
+                || else_expr.free_vars().contains(&self.target_name))
+                && FreeOccurrenceProbe::contains_local_name(&expr.get_if_cond())
+            {
+                self.used_before_any_other_local_names = false;
+            }
+        }
+
         StartVisitResult::VisitChildren
     }
 
@@ -529,6 +630,25 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // Match expression `match {cond} { pat1 => {val1}; pat2 => {val2}; ... }`.
+        // If the target name appears in any {val} (not shadowed by {pat}), and {cond} contains local name, then set `used_before_any_other_local_names` to false.
+        if !self.shadowed.contains(&self.target_name) {
+            let pat_vals = expr.get_match_pat_vals();
+            let mut appear_in_val = false;
+            for (pat, val) in &pat_vals {
+                let pat_names = pat.pattern.vars();
+                if !pat_names.contains(&self.target_name)
+                    && val.free_vars().contains(&self.target_name)
+                {
+                    appear_in_val = true;
+                    break;
+                }
+            }
+            if appear_in_val && FreeOccurrenceProbe::contains_local_name(&expr.get_match_cond()) {
+                self.used_before_any_other_local_names = false;
+            }
+        }
+
         // Visit the condition expression first
         let cond = expr.get_match_cond();
         self.traverse(&cond);

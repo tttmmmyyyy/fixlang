@@ -132,6 +132,33 @@ impl ExprNode {
         }
     }
 
+    pub fn get_if_cond(&self) -> Arc<ExprNode> {
+        match &*self.expr {
+            Expr::If(cond, _, _) => cond.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn get_if_then(&self) -> Arc<ExprNode> {
+        match &*self.expr {
+            Expr::If(_, then_expr, _) => then_expr.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn get_if_else(&self) -> Arc<ExprNode> {
+        match &*self.expr {
+            Expr::If(_, _, else_expr) => else_expr.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
     pub fn set_app_func(&self, func: Arc<ExprNode>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {

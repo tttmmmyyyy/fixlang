@@ -45,6 +45,7 @@ use crate::{
 
 use super::rename::generate_new_names;
 
+#[allow(dead_code)]
 pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym);
