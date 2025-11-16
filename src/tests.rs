@@ -3567,6 +3567,8 @@ pub fn test_array_act_0() {
         
         main : IO ();
         main = (
+            pure();; // To make the `arr` defined below not global and therefor unique.
+
             // If the array and the element is both unique, the action should receive an unique value.
             let arr = [[1,2,3], [4,5,6]];
             let arr = arr.act(0, |arr| let arr = arr.assert_unique(|_|"the array is not unique!"); (arr.to_iter.sum, []));
@@ -6997,6 +6999,8 @@ pub fn test_struct_act() {
 
         main: IO ();
         main = (
+            pure();; // To make the `s` defined below not global and therefore unique.
+
             let actor_array = |x| let x = x.assert_unique(|_|""); if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
             let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
 
