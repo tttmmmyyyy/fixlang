@@ -714,9 +714,28 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_make_struct(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // If any field contains the target name, and any other field contains local name, then set `used_before_any_other_local_names` to false.
+        if !self.shadowed.contains(&self.target_name) {
+            let expr_mames = expr.free_vars();
+            if expr_mames.contains(&self.target_name) {
+                // Then the target name appears in some field.
+                let struct_fields = expr.get_make_struct_fields();
+                for (_, field) in &struct_fields {
+                    let field_free_vars = field.free_vars();
+                    if !field_free_vars.contains(&self.target_name)
+                        && FreeOccurrenceProbe::contains_local_name(field)
+                    {
+                        // A field contains local name other than the target name.
+                        self.used_before_any_other_local_names = false;
+                        break;
+                    }
+                }
+            }
+        }
+
         StartVisitResult::VisitChildren
     }
 
@@ -730,9 +749,27 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_array_lit(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // If any element contains the target name, and any other element contains local name, then set `used_before_any_other_local_names` to false.
+        if !self.shadowed.contains(&self.target_name) {
+            let expr_mames = expr.free_vars();
+            if expr_mames.contains(&self.target_name) {
+                // Then the target name appears in some element.
+                let array_elements = expr.get_array_lit_elements();
+                for element in array_elements {
+                    let element_free_vars = element.free_vars();
+                    if !element_free_vars.contains(&self.target_name)
+                        && FreeOccurrenceProbe::contains_local_name(&element)
+                    {
+                        // An element contains local name other than the target name.
+                        self.used_before_any_other_local_names = false;
+                        break;
+                    }
+                }
+            }
+        }
         StartVisitResult::VisitChildren
     }
 
@@ -746,9 +783,27 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_ffi_call(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &std::sync::Arc<crate::ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
+        // If any argument contains the target name, and any other argument contains local name, then set `used_before_any_other_local_names` to false.
+        if !self.shadowed.contains(&self.target_name) {
+            let expr_names = expr.free_vars();
+            if expr_names.contains(&self.target_name) {
+                // Then the target name appears in some argument.
+                let ffi_args = expr.get_ffi_call_args();
+                for arg in ffi_args {
+                    let arg_free_vars = arg.free_vars();
+                    if !arg_free_vars.contains(&self.target_name)
+                        && FreeOccurrenceProbe::contains_local_name(&arg)
+                    {
+                        // An argument contains local name other than the target name.
+                        self.used_before_any_other_local_names = false;
+                        break;
+                    }
+                }
+            }
+        }
         StartVisitResult::VisitChildren
     }
 
@@ -762,9 +817,19 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_eval(
         &mut self,
-        _expr: &Arc<ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> StartVisitResult {
+        // If the main expression contains the target name, and the sub-expression contains local name, then set `used_before_any_other_local_names` to false.
+        if !self.shadowed.contains(&self.target_name) {
+            let side = expr.get_eval_side();
+            let main = expr.get_eval_main();
+            if main.free_vars().contains(&self.target_name)
+                && FreeOccurrenceProbe::contains_local_name(&side)
+            {
+                self.used_before_any_other_local_names = false;
+            }
+        }
         StartVisitResult::VisitChildren
     }
 

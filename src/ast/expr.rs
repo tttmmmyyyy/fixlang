@@ -369,6 +369,42 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    pub fn get_make_struct_fields(&self) -> Vec<(Name, Arc<ExprNode>)> {
+        match &*self.expr {
+            Expr::MakeStruct(_, fields) => fields.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn get_array_lit_elements(&self) -> Vec<Arc<ExprNode>> {
+        match &*self.expr {
+            Expr::ArrayLit(elements) => elements.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn get_ffi_call_args(&self) -> Vec<Arc<ExprNode>> {
+        match &*self.expr {
+            Expr::FFICall(_, _, _, args, _) => args.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
+    pub fn get_eval_side(&self) -> Arc<ExprNode> {
+        match &*self.expr {
+            Expr::Eval(side_expr, _) => side_expr.clone(),
+            _ => {
+                panic!()
+            }
+        }
+    }
+
     pub fn set_eval_side(&self, side: Arc<ExprNode>) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -380,6 +416,15 @@ impl ExprNode {
             }
         }
         Arc::new(ret)
+    }
+
+    pub fn get_eval_main(&self) -> Arc<ExprNode> {
+        match &*self.expr {
+            Expr::Eval(_, main_expr) => main_expr.clone(),
+            _ => {
+                panic!()
+            }
+        }
     }
 
     pub fn set_eval_main(&self, main: Arc<ExprNode>) -> Arc<ExprNode> {

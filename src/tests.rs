@@ -9968,3 +9968,29 @@ main: IO () = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_regression_issue_67() {
+    let source = r##"
+module Main;
+
+type Obj = unbox struct {
+    arr: Array I64,
+};
+
+execute: I64 -> Obj -> (Obj, I64) = |i, obj| (
+    let val = obj.@arr.@(i);
+    let obj2 = obj.mod_arr(|arr|
+        arr.assert_unique(|_| "arr")
+    );
+    (obj2, val)
+);
+
+main: IO () = (
+    let obj = Obj { arr: [ 42 ] };
+    let (obj, val) = obj.execute(0);
+    println(val.to_string)
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
