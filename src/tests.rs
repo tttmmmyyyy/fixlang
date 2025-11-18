@@ -9971,17 +9971,16 @@ type C = struct { x : B };
 type D = struct { x : C };
 
 main: IO () = (
-    pure();; // To make the array created below not global and therefore unique.
     let a = A { i : ([0],) };
     let b = B { a : a };
     let c = C { x : b };
     let d = D { x : c };
     let d = d[^x, ^x, ^a, ^i, ^0, 0].iset(42);
-    let v = d[^D::x, ^::Main::C::x, ^a, ^i, ^0, 0].iget;
+    let v = d[^D::x, ^::Main::C::x, ^a, ^i, ^Tuple1::0, 0].iget;
     assert_eq(|_|"", v, 42);;
-    let d = d[^D::x, ^::Main::C::x, ^a, ^i, ^0].imod(|arr| arr.assert_unique(|_|"Array is not unique!").mod(0, |x| x / 6));
-    let v = d[^D::x, ^::Main::C::x, ^a, ^i, ^0, 0].iget;
-    assert_eq(|_|"", v, 7);;
+    let d = d[^x, ^x, ^a, ^i, ^0].imod(|arr| arr.push_back(84));
+    let v = d[^x, ^x, ^a, ^i, ^0, 1].iget;
+    assert_eq(|_|"", v, 84);;
     pure()
 );
     "##;
