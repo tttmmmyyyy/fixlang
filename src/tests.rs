@@ -3576,7 +3576,7 @@ pub fn test_array_act_0() {
         
         main : IO ();
         main = (
-            pure();; // To make the `arr` defined below not global and therefor unique.
+            pure();; // To make the `arr` defined below not global and therefore unique.
 
             // If the array and the element is both unique, the action should receive an unique value.
             let arr = [[1,2,3], [4,5,6]];
@@ -9848,78 +9848,6 @@ main = (
 }
 
 #[test]
-pub fn test_index_syntax_0() {
-    let source = r##"
-module Main;
-
-main : IO () = (
-    let arr = [0, 1, 2];
-    let x = arr[1].iget;
-    assert_eq(|_|"", x, 1);;
-
-    let arr2 = [[0, 0, 0], [0, 1, 0], [0, 0, 0]];
-    let x = arr2[1, 1].iget;
-    assert_eq(|_|"", x, 1);;
-
-    let arr = [0, 0, 0];
-    let arr = arr[1].iset(42);
-    assert_eq(|_|"", arr, [0, 42, 0]);;
-
-    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-    let arr2 = arr2[1, 1].iset(42);
-    assert_eq(|_|"", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
-
-    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-    let arr2 = arr2[1, 1].imod(add(42));
-    assert_eq(|_|"", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
-
-    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-    let arr2 = arr2[1, 1].iact(some);
-    assert_eq(|_|"", arr2, some $ [[0, 0, 0], [0, 0, 0], [0, 0, 0]]);;
-
-    pure()
-);
-    "##;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
-pub fn test_index_syntax_1() {
-    let source = r##"
-module Main;
-
-main : IO () = (
-    let xs = [(0, 1), (2, 3), (4, 5)];
-    let x = xs[1, ^0].iget;
-    assert_eq(|_|"", x, 2);;
-
-    let xs = ((0, 1, 2), (3, 4, 5), (6, 7, 8));
-    let x = xs[^1, ^1].iget;
-    assert_eq(|_|"", x, 4);;
-
-    let xs = (0, 0, 0);
-    let xs = xs[^1].iset(42);
-    assert_eq(|_|"", xs, (0, 42, 0));;
-
-    let xs = ([0, 0, 0], [0, 0, 0], [0, 0, 0]);
-    let xs = xs[^1, 1].iset(42);
-    assert_eq(|_|"", xs, ([0, 0, 0], [0, 42, 0], [0, 0, 0]));;
-
-    let xs = ((0, 0, 0), (0, 0, 0), (0, 0, 0));
-    let xs = xs[^1, ^1].imod(add(42));
-    assert_eq(|_|"", xs, ((0, 0, 0), (0, 42, 0), (0, 0, 0)));;
-
-    let xs = ((0, 0, 0), (0, 0, 0), (0, 0, 0));
-    let xs = xs[^1, ^1].iact(some);
-    assert_eq(|_|"", xs, some $ ((0, 0, 0), (0, 0, 0), (0, 0, 0)));;
-
-    pure()
-);
-    "##;
-    test_source(&source, Configuration::develop_compiler_mode());
-}
-
-#[test]
 pub fn test_eval_0() {
     // This program verifies memory management of GenerationContext::eval_eval.
     let source = r##"
@@ -9991,6 +9919,70 @@ main: IO () = (
     let obj = Obj { arr: [ 42 ] };
     let (obj, val) = obj.execute(0);
     println(val.to_string)
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_index_syntax_0() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let arr = [0, 1, 2];
+    let x = arr[1].iget;
+    assert_eq(|_|"", x, 1);;
+
+    let arr2 = [[0, 0, 0], [0, 1, 0], [0, 0, 0]];
+    let x = arr2[1, 1].iget;
+    assert_eq(|_|"", x, 1);;
+
+    let arr = [0, 0, 0];
+    let arr = arr[1].iset(42);
+    assert_eq(|_|"", arr, [0, 42, 0]);;
+
+    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    let arr2 = arr2[1, 1].iset(42);
+    assert_eq(|_|"", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
+
+    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    let arr2 = arr2[1, 1].imod(add(42));
+    assert_eq(|_|"", arr2, [[0, 0, 0], [0, 42, 0], [0, 0, 0]]);;
+
+    let arr2 = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    let arr2 = arr2[1, 1].iact(some);
+    assert_eq(|_|"", arr2, some $ [[0, 0, 0], [0, 0, 0], [0, 0, 0]]);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
+pub fn test_index_syntax_1() {
+    let source = r##"
+module Main;
+
+type A = box struct { i : (Array I64,) };
+type B = box struct { a : A };
+type C = struct { x : B };
+type D = struct { x : C };
+
+main: IO () = (
+    pure();; // To make the array created below not global and therefore unique.
+    let a = A { i : ([0],) };
+    let b = B { a : a };
+    let c = C { x : b };
+    let d = D { x : c };
+    let d = d[^x, ^x, ^a, ^i, ^0, 0].iset(42);
+    let v = d[^D::x, ^::Main::C::x, ^a, ^i, ^0, 0].iget;
+    assert_eq(|_|"", v, 42);;
+    let d = d[^D::x, ^::Main::C::x, ^a, ^i, ^0].imod(|arr| arr.assert_unique(|_|"Array is not unique!").mod(0, |x| x / 6));
+    let v = d[^D::x, ^::Main::C::x, ^a, ^i, ^0, 0].iget;
+    assert_eq(|_|"", v, 7);;
+    pure()
 );
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
