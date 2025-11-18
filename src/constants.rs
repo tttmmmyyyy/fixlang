@@ -53,6 +53,8 @@ pub const TEST_FUNCTION_NAME: &str = "test";
 pub const TEST_MODULE_NAME: &str = "Test";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";
 pub const WITH_RETAINED_NAME: &str = "with_retained";
+pub const INDEXABLE_TRAIT_NAME: &str = "Indexable";
+pub const INDEXABLE_TRAIT_ACT_NAME: &str = "act_on_index";
 
 // Array methods.
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";

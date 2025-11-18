@@ -117,11 +117,17 @@ expr_make_struct = {
 // Non Left Recursive expressions
 expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_match | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
 
+// Index syntax, e.g., `arr[0, ^field]`.
+expr_index = { expr_nlr ~ (sep* ~ index_syntax)* }
+index_syntax = { "[" ~ sep* ~ index_accessor ~ (sep* ~ "," ~ sep* ~ index_accessor)* ~ sep* ~ "]" }
+index_accessor = { expr | field_accessor }
+field_accessor = { "^" ~ fullname }
+
 // List of arguments. Can be an empty list.
 arg_list = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }
 
 // application sequence, e.g., `f(x,y)`. (left-associative)
-expr_app = { expr_nlr ~ (sep* ~ arg_list)* }
+expr_app = { expr_index ~ (sep* ~ arg_list)* }
 
 // left to right application sequence, e.g., `x.f.g`. (left-associative)
 combinator_dot = _{ "." }

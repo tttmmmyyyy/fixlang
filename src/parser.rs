@@ -1463,7 +1463,7 @@ fn parse_expr_ltr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Ex
 fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_app);
     let mut pairs = pair.into_inner();
-    let head = parse_expr_nlr(pairs.next().unwrap(), ctx)?;
+    let head = parse_expr_index(pairs.next().unwrap(), ctx)?;
     let mut args = vec![];
     while pairs.peek().is_some() {
         // If parentheses for arguments are given,
@@ -1489,6 +1489,92 @@ fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
 fn parse_arg_list(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Vec<Arc<ExprNode>>, Errors> {
     assert_eq!(pair.as_rule(), Rule::arg_list);
     parse_combinator_sequence(pair, ctx, parse_expr)
+}
+
+enum IndexAccessor {
+    Expr(Arc<ExprNode>),
+    Field(FullName, Option<Span>),
+}
+
+fn parse_expr_index(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
+    assert_eq!(pair.as_rule(), Rule::expr_index);
+    let mut pairs = pair.into_inner();
+    let mut expr = parse_expr_nlr(pairs.next().unwrap(), ctx)?;
+    while let Some(pair) = pairs.next() {
+        let src = unite_span(&expr.source, &Some(Span::from_pair(&ctx.source, &pair)));
+        let indices = parse_index_syntax(pair, ctx)?;
+        const ACTION_NAME: &str = "#a";
+        let action_arg = var_local(ACTION_NAME);
+        let action_var = expr_var(FullName::local(ACTION_NAME), None);
+        let mut action = action_var;
+        for index in indices.into_iter().rev() {
+            match index {
+                IndexAccessor::Expr(index_expr) => {
+                    let index_span = index_expr.source.clone();
+                    let new_action_span = unite_span(&index_span, &action.source);
+                    let act_func = expr_app(
+                        expr_var(
+                            FullName::from_strs(
+                                &[STD_NAME, INDEXABLE_TRAIT_NAME],
+                                INDEXABLE_TRAIT_ACT_NAME,
+                            ),
+                            index_span.clone(),
+                        ),
+                        vec![index_expr],
+                        index_span,
+                    );
+                    action = expr_app(act_func, vec![action], new_action_span);
+                }
+                IndexAccessor::Field(field_name, field_span) => {
+                    let new_action_span = unite_span(&field_span, &action.source);
+                    let mut act_func_name = field_name.clone();
+                    // field_name = `Std::Box::value` => act_func_name = `Std::Box::act_value`
+                    *act_func_name.name_as_mut() =
+                        format!("{}{}", STRUCT_ACT_SYMBOL, field_name.name);
+                    let act_func = expr_var(act_func_name, field_span);
+                    action = expr_app(act_func, vec![action], new_action_span);
+                }
+            }
+        }
+        expr = expr_abs(
+            vec![action_arg],
+            expr_app(action, vec![expr], src.clone()).set_app_order(AppSourceCodeOrderType::XDotF),
+            src,
+        );
+    }
+    Ok(expr)
+}
+
+fn parse_index_syntax(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Vec<IndexAccessor>, Errors> {
+    assert_eq!(pair.as_rule(), Rule::index_syntax);
+    let pairs = pair.into_inner();
+    let mut accessors: Vec<IndexAccessor> = Vec::new();
+    for pair in pairs {
+        accessors.push(parse_index_accessor(pair, ctx)?);
+    }
+    Ok(accessors)
+}
+
+fn parse_index_accessor(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexAccessor, Errors> {
+    assert_eq!(pair.as_rule(), Rule::index_accessor);
+    let mut pairs = pair.into_inner();
+    let pair = pairs.next().unwrap();
+    let src = Span::from_pair(&ctx.source, &pair);
+    let accessor = match pair.as_rule() {
+        Rule::expr => {
+            let expr = parse_expr(pair, ctx)?;
+            IndexAccessor::Expr(expr)
+        }
+        Rule::field_accessor => {
+            let field_name = parse_fullname(pair);
+            IndexAccessor::Field(field_name, Some(src))
+        }
+        _ => unreachable!(),
+    };
+    Ok(accessor)
 }
 
 fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {

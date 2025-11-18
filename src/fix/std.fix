@@ -3992,3 +3992,63 @@ namespace Debug {
         ).unsafe_perform
     );
 }
+
+// The trait for indexable types.
+// 
+// Implementing this trait for an aggregate type `c` enables the use of the index syntax `c[i]`.
+// 
+// The index syntax `c[i]` returns a "store", which is a value of type `[f : Functor] Elem c -> f (Elem c) -> f c`.
+// By applying `Indexable::iget`, `Indexable::iset`, `Indexable::imod`, and `Indexable::iact` to the store, various operations can be performed on the specified index.
+trait c : Indexable {
+    // The type of elements.
+    type Elem c;
+    // The type of indices.
+    type Index c;
+    // Act on an index.
+    act_on_index : [f : Functor] Index c -> (Elem c -> f (Elem c)) -> c -> f c;
+}
+
+impl Array a : Indexable {
+    type Elem (Array a) = a;
+    type Index (Array a) = I64;
+    act_on_index = Array::act;
+}
+
+// The identity functor.
+type Identity a = struct { data : a };
+
+impl Identity : Functor {
+    map = |f, Identity { data : x }| ( Identity { data : f(x) } );
+}
+
+// The constant functor.
+type Const a b = struct { data : a };
+impl Const a : Functor {
+    map = |_, Const { data : x }| ( Const { data : x } );
+}
+
+namespace Indexable {
+    // Get a value from a "store". 
+    // 
+    // Stores are typically created using index syntax, e.g., `arr[0]`.
+    iget : ((a -> Const a a) -> Const a b) -> a;
+    iget = |f| f(|x| Const { data : x }).@data;
+
+    // Set a value in a "store".
+    // 
+    // Stores are typically created using index syntax, e.g., `arr[0]`.
+    iset : a -> ((a -> Identity a) -> Identity b) -> b;
+    iset = |x, f| f(|_| Identity { data : x }).@data;
+
+    // Modify a value in a "store". 
+    // 
+    // Stores are typically created using index syntax, e.g., `arr[0]`.
+    imod : (a -> a) -> ((a -> Identity a) -> Identity b) -> b;
+    imod = |g, f| f(|x| Identity { data : g(x) }).@data;
+
+    // Perform a functorial action on a value in a "store".
+    // 
+    // Stores are typically created using index syntax, e.g., `arr[0]`.
+    iact : [f : Functor] (a -> f a) -> ((a -> f a) -> f b) -> f b;
+    iact = |g, f| f(g);
+}
