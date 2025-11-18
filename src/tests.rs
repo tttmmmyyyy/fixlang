@@ -9986,3 +9986,39 @@ main: IO () = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_index_syntax_2d_array() {
+    let source = r##"
+module Main;
+
+type Array2d a = struct {
+    width : I64,
+    data : Array a
+};
+
+impl Array2d a : Indexable {
+    type Elem (Array2d a) = a;
+    type Index (Array2d a) = (I64, I64);
+    act_on_index = |(i, j), f, arr| (
+        let i = i * arr.@width + j;
+        arr[^data, i].iact(f)
+    );
+}
+
+main: IO () = (
+    let arr = Array2d {
+        width : 3,
+        data : [
+            0, 1, 2, 
+            3, 4, 5, 
+            6, 7, 8
+        ]
+    };
+    let x = arr[(0, 1)].iget + arr[(1, 0)].iget + arr[(2, 1)].iget + arr[(1, 2)].iget;
+    assert_eq(|_|"", x, 16);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
