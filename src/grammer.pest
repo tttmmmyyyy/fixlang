@@ -24,6 +24,10 @@ name_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 name = { !keywords ~ (name_head ~ name_char*) }
 fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ name }
 
+// The name of fields of tuple types with namespaces (e.g., `Std::Tuple1::0`).
+number_name = { ASCII_DIGIT+ }
+number_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ number_name }
+
 // Strings that can be used of types, traits, modules or namespaces.
 capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
 capital_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ capital_name }
@@ -120,8 +124,9 @@ expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_match |
 // Index syntax, e.g., `arr[0, ^field]`.
 expr_index = { expr_nlr ~ (sep* ~ index_syntax)* }
 index_syntax = { "[" ~ sep* ~ index_accessor ~ (sep* ~ "," ~ sep* ~ index_accessor)* ~ sep* ~ "]" }
-index_accessor = { expr | field_accessor }
+index_accessor = { expr | field_accessor | tuple_accessor }
 field_accessor = { "^" ~ fullname }
+tuple_accessor = { "^" ~ number_fullname }
 
 // List of arguments. Can be an empty list.
 arg_list = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }

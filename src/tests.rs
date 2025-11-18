@@ -9884,6 +9884,42 @@ main : IO () = (
 }
 
 #[test]
+pub fn test_index_syntax_1() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let xs = [(0, 1), (2, 3), (4, 5)];
+    let x = xs[1, ^0].iget;
+    assert_eq(|_|"", x, 2);;
+
+    let xs = ((0, 1, 2), (3, 4, 5), (6, 7, 8));
+    let x = xs[^1, ^1].iget;
+    assert_eq(|_|"", x, 4);;
+
+    let xs = (0, 0, 0);
+    let xs = xs[^1].iset(42);
+    assert_eq(|_|"", xs, (0, 42, 0));;
+
+    let xs = ([0, 0, 0], [0, 0, 0], [0, 0, 0]);
+    let xs = xs[^1, 1].iset(42);
+    assert_eq(|_|"", xs, ([0, 0, 0], [0, 42, 0], [0, 0, 0]));;
+
+    let xs = ((0, 0, 0), (0, 0, 0), (0, 0, 0));
+    let xs = xs[^1, ^1].imod(add(42));
+    assert_eq(|_|"", xs, ((0, 0, 0), (0, 42, 0), (0, 0, 0)));;
+
+    let xs = ((0, 0, 0), (0, 0, 0), (0, 0, 0));
+    let xs = xs[^1, ^1].iact(some);
+    assert_eq(|_|"", xs, some $ ((0, 0, 0), (0, 0, 0), (0, 0, 0)));;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_compiler_mode());
+}
+
+#[test]
 pub fn test_eval_0() {
     // This program verifies memory management of GenerationContext::eval_eval.
     let source = r##"

@@ -1569,7 +1569,13 @@ fn parse_index_accessor(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Inde
             IndexAccessor::Expr(expr)
         }
         Rule::field_accessor => {
+            let pair = pair.into_inner().next().unwrap();
             let field_name = parse_fullname(pair);
+            IndexAccessor::Field(field_name, Some(src))
+        }
+        Rule::tuple_accessor => {
+            let pair = pair.into_inner().next().unwrap();
+            let field_name = parse_number_fullname(pair);
             IndexAccessor::Field(field_name, Some(src))
         }
         _ => unreachable!(),
@@ -1614,8 +1620,17 @@ fn parse_capital_fullname(pair: Pair<Rule>) -> FullName {
     parse_fullname_or_capital_fullname(pair)
 }
 
+fn parse_number_fullname(pair: Pair<Rule>) -> FullName {
+    assert_eq!(pair.as_rule(), Rule::number_fullname);
+    parse_fullname_or_capital_fullname(pair)
+}
+
 fn parse_fullname_or_capital_fullname(pair: Pair<Rule>) -> FullName {
-    assert!(pair.as_rule() == Rule::fullname || pair.as_rule() == Rule::capital_fullname);
+    assert!(
+        pair.as_rule() == Rule::fullname
+            || pair.as_rule() == Rule::capital_fullname
+            || pair.as_rule() == Rule::number_fullname
+    );
     let mut pairs = pair.into_inner();
     let mut fullname = FullName::local("");
     while let Some(pair) = pairs.next() {
@@ -1627,7 +1642,11 @@ fn parse_fullname_or_capital_fullname(pair: Pair<Rule>) -> FullName {
                 fullname.namespace.set_absolute();
             }
         } else {
-            assert!(pair.as_rule() == Rule::name || pair.as_rule() == Rule::capital_name);
+            assert!(
+                pair.as_rule() == Rule::name
+                    || pair.as_rule() == Rule::capital_name
+                    || pair.as_rule() == Rule::number_name
+            );
             fullname.name = pair.as_str().to_string();
             break;
         }
