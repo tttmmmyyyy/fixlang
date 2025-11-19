@@ -42,6 +42,7 @@
         - [`is_v : U -> Bool`](#is_v--u---bool)
         - [`as_v : U -> V`](#as_v--u---v)
         - [`mod_v : (V -> V) -> U -> U`](#mod_v--v---v---u---u)
+    - [Index Syntax](#index-syntax)
     - [Modules and import statements](#modules-and-import-statements)
     - [Namespaces and overloading](#namespaces-and-overloading)
     - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
@@ -900,6 +901,54 @@ Converts a union value into a variant value if it is created as the variant. If 
 
 Modify a union value by a function acting on a variant.
 What is special about `mod_v` is that if you call `u.mod_v(a)` when both of `u` and the value stored in `u` is unique, then `a` receives an unique value.
+
+## Index Syntax
+
+Consider the following struct:
+```
+type Vector = struct { x: F64, y: F64 };
+```
+
+In this situation, suppose we define an array `vs` as follows:
+```
+let vs = [Vector { x: 1.0, y: 2.0 }, Vector { x: 3.0, y: 4.0 }];
+```
+
+If we want to change the value of the `x` field of the first element of `vs` to `5.0`, we can use the index syntax to write:
+
+```
+let vs = vs[0][^x].iset(5.0);
+```
+
+Here, `[0]` means accessing the 0th index of the array, and `[^x]` means accessing the `x` field.
+The expression `vs[0][^x]` using index syntax generates a value called a "store" (of type `[f : Functor] (F64 -> f F64) -> f (Array Vector)`) to the region we want to access, and `iset` works to set a value to the store.
+
+Without using index syntax, you can also write:
+```
+let vs = vs.mod(0, set_x(5.0));
+```
+The deeper the hierarchical structure of types becomes, the more concisely you can write using index syntax.
+
+In addition to `iset`, there are other functions that operate on stores: `iget`, `imod`, and `iact`.
+
+`iget` retrieves a value from the store.
+```
+let vs = [Vector { x: 1.0, y: 2.0 }, Vector { x: 3.0, y: 4.0 }];
+let v0x = vs[0][^x].iget; // v0x == 1.0
+```
+
+`imod` modifies the entire value through a function acting on the store.
+```
+let vs = [Vector { x: 1.0, y: 2.0 }, Vector { x: 3.0, y: 4.0 }];
+let vs = vs[0][^x].imod(|x| x + 10.0); // vs == [Vector { x: 11.0, y: 2.0 }, Vector { x: 3.0, y: 4.0 }]
+```
+
+`iact` is similar to `imod`, but modifies the entire value through a functorial action.
+```
+let f = |x| println(x.to_string + "!");; (-x).pure; // An IO action that prints `x` to the screen and returns its negative value
+let vs = [Vector { x: 1.0, y: 2.0 }, Vector { x: 3.0, y: 4.0 }];
+let vs = *vs[0][^x].iact(f); // Prints `1.0!` and results in `vs == [Vector { x: -1.0, y: 2.0 }, Vector { x: 3.0, y: 4.0 }]`
+```
 
 ## Modules and import statements
 
