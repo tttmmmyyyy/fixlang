@@ -2730,7 +2730,7 @@ If `IO::close` is called while using the `Ptr` obtained by this function, the `P
 
 ### namespace Std::Indexable
 
-#### act_on_index
+#### act_at_index
 
 Type: `[c : Std::Indexable, f : Std::Functor] Std::Indexable::Index c -> (Std::Indexable::Elem c -> f (Std::Indexable::Elem c)) -> c -> f c`
 
@@ -5504,7 +5504,7 @@ Defined as: `Elem c`
 
 The type of elements.
 
-##### method `act_on_index`
+##### method `act_at_index`
 
 Type: `[f : Std::Functor] Std::Indexable::Index c -> (Std::Indexable::Elem c -> f (Std::Indexable::Elem c)) -> c -> f c`
 

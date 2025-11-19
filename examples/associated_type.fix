@@ -1,5 +1,7 @@
 module Main;
 
+import Std::* hiding Indexable::Elem;
+
 // A trait for collection-like types.
 trait c : Collects {
     // Associated type definition.

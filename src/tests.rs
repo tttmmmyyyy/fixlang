@@ -6003,6 +6003,8 @@ pub fn test_import_unknown_namespace() {
 pub fn test_associated_type_collects() {
     let source = r##"
     module Main;
+
+    import Std::* hiding Indexable::Elem;
     
     trait c : Collects {
         type Elem c;
@@ -8822,6 +8824,8 @@ pub fn test_regression_on_associated_type_bug() {
     let source = r##"
 module Main;
 
+import Std::* hiding Indexable::Elem;
+
 type BinaryHeap p e = unbox struct { _d : Array e, _p : p };
 
 trait p : Priority {
@@ -10011,7 +10015,7 @@ type MyType = struct { data : (I64, I64, I64) };
 impl MyType : Indexable {
     type Elem (MyType) = I64;
     type Index (MyType) = Array I64;
-    act_on_index = |i, f, obj| (
+    act_at_index = |i, f, obj| (
         let i = i.to_iter.sum % 3;
         if i == 0 {
             obj[^data][^0].iact(f)
@@ -10046,7 +10050,7 @@ type Array2d a = struct {
 impl Array2d a : Indexable {
     type Elem (Array2d a) = a;
     type Index (Array2d a) = (I64, I64);
-    act_on_index = |(i, j), f, arr| (
+    act_at_index = |(i, j), f, arr| (
         let i = i * arr.@width + j;
         arr[^data][i].iact(f)
     );

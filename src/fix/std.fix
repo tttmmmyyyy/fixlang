@@ -4005,13 +4005,13 @@ trait c : Indexable {
     // The type of indices.
     type Index c;
     // Act on an index.
-    act_on_index : [f : Functor] Index c -> (Elem c -> f (Elem c)) -> c -> f c;
+    act_at_index : [f : Functor] Index c -> (Elem c -> f (Elem c)) -> c -> f c;
 }
 
 impl Array a : Indexable {
     type Elem (Array a) = a;
     type Index (Array a) = I64;
-    act_on_index = Array::act;
+    act_at_index = Array::act;
 }
 
 // The identity functor.
