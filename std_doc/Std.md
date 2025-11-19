@@ -2728,6 +2728,46 @@ If `IO::close` is called while using the `Ptr` obtained by this function, the `P
 
 * `handle` - The IOHandle to get the file pointer from.
 
+### namespace Std::Indexable
+
+#### act_on_index
+
+Type: `[c : Std::Indexable, f : Std::Functor] Std::Indexable::Index c -> (Std::Indexable::Elem c -> f (Std::Indexable::Elem c)) -> c -> f c`
+
+Act on an index.
+
+#### iact
+
+Type: `[f : Std::Functor] (a -> f a) -> ((a -> f a) -> f b) -> f b`
+
+Perform a functorial action on a value in a "store".
+
+Stores are typically created using index syntax, e.g., `arr[0]`.
+
+#### iget
+
+Type: `((a -> Std::Const a a) -> Std::Const a b) -> a`
+
+Get a value from a "store".
+
+Stores are typically created using index syntax, e.g., `arr[0]`.
+
+#### imod
+
+Type: `(a -> a) -> ((a -> Std::Identity a) -> Std::Identity b) -> b`
+
+Modify a value in a "store".
+
+Stores are typically created using index syntax, e.g., `arr[0]`.
+
+#### iset
+
+Type: `a -> ((a -> Std::Identity a) -> Std::Identity b) -> b`
+
+Set a value in a "store".
+
+Stores are typically created using index syntax, e.g., `arr[0]`.
+
 ### namespace Std::Iterator
 
 #### advance
@@ -4689,6 +4729,16 @@ Boxed wrapper for a type.
 
 Type: `a`
 
+#### Const
+
+Defined as: `type Const a b = unbox struct { ...fields... }`
+
+The constant functor.
+
+##### field `data`
+
+Type: `a`
+
 #### ErrMsg
 
 Defined as: `type ErrMsg = Std::String`
@@ -4740,6 +4790,16 @@ Defined as: `type IO a = unbox struct { ...fields... }`
 ##### field `runner`
 
 Type: `Std::IO::IOState -> (Std::IO::IOState, a)`
+
+#### Identity
+
+Defined as: `type Identity a = unbox struct { ...fields... }`
+
+The identity functor.
+
+##### field `data`
+
+Type: `a`
 
 #### Lazy
 
@@ -5423,6 +5483,33 @@ Applies a function to the value inside the functor.
 * `f` - The function to be applied.
 * `value` - The functor value to be transformed.
 
+#### trait `c : Indexable`
+
+The trait for indexable types.
+
+Implementing this trait for an aggregate value `xs` enables the use of the index syntax `xs[i]`.
+
+The index syntax `xs[i]` returns a "store", which is a value of type `[f : Functor] Elem c -> f (Elem c) -> f c`.
+By applying `Indexable::iget`, `Indexable::iset`, `Indexable::imod`, and `Indexable::iact` to the store, various operations can be performed on the specified index.
+
+##### type `Index`
+
+Defined as: `Index c`
+
+The type of indices.
+
+##### type `Elem`
+
+Defined as: `Elem c`
+
+The type of elements.
+
+##### method `act_on_index`
+
+Type: `[f : Std::Functor] Std::Indexable::Index c -> (Std::Indexable::Elem c -> f (Std::Indexable::Elem c)) -> c -> f c`
+
+Act on an index.
+
 #### trait `iter : Iterator`
 
 The trait of iterators.
@@ -5620,6 +5707,8 @@ Concatenates two arrays.
 
 ### impl `[a : Std::Eq] Std::Array a : Std::Eq`
 
+### impl `Std::Array a : Std::Indexable`
+
 ### impl `[a : Std::Eq, a : Std::LessThan] Std::Array a : Std::LessThan`
 
 `LessThan` implementation for `Array a`.
@@ -5649,6 +5738,8 @@ The empty array with zero capacity.
 ### impl `Std::Bool : Std::ToString`
 
 ### impl `Std::Box a : Std::Boxed`
+
+### impl `Std::Const a : Std::Functor`
 
 ### impl `Std::F32 : Std::Add`
 
@@ -5823,6 +5914,8 @@ The empty array with zero capacity.
 ### impl `Std::IO::IOFail : Std::Functor`
 
 ### impl `Std::IO::IOFail : Std::Monad`
+
+### impl `Std::Identity : Std::Functor`
 
 ### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
 

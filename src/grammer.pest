@@ -123,7 +123,7 @@ expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_match |
 
 // Index syntax, e.g., `arr[0, ^field]`.
 expr_index = { expr_nlr ~ (sep* ~ index_syntax)* }
-index_syntax = { "[" ~ sep* ~ index_accessor ~ (sep* ~ "," ~ sep* ~ index_accessor)* ~ sep* ~ "]" }
+index_syntax = { "[" ~ sep* ~ index_accessor ~ sep* ~ "]" }
 index_accessor = { expr | field_accessor | tuple_accessor }
 field_accessor = { "^" ~ fullname }
 tuple_accessor = { "^" ~ number_fullname }

@@ -1498,64 +1498,61 @@ enum IndexAccessor {
 
 fn parse_expr_index(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_index);
+    let src = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_nlr(pairs.next().unwrap(), ctx)?;
-    while let Some(pair) = pairs.next() {
-        let src = unite_span(&expr.source, &Some(Span::from_pair(&ctx.source, &pair)));
-        let indices = parse_index_syntax(pair, ctx)?;
-        const ACTION_NAME: &str = "#a";
-        let action_arg = var_local(ACTION_NAME);
-        let action_var = expr_var(FullName::local(ACTION_NAME), None);
-        let mut action = action_var;
-        for index in indices.into_iter().rev() {
-            match index {
-                IndexAccessor::Expr(index_expr) => {
-                    let index_span = index_expr.source.clone();
-                    let new_action_span = unite_span(&index_span, &action.source);
-                    let act_func = expr_app(
-                        expr_var(
-                            FullName::from_strs(
-                                &[STD_NAME, INDEXABLE_TRAIT_NAME],
-                                INDEXABLE_TRAIT_ACT_NAME,
-                            ),
-                            index_span.clone(),
+    let expr = parse_expr_nlr(pairs.next().unwrap(), ctx)?;
+    let indices = pairs
+        .map(|p| parse_index_syntax(p, ctx))
+        .collect::<Result<Vec<_>, _>>()?;
+    if indices.len() == 0 {
+        return Ok(expr);
+    }
+    const ACTION_NAME: &str = "#a";
+    let action_arg = var_local(ACTION_NAME);
+    let action_var = expr_var(FullName::local(ACTION_NAME), None);
+    let mut action = action_var;
+    for index in indices.into_iter().rev() {
+        match index {
+            IndexAccessor::Expr(index_expr) => {
+                let index_span = index_expr.source.clone();
+                let new_action_span = unite_span(&index_span, &action.source);
+                let act_func = expr_app(
+                    expr_var(
+                        FullName::from_strs(
+                            &[STD_NAME, INDEXABLE_TRAIT_NAME],
+                            INDEXABLE_TRAIT_ACT_NAME,
                         ),
-                        vec![index_expr],
-                        index_span,
-                    );
-                    action = expr_app(act_func, vec![action], new_action_span);
-                }
-                IndexAccessor::Field(field_name, field_span) => {
-                    let new_action_span = unite_span(&field_span, &action.source);
-                    let mut act_func_name = field_name.clone();
-                    // field_name = `Std::Box::value` => act_func_name = `Std::Box::act_value`
-                    *act_func_name.name_as_mut() =
-                        format!("{}{}", STRUCT_ACT_SYMBOL, field_name.name);
-                    let act_func = expr_var(act_func_name, field_span);
-                    action = expr_app(act_func, vec![action], new_action_span);
-                }
+                        index_span.clone(),
+                    ),
+                    vec![index_expr],
+                    index_span,
+                );
+                action = expr_app(act_func, vec![action], new_action_span);
+            }
+            IndexAccessor::Field(field_name, field_span) => {
+                let new_action_span = unite_span(&field_span, &action.source);
+                let mut act_func_name = field_name.clone();
+                // field_name = `Std::Box::value` => act_func_name = `Std::Box::act_value`
+                *act_func_name.name_as_mut() = format!("{}{}", STRUCT_ACT_SYMBOL, field_name.name);
+                let act_func = expr_var(act_func_name, field_span);
+                action = expr_app(act_func, vec![action], new_action_span);
             }
         }
-        expr = expr_abs(
-            vec![action_arg],
-            expr_app(action, vec![expr], src.clone()).set_app_order(AppSourceCodeOrderType::XDotF),
-            src,
-        );
     }
+    let expr = expr_abs(
+        vec![action_arg],
+        expr_app(action, vec![expr], Some(src.clone()))
+            .set_app_order(AppSourceCodeOrderType::XDotF),
+        Some(src),
+    );
     Ok(expr)
 }
 
-fn parse_index_syntax(
-    pair: Pair<Rule>,
-    ctx: &mut ParseContext,
-) -> Result<Vec<IndexAccessor>, Errors> {
+fn parse_index_syntax(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexAccessor, Errors> {
     assert_eq!(pair.as_rule(), Rule::index_syntax);
     let pairs = pair.into_inner();
-    let mut accessors: Vec<IndexAccessor> = Vec::new();
-    for pair in pairs {
-        accessors.push(parse_index_accessor(pair, ctx)?);
-    }
-    Ok(accessors)
+    let pair = pairs.into_iter().next().unwrap();
+    parse_index_accessor(pair, ctx)
 }
 
 fn parse_index_accessor(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexAccessor, Errors> {
