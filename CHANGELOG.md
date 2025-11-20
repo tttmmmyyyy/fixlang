@@ -4,12 +4,13 @@
 
 ### Added
 
-- LSP: Added a feature to automatically add import statements when completing entity names, if necessary.
-- LSP: Added Quick Fix for "Unknown name" and "Unknown type" errors to add import statements.
-- LSP: You can now search documents and jump to definitions from entities written in import statements.
 - Added `--backtrace` option to `build`, `run`, `test` commands to enable printing backtrace when a runtime error occurs.
 - Added `backtrace` field to `build` and `build.test` section of `fixproj.toml` file. If it is true, backtrace will be enabled by default.
 - Added `--disable-cpu-feature <feature>` option to `build`, `run`, `test` commands to disable specific CPU features. Add `disable_cpu_features` field to `build` and `build.test` section of `fixproj.toml` file.
+- Added the [index syntax](./Document.md#index-syntax).
+- LSP: Added a feature to automatically add import statements when completing entity names, if necessary.
+- LSP: Added Quick Fix for "Unknown name" and "Unknown type" errors to add import statements.
+- LSP: You can now search documents and jump to definitions from entities written in import statements.
 - Optimization: Added `unwrap-newtype` optimization, which removes unnecessary newtype wrappers, e.g., `type Foo = unbox struct { data : Bar }`.
 - Optimization: Added `inline-local` optimization, which tries to inline local functions.
 
