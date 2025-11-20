@@ -728,10 +728,18 @@ impl TypeCheckContext {
                         .collect::<Vec<_>>();
                     let msg = NameResolutionContext::create_ambiguous_message(
                         &var.name.to_string(),
-                        candidates,
+                        candidates.clone(),
                         true,
                     );
-                    return Err(Errors::from_msg_srcs(msg, &[&ei.source]));
+                    let mut err = Error::from_msg_srcs(msg, &[&ei.source]);
+                    err.code = Some(ERR_AMBIGUOUS_NAME);
+                    err.data = Some(serde_json::Value::Array(
+                        candidates
+                            .iter()
+                            .map(|name| serde_json::Value::String(name.to_string()))
+                            .collect(),
+                    ));
+                    return Err(Errors::from_err(err));
                 } else {
                     // candidates.len() == 1
                     let (tc, ns) = candidates_check_res

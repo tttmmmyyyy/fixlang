@@ -218,4 +218,5 @@ pub fn chars_allowed_in_identifiers() -> String {
 
 // Error codes.
 pub const ERR_UNKNOWN_NAME: &str = "unknown-name";
+pub const ERR_AMBIGUOUS_NAME: &str = "ambiguous-name";
 pub const ERR_NO_VALUE_MATCH: &str = "no-value-match";
