@@ -1,13 +1,13 @@
-proj_file_hash = "b0008614552028ccd3840cf7888d3b5a"
+proj_file_hash = "f527e4245d7131547a229a1c5d430929"
 
 [[dependencies]]
 name = "cp-library"
-version = "0.4.2"
-path = ".fixlang/deps/cp-library_0.4.2"
+version = "0.7.0"
+path = ".fixlang/deps/cp-library_0.7.0"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/cp-library.git"
-rev = "f966c531aa9df8cedf2f755a3d4c26909a72fc42"
+rev = "6f2fbe9fa049bbc1098bcea2db2640a545d55a2d"
 
 [[dependencies]]
 name = "random"
@@ -19,31 +19,13 @@ repo = "https://github.com/tttmmmyyyy/fixlang-random.git"
 rev = "b4f83ee48564e714c0918513dd431f9135493dce"
 
 [[dependencies]]
-name = "hashmap"
-version = "1.1.2"
-path = ".fixlang/deps/hashmap_1.1.2"
-
-[dependencies.git]
-repo = "https://github.com/tttmmmyyyy/fixlang-hashmap.git"
-rev = "33da33ecb5d95d45c29feaeee5dea454fecc89b9"
-
-[[dependencies]]
-name = "hash"
-version = "1.1.0"
-path = ".fixlang/deps/hash_1.1.0"
-
-[dependencies.git]
-repo = "https://github.com/tttmmmyyyy/fixlang-hash.git"
-rev = "40d5d04e9b5f5a11c46151d00a98acb6dfdb4e48"
-
-[[dependencies]]
 name = "binary-heap"
-version = "0.1.1"
-path = ".fixlang/deps/binary-heap_0.1.1"
+version = "0.2.0"
+path = ".fixlang/deps/binary-heap_0.2.0"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/fixlang-binary-heap.git"
-rev = "3b7972d5ec6ff814db5de4f6ade3c83dd9c8d4e7"
+rev = "1ea2a2465fb42878fbace135fd7a30014b1cafab"
 
 [[dependencies]]
 name = "bool-array"

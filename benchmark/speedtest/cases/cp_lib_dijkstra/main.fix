@@ -23,7 +23,7 @@ main = (
 
         (graph, rng)
     );
-    let (dist, time) = consumed_time_while_lazy(|_| graph.dijkstra(0, I64::maximum));
+    let (dist, time) = consumed_time_while_lazy(|_| graph.dijkstra(0));
     assert_eq(|_|"test_dijkstra_speed", dist.@(1), 391);;
     println $ "[CPLib.Graph.Test] dijkstra({}): {}".populate([n.to_string, time.to_string]);;
     pure()

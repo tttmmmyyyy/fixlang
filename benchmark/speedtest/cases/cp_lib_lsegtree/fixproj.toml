@@ -6,7 +6,7 @@ name = "myproject"
 version = "0.1.0"
 
 ## Fix version requirement. Default is "*".
-fix_version = "1.1.0"
+fix_version = "1.2.0"
 
 ## Project authors.
 # authors = ["Alice", "Bob"]
@@ -93,5 +93,5 @@ files = ["test.fix"]
 
 [[dependencies]]
 name = "cp-library"
-version = "0.4.2"
+version = "0.7.0"
 git = { url = "https://github.com/tttmmmyyyy/cp-library.git" }
