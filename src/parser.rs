@@ -94,7 +94,12 @@ impl DoContext {
 fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
     match lhs {
         None => rhs.clone(),
-        Some(s) => rhs.clone().map(|t| s.unite(&t)),
+        Some(lhs) => match rhs {
+            None => return Some(lhs.clone()),
+            Some(rhs) => {
+                return Some(Span::unite(lhs, rhs));
+            }
+        },
     }
 }
 
@@ -1501,9 +1506,11 @@ fn parse_expr_index(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
     let src = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let expr = parse_expr_nlr(pairs.next().unwrap(), ctx)?;
-    let indices = pairs
-        .map(|p| parse_index_syntax(p, ctx))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut indices = vec![];
+    for pair in pairs {
+        let span = Span::from_pair(&ctx.source, &pair);
+        indices.push((parse_index_syntax(pair, ctx)?, span))
+    }
     if indices.len() == 0 {
         return Ok(expr);
     }
@@ -1511,30 +1518,30 @@ fn parse_expr_index(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
     let action_arg = var_local(ACTION_NAME);
     let action_var = expr_var(FullName::local(ACTION_NAME), None);
     let mut action = action_var;
-    for index in indices.into_iter().rev() {
+    for (index, index_span_with_braces) in indices.into_iter().rev() {
         match index {
             IndexAccessor::Expr(index_expr) => {
-                let index_span = index_expr.source.clone();
-                let new_action_span = unite_span(&index_span, &action.source);
                 let act_func = expr_app(
                     expr_var(
                         FullName::from_strs(
                             &[STD_NAME, INDEXABLE_TRAIT_NAME],
                             INDEXABLE_TRAIT_ACT_NAME,
                         ),
-                        index_span.clone(),
+                        None,
                     ),
                     vec![index_expr],
-                    index_span,
+                    Some(index_span_with_braces.clone()),
                 );
+                let new_action_span =
+                    unite_span(&Some(index_span_with_braces.clone()), &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }
             IndexAccessor::Field(field_name, field_span) => {
-                let new_action_span = unite_span(&field_span, &action.source);
                 let mut act_func_name = field_name.clone();
                 // field_name = `Std::Box::value` => act_func_name = `Std::Box::act_value`
                 *act_func_name.name_as_mut() = format!("{}{}", STRUCT_ACT_SYMBOL, field_name.name);
-                let act_func = expr_var(act_func_name, field_span);
+                let act_func = expr_var(act_func_name, field_span.clone());
+                let new_action_span = unite_span(&field_span, &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }
         }
