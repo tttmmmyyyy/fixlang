@@ -1160,7 +1160,7 @@ You can hide multiple entities by writing such as `import Std hiding {symbol0, T
 
 ## Which is better: importing whole module or only necessary entities?
 
-Importing an entire module like this:
+Which is better: importing an entire module like this:
 
 ```
 import Lib;
@@ -1172,13 +1172,20 @@ or importing only the necessary entities like this:
 import Lib::{value0, Type1};
 ```
 
-The latter requires you to update the import statement every time you want to use a new entity from `Lib`. The former avoids this extra work.
+The latter requires you to update the `import` statement every time you use an entity from `Lib`.
+The former avoids this overhead.
 
-On the other hand, the latter has an advantage from a maintenance perspective. For example, suppose your code defines a value named `value`, and then the `Lib` library is updated to include a value with the same name. If you had imported the entire `Lib` module, the compiler would flag `value` as ambiguous, which could lead to a compilation error in your code. In contrast, if you only imported the necessary entities from `Lib`, you wouldn't automatically import the new value, and your code would continue to compile.
+On the other hand, the latter has advantages from a maintenance perspective.
+Suppose your code defines a value named `value`.
+Then, the library `Lib` is updated and adds a value with the same name `value`.
+In this case, if you had imported the entire `Lib` module, `value` would become ambiguous in your code, potentially resulting in a compilation error.
+If you only import the necessary entities, you can avoid this problem.
 
-Currently, the Language Server Protocol (LSP) functionality in the fix compiler allows you to automatically update import statements by completing entity names or using a Quick Fix for "Unknown name" errors.
+Currently, with the Language Server Protocol functionality of the fix compiler, you can automatically update `import` statements through entity name completion or Quick Fix for "Unknown name" errors. This makes importing necessary entities less burdensome.
 
-Therefore, we recommend importing only the necessary entities, except in situations like competitive programming where you need to write code as quickly as possible.
+In Fix, to make it easy to start writing programs, `import Std;` is implicitly performed.
+Therefore, when functionality is added to the `Std` module, there is a possibility that the names of entities defined in your code will collide with the names of newly added entities in the `Std` module, resulting in a compilation error.
+If you want to avoid this, we recommend a style where you write `import Std::{};` at the beginning and import the necessary entities (entities that cause "Unknown name" errors) as needed.
 
 ## Recursion
 
