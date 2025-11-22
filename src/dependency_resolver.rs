@@ -1,4 +1,4 @@
-// This module impleents an algorithm of dependency resolution.
+// This module implements an algorithm of dependency resolution.
 
 use crate::{error::Errors, project_file::ProjectFile};
 use semver::{Version, VersionReq};
