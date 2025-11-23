@@ -3,12 +3,12 @@ use std::sync::Arc;
 use crate::{error::panic_with_err, misc::Set};
 use ast::name::{FullName, Name, NameSpace};
 use inkwell::module::Linkage;
-use misc::{Map, make_map};
+use misc::{make_map, Map};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 
 // Implement built-in functions, types, etc.
-use super::*
+use super::*;
 
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
@@ -2927,31 +2927,27 @@ pub fn struct_act(
                     FullName::new(&make_functor_name().to_namespace(), "map"),
                     None,
                 ),
-                vec![
-                    expr_app(
-                        expr_var(
-                            FullName::new(
-                                &struct_name.to_namespace(),
-                                &format!("{}{}", STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, field_name),
-                            ),
-                            None,
+                vec![expr_app(
+                    expr_var(
+                        FullName::new(
+                            &struct_name.to_namespace(),
+                            &format!("{}{}", STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, field_name),
                         ),
-                        vec![expr_var(FullName::local("ps"), None)],
                         None,
-                    )
-                    .set_app_order(AppSourceCodeOrderType::XDotF),
-                ],
+                    ),
+                    vec![expr_var(FullName::local("ps"), None)],
+                    None,
+                )
+                .set_app_order(AppSourceCodeOrderType::XDotF)],
                 None,
             )
             .set_app_order(AppSourceCodeOrderType::FX),
-            vec![
-                expr_app(
-                    expr_var(FullName::local("f"), None),
-                    vec![expr_var(FullName::local("x"), None)],
-                    None,
-                )
-                .set_app_order(AppSourceCodeOrderType::FX),
-            ],
+            vec![expr_app(
+                expr_var(FullName::local("f"), None),
+                vec![expr_var(FullName::local("x"), None)],
+                None,
+            )
+            .set_app_order(AppSourceCodeOrderType::FX)],
             None,
         )
         .set_app_order(AppSourceCodeOrderType::XDotF),
@@ -2988,27 +2984,23 @@ pub fn struct_act(
             None,
         )
         .set_app_order(AppSourceCodeOrderType::FX),
-        vec![
-            expr_app(
-                expr_var(FullName::local("f"), None),
-                vec![
-                    expr_app(
-                        expr_var(
-                            FullName::new(
-                                &struct_name.to_namespace(),
-                                &format!("{}{}", STRUCT_GETTER_SYMBOL, field_name),
-                            ),
-                            None,
-                        ),
-                        vec![expr_var(FullName::local("s"), None)],
-                        None,
-                    )
-                    .set_app_order(AppSourceCodeOrderType::XDotF),
-                ],
+        vec![expr_app(
+            expr_var(FullName::local("f"), None),
+            vec![expr_app(
+                expr_var(
+                    FullName::new(
+                        &struct_name.to_namespace(),
+                        &format!("{}{}", STRUCT_GETTER_SYMBOL, field_name),
+                    ),
+                    None,
+                ),
+                vec![expr_var(FullName::local("s"), None)],
                 None,
             )
-            .set_app_order(AppSourceCodeOrderType::FX),
-        ],
+            .set_app_order(AppSourceCodeOrderType::XDotF)],
+            None,
+        )
+        .set_app_order(AppSourceCodeOrderType::FX)],
         None,
     )
     .set_app_order(AppSourceCodeOrderType::XDotF);
