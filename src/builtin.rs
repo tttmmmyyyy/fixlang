@@ -4489,17 +4489,16 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafePerformInternalBody {
-    io_act_name: FullName,
+pub struct InlineLLVMIOStateUnsafeCreate {
 }
 
-impl InlineLLVMUnsafePerformInternalBody {
+impl InlineLLVMIOStateUnsafeCreate {
     pub fn name(&self) -> String {
-        format!("{}._unsafe_perform_internal", self.io_act_name.to_string())
+        "IOState::_unsafe_create".to_string()
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.io_act_name]
+        vec![]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4507,30 +4506,18 @@ impl InlineLLVMUnsafePerformInternalBody {
         gc: &mut GenerationContext<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        // Get arguments.
-        let io_act = gc.get_scoped_obj(&self.io_act_name);
-
-        // Run the IO action.
-        run_ios_runner(gc, &io_act, None).1
+        create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
     }
 }
 
-// _unsafe_perform_internal : (IOState -> (IOState, a)) -> a
-pub fn make_unsafe_perform_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const A_TYPE_NAME: &str = "a";
-    const IO_ACT_NAME: &str = "io";
-    let a_ty = type_tyvar(A_TYPE_NAME, &kind_star());
-    let io_ty = make_io_runner_ty(a_ty.clone());
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(io_ty, a_ty.clone()));
-    let expr = expr_abs_many(
-        vec![var_local(IO_ACT_NAME)],
-        expr_llvm(
-            LLVMGenerator::UnsafePerformInternalBody(InlineLLVMUnsafePerformInternalBody {
-                io_act_name: FullName::local(IO_ACT_NAME),
-            }),
-            a_ty,
+// IOState::_unsafe_create : IOState
+pub fn make_iostate_unsafe_create() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let ios_ty = make_iostate_ty();
+    let scm = Scheme::generalize(&[], vec![], vec![], ios_ty.clone());
+    let expr = expr_llvm(
+            LLVMGenerator::IOStateUnsafeCreate(InlineLLVMIOStateUnsafeCreate {}),
+            ios_ty,
             None,
-        ),
     );
     (expr, scm)
 }

@@ -982,7 +982,12 @@ namespace IO {
     // 
     // # Parameters
     // - `io` - An IO action to be performed.
-    unsafe_perform : IO a -> a = |io| io.@runner._unsafe_perform_internal;
+    unsafe_perform : IO a -> a = |io| (
+        let ios = IOState::_unsafe_create;
+        let (ios, res) = (io.@runner)(ios);
+        eval ios;
+        res
+    );
 
     // Reads characters from an IOHandle.
     // 
