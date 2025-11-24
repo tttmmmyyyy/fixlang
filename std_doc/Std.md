@@ -4863,7 +4863,7 @@ This is used in the implementation of `Array::act`.
 
 Type: `Std::Array a`
 
-##### field `idx`
+##### field `_idx`
 
 Type: `Std::I64`
 
