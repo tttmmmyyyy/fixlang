@@ -751,8 +751,8 @@ impl TypeCheckContext {
                 }
             }
             Expr::LLVM(lit) => {
-                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &lit.ty))? {
-                    let err = self.create_type_mismatch_error(&ty, &lit.ty, &e, &ei.source);
+                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &lit.generic_ty))? {
+                    let err = self.create_type_mismatch_error(&ty, &lit.generic_ty, &e, &ei.source);
                     return Err(Errors::from_err(err));
                 }
                 Ok(ei.clone())

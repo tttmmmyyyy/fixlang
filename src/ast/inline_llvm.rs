@@ -331,5 +331,9 @@ impl LLVMGenerator {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVM {
     pub generator: LLVMGenerator,
-    pub ty: Arc<TypeNode>,
+    // The type of this LLVM expression.
+    //
+    // For example, in `@ : Array a -> a = |arr| LLVM<arr.Array::@>;`, the type of `LLVM<arr.Array::@>` is `a`.
+    // Note that `generic_ty` may contain type variables, and it is not changed in type instantiation.
+    pub generic_ty: Arc<TypeNode>,
 }

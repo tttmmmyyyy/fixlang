@@ -774,7 +774,7 @@ impl ExprNode {
             }
             Expr::LLVM(llvm) => {
                 let mut llvm = llvm.as_ref().clone();
-                llvm.ty = llvm.ty.resolve_namespace(ctx)?;
+                llvm.generic_ty = llvm.generic_ty.resolve_namespace(ctx)?;
                 Ok(self.clone().set_llvm(llvm))
             }
             Expr::App(fun, args) => {
@@ -852,7 +852,7 @@ impl ExprNode {
             Expr::Var(_) => Ok(self.clone()),
             Expr::LLVM(llvm) => {
                 let mut llvm = llvm.as_ref().clone();
-                llvm.ty = llvm.ty.resolve_type_aliases(type_env)?;
+                llvm.generic_ty = llvm.generic_ty.resolve_type_aliases(type_env)?;
                 Ok(self.clone().set_llvm(llvm))
             }
             Expr::App(fun, args) => {
@@ -1346,7 +1346,11 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
 }
 
 pub fn expr_llvm(generator: LLVMGenerator, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::LLVM(Arc::new(InlineLLVM { generator, ty }))).into_expr_info(src)
+    Arc::new(Expr::LLVM(Arc::new(InlineLLVM {
+        generator,
+        generic_ty: ty,
+    })))
+    .into_expr_info(src)
 }
 
 pub fn expr_let(
