@@ -4021,9 +4021,12 @@ impl Array a : Indexable {
 
 // The identity functor.
 type Identity a = struct { data : a };
-
 impl Identity : Functor {
     map = |f, Identity { data : x }| ( Identity { data : f(x) } );
+}
+impl Identity : Monad {
+    pure = |x| Identity { data : x };
+    bind = |f, Identity { data : x }| f(x);
 }
 
 // The constant functor.

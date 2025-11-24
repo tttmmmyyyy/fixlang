@@ -5917,6 +5917,8 @@ The empty array with zero capacity.
 
 ### impl `Std::Identity : Std::Functor`
 
+### impl `Std::Identity : Std::Monad`
+
 ### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
 
 ### impl `Std::Iterator::ArrayIterator a : Std::Iterator`

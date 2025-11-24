@@ -10072,3 +10072,43 @@ main: IO () = (
     "##;
     test_source(&source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_identity_monad() {
+    // Test Identity Monad: pure and bind
+    let source = r#"
+    module Main;
+    
+    main : IO ();
+    main = (
+        // Test pure
+        let id_val = pure(42);
+        assert_eq(|_|"pure", id_val.@data, 42);;
+        
+        // Test bind with a simple function
+        let id_result = id_val.bind(|x| pure(x + 10));
+        assert_eq(|_|"bind", id_result.@data, 52);;
+        
+        // Test bind chaining
+        let id_chain = pure(5)
+            .bind(|x| pure(x * 2))
+            .bind(|x| pure(x + 3))
+            .bind(|x| pure(x * x));
+        assert_eq(|_|"bind chain", id_chain.@data, 169);;
+        
+        // Test monad laws
+        // Left identity: pure(a).bind(f) == f(a)
+        let left_identity_lhs = pure(10).bind(|x| pure(x + 5));
+        let left_identity_rhs = pure(10 + 5);
+        assert_eq(|_|"left identity", left_identity_lhs.@data, left_identity_rhs.@data);;
+        
+        // Right identity: m.bind(pure) == m
+        let right_identity_m = pure(20);
+        let right_identity_result = right_identity_m.bind(pure);
+        assert_eq(|_|"right identity", right_identity_result.@data, 20);;
+        
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_compiler_mode());
+}
