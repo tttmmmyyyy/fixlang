@@ -3473,33 +3473,6 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 * `rhs`
 * `lhs`
 
-### namespace Std::PunchedArray
-
-#### plug_in
-
-Type: `a -> Std::PunchedArray a -> Std::Array a`
-
-Plug in an element to a punched array to get back an array.
-
-##### Parameters
-
-* `element` - The element to be plugged in.
-* `parray` - The punched array to be plugged in.
-
-#### unsafe_punch
-
-Type: `Std::I64 -> Std::Array a -> (Std::PunchedArray a, a)`
-
-Creates a punched array by moving out the element at the specified index.
-
-NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
-The uniqueness of the array is ensured in the `Array::act` function.
-
-##### Parameters
-
-* `i` - The index of the element to be punched.
-* `array` - The array to be punched.
-
 ### namespace Std::Rem
 
 #### rem
