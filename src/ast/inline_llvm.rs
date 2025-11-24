@@ -333,7 +333,7 @@ pub struct InlineLLVM {
     pub generator: LLVMGenerator,
     // The type of this LLVM expression.
     //
-    // For example, in `@ : Array a -> a = |arr| LLVM<arr.Array::@>;`, the type of `LLVM<arr.Array::@>` is `a`.
+    // For example, in `@ : I64 -> Array a -> a = |i, arr| LLVM<Array::@(i, arr)>;`, the `generic_ty` of the InlineLLVM `LLVM<arr.Array::@(i, arr)>` is `a`.
     // Note that `generic_ty` may contain type variables, and it is not changed in type instantiation.
     pub generic_ty: Arc<TypeNode>,
 }
