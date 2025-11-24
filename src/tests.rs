@@ -10112,3 +10112,26 @@ pub fn test_identity_monad() {
     "#;
     test_source(source, Configuration::develop_compiler_mode());
 }
+
+#[test]
+pub fn test_recursive_reference() {
+    // Even with recursive definitions, it should compile as long as the values are not used.
+    let source = r#"
+    module Main;
+
+    x : I64;
+    x = x;
+
+    y : I64;
+    y = z;
+
+    z : I64;
+    z = y;
+    
+    main : IO ();
+    main = (
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_compiler_mode());
+}

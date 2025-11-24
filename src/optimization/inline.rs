@@ -92,10 +92,10 @@ pub fn calculate_inline_costs(prg: &Program) -> InlineCosts {
     for (name, sym) in &prg.symbols {
         let mut cost_calculator = InlineCostCalculator::new(name.clone());
         cost_calculator.traverse(&sym.expr.as_ref().unwrap());
-        costs.add_cost_calculation_result(name, cost_calculator);
+        costs.add_cost_calculation_result(cost_calculator);
 
-        // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`.
         let expr = sym.expr.as_ref().unwrap();
+        // If the expression is of the form `|x, y, ...| {llvm}`, then set as `is_llvm_lam`.
         let (_params, body) = expr.destructure_lam_sequence();
         let is_llvm_lam = body.is_llvm();
         costs.costs.get_mut(name).unwrap().is_llvm_lam = is_llvm_lam;
@@ -108,6 +108,13 @@ pub fn calculate_inline_costs(prg: &Program) -> InlineCosts {
 
         // If the expression is instantiated by `Std::fix`, set as `is_std_fix`.
         costs.costs.get_mut(name).unwrap().is_std_fix = is_std_fix(name);
+
+        // If the expression is an alias to another global value, set as `is_alias`.
+        if expr.is_var() {
+            let var_name = &expr.get_var().name;
+            assert!(var_name.is_global());
+            costs.costs.get_mut(name).unwrap().is_alias = true;
+        }
     }
     costs
 }
@@ -126,11 +133,31 @@ pub struct InlineCost {
     is_llvm_lam: bool,
     // Is the expression primitive literal?
     is_primitive_literal: bool,
+    // Is this expression an alias to another value?
+    //
+    // Example:
+    // ```
+    // x = y;
+    // ```
+    is_alias: bool,
     // Is the expression instantiated by Std::fix?
     is_std_fix: bool,
 }
 
 impl InlineCost {
+    fn new() -> Self {
+        InlineCost {
+            call_count: 0,
+            complexity: 0,
+            is_self_recursive: false,
+            is_lambda: false,
+            is_llvm_lam: false,
+            is_primitive_literal: false,
+            is_std_fix: false,
+            is_alias: false,
+        }
+    }
+
     // Returns true if the symbol can be inlined even at a non-call site.
     fn inline_at_non_call_site(&self) -> bool {
         if self.is_std_fix {
@@ -144,6 +171,9 @@ impl InlineCost {
             return false;
         }
         if self.is_llvm_lam {
+            return true;
+        }
+        if !self.is_self_recursive && self.is_alias {
             return true;
         }
         return false;
@@ -183,50 +213,30 @@ impl InlineCosts {
         }
     }
 
+    fn insert_cost_if_absent(&mut self, name: &FullName) {
+        if !self.costs.contains_key(name) {
+            self.costs.insert(name.clone(), InlineCost::new());
+        }
+    }
+
     pub fn get_call_count(&self, name: &FullName) -> usize {
         self.costs.get(name).map_or(0, |c| c.call_count)
     }
 
-    fn add_cost_calculation_result(&mut self, name: &FullName, cost: InlineCostCalculator) {
-        // Add call counts.
+    // After `InlineCostCalculator` has been executed, add its result to `InlineCosts`.
+    fn add_cost_calculation_result(&mut self, cost: InlineCostCalculator) {
+        // For each global symbol called from the symbol where `InlineCostCalculator` has been executed, add the call count.
         for (sym, count) in cost.call_count {
-            if let Some(c) = self.costs.get_mut(&sym) {
-                c.call_count += count;
-            } else {
-                self.costs.insert(
-                    sym,
-                    InlineCost {
-                        call_count: count,
-                        complexity: 0,
-                        is_self_recursive: false,
-                        is_lambda: false,
-                        is_llvm_lam: false,
-                        is_primitive_literal: false,
-                        is_std_fix: false,
-                    },
-                );
-            }
+            self.insert_cost_if_absent(&sym);
+            self.costs.get_mut(&sym).unwrap().call_count += count;
         }
 
-        // Set other fields.
-        if let Some(c) = self.costs.get_mut(name) {
-            c.complexity = cost.complexity;
-            c.is_self_recursive = cost.is_call_self;
-            c.is_lambda = cost.is_lambda;
-        } else {
-            self.costs.insert(
-                name.clone(),
-                InlineCost {
-                    call_count: 0,
-                    complexity: cost.complexity,
-                    is_self_recursive: cost.is_call_self,
-                    is_lambda: cost.is_lambda,
-                    is_primitive_literal: false,
-                    is_llvm_lam: false,
-                    is_std_fix: false,
-                },
-            );
-        }
+        // Set other fields for the symbol itself that `InlineCostCalculator` has traversed.
+        self.insert_cost_if_absent(&cost.name);
+        let inline_cost = self.costs.get_mut(&cost.name).unwrap();
+        inline_cost.complexity = cost.complexity;
+        inline_cost.is_self_recursive = cost.is_refer_self;
+        inline_cost.is_lambda = cost.is_lambda;
     }
 }
 
@@ -237,8 +247,8 @@ struct InlineCostCalculator {
     call_count: Map<FullName, usize>,
     // The cost of the symbol.
     complexity: usize,
-    // Is the symbol calling itself?
-    is_call_self: bool,
+    // Is the symbol referring itself?
+    is_refer_self: bool,
     // Is the top-level construct a lambda expression?
     is_lambda: bool,
 }
@@ -249,7 +259,7 @@ impl InlineCostCalculator {
             name,
             call_count: Map::default(),
             complexity: 0,
-            is_call_self: false,
+            is_refer_self: false,
             is_lambda: false,
         }
     }
@@ -265,7 +275,7 @@ impl InlineCostCalculator {
 
         // If it calls itself, set `is_call_self`.
         if used_name == &self.name {
-            self.is_call_self = true;
+            self.is_refer_self = true;
         }
     }
 }
