@@ -489,6 +489,10 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    pub fn enable_index_syntax_optimization(&self) -> bool {
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
+    }
+
     pub fn enable_simplify_symbol_names(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }

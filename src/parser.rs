@@ -1540,7 +1540,8 @@ fn parse_expr_index(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
                 let mut act_func_name = field_name.clone();
                 // field_name = `Std::Box::value` => act_func_name = `Std::Box::act_value`
                 *act_func_name.name_as_mut() = format!("{}{}", STRUCT_ACT_SYMBOL, field_name.name);
-                let act_func = expr_var(act_func_name, field_span.clone());
+                let act_func =
+                    expr_var(act_func_name, field_span.clone()).set_act_func_in_index_syntax(true);
                 let new_action_span = unite_span(&field_span, &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }

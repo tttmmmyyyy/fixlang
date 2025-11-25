@@ -7,6 +7,7 @@ mod find_usage_of_name;
 mod inline;
 mod inline_local;
 mod let_elimination;
+mod opt_index_syntax;
 pub mod optimization;
 mod pull_let;
 mod remove_hktvs;

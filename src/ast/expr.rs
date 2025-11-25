@@ -26,7 +26,12 @@ pub struct ExprNode {
     pub source: Option<Span>,
     // The source of the parameter of a lambda expression.
     pub param_src: Option<Span>,
+    // In an application expression, indicates the order of function and argument in the source code.
+    // In the case of `f(x)` or `f $ x`, it is `FX`, and in the case of `x.f`, it is `XDotF`.
     pub app_order: AppSourceCodeOrderType,
+    // Indicates whether this is a name generated from index syntax for `act` functions.
+    // `act` functions are `Std::Indexable::act_at_index` and `act_{field}` functions for struct fields.
+    pub act_func_in_index_syntax: bool,
     // The (inferred) type of this expression.
     pub type_: Option<Arc<TypeNode>>,
 }
@@ -40,6 +45,7 @@ impl ExprNode {
             source: self.source.clone(),
             param_src: self.param_src.clone(),
             app_order: self.app_order.clone(),
+            act_func_in_index_syntax: self.act_func_in_index_syntax,
             type_: self.type_.clone(),
         }
     }
@@ -52,6 +58,7 @@ impl ExprNode {
             source: self.source.clone(),
             param_src: self.param_src.clone(),
             app_order: self.app_order.clone(),
+            act_func_in_index_syntax: self.act_func_in_index_syntax,
             type_: self.type_.clone(),
         }
     }
@@ -75,6 +82,13 @@ impl ExprNode {
     pub fn set_app_order(&self, app_order: AppSourceCodeOrderType) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.app_order = app_order;
+        Arc::new(ret)
+    }
+
+    // Set act_func_in_index_syntax
+    pub fn set_act_func_in_index_syntax(&self, value: bool) -> Arc<Self> {
+        let mut ret = self.clone_all();
+        ret.act_func_in_index_syntax = value;
         Arc::new(ret)
     }
 
@@ -1182,11 +1196,11 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn into_expr_info(self: &Arc<Self>, src: Option<Span>) -> Arc<ExprNode> {
-        self.into_expr_info_param_src(src, None)
+    pub fn into_expr_node(self: &Arc<Self>, src: Option<Span>) -> Arc<ExprNode> {
+        self.into_expr_node_with_param_src(src, None)
     }
 
-    pub fn into_expr_info_param_src(
+    pub fn into_expr_node_with_param_src(
         self: &Arc<Self>,
         src: Option<Span>,
         param_src: Option<Span>,
@@ -1197,6 +1211,7 @@ impl Expr {
             source: src,
             param_src,
             app_order: AppSourceCodeOrderType::FX,
+            act_func_in_index_syntax: false,
             type_: None,
         })
     }
@@ -1209,7 +1224,7 @@ impl Expr {
             Expr::LLVM(l) => Text::from_string(l.generator.name()),
             Expr::App(_, _) => {
                 // Stringify the funciton.
-                let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_info(None));
+                let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_node(None));
                 let brace_fun = match *(fun.expr) {
                     Expr::Var(_) => false,
                     Expr::LLVM(_) => false,
@@ -1350,7 +1365,7 @@ pub fn expr_llvm(generator: LLVMGenerator, ty: Arc<TypeNode>, src: Option<Span>)
         generator,
         generic_ty: ty,
     })))
-    .into_expr_info(src)
+    .into_expr_node(src)
 }
 
 pub fn expr_let(
@@ -1359,7 +1374,7 @@ pub fn expr_let(
     expr: Arc<ExprNode>,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::Let(pat, bound, expr)).into_expr_info(src)
+    Arc::new(Expr::Let(pat, bound, expr)).into_expr_node(src)
 }
 
 pub fn expr_let_typed(
@@ -1376,7 +1391,7 @@ pub fn expr_let_typed(
 }
 
 pub fn expr_abs(vars: Vec<Arc<Var>>, val: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Lam(vars, val)).into_expr_info(src)
+    Arc::new(Expr::Lam(vars, val)).into_expr_node(src)
 }
 
 pub fn expr_abs_param_src(
@@ -1385,7 +1400,7 @@ pub fn expr_abs_param_src(
     src: Option<Span>,
     param_src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::Lam(vars, val)).into_expr_info_param_src(src, param_src)
+    Arc::new(Expr::Lam(vars, val)).into_expr_node_with_param_src(src, param_src)
 }
 
 pub fn expr_abs_many(mut vars: Vec<Arc<Var>>, mut val: Arc<ExprNode>) -> Arc<ExprNode> {
@@ -1403,7 +1418,7 @@ pub fn expr_abs_typed(var: Arc<Var>, var_ty: Arc<TypeNode>, val: Arc<ExprNode>) 
 }
 
 pub fn expr_app(lam: Arc<ExprNode>, args: Vec<Arc<ExprNode>>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::App(lam, args)).into_expr_info(src)
+    Arc::new(Expr::App(lam, args)).into_expr_node(src)
 }
 
 // Create application expression `{lam}({args})`, and set the inferred type.
@@ -1414,7 +1429,7 @@ pub fn expr_app_typed(lam: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Arc<ExprN
 
 // Make variable expression.
 pub fn expr_var(name: FullName, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Var(var_var(name))).into_expr_info(src)
+    Arc::new(Expr::Var(var_var(name))).into_expr_node(src)
 }
 
 pub fn expr_if(
@@ -1423,7 +1438,7 @@ pub fn expr_if(
     else_expr: Arc<ExprNode>,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_info(src)
+    Arc::new(Expr::If(cond, then_expr, else_expr)).into_expr_node(src)
 }
 
 pub fn expr_if_typed(
@@ -1438,7 +1453,7 @@ pub fn expr_if_typed(
 }
 
 pub fn expr_eval(side: Arc<ExprNode>, main: Arc<ExprNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::Eval(side, main)).into_expr_info(src)
+    Arc::new(Expr::Eval(side, main)).into_expr_node(src)
 }
 
 pub fn expr_eval_typed(side: Arc<ExprNode>, main: Arc<ExprNode>) -> Arc<ExprNode> {
@@ -1451,7 +1466,7 @@ pub fn expr_match(
     cases: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::Match(cond, cases)).into_expr_info(src)
+    Arc::new(Expr::Match(cond, cases)).into_expr_node(src)
 }
 
 pub fn expr_match_typed(
@@ -1470,15 +1485,15 @@ pub fn expr_match_typed(
 }
 
 pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::TyAnno(expr, ty)).into_expr_info(src)
+    Arc::new(Expr::TyAnno(expr, ty)).into_expr_node(src)
 }
 
 pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<ExprNode> {
-    Arc::new(Expr::MakeStruct(tc, fields)).into_expr_info(None)
+    Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
 }
 
 pub fn expr_array_lit(elems: Vec<Arc<ExprNode>>, src: Option<Span>) -> Arc<ExprNode> {
-    Arc::new(Expr::ArrayLit(elems)).into_expr_info(src)
+    Arc::new(Expr::ArrayLit(elems)).into_expr_node(src)
 }
 
 pub fn expr_ffi_call(
@@ -1489,7 +1504,7 @@ pub fn expr_ffi_call(
     is_ios: bool,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::FFICall(fun_name, ret_ty, param_tys, args, is_ios)).into_expr_info(src)
+    Arc::new(Expr::FFICall(fun_name, ret_ty, param_tys, args, is_ios)).into_expr_node(src)
 }
 
 // Convert f(y, z) to (f, [y, z]).
