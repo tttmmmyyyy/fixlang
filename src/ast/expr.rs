@@ -29,9 +29,8 @@ pub struct ExprNode {
     // In an application expression, indicates the order of function and argument in the source code.
     // In the case of `f(x)` or `f $ x`, it is `FX`, and in the case of `x.f`, it is `XDotF`.
     pub app_order: AppSourceCodeOrderType,
-    // Indicates whether this is a name generated from index syntax for `act` functions.
-    // `act` functions are `Std::Indexable::act_at_index` and `act_{field}` functions for struct fields.
-    pub act_func_in_index_syntax: bool,
+    // Indicates whether this is a name generated from index syntax for `act_{field}` functions.
+    pub struct_act_func_in_index_syntax: bool,
     // The (inferred) type of this expression.
     pub type_: Option<Arc<TypeNode>>,
 }
@@ -45,7 +44,7 @@ impl ExprNode {
             source: self.source.clone(),
             param_src: self.param_src.clone(),
             app_order: self.app_order.clone(),
-            act_func_in_index_syntax: self.act_func_in_index_syntax,
+            struct_act_func_in_index_syntax: self.struct_act_func_in_index_syntax,
             type_: self.type_.clone(),
         }
     }
@@ -58,7 +57,7 @@ impl ExprNode {
             source: self.source.clone(),
             param_src: self.param_src.clone(),
             app_order: self.app_order.clone(),
-            act_func_in_index_syntax: self.act_func_in_index_syntax,
+            struct_act_func_in_index_syntax: self.struct_act_func_in_index_syntax,
             type_: self.type_.clone(),
         }
     }
@@ -85,10 +84,10 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    // Set act_func_in_index_syntax
-    pub fn set_act_func_in_index_syntax(&self, value: bool) -> Arc<Self> {
+    // Set struct_act_func_in_index_syntax
+    pub fn set_struct_act_func_in_index_syntax(&self, value: bool) -> Arc<Self> {
         let mut ret = self.clone_all();
-        ret.act_func_in_index_syntax = value;
+        ret.struct_act_func_in_index_syntax = value;
         Arc::new(ret)
     }
 
@@ -1211,7 +1210,7 @@ impl Expr {
             source: src,
             param_src,
             app_order: AppSourceCodeOrderType::FX,
-            act_func_in_index_syntax: false,
+            struct_act_func_in_index_syntax: false,
             type_: None,
         })
     }

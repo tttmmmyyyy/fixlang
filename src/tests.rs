@@ -10038,6 +10038,24 @@ main: IO () = (
 }
 
 #[test]
+pub fn test_index_syntax_4() {
+    // Forbid using user-defined `act_foo` with index syntax
+    let source = r#"
+    module Main;
+
+    act_foo : [f : Functor] (a -> f a) -> (a,) -> f (a,) = act_0;
+    
+    main : IO ();
+    main = (
+        let x = (42,)[^foo].iget;
+        assert_eq(|_|"", x, 42);;
+        pure()
+    );
+    "#;
+    test_source_fail(source, Configuration::develop_compiler_mode(), "Unknown");
+}
+
+#[test]
 pub fn test_index_syntax_2d_array() {
     let source = r##"
 module Main;

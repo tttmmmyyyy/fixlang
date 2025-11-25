@@ -607,9 +607,18 @@ impl TypeCheckContext {
         let ei = ei.set_type(ty.clone());
         match &*ei.expr {
             Expr::Var(var) => {
-                let candidates = self
+                let mut candidates = self
                     .scope
                     .overloaded_candidates(&var.name, self.imported_statements());
+                if ei.struct_act_func_in_index_syntax {
+                    candidates = candidates
+                        .into_iter()
+                        .filter(|(ns, _)| {
+                            let full_name = FullName::new(ns, &var.name.name);
+                            self.type_env.is_struct_act(&full_name)
+                        })
+                        .collect();
+                }
                 if candidates.is_empty() {
                     let mut err = Error::from_msg_srcs(
                         format!("Unknown name `{}`.", var.name.to_string()),

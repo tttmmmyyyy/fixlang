@@ -54,6 +54,26 @@ impl TypeEnv {
         }
         res
     }
+
+    // Check if the given function is `act_{field}` function for a field of a struct.
+    pub fn is_struct_act(&self, name: &FullName) -> bool {
+        if name.is_local() {
+            return false;
+        }
+        let str_name = name.namespace.clone().to_fullname();
+        match self.tycons.get(&TyCon { name: str_name }) {
+            Some(tycon_info) => {
+                if tycon_info.variant != TyConVariant::Struct {
+                    return false;
+                }
+                tycon_info.fields.iter().any(|f| {
+                    let act_func_name = format!("{}{}", STRUCT_ACT_SYMBOL, f.name);
+                    act_func_name == name.name
+                })
+            }
+            None => false,
+        }
+    }
 }
 
 // Symbols are Fix values that are instantiated:
