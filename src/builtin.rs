@@ -1851,7 +1851,7 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
 
 // Gets a value from an array, without bounds checking and retaining the returned value.
 // Type: I64 -> Array a -> (Array a, a)
-pub fn array_unsafe_get_linear_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn array_unsafe_get_linear() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";

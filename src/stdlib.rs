@@ -432,7 +432,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_get_linear"),
-        array_unsafe_get_linear_function(),
+        array_unsafe_get_linear(),
         None,
         Some(include_str!("./docs/std_array_unsafe_get_linear.md").to_string()),
     ));
