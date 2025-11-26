@@ -950,6 +950,10 @@ let vs = [Vector { x: 1.0, y: 2.0 }, Vector { x: 3.0, y: 4.0 }];
 let vs = *vs[0][^x].iact(f); // Prints `1.0!` and results in `vs == [Vector { x: -1.0, y: 2.0 }, Vector { x: 3.0, y: 4.0 }]`
 ```
 
+When specifying a field using index syntax (`obj[^field]`), if the field name is ambiguous and causes a compilation error, you can specify the namespace of the field like `obj[^NameSpace::field]`.
+
+Index syntax is syntactic sugar. `vs[0][^x]` is expanded to `|f| vs.(act(0) << act_x)(f)`.
+
 ## Modules and import statements
 
 In Fix, all entities (global values, types, traits) defined in a source file is collected to form a module.
