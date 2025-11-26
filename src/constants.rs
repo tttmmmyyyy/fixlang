@@ -60,6 +60,9 @@ pub const INDEXABLE_TRAIT_ACT_NAME: &str = "act_at_index";
 
 // Array methods.
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
+pub const ARRAY_GET_SIZE_NAME: &str = "get_size";
+pub const ARRAY_UNSAFE_GET_LINEAR_FU_NAME: &str = "_unsafe_get_linear_fu";
+pub const ARRAY_UNSAFE_SET_NAME: &str = "_unsafe_set";
 
 // Structure methods.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";

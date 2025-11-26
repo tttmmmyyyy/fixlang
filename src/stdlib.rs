@@ -413,7 +413,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     // Array
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_SET_NAME),
         unsafe_set_array(),
         None,
         Some(include_str!("./docs/std_array_unsafe_set.md").to_string()),
@@ -437,7 +437,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_array_unsafe_get_linear.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_get_linear_fu"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_GET_LINEAR_FU_NAME),
         array_unsafe_get_linear(true),
         None,
         Some(include_str!("./docs/std_array_unsafe_get_linear_fu.md").to_string()),
@@ -473,7 +473,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_array_get_capacity.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_size"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_GET_SIZE_NAME),
         get_size_array(),
         None,
         Some(include_str!("./docs/std_array_get_size.md").to_string()),

@@ -1436,6 +1436,17 @@ pub fn expr_app_typed(lam: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Arc<ExprN
     expr_app(lam, args, None).set_type(dst_ty)
 }
 
+// Apply a curried function to multiple arguments in sequence.
+// For a function of type `A -> B -> C -> D` and arguments `[a, b, c]`,
+// this generates `((f a) b) c` with proper types.
+pub fn expr_app_many_typed(lam: Arc<ExprNode>, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
+    let mut result = lam;
+    for arg in args {
+        result = expr_app_typed(result, vec![arg]);
+    }
+    result
+}
+
 // Make variable expression.
 pub fn expr_var(name: FullName, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Var(var_var(name))).into_expr_node(src)
