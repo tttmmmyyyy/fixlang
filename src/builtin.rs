@@ -1799,6 +1799,7 @@ pub fn array_unsafe_get_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeGetLinearFunctionBody {
+    force_unique: bool,
     arr_name: FullName,
     idx_name: FullName,
 }
@@ -1806,8 +1807,9 @@ pub struct InlineLLVMArrayUnsafeGetLinearFunctionBody {
 impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
     pub fn name(&self) -> String {
         format!(
-            "{}.Array::unsafe_get_linear({})",
+            "{}.Array::unsafe_get_linear{}({})",
             self.arr_name.to_string(),
+            if self.force_unique { "_fu" } else { "" },
             self.idx_name.to_string()
         )
     }
@@ -1822,15 +1824,19 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argments
-        let array = gc.get_scoped_obj(&self.arr_name);
+        let mut array = gc.get_scoped_obj(&self.arr_name);
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
 
-        let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
+        // If force_unique is set, we need to force the array to be unique.
+        if self.force_unique {
+            array = make_array_unique(gc, array);
+        }
 
         // Get array buffer
         let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
 
         // Get the element.
+        let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
         let elem =
             ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty.clone(), idx);
 
@@ -1851,7 +1857,7 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
 
 // Gets a value from an array, without bounds checking and retaining the returned value.
 // Type: I64 -> Array a -> (Array a, a)
-pub fn array_unsafe_get_linear() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn array_unsafe_get_linear(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";
@@ -1865,6 +1871,7 @@ pub fn array_unsafe_get_linear() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_llvm(
             LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(
                 InlineLLVMArrayUnsafeGetLinearFunctionBody {
+                    force_unique,
                     arr_name: FullName::local(ARR_NAME),
                     idx_name: FullName::local(IDX_NAME),
                 },

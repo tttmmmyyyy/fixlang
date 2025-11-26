@@ -112,8 +112,7 @@ namespace Array {
     mod = |idx, fun, arr| (
         let size = arr.get_size;
         if !(0 <= idx && idx < size) { undefined("Index out of range.") };
-        let arr = arr._unsafe_force_unique;
-        let (arr, elm) = arr._unsafe_get_linear(idx);
+        let (arr, elm) = arr._unsafe_get_linear_fu(idx);
         let elm = fun(elm);
         arr._unsafe_set(idx, elm)
     );
