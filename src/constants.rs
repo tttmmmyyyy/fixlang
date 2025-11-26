@@ -45,6 +45,7 @@ pub const DESTRUCTOR_OBJECT_VALUE_FIELD_IDX: u32 = 0;
 pub const DESTRUCTOR_OBJECT_DTOR_FIELD_IDX: u32 = 1;
 pub const STRING_NAME: &str = "String";
 pub const MONAD_NAME: &str = "Monad";
+pub const IDENTITY_NAME: &str = "Identity";
 pub const MONAD_BIND_NAME: &str = "bind";
 pub const COMPOSE_FUNCTION_NAME: &str = "compose";
 pub const MAIN_FUNCTION_NAME: &str = "main";
@@ -53,6 +54,7 @@ pub const TEST_FUNCTION_NAME: &str = "test";
 pub const TEST_MODULE_NAME: &str = "Test";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";
 pub const WITH_RETAINED_NAME: &str = "with_retained";
+pub const ARRAY_ACT_NAME: &str = "act";
 pub const INDEXABLE_TRAIT_NAME: &str = "Indexable";
 pub const INDEXABLE_TRAIT_ACT_NAME: &str = "act_at_index";
 

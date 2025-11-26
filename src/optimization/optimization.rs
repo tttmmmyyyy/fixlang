@@ -1,5 +1,5 @@
 use crate::{
-    optimization::{inline_local, opt_index_syntax, remove_hktvs},
+    optimization::{inline_local, optimize_act, remove_hktvs},
     stopwatch::StopWatch,
     Configuration, Program,
 };
@@ -29,10 +29,10 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 
     // Perfom index syntax optimization.
     if config.enable_index_syntax_optimization() {
-        let _sw = StopWatch::new("opt_index_syntax::run", config.show_build_times);
-        opt_index_syntax::run(prg);
+        let _sw = StopWatch::new("optimize_act::run", config.show_build_times);
+        optimize_act::run(prg);
         if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.opt_index_syntax", prg.optimization_step));
+            prg.emit_symbols(&format!("{}.optimize_act", prg.optimization_step));
             prg.optimization_step += 1;
         }
     }

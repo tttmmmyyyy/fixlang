@@ -1402,6 +1402,16 @@ pub fn expr_abs_param_src(
     Arc::new(Expr::Lam(vars, val)).into_expr_node_with_param_src(src, param_src)
 }
 
+pub fn expr_abs_many_typed(
+    mut vars: Vec<(Arc<Var>, Arc<TypeNode>)>,
+    mut val: Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    while let Some((var, var_ty)) = vars.pop() {
+        val = expr_abs_typed(var, var_ty, val);
+    }
+    val
+}
+
 pub fn expr_abs_many(mut vars: Vec<Arc<Var>>, mut val: Arc<ExprNode>) -> Arc<ExprNode> {
     while let Some(var) = vars.pop() {
         val = expr_abs(vec![var], val, None);
