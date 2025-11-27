@@ -611,11 +611,12 @@ impl TypeCheckContext {
                     .scope
                     .overloaded_candidates(&var.name, self.imported_statements());
                 if ei.struct_act_func_in_index_syntax {
+                    // If this variable `act_{field}` arises from struct index `obj[^field]`, filter candidates to struct accessor functions only.
                     candidates = candidates
                         .into_iter()
                         .filter(|(ns, _)| {
                             let full_name = FullName::new(ns, &var.name.name);
-                            self.type_env.is_struct_act(&full_name)
+                            self.type_env.is_struct_act(&full_name).is_some()
                         })
                         .collect();
                 }

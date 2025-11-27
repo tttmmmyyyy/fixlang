@@ -3048,6 +3048,249 @@ pub fn struct_act(
     (expr, scm)
 }
 
+// Field act function for a given struct, specialized for identity functor.
+//
+// If the struct is `S` and the field is `F`, then the function has the type `(F -> Std::Identity F) -> S -> Std::Identity S`.
+//
+// The implementation is optimized for the identity functor:
+// ```
+// |f, x| (
+//     let (x, p) = x.#punch_fu_{field}; // here, force uniqueness of x.
+//     let Identity { data : x } = f(x); // unwrap Identity
+//     let p = #plug_in_{field}(p, x); // uniqueness of p is guaranteed here, so we do not use "_fu" version.
+//     Identity { data : p }
+// )
+// ```
+pub fn struct_act_identity(
+    struct_name: &FullName,
+    definition: &TypeDefn,
+    field_name: &str,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    let (_, field) = definition.get_field_by_name(field_name).unwrap();
+    let str_ty = definition.applied_type();
+    let field_ty = field.ty.clone();
+
+    // Type: (F -> Identity F) -> S -> Identity S
+    let identity_tycon = tycon(FullName::from_strs(&[STD_NAME], IDENTITY_NAME));
+    let identity_f_ty = type_tyapp(type_tycon(&identity_tycon), field_ty.clone());
+    let identity_s_ty = type_tyapp(type_tycon(&identity_tycon), str_ty.clone());
+    let ty = type_fun(
+        type_fun(field_ty.clone(), identity_f_ty.clone()),
+        type_fun(str_ty.clone(), identity_s_ty.clone()),
+    );
+
+    // The implementation as AST:
+    // |f, x| (
+    //     let (x, p) = x.#punch_fu_{field};
+    //     let Identity { data : x } = f(x);
+    //     let p = #plug_in_{field}(p, x);
+    //     Identity { data : p }
+    // )
+
+    // `#punch_fu_{field}`
+    let punch_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `x.#punch_fu_{field}`
+    let punch_expr = expr_app(punch_func, vec![expr_var(FullName::local("x"), None)], None);
+
+    // `f(x)`
+    let fx = expr_app(
+        expr_var(FullName::local("f"), None),
+        vec![expr_var(FullName::local("x"), None)],
+        None,
+    );
+
+    // `#plug_in_{field}`
+    let plug_in_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `#plug_in_{field}(p, x)`
+    let plug_in_expr = expr_app(
+        expr_app(
+            plug_in_func,
+            vec![expr_var(FullName::local("p"), None)],
+            None,
+        ),
+        vec![expr_var(FullName::local("x"), None)],
+        None,
+    );
+
+    // `Identity { data : p }`
+    let wrap_identity = expr_make_struct(
+        identity_tycon.clone(),
+        vec![("data".to_string(), plug_in_expr)],
+    );
+
+    // let Identity { data : x } = f(x);
+    // Identity { data : #plug_in_{field}(p, x) }
+    let unwrap_identity = expr_let(
+        PatternNode::make_struct(
+            identity_tycon,
+            vec![(
+                "data".to_string(),
+                PatternNode::make_var(var_local("x"), None),
+            )],
+        ),
+        fx,
+        wrap_identity,
+        None,
+    );
+
+    // let (x, p) = x.#punch_fu_{field};
+    // let Identity { data : x } = f(x);
+    // let p = #plug_in_{field}(p, x);
+    // Identity { data : p }
+    let let_expr = expr_let(
+        PatternNode::make_struct(
+            tycon(make_tuple_name(2)),
+            vec![
+                ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
+                ("1".to_string(), PatternNode::make_var(var_local("p"), None)),
+            ],
+        ),
+        punch_expr,
+        unwrap_identity,
+        None,
+    );
+
+    // |f, x| ...
+    let expr = expr_abs(
+        vec![var_local("f")],
+        expr_abs(vec![var_local("x")], let_expr, None),
+        None,
+    );
+    let scm = Scheme::generalize(&[], vec![], vec![], ty);
+    (expr, scm)
+}
+
+// Field act function for a given struct, specialized for constant functor.
+//
+// If the struct is `S` and the field is `F`, then the function has the type `(F -> Std::Const r F) -> S -> Std::Const r S`.
+//
+// The implementation is optimized for the constant functor:
+// ```
+// |f, s| (
+//     let x = s.@{field}; // get the field value
+//     let Const { data : r } = f(x); // unwrap `Const r F`
+//     Const { data : r } // wrap back into `Const r S`
+// )
+// ```
+pub fn struct_act_const(
+    struct_name: &FullName,
+    definition: &TypeDefn,
+    field_name: &str,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    let (_, field) = definition.get_field_by_name(field_name).unwrap();
+    let str_ty = definition.applied_type();
+    let field_ty = field.ty.clone();
+
+    // Create type scheme: (F -> Const r F) -> S -> Const r S
+    // We need a type variable for r
+    let mut used_tyvar_names = Set::default();
+    str_ty.collect_tyvar_names(&mut used_tyvar_names);
+    field_ty.collect_tyvar_names(&mut used_tyvar_names);
+    let used_tyvar_names: Set<FullName> = used_tyvar_names
+        .into_iter()
+        .map(|name| FullName::local(&name))
+        .collect();
+    let r_name = crate::optimization::rename::generate_new_names(&used_tyvar_names, 1)[0]
+        .name
+        .clone();
+    let r_ty = type_tyvar(&r_name, &kind_star());
+
+    let const_tycon = tycon(FullName::from_strs(&[STD_NAME], CONST_NAME));
+    // Const r
+    let const_r_ty = type_tyapp(type_tycon(&const_tycon), r_ty.clone());
+    // Const r F
+    let const_r_f_ty = type_tyapp(const_r_ty.clone(), field_ty.clone());
+    // Const r S
+    let const_r_s_ty = type_tyapp(const_r_ty, str_ty.clone());
+
+    let ty = type_fun(
+        type_fun(field_ty.clone(), const_r_f_ty.clone()),
+        type_fun(str_ty.clone(), const_r_s_ty.clone()),
+    );
+
+    // The implementation as AST:
+    // |f, s| (
+    //     let x = s.@{field};
+    //     let Const { data : r } = f(x);
+    //     Const { data : r }
+    // )
+
+    // `@{field}`
+    let getter_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_GETTER_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `s.@{field}`
+    let getter_expr = expr_app(
+        getter_func,
+        vec![expr_var(FullName::local("s"), None)],
+        None,
+    )
+    .set_app_order(AppSourceCodeOrderType::XDotF);
+
+    // `f(x)`
+    let fx = expr_app(
+        expr_var(FullName::local("f"), None),
+        vec![expr_var(FullName::local("x"), None)],
+        None,
+    );
+
+    // `Const { data : r }`
+    let wrap_const = expr_make_struct(
+        const_tycon.clone(),
+        vec![("data".to_string(), expr_var(FullName::local("r"), None))],
+    );
+
+    // let Const { data : r } = f(x);
+    // Const { data : r }
+    let unwrap_const = expr_let(
+        PatternNode::make_struct(
+            const_tycon,
+            vec![(
+                "data".to_string(),
+                PatternNode::make_var(var_local("r"), None),
+            )],
+        ),
+        fx,
+        wrap_const,
+        None,
+    );
+
+    // let x = s.@{field};
+    // let Const { data : r } = f(x);
+    // Const { data : r }
+    let let_expr = expr_let(
+        PatternNode::make_var(var_local("x"), None),
+        getter_expr,
+        unwrap_const,
+        None,
+    );
+
+    // |f, s| ...
+    let expr = expr_abs(
+        vec![var_local("f")],
+        expr_abs(vec![var_local("s")], let_expr, None),
+        None,
+    );
+    let scm = Scheme::generalize(&[], vec![], vec![], ty);
+    (expr, scm)
+}
+
 // Make struct object unique.
 // If it is (unboxed or) unique, do nothing.
 // If it is shared, clone the object.

@@ -56,22 +56,28 @@ impl TypeEnv {
     }
 
     // Check if the given function is `act_{field}` function for a field of a struct.
-    pub fn is_struct_act(&self, name: &FullName) -> bool {
+    //
+    // If so, return (struct tycon, field name).
+    pub fn is_struct_act(&self, name: &FullName) -> Option<(TyCon, Name)> {
         if name.is_local() {
-            return false;
+            return None;
         }
         let str_name = name.namespace.clone().to_fullname();
-        match self.tycons.get(&TyCon { name: str_name }) {
+        let str_name = TyCon { name: str_name };
+        match self.tycons.get(&str_name) {
             Some(tycon_info) => {
                 if tycon_info.variant != TyConVariant::Struct {
-                    return false;
+                    return None;
                 }
-                tycon_info.fields.iter().any(|f| {
-                    let act_func_name = format!("{}{}", STRUCT_ACT_SYMBOL, f.name);
-                    act_func_name == name.name
-                })
+                for field in &tycon_info.fields {
+                    let act_func_name = format!("{}{}", STRUCT_ACT_SYMBOL, field.name);
+                    if act_func_name == name.name {
+                        return Some((str_name, field.name.clone()));
+                    }
+                }
+                None
             }
-            None => false,
+            None => None,
         }
     }
 }
@@ -1869,6 +1875,26 @@ impl Program {
                             Some(format!(
                                 "Updates a value of `{}` by applying a functorial action to field `{}`.",
                                 struct_name.name, &field.name,
+                            )),
+                        ));
+                        errors.eat_err(self.add_compiler_defined_method(
+                            FullName::new(
+                                &defn.name.to_namespace(),
+                                &format!("_{}{}_identity", STRUCT_ACT_SYMBOL, &field.name),
+                            ),
+                            struct_act_identity(&struct_name, defn, &field.name),
+                            Some(format!(
+                                "Optimized implementation of `act_{{field}}` function for `Identity` functor."
+                            )),
+                        ));
+                        errors.eat_err(self.add_compiler_defined_method(
+                            FullName::new(
+                                &defn.name.to_namespace(),
+                                &format!("_{}{}_const", STRUCT_ACT_SYMBOL, &field.name),
+                            ),
+                            struct_act_const(&struct_name, defn, &field.name),
+                            Some(format!(
+                                "Optimized implementation of `act_{{field}}` function for `Const r` functor."
                             )),
                         ));
                         // Add punch functions.

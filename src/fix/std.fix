@@ -117,21 +117,21 @@ namespace Array {
         arr._unsafe_set(idx, elm)
     );
 
-    // Optimized `act` implementation specialized for `Identity` functor.
+    // Optimized implementation of `act` function specialized for `Identity` functor.
     _act_identity : I64 -> (a -> Identity a) -> Array a -> Identity (Array a);
     _act_identity = |idx, fun, arr| (
         let size = arr.get_size;
         if !(0 <= idx && idx < size) { undefined("Index out of range.") };
         let (arr, elm) = arr._unsafe_get_linear_fu(idx);
-        let elm = fun(elm).@data;
+        let Identity { data : elm } = fun(elm);
         Identity { data : arr._unsafe_set(idx, elm) }
     );
 
-    // Optimized `act` implementation specialized for `Const r` functor.
+    // Optimized implementation of `act` function specialized for `Const r` functor.
     _act_const : I64 -> (a -> Const r a) -> Array a -> Const r (Array a);
     _act_const = |idx, fun, arr| (
         let elm = arr.@(idx);
-        let res = fun(elm).@data;
+        let Const { data : res } = fun(elm);
         Const { data : res }
     );
 
