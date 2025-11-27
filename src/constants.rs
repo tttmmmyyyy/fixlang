@@ -46,6 +46,7 @@ pub const DESTRUCTOR_OBJECT_DTOR_FIELD_IDX: u32 = 1;
 pub const STRING_NAME: &str = "String";
 pub const MONAD_NAME: &str = "Monad";
 pub const IDENTITY_NAME: &str = "Identity";
+pub const CONST_NAME: &str = "Const";
 pub const MONAD_BIND_NAME: &str = "bind";
 pub const COMPOSE_FUNCTION_NAME: &str = "compose";
 pub const MAIN_FUNCTION_NAME: &str = "main";

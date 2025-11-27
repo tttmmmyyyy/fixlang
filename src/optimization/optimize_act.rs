@@ -26,10 +26,10 @@ use crate::{
         expr::expr_var,
         name::FullName,
         program::{Program, Symbol},
-        types::{tycon, type_tyapp, type_tycon, TypeNode},
+        types::{tycon, type_tyapp, type_tycon, Type::TyApp, TypeNode},
     },
     configuration::Configuration,
-    constants::{ARRAY_ACT_NAME, ARRAY_NAME, IDENTITY_NAME, STD_NAME},
+    constants::{ARRAY_ACT_NAME, ARRAY_NAME, CONST_NAME, IDENTITY_NAME, STD_NAME},
     error::Errors,
     misc::warn_msg,
     typecheck::TypeCheckContext,
@@ -78,13 +78,25 @@ fn run_on_array_act(
     let act_ty = sym.ty.clone(); // I64 -> (T -> f T) -> U -> f U
     let lens_ty = act_ty.get_lambda_dst(); // (T -> f T) -> U -> f U
 
-    if is_functor_identity(&lens_ty) {
-        let act_for_id_gen_name =
-            FullName::from_strs(&[STD_NAME, ARRAY_NAME], &format!("_act_identity"));
-        let act_for_id_inst_name = prg.require_instantiation(&act_for_id_gen_name, &act_ty)?;
+    let optimized_func_name = if is_functor_identity(&lens_ty) {
+        Some(FullName::from_strs(
+            &[STD_NAME, ARRAY_NAME],
+            &format!("_act_identity"),
+        ))
+    } else if is_functor_const(&lens_ty) {
+        Some(FullName::from_strs(
+            &[STD_NAME, ARRAY_NAME],
+            &format!("_act_const"),
+        ))
+    } else {
+        None
+    };
+
+    if let Some(opt_func_name) = optimized_func_name {
+        let inst_name = prg.require_instantiation(&opt_func_name, &act_ty)?;
         prg.instantiate_symbols(tc)?;
-        let act_for_id_val = expr_var(act_for_id_inst_name, None).set_type(act_ty.clone());
-        sym.expr = Some(act_for_id_val);
+        let optimized_val = expr_var(inst_name, None).set_type(act_ty.clone());
+        sym.expr = Some(optimized_val);
     }
 
     Ok(())
@@ -117,4 +129,43 @@ fn is_functor_identity(lens_ty: &Arc<TypeNode>) -> bool {
     let id_u_ty = type_tyapp(id_ty, u_ty);
 
     ft_ty.to_string() == id_t_ty.to_string() && fu_ty.to_string() == id_u_ty.to_string()
+}
+
+// Taking type `(T -> f T) -> U -> f U`, check if `f` is `Std::Const C` for some `C`.
+fn is_functor_const(lens_ty: &Arc<TypeNode>) -> bool {
+    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
+
+    let const_ty = type_tycon(&tycon(FullName::from_strs(&[STD_NAME], CONST_NAME)));
+
+    // Try to extract C from ft_ty (which should be Const C T)
+    // ft_ty has the form: (Const C) T = TyApp(TyApp(Const, C), T)
+    let TyApp(ft_const_c, t) = &ft_ty.ty else {
+        return false;
+    };
+    if t.to_string() != t_ty.to_string() {
+        return false;
+    }
+    let TyApp(ft_const_base, ft_c) = &ft_const_c.ty else {
+        return false;
+    };
+    if ft_const_base.to_string() != const_ty.to_string() {
+        return false;
+    }
+
+    // Try to extract C from fu_ty (which should be Const C U)
+    let TyApp(fu_const_c, u) = &fu_ty.ty else {
+        return false;
+    };
+    if u.to_string() != u_ty.to_string() {
+        return false;
+    }
+    let TyApp(fu_const_base, fu_c) = &fu_const_c.ty else {
+        return false;
+    };
+    if fu_const_base.to_string() != const_ty.to_string() {
+        return false;
+    }
+
+    // Check if both have the same C
+    ft_c.to_string() == fu_c.to_string()
 }
