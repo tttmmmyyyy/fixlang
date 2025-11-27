@@ -2306,6 +2306,28 @@ impl Program {
         }
         graph
     }
+
+    pub fn create_typechecker(&self, config: &Configuration) -> TypeCheckContext {
+        // Create typeckecker.
+        let mut typechecker = TypeCheckContext::new(
+            self.trait_env.clone(),
+            self.type_env(),
+            self.kind_env(),
+            self.mod_to_import_stmts.clone(),
+            config.type_check_cache.clone(),
+            config.num_worker_thread,
+        );
+
+        // Register type declarations of global symbols to typechecker.
+        let globals = self
+            .global_values
+            .iter()
+            .map(|(name, defn)| (name.clone(), defn.scm.clone()))
+            .collect::<Vec<_>>();
+        typechecker.scope.set_globals(globals);
+
+        typechecker
+    }
 }
 
 #[derive(Serialize, Deserialize)]

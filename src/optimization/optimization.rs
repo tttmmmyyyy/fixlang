@@ -17,22 +17,22 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         prg.optimization_step += 1;
     }
 
+    // Perform act optimization.
+    if config.enable_act_optimization() {
+        let _sw = StopWatch::new("optimize_act::run", config.show_build_times);
+        optimize_act::run(prg, config);
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.optimize_act", prg.optimization_step));
+            prg.optimization_step += 1;
+        }
+    }
+
     // Perform simplification of global names.
     if config.enable_simplify_symbol_names() {
         let _sw = StopWatch::new("simplify_symbol_names::run", config.show_build_times);
         simplify_symbol_names::run(prg);
         if config.emit_symbols {
             prg.emit_symbols(&format!("{}.simplify_symbol_names", prg.optimization_step));
-            prg.optimization_step += 1;
-        }
-    }
-
-    // Perfom index syntax optimization.
-    if config.enable_index_syntax_optimization() {
-        let _sw = StopWatch::new("optimize_act::run", config.show_build_times);
-        optimize_act::run(prg);
-        if config.emit_symbols {
-            prg.emit_symbols(&format!("{}.optimize_act", prg.optimization_step));
             prg.optimization_step += 1;
         }
     }

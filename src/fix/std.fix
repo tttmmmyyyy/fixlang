@@ -117,6 +117,18 @@ namespace Array {
         arr._unsafe_set(idx, elm)
     );
 
+    // Optimized `act` specialized for `Identity` functor.
+    // 
+    // The implementation of this function is equivalent to `mod`.
+    _act_identity : I64 -> (a -> Identity a) -> Array a -> Identity (Array a);
+    _act_identity = |idx, fun, arr| (
+        let size = arr.get_size;
+        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
+        let (arr, elm) = arr._unsafe_get_linear_fu(idx);
+        let elm = fun(elm).@data;
+        Identity { data : arr._unsafe_set(idx, elm) }
+    );
+
     // Modifies an array by a functorial action. 
     // 
     // Semantically, `arr.act(idx, fun)` is equivalent to `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))`.

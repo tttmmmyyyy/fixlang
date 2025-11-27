@@ -11,7 +11,6 @@ use crate::LinkType;
 use crate::OutputFileType;
 use crate::Program;
 use crate::SubCommand;
-use crate::TypeCheckContext;
 use crate::ValgrindTool;
 use crate::DOT_FIXLANG;
 use crate::INTERMEDIATE_PATH;
@@ -88,25 +87,7 @@ fn check_program(mut program: Program, config: &Configuration) -> Result<Program
         return Ok(program);
     }
 
-    // Create typeckecker.
-    let mut typechecker = TypeCheckContext::new(
-        program.trait_env.clone(),
-        program.type_env(),
-        program.kind_env(),
-        program.mod_to_import_stmts.clone(),
-        config.type_check_cache.clone(),
-        config.num_worker_thread,
-    );
-
-    // Register type declarations of global symbols to typechecker.
-    {
-        let globals = program
-            .global_values
-            .iter()
-            .map(|(name, defn)| (name.clone(), defn.scm.clone()))
-            .collect::<Vec<_>>();
-        typechecker.scope.set_globals(globals);
-    }
+    let typechecker = program.create_typechecker(config);
 
     // When running diagnostics, perform type checking of target modules and return here.
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {

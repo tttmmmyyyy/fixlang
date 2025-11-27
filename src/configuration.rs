@@ -202,6 +202,8 @@ pub struct Configuration {
     // Emit symbols at each step of optimization.
     // Used only for compiler development.
     pub emit_symbols: bool,
+    // Is in compiler development mode?
+    pub develop_mode: bool,
 }
 
 #[derive(Clone)]
@@ -315,6 +317,7 @@ impl Configuration {
             llvm_passes_file: None,
             run_program_args: vec![],
             emit_symbols: false,
+            develop_mode: false,
         })
     }
 }
@@ -329,9 +332,10 @@ impl Configuration {
 
     // Configuration for compiler development
     #[allow(dead_code)]
-    pub fn develop_compiler_mode() -> Configuration {
+    pub fn compiler_develop_mode() -> Configuration {
         #[allow(unused_mut)]
         let mut config = panic_if_err(Self::new(SubCommand::Run));
+        config.develop_mode = true;
         config.num_worker_thread = 0;
         config.set_valgrind(ValgrindTool::MemCheck);
         config.fix_opt_level = FixOptimizationLevel::Experimental;
@@ -489,7 +493,7 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
-    pub fn enable_index_syntax_optimization(&self) -> bool {
+    pub fn enable_act_optimization(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
 
