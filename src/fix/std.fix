@@ -118,8 +118,6 @@ namespace Array {
     );
 
     // Optimized `act` implementation specialized for `Identity` functor.
-    // 
-    // The implementation of this function is equivalent to `mod`.
     _act_identity : I64 -> (a -> Identity a) -> Array a -> Identity (Array a);
     _act_identity = |idx, fun, arr| (
         let size = arr.get_size;
