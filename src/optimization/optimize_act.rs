@@ -33,7 +33,7 @@ use crate::{
         ARRAY_ACT_NAME, ARRAY_NAME, CONST_NAME, IDENTITY_NAME, STD_NAME, STRUCT_ACT_SYMBOL,
     },
     error::Errors,
-    misc::warn_msg,
+    misc::info_msg,
     typecheck::TypeCheckContext,
 };
 
@@ -42,13 +42,13 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         Ok(_) => {}
         Err(errs) => {
             let msg = format!(
-                "Errors occurred during \"act optimization\":\n{}",
+                "Errors occurred during \"act optimization\". Please consider submitting an issue to the fixlang's repository. Details:\n{}",
                 errs.to_string()
             );
             if config.develop_mode {
                 panic!("{}", msg);
             } else {
-                warn_msg(&msg);
+                info_msg(&msg);
             }
         }
     }
