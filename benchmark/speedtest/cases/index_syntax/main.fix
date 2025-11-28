@@ -1,0 +1,14 @@
+module Main;
+
+main : IO () = (
+    let n = 1e3;
+    let table = Array::fill(n, Array::fill(n, Box::make(0)));
+    let table = range(0, n).product(range(0, n)).fold(table, |(i, j), table|
+        table[j][i][^value].iset(i + j)
+    );
+    let sum = range(0, n).product(range(0, n)).fold(0, |(i, j), sum|
+        sum + table[j][i][^value].iget
+    );
+    assert_eq(|_|"", sum, (n - 1) * n * n);;
+    pure()
+);
