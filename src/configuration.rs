@@ -494,7 +494,8 @@ impl Configuration {
     }
 
     pub fn enable_act_optimization(&self) -> bool {
-        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+        false
+        // self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
     pub fn enable_simplify_symbol_names(&self) -> bool {
