@@ -62,7 +62,7 @@ main = (
 - Syntax
   - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
 - Memory management & mutability
-  - In-place update of values using reference counting
+  - In-place update of values which is uniquely referenced
   - Memory safety and thread safety
   - No memory leak achieved by avoiding cyclic references syntactically
 - Multithreading
