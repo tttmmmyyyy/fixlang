@@ -3048,6 +3048,155 @@ pub fn struct_act(
     (expr, scm)
 }
 
+// Field act function for a given struct, specialized for `Tuple2 X` functor for a given type `U`.
+//
+// If the struct is `S` and the field is `F`, then the function has the type `(F -> (U, F)) -> S -> (U, S)`.
+//
+// The implementation is optimized for the `Tuple2 U` functor:
+// ```
+// |f, x| (
+//     let (x, p) = x.#punch_fu_{field}; // here, force uniqueness of x.
+//     let (u, x) = f(x); // unwrap Tuple2
+//     let p = #plug_in_{field}(p, x); // uniqueness of p is guaranteed here, so we do not use "_fu" version.
+//     (u, p)
+// )
+// ```
+pub fn struct_act_tuple2(
+    struct_name: &FullName,
+    definition: &TypeDefn,
+    field_name: &str,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    let (_, field) = definition.get_field_by_name(field_name).unwrap();
+    let str_ty = definition.applied_type();
+    let field_ty = field.ty.clone();
+
+    // Create type scheme: (F -> (U, F)) -> S -> (U, S)
+    // We need a type variable for U
+    let mut used_tyvar_names = Set::default();
+    str_ty.collect_tyvar_names(&mut used_tyvar_names);
+    field_ty.collect_tyvar_names(&mut used_tyvar_names);
+    let used_tyvar_names: Set<FullName> = used_tyvar_names
+        .into_iter()
+        .map(|name| FullName::local(&name))
+        .collect();
+    let u_name = crate::optimization::rename::generate_new_names(&used_tyvar_names, 1)[0]
+        .name
+        .clone();
+    let u_ty = type_tyvar(&u_name, &kind_star());
+
+    let tuple2_tycon = tycon(make_tuple_name(2));
+    // (U, F)
+    let tuple2_u_f_ty = type_tyapp(
+        type_tyapp(type_tycon(&tuple2_tycon), u_ty.clone()),
+        field_ty.clone(),
+    );
+    // (U, S)
+    let tuple2_u_s_ty = type_tyapp(
+        type_tyapp(type_tycon(&tuple2_tycon), u_ty.clone()),
+        str_ty.clone(),
+    );
+
+    let ty = type_fun(
+        type_fun(field_ty.clone(), tuple2_u_f_ty.clone()),
+        type_fun(str_ty.clone(), tuple2_u_s_ty.clone()),
+    );
+
+    // The implementation as AST:
+    // |f, x| (
+    //     let (x, p) = x.#punch_fu_{field};
+    //     let (u, x) = f(x);
+    //     let p = #plug_in_{field}(p, x);
+    //     (u, p)
+    // )
+
+    // `#punch_fu_{field}`
+    let punch_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `x.#punch_fu_{field}`
+    let punch_expr = expr_app(punch_func, vec![expr_var(FullName::local("x"), None)], None);
+
+    // `f(x)`
+    let fx = expr_app(
+        expr_var(FullName::local("f"), None),
+        vec![expr_var(FullName::local("x"), None)],
+        None,
+    );
+
+    // `#plug_in_{field}`
+    let plug_in_func = expr_var(
+        FullName::new(
+            &struct_name.to_namespace(),
+            &format!("{}{}", STRUCT_PLUG_IN_SYMBOL, field_name),
+        ),
+        None,
+    );
+    // `#plug_in_{field}(p, x)`
+    let plug_in_expr = expr_app(
+        expr_app(
+            plug_in_func,
+            vec![expr_var(FullName::local("p"), None)],
+            None,
+        ),
+        vec![expr_var(FullName::local("x"), None)],
+        None,
+    );
+
+    // `(u, p)`
+    let wrap_tuple2 = expr_make_struct(
+        tuple2_tycon.clone(),
+        vec![
+            ("0".to_string(), expr_var(FullName::local("u"), None)),
+            ("1".to_string(), plug_in_expr),
+        ],
+    );
+
+    // let (u, x) = f(x);
+    // (u, #plug_in_{field}(p, x))
+    let unwrap_tuple2 = expr_let(
+        PatternNode::make_struct(
+            tuple2_tycon.clone(),
+            vec![
+                ("0".to_string(), PatternNode::make_var(var_local("u"), None)),
+                ("1".to_string(), PatternNode::make_var(var_local("x"), None)),
+            ],
+        ),
+        fx,
+        wrap_tuple2,
+        None,
+    );
+
+    // let (x, p) = x.#punch_fu_{field};
+    // let (u, x) = f(x);
+    // let p = #plug_in_{field}(p, x);
+    // (u, p)
+    let let_expr = expr_let(
+        PatternNode::make_struct(
+            tuple2_tycon,
+            vec![
+                ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
+                ("1".to_string(), PatternNode::make_var(var_local("p"), None)),
+            ],
+        ),
+        punch_expr,
+        unwrap_tuple2,
+        None,
+    );
+
+    // |f, x| ...
+    let expr = expr_abs(
+        vec![var_local("f")],
+        expr_abs(vec![var_local("x")], let_expr, None),
+        None,
+    );
+    let scm = Scheme::generalize(&[], vec![], vec![], ty);
+    (expr, scm)
+}
+
 // Field act function for a given struct, specialized for identity functor.
 //
 // If the struct is `S` and the field is `F`, then the function has the type `(F -> Std::Identity F) -> S -> Std::Identity S`.

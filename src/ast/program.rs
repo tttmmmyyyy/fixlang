@@ -1897,6 +1897,16 @@ impl Program {
                                 "Optimized implementation of `act_{{field}}` function for `Const r` functor."
                             )),
                         ));
+                        errors.eat_err(self.add_compiler_defined_method(
+                            FullName::new(
+                                &defn.name.to_namespace(),
+                                &format!("_{}{}_tuple2", STRUCT_ACT_SYMBOL, &field.name),
+                            ),
+                            struct_act_tuple2(&struct_name, defn, &field.name),
+                            Some(format!(
+                                "Optimized implementation of `act_{{field}}` function for `Tuple2 x` functor."
+                            )),
+                        ));
                         // Add punch functions.
                         errors.eat_err(self.add_compiler_defined_method(
                             FullName::new(
