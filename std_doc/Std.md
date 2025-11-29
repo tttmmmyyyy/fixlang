@@ -2740,33 +2740,105 @@ Act on an index.
 
 Type: `[f : Std::Functor] (a -> f a) -> ((a -> f a) -> f b) -> f b`
 
-Perform a functorial action on a value in a "store".
+Modify a value in a store using a functorial action.
 
-Stores are typically created using index syntax, e.g., `arr[0]`.
+Stores can be created using index syntax on `Indexable`s or structs.
+
+##### Examples
+
+```
+let arr = [1, 2, 3];
+let arr = arr[1].iact(|x| some(x * 10));
+assert_eq(|_|"", arr, some([1, 20, 3]))
+```
+
+##### Parameters
+
+* `f` - The functorial action to modify the value.
+* `store` - The store.
 
 #### iget
 
 Type: `((a -> Std::Const a a) -> Std::Const a b) -> a`
 
-Get a value from a "store".
+Get a value from a store.
 
-Stores are typically created using index syntax, e.g., `arr[0]`.
+Stores can be created using index syntax on `Indexable`s or structs.
+
+##### Examples
+
+```
+let arr = [1, 2, 3];
+assert_eq(|_|"", arr[1].iget, 2)
+```
+
+##### Parameters
+
+* `store` - The store.
 
 #### imod
 
 Type: `(a -> a) -> ((a -> Std::Identity a) -> Std::Identity b) -> b`
 
-Modify a value in a "store".
+Modify a value in a store using a function.
 
-Stores are typically created using index syntax, e.g., `arr[0]`.
+Stores can be created using index syntax on `Indexable`s or structs.
+
+##### Examples
+
+```
+let arr = [1, 2, 3];
+let arr = arr[1].imod(|x| x * 10);
+assert_eq(|_|"", arr, [1, 20, 3])
+```
+
+##### Parameters
+
+* `f` - The function to modify the value.
+* `store` - The store.
 
 #### iset
 
 Type: `a -> ((a -> Std::Identity a) -> Std::Identity b) -> b`
 
-Set a value in a "store".
+Set a value into a store.
 
-Stores are typically created using index syntax, e.g., `arr[0]`.
+Stores can be created using index syntax on `Indexable`s or structs.
+
+##### Examples
+
+```
+let arr = [1, 2, 3];
+let arr = arr[1].iset(42);
+assert_eq(|_|"", arr, [1, 42, 3])
+```
+
+##### Parameters
+
+* `x` - The value to be set.
+* `store` - The store.
+
+#### ixchg
+
+Type: `a -> ((a -> (a, a)) -> (a, b)) -> (b, a)`
+
+Exchange a value in a store with a new value.
+
+Stores can be created using index syntax on `Indexable`s or structs.
+
+##### Examples
+
+```
+let arr = [1, 2, 3];
+let (arr, x) = arr[1].ixchg(42);
+assert_eq(|_|"", x, 2);
+assert_eq(|_|"", arr, [1, 42, 3])
+```
+
+##### Parameters
+
+* `new` - The new value to be set.
+* `store` - The store.
 
 ### namespace Std::Iterator
 
