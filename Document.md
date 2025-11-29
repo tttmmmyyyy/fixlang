@@ -27,17 +27,23 @@
     - [Mutability and Reference Counting in Fix](#mutability-and-reference-counting-in-fix)
     - [A bit on IO (or monads)](#a-bit-on-io-or-monads)
 - [More on language and standard library](#more-on-language-and-standard-library)
+    - [Boxed and Unboxed Types](#boxed-and-unboxed-types)
+        - [Functions](#functions)
+        - [Tuples and unit](#tuples-and-unit)
+        - [Array](#array)
+        - [Structs](#structs-1)
+        - [Unions](#unions-1)
     - [Booleans and literals](#booleans-and-literals)
     - [Numbers and literals](#numbers-and-literals)
     - [Strings and literals](#strings-and-literals)
     - [Arrays and literals](#arrays-and-literals)
     - [Unit and tuples](#unit-and-tuples)
-    - [Structs](#structs-1)
+    - [Structs](#structs-2)
         - [`@f : S -> F`](#f--s---f)
         - [`set_f : F -> S -> S`](#set_f--f---s---s)
         - [`mod_f : (F -> F) -> S -> S`](#mod_f--f---f---s---s)
         - [`act_f : [f : Functor] (F -> f F) -> S -> f S`](#act_f--f--functor-f---f-f---s---f-s)
-    - [Unions](#unions-1)
+    - [Unions](#unions-2)
         - [`v : V -> U`](#v--v---u)
         - [`is_v : U -> Bool`](#is_v--u---bool)
         - [`as_v : U -> V`](#as_v--u---v)
@@ -64,12 +70,6 @@
         - [When an explicit `do` block is needed](#when-an-explicit-do-block-is-needed)
         - [Chaining monadic actions with the `;;` Syntax](#chaining-monadic-actions-with-the--syntax)
         - [Fix's Iterator is not a monad](#fixs-iterator-is-not-a-monad)
-    - [Boxed and Unboxed Types](#boxed-and-unboxed-types)
-        - [Functions](#functions)
-        - [Tuples and unit](#tuples-and-unit)
-        - [Array](#array)
-        - [Structs](#structs-2)
-        - [Unions](#unions-2)
     - [Foreign Function Interface (FFI)](#foreign-function-interface-ffi)
         - [Calling External Functions from Fix](#calling-external-functions-from-fix)
         - [Exporting Fix Values and Functions to External Languages](#exporting-fix-values-and-functions-to-external-languages)
@@ -807,6 +807,47 @@ In this code, two IO actions created by two `println` are combined by double-sem
 How to combine IO actions and more generally, how to combine monads to create more complex monads are explained in [Monads](#monads).
 
 # More on language and standard library
+
+## Boxed and Unboxed Types
+
+Fix types are divided into **boxed** and **unboxed** types, which are similar to what other languages call "reference types" and "value types."
+
+* **Boxed** type values are allocated on the heap. A local variable or a field in a struct/union with a boxed type is compiled as a pointer to the value.
+* **Unboxed** type values are directly embedded in stack memory, structs, or unions.
+
+In general, it's recommended that types containing a large amount of data (e.g., `Array a`) be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.
+
+### Functions
+
+Functions are unboxed, but captured values are stored to an unnamed boxed struct.
+
+### Tuples and unit
+
+Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
+Tuples are special forms of structs whose field names are `0`, `1`, `2`, etc. 
+
+Since the unit type is a tuple type of length 0, the unit type is also unboxed.
+
+### Array
+
+`Std::Array` is a boxed type.
+
+### Structs
+
+Structs are unboxed by default. To define boxed struct type, write `box` specifier before `struct`.
+
+Example:
+```
+type Product = box struct { price: I64, sold: Bool };
+```
+
+### Unions
+
+Unions are unboxed by default. To define boxed union type, write `box` specifier before `struct`.
+
+```
+type Weight = box union { pound: I64, kilograms: I64 };
+```
 
 ## Booleans and literals
 
@@ -1904,47 +1945,6 @@ pythagorean_triples = |limit| (
         ))
     )).to_array
 );
-```
-
-## Boxed and Unboxed Types
-
-Fix types are divided into **boxed** and **unboxed** types, which are similar to what other languages call "reference types" and "value types."
-
-* **Boxed** type values are allocated on the heap. A local variable or a field in a struct/union with a boxed type is compiled as a pointer to the value.
-* **Unboxed** type values are directly embedded in stack memory, structs, or unions.
-
-In general, it's recommended that types containing a large amount of data (e.g., `Array a`) be **boxed** to reduce copying costs. On the other hand, types with little data (e.g., `I64`) can be **unboxed** to eliminate the overhead of incrementing and decrementing reference counters and to improve memory locality.
-
-### Functions
-
-Functions are unboxed, but captured values are stored to an unnamed boxed struct.
-
-### Tuples and unit
-
-Tuple types are unboxed, because tuple is intended to have only a few fields. If you want to use many fields, you should define a new struct.
-Tuples are special forms of structs whose field names are `0`, `1`, `2`, etc. 
-
-Since the unit type is a tuple type of length 0, the unit type is also unboxed.
-
-### Array
-
-`Std::Array` is a boxed type.
-
-### Structs
-
-Structs are unboxed by default. To define boxed struct type, write `box` specifier before `struct`.
-
-Example:
-```
-type Product = box struct { price: I64, sold: Bool };
-```
-
-### Unions
-
-Unions are unboxed by default. To define boxed union type, write `box` specifier before `struct`.
-
-```
-type Weight = box union { pound: I64, kilograms: I64 };
 ```
 
 ## Foreign Function Interface (FFI)
