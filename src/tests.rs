@@ -9985,6 +9985,10 @@ main: IO () = (
     let d = d[^x][^x][^a][^i][^0].imod(|arr| arr.push_back(84));
     let v = d[^x][^x][^a][^i][^0][1].iget;
     assert_eq(|_|"", v, 84);;
+    let (d, v) = d[^x][^x][^a][^i][^0][1].ixchg(42);
+    assert_eq(|_|"", v, 84);;
+    let v = d[^x][^x][^a][^i][^0][1].iget;
+    assert_eq(|_|"", v, 42);;
     pure()
 );
     "##;

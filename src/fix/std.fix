@@ -135,6 +135,16 @@ namespace Array {
         Const { data : res }
     );
 
+    // Optimized implementation of `act` function specialized for `Tuple2 x` functor.
+    _act_tuple2 : I64 -> (a -> (x, a)) -> Array a -> (x, Array a);
+    _act_tuple2 = |idx, fun, arr| (
+        let size = arr.get_size;
+        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
+        let (arr, elm) = arr._unsafe_get_linear_fu(idx);
+        let (x, elm) = fun(elm);
+        (x, arr._unsafe_set(idx, elm))
+    );
+
     // Modifies an array by a functorial action. 
     // 
     // Semantically, `arr.act(idx, fun)` is equivalent to `fun(arr.@(idx)).map(|elm| arr.set(idx, elm))`.
@@ -4053,27 +4063,89 @@ impl Const a : Functor {
 }
 
 namespace Indexable {
-    // Get a value from a "store". 
+    // Get a value from a store.
     // 
-    // Stores are typically created using index syntax, e.g., `arr[0]`.
+    // Stores can be created using index syntax on `Indexable`s or structs.
+    // 
+    // # Examples
+    // 
+    // ```
+    // let arr = [1, 2, 3];
+    // assert_eq(|_|"", arr[1].iget, 2)
+    // ```
+    // 
+    // # Parameters
+    // 
+    // * `store` - The store.
     iget : ((a -> Const a a) -> Const a b) -> a;
-    iget = |f| f(|x| Const { data : x }).@data;
+    iget = |store| store(|x| Const { data : x }).@data;
 
-    // Set a value in a "store".
+    // Set a value into a store.
     // 
-    // Stores are typically created using index syntax, e.g., `arr[0]`.
+    // Stores can be created using index syntax on `Indexable`s or structs.
+    // 
+    // # Examples
+    // ```
+    // let arr = [1, 2, 3];
+    // let arr = arr[1].iset(42);
+    // assert_eq(|_|"", arr, [1, 42, 3])
+    // ```
+    //
+    // # Parameters
+    // * `x` - The value to be set.
+    // * `store` - The store.
     iset : a -> ((a -> Identity a) -> Identity b) -> b;
-    iset = |x, f| f(|_| Identity { data : x }).@data;
+    iset = |x, store| store(|_| Identity { data : x }).@data;
 
-    // Modify a value in a "store". 
+    // Modify a value in a store using a function.
     // 
-    // Stores are typically created using index syntax, e.g., `arr[0]`.
+    // Stores can be created using index syntax on `Indexable`s or structs.
+    //
+    // # Examples
+    // ```
+    // let arr = [1, 2, 3];
+    // let arr = arr[1].imod(|x| x * 10);
+    // assert_eq(|_|"", arr, [1, 20, 3])
+    // ```
+    //
+    // # Parameters
+    // * `f` - The function to modify the value.
+    // * `store` - The store.
     imod : (a -> a) -> ((a -> Identity a) -> Identity b) -> b;
-    imod = |g, f| f(|x| Identity { data : g(x) }).@data;
+    imod = |f, store| store(|x| Identity { data : f(x) }).@data;
 
-    // Perform a functorial action on a value in a "store".
+    // Exchange a value in a store with a new value.
     // 
-    // Stores are typically created using index syntax, e.g., `arr[0]`.
+    // Stores can be created using index syntax on `Indexable`s or structs.
+    // 
+    // # Examples
+    // ```
+    // let arr = [1, 2, 3];
+    // let (arr, x) = arr[1].ixchg(42);
+    // assert_eq(|_|"", x, 2);
+    // assert_eq(|_|"", arr, [1, 42, 3])
+    // ```
+    // 
+    // # Parameters
+    // * `new` - The new value to be set.
+    // * `store` - The store.
+    ixchg : a -> ((a -> (a, a)) -> (a, b)) -> (b, a);
+    ixchg = |new, store| let (x, y) = store(|old| (old, new)); (y, x);
+
+    // Modify a value in a store using a functorial action.
+    // 
+    // Stores can be created using index syntax on `Indexable`s or structs.
+    // 
+    // # Examples
+    // ```
+    // let arr = [1, 2, 3];
+    // let arr = arr[1].iact(|x| some(x * 10));
+    // assert_eq(|_|"", arr, some([1, 20, 3]))
+    // ```
+    // 
+    // # Parameters
+    // * `f` - The functorial action to modify the value.
+    // * `store` - The store.
     iact : [f : Functor] (a -> f a) -> ((a -> f a) -> f b) -> f b;
-    iact = |g, f| f(g);
+    iact = |f, store| store(f);
 }
