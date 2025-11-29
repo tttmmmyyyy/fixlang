@@ -6,11 +6,10 @@
 Act-family functions refer to `Std::Array::act(i)` and struct field accessors `act_{field}`.
 These functions have the type `[f : Functor] (T -> f T) -> U -> f U`.
 
-This optimization performs the following transformations:
-
-(1) Replace the implementation of act-family functions instantiated with `f = Std::Identity` with the implementation of mod-family functions.
-
-(2) (Not implemented yet) Replace the implementation of act-family functions instantiated with `f = Std::Const T` with the composition of the projection from `U` to `T` (get-family functions) and the argument function.
+This optimization replaces the implementation of act-family functions instantiated with specific functors with more efficient implementations:
+- `Std::Identity`
+- `Std::Const T`
+- `Std::Tuple2 X`
 
 ## Notes
 
@@ -28,6 +27,7 @@ use crate::{
         program::{Program, Symbol},
         types::{tycon, type_tyapp, type_tycon, TyCon, Type::TyApp, TypeNode},
     },
+    builtin::make_tuple_name,
     configuration::Configuration,
     constants::{
         ARRAY_ACT_NAME, ARRAY_NAME, CONST_NAME, IDENTITY_NAME, STD_NAME, STRUCT_ACT_SYMBOL,
@@ -92,6 +92,11 @@ fn run_on_array_act(
             &[STD_NAME, ARRAY_NAME],
             &format!("_{}_const", ARRAY_ACT_NAME),
         ))
+    } else if is_functor_tuple2(&lens_ty) {
+        Some(FullName::from_strs(
+            &[STD_NAME, ARRAY_NAME],
+            &format!("_{}_tuple2", ARRAY_ACT_NAME),
+        ))
     } else {
         None
     };
@@ -130,6 +135,11 @@ fn run_on_struct_field_act(
         Some(FullName::new(
             &str_namespace,
             &format!("_{}{}_const", STRUCT_ACT_SYMBOL, field),
+        ))
+    } else if is_functor_tuple2(&act_ty.clone()) {
+        Some(FullName::new(
+            &str_namespace,
+            &format!("_{}{}_tuple2", STRUCT_ACT_SYMBOL, field),
         ))
     } else {
         None
@@ -207,4 +217,43 @@ fn is_functor_const(lens_ty: &Arc<TypeNode>) -> bool {
 
     // Check if both have the same C
     ft_c.to_string() == fu_c.to_string()
+}
+
+// Taking type `(T -> f T) -> U -> f U`, check if `f` is `Std::Tuple2 X` for some `X`.
+fn is_functor_tuple2(lens_ty: &Arc<TypeNode>) -> bool {
+    let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
+
+    let tuple2_ty = type_tycon(&tycon(make_tuple_name(2)));
+
+    // Try to extract X from ft_ty (which should be Tuple2 X T)
+    // ft_ty has the form: (Tuple2 X) T = TyApp(TyApp(Tuple2, X), T)
+    let TyApp(ft_tuple2_x, t) = &ft_ty.ty else {
+        return false;
+    };
+    if t.to_string() != t_ty.to_string() {
+        return false;
+    }
+    let TyApp(ft_tuple2_base, ft_x) = &ft_tuple2_x.ty else {
+        return false;
+    };
+    if ft_tuple2_base.to_string() != tuple2_ty.to_string() {
+        return false;
+    }
+
+    // Try to extract X from fu_ty (which should be Tuple2 X U)
+    let TyApp(fu_tuple2_x, u) = &fu_ty.ty else {
+        return false;
+    };
+    if u.to_string() != u_ty.to_string() {
+        return false;
+    }
+    let TyApp(fu_tuple2_base, fu_x) = &fu_tuple2_x.ty else {
+        return false;
+    };
+    if fu_tuple2_base.to_string() != tuple2_ty.to_string() {
+        return false;
+    }
+
+    // Check if both have the same X
+    ft_x.to_string() == fu_x.to_string()
 }
