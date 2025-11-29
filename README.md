@@ -67,9 +67,10 @@ main = (
   - No memory leak achieved by avoiding cyclic references syntactically
 - Multithreading
 - Foreign function interface (FFI)
-- Toolchains:
+- Tools
   - Dependency manager
   - Document generation
+  - Language Server Protocol (LSP) support
 
 ## Examples
 
