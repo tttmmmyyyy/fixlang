@@ -1708,16 +1708,14 @@ Fixの標準ライブラリで定義されている`IO`も状態系モナドの�
 ここで`IOState`は「コンピュータの状態」を表す型であるとイメージされるべき型です（実際には空の構造体として定義されています）。
 
 `IO`を例として、`bind`の使い方を見てみましょう。
-`print(str) : IO ()`は`str`を標準出力に出力するI/Oアクションです。
-標準入力の内容を文字列として読み取るI/Oアクション`read : IO String`があると仮定します。
-この場合、標準入力を読み取り、それをそのまま出力するI/Oアクション`echo`は次のように記述できます：
+`println(str) : IO ()`は`str`と改行を標準出力に出力するI/Oアクションです。
+`input_line : IO String`は標準入力から1行読み取り、その行を文字列として返すI/Oアクションです。
+この場合、標準入力を1行読み取り、それをそのまま出力するI/Oアクション`echo1`は次のように記述できます：
 
 ```
-echo : IO ();
-echo = read.bind(|s| print(s));
+echo1 : IO ();
+echo1 = input_line.bind(|s| println(s));
 ```
-
-注意：実際には、Fixの標準ライブラリには`read : IO String`は定義されていません。`read_content(stdin).map(as_ok)`として実装できます。
 
 #### 失敗系モナド
 
@@ -1823,27 +1821,27 @@ Fixの前置単項演算子`*`は、`bind`をより簡潔に使用する方法�
 - マッチ式`match val { pat => ... }`は暗黙的に`do`ブロック`...`を定義します。
 - ダブルセミコロン構文（後述）`act;; ...`は暗黙的に`do`ブロック`...`を定義します。
 
-以前のセクションで、状態系モナドである`IO`において、`bind`を使用して`read : IO String`と`print : String -> IO ()`から`echo : IO ()`を作成する例を示しました。
+以前のセクションで、状態系モナドである`IO`において、`bind`を使用して`input_line : IO String`と`println : String -> IO ()`から`echo1 : IO ()`を作成する例を示しました。
 
 ```
-echo : IO ();
-echo = read.bind(|s| print(s));
+echo1 : IO ();
+echo1 = input_line.bind(|s| println(s));
 ```
 
 `bind`をより簡潔に使うための演算子`*`を使うと、上記は次のように書けます。
 
 ```
-echo : IO ();
-echo = print(*read);
+echo1 : IO ();
+echo1 = println(*input_line);
 ```
 
-これは、演算子`*`が`read`というモナド値の内容を取り出し、その内容を`print`に渡している、と解釈することができます。実際、以下のように書いても同じです。
-
+これは、演算子`*`が`input_line`というモナド値の内容を取り出し、その内容を`println`に渡している、と解釈することができます。
+実際、以下のように書いても同じです。
 ```
-echo : IO ();
-echo = (
-    let s = *read;
-    print(s)
+echo1 : IO ();
+echo1 = (
+    let s = *input_line;
+    println(s)
 );
 ```
 

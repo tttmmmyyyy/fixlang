@@ -3,7 +3,7 @@ Fix-lang: Fix Programming Language
 
 ## Overview
 
-Fix is a purely functional programming language that focuses on ease of learning, usability, and fun.
+Fix is a purely functional programming language designed to be easy to learn, easy to use, and enjoyable.
 
 You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/).
 
@@ -53,22 +53,23 @@ main = (
 
 ## Features
 
-- Functional:
-  - First-class functions (a.k.a. closures)
-  - Pattern matching
-  - Higher kinded types
-  - Traits
-  - Associated types
-  - Syntax for monads (distinct from `do` in Haskell)
-  - Type inference
-  - Built-in lens functions
-- Memory management & mutability:
+- Functional paradigm and type system
+  - Closures: `|x| x + 42`
+  - Higher kinded types and traits: `Array : Functor`, `IO : Monad`, etc.
+  - Associated types to traits: `Iterator::Item`
+  - Syntax for combining monads (`;;` and `*`): `main : IO () = println("I will echo you: ");; println(*input_line);`
+  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(2.0) // Update the "x" field of the struct at index 2 of an array of vectors`
+- Syntax
+  - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
+- Memory management & mutability
   - In-place update of values using reference counting
   - Memory safety and thread safety
   - No memory leak achieved by avoiding cyclic references syntactically
-- Ad hoc overloading
 - Multithreading
 - Foreign function interface (FFI)
+- Toolchains:
+  - Dependency manager
+  - Document generation
 
 ## Examples
 

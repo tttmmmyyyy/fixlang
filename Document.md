@@ -1618,14 +1618,12 @@ impl State s : Monad {
 
 `IO`, as defined in Fix's standard library, is also an example of a stateful monad. `IO a` can be thought of as an "I/O action" that returns a value of type `a` while interacting with the computer's state. In fact, `IO` is defined as a wrapper for the type `IOState -> (IOState, a)`, where `IOState` should be imagined as a type that represents the "computer's state" (though it is actually defined as an empty struct).
 
-Using `IO` as an example, let's see how `bind` works. `print(str) : IO ()` is an I/O action that prints `str` to standard output. Assuming there's an I/O action `read : IO String` that reads the contents of standard input as a string, you can write an `echo` I/O action that reads standard input and then prints it directly, as follows:
+Using `IO` as an example, let's see how `bind` works. `println(str) : IO ()` is an I/O action that prints `str` and a newline to standard output. `input_line : IO String` is an I/O action that reads a line from standard input and returns that line as a string. In this case, you can write an I/O action `echo1` that reads a line from standard input and prints it as-is, as follows:
 
 ```
-echo : IO ();
-echo = read.bind(|s| print(s));
+echo1 : IO ();
+echo1 = input_line.bind(|s| println(s));
 ```
-
-Note: In reality, `read : IO String` is not defined in Fix's standard library. It can be implemented as `read_content(stdin).map(as_ok)`.
 
 #### Failure Monads
 
@@ -1724,27 +1722,27 @@ Here, `B(*x)` is the smallest **do block** that encloses the expression `*x`. A 
   - A match expression `match val { pat => ... }` implicitly defines a do block `...`.
   - The double semicolon syntax (explained later) `act;; ...` implicitly defines a do block `...`.
 
-In a previous section, we showed an example of creating `echo : IO ()` from `read : IO String` and `print : String -> IO ()` using `bind` in the stateful monad `IO`.
+In a previous section, we showed an example of creating `echo1 : IO ()` from `input_line : IO String` and `println : String -> IO ()` using `bind` in the stateful monad `IO`.
 
 ```
-echo : IO ();
-echo = read.bind(|s| print(s));
+echo1 : IO ();
+echo1 = input_line.bind(|s| println(s));
 ```
 
 Using the `*` operator for a more concise way to use `bind`, the code above can be written as:
 
 ```
-echo : IO ();
-echo = print(*read);
+echo1 : IO ();
+echo1 = println(*input_line);
 ```
 
-This can be interpreted as the `*` operator taking the content of the `read` monad value and passing it to `print`. In fact, writing it like this is the same:
+This can be interpreted as the `*` operator extracting the content of the `input_line` monad value and passing that content to `println`. In fact, writing it like this is the same:
 
 ```
-echo : IO ();
-echo = (
-    let s = *read;
-    print(s)
+echo1 : IO ();
+echo1 = (
+    let s = *input_line;
+    println(s)
 );
 ```
 
