@@ -58,7 +58,7 @@ main = (
   - Higher kinded types and traits: `Array : Functor`, `IO : Monad`, etc.
   - Associated types to traits: `Iterator::Item`
   - Syntax for combining monads (`;;` and `*`): `main : IO () = println("I will echo you: ");; println(*input_line);`
-  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(2.0) // Update the "x" field of the struct at index 2 of an array of vectors`
+  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0) // Update the "x" field of the struct at index 2 of an array of vectors`
 - Syntax
   - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
 - Memory management & mutability
