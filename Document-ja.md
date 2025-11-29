@@ -77,6 +77,7 @@
         - [外部言語でFixのボックス値の所有権を管理する](#外部言語でfixのボックス値の所有権を管理する)
         - [CからFixの構造体値のフィールドにアクセスする](#cからfixの構造体値のフィールドにアクセスする)
     - [`eval`構文](#eval構文)
+    - [身代わりパターン](#身代わりパターン)
     - [演算子](#演算子)
 - [コンパイラの機能](#コンパイラの機能)
     - [プロジェクトファイル](#プロジェクトファイル)
@@ -2255,6 +2256,65 @@ my_add : I64 -> I64 -> I64 = |x, y| (
 truth : I64 = eval debug_println("evaluated"); 42;
 ```
 というコードがあった時、`truth`を参照するたびに"evaluated"が出力されるか、最初に参照するときに一回だけ出力されるかは保証されません。
+
+## 身代わりパターン
+
+Fixの弱点との一つといえる現象と、その回避策としての「身代わりパターン」について説明します。
+
+以下のような型定義がある状況を考えます。
+```
+type MyType = struct {
+    field1: Array I64,
+    field2: Array I64,
+    ... // その他の沢山のフィールド
+};
+```
+
+また、以下のような関数があるとします。
+```
+modify_array : Array I64 -> Array I64;
+```
+
+`modify_array`は、与えられた`Array I64`を（ユニークなら）インプレースに変更するよう実装されているとします。
+
+`MyType`型の値`x`があり、その`field1`を`modify_array`で変更するときは、以下のように書けばよいです。
+```
+x.mod_field1(modify_array)
+```
+
+`field1`がユニークな`x`に対しこのコードが実行されると、期待通り、`field1`がインプレースに変更されます。
+
+次に、以下のような関数を考えます。
+```
+modify_arrays : (Array I64, Array I64) -> (Array I64, Array I64);
+```
+
+この関数も、与えられた2つの`Array I64`を（ユニークなら）インプレースに変更するよう実装されているとします。
+
+さて、`x: MyType`の`field1`と`field2`を同時に`modify_arrays`で変更したい場合、どう書くべきでしょうか。
+
+`mod_field1_and_field2`というようなビルトイン関数は存在しません。
+したがって、以下のように書くことを考えるかもしれません。
+```
+let (field1, field2) = modify_arrays((x.@field1, x.@field2));
+x.set_field1(field1).set_field2(field2)
+```
+
+しかし、このコードは、もともと`x`の`field1`と`field2`がユニークであっても、`modify_arrays`の内部でコピーが作成されてしまう可能性があります。
+これは、`modify_arrays`の後でも名前`x`が使用されていることが原因です。
+これにより、`x`やそこから辿れる配列の値は、`modify_arrays`の呼び出し **の後** まで不変である必要があるため、
+`modify_arrays`が直接`x.@field1`および`x.@field2`が示していたメモリ領域を編集することは許されないことになります。
+
+この問題の回避方法の一つは、`x`の`field1`と`field2`を一時的な身代わりの値（ここでは空配列を使います）と交換し、取り出した配列を`modify_arrays`に渡すことです。
+```
+let (x, arr1) = x[^field1].ixchg([]); // field1を空配列と交換
+let (x, arr2) = x[^field2].ixchg([]); // field2を空配列と交換
+let (arr1, arr2) = modify_arrays((arr1, arr2));
+x.set_field1(arr1).set_field2(arr2) // 元のxにfield1とfield2を戻す
+```
+
+この方法は、`field1`や`field2`の型（ここでは`Array I64`）に「身代わり値」として使用できるような値（ここでは空配列`[]`）が存在する場合にのみ有効です。
+もしそうでない場合は、`field1`や`field2`の型を`Option`型などに変更し、`none()`を身代わり値として使用することを検討してください。
 
 ## 演算子
 

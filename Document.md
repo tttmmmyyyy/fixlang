@@ -77,6 +77,7 @@
         - [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language)
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
     - [`eval` syntax](#eval-syntax)
+    - [Substitute Pattern](#substitute-pattern)
     - [Operators](#operators)
 - [Compiler features](#compiler-features)
     - [Project file](#project-file)
@@ -2136,6 +2137,65 @@ Notes:
 truth : I64 = eval debug_println("evaluated"); 42;
 ```
 For code like this, there is no guarantee whether "evaluated" will be output every time `truth` is referenced, or only once when it is first referenced.
+
+## Substitute Pattern
+
+This section explains a phenomenon that can be considered one of Fix's weaknesses and the "substitute pattern" as a workaround.
+
+Consider a situation where you have the following type definition:
+```
+type MyType = struct {
+    field1: Array I64,
+    field2: Array I64,
+    ... // many other fields
+};
+```
+
+Also, suppose you have the following function:
+```
+modify_array : Array I64 -> Array I64;
+```
+
+Assume that `modify_array` is implemented to modify the given `Array I64` in-place (when it is unique).
+
+If you have a value `x` of type `MyType` and want to modify its `field1` with `modify_array`, you can write:
+```
+x.mod_field1(modify_array)
+```
+
+When this code is executed on an `x` with a unique `field1`, the `field1` is modified in-place as expected.
+
+Next, consider the following function:
+```
+modify_arrays : (Array I64, Array I64) -> (Array I64, Array I64);
+```
+
+This function is also assumed to be implemented to modify the two given `Array I64` values in-place (when they are unique).
+
+Now, if you want to modify both `field1` and `field2` of `x: MyType` simultaneously with `modify_arrays`, how should you write it?
+
+There is no built-in function like `mod_field1_and_field2`.
+Therefore, you might consider writing something like this:
+```
+let (field1, field2) = modify_arrays((x.@field1, x.@field2));
+x.set_field1(field1).set_field2(field2)
+```
+
+However, in this code, even if `field1` and `field2` of `x` were originally unique, copies may be created inside `modify_arrays`.
+This is because the name `x` is still used after `modify_arrays`.
+As a result, `x` and the array values reachable from it must remain unchanged even **after** the call to `modify_arrays`,
+which means `modify_arrays` is not allowed to directly edit the memory regions pointed to by `x.@field1` and `x.@field2`.
+
+One way to avoid this problem is to temporarily exchange `field1` and `field2` of `x` with substitute values (here we use empty arrays), and pass the extracted arrays to `modify_arrays`.
+```
+let (x, arr1) = x[^field1].ixchg([]); // exchange field1 with an empty array
+let (x, arr2) = x[^field2].ixchg([]); // exchange field2 with an empty array
+let (arr1, arr2) = modify_arrays((arr1, arr2));
+x.set_field1(arr1).set_field2(arr2) // restore field1 and field2 to the original x
+```
+
+This method is only effective when there exists a value that can be used as a "substitute value" for the type of `field1` and `field2` (here `Array I64`) (here, the empty array `[]`).
+If this is not the case, consider changing the type of `field1` and `field2` to an `Option` type or similar, and using `none()` as the substitute value.
 
 ## Operators
 
