@@ -1,7 +1,7 @@
 use crate::ast::import::{is_accessible, ImportStatement};
 use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{GlobalValue, ModuleInfo, Program};
-use crate::ast::traits::{Trait, TraitAlias, TraitInfo, TraitInstance};
+use crate::ast::traits::{Trait, TraitAlias, TraitId, TraitInstance};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
 use crate::constants::{
     chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
@@ -1306,7 +1306,7 @@ fn handle_goto_definition(
             EndNode::TypeOrTrait(name) => {
                 def_src = find_tycon_def_src(program, TyCon { name: name.clone() });
                 if def_src.is_none() {
-                    def_src = find_trait_or_alias_def_src(program, Trait::from_fullname(name));
+                    def_src = find_trait_or_alias_def_src(program, TraitId::from_fullname(name));
                 }
             }
             EndNode::Module(mod_name) => {
@@ -1349,7 +1349,7 @@ fn handle_goto_definition(
     send_response(id, Ok::<_, ()>(location));
 }
 
-fn find_trait_or_alias_def_src(program: &Program, trait_: Trait) -> Option<Span> {
+fn find_trait_or_alias_def_src(program: &Program, trait_: TraitId) -> Option<Span> {
     let mut def_src = program
         .trait_env
         .traits
@@ -1598,7 +1598,7 @@ fn create_symbol_from_global_value(
 }
 
 #[allow(deprecated)]
-fn create_symbol_from_trait_info(trait_: &Trait, trait_info: &TraitInfo) -> DocumentSymbol {
+fn create_symbol_from_trait_info(trait_: &TraitId, trait_info: &Trait) -> DocumentSymbol {
     let name = trait_.name.to_string();
     let range = trait_info
         .source
@@ -1643,7 +1643,7 @@ fn create_symbol_from_trait_alias(trait_alias: &TraitAlias) -> DocumentSymbol {
 
 #[allow(deprecated)]
 fn create_symbol_from_trait_instance(
-    trait_: &Trait,
+    trait_: &TraitId,
     trait_instance: &TraitInstance,
 ) -> DocumentSymbol {
     let name = format!("impl {}", trait_instance.qual_pred.to_string());
@@ -1792,7 +1792,7 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
         }
     }
 
-    fn document_trait_or_alias(program: &Program, docs: &mut String, trait_id: &Trait) {
+    fn document_trait_or_alias(program: &Program, docs: &mut String, trait_id: &TraitId) {
         *docs += &format!("```\n{}\n```", trait_id.to_string());
         if let Some(ti) = program.trait_env.traits.get(&trait_id) {
             if let Some(document) = ti.get_document() {
@@ -1879,7 +1879,7 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
         }
         EndNode::TypeOrTrait(name) => {
             let tycon = TyCon { name: name.clone() };
-            let trait_ = Trait::from_fullname(name.clone());
+            let trait_ = TraitId::from_fullname(name.clone());
             if program.type_env.tycons.contains_key(&tycon) {
                 document_tycon_or_alias(program, &mut docs, &tycon);
             } else if program.trait_env.traits.contains_key(&trait_) {

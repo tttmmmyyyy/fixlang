@@ -664,7 +664,7 @@ fn trait_entries(
             subsection.concatenate_many(docstring);
             doc.add_subsection(subsection);
         }
-        for method in &info.methods {
+        for method in &info.members {
             let title = format!("method `{}`", method.name);
             let mut subsection = MarkdownSection::new(title);
             subsection.add_paragraph(format!("Type: `{}`", method.qual_ty.to_string()));

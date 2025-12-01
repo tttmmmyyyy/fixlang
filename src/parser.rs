@@ -205,7 +205,7 @@ fn parse_module(
     let mut type_defns: Vec<TypeDefn> = Vec::new();
     let mut global_value_decls: Vec<GlobalValueDecl> = vec![];
     let mut global_value_defns: Vec<GlobalValueDefn> = vec![];
-    let mut trait_infos: Vec<TraitInfo> = vec![];
+    let mut trait_infos: Vec<Trait> = vec![];
     let mut trait_aliases: Vec<TraitAlias> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
     let mut import_statements: Vec<ImportStatement> = vec![];
@@ -247,7 +247,7 @@ fn parse_global_defns(
     global_value_decls: &mut Vec<GlobalValueDecl>,
     global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
-    trait_infos: &mut Vec<TraitInfo>,
+    trait_infos: &mut Vec<Trait>,
     trait_aliases: &mut Vec<TraitAlias>,
     trait_impls: &mut Vec<TraitInstance>,
     export_statements: &mut Vec<ExportStatement>,
@@ -311,7 +311,7 @@ fn parse_global_defns_in_namespace(
     global_value_decls: &mut Vec<GlobalValueDecl>,
     global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
-    trait_infos: &mut Vec<TraitInfo>,
+    trait_infos: &mut Vec<Trait>,
     trait_aliases: &mut Vec<TraitAlias>,
     trait_impls: &mut Vec<TraitInstance>,
     export_statements: &mut Vec<ExportStatement>,
@@ -353,7 +353,7 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
-    let id = Trait::from_fullname(FullName::new(
+    let id = TraitId::from_fullname(FullName::new(
         &ctx.namespace,
         &pairs.next().unwrap().as_str().to_string(),
     ));
@@ -373,7 +373,7 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
     }
 }
 
-fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInfo, Errors> {
+fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Trait, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -399,7 +399,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInf
     let impl_type = type_tyvar_star(&trait_tyvar);
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
     let trait_name = pairs.next().unwrap().as_str().to_string();
-    let mut methods: Vec<MethodInfo> = vec![];
+    let mut methods: Vec<TraitMember> = vec![];
     let mut type_syns: Map<Name, AssocTypeDefn> = Map::default();
     for pair in pairs {
         match parse_trait_member_defn(pair, &impl_type, ctx)? {
@@ -426,10 +426,10 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInf
             }
         }
     }
-    Ok(TraitInfo {
-        trait_: Trait::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
+    Ok(Trait {
+        trait_: TraitId::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
         type_var: make_tyvar(&trait_tyvar, &kind_star()),
-        methods,
+        members: methods,
         assoc_types: type_syns,
         kind_signs: kinds,
         source: Some(span),
@@ -441,7 +441,7 @@ fn parse_trait_member_defn(
     pair: Pair<Rule>,
     impl_type: &Arc<TypeNode>,
     ctx: &mut ParseContext,
-) -> Result<Either<MethodInfo, AssocTypeDefn>, Errors> {
+) -> Result<Either<TraitMember, AssocTypeDefn>, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_member_defn);
     let pair = pair.into_inner().next().unwrap();
     Ok(match pair.as_rule() {
@@ -456,13 +456,13 @@ fn parse_trait_member_defn(
 fn parse_trait_member_value_defn(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-) -> Result<MethodInfo, Errors> {
+) -> Result<TraitMember, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_member_value_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let method_name = pairs.next().unwrap().as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx)?;
-    Ok(MethodInfo {
+    Ok(TraitMember {
         name: method_name,
         qual_ty: qual_type,
         syn_qual_ty: None,
@@ -571,8 +571,8 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitIns
     }
     Ok(TraitInstance {
         qual_pred,
-        methods: value_impls,
-        method_sigs: value_type_sigs,
+        members: value_impls,
+        member_sigs: value_type_sigs,
         assoc_types,
         define_module: ctx.module_name.clone(),
         source: Some(span),
@@ -844,11 +844,11 @@ fn parse_predicate(pair: Pair<Rule>, ctx: &mut ParseContext) -> Predicate {
     pred
 }
 
-fn parse_trait_fullname(pair: Pair<Rule>, _ctx: &mut ParseContext) -> Trait {
+fn parse_trait_fullname(pair: Pair<Rule>, _ctx: &mut ParseContext) -> TraitId {
     assert_eq!(pair.as_rule(), Rule::trait_fullname);
     let mut pairs = pair.into_inner();
     let fullname = parse_capital_fullname(pairs.next().unwrap());
-    Trait { name: fullname }
+    TraitId { name: fullname }
 }
 
 fn parse_kind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Kind> {

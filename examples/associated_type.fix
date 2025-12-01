@@ -9,7 +9,7 @@ trait c : Collects {
     // When implementing `Collects` trait for a type `c`, you need to specify the value (which is a type) `Elem c`.
     type Elem c;
     type Iterator c;
-    // You can use `Elem c` in trait method definitions.
+    // You can use `Elem c` in trait member definitions.
     empty : c;
     insert : Elem c -> c -> c;
     to_iter : c -> Iterator c;

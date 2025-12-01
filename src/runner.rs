@@ -68,7 +68,7 @@ fn check_program(mut program: Program, config: &Configuration) -> Result<Program
     program.validate_trait_env()?;
 
     // Create symbols.
-    program.create_trait_method_symbols();
+    program.create_trait_member_symbols();
 
     // Validate constraints of global value type.
     program.validate_global_value_type_constraints()?;

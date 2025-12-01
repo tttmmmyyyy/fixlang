@@ -225,8 +225,8 @@ impl GlobalValue {
 // Expression of global symbol.
 #[derive(Clone)]
 pub enum SymbolExpr {
-    Simple(TypedExpr),       // Definition such as "id : a -> a; id = \x -> x".
-    Method(Vec<MethodImpl>), // Trait method implementations.
+    Simple(TypedExpr),            // Definition such as "id : a -> a; id = \x -> x".
+    Method(Vec<TraitMemberImpl>), // Trait method implementations.
 }
 
 impl SymbolExpr {
@@ -302,12 +302,12 @@ impl TypedExpr {
     }
 }
 
-// Trait method implementation
+// Trait member implementation
 #[derive(Clone)]
-pub struct MethodImpl {
-    // Type of this method.
+pub struct TraitMemberImpl {
+    // Type of this member.
     // For example, in case "impl [a: Show, b: Show] (a, b): Show {...}",
-    // the type of method "show" is "[a: Show, b: Show] (a, b) -> String",
+    // the type of member "show" is "[a: Show, b: Show] (a, b) -> String",
     pub ty: Arc<Scheme>,
     // Expression of this implementation
     pub expr: TypedExpr,
@@ -319,7 +319,7 @@ pub struct MethodImpl {
     pub define_module: Name,
 }
 
-impl MethodImpl {
+impl TraitMemberImpl {
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())
@@ -701,7 +701,7 @@ impl Program {
     // Add traits.
     pub fn add_traits(
         &mut self,
-        trait_infos: Vec<TraitInfo>,
+        trait_infos: Vec<Trait>,
         trait_impls: Vec<TraitInstance>,
         trait_aliases: Vec<TraitAlias>,
     ) -> Result<(), Errors> {
@@ -787,7 +787,7 @@ impl Program {
         self.trait_env.trait_names()
     }
 
-    pub fn traits_with_aliases(&self) -> Vec<Trait> {
+    pub fn traits_with_aliases(&self) -> Vec<TraitId> {
         self.trait_env.traits_with_aliases()
     }
 
@@ -1046,7 +1046,8 @@ impl Program {
 
         // Method implementations to be checked.
         let modules = modules.to_vec();
-        let method_impl_filter = |method: &MethodImpl| Ok(modules.contains(&method.define_module));
+        let method_impl_filter =
+            |method: &TraitMemberImpl| Ok(modules.contains(&method.define_module));
 
         errors.eat_err(self.resolve_namespace_and_check_type(
             tc,
@@ -1062,7 +1063,7 @@ impl Program {
         &mut self,
         tc: &TypeCheckContext,
         val_names: &[FullName],
-        method_impl_filter: impl Fn(&MethodImpl) -> Result<bool, Errors>,
+        method_impl_filter: impl Fn(&TraitMemberImpl) -> Result<bool, Errors>,
     ) -> Result<(), Errors> {
         struct CheckTask {
             val_name: FullName,
@@ -1235,7 +1236,7 @@ impl Program {
         assert!(sym.expr.is_none());
 
         // First, perform namespace resolution and type-checking.
-        let method_selector = |method: &MethodImpl| -> Result<bool, Errors> {
+        let method_selector = |method: &TraitMemberImpl| -> Result<bool, Errors> {
             // Select method implementation whose type unifies with the required type `sym.ty`.
             //
             // NOTE: Since overlapping implementations and unrelated methods are forbidden,
@@ -1525,34 +1526,34 @@ impl Program {
         Ok(name)
     }
 
-    // Create symbols of trait methods from TraitEnv.
-    pub fn create_trait_method_symbols(&mut self) {
+    // Create symbols of trait members from TraitEnv.
+    pub fn create_trait_member_symbols(&mut self) {
         for (trait_id, trait_info) in &self.trait_env.traits {
-            for method_info in &trait_info.methods {
-                let method_ty = trait_info.method_scheme(&method_info.name, false);
-                let syn_method_ty = trait_info.method_scheme(&method_info.name, true);
-                let mut method_impls: Vec<MethodImpl> = vec![];
+            for member in &trait_info.members {
+                let member_ty = trait_info.member_scheme(&member.name, false);
+                let syntactic_member_ty = trait_info.member_scheme(&member.name, true);
+                let mut member_impls: Vec<TraitMemberImpl> = vec![];
                 let instances = self.trait_env.instances.get(trait_id);
                 if let Some(insntances) = instances {
                     for trait_impl in insntances {
-                        let scm = trait_impl.method_scheme(&method_info.name, trait_info);
-                        let expr = trait_impl.method_expr(&method_info.name);
-                        method_impls.push(MethodImpl {
+                        let scm = trait_impl.member_scheme(&member.name, trait_info);
+                        let expr = trait_impl.member_expr(&member.name);
+                        member_impls.push(TraitMemberImpl {
                             ty: scm,
                             expr: TypedExpr::from_expr(expr),
                             define_module: trait_impl.define_module.clone(),
                         });
                     }
                 }
-                let method_name = FullName::new(&trait_id.name.to_namespace(), &method_info.name);
+                let method_name = FullName::new(&trait_id.name.to_namespace(), &member.name);
                 self.global_values.insert(
                     method_name,
                     GlobalValue {
-                        scm: method_ty,
-                        syn_scm: Some(syn_method_ty),
-                        expr: SymbolExpr::Method(method_impls),
-                        def_src: method_info.source.clone(),
-                        document: method_info.document.clone(),
+                        scm: member_ty,
+                        syn_scm: Some(syntactic_member_ty),
+                        expr: SymbolExpr::Method(member_impls),
+                        def_src: member.source.clone(),
+                        document: member.document.clone(),
                         compiler_defined_method: false,
                     },
                 );
@@ -2371,7 +2372,7 @@ pub enum EndNode {
     Expr(Var, Option<Arc<TypeNode>>),
     Pattern(Var, Option<Arc<TypeNode>>),
     Type(TyCon),
-    Trait(Trait),
+    Trait(TraitId),
     TypeOrTrait(FullName), // Unknown whether Type or Trait
     Module(Name),
 }

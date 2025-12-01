@@ -311,8 +311,8 @@ pub fn is_array_tycon(tc: &TyCon) -> bool {
 }
 
 // Make `Std::Boxed` trait.
-pub fn make_boxed_trait() -> Trait {
-    Trait::from_fullname(FullName::from_strs(&[STD_NAME], BOXED_TRAIT_NAME))
+pub fn make_boxed_trait() -> TraitId {
+    TraitId::from_fullname(FullName::from_strs(&[STD_NAME], BOXED_TRAIT_NAME))
 }
 
 pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
@@ -2882,7 +2882,7 @@ pub fn struct_act(
     let scm = Scheme::generalize(
         &[],
         vec![Predicate::make(
-            Trait::from_fullname(make_functor_name()),
+            TraitId::from_fullname(make_functor_name()),
             functor_ty,
         )],
         vec![],
@@ -5048,7 +5048,7 @@ pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
 const UNARY_OPERATOR_RHS_NAME: &str = "rhs";
 
 pub fn unary_opeartor_instance(
-    trait_id: Trait,
+    trait_id: TraitId,
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
     result_ty: Arc<TypeNode>,
@@ -5061,7 +5061,7 @@ pub fn unary_opeartor_instance(
             kind_constraints: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
-        methods: make_map([(
+        members: make_map([(
             method_name.to_string(),
             expr_abs(
                 vec![var_local(UNARY_OPERATOR_RHS_NAME)],
@@ -5073,7 +5073,7 @@ pub fn unary_opeartor_instance(
         define_module: STD_NAME.to_string(),
         source: None,
         is_user_defined: false,
-        method_sigs: Map::default(),
+        member_sigs: Map::default(),
     }
 }
 
@@ -5081,7 +5081,7 @@ const BINARY_OPERATOR_LHS_NAME: &str = "lhs";
 const BINARY_OPERATOR_RHS_NAME: &str = "rhs";
 
 pub fn binary_opeartor_instance(
-    trait_id: Trait,
+    trait_id: TraitId,
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
     result_ty: Arc<TypeNode>,
@@ -5094,7 +5094,7 @@ pub fn binary_opeartor_instance(
             kind_constraints: vec![],
             predicate: Predicate::make(trait_id, operand_ty),
         },
-        methods: make_map([(
+        members: make_map([(
             method_name.to_string(),
             expr_abs(
                 vec![var_local(BINARY_OPERATOR_LHS_NAME)],
@@ -5110,15 +5110,15 @@ pub fn binary_opeartor_instance(
         define_module: STD_NAME.to_string(),
         source: None,
         is_user_defined: false,
-        method_sigs: Map::default(),
+        member_sigs: Map::default(),
     }
 }
 
 pub const EQ_TRAIT_NAME: &str = "Eq";
 pub const EQ_TRAIT_EQ_NAME: &str = "eq";
 
-pub fn eq_trait_id() -> Trait {
-    Trait {
+pub fn eq_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], EQ_TRAIT_NAME),
     }
 }
@@ -5342,8 +5342,8 @@ pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
 pub const LESS_THAN_TRAIT_NAME: &str = "LessThan";
 pub const LESS_THAN_TRAIT_LT_NAME: &str = "less_than";
 
-pub fn less_than_trait_id() -> Trait {
-    Trait {
+pub fn less_than_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], LESS_THAN_TRAIT_NAME),
     }
 }
@@ -5500,8 +5500,8 @@ pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
 pub const LESS_THAN_OR_EQUAL_TO_TRAIT_NAME: &str = "LessThanOrEq";
 pub const LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME: &str = "less_than_or_eq";
 
-pub fn less_than_or_equal_to_trait_id() -> Trait {
-    Trait {
+pub fn less_than_or_equal_to_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], LESS_THAN_OR_EQUAL_TO_TRAIT_NAME),
     }
 }
@@ -5656,8 +5656,8 @@ pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitIns
 pub const ADD_TRAIT_NAME: &str = "Add";
 pub const ADD_TRAIT_ADD_NAME: &str = "add";
 
-pub fn add_trait_id() -> Trait {
-    Trait {
+pub fn add_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], ADD_TRAIT_NAME),
     }
 }
@@ -5777,8 +5777,8 @@ pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
 pub const SUBTRACT_TRAIT_NAME: &str = "Sub";
 pub const SUBTRACT_TRAIT_SUBTRACT_NAME: &str = "sub";
 
-pub fn subtract_trait_id() -> Trait {
-    Trait {
+pub fn subtract_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], SUBTRACT_TRAIT_NAME),
     }
 }
@@ -5898,8 +5898,8 @@ pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
 pub const MULTIPLY_TRAIT_NAME: &str = "Mul";
 pub const MULTIPLY_TRAIT_MULTIPLY_NAME: &str = "mul";
 
-pub fn multiply_trait_id() -> Trait {
-    Trait {
+pub fn multiply_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], MULTIPLY_TRAIT_NAME),
     }
 }
@@ -6019,8 +6019,8 @@ pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
 pub const DIVIDE_TRAIT_NAME: &str = "Div";
 pub const DIVIDE_TRAIT_DIVIDE_NAME: &str = "div";
 
-pub fn divide_trait_id() -> Trait {
-    Trait {
+pub fn divide_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], DIVIDE_TRAIT_NAME),
     }
 }
@@ -6148,8 +6148,8 @@ pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
 pub const REMAINDER_TRAIT_NAME: &str = "Rem";
 pub const REMAINDER_TRAIT_REMAINDER_NAME: &str = "rem";
 
-pub fn remainder_trait_id() -> Trait {
-    Trait {
+pub fn remainder_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], REMAINDER_TRAIT_NAME),
     }
 }
@@ -6221,8 +6221,8 @@ pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
 pub const NEGATE_TRAIT_NAME: &str = "Neg";
 pub const NEGATE_TRAIT_NEGATE_NAME: &str = "neg";
 
-pub fn negate_trait_id() -> Trait {
-    Trait {
+pub fn negate_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], NEGATE_TRAIT_NAME),
     }
 }
@@ -6327,8 +6327,8 @@ pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
 pub const NOT_TRAIT_NAME: &str = "Not";
 pub const NOT_TRAIT_OP_NAME: &str = "not";
 
-pub fn not_trait_id() -> Trait {
-    Trait {
+pub fn not_trait_id() -> TraitId {
+    TraitId {
         name: FullName::from_strs(&[STD_NAME], NOT_TRAIT_NAME),
     }
 }
@@ -6399,11 +6399,11 @@ pub fn boxed_trait_instance(ty: &Arc<TypeNode>) -> TraitInstance {
             kind_constraints: vec![],
             predicate: Predicate::make(trait_id, ty.clone()),
         },
-        methods: Map::default(),
+        members: Map::default(),
         assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,
         is_user_defined: false,
-        method_sigs: Map::default(),
+        member_sigs: Map::default(),
     }
 }

@@ -369,7 +369,7 @@ pub struct TypeCheckContext {
     // Equalities assumed.
     pub assumed_eqs: Map<TyAssoc, Vec<EqualityScheme>>,
     // Predicates assumed.
-    pub assumed_preds: Map<Trait, Vec<QualPredScheme>>,
+    pub assumed_preds: Map<TraitId, Vec<QualPredScheme>>,
     // Fixed type variables.
     // In unification, these type variables are not allowed to be replaced to another type.
     // NOTE: We use `Vec` instead of `Set` because the expected size is small.

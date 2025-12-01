@@ -58,10 +58,10 @@ impl TyAssoc {
         Ok(())
     }
 
-    pub fn trait_id(&self) -> Trait {
+    pub fn trait_id(&self) -> TraitId {
         let mut namespace = self.name.namespace.names.clone();
         let name = namespace.pop().unwrap();
-        Trait {
+        TraitId {
             name: FullName::new(&NameSpace::new(namespace), &name),
         }
     }
@@ -1958,5 +1958,5 @@ impl Scheme {
 pub struct KindEnv {
     pub tycons: Map<TyCon, Arc<Kind>>,
     pub assoc_tys: Map<TyAssoc, AssocTypeKindInfo>,
-    pub traits_and_aliases: Map<Trait, Arc<Kind>>,
+    pub traits_and_aliases: Map<TraitId, Arc<Kind>>,
 }

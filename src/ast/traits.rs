@@ -8,15 +8,15 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
-// A trait.
+// The identifier of a trait.
 #[derive(Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct Trait {
+pub struct TraitId {
     pub name: FullName,
 }
 
-impl Trait {
-    pub fn from_fullname(name: FullName) -> Trait {
-        Trait { name }
+impl TraitId {
+    pub fn from_fullname(name: FullName) -> TraitId {
+        TraitId { name }
     }
 
     pub fn to_string(&self) -> String {
@@ -151,24 +151,24 @@ pub struct AssocTypeKindInfo {
     pub value_kind: Arc<Kind>,
 }
 
-// Trait method.
+// Trait member.
 #[derive(Clone)]
-pub struct MethodInfo {
+pub struct TraitMember {
     pub name: Name,
-    // The type of the method.
+    // The type of the member.
     // Here, for example, in case "trait a : Show { show : a -> String }",
     // the type of method "show" is "a -> String",
     // and not "[a : Show] a -> String".
     pub qual_ty: QualType,
-    // The type of the method, but with aliases retained.
+    // The type of the member, but with aliases retained.
     pub syn_qual_ty: Option<QualType>,
     pub source: Option<Span>,
-    // Document of this method.
+    // Document of this member.
     // This field is used only If document from `source` is not available.
     pub document: Option<String>,
 }
 
-impl MethodInfo {
+impl TraitMember {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         if self.source.is_none() {
@@ -193,14 +193,14 @@ impl MethodInfo {
 
 // Traits definitions.
 #[derive(Clone)]
-pub struct TraitInfo {
+pub struct Trait {
     // Identifier of this trait (i.e. the name).
-    pub trait_: Trait,
+    pub trait_: TraitId,
     // Type variable used in trait definition.
     pub type_var: Arc<TyVar>,
-    // Methods of this trait.
-    pub methods: Vec<MethodInfo>,
-    // Associated type synonyms.
+    // Members of this trait.
+    pub members: Vec<TraitMember>,
+    // Associated types.
     pub assoc_types: Map<Name, AssocTypeDefn>,
     // Kind signatures at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_signs: Vec<KindSignature>,
@@ -211,10 +211,10 @@ pub struct TraitInfo {
     pub document: Option<String>,
 }
 
-impl TraitInfo {
+impl Trait {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        for mi in &self.methods {
+        for mi in &self.members {
             let node = mi.find_node_at(pos);
             if node.is_some() {
                 return node;
@@ -250,7 +250,7 @@ impl TraitInfo {
     // Resolve namespace.
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for mi in &mut self.methods {
+        for mi in &mut self.members {
             errors.eat_err(mi.resolve_namespace(ctx));
         }
         errors.to_result()
@@ -259,21 +259,21 @@ impl TraitInfo {
     // Resolve type aliases
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for mi in &mut self.methods {
+        for mi in &mut self.members {
             errors.eat_err(mi.resolve_type_aliases(type_env));
         }
         errors.to_result()
     }
 
-    // Get type-scheme of a method.
+    // Get type-scheme of a member.
     // Here, for example, in case "trait a: ToString { to_string : a -> String }",
-    // this function returns "[a: ToString] a -> String" as type of "to_string" method.
-    pub fn method_scheme(&self, name: &Name, syntactic: bool) -> Arc<Scheme> {
-        let method_info = self.methods.iter().find(|mi| mi.name == *name).unwrap();
+    // this function returns "[a: ToString] a -> String" as type of "to_string" member.
+    pub fn member_scheme(&self, name: &Name, syntactic: bool) -> Arc<Scheme> {
+        let member = self.members.iter().find(|mi| mi.name == *name).unwrap();
         let mut qual_ty = if syntactic {
-            method_info.syn_qual_ty.as_ref().unwrap().clone()
+            member.syn_qual_ty.as_ref().unwrap().clone()
         } else {
-            method_info.qual_ty.clone()
+            member.qual_ty.clone()
         };
         let mut vars = vec![];
         qual_ty.free_vars_vec(&mut vars);
@@ -285,11 +285,11 @@ impl TraitInfo {
         Scheme::generalize(&qual_ty.kind_signs, preds, qual_ty.eqs, qual_ty.ty)
     }
 
-    // Get the type of a method.
+    // Get the type of a member.
     // Here, for example, in case "trait a: ToString { to_string: a -> String }",
-    // this function returns "a -> String" as type of "to_string" method.
-    pub fn method_ty(&self, name: &Name) -> QualType {
-        self.methods
+    // this function returns "a -> String" as type of "to_string" member.
+    pub fn member_ty(&self, name: &Name) -> QualType {
+        self.members
             .iter()
             .find(|mi| mi.name == *name)
             .unwrap()
@@ -332,10 +332,10 @@ impl TraitInfo {
 pub struct TraitInstance {
     // Statement such as "[a: Show, b: Show] (a, b): Show".
     pub qual_pred: QualPredicate,
-    // Method implementation.
-    pub methods: Map<Name, Arc<ExprNode>>,
-    // Type signatures of methods, if provided by user.
-    pub method_sigs: Map<Name, QualType>,
+    // Member implementation.
+    pub members: Map<Name, Arc<ExprNode>>,
+    // Type signatures of members, if provided by user.
+    pub member_sigs: Map<Name, QualType>,
     // Associated type synonym implementation.
     pub assoc_types: Map<Name, AssocTypeImpl>,
     // Module where this instance is defined.
@@ -404,23 +404,23 @@ impl TraitInstance {
     }
 
     // Get trait id.
-    fn trait_id(&self) -> Trait {
+    fn trait_id(&self) -> TraitId {
         self.qual_pred.predicate.trait_id.clone()
     }
 
     // Get mutable trait id.
-    fn trait_id_mut(&mut self) -> &mut Trait {
+    fn trait_id_mut(&mut self) -> &mut TraitId {
         &mut self.qual_pred.predicate.trait_id
     }
 
-    // Get type-scheme of a method implementation.
+    // Get type-scheme of a member implementation.
     // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
     // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
     //
     // Users can also write type annotations in trait implementations.
     // This function trusts and returns the type annotation if the user has written one.
-    pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
-        if let Some(qual_ty) = self.method_sigs.get(method_name) {
+    pub fn member_scheme(&self, member: &Name, trait_info: &Trait) -> Arc<Scheme> {
+        if let Some(qual_ty) = self.member_sigs.get(member) {
             // If type annotation is provided by user, use it.
             let mut preds = vec![];
             preds.extend(self.qual_pred.pred_constraints.iter().cloned());
@@ -433,7 +433,7 @@ impl TraitInstance {
             )
         } else {
             // Otherwise, construct the type from trait definition and impl declaration.
-            self.method_scheme_by_defn(method_name, trait_info)
+            self.member_scheme_by_defn(member, trait_info)
         }
     }
 
@@ -443,11 +443,11 @@ impl TraitInstance {
     //
     // Users can also write type annotations in trait implementations.
     // The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
-    fn method_scheme_by_defn(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
+    fn member_scheme_by_defn(&self, method_name: &Name, trait_info: &Trait) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
         let tv = &trait_info.type_var.name; // `a` in the above example.
-        let mut method_qualty = trait_info.method_ty(method_name); // `a -> String` in the above example.
+        let mut method_qualty = trait_info.member_ty(method_name); // `a -> String` in the above example.
 
         // Next, see the trait implementation to get the type for which the trait is implemented.
         let impl_type = self.impl_type(); // `(a, b)` in the above example.
@@ -505,7 +505,7 @@ impl TraitInstance {
 
         // Set source location of the type to the location where the method is implemented.
         let source = self
-            .method_expr(method_name)
+            .member_expr(method_name)
             .source
             .as_ref()
             .map(|src| src.to_head_character());
@@ -514,9 +514,9 @@ impl TraitInstance {
         Scheme::generalize(&kind_signs, preds, eqs, ty)
     }
 
-    // Get expression that implements a method.
-    pub fn method_expr(&self, name: &Name) -> Arc<ExprNode> {
-        self.methods.get(name).unwrap().clone()
+    // Get expression that implements a member.
+    pub fn member_expr(&self, name: &Name) -> Arc<ExprNode> {
+        self.members.get(name).unwrap().clone()
     }
 
     // Get the type implementing the trait.
@@ -529,9 +529,9 @@ impl TraitInstance {
 #[derive(Clone)]
 pub struct TraitAlias {
     // Identifier of this trait (i.e., the name).
-    pub id: Trait,
+    pub id: TraitId,
     // Aliased traits and its source span.
-    pub value: Vec<(Trait, Span)>,
+    pub value: Vec<(TraitId, Span)>,
     // Source location of alias definition.
     pub source: Option<Span>,
     // Kind of this trait alias.
@@ -833,7 +833,7 @@ impl QualType {
 // Statement such as "String : Show" or "a : Eq".
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Predicate {
-    pub trait_id: Trait,
+    pub trait_id: TraitId,
     pub ty: Arc<TypeNode>,
     pub source: Option<Span>,
 }
@@ -847,7 +847,7 @@ impl Predicate {
         self.source = Some(source);
     }
 
-    pub fn make(trait_id: Trait, ty: Arc<TypeNode>) -> Self {
+    pub fn make(trait_id: TraitId, ty: Arc<TypeNode>) -> Self {
         Predicate {
             trait_id,
             ty,
@@ -1082,9 +1082,9 @@ pub struct EqualityScheme {
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
-    pub traits: Map<Trait, TraitInfo>,
-    pub instances: Map<Trait, Vec<TraitInstance>>,
-    pub aliases: Map<Trait, TraitAlias>,
+    pub traits: Map<TraitId, Trait>,
+    pub instances: Map<TraitId, Vec<TraitInstance>>,
+    pub aliases: Map<TraitId, TraitAlias>,
 }
 
 impl TraitEnv {
@@ -1121,7 +1121,7 @@ impl TraitEnv {
             .collect()
     }
 
-    pub fn traits_with_aliases(&self) -> Vec<Trait> {
+    pub fn traits_with_aliases(&self) -> Vec<TraitId> {
         let mut res = vec![];
         for (k, _v) in &self.traits {
             res.push(k.clone());
@@ -1136,7 +1136,7 @@ impl TraitEnv {
         let mut errors = Errors::empty();
 
         // Check name confliction of traits and aliases.
-        fn create_conflicting_error(env: &TraitEnv, trait_id: &Trait) -> Errors {
+        fn create_conflicting_error(env: &TraitEnv, trait_id: &TraitId) -> Errors {
             let this_src = &env.traits.get(trait_id).unwrap().source;
             let other_src = &env.aliases.get(trait_id).unwrap().source;
             Errors::from_msg_srcs(
@@ -1173,19 +1173,19 @@ impl TraitEnv {
 
         // Circular aliasing will be detected in `TraitEnv::resolve_aliases`, so we don't need to check it here.
 
-        // Forbid unrelated trait method:
-        // Check that the type variable in trait definition appears each of the methods' type.
+        // Forbid unrelated trait member:
+        // Check that the type variable in trait definition appears each of the members' type.
         // This assumption is used in `InstanciatedSymbol::dependent_modules`.
         for (_trait_id, trait_info) in &self.traits {
-            for method_info in &trait_info.methods {
-                if !method_info.qual_ty.ty.contains_tyvar(&trait_info.type_var) {
+            for member in &trait_info.members {
+                if !member.qual_ty.ty.contains_tyvar(&trait_info.type_var) {
                     errors.append(Errors::from_msg_srcs(
                         format!(
-                            "Type variable `{}` used in trait definition has to appear in the type of a method `{}`.",
+                            "Type variable `{}` used in trait definition has to appear in the type of a member `{}`.",
                             trait_info.type_var.name,
-                            method_info.name,
+                            member.name,
                         ),
-                        &[&method_info.qual_ty.ty.get_source()],
+                        &[&member.qual_ty.ty.get_source()],
                     ));
                 }
             }
@@ -1234,9 +1234,9 @@ impl TraitEnv {
                 }
 
                 // Validate the set of trait methods.
-                let trait_methods = &self.traits[trait_id].methods;
-                let impl_methods = &inst.methods;
-                let method_sigs = &inst.method_sigs;
+                let trait_methods = &self.traits[trait_id].members;
+                let impl_methods = &inst.members;
+                let method_sigs = &inst.member_sigs;
                 for trait_method in trait_methods {
                     if !impl_methods.contains_key(&trait_method.name) {
                         errors.append(Errors::from_msg_srcs(
@@ -1325,8 +1325,8 @@ impl TraitEnv {
                         continue;
                     }
                     // Check the method type signature matches the trait definition.
-                    let type_by_defn = inst.method_scheme_by_defn(method_name, trait_info);
-                    let type_by_sig = inst.method_scheme(method_name, trait_info);
+                    let type_by_defn = inst.member_scheme_by_defn(method_name, trait_info);
+                    let type_by_sig = inst.member_scheme(method_name, trait_info);
                     if !Scheme::equivalent(&type_by_defn, &type_by_sig) {
                         errors.append(Errors::from_msg_srcs(
                             format!(
@@ -1438,7 +1438,7 @@ impl TraitEnv {
 
         // Resolve names in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
-        let mut instances_resolved: Map<Trait, Vec<TraitInstance>> = Default::default();
+        let mut instances_resolved: Map<TraitId, Vec<TraitInstance>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Set up NameResolutionContext.
@@ -1476,7 +1476,7 @@ impl TraitEnv {
 
         // Resolve aliases in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
-        let mut instances_resolved: Map<Trait, Vec<TraitInstance>> = Default::default();
+        let mut instances_resolved: Map<TraitId, Vec<TraitInstance>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Resolve names in TrantInstance.
@@ -1497,7 +1497,7 @@ impl TraitEnv {
     // Add traits.
     pub fn add(
         &mut self,
-        trait_infos: Vec<TraitInfo>,
+        trait_infos: Vec<Trait>,
         trait_impls: Vec<TraitInstance>,
         trait_aliases: Vec<TraitAlias>,
     ) -> Result<(), Errors> {
@@ -1515,7 +1515,7 @@ impl TraitEnv {
     }
 
     // Add a trait to TraitEnv.
-    pub fn add_trait(&mut self, info: TraitInfo) -> Result<(), Errors> {
+    pub fn add_trait(&mut self, info: Trait) -> Result<(), Errors> {
         // Check Duplicate definition.
         if self.traits.contains_key(&info.trait_) {
             let info1 = self.traits.get(&info.trait_).unwrap();
@@ -1558,7 +1558,7 @@ impl TraitEnv {
         Ok(())
     }
 
-    pub fn qualified_predicates(&self) -> Map<Trait, Vec<QualPredScheme>> {
+    pub fn qualified_predicates(&self) -> Map<TraitId, Vec<QualPredScheme>> {
         let mut qps = Map::default();
         for (trait_id, insts) in &self.instances {
             for inst in insts {
@@ -1656,12 +1656,12 @@ impl TraitEnv {
     }
 
     // Resolve trait aliases.
-    fn resolve_aliases(&self, trait_id: &Trait) -> Result<Vec<Trait>, Errors> {
+    fn resolve_aliases(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
         fn resolve_aliases_inner(
             env: &TraitEnv,
-            trait_id: &Trait,
-            res: &mut Vec<Trait>,
-            visited: &mut Set<Trait>,
+            trait_id: &TraitId,
+            res: &mut Vec<TraitId>,
+            visited: &mut Set<TraitId>,
         ) -> Result<(), Errors> {
             if visited.contains(trait_id) {
                 return Err(Errors::from_msg_srcs(
@@ -1694,7 +1694,7 @@ impl TraitEnv {
     }
 
     // Check if a trait name is an alias.
-    pub fn is_alias(&self, trait_id: &Trait) -> bool {
+    pub fn is_alias(&self, trait_id: &TraitId) -> bool {
         self.aliases.contains_key(trait_id)
     }
 
@@ -1711,7 +1711,7 @@ impl TraitEnv {
         errors.to_result()?;
 
         // Set kinds in trait aliases definitions.
-        let mut resolved_aliases: Map<Trait, Vec<Trait>> = Map::default();
+        let mut resolved_aliases: Map<TraitId, Vec<TraitId>> = Map::default();
         for (id, _) in &self.aliases {
             resolved_aliases.insert(id.clone(), self.resolve_aliases(id)?); // If circular aliasing is detected, throw it immediately.
         }
@@ -1753,8 +1753,8 @@ impl TraitEnv {
         errors.to_result()
     }
 
-    pub fn trait_kind_map_with_aliases(&self) -> Map<Trait, Arc<Kind>> {
-        let mut res: Map<Trait, Arc<Kind>> = Map::default();
+    pub fn trait_kind_map_with_aliases(&self) -> Map<TraitId, Arc<Kind>> {
+        let mut res: Map<TraitId, Arc<Kind>> = Map::default();
         for (id, ti) in &self.traits {
             res.insert(id.clone(), ti.type_var.kind.clone());
         }
