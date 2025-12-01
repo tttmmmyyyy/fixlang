@@ -277,9 +277,11 @@ trait_member_type_defn = { "type" ~ (sep+ ~ constraints)? ~ sep+ ~ type_expr ~ (
 // === Trait implementations ===
 trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_member_impl)* ~ sep* ~ "}" }
 
-trait_member_impl = { trait_member_value_impl | trait_member_type_impl }
+trait_member_impl = { trait_member_value_impl | trait_member_type_impl | trait_member_value_type_sign }
 
 trait_member_value_impl = { trait_member_value_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
+
+trait_member_value_type_sign = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr ~ sep*)? ~ semicolon }
 
 trait_member_type_impl = { "type" ~ sep+ ~ type_expr ~ sep* ~ "=" ~ sep* ~ type_expr ~ sep* ~ semicolon }
 

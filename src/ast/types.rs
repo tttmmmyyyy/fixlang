@@ -1529,7 +1529,7 @@ pub fn tycon(name: FullName) -> Arc<TyCon> {
 // Additional information of types.
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
-    source: Option<Span>,
+    pub source: Option<Span>,
 }
 
 impl TypeNode {
@@ -1638,6 +1638,10 @@ pub struct Scheme {
 }
 
 impl Scheme {
+    pub fn equivalent(lhs: &Scheme, rhs: &Scheme) -> bool {
+        todo!("")
+    }
+
     pub fn validate_constraints(&self, trait_env: &TraitEnv) -> Result<(), Errors> {
         // Validate constraints.
         // NOTE:

@@ -334,6 +334,8 @@ pub struct TraitInstance {
     pub qual_pred: QualPredicate,
     // Method implementation.
     pub methods: Map<Name, Arc<ExprNode>>,
+    // Type signatures of methods, if provided by user.
+    pub method_sigs: Map<Name, QualType>,
     // Associated type synonym implementation.
     pub assoc_types: Map<Name, AssocTypeImpl>,
     // Module where this instance is defined.
@@ -414,7 +416,34 @@ impl TraitInstance {
     // Get type-scheme of a method implementation.
     // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
     // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
+    //
+    // Users can also write type annotations in trait implementations.
+    // This function trusts and returns the type annotation if the user has written one.
     pub fn method_scheme(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
+        if let Some(qual_ty) = self.method_sigs.get(method_name) {
+            // If type annotation is provided by user, use it.
+            let mut preds = vec![];
+            preds.extend(self.qual_pred.pred_constraints.iter().cloned());
+            preds.extend(qual_ty.preds.iter().cloned());
+            Scheme::generalize(
+                &qual_ty.kind_signs,
+                preds,
+                qual_ty.eqs.clone(),
+                qual_ty.ty.clone(),
+            )
+        } else {
+            // Otherwise, construct the type from trait definition and impl declaration.
+            self.method_scheme_by_defn(method_name, trait_info)
+        }
+    }
+
+    // Get type-scheme of a method implementation.
+    // Here, for example, in case "impl [a: ToString, b: ToString] (a, b): ToString",
+    // this function returns "[a: ToString, b: ToString] (a, b) -> String" as the type of "to_string".
+    //
+    // Users can also write type annotations in trait implementations.
+    // The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
+    fn method_scheme_by_defn(&self, method_name: &Name, trait_info: &TraitInfo) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
         let tv = &trait_info.type_var.name; // `a` in the above example.
@@ -428,7 +457,8 @@ impl TraitInstance {
         // Otherwise, we need to rename the type variables in `method_qualty` to avoid name collision.
         // Example:
         // Consider `impl Arrow a : Functor` for `trait f : Functor { map : (a -> b) -> f a -> f b }`.
-        // In this case, if we naively substitute `f` in `map : (a -> b) -> f a -> f b` with `Arrow a`, then we get `map : (a -> b) -> Arrow a a -> Arrow a b`, which is wrong.
+        // In this case, if we naively substitute `f` in `map : (a -> b) -> f a -> f b` with `Arrow a`,
+        // then we get `map : (a -> b) -> Arrow a a -> Arrow a b`, which is wrong.
         // So we first rename `(a -> b) -> f a -> f b` to `(c -> b) -> f c -> f b`.
         let mut fv_method_quality = vec![];
         method_qualty.free_vars_vec(&mut fv_method_quality);
@@ -1175,6 +1205,7 @@ impl TraitEnv {
         );
         // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {
+            let trait_info = &self.traits[trait_id];
             for inst in insts.iter_mut() {
                 // check implementation is given for trait, not for trait alias.
                 if aliases.contains(trait_id) {
@@ -1205,10 +1236,11 @@ impl TraitEnv {
                 // Validate the set of trait methods.
                 let trait_methods = &self.traits[trait_id].methods;
                 let impl_methods = &inst.methods;
+                let method_sigs = &inst.method_sigs;
                 for trait_method in trait_methods {
                     if !impl_methods.contains_key(&trait_method.name) {
                         errors.append(Errors::from_msg_srcs(
-                            format!("Lacking implementation of method `{}`.", trait_method.name),
+                            format!("Lacking implementation of member `{}`.", trait_method.name),
                             &[&inst.source],
                         ));
                     }
@@ -1221,7 +1253,7 @@ impl TraitEnv {
                     {
                         errors.append(Errors::from_msg_srcs(
                             format!(
-                                "`{}` is not a method of trait `{}`.",
+                                "`{}` is not a member of trait `{}`.",
                                 impl_method,
                                 trait_id.to_string(),
                             ),
@@ -1272,6 +1304,43 @@ impl TraitEnv {
                             ));
                         }
                     }
+                }
+
+                // Validate method type signatures.
+                for (method_name, method_sig) in method_sigs {
+                    // Check the method is defined in the trait.
+                    if !trait_methods
+                        .iter()
+                        .find(|mi| &mi.name == method_name)
+                        .is_some()
+                    {
+                        errors.append(Errors::from_msg_srcs(
+                            format!(
+                                "`{}` is not a member of trait `{}`.",
+                                method_name,
+                                trait_id.to_string(),
+                            ),
+                            &[&method_sig.ty.info.source],
+                        ));
+                        continue;
+                    }
+                    // Check the method type signature matches the trait definition.
+                    let type_by_defn = inst.method_scheme_by_defn(method_name, trait_info);
+                    let type_by_sig = inst.method_scheme(method_name, trait_info);
+                    if !Scheme::equivalent(&type_by_defn, &type_by_sig) {
+                        errors.append(Errors::from_msg_srcs(
+                            format!(
+                                "Type signature of member `{}` does not match the trait member definition. \
+                                Expected: `{}`, found: `{}`.",
+                                method_name,
+                                type_by_defn.to_string(),
+                                type_by_sig.to_string(),
+                            ),
+                            &[&method_sig.ty.info.source],
+                        ));
+                    }
+                    // If type variables used in the method implementation are introduced in the trait definition but not in the implementation, raise an error.
+                    todo!("")
                 }
 
                 // Check Orphan rules.

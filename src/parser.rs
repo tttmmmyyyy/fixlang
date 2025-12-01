@@ -525,20 +525,39 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitIns
     let mut pairs = pair.into_inner();
     let qual_pred = parse_predicate_qualified(pairs.next().unwrap(), ctx)?;
     let impl_type = qual_pred.predicate.ty.clone();
-    let mut methods: Map<Name, Arc<ExprNode>> = Map::default();
+    let mut value_impls: Map<Name, Arc<ExprNode>> = Map::default();
+    let mut value_type_sigs: Map<Name, QualType> = Map::default();
     let mut assoc_types: Map<Name, AssocTypeImpl> = Map::default();
     for pair in pairs {
         match parse_trait_member_impl(pair, &impl_type, ctx)? {
-            Either::Left((name, expr)) => {
-                if methods.contains_key(&name) {
+            TraitMemberImpl::Value((name, expr)) => {
+                if value_impls.contains_key(&name) {
                     return Err(Errors::from_msg_srcs(
                         format!("Duplicate implementation of member `{}`.", name),
                         &[&Some(span)],
                     ));
                 }
-                methods.insert(name, expr);
+                value_impls.insert(name, expr);
             }
-            Either::Right(assoc_type_impl) => {
+            TraitMemberImpl::TypeSig((name, type_sign, opt_expr)) => {
+                if value_type_sigs.contains_key(&name) {
+                    return Err(Errors::from_msg_srcs(
+                        format!("Duplicate the type signature of member `{}`.", name),
+                        &[&Some(span)],
+                    ));
+                }
+                value_type_sigs.insert(name.clone(), type_sign);
+                if let Some(expr) = opt_expr {
+                    if value_impls.contains_key(&name) {
+                        return Err(Errors::from_msg_srcs(
+                            format!("Duplicate implementation of member `{}`.", name),
+                            &[&Some(span)],
+                        ));
+                    }
+                    value_impls.insert(name, expr);
+                }
+            }
+            TraitMemberImpl::Type(assoc_type_impl) => {
                 let name = &assoc_type_impl.name;
                 if assoc_types.contains_key(name) {
                     return Err(Errors::from_msg_srcs(
@@ -552,7 +571,8 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitIns
     }
     Ok(TraitInstance {
         qual_pred,
-        methods,
+        methods: value_impls,
+        method_sigs: value_type_sigs,
         assoc_types,
         define_module: ctx.module_name.clone(),
         source: Some(span),
@@ -560,20 +580,30 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitIns
     })
 }
 
+enum TraitMemberImpl {
+    Value((Name, Arc<ExprNode>)),
+    TypeSig((Name, QualType, Option<Arc<ExprNode>>)), // Name, TypeSign, and implementation expr if given.
+    Type(AssocTypeImpl),
+}
+
 fn parse_trait_member_impl(
     pair: Pair<Rule>,
     impl_type: &Arc<TypeNode>,
     ctx: &mut ParseContext,
-) -> Result<Either<(Name, Arc<ExprNode>), AssocTypeImpl>, Errors> {
+) -> Result<TraitMemberImpl, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_member_impl);
     let pair = pair.into_inner().next().unwrap();
     Ok(match pair.as_rule() {
         Rule::trait_member_value_impl => {
             let (name, expr) = parse_trait_member_value_impl(pair, ctx)?;
-            Either::Left((name, expr))
+            TraitMemberImpl::Value((name, expr))
+        }
+        Rule::trait_member_value_type_sign => {
+            let (name, type_sign, opt_expr) = parse_trait_member_value_type_sign(pair, ctx)?;
+            TraitMemberImpl::TypeSig((name, type_sign, opt_expr))
         }
         Rule::trait_member_type_impl => {
-            Either::Right(parse_trait_member_type_impl(pair, impl_type, ctx)?)
+            TraitMemberImpl::Type(parse_trait_member_type_impl(pair, impl_type, ctx)?)
         }
         _ => unreachable!(),
     })
@@ -588,6 +618,23 @@ fn parse_trait_member_value_impl(
     let method_name = pairs.next().unwrap().as_str().to_string();
     let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
     Ok((method_name, expr))
+}
+
+fn parse_trait_member_value_type_sign(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<(Name, QualType, Option<Arc<ExprNode>>), Errors> {
+    assert_eq!(pair.as_rule(), Rule::trait_member_value_type_sign);
+    let mut pairs = pair.into_inner();
+    let method_name = pairs.next().unwrap().as_str().to_string();
+    let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx)?;
+    let mut opt_expr = None;
+    if let Some(pair) = pairs.peek() {
+        if pair.as_rule() == Rule::expr {
+            opt_expr = Some(parse_expr_with_new_do(pairs.next().unwrap(), ctx)?);
+        }
+    }
+    Ok((method_name, qual_type, opt_expr))
 }
 
 fn parse_trait_member_type_impl(
