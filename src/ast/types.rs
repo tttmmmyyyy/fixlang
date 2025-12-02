@@ -1529,7 +1529,7 @@ pub fn tycon(name: FullName) -> Arc<TyCon> {
 // Additional information of types.
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
-    pub source: Option<Span>,
+    source: Option<Span>,
 }
 
 impl TypeNode {
@@ -1571,6 +1571,30 @@ impl TypeNode {
             Type::AssocTy(_, args) => {
                 for arg in args {
                     arg.free_vars_to_vec(buf);
+                }
+            }
+        };
+    }
+
+    pub fn free_vars_to_vec_with_span(
+        self: &Arc<TypeNode>,
+        buf: &mut Vec<(Arc<TyVar>, Option<Span>)>,
+    ) {
+        match &self.ty {
+            Type::TyVar(tv) => {
+                if buf.iter().any(|(tv0, _)| tv0.name == tv.name) {
+                    return;
+                }
+                buf.push((tv.clone(), self.get_source().clone()))
+            }
+            Type::TyApp(tyfun, arg) => {
+                tyfun.free_vars_to_vec_with_span(buf);
+                arg.free_vars_to_vec_with_span(buf);
+            }
+            Type::TyCon(_) => {}
+            Type::AssocTy(_, args) => {
+                for arg in args {
+                    arg.free_vars_to_vec_with_span(buf);
                 }
             }
         };

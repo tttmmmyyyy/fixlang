@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::error::Errors;
+use crate::{ast::collect_annotation_tyvars::collect_annotation_tyvars, error::Errors};
 use import::ImportStatement;
 use misc::{number_to_varname, Map, Set};
 use name::{FullName, Name};
@@ -1306,6 +1306,26 @@ impl TraitEnv {
                     }
                 }
 
+                // For members without type signature, type variables used in type annotations in the member
+                // must appear in the type being implemented.
+                for (method_name, method_expr) in impl_methods {
+                    if !method_sigs.contains_key(method_name) {
+                        let mut allowed_tyvars = vec![];
+                        inst.impl_type().free_vars_to_vec(&mut allowed_tyvars);
+                        for (used_tv, tv_src) in collect_annotation_tyvars(&method_expr) {
+                            if allowed_tyvars
+                                .iter()
+                                .all(|allowed_tv| allowed_tv.name != used_tv.name)
+                            {
+                                errors.append(Errors::from_msg_srcs(
+                                    format!("Unknown type variable `{}`.", used_tv.name),
+                                    &[&tv_src],
+                                ));
+                            }
+                        }
+                    }
+                }
+
                 // Validate method type signatures.
                 for (method_name, method_sig) in method_sigs {
                     // Check the method is defined in the trait.
@@ -1320,10 +1340,11 @@ impl TraitEnv {
                                 method_name,
                                 trait_id.to_string(),
                             ),
-                            &[&method_sig.ty.info.source],
+                            &[&method_sig.ty.get_source()],
                         ));
                         continue;
                     }
+
                     // Check the method type signature matches the trait definition.
                     let type_by_defn = inst.member_scheme_by_defn(method_name, trait_info);
                     let type_by_sig = inst.member_scheme(method_name, trait_info);
@@ -1336,11 +1357,9 @@ impl TraitEnv {
                                 type_by_defn.to_string(),
                                 type_by_sig.to_string(),
                             ),
-                            &[&method_sig.ty.info.source],
+                            &[&method_sig.ty.get_source()],
                         ));
                     }
-                    // If type variables used in the method implementation are introduced in the trait definition but not in the implementation, raise an error.
-                    todo!("")
                 }
 
                 // Check Orphan rules.
