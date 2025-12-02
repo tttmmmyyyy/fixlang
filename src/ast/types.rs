@@ -1663,7 +1663,7 @@ pub struct Scheme {
 
 impl Scheme {
     pub fn equivalent(lhs: &Scheme, rhs: &Scheme) -> bool {
-        todo!("")
+        lhs.to_string_normalize() == rhs.to_string_normalize()
     }
 
     pub fn validate_constraints(&self, trait_env: &TraitEnv) -> Result<(), Errors> {
@@ -1792,12 +1792,17 @@ impl Scheme {
             "".to_string()
         } else {
             let mut constraint_strs = vec![];
-            for p in &preds {
-                constraint_strs.push(p.to_string());
-            }
-            for eq in &eqs {
-                constraint_strs.push(eq.to_string());
-            }
+
+            let mut pred_strs = preds.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+            pred_strs.sort();
+            pred_strs.dedup();
+            constraint_strs.extend(pred_strs);
+
+            let mut eq_strs = eqs.iter().map(|eq| eq.to_string()).collect::<Vec<_>>();
+            eq_strs.sort();
+            eq_strs.dedup();
+            constraint_strs.extend(eq_strs);
+
             format!("[{}] ", constraint_strs.join(", "))
         };
         constraints_str + &ty.to_string()
