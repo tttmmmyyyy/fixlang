@@ -5446,7 +5446,7 @@ pub fn test_unrelated_trait_method() {
     test_source_fail(
         &source,
         Configuration::compiler_develop_mode(),
-        "Type variable `a` used in trait definition has to appear in the type of a method `value`.",
+        "Type variable `a` used in trait definition has to appear in the type of a member `value`.",
     );
 }
 

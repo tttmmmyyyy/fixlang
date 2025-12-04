@@ -2898,7 +2898,7 @@ Added in v1.1.0.
 
 #### collect_m
 
-Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = m a] iter -> m (Std::Array a)`
+Type: `[iter : Std::Iterator, m : Std::Monad, Std::Iterator::Item iter = m a] iter -> m (Std::Array a)`
 
 Executes monadic actions and collects the results into an array.
 
@@ -2977,7 +2977,7 @@ Apply a function to each element of an iterator and flatten the result.
 
 #### flatten
 
-Type: `[i2 : Std::Iterator, i1 : Std::Iterator, Std::Iterator::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
+Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
 
 Flatten an iterator of iterators.
 
@@ -3001,7 +3001,7 @@ Conceptually, `[a0, a1, a2, ...].to_iter.fold(s, op) = s.op(a0).op(a1).op(a2)...
 
 #### fold_m
 
-Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
+Type: `[iter : Std::Iterator, m : Std::Monad, Std::Iterator::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
 
 Fold the elements of an iterator from left to right by monadic action.
 
@@ -3104,7 +3104,7 @@ Is an iterator empty?
 
 #### is_equal
 
-Type: `[iter1 : Std::Iterator, iter2 : Std::Iterator, a : Std::Eq, Std::Iterator::Item iter1 = a, Std::Iterator::Item iter2 = a] iter1 -> iter2 -> Std::Bool`
+Type: `[a : Std::Eq, iter1 : Std::Iterator, iter2 : Std::Iterator, Std::Iterator::Item iter1 = a, Std::Iterator::Item iter2 = a] iter1 -> iter2 -> Std::Bool`
 
 Compare two iterators by their elements.
 
@@ -3129,7 +3129,7 @@ This function is similar to `fold` but a more general version of it. It allows t
 
 #### loop_iter_m
 
-Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
+Type: `[iter : Std::Iterator, m : Std::Monad, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
 
 Loop over the elements of an iterator by monadic action.
 
@@ -3141,7 +3141,7 @@ Loop over the elements of an iterator by monadic action.
 
 #### loop_iter_ms
 
-Type: `[m : Std::Monad, iter : Std::Iterator, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s b)) -> iter -> m (Std::LoopState s b)`
+Type: `[iter : Std::Iterator, m : Std::Monad, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s b)) -> iter -> m (Std::LoopState s b)`
 
 Loop over the elements of an iterator by monadic action.
 
@@ -3268,7 +3268,7 @@ NOTE: This function puts all elements of the iterator into an array, so it may c
 
 #### sum
 
-Type: `[iter : Std::Iterator, a : Std::Additive, Std::Iterator::Item iter = a] iter -> a`
+Type: `[a : Std::Additive, iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> a`
 
 Calcculate sum of the elements of an iterator.
 

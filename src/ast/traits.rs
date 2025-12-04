@@ -1238,7 +1238,6 @@ impl TraitEnv {
         );
         // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {
-            let trait_info = &self.traits[trait_id];
             for inst in insts.iter_mut() {
                 // check implementation is given for trait, not for trait alias.
                 if aliases.contains(trait_id) {
@@ -1248,8 +1247,9 @@ impl TraitEnv {
                     ));
                     continue;
                 }
-
                 *inst.trait_id_mut() = trait_id.clone();
+
+                let trait_info = &self.traits[trait_id];
 
                 // Check instance head.
                 let implemented_ty = &inst.qual_pred.predicate.ty;
