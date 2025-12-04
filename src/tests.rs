@@ -5472,6 +5472,50 @@ pub fn test_duplicated_symbols() {
 }
 
 #[test]
+pub fn test_duplicated_trait_member() {
+    let source = r##"
+    module Main;
+
+    trait a : MyToString {
+        to_string : a -> String;
+        to_string : a -> String;
+    }
+    
+    main : IO ();
+    main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::compiler_develop_mode(),
+        "Duplicate definitions of member `to_string`.",
+    );
+}
+
+#[test]
+pub fn test_duplicated_trait_member_impl() {
+    let source = r##"
+    module Main;
+
+    trait a : MyToString {
+        to_string : a -> String;
+    }
+
+    impl I64 : MyToString {
+        to_string = |val| "(1) " + val.to_string;
+        to_string = |val| "(2) " + val.to_string;
+    }
+    
+    main : IO ();
+    main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::compiler_develop_mode(),
+        "Duplicate implementation of member `to_string`.",
+    );
+}
+
+#[test]
 pub fn test_typedef_unknown_tyvar() {
     let source = r##"
     module Main;
@@ -10156,4 +10200,271 @@ pub fn test_recursive_reference() {
     );
     "#;
     test_source(source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_0() {
+    let source = r#"
+    module Main;
+
+    trait a : MyToString {
+        my_to_string : a -> String;
+    }
+
+    impl Array a : MyToString {
+        my_to_string : Array a -> String = |_|"my_to_string";
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1,2,3].my_to_string, "my_to_string");;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_1() {
+    let source = r#"
+    module Main;
+
+    trait a : MyToString {
+        my_to_string : a -> String;
+    }
+
+    impl Array a : MyToString {
+        my_to_string : Array a -> String;
+        my_to_string = |_|"my_to_string";
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1,2,3].my_to_string, "my_to_string");;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_use_in_annotation() {
+    let source = r#"
+    module Main;
+
+    trait a : MyToString {
+        my_to_string : a -> String;
+    }
+
+    impl [a : ToString] Array a : MyToString {
+        my_to_string : Array a -> String;
+        my_to_string = |arr : Array a| (
+            arr.to_iter.map(to_string : a -> String).join(", ")
+        );
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1,2,3].my_to_string, "1, 2, 3");;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_mismatch_type() {
+    let source = r#"
+    module Main;
+
+    trait a : MyToString {
+        my_to_string : b -> a -> String;
+    }
+
+    impl [a : ToString] Array a : MyToString {
+        my_to_string : a -> Array a -> String;
+        my_to_string = |_: a, arr : Array a| (
+            arr.to_iter.map(to_string).join(", ")
+        );
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1,2,3].my_to_string(1), "1, 2, 3");;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Type signature of member `my_to_string` does not match the trait member definition.",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_undefined_type_var_0() {
+    let source = r#"
+    module Main;
+
+    trait a : MyToString {
+        my_to_string : a -> String;
+    }
+
+    impl [b : ToString] Array b : MyToString {
+        my_to_string : Array b -> String;
+        my_to_string = |arr : a| (
+            arr.to_iter.map(to_string).join(", ")
+        );
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1,2,3].my_to_string, "1, 2, 3");;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Unknown type variable `a`.",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_undefined_type_var_1() {
+    let source = r#"
+    module Main;
+
+    trait a : MyToString {
+        my_to_string : a -> String;
+    }
+
+    impl [b : ToString] Array b : MyToString {
+        my_to_string = |arr : a| ( // `a` is defined in the trait, but not in this scope
+            arr.to_iter.map(to_string).join(", ")
+        );
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1,2,3].my_to_string, "1, 2, 3");;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Unknown type variable `a`.",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_duplicated_type_sig() {
+    let source = r#"
+    module Main;
+
+    trait a : MyToString {
+        my_to_string : a -> String;
+    }
+
+    impl [a : ToString] Array a : MyToString {
+        my_to_string : Array a -> String;
+        my_to_string : Array a -> String = |arr : Array a| (
+            arr.to_iter.map(to_string).join(", ")
+        );
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1,2,3].my_to_string, "1, 2, 3");;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Duplicate the type signature of member `my_to_string`",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_type_sig_on_nonexistent_member() {
+    let source = r#"
+    module Main;
+
+    trait a : MyToString {
+        my_to_string : a -> String;
+    }
+
+    impl [a : ToString] Array a : MyToString {
+        to_string : Array a -> String;
+
+        my_to_string : Array a -> String = |arr : Array a| (
+            arr.to_iter.map(to_string).join(", ")
+        );
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", [1,2,3].my_to_string, "1, 2, 3");;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "`to_string` is not a member of trait `Main::MyToString`.",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_use_type_alias_and_trait_alias_0() {
+    let source = r#"
+    module Main;
+
+    trait a : MyTrait {
+        member : [b : Zero, b : Add] b -> b -> () -> a;
+    }
+
+    impl I64 : MyTrait {
+        member : [b : Additive] b -> b -> Lazy I64 = |x, y, _| eval x; eval y; 42;
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", MyTrait::member(0, 0, ()), 42);;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "`to_string` is not a member of trait `Main::MyToString`.",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_use_type_alias_and_trait_alias_1() {
+    let source = r#"
+    module Main;
+
+    trait a : MyTrait {
+        member : [b : Additive] b -> b -> Lazy a;
+    }
+
+    impl I64 : MyTrait {
+        member : [b : Zero, b : Add] b -> b -> () -> I64 = |x, y, _| eval x; eval y; 42;
+    }
+    
+    main : IO ();
+    main = (
+        assert_eq(|_|"", MyTrait::member(0, 0, ()), 42);;
+        pure()
+    );
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "`to_string` is not a member of trait `Main::MyToString`.",
+    );
 }
