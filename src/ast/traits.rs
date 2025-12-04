@@ -362,7 +362,10 @@ impl TraitInstance {
         None
     }
 
-    pub fn set_kinds_in_qual_pred(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
+    pub fn set_kinds_in_qual_pred_and_member_sigs(
+        &mut self,
+        kind_env: &KindEnv,
+    ) -> Result<(), Errors> {
         let mut scope = Map::default();
         let preds = &self.qual_pred.pred_constraints;
         let eqs = &self.qual_pred.eq_constraints;
@@ -378,6 +381,29 @@ impl TraitInstance {
         for eq in &mut self.qual_pred.eq_constraints {
             eq.set_kinds(&scope);
         }
+        for (_member_name, member_sig) in &mut self.member_sigs {
+            let mut scope = scope.clone();
+            let res = QualPredicate::extend_kind_scope(
+                &mut scope,
+                &member_sig.preds,
+                &member_sig.eqs,
+                &member_sig.kind_signs,
+                kind_env,
+            );
+            if res.is_err() {
+                return Err(Errors::from_msg_srcs(
+                    res.unwrap_err(),
+                    &[&member_sig.ty.get_source()],
+                ));
+            }
+            member_sig.ty = member_sig.ty.set_kinds(&scope);
+            for pred in &mut member_sig.preds {
+                pred.set_kinds(&scope);
+            }
+            for eq in &mut member_sig.eqs {
+                eq.set_kinds(&scope);
+            }
+        }
         Ok(())
     }
 
@@ -387,6 +413,9 @@ impl TraitInstance {
         let mut errors = Errors::empty();
         for (_assoc_ty_name, assoc_ty_impl) in &mut self.assoc_types {
             errors.eat_err(assoc_ty_impl.resolve_namespace(ctx));
+        }
+        for (_member_name, member_sig) in &mut self.member_sigs {
+            errors.eat_err(member_sig.resolve_namespace(ctx));
         }
 
         errors.to_result()
@@ -399,6 +428,9 @@ impl TraitInstance {
         errors.eat_err(self.qual_pred.resolve_type_aliases(type_env));
         for (_assoc_ty_name, assoc_ty_impl) in &mut self.assoc_types {
             errors.eat_err(assoc_ty_impl.resolve_type_aliases(type_env));
+        }
+        for (_member_name, member_sig) in &mut self.member_sigs {
+            errors.eat_err(member_sig.resolve_type_aliases(type_env));
         }
         errors.to_result()
     }
@@ -422,15 +454,16 @@ impl TraitInstance {
     pub fn member_scheme(&self, member: &Name, trait_info: &Trait) -> Arc<Scheme> {
         if let Some(qual_ty) = self.member_sigs.get(member) {
             // If type annotation is provided by user, use it.
-            let mut preds = vec![];
-            preds.extend(self.qual_pred.pred_constraints.iter().cloned());
-            preds.extend(qual_ty.preds.iter().cloned());
-            Scheme::generalize(
-                &qual_ty.kind_signs,
-                preds,
-                qual_ty.eqs.clone(),
-                qual_ty.ty.clone(),
-            )
+            let mut preds = self.qual_pred.pred_constraints.clone();
+            preds.extend(qual_ty.preds.clone());
+
+            let mut eqs = self.qual_pred.eq_constraints.clone();
+            eqs.extend(qual_ty.eqs.clone());
+
+            let mut kind_signs = self.qual_pred.kind_constraints.clone();
+            kind_signs.extend(qual_ty.kind_signs.clone());
+
+            Scheme::generalize(&kind_signs, preds, eqs, qual_ty.ty.clone())
         } else {
             // Otherwise, construct the type from trait definition and impl declaration.
             self.member_scheme_by_defn(member, trait_info)
@@ -1717,7 +1750,7 @@ impl TraitEnv {
         self.aliases.contains_key(trait_id)
     }
 
-    // Set kinds in TraitInfo, TraitAlias and TraitInstances.
+    // Set kinds in Trait definitions and TraitAlias definitions.
     pub fn set_kinds_in_trait_and_alias_defns(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -1761,7 +1794,7 @@ impl TraitEnv {
         let mut errors = Errors::empty();
         for (_trait_id, trait_impls) in &mut self.instances {
             for inst in trait_impls {
-                errors.eat_err(inst.set_kinds_in_qual_pred(kind_env));
+                errors.eat_err(inst.set_kinds_in_qual_pred_and_member_sigs(kind_env));
                 let mut assoc_tys = std::mem::replace(&mut inst.assoc_types, Map::default());
                 for (_, assoc_ty_impl) in &mut assoc_tys {
                     errors.eat_err(assoc_ty_impl.set_kinds(&inst, kind_env));
