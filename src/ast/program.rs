@@ -1528,15 +1528,15 @@ impl Program {
 
     // Create symbols of trait members from TraitEnv.
     pub fn create_trait_member_symbols(&mut self) {
-        for (trait_id, trait_info) in &self.trait_env.traits {
-            for member in &trait_info.members {
-                let member_ty = trait_info.member_scheme(&member.name, false);
-                let syntactic_member_ty = trait_info.member_scheme(&member.name, true);
+        for (trait_id, trait_) in &self.trait_env.traits {
+            for member in &trait_.members {
+                let member_scm = trait_.member_scheme(&member.name, false);
+                let syntactic_member_scm = trait_.member_scheme(&member.name, true);
                 let mut member_impls: Vec<TraitMemberImpl> = vec![];
                 let instances = self.trait_env.instances.get(trait_id);
                 if let Some(insntances) = instances {
                     for trait_impl in insntances {
-                        let scm = trait_impl.member_scheme(&member.name, trait_info);
+                        let scm = trait_impl.member_scheme(&member.name, trait_);
                         let expr = trait_impl.member_expr(&member.name);
                         member_impls.push(TraitMemberImpl {
                             ty: scm,
@@ -1545,12 +1545,12 @@ impl Program {
                         });
                     }
                 }
-                let method_name = FullName::new(&trait_id.name.to_namespace(), &member.name);
+                let member_name = FullName::new(&trait_id.name.to_namespace(), &member.name);
                 self.global_values.insert(
-                    method_name,
+                    member_name,
                     GlobalValue {
-                        scm: member_ty,
-                        syn_scm: Some(syntactic_member_ty),
+                        scm: member_scm,
+                        syn_scm: Some(syntactic_member_scm),
                         expr: SymbolExpr::Method(member_impls),
                         def_src: member.source.clone(),
                         document: member.document.clone(),
