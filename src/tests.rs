@@ -10468,3 +10468,53 @@ pub fn test_type_sign_in_trait_impl_use_type_alias_and_trait_alias_1() {
         "`to_string` is not a member of trait `Main::MyToString`.",
     );
 }
+
+#[test]
+pub fn test_type_sign_in_trait_impl_example_in_changelog_0() {
+    let source = r#"
+module Main;
+
+trait [f : *->*] f : MyFunctor {
+    mymap : (a -> b) -> f a -> f b;
+}
+
+type MyType a = struct {};
+
+impl MyType : MyFunctor {
+    mymap = |f : a -> b, x : MyType a| MyType{} : MyType b;
+}
+
+main : IO () = (
+    eval (MyType{} : MyType I64).mymap(to_U64);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Unknown type variable `a`.",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_example_in_changelog_1() {
+    let source = r#"
+module Main;
+
+trait [f : *->*] f : MyFunctor {
+    mymap : (a -> b) -> f a -> f b;
+}
+
+type MyType a = struct {};
+
+impl MyType : MyFunctor {
+    mymap : (a -> b) -> MyType a -> MyType b = |f : a -> b, x : MyType a| MyType{} : MyType b;
+}
+
+main : IO () = (
+    eval (MyType{} : MyType I64).mymap(to_U64);
+    pure()
+);
+    "#;
+    test_source(source, Configuration::compiler_develop_mode());
+}
