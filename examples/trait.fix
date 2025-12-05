@@ -1,17 +1,17 @@
 module Main;
 
 // A Trait is a set of types. 
-// A trait is defined by a set of "methods" to be implemented by each member of it.
+// A trait is defined by a set of "members" to be implemented by each member of it.
 
 // `Greeter` is a set of types, where...
 trait a : Greeter {
-    // whose member has a method `greeting` that converts a value of type `a` into a greeting message greeting.
+    // whose element has a member `greeting` that converts a value of type `a` into a greeting message greeting.
     greeting : a -> String;
 }
 
 // Let `I64` belong to the trait `MyToString`, where 
 impl I64 : Greeter {
-    // the `greeting` method is defined as follows.
+    // the `greeting` member is defined as follows.
     greeting = |n| "Hi! I'm a 64-bit integer " + n.to_string + "!";
 }
 
@@ -19,11 +19,9 @@ impl I64 : Greeter {
 Traits are used for overloading operators.
 For example, `Eq` trait is defined in standard library as follows: 
 
-```
 trait a : Eq {
     eq : a -> a -> Bool
 }
-```
 
 Each expression `x == y` is a syntax suger for `Eq::eq(x, y)`.
 */
@@ -55,7 +53,10 @@ trait [f : *->*] f : MyFunctor {
 // An example of implementing higher-kinded trait.
 // `Array` is a type of kind `* -> *`, so matches to the kind of trait `MyFunctor`.
 impl Array : MyFunctor {
-    mymap = |f, arr| (
+    // In trait implementation, you can write type signatures for members. This improves code readability.
+    mymap : (a -> b) -> Array a -> Array b;
+    // Also, type variables (like `a` and `b`) defined in the member's type signature can be used in type annotations in the member's implementation.
+    mymap = |f : a -> b, arr : Array a| (
         Array::from_map(arr.get_size, |idx| f(arr.@(idx)))
     );
 }

@@ -1343,17 +1343,17 @@ A trait is defined by a set of "methods" to be implemented by each member of it.
 module Main;
 
 // A Trait is a set of types. 
-// A trait is defined by a set of "methods" to be implemented by each member of it.
+// A trait is defined by a set of "members" to be implemented by each member of it.
 
 // `Greeter` is a set of types, where...
 trait a : Greeter {
-    // whose member has a method `greeting` that converts a value of type `a` into a greeting message greeting.
+    // whose element has a member `greeting` that converts a value of type `a` into a greeting message greeting.
     greeting : a -> String;
 }
 
 // Let `I64` belong to the trait `MyToString`, where 
 impl I64 : Greeter {
-    // the `greeting` method is defined as follows.
+    // the `greeting` member is defined as follows.
     greeting = |n| "Hi! I'm a 64-bit integer " + n.to_string + "!";
 }
 
@@ -1361,11 +1361,9 @@ impl I64 : Greeter {
 Traits are used for overloading operators.
 For example, `Eq` trait is defined in standard library as follows: 
 
-```
 trait a : Eq {
     eq : a -> a -> Bool
 }
-```
 
 Each expression `x == y` is a syntax suger for `Eq::eq(x, y)`.
 */
@@ -1397,7 +1395,10 @@ trait [f : *->*] f : MyFunctor {
 // An example of implementing higher-kinded trait.
 // `Array` is a type of kind `* -> *`, so matches to the kind of trait `MyFunctor`.
 impl Array : MyFunctor {
-    mymap = |f, arr| (
+    // In trait implementation, you can write type signatures for members. This improves code readability.
+    mymap : (a -> b) -> Array a -> Array b;
+    // Also, type variables (like `a` and `b`) defined in the member's type signature can be used in type annotations in the member's implementation.
+    mymap = |f : a -> b, arr : Array a| (
         Array::from_map(arr.get_size, |idx| f(arr.@(idx)))
     );
 }
@@ -1410,7 +1411,6 @@ main = (
     println $ x.greeting // This should print "Hi! I'm a 64-bit integer 5!".
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCi8vIEEgVHJhaXQgaXMgYSBzZXQgb2YgdHlwZXMuIA0KLy8gQSB0cmFpdCBpcyBkZWZpbmVkIGJ5IGEgc2V0IG9mICJtZXRob2RzIiB0byBiZSBpbXBsZW1lbnRlZCBieSBlYWNoIG1lbWJlciBvZiBpdC4NCg0KLy8gYEdyZWV0ZXJgIGlzIGEgc2V0IG9mIHR5cGVzLCB3aGVyZS4uLg0KdHJhaXQgYSA6IEdyZWV0ZXIgew0KICAgIC8vIHdob3NlIG1lbWJlciBoYXMgYSBtZXRob2QgYGdyZWV0aW5nYCB0aGF0IGNvbnZlcnRzIGEgdmFsdWUgb2YgdHlwZSBgYWAgaW50byBhIGdyZWV0aW5nIG1lc3NhZ2UgZ3JlZXRpbmcuDQogICAgZ3JlZXRpbmcgOiBhIC0%2BIFN0cmluZzsNCn0NCg0KLy8gTGV0IGBJNjRgIGJlbG9uZyB0byB0aGUgdHJhaXQgYE15VG9TdHJpbmdgLCB3aGVyZSANCmltcGwgSTY0IDogR3JlZXRlciB7DQogICAgLy8gdGhlIGBncmVldGluZ2AgbWV0aG9kIGlzIGRlZmluZWQgYXMgZm9sbG93cy4NCiAgICBncmVldGluZyA9IHxufCAiSGkhIEknbSBhIDY0LWJpdCBpbnRlZ2VyICIgKyBuLnRvX3N0cmluZyArICIhIjsNCn0NCg0KLyoNClRyYWl0cyBhcmUgdXNlZCBmb3Igb3ZlcmxvYWRpbmcgb3BlcmF0b3JzLg0KRm9yIGV4YW1wbGUsIGBFcWAgdHJhaXQgaXMgZGVmaW5lZCBpbiBzdGFuZGFyZCBsaWJyYXJ5IGFzIGZvbGxvd3M6IA0KDQpgYGANCnRyYWl0IGEgOiBFcSB7DQogICAgZXEgOiBhIC0%2BIGEgLT4gQm9vbA0KfQ0KYGBgDQoNCkVhY2ggZXhwcmVzc2lvbiBgeCA9PSB5YCBpcyBhIHN5bnRheCBzdWdlciBmb3IgYEVxOjplcSh4LCB5KWAuDQoqLw0KDQovLyBBcyBhbm90aGVyIGV4YW1wbGUsIA0KdHlwZSBQYWlyIGEgYiA9IHN0cnVjdCB7IGZzdDogYSwgc25kOiBiIH07DQoNCi8vIEluIHRoZSB0cmFpdCBpbXBsZW1lbnRhdGlvbiwgeW91IGNhbiBzcGVjaWZ5IGNvbnN0cmFpbnRzIG9uIHR5cGUgdmFyaWFibGVzIGluIGBbXWAgYnJhY2tldCBhZnRlciBgaW1wbGAuDQppbXBsIFthIDogRXEsIGIgOiBFcV0gUGFpciBhIGIgOiBFcSB7DQogICAgZXEgPSB8bGhzLCByaHN8ICgNCiAgICAgICAgbGhzLkBmc3QgPT0gcmhzLkBmc3QgJiYgbGhzLkBzbmQgPT0gcmhzLkBzbmQNCiAgICApOw0KfQ0KDQovLyBZb3UgY2FuIHNwZWNpZnkgY29uc3RyYWludHMgb24gdHlwZSB2YXJpYWJsZXMgaW4gdGhlIGBbXWAgYnJhY2tldCBiZWZvcmUgYSB0eXBlIHNpZ25hdHVyZS4NCnNlYXJjaCA6IFthIDogRXFdIGEgLT4gQXJyYXkgYSAtPiBJNjQ7DQpzZWFyY2ggPSB8ZWxlbSwgYXJyfCBsb29wKDAsIHxpZHh8DQogICAgaWYgaWR4ID09IGFyci5nZXRfc2l6ZSB7IGJyZWFrICQgLTEgfTsNCiAgICBpZiBhcnIuQChpZHgpID09IGVsZW0geyBicmVhayAkIGlkeCB9Ow0KICAgIGNvbnRpbnVlICQgKGlkeCArIDEpDQopOw0KDQovLyBBbiBleGFtcGxlIG9mIGRlZmluaW5nIGhpZ2hlci1raW5kZWQgdHJhaXQuDQovLyBBbGwgdHlwZSB2YXJpYWJsZSBoYXMga2luZCBgKmAgYnkgZGVmYXVsdCwgYW5kIGFueSBraW5kIG9mIGhpZ2hlci1raW5kZWQgdHlwZSB2YXJpYWJsZSBuZWVkIHRvIGJlIGFubm90ZWQgZXhwbGljaXRseS4NCnRyYWl0IFtmIDogKi0%2BKl0gZiA6IE15RnVuY3RvciB7DQogICAgbXltYXAgOiAoYSAtPiBiKSAtPiBmIGEgLT4gZiBiOw0KfQ0KDQovLyBBbiBleGFtcGxlIG9mIGltcGxlbWVudGluZyBoaWdoZXIta2luZGVkIHRyYWl0Lg0KLy8gYEFycmF5YCBpcyBhIHR5cGUgb2Yga2luZCBgKiAtPiAqYCwgc28gbWF0Y2hlcyB0byB0aGUga2luZCBvZiB0cmFpdCBgTXlGdW5jdG9yYC4NCmltcGwgQXJyYXkgOiBNeUZ1bmN0b3Igew0KICAgIG15bWFwID0gfGYsIGFycnwgKA0KICAgICAgICBBcnJheTo6ZnJvbV9tYXAoYXJyLmdldF9zaXplLCB8aWR4fCBmKGFyci5AKGlkeCkpKQ0KICAgICk7DQp9DQoNCm1haW4gOiBJTyAoKTsNCm1haW4gPSAoDQogICAgbGV0IGFyciA9IEFycmF5Ojpmcm9tX21hcCg2LCB8eHwgeCk7IC8vIGFyciA9IFswLDEsMiwuLi4sOV0uDQogICAgbGV0IGFyciA9IGFyci5teW1hcCh8eHwgUGFpciB7IGZzdDogeCAlIDIsIHNuZDogeCAlIDMgfSk7IC8vIGFyciA9IFsoMCwgMCksICgxLCAxKSwgKDAsIDIpLCAuLi5dLg0KICAgIGxldCB4ID0gYXJyLnNlYXJjaChQYWlyIHsgZnN0OiAxLCBzbmQ6IDJ9KTsgLy8gNSwgdGhlIGZpcnN0IG51bWJlciB4IHN1Y2ggdGhhdCB4ICUgMiA9PSAxIGFuZCB4ICUgMyA9PSAyLg0KICAgIHByaW50bG4gJCB4LmdyZWV0aW5nIC8vIFRoaXMgc2hvdWxkIHByaW50ICJIaSEgSSdtIGEgNjQtYml0IGludGVnZXIgNSEiLg0KKTs%3D)
 
 ## Associated types
 
