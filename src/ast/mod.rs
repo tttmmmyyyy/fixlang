@@ -1,4 +1,5 @@
 pub mod collect_annotation_tyvars;
+pub mod equality;
 pub mod export_statement;
 pub mod expr;
 pub mod import;
