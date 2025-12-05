@@ -1236,6 +1236,7 @@ impl TraitEnv {
             Arc::new(typecheckcache::FileCache::new()),
             0,
         );
+        let trait_env = self.clone();
         // Validate trait instances.
         for (trait_id, insts) in &mut self.instances {
             for inst in insts.iter_mut() {
@@ -1381,7 +1382,7 @@ impl TraitEnv {
                     // Check the method type signature matches the trait definition.
                     let type_by_defn = inst.member_scheme_by_defn(method_name, trait_info);
                     let type_by_sig = inst.member_scheme(method_name, trait_info);
-                    if !Scheme::equivalent(&type_by_defn, &type_by_sig) {
+                    if !Scheme::equivalent(&type_by_defn, &type_by_sig, &trait_env)? {
                         errors.append(Errors::from_msg_srcs(
                             format!(
                                 "Type signature of member `{}` is not equivalent to the one in the trait definition. \
@@ -1661,18 +1662,6 @@ impl TraitEnv {
         eq_scms
     }
 
-    // pub fn assoc_ty_names(&self) -> Set<FullName> {
-    //     let mut names = vec![];
-    //     for (trait_id, trait_info) in &self.traits {
-    //         for (assoc_ty_name, _assoc_ty_info) in &trait_info.assoc_types {
-    //             let assoc_type_namespace = trait_id.name.to_namespace();
-    //             let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
-    //             names.push(assoc_type_fullname)
-    //         }
-    //     }
-    //     names.into_iter().collect::<Set<_>>()
-    // }
-
     pub fn assoc_ty_to_arity(&self) -> Map<FullName, usize> {
         let mut assoc_ty_arity = Map::default();
         for (trait_id, trait_info) in &self.traits {
@@ -1709,7 +1698,7 @@ impl TraitEnv {
 
     // Resolve trait aliases.
     fn resolve_aliases(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
-        fn resolve_aliases_inner(
+        fn resolve_aliases_internal(
             env: &TraitEnv,
             trait_id: &TraitId,
             res: &mut Vec<TraitId>,
@@ -1734,14 +1723,14 @@ impl TraitEnv {
                 return Ok(());
             }
             for (t, _) in &env.aliases.get(trait_id).unwrap().value {
-                resolve_aliases_inner(env, t, res, visited)?;
+                resolve_aliases_internal(env, t, res, visited)?;
             }
             Ok(())
         }
 
         let mut res = vec![];
         let mut visited = Set::default();
-        resolve_aliases_inner(self, trait_id, &mut res, &mut visited)?;
+        resolve_aliases_internal(self, trait_id, &mut res, &mut visited)?;
         Ok(res)
     }
 

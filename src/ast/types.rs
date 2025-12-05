@@ -1662,8 +1662,23 @@ pub struct Scheme {
 }
 
 impl Scheme {
-    pub fn equivalent(lhs: &Scheme, rhs: &Scheme) -> bool {
-        lhs.to_string_normalize() == rhs.to_string_normalize()
+    pub fn resolve_trait_aliases(&self, trait_env: &TraitEnv) -> Result<Scheme, Errors> {
+        let mut preds = vec![];
+        for pred in &self.predicates {
+            let mut pred = pred.resolve_trait_aliases(trait_env)?;
+            preds.append(&mut pred);
+        }
+        Ok(Scheme {
+            gen_vars: self.gen_vars.clone(),
+            predicates: preds,
+            equalities: self.equalities.clone(),
+            ty: self.ty.clone(),
+        })
+    }
+
+    pub fn equivalent(lhs: &Scheme, rhs: &Scheme, trait_env: &TraitEnv) -> Result<bool, Errors> {
+        Ok(lhs.resolve_trait_aliases(trait_env)?.to_string_normalize()
+            == rhs.resolve_trait_aliases(trait_env)?.to_string_normalize())
     }
 
     pub fn validate_constraints(&self, trait_env: &TraitEnv) -> Result<(), Errors> {

@@ -10297,7 +10297,7 @@ pub fn test_type_sign_in_trait_impl_mismatch_type() {
     test_source_fail(
         source,
         Configuration::compiler_develop_mode(),
-        "Type signature of member `my_to_string` does not match the trait member definition.",
+        "Type signature of member `my_to_string` is not equivalent to the one in the trait definition.",
     );
 }
 
@@ -10436,11 +10436,7 @@ pub fn test_type_sign_in_trait_impl_use_type_alias_and_trait_alias_0() {
         pure()
     );
     "#;
-    test_source_fail(
-        source,
-        Configuration::compiler_develop_mode(),
-        "`to_string` is not a member of trait `Main::MyToString`.",
-    );
+    test_source(source, Configuration::compiler_develop_mode());
 }
 
 #[test]
@@ -10462,11 +10458,7 @@ pub fn test_type_sign_in_trait_impl_use_type_alias_and_trait_alias_1() {
         pure()
     );
     "#;
-    test_source_fail(
-        source,
-        Configuration::compiler_develop_mode(),
-        "`to_string` is not a member of trait `Main::MyToString`.",
-    );
+    test_source(source, Configuration::compiler_develop_mode());
 }
 
 #[test]
