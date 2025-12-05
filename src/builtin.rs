@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{error::panic_with_err, misc::Set};
+use crate::{ast::qual_predicate::QualPredicate, error::panic_with_err, misc::Set};
 use ast::name::{FullName, Name, NameSpace};
 use inkwell::module::Linkage;
 use misc::{make_map, Map};

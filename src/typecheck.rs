@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    ast::equality::{Equality, EqualityScheme},
+    ast::{
+        equality::{Equality, EqualityScheme},
+        qual_predicate::{QualPredScheme, QualPredicate},
+    },
     error::Errors,
 };
 use ast::{
