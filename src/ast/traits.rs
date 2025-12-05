@@ -1384,7 +1384,7 @@ impl TraitEnv {
                     if !Scheme::equivalent(&type_by_defn, &type_by_sig) {
                         errors.append(Errors::from_msg_srcs(
                             format!(
-                                "Type signature of member `{}` does not match the trait member definition. \
+                                "Type signature of member `{}` is not equivalent to the one in the trait definition. \
                                 Expected: `{}`, found: `{}`.",
                                 method_name,
                                 type_by_defn.to_string(),
