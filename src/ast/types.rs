@@ -1,5 +1,5 @@
 use crate::ast::equality::Equality;
-use crate::ast::qual_predicate::QualPredicate;
+use crate::ast::qual_pred::QualPred;
 use crate::error::Errors;
 use core::panic;
 use inkwell::types::BasicType;
@@ -1871,7 +1871,7 @@ impl Scheme {
                 scope.insert(tv.name.clone(), tv.kind.clone());
             }
         }
-        let res = QualPredicate::extend_kind_scope(
+        let res = QualPred::extend_kind_scope(
             &mut scope,
             &ret.predicates,
             &ret.equalities,

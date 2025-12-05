@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
-        qual_predicate::{QualPredScheme, QualPredicate},
+        qual_pred::{QualPred, QualPredScheme},
     },
     error::Errors,
 };
@@ -236,7 +236,7 @@ impl Substitution {
         eq.value = self.substitute_type(&eq.value);
     }
 
-    pub fn substitute_qualpred(&self, qual_pred: &mut QualPredicate) {
+    pub fn substitute_qualpred(&self, qual_pred: &mut QualPred) {
         for pred in &mut qual_pred.pred_constraints {
             self.substitute_predicate(pred);
         }
@@ -541,7 +541,7 @@ impl TypeCheckContext {
                     let trait_id = pred.trait_id.clone();
                     let qual_pred_scm = QualPredScheme {
                         gen_vars: vec![],
-                        qual_pred: QualPredicate {
+                        qual_pred: QualPred {
                             pred_constraints: vec![],
                             eq_constraints: vec![],
                             kind_constraints: vec![],

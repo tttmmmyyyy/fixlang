@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{ast::qual_predicate::QualPredicate, error::panic_with_err, misc::Set};
+use crate::{ast::qual_pred::QualPred, error::panic_with_err, misc::Set};
 use ast::name::{FullName, Name, NameSpace};
 use inkwell::module::Linkage;
 use misc::{make_map, Map};
@@ -5055,7 +5055,7 @@ pub fn unary_opeartor_instance(
     generator: LLVMGenerator,
 ) -> TraitImpl {
     TraitImpl {
-        qual_pred: QualPredicate {
+        qual_pred: QualPred {
             pred_constraints: vec![],
             eq_constraints: vec![],
             kind_constraints: vec![],
@@ -5088,7 +5088,7 @@ pub fn binary_opeartor_instance(
     generator: LLVMGenerator,
 ) -> TraitImpl {
     TraitImpl {
-        qual_pred: QualPredicate {
+        qual_pred: QualPred {
             pred_constraints: vec![],
             eq_constraints: vec![],
             kind_constraints: vec![],
@@ -6393,7 +6393,7 @@ pub fn not_trait_instance_bool() -> TraitImpl {
 pub fn boxed_trait_instance(ty: &Arc<TypeNode>) -> TraitImpl {
     let trait_id = make_boxed_trait();
     TraitImpl {
-        qual_pred: QualPredicate {
+        qual_pred: QualPred {
             pred_constraints: vec![],
             eq_constraints: vec![],
             kind_constraints: vec![],

@@ -5,7 +5,7 @@ use crate::ast::expr::ExprNode;
 use crate::ast::import::ImportStatement;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, NameResolutionContext, NameResolutionType, TypeEnv};
-use crate::ast::qual_predicate::{QualPredScheme, QualPredicate};
+use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
     type_from_tyvar, type_tyvar, Kind, KindEnv, Scheme, TyAssoc, TyVar, TypeNode,
 };
@@ -337,7 +337,7 @@ impl TraitDefn {
 #[derive(Clone)]
 pub struct TraitImpl {
     // Statement such as "[a: Show, b: Show] (a, b): Show".
-    pub qual_pred: QualPredicate,
+    pub qual_pred: QualPred,
     // Member implementation.
     pub members: Map<Name, Arc<ExprNode>>,
     // Type signatures of members, if provided by user.
@@ -376,7 +376,7 @@ impl TraitImpl {
         let preds = &self.qual_pred.pred_constraints;
         let eqs = &self.qual_pred.eq_constraints;
         let kind_signs = &self.qual_pred.kind_constraints;
-        let res = QualPredicate::extend_kind_scope(&mut scope, preds, eqs, kind_signs, kind_env);
+        let res = QualPred::extend_kind_scope(&mut scope, preds, eqs, kind_signs, kind_env);
         if res.is_err() {
             return Err(Errors::from_msg_srcs(res.unwrap_err(), &[&self.source]));
         }
@@ -389,7 +389,7 @@ impl TraitImpl {
         }
         for (_member_name, member_sig) in &mut self.member_sigs {
             let mut scope = scope.clone();
-            let res = QualPredicate::extend_kind_scope(
+            let res = QualPred::extend_kind_scope(
                 &mut scope,
                 &member_sig.preds,
                 &member_sig.eqs,

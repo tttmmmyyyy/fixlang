@@ -12,14 +12,14 @@ use crate::sourcefile::SourcePos;
 // Qualified predicate. Statement such as "[a : Eq] Array a : Eq".
 // Constraints in `[...]` can be trait bound and equality.
 #[derive(Clone)]
-pub struct QualPredicate {
+pub struct QualPred {
     pub pred_constraints: Vec<Predicate>,
     pub eq_constraints: Vec<Equality>,
     pub kind_constraints: Vec<KindSignature>,
     pub predicate: Predicate,
 }
 
-impl QualPredicate {
+impl QualPred {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let node = self.predicate.find_node_at(pos);
@@ -184,5 +184,5 @@ impl QualPredicate {
 #[derive(Clone)]
 pub struct QualPredScheme {
     pub gen_vars: Vec<Arc<TyVar>>,
-    pub qual_pred: QualPredicate,
+    pub qual_pred: QualPred,
 }

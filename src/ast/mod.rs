@@ -7,7 +7,7 @@ pub mod inline_llvm;
 pub mod name;
 pub mod pattern;
 pub mod program;
-pub mod qual_predicate;
+pub mod qual_pred;
 pub mod traits;
 pub mod traverse;
 pub mod typedecl;

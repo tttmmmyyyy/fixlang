@@ -2,7 +2,7 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
-use crate::ast::{equality::Equality, qual_predicate::QualPredicate};
+use crate::ast::{equality::Equality, qual_pred::QualPred};
 
 use super::*;
 use ast::{
@@ -676,10 +676,7 @@ fn parse_export_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ExportSta
     )
 }
 
-fn parse_predicate_qualified(
-    pair: Pair<Rule>,
-    ctx: &mut ParseContext,
-) -> Result<QualPredicate, Errors> {
+fn parse_predicate_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<QualPred, Errors> {
     assert_eq!(pair.as_rule(), Rule::predicate_qualified);
     let mut pairs = pair.into_inner();
     let (predicates, eqs, kinds) = if pairs.peek().unwrap().as_rule() == Rule::constraints {
@@ -688,7 +685,7 @@ fn parse_predicate_qualified(
         (vec![], vec![], vec![])
     };
     let predicate = parse_predicate(pairs.next().unwrap(), ctx);
-    let qp = QualPredicate {
+    let qp = QualPred {
         pred_constraints: predicates,
         eq_constraints: eqs,
         kind_constraints: kinds,
