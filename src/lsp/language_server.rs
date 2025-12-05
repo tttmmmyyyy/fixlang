@@ -1,7 +1,7 @@
 use crate::ast::import::{is_accessible, ImportStatement};
 use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{GlobalValue, ModuleInfo, Program};
-use crate::ast::traits::{Trait, TraitAlias, TraitId, TraitInstance};
+use crate::ast::traits::{TraitAlias, TraitDefn, TraitId, TraitInstance};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
 use crate::constants::{
     chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
@@ -1598,7 +1598,7 @@ fn create_symbol_from_global_value(
 }
 
 #[allow(deprecated)]
-fn create_symbol_from_trait_info(trait_: &TraitId, trait_info: &Trait) -> DocumentSymbol {
+fn create_symbol_from_trait_info(trait_: &TraitId, trait_info: &TraitDefn) -> DocumentSymbol {
     let name = trait_.name.to_string();
     let range = trait_info
         .source

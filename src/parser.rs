@@ -207,7 +207,7 @@ fn parse_module(
     let mut type_defns: Vec<TypeDefn> = Vec::new();
     let mut global_value_decls: Vec<GlobalValueDecl> = vec![];
     let mut global_value_defns: Vec<GlobalValueDefn> = vec![];
-    let mut trait_infos: Vec<Trait> = vec![];
+    let mut trait_infos: Vec<TraitDefn> = vec![];
     let mut trait_aliases: Vec<TraitAlias> = vec![];
     let mut trait_impls: Vec<TraitInstance> = vec![];
     let mut import_statements: Vec<ImportStatement> = vec![];
@@ -249,7 +249,7 @@ fn parse_global_defns(
     global_value_decls: &mut Vec<GlobalValueDecl>,
     global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
-    trait_infos: &mut Vec<Trait>,
+    trait_infos: &mut Vec<TraitDefn>,
     trait_aliases: &mut Vec<TraitAlias>,
     trait_impls: &mut Vec<TraitInstance>,
     export_statements: &mut Vec<ExportStatement>,
@@ -313,7 +313,7 @@ fn parse_global_defns_in_namespace(
     global_value_decls: &mut Vec<GlobalValueDecl>,
     global_value_defns: &mut Vec<GlobalValueDefn>,
     type_defns: &mut Vec<TypeDefn>,
-    trait_infos: &mut Vec<Trait>,
+    trait_infos: &mut Vec<TraitDefn>,
     trait_aliases: &mut Vec<TraitAlias>,
     trait_impls: &mut Vec<TraitInstance>,
     export_statements: &mut Vec<ExportStatement>,
@@ -375,7 +375,7 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
     }
 }
 
-fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Trait, Errors> {
+fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitDefn, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -428,7 +428,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Trait, E
             }
         }
     }
-    Ok(Trait {
+    Ok(TraitDefn {
         trait_: TraitId::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
         type_var: make_tyvar(&trait_tyvar, &kind_star()),
         members: methods,

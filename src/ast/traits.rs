@@ -202,7 +202,7 @@ impl TraitMember {
 
 // Traits definitions.
 #[derive(Clone)]
-pub struct Trait {
+pub struct TraitDefn {
     // Identifier of this trait (i.e. the name).
     pub trait_: TraitId,
     // Type variable used in trait definition.
@@ -220,7 +220,7 @@ pub struct Trait {
     pub document: Option<String>,
 }
 
-impl Trait {
+impl TraitDefn {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for mi in &self.members {
@@ -460,7 +460,7 @@ impl TraitInstance {
     //
     // Users can also write type annotations in trait implementations.
     // This function trusts and returns the type annotation if the user has written one.
-    pub fn member_scheme(&self, member: &Name, trait_info: &Trait) -> Arc<Scheme> {
+    pub fn member_scheme(&self, member: &Name, trait_info: &TraitDefn) -> Arc<Scheme> {
         if let Some(qual_ty) = self.member_sigs.get(member) {
             // If type annotation is provided by user, use it.
             let mut preds = self.qual_pred.pred_constraints.clone();
@@ -485,7 +485,7 @@ impl TraitInstance {
     //
     // Users can also write type annotations in trait implementations.
     // The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
-    fn member_scheme_by_defn(&self, method_name: &Name, trait_info: &Trait) -> Arc<Scheme> {
+    fn member_scheme_by_defn(&self, method_name: &Name, trait_info: &TraitDefn) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
         let tv = &trait_info.type_var.name; // `a` in the above example.
@@ -990,7 +990,7 @@ impl KindSignature {
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
-    pub traits: Map<TraitId, Trait>,
+    pub traits: Map<TraitId, TraitDefn>,
     pub instances: Map<TraitId, Vec<TraitInstance>>,
     pub aliases: Map<TraitId, TraitAlias>,
 }
@@ -1425,7 +1425,7 @@ impl TraitEnv {
     // Add traits.
     pub fn add(
         &mut self,
-        trait_infos: Vec<Trait>,
+        trait_infos: Vec<TraitDefn>,
         trait_impls: Vec<TraitInstance>,
         trait_aliases: Vec<TraitAlias>,
     ) -> Result<(), Errors> {
@@ -1443,7 +1443,7 @@ impl TraitEnv {
     }
 
     // Add a trait to TraitEnv.
-    pub fn add_trait(&mut self, info: Trait) -> Result<(), Errors> {
+    pub fn add_trait(&mut self, info: TraitDefn) -> Result<(), Errors> {
         // Check Duplicate definition.
         if self.traits.contains_key(&info.trait_) {
             let info1 = self.traits.get(&info.trait_).unwrap();

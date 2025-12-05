@@ -702,7 +702,7 @@ impl Program {
     // Add traits.
     pub fn add_traits(
         &mut self,
-        trait_infos: Vec<Trait>,
+        trait_infos: Vec<TraitDefn>,
         trait_impls: Vec<TraitInstance>,
         trait_aliases: Vec<TraitAlias>,
     ) -> Result<(), Errors> {
