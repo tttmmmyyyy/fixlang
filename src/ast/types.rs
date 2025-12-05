@@ -1,8 +1,6 @@
-use core::panic;
-use std::sync::Arc;
-
+use crate::ast::equality::Equality;
 use crate::error::Errors;
-
+use core::panic;
 use inkwell::types::BasicType;
 use misc::collect_results;
 use misc::number_to_varname;
@@ -12,6 +10,7 @@ use name::FullName;
 use name::Name;
 use name::NameSpace;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use super::*;
 

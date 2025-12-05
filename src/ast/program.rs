@@ -1,3 +1,4 @@
+use crate::ast::equality::Equality;
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
 use crate::error::{Error, Errors};
 use import::{ImportItem, ImportStatement};

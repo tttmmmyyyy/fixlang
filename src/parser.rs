@@ -2,6 +2,8 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
+use crate::ast::equality::Equality;
+
 use super::*;
 use ast::{
     export_statement::ExportStatement,

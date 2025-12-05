@@ -1,14 +1,21 @@
 use std::sync::Arc;
 
+use crate::ast::equality::{Equality, EqualityScheme};
+use crate::ast::expr::ExprNode;
+use crate::ast::import::ImportStatement;
+use crate::ast::name::{FullName, Name};
+use crate::ast::program::{EndNode, NameResolutionContext, NameResolutionType, TypeEnv};
+use crate::ast::types::{
+    type_from_tyvar, type_tyvar, Kind, KindEnv, Scheme, TyAssoc, TyVar, Type, TypeNode,
+};
+use crate::builtin::make_boxed_trait;
+use crate::misc::{insert_to_map_vec, number_to_varname, Map, Set};
+use crate::sourcefile::{SourcePos, Span};
+use crate::typecheck::{Substitution, TypeCheckContext};
+use crate::typecheckcache;
+use crate::UnifOrOtherErr;
 use crate::{ast::collect_annotation_tyvars::collect_annotation_tyvars, error::Errors};
-use import::ImportStatement;
-use misc::{number_to_varname, Map, Set};
-use name::{FullName, Name};
 use serde::{Deserialize, Serialize};
-
-use super::*;
-
-pub use equality::{Equality, EqualityScheme};
 
 // The identifier of a trait.
 #[derive(Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -1485,7 +1492,7 @@ impl TraitEnv {
             for inst in insts {
                 let mut vars = vec![];
                 inst.qual_pred.free_vars_vec(&mut vars);
-                misc::insert_to_map_vec(
+                insert_to_map_vec(
                     &mut qps,
                     trait_id,
                     QualPredScheme {
@@ -1519,11 +1526,7 @@ impl TraitEnv {
                         value: assoc_type_impl.value.clone(),
                         source: assoc_type_impl.source.clone(),
                     };
-                    misc::insert_to_map_vec(
-                        &mut eq_scms,
-                        &equality.assoc_type,
-                        equality.generalize(),
-                    );
+                    insert_to_map_vec(&mut eq_scms, &equality.assoc_type, equality.generalize());
                 }
             }
         }

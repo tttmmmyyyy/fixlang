@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::error::Errors;
+use crate::{
+    ast::equality::{Equality, EqualityScheme},
+    error::Errors,
+};
 use ast::{
     import::ImportStatement,
     name::{FullName, NameSpace},
