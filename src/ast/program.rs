@@ -703,7 +703,7 @@ impl Program {
     pub fn add_traits(
         &mut self,
         trait_infos: Vec<TraitDefn>,
-        trait_impls: Vec<TraitInstance>,
+        trait_impls: Vec<TraitImpl>,
         trait_aliases: Vec<TraitAlias>,
     ) -> Result<(), Errors> {
         self.trait_env.add(trait_infos, trait_impls, trait_aliases)

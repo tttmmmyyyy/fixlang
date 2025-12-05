@@ -5053,8 +5053,8 @@ pub fn unary_opeartor_instance(
     operand_ty: Arc<TypeNode>,
     result_ty: Arc<TypeNode>,
     generator: LLVMGenerator,
-) -> TraitInstance {
-    TraitInstance {
+) -> TraitImpl {
+    TraitImpl {
         qual_pred: QualPredicate {
             pred_constraints: vec![],
             eq_constraints: vec![],
@@ -5086,8 +5086,8 @@ pub fn binary_opeartor_instance(
     operand_ty: Arc<TypeNode>,
     result_ty: Arc<TypeNode>,
     generator: LLVMGenerator,
-) -> TraitInstance {
-    TraitInstance {
+) -> TraitImpl {
+    TraitImpl {
         qual_pred: QualPredicate {
             pred_constraints: vec![],
             eq_constraints: vec![],
@@ -5176,7 +5176,7 @@ impl InlineLLVMIntEqBody {
     }
 }
 
-pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
@@ -5255,7 +5255,7 @@ impl InlineLLVMPtrEqBody {
     }
 }
 
-pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
@@ -5326,7 +5326,7 @@ impl InlineLLVMFloatEqBody {
     }
 }
 
-pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         eq_trait_id(),
         &EQ_TRAIT_EQ_NAME.to_string(),
@@ -5413,7 +5413,7 @@ impl InlineLLVMIntLessThanBody {
     }
 }
 
-pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         less_than_trait_id(),
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
@@ -5484,7 +5484,7 @@ impl InlineLLVMFloatLessThanBody {
     }
 }
 
-pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         less_than_trait_id(),
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
@@ -5569,7 +5569,7 @@ impl InlineLLVMIntLessThanOrEqBody {
     }
 }
 
-pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         less_than_or_equal_to_trait_id(),
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
@@ -5640,7 +5640,7 @@ impl InlineLLVMFloatLessThanOrEqBody {
     }
 }
 
-pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         less_than_or_equal_to_trait_id(),
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
@@ -5705,7 +5705,7 @@ impl InlineLLVMIntAddBody {
     }
 }
 
-pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         add_trait_id(),
         &ADD_TRAIT_ADD_NAME.to_string(),
@@ -5761,7 +5761,7 @@ impl InlineLLVMFloatAddBody {
     }
 }
 
-pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         add_trait_id(),
         &ADD_TRAIT_ADD_NAME.to_string(),
@@ -5826,7 +5826,7 @@ impl InlineLLVMIntSubBody {
     }
 }
 
-pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         subtract_trait_id(),
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
@@ -5882,7 +5882,7 @@ impl InlineLLVMFloatSubBody {
     }
 }
 
-pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         subtract_trait_id(),
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
@@ -5947,7 +5947,7 @@ impl InlineLLVMIntMulBody {
     }
 }
 
-pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         multiply_trait_id(),
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
@@ -6003,7 +6003,7 @@ impl InlineLLVMFloatMulBody {
     }
 }
 
-pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         multiply_trait_id(),
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
@@ -6076,7 +6076,7 @@ impl InlineLLVMIntDivBody {
     }
 }
 
-pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         divide_trait_id(),
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
@@ -6132,7 +6132,7 @@ impl InlineLLVMFloatDivBody {
     }
 }
 
-pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         divide_trait_id(),
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
@@ -6205,7 +6205,7 @@ impl InlineLLVMIntRemBody {
     }
 }
 
-pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         remainder_trait_id(),
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
@@ -6263,7 +6263,7 @@ impl InlineLLVMIntNegBody {
     }
 }
 
-pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     unary_opeartor_instance(
         negate_trait_id(),
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
@@ -6312,7 +6312,7 @@ impl InlineLLVMFloatNegBody {
     }
 }
 
-pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitInstance {
+pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     unary_opeartor_instance(
         negate_trait_id(),
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
@@ -6378,7 +6378,7 @@ impl InlineLLVMBoolNegBody {
     }
 }
 
-pub fn not_trait_instance_bool() -> TraitInstance {
+pub fn not_trait_instance_bool() -> TraitImpl {
     unary_opeartor_instance(
         not_trait_id(),
         &NOT_TRAIT_OP_NAME.to_string(),
@@ -6390,9 +6390,9 @@ pub fn not_trait_instance_bool() -> TraitInstance {
     )
 }
 
-pub fn boxed_trait_instance(ty: &Arc<TypeNode>) -> TraitInstance {
+pub fn boxed_trait_instance(ty: &Arc<TypeNode>) -> TraitImpl {
     let trait_id = make_boxed_trait();
-    TraitInstance {
+    TraitImpl {
         qual_pred: QualPredicate {
             pred_constraints: vec![],
             eq_constraints: vec![],

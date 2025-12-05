@@ -117,11 +117,7 @@ impl AssocTypeImpl {
         Ok(())
     }
 
-    pub fn set_kinds(
-        &mut self,
-        trait_inst: &TraitInstance,
-        kind_env: &KindEnv,
-    ) -> Result<(), Errors> {
+    pub fn set_kinds(&mut self, trait_inst: &TraitImpl, kind_env: &KindEnv) -> Result<(), Errors> {
         let assoc_ty_name = TyAssoc {
             name: FullName::new(&trait_inst.trait_id().name.to_namespace(), &self.name),
         };
@@ -336,9 +332,9 @@ impl TraitDefn {
     }
 }
 
-// Trait instance.
+// Trait implementation
 #[derive(Clone)]
-pub struct TraitInstance {
+pub struct TraitImpl {
     // Statement such as "[a: Show, b: Show] (a, b): Show".
     pub qual_pred: QualPredicate,
     // Member implementation.
@@ -355,7 +351,7 @@ pub struct TraitInstance {
     pub is_user_defined: bool,
 }
 
-impl TraitInstance {
+impl TraitImpl {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let node = self.qual_pred.find_node_at(pos);
@@ -991,7 +987,7 @@ impl KindSignature {
 #[derive(Clone, Default)]
 pub struct TraitEnv {
     pub traits: Map<TraitId, TraitDefn>,
-    pub instances: Map<TraitId, Vec<TraitInstance>>,
+    pub instances: Map<TraitId, Vec<TraitImpl>>,
     pub aliases: Map<TraitId, TraitAlias>,
 }
 
@@ -1366,7 +1362,7 @@ impl TraitEnv {
 
         // Resolve names in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
-        let mut instances_resolved: Map<TraitId, Vec<TraitInstance>> = Default::default();
+        let mut instances_resolved: Map<TraitId, Vec<TraitImpl>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Set up NameResolutionContext.
@@ -1404,7 +1400,7 @@ impl TraitEnv {
 
         // Resolve aliases in trait implementations.
         let insntaces = std::mem::replace(&mut self.instances, Default::default());
-        let mut instances_resolved: Map<TraitId, Vec<TraitInstance>> = Default::default();
+        let mut instances_resolved: Map<TraitId, Vec<TraitImpl>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
                 // Resolve names in TrantInstance.
@@ -1426,7 +1422,7 @@ impl TraitEnv {
     pub fn add(
         &mut self,
         trait_infos: Vec<TraitDefn>,
-        trait_impls: Vec<TraitInstance>,
+        trait_impls: Vec<TraitImpl>,
         trait_aliases: Vec<TraitAlias>,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
@@ -1460,7 +1456,7 @@ impl TraitEnv {
     }
 
     // Add an instance.
-    pub fn add_instance(&mut self, inst: TraitInstance) -> Result<(), Errors> {
+    pub fn add_instance(&mut self, inst: TraitImpl) -> Result<(), Errors> {
         let trait_id = inst.trait_id();
         if !self.instances.contains_key(&trait_id) {
             self.instances.insert(trait_id.clone(), vec![]);

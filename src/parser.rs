@@ -209,7 +209,7 @@ fn parse_module(
     let mut global_value_defns: Vec<GlobalValueDefn> = vec![];
     let mut trait_infos: Vec<TraitDefn> = vec![];
     let mut trait_aliases: Vec<TraitAlias> = vec![];
-    let mut trait_impls: Vec<TraitInstance> = vec![];
+    let mut trait_impls: Vec<TraitImpl> = vec![];
     let mut import_statements: Vec<ImportStatement> = vec![];
     let mut export_statements: Vec<ExportStatement> = vec![];
 
@@ -251,7 +251,7 @@ fn parse_global_defns(
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitDefn>,
     trait_aliases: &mut Vec<TraitAlias>,
-    trait_impls: &mut Vec<TraitInstance>,
+    trait_impls: &mut Vec<TraitImpl>,
     export_statements: &mut Vec<ExportStatement>,
 ) -> Result<(), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_defns);
@@ -315,7 +315,7 @@ fn parse_global_defns_in_namespace(
     type_defns: &mut Vec<TypeDefn>,
     trait_infos: &mut Vec<TraitDefn>,
     trait_aliases: &mut Vec<TraitAlias>,
-    trait_impls: &mut Vec<TraitInstance>,
+    trait_impls: &mut Vec<TraitImpl>,
     export_statements: &mut Vec<ExportStatement>,
 ) -> Result<(), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
@@ -521,7 +521,7 @@ fn parse_trait_member_type_defn(
     })
 }
 
-fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitInstance, Errors> {
+fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitImpl, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_impl);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -571,7 +571,7 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitIns
             }
         }
     }
-    Ok(TraitInstance {
+    Ok(TraitImpl {
         qual_pred,
         members: value_impls,
         member_sigs: value_type_sigs,
