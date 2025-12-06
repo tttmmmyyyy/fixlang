@@ -630,8 +630,8 @@ impl TraitAliasEnv {
     }
 
     // Resolve trait aliases.
-    pub fn resolve_aliases(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
-        fn resolve_aliases_internal(
+    pub fn resolve_alias(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
+        fn resolve_alias_internal(
             env: &TraitAliasEnv,
             trait_id: &TraitId,
             res: &mut Vec<TraitId>,
@@ -652,14 +652,14 @@ impl TraitAliasEnv {
                 return Ok(());
             }
             for (t, _) in &env.data.get(trait_id).unwrap().value {
-                resolve_aliases_internal(env, t, res, visited)?;
+                resolve_alias_internal(env, t, res, visited)?;
             }
             Ok(())
         }
 
         let mut res = vec![];
         let mut visited = Set::default();
-        resolve_aliases_internal(self, trait_id, &mut res, &mut visited)?;
+        resolve_alias_internal(self, trait_id, &mut res, &mut visited)?;
         Ok(res)
     }
 }
@@ -1258,7 +1258,7 @@ impl TraitEnv {
         // Set kinds in trait aliases definitions.
         let mut resolved_aliases: Map<TraitId, Vec<TraitId>> = Map::default();
         for (id, _) in &self.aliases.data {
-            resolved_aliases.insert(id.clone(), self.aliases.resolve_aliases(id)?);
+            resolved_aliases.insert(id.clone(), self.aliases.resolve_alias(id)?);
             // If circular aliasing is detected, throw it immediately.
         }
         for (id, ta) in &mut self.aliases.data {

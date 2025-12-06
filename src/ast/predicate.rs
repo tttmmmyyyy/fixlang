@@ -83,7 +83,7 @@ impl Predicate {
         if !aliases.is_alias(&self.trait_id) {
             return Ok(vec![self.clone()]);
         }
-        let trait_ids = aliases.resolve_aliases(&self.trait_id)?;
+        let trait_ids = aliases.resolve_alias(&self.trait_id)?;
         let mut res = vec![];
         for trait_id in trait_ids {
             let mut p = self.clone();
