@@ -1,4 +1,5 @@
 use crate::ast::equality::Equality;
+use crate::ast::predicate::Predicate;
 use crate::ast::qual_pred::QualPred;
 use crate::error::Errors;
 use core::panic;

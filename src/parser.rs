@@ -2,7 +2,9 @@
 #[grammar = "grammer.pest"]
 struct FixParser;
 
-use crate::ast::{equality::Equality, qual_pred::QualPred, qual_type::QualType};
+use crate::ast::{
+    equality::Equality, predicate::Predicate, qual_pred::QualPred, qual_type::QualType,
+};
 
 use super::*;
 use ast::{

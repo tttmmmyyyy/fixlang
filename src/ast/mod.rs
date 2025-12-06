@@ -6,6 +6,7 @@ pub mod import;
 pub mod inline_llvm;
 pub mod name;
 pub mod pattern;
+pub mod predicate;
 pub mod program;
 pub mod qual_pred;
 pub mod qual_type;

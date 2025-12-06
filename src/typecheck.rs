@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
+        predicate::Predicate,
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
     },

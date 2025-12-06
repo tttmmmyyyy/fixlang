@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::ast::equality::Equality;
 use crate::ast::name::Name;
+use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
-use crate::ast::traits::{KindSignature, Predicate};
+use crate::ast::traits::KindSignature;
 use crate::ast::types::{Kind, KindEnv, TyVar, Type, TypeNode};
 use crate::error::Errors;
 use crate::misc::Map;
