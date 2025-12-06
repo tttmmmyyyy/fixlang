@@ -7,9 +7,7 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, NameResolutionContext, NameResolutionType, TypeEnv};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
-use crate::ast::types::{
-    type_from_tyvar, type_tyvar, Kind, Scheme, TyAssoc, TyVar, TypeNode,
-};
+use crate::ast::types::{type_from_tyvar, type_tyvar, Kind, Scheme, TyAssoc, TyVar, TypeNode};
 use crate::builtin::make_boxed_trait;
 use crate::misc::{insert_to_map_vec, number_to_varname, Map, Set};
 use crate::sourcefile::{SourcePos, Span};
@@ -365,6 +363,12 @@ impl TraitImpl {
         }
         for (_assoc_ty_name, assoc_ty_impl) in &self.assoc_types {
             let node = assoc_ty_impl.find_node_at(pos);
+            if node.is_some() {
+                return node;
+            }
+        }
+        for (_member_name, member_sig) in &self.member_sigs {
+            let node = member_sig.find_node_at(pos);
             if node.is_some() {
                 return node;
             }
