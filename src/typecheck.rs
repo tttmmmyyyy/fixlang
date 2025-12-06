@@ -4,6 +4,7 @@ use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
         qual_pred::{QualPred, QualPredScheme},
+        qual_type::QualType,
     },
     error::Errors,
 };
