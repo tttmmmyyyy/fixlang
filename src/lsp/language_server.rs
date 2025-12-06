@@ -1359,6 +1359,7 @@ fn find_trait_or_alias_def_src(program: &Program, trait_: TraitId) -> Option<Spa
         def_src = program
             .trait_env
             .aliases
+            .data
             .get(&trait_)
             .and_then(|ta| ta.source.clone());
     }
@@ -1471,7 +1472,7 @@ fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, program: &Prog
     }
 
     // Extract trait aliases from trait environment
-    for (trait_, trait_alias) in &program.trait_env.aliases {
+    for (trait_, trait_alias) in &program.trait_env.aliases.data {
         // Skip compiler-defined entities
         if trait_.name.to_string().contains('#') {
             continue;
@@ -1798,7 +1799,7 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
             if let Some(document) = ti.get_document() {
                 *docs += &format!("\n\n{}", document);
             }
-        } else if let Some(ta) = program.trait_env.aliases.get(&trait_id) {
+        } else if let Some(ta) = program.trait_env.aliases.data.get(&trait_id) {
             if let Some(document) = ta.get_document() {
                 *docs += &format!("\n\n{}", document);
             }
@@ -2302,7 +2303,7 @@ fn handle_code_action(
             for trait_ in program.trait_env.traits.keys() {
                 available_names.push(trait_.name.clone());
             }
-            for trait_alias in program.trait_env.aliases.keys() {
+            for trait_alias in program.trait_env.aliases.data.keys() {
                 available_names.push(trait_alias.name.clone());
             }
             available_names.sort();

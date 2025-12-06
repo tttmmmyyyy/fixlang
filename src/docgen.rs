@@ -682,7 +682,7 @@ fn trait_entries(
         entries.push(entry);
     }
 
-    for (id, info) in &program.trait_env.aliases {
+    for (id, info) in &program.trait_env.aliases.data {
         let name = id.name.clone();
 
         if !is_entry_should_be_documented(&name, mod_name, config) {

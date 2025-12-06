@@ -617,12 +617,18 @@ impl KindSignature {
     }
 }
 
+// Trait alias environment.
+#[derive(Clone, Default)]
+pub struct TraitAliasEnv {
+    pub data: Map<TraitId, TraitAlias>,
+}
+
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
     pub traits: Map<TraitId, TraitDefn>,
     pub impls: Map<TraitId, Vec<TraitImpl>>,
-    pub aliases: Map<TraitId, TraitAlias>,
+    pub aliases: TraitAliasEnv,
 }
 
 impl TraitEnv {
@@ -642,7 +648,7 @@ impl TraitEnv {
                 }
             }
         }
-        for (_, alias) in &self.aliases {
+        for (_, alias) in &self.aliases.data {
             let node = alias.find_node_at(pos);
             if node.is_some() {
                 return node;
@@ -664,7 +670,7 @@ impl TraitEnv {
         for (k, _v) in &self.traits {
             res.push(k.clone());
         }
-        for (k, _v) in &self.aliases {
+        for (k, _v) in &self.aliases.data {
             res.push(k.clone());
         }
         res
@@ -676,7 +682,7 @@ impl TraitEnv {
         // Check name confliction of traits and aliases.
         fn create_conflicting_error(env: &TraitEnv, trait_id: &TraitId) -> Errors {
             let this_src = &env.traits.get(trait_id).unwrap().source;
-            let other_src = &env.aliases.get(trait_id).unwrap().source;
+            let other_src = &env.aliases.data.get(trait_id).unwrap().source;
             Errors::from_msg_srcs(
                 format!("Duplicate definition for `{}`", trait_id.to_string()),
                 &[this_src, other_src],
@@ -684,20 +690,20 @@ impl TraitEnv {
         }
 
         for (trait_id, _) in &self.traits {
-            if self.aliases.contains_key(trait_id) {
+            if self.aliases.data.contains_key(trait_id) {
                 errors.append(create_conflicting_error(self, trait_id));
             }
         }
-        for (trait_id, _) in &self.aliases {
+        for (trait_id, _) in &self.aliases.data {
             if self.traits.contains_key(trait_id) {
                 errors.append(create_conflicting_error(self, trait_id));
             }
         }
 
         // Check that values of trait aliases are defined.
-        for (_, ta) in &self.aliases {
+        for (_, ta) in &self.aliases.data {
             for (t, _) in &ta.value {
-                if !self.traits.contains_key(t) && !self.aliases.contains_key(t) {
+                if !self.traits.contains_key(t) && !self.aliases.data.contains_key(t) {
                     errors.append(Errors::from_msg_srcs(
                         format!("Unknown trait `{}`.", t.to_string()),
                         &[&ta.source],
@@ -731,7 +737,7 @@ impl TraitEnv {
         // If some errors are found upto here, throw them.
         errors.to_result()?;
 
-        let aliases: Set<_> = self.aliases.keys().collect();
+        let aliases: Set<_> = self.aliases.data.keys().collect();
         // Prepare TypeCheckContext to use `unify`.
         let tc = TypeCheckContext::new(
             TraitEnv::default(),
@@ -970,7 +976,7 @@ impl TraitEnv {
         let mut errors = Errors::empty();
 
         // Resolve names in trait aliases.
-        for (trait_id, alias_info) in &mut self.aliases {
+        for (trait_id, alias_info) in &mut self.aliases.data {
             ctx.import_statements = imported_modules[&trait_id.name.module()].clone();
             errors.eat_err(alias_info.resolve_namespace(ctx));
         }
@@ -1100,8 +1106,8 @@ impl TraitEnv {
     // Add an trait alias.
     fn add_alias(&mut self, alias: TraitAlias) -> Result<(), Errors> {
         // Check duplicate definition.
-        if self.aliases.contains_key(&alias.id) {
-            let alias1 = self.aliases.get(&alias.id).unwrap();
+        if self.aliases.data.contains_key(&alias.id) {
+            let alias1 = self.aliases.data.get(&alias.id).unwrap();
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Duplicate definition for trait alias {}.",
@@ -1110,7 +1116,7 @@ impl TraitEnv {
                 &[&alias1.source, &alias.source],
             ));
         }
-        self.aliases.insert(alias.id.clone(), alias);
+        self.aliases.data.insert(alias.id.clone(), alias);
         Ok(())
     }
 
@@ -1211,6 +1217,7 @@ impl TraitEnv {
                     ),
                     &[&env
                         .aliases
+                        .data
                         .get(trait_id)
                         .map(|ta| ta.source.clone())
                         .flatten()],
@@ -1221,7 +1228,7 @@ impl TraitEnv {
                 res.push(trait_id.clone());
                 return Ok(());
             }
-            for (t, _) in &env.aliases.get(trait_id).unwrap().value {
+            for (t, _) in &env.aliases.data.get(trait_id).unwrap().value {
                 resolve_aliases_internal(env, t, res, visited)?;
             }
             Ok(())
@@ -1235,7 +1242,7 @@ impl TraitEnv {
 
     // Check if a trait name is an alias.
     pub fn is_alias(&self, trait_id: &TraitId) -> bool {
-        self.aliases.contains_key(trait_id)
+        self.aliases.data.contains_key(trait_id)
     }
 
     // Set kinds in Trait definitions and TraitAlias definitions.
@@ -1252,10 +1259,10 @@ impl TraitEnv {
 
         // Set kinds in trait aliases definitions.
         let mut resolved_aliases: Map<TraitId, Vec<TraitId>> = Map::default();
-        for (id, _) in &self.aliases {
+        for (id, _) in &self.aliases.data {
             resolved_aliases.insert(id.clone(), self.resolve_aliases(id)?); // If circular aliasing is detected, throw it immediately.
         }
-        for (id, ta) in &mut self.aliases {
+        for (id, ta) in &mut self.aliases.data {
             let mut kinds = resolved_aliases
                 .get(id)
                 .unwrap()
@@ -1298,7 +1305,7 @@ impl TraitEnv {
         for (id, ti) in &self.traits {
             res.insert(id.clone(), ti.type_var.kind.clone());
         }
-        for (id, ta) in &self.aliases {
+        for (id, ta) in &self.aliases.data {
             res.insert(id.clone(), ta.kind.clone());
         }
         res
@@ -1316,7 +1323,7 @@ impl TraitEnv {
                 errors.eat_err(self.add_instance(inst));
             }
         }
-        for (_, alias) in other.aliases {
+        for (_, alias) in other.aliases.data {
             if let Err(es) = self.add_alias(alias) {
                 errors.append(es);
             }
