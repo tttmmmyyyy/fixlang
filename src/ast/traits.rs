@@ -742,7 +742,7 @@ impl TraitEnv {
         }
 
         // Validate trait aliases:
-        // Check that values of trait aliases are defined.
+        // Check that traits that appear in values of trait aliases define actually exist.
         for (_, ta) in &self.aliases.data {
             for (t, _) in &ta.value {
                 if !self.traits.contains_key(t) && !self.aliases.data.contains_key(t) {
