@@ -50,10 +50,10 @@ fn check_program(mut program: Program, config: &Configuration) -> Result<Program
     program.validate_capital_name_confliction()?;
 
     // Infer namespaces of traits and types that appear in declarations and associated type implementations.
-    program.resolve_namespace_in_type_signs()?;
+    program.resolve_namespace_not_in_expr()?;
 
     // Resolve type aliases that appear in declarations and associated type implementations.
-    program.resolve_type_aliases_in_declaration()?;
+    program.resolve_type_aliases_not_in_expr()?;
 
     // Validate user-defined types.
     program.validate_type_defns()?;

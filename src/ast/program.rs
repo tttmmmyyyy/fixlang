@@ -1659,7 +1659,7 @@ impl Program {
 
     // Infer namespaces of traits and types that appear in declarations and associated type implementations.
     // NOTE: names in the lhs of definition of types/traits/global_values have to be full-named already when this function called.
-    pub fn resolve_namespace_in_type_signs(&mut self) -> Result<(), Errors> {
+    pub fn resolve_namespace_not_in_expr(&mut self) -> Result<(), Errors> {
         let mut ctx = NameResolutionContext::new(
             &self.tycon_names_with_aliases(),
             &self.trait_names_with_aliases(),
@@ -1698,8 +1698,8 @@ impl Program {
         Ok(())
     }
 
-    // Resolve type aliases that appear in declarations and associated type implementations.
-    pub fn resolve_type_aliases_in_declaration(&mut self) -> Result<(), Errors> {
+    // Resolve type aliases in types that appear NOT in expressions.
+    pub fn resolve_type_aliases_not_in_expr(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
         // Resolve aliases in type constructors.
