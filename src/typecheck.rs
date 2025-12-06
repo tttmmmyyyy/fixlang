@@ -509,7 +509,7 @@ impl TypeCheckContext {
     ) -> Result<Arc<TypeNode>, UnifOrOtherErr> {
         let mut preds = vec![];
         for pred in &scheme.predicates {
-            preds.append(&mut pred.resolve_trait_aliases(&self.trait_env)?);
+            preds.append(&mut pred.resolve_trait_aliases(&self.trait_env.aliases)?);
         }
         let mut eqs = scheme.equalities.clone();
         match constraint_mode {
@@ -1435,7 +1435,7 @@ impl TypeCheckContext {
         pred: Predicate,
         already_added: &mut Set<Name>,
     ) -> Result<(), UnifOrOtherErr> {
-        for pred in pred.resolve_trait_aliases(&self.trait_env)? {
+        for pred in pred.resolve_trait_aliases(&self.trait_env.aliases)? {
             self.add_predicate_reducing_noalias(pred, already_added)?;
         }
         Ok(())

@@ -1663,10 +1663,10 @@ pub struct Scheme {
 }
 
 impl Scheme {
-    pub fn resolve_trait_aliases(&self, trait_env: &TraitEnv) -> Result<Scheme, Errors> {
+    pub fn resolve_trait_aliases(&self, aliases: &TraitAliasEnv) -> Result<Scheme, Errors> {
         let mut preds = vec![];
         for pred in &self.predicates {
-            let mut pred = pred.resolve_trait_aliases(trait_env)?;
+            let mut pred = pred.resolve_trait_aliases(aliases)?;
             preds.append(&mut pred);
         }
         Ok(Scheme {
@@ -1677,9 +1677,9 @@ impl Scheme {
         })
     }
 
-    pub fn equivalent(lhs: &Scheme, rhs: &Scheme, trait_env: &TraitEnv) -> Result<bool, Errors> {
-        Ok(lhs.resolve_trait_aliases(trait_env)?.to_string_normalize()
-            == rhs.resolve_trait_aliases(trait_env)?.to_string_normalize())
+    pub fn equivalent(lhs: &Scheme, rhs: &Scheme, aliases: &TraitAliasEnv) -> Result<bool, Errors> {
+        Ok(lhs.resolve_trait_aliases(aliases)?.to_string_normalize()
+            == rhs.resolve_trait_aliases(aliases)?.to_string_normalize())
     }
 
     pub fn validate_constraints(&self, trait_env: &TraitEnv) -> Result<(), Errors> {
@@ -1703,7 +1703,7 @@ impl Scheme {
         }
         let mut preds = vec![];
         for pred in &self.predicates {
-            let mut pred = pred.resolve_trait_aliases(trait_env)?;
+            let mut pred = pred.resolve_trait_aliases(&trait_env.aliases)?;
             preds.append(&mut pred);
         }
         for eq in &self.equalities {

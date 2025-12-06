@@ -623,6 +623,47 @@ pub struct TraitAliasEnv {
     pub data: Map<TraitId, TraitAlias>,
 }
 
+impl TraitAliasEnv {
+    // Check if a trait name is an alias.
+    pub fn is_alias(&self, trait_id: &TraitId) -> bool {
+        self.data.contains_key(trait_id)
+    }
+
+    // Resolve trait aliases.
+    pub fn resolve_aliases(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
+        fn resolve_aliases_internal(
+            env: &TraitAliasEnv,
+            trait_id: &TraitId,
+            res: &mut Vec<TraitId>,
+            visited: &mut Set<TraitId>,
+        ) -> Result<(), Errors> {
+            if visited.contains(trait_id) {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "Circular aliasing detected in trait alias `{}`.",
+                        trait_id.to_string()
+                    ),
+                    &[&env.data.get(trait_id).map(|ta| ta.source.clone()).flatten()],
+                ));
+            }
+            visited.insert(trait_id.clone());
+            if !env.is_alias(trait_id) {
+                res.push(trait_id.clone());
+                return Ok(());
+            }
+            for (t, _) in &env.data.get(trait_id).unwrap().value {
+                resolve_aliases_internal(env, t, res, visited)?;
+            }
+            Ok(())
+        }
+
+        let mut res = vec![];
+        let mut visited = Set::default();
+        resolve_aliases_internal(self, trait_id, &mut res, &mut visited)?;
+        Ok(res)
+    }
+}
+
 // Trait environments.
 #[derive(Clone, Default)]
 pub struct TraitEnv {
@@ -712,7 +753,7 @@ impl TraitEnv {
                 }
             }
         }
-        // Now TraitAliasEnv is valid: we can use it to check trait implementations.
+        // Now TraitAliasEnv is valid: we can use it for other validations.
         let aliases = self.aliases.clone();
         // If some errors are found upto here, throw them.
         errors.to_result()?;
@@ -868,39 +909,39 @@ impl TraitEnv {
                     }
                 }
 
-                // Validate method type signatures.
-                for (method_name, method_sig) in method_sigs {
-                    // Check the method is defined in the trait.
+                // Validate member type signatures.
+                for (member_name, member_sig) in method_sigs {
+                    // Check the member is defined in the trait.
                     if !trait_methods
                         .iter()
-                        .find(|mi| &mi.name == method_name)
+                        .find(|mi| &mi.name == member_name)
                         .is_some()
                     {
                         errors.append(Errors::from_msg_srcs(
                             format!(
                                 "`{}` is not a member of trait `{}`.",
-                                method_name,
+                                member_name,
                                 trait_id.to_string(),
                             ),
-                            &[&method_sig.ty.get_source()],
+                            &[&member_sig.ty.get_source()],
                         ));
                         continue;
                     }
 
                     // Check the member type signature is equivalent to the one in the trait definition.
                     let trait_defn = &self.traits[trait_id];
-                    let type_by_defn = inst.member_scheme_by_defn(method_name, trait_defn);
-                    let type_by_sig = inst.member_scheme(method_name, trait_defn);
-                    if !Scheme::equivalent(&type_by_defn, &type_by_sig, &self)? {
+                    let type_by_defn = inst.member_scheme_by_defn(member_name, trait_defn);
+                    let type_by_sig = inst.member_scheme(member_name, trait_defn);
+                    if !Scheme::equivalent(&type_by_defn, &type_by_sig, &aliases)? {
                         errors.append(Errors::from_msg_srcs(
                             format!(
                                 "Type signature of member `{}` is not equivalent to the one in the trait definition. \
                                 Expected: `{}`, found: `{}`.",
-                                method_name,
+                                member_name,
                                 type_by_defn.to_string(),
                                 type_by_sig.to_string(),
                             ),
-                            &[&method_sig.ty.get_source()],
+                            &[&member_sig.ty.get_source()],
                         ));
                     }
                 }
@@ -1202,50 +1243,6 @@ impl TraitEnv {
         assoc_ty_kind_info
     }
 
-    // Resolve trait aliases.
-    pub fn resolve_aliases(&self, trait_id: &TraitId) -> Result<Vec<TraitId>, Errors> {
-        fn resolve_aliases_internal(
-            env: &TraitEnv,
-            trait_id: &TraitId,
-            res: &mut Vec<TraitId>,
-            visited: &mut Set<TraitId>,
-        ) -> Result<(), Errors> {
-            if visited.contains(trait_id) {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "Circular aliasing detected in trait alias `{}`.",
-                        trait_id.to_string()
-                    ),
-                    &[&env
-                        .aliases
-                        .data
-                        .get(trait_id)
-                        .map(|ta| ta.source.clone())
-                        .flatten()],
-                ));
-            }
-            visited.insert(trait_id.clone());
-            if env.traits.contains_key(trait_id) {
-                res.push(trait_id.clone());
-                return Ok(());
-            }
-            for (t, _) in &env.aliases.data.get(trait_id).unwrap().value {
-                resolve_aliases_internal(env, t, res, visited)?;
-            }
-            Ok(())
-        }
-
-        let mut res = vec![];
-        let mut visited = Set::default();
-        resolve_aliases_internal(self, trait_id, &mut res, &mut visited)?;
-        Ok(res)
-    }
-
-    // Check if a trait name is an alias.
-    pub fn is_alias(&self, trait_id: &TraitId) -> bool {
-        self.aliases.data.contains_key(trait_id)
-    }
-
     // Set kinds in Trait definitions and TraitAlias definitions.
     pub fn set_kinds_in_trait_and_alias_defns(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
@@ -1261,7 +1258,8 @@ impl TraitEnv {
         // Set kinds in trait aliases definitions.
         let mut resolved_aliases: Map<TraitId, Vec<TraitId>> = Map::default();
         for (id, _) in &self.aliases.data {
-            resolved_aliases.insert(id.clone(), self.resolve_aliases(id)?); // If circular aliasing is detected, throw it immediately.
+            resolved_aliases.insert(id.clone(), self.aliases.resolve_aliases(id)?);
+            // If circular aliasing is detected, throw it immediately.
         }
         for (id, ta) in &mut self.aliases.data {
             let mut kinds = resolved_aliases

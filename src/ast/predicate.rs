@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::ast::name::Name;
 use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
-use crate::ast::traits::TraitId;
+use crate::ast::traits::{TraitAliasEnv, TraitId};
 use crate::ast::types::{Kind, KindEnv, TyVar, TypeNode};
 use crate::error::Errors;
 use crate::misc::Map;
@@ -79,11 +79,11 @@ impl Predicate {
     }
 
     // If the trait used in this predicate is a trait alias, resolve it to a set of predicates that are not using trait aliases.
-    pub fn resolve_trait_aliases(&self, trait_env: &crate::ast::traits::TraitEnv) -> Result<Vec<Predicate>, Errors> {
-        if !trait_env.is_alias(&self.trait_id) {
+    pub fn resolve_trait_aliases(&self, aliases: &TraitAliasEnv) -> Result<Vec<Predicate>, Errors> {
+        if !aliases.is_alias(&self.trait_id) {
             return Ok(vec![self.clone()]);
         }
-        let trait_ids = trait_env.resolve_aliases(&self.trait_id)?;
+        let trait_ids = aliases.resolve_aliases(&self.trait_id)?;
         let mut res = vec![];
         for trait_id in trait_ids {
             let mut p = self.clone();
