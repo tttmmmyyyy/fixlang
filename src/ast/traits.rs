@@ -741,7 +741,7 @@ impl TraitEnv {
             }
         }
 
-        // Validate trait aliases:
+        // Validate trait aliases.
         // Check that traits that appear in values of trait aliases define actually exist.
         for (_, ta) in &self.aliases.data {
             for (t, _) in &ta.value {
@@ -753,8 +753,6 @@ impl TraitEnv {
                 }
             }
         }
-        // Now TraitAliasEnv is valid: we can use it for other validations.
-        let aliases = self.aliases.clone();
         // If some errors are found upto here, throw them.
         errors.to_result()?;
 
@@ -791,186 +789,17 @@ impl TraitEnv {
         );
         // Validate trait implementations.
         for (trait_id, impls) in &self.impls {
-            for inst in impls.iter() {
+            for impl_ in impls.iter() {
                 // check implementation is given for trait, not for trait alias.
-                if aliases.data.contains_key(trait_id) {
-                    errors.append(Errors::from_msg_srcs(
+                if self.aliases.is_alias(&trait_id) {
+                    return Err(Errors::from_msg_srcs(
                         "A trait alias cannot be implemented directly. Implement each aliased trait instead.".to_string(),
-                        &[&inst.qual_pred.predicate.source],
-                    ));
-                    continue;
-                }
-
-                // Check instance head.
-                let implemented_ty = &inst.qual_pred.predicate.ty;
-                if !implemented_ty.is_implementable() {
-                    errors.append(Errors::from_msg_srcs(
-                        format!(
-                            "Implementing trait for type `{}` is not allowed. \
-                            The head (in this case, `{}`) of the type should be a type constructor.",
-                            implemented_ty.to_string(),
-                            implemented_ty.get_head_string(),
-                        ),
-                        &[&implemented_ty.get_source()],
-                    ));
-                    continue;
-                }
-
-                // Validate the set of trait members.
-                let trait_members = &self.traits[trait_id].members;
-                let impl_members = &inst.members;
-                let member_sigs = &inst.member_sigs;
-                for trait_member in trait_members {
-                    if !impl_members.contains_key(&trait_member.name) {
-                        errors.append(Errors::from_msg_srcs(
-                            format!("Lacking implementation of member `{}`.", trait_member.name),
-                            &[&inst.source],
-                        ));
-                    }
-                }
-                for (impl_member, impl_expr) in impl_members {
-                    if !trait_members
-                        .iter()
-                        .find(|mi| mi.name == *impl_member)
-                        .is_some()
-                    {
-                        errors.append(Errors::from_msg_srcs(
-                            format!(
-                                "`{}` is not a member of trait `{}`.",
-                                impl_member,
-                                trait_id.to_string(),
-                            ),
-                            &[&impl_expr.source],
-                        ));
-                    }
-                }
-
-                // Validate the set of associated types.
-                let trait_assoc_types = &self.traits[trait_id].assoc_types;
-                let impl_assoc_types = &inst.assoc_types;
-                for (trait_assoc_type, _) in trait_assoc_types {
-                    if !impl_assoc_types.contains_key(trait_assoc_type) {
-                        errors.append(Errors::from_msg_srcs(
-                            format!(
-                                "Lacking implementation of associated type `{}`.",
-                                trait_assoc_type,
-                            ),
-                            &[&inst.source],
-                        ));
-                    }
-                }
-                for (impl_assoc_type, impl_info) in impl_assoc_types {
-                    if !trait_assoc_types.contains_key(impl_assoc_type) {
-                        errors.append(Errors::from_msg_srcs(
-                            format!(
-                                "`{}` is not an associated type of trait `{}`.",
-                                impl_assoc_type,
-                                trait_id.to_string(),
-                            ),
-                            &[&impl_info.source],
-                        ));
-                    }
-                    // Validate free variable of associated type implementation.
-                    let mut allowed_tyvars = vec![];
-                    inst.impl_type().free_vars_to_vec(&mut allowed_tyvars);
-                    for arg in &impl_info.params {
-                        allowed_tyvars.push(arg.clone());
-                    }
-                    for used_tv in impl_info.value.free_vars_vec() {
-                        if allowed_tyvars
-                            .iter()
-                            .all(|allowed_tv| allowed_tv.name != used_tv.name)
-                        {
-                            errors.append(Errors::from_msg_srcs(
-                                format!("Unknown type variable `{}`.", used_tv.name),
-                                &[&impl_info.source],
-                            ));
-                        }
-                    }
-                }
-
-                // For members without type signature, type variables used in type annotations in the member
-                // must appear in the type being implemented.
-                for (method_name, method_expr) in impl_members {
-                    if !member_sigs.contains_key(method_name) {
-                        let mut allowed_tyvars = vec![];
-                        inst.impl_type().free_vars_to_vec(&mut allowed_tyvars);
-                        for (used_tv, tv_src) in collect_annotation_tyvars(&method_expr) {
-                            if allowed_tyvars
-                                .iter()
-                                .all(|allowed_tv| allowed_tv.name != used_tv.name)
-                            {
-                                errors.append(Errors::from_msg_srcs(
-                                    format!("Unknown type variable `{}`.", used_tv.name),
-                                    &[&tv_src],
-                                ));
-                            }
-                        }
-                    }
-                }
-
-                // Validate member type signatures.
-                for (member_name, member_sig) in member_sigs {
-                    // Check the member is defined in the trait.
-                    if !trait_members
-                        .iter()
-                        .find(|mi| &mi.name == member_name)
-                        .is_some()
-                    {
-                        errors.append(Errors::from_msg_srcs(
-                            format!(
-                                "`{}` is not a member of trait `{}`.",
-                                member_name,
-                                trait_id.to_string(),
-                            ),
-                            &[&member_sig.ty.get_source()],
-                        ));
-                        continue;
-                    }
-
-                    // Check the member type signature is equivalent to the one in the trait definition.
-                    let trait_defn = &self.traits[trait_id];
-                    let type_by_defn = inst.member_scheme_by_defn(member_name, trait_defn);
-                    let type_by_sig = inst.member_scheme(member_name, trait_defn);
-                    if !Scheme::equivalent(&type_by_defn, &type_by_sig, &aliases)? {
-                        errors.append(Errors::from_msg_srcs(
-                            format!(
-                                "Type signature of member `{}` is not equivalent to the one in the trait definition. \
-                                Expected: `{}`, found: `{}`.",
-                                member_name,
-                                type_by_defn.to_string(),
-                                type_by_sig.to_string(),
-                            ),
-                            &[&member_sig.ty.get_source()],
-                        ));
-                    }
-                }
-
-                // Check Orphan rules.
-                let instance_def_mod = &inst.define_module;
-                let trait_def_id = trait_id.name.module();
-                let ty = &inst.qual_pred.predicate.ty;
-                let type_def_id = ty.toplevel_tycon().unwrap().name.module();
-                if trait_def_id != *instance_def_mod && type_def_id != *instance_def_mod {
-                    errors.append(Errors::from_msg_srcs(
-                        format!(
-                            "Implementing trait `{}` for type `{}` in module `{}` is illegal; \
-                            it is not allowed to implement an external trait for an external type.",
-                            trait_id.to_string(),
-                            ty.to_string_normalize(),
-                            instance_def_mod.to_string(),
-                        ),
-                        &[&inst.source.as_ref().map(|s| s.to_head_character())],
+                        &[&impl_.qual_pred.predicate.source],
                     ));
                 }
-
-                // Check `Std::Boxed` is not implemented by user.
-                if trait_id == &make_boxed_trait() && inst.is_user_defined {
-                    errors.append(Errors::from_msg_srcs(
-                        "Implementing `Std::Boxed` by hand is not allowed. It is automatically implemented for all boxed types by compiler.".to_string(),
-                        &[&inst.source],
-                    ));
-                }
+                // Now `trait_id` is not an alias, so get the trait definition.
+                let defn = self.traits.get(trait_id).unwrap();
+                errors.eat_err(Self::validate_trait_impl(impl_, defn, &self.aliases));
             }
             // Throw errors if any.
             errors.to_result()?;
@@ -1008,6 +837,184 @@ impl TraitEnv {
         }
 
         errors.to_result()
+    }
+
+    fn validate_trait_impl(
+        impl_: &TraitImpl,
+        defn: &TraitDefn,
+        aliases: &TraitAliasEnv,
+    ) -> Result<(), Errors> {
+        let trait_id = &defn.trait_;
+
+        // Check instance head.
+        let implemented_ty = &impl_.qual_pred.predicate.ty;
+        if !implemented_ty.is_implementable() {
+            return Err(Errors::from_msg_srcs(
+                        format!(
+                            "Implementing trait for type `{}` is not allowed. \
+                            The head (in this case, `{}`) of the type should be a type constructor.",
+                            implemented_ty.to_string(),
+                            implemented_ty.get_head_string(),
+                        ),
+                        &[&implemented_ty.get_source()],
+                    ));
+        }
+
+        // Validate the set of trait members.
+        let trait_members = &defn.members;
+        let impl_members = &impl_.members;
+        let member_sigs = &impl_.member_sigs;
+        for trait_member in trait_members {
+            if !impl_members.contains_key(&trait_member.name) {
+                return Err(Errors::from_msg_srcs(
+                    format!("Lacking implementation of member `{}`.", trait_member.name),
+                    &[&impl_.source],
+                ));
+            }
+        }
+        for (impl_member, impl_expr) in impl_members {
+            if trait_members
+                .iter()
+                .find(|mi| mi.name == *impl_member)
+                .is_none()
+            {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "`{}` is not a member of trait `{}`.",
+                        impl_member,
+                        trait_id.to_string(),
+                    ),
+                    &[&impl_expr.source],
+                ));
+            }
+        }
+
+        // Validate the set of associated types.
+        let trait_assoc_types = &defn.assoc_types;
+        let impl_assoc_types = &impl_.assoc_types;
+        for (trait_assoc_type, _) in trait_assoc_types {
+            if !impl_assoc_types.contains_key(trait_assoc_type) {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "Lacking implementation of associated type `{}`.",
+                        trait_assoc_type,
+                    ),
+                    &[&impl_.source],
+                ));
+            }
+        }
+        for (impl_assoc_type, impl_info) in impl_assoc_types {
+            if !trait_assoc_types.contains_key(impl_assoc_type) {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "`{}` is not an associated type of trait `{}`.",
+                        impl_assoc_type,
+                        trait_id.to_string(),
+                    ),
+                    &[&impl_info.source],
+                ));
+            }
+            // Validate free variable of associated type implementation.
+            let mut allowed_tyvars = vec![];
+            impl_.impl_type().free_vars_to_vec(&mut allowed_tyvars);
+            for arg in &impl_info.params {
+                allowed_tyvars.push(arg.clone());
+            }
+            for used_tv in impl_info.value.free_vars_vec() {
+                if allowed_tyvars
+                    .iter()
+                    .all(|allowed_tv| allowed_tv.name != used_tv.name)
+                {
+                    return Err(Errors::from_msg_srcs(
+                        format!("Unknown type variable `{}`.", used_tv.name),
+                        &[&impl_info.source],
+                    ));
+                }
+            }
+        }
+
+        // For members without type signature, type variables used in type annotations in the member
+        // must appear in the type being implemented.
+        for (method_name, method_expr) in impl_members {
+            if !member_sigs.contains_key(method_name) {
+                let mut allowed_tyvars = vec![];
+                impl_.impl_type().free_vars_to_vec(&mut allowed_tyvars);
+                for (used_tv, tv_src) in collect_annotation_tyvars(&method_expr) {
+                    if allowed_tyvars
+                        .iter()
+                        .all(|allowed_tv| allowed_tv.name != used_tv.name)
+                    {
+                        return Err(Errors::from_msg_srcs(
+                            format!("Unknown type variable `{}`.", used_tv.name),
+                            &[&tv_src],
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Validate member type signatures.
+        for (member_name, member_sig) in member_sigs {
+            // Check the member is defined in the trait.
+            if !trait_members
+                .iter()
+                .find(|mi| &mi.name == member_name)
+                .is_some()
+            {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "`{}` is not a member of trait `{}`.",
+                        member_name,
+                        trait_id.to_string(),
+                    ),
+                    &[&member_sig.ty.get_source()],
+                ));
+            }
+
+            // Check the member type signature is equivalent to the one in the trait definition.
+            let trait_defn = &defn;
+            let type_by_defn = impl_.member_scheme_by_defn(member_name, trait_defn);
+            let type_by_sig = impl_.member_scheme(member_name, trait_defn);
+            if !Scheme::equivalent(&type_by_defn, &type_by_sig, &aliases)? {
+                return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Type signature of member `{}` is not equivalent to the one in the trait definition. \
+                                Expected: `{}`, found: `{}`.",
+                                member_name,
+                                type_by_defn.to_string(),
+                                type_by_sig.to_string(),
+                            ),
+                            &[&member_sig.ty.get_source()],
+                        ));
+            }
+        }
+
+        // Check Orphan rules.
+        let instance_def_mod = &impl_.define_module;
+        let trait_def_id = trait_id.name.module();
+        let ty = &impl_.qual_pred.predicate.ty;
+        let type_def_id = ty.toplevel_tycon().unwrap().name.module();
+        if trait_def_id != *instance_def_mod && type_def_id != *instance_def_mod {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "Implementing trait `{}` for type `{}` in module `{}` is illegal; \
+                            it is not allowed to implement an external trait for an external type.",
+                    trait_id.to_string(),
+                    ty.to_string_normalize(),
+                    instance_def_mod.to_string(),
+                ),
+                &[&impl_.source.as_ref().map(|s| s.to_head_character())],
+            ));
+        }
+
+        // Check `Std::Boxed` is not implemented by user.
+        if trait_id == &make_boxed_trait() && impl_.is_user_defined {
+            return Err(Errors::from_msg_srcs(
+                        "Implementing `Std::Boxed` by hand is not allowed. It is automatically implemented for all boxed types by compiler.".to_string(),
+                        &[&impl_.source],
+                    ));
+        }
+        Ok(())
     }
 
     pub fn resolve_namespace(

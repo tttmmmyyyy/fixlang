@@ -10302,6 +10302,30 @@ pub fn test_type_sign_in_trait_impl_mismatch_type() {
 }
 
 #[test]
+pub fn test_type_sign_in_trait_impl_redundant_kind_sign() {
+    let source = r#"
+    module Main;
+
+    trait a : MyTrait {
+        my_member : (f, a);
+    }
+
+    type MyType = struct {};
+
+    impl MyType : MyTrait {
+        my_member : [f:*] (f, MyType);
+        my_member = undefined("");
+    }
+    
+    main : IO ();
+    main = (
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::compiler_develop_mode());
+}
+
+#[test]
 pub fn test_type_sign_in_trait_impl_undefined_type_var_0() {
     let source = r#"
     module Main;
@@ -10509,4 +10533,82 @@ main : IO () = (
 );
     "#;
     test_source(source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_lacking_impl() {
+    let source = r#"
+module Main;
+
+trait [f : *->*] f : MyFunctor {
+    mymap : (a -> b) -> f a -> f b;
+}
+
+type MyType a = struct {};
+
+impl MyType : MyFunctor {
+    mymap : (a -> b) -> MyType a -> MyType b;
+}
+
+main : IO () = (
+    eval (MyType{} : MyType I64).mymap(to_U64);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Lacking implementation of member `mymap`.",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_wrong_member_name() {
+    let source = r#"
+module Main;
+
+trait [f : *->*] f : MyFunctor {
+    mymap : (a -> b) -> f a -> f b;
+}
+
+type MyType a = struct {};
+
+impl MyType : MyFunctor {
+    my_map : (a -> b) -> MyType a -> MyType b;
+    mymap = |f, x| MyType{};
+}
+
+main : IO () = (
+    eval (MyType{} : MyType I64).mymap(to_U64);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "`my_map` is not a member of trait `Main::MyFunctor`.",
+    );
+}
+
+#[test]
+pub fn test_impl_undefined_trait() {
+    let source = r#"
+module Main;
+
+type MyType a = struct {};
+
+impl MyType : MyFunctor {
+    mymap = |f, x| MyType{};
+}
+
+main : IO () = (
+    eval (MyType{} : MyType I64).mymap(to_U64);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Unknown trait name `MyFunctor`.",
+    );
 }
