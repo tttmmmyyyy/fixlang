@@ -4,6 +4,7 @@ pub mod export_statement;
 pub mod expr;
 pub mod import;
 pub mod inline_llvm;
+pub mod kind_scope;
 pub mod name;
 pub mod pattern;
 pub mod predicate;

@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
 use crate::ast::equality::Equality;
-use crate::ast::name::Name;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
 use crate::ast::traits::KindSignature;
-use crate::ast::types::{Kind, KindEnv, TyVar, Type, TypeNode};
+use crate::ast::types::TyVar;
 use crate::error::Errors;
-use crate::misc::Map;
 use crate::sourcefile::SourcePos;
 
 // Qualified predicate. Statement such as "[a : Eq] Array a : Eq".
@@ -95,89 +93,6 @@ impl QualPred {
             eq.resolve_type_aliases(type_env)?;
         }
         self.predicate.resolve_type_aliases(type_env)?;
-        Ok(())
-    }
-
-    pub fn extend_kind_scope(
-        scope: &mut Map<Name, Arc<Kind>>,
-        preds: &Vec<Predicate>,
-        eqs: &Vec<Equality>,
-        kind_signs: &Vec<KindSignature>,
-        kind_env: &KindEnv,
-    ) -> Result<(), String> {
-        fn insert(
-            scope: &mut Map<Name, Arc<Kind>>,
-            tyvar: String,
-            kind: Arc<Kind>,
-        ) -> Result<(), String> {
-            if scope.contains_key(&tyvar) {
-                if scope[&tyvar] != kind {
-                    return Err(format!("Kind mismatch on type variable `{}`.", tyvar));
-                }
-            } else {
-                scope.insert(tyvar, kind);
-            }
-            Ok(())
-        }
-        fn extend_by_assoc_ty_application(
-            scope: &mut Map<Name, Arc<Kind>>,
-            assoc_ty_app: Arc<TypeNode>,
-            kind_env: &KindEnv,
-        ) -> Result<(), String> {
-            match &assoc_ty_app.ty {
-                Type::AssocTy(assoc_ty, args) => {
-                    let kind_info = kind_env.assoc_tys.get(assoc_ty).unwrap();
-                    if args.len() != kind_info.param_kinds.len() {
-                        return Err(format!(
-                            "Invalid number of arguments for associated type `{}`. Expect: {}, found: {}.",
-                            assoc_ty.name.to_string(),
-                            kind_info.param_kinds.len(),
-                            args.len()
-                        ));
-                    }
-                    for (arg, kind) in args.iter().zip(kind_info.param_kinds.iter()) {
-                        match &arg.ty {
-                            Type::TyVar(tv) => {
-                                insert(scope, tv.name.clone(), kind.clone())?;
-                            }
-                            Type::AssocTy(_, _) => {
-                                extend_by_assoc_ty_application(scope, arg.clone(), kind_env)?;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                _ => unreachable!("Associated type application expected."),
-            }
-            Ok(())
-        }
-
-        for kp in kind_signs {
-            let tyvar = kp.tyvar.clone();
-            let kind = kp.kind.clone();
-            insert(scope, tyvar, kind)?;
-        }
-        for pred in preds {
-            match &pred.ty.ty {
-                Type::TyVar(tv) => {
-                    let trait_id = &pred.trait_id;
-                    if !kind_env.traits_and_aliases.contains_key(trait_id) {
-                        panic!("Unknown trait: {}", trait_id.to_string());
-                    }
-                    let kind = kind_env.traits_and_aliases[trait_id].clone();
-                    insert(scope, tv.name.clone(), kind)?;
-                }
-                Type::AssocTy(_, _) => {
-                    extend_by_assoc_ty_application(scope, pred.ty.clone(), kind_env)?;
-                }
-                _ => {
-                    // Do nothing.
-                }
-            }
-        }
-        for eq in eqs {
-            extend_by_assoc_ty_application(scope, eq.lhs(), kind_env)?;
-        }
         Ok(())
     }
 }

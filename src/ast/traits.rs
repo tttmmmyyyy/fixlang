@@ -1,13 +1,14 @@
 use crate::ast::equality::{Equality, EqualityScheme};
 use crate::ast::expr::ExprNode;
 use crate::ast::import::ImportStatement;
+use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::{FullName, Name};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, NameResolutionContext, NameResolutionType, TypeEnv};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
 use crate::ast::types::{
-    type_from_tyvar, type_tyvar, Kind, KindEnv, Scheme, TyAssoc, TyVar, TypeNode,
+    type_from_tyvar, type_tyvar, Kind, Scheme, TyAssoc, TyVar, TypeNode,
 };
 use crate::builtin::make_boxed_trait;
 use crate::misc::{insert_to_map_vec, number_to_varname, Map, Set};
@@ -141,11 +142,13 @@ impl AssocTypeImpl {
             *param = param.set_kind(kind.clone());
             tvs_in_value.push(param.clone());
         }
-        let mut tv_to_kind = Map::default();
+        let mut scope = KindScope::new();
         for tv_in_value in tvs_in_value {
-            tv_to_kind.insert(tv_in_value.name.clone(), tv_in_value.kind.clone());
+            scope
+                .insert(tv_in_value.name.clone(), tv_in_value.kind.clone())
+                .map_err(|e| Errors::from_msg_srcs(e, &[&self.source]))?;
         }
-        self.value = self.value.set_kinds(&tv_to_kind);
+        self.value = self.value.set_kinds(&scope);
         Ok(())
     }
 }
@@ -373,25 +376,24 @@ impl TraitImpl {
         &mut self,
         kind_env: &KindEnv,
     ) -> Result<(), Errors> {
-        let mut scope = Map::default();
+        let mut kind_scope = KindScope::new();
         let preds = &self.qual_pred.pred_constraints;
         let eqs = &self.qual_pred.eq_constraints;
         let kind_signs = &self.qual_pred.kind_constraints;
-        let res = QualPred::extend_kind_scope(&mut scope, preds, eqs, kind_signs, kind_env);
+        let res = kind_scope.extend(preds, eqs, kind_signs, kind_env);
         if res.is_err() {
             return Err(Errors::from_msg_srcs(res.unwrap_err(), &[&self.source]));
         }
-        self.qual_pred.predicate.set_kinds(&scope);
+        self.qual_pred.predicate.set_kinds(&kind_scope);
         for pred in &mut self.qual_pred.pred_constraints {
-            pred.set_kinds(&scope);
+            pred.set_kinds(&kind_scope);
         }
         for eq in &mut self.qual_pred.eq_constraints {
-            eq.set_kinds(&scope);
+            eq.set_kinds(&kind_scope);
         }
         for (_member_name, member_sig) in &mut self.member_sigs {
-            let mut scope = scope.clone();
-            let res = QualPred::extend_kind_scope(
-                &mut scope,
+            let mut member_kind_scope = kind_scope.clone();
+            let res = member_kind_scope.extend(
                 &member_sig.preds,
                 &member_sig.eqs,
                 &member_sig.kind_signs,
@@ -403,12 +405,12 @@ impl TraitImpl {
                     &[&member_sig.ty.get_source()],
                 ));
             }
-            member_sig.ty = member_sig.ty.set_kinds(&scope);
+            member_sig.ty = member_sig.ty.set_kinds(&member_kind_scope);
             for pred in &mut member_sig.preds {
-                pred.set_kinds(&scope);
+                pred.set_kinds(&member_kind_scope);
             }
             for eq in &mut member_sig.eqs {
-                eq.set_kinds(&scope);
+                eq.set_kinds(&member_kind_scope);
             }
         }
         Ok(())

@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
+use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::error::Errors;
-use misc::Map;
-use name::Name;
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -82,7 +81,7 @@ impl Equality {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, scope: &Map<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &KindScope) {
         for arg in &mut self.args {
             *arg = arg.set_kinds(scope);
         }

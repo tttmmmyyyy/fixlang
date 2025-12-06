@@ -1,6 +1,6 @@
 use crate::ast::equality::Equality;
+use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::predicate::Predicate;
-use crate::ast::qual_pred::QualPred;
 use crate::error::Errors;
 use core::panic;
 use inkwell::types::BasicType;
@@ -434,23 +434,17 @@ impl TypeNode {
     }
 
     // Set kinds to type variables.
-    pub fn set_kinds(self: &Arc<TypeNode>, tv_to_kind: &Map<Name, Arc<Kind>>) -> Arc<TypeNode> {
+    pub fn set_kinds(self: &Arc<TypeNode>, scope: &KindScope) -> Arc<TypeNode> {
         match &self.ty {
-            Type::TyVar(tv) => {
-                if tv_to_kind.contains_key(&tv.name) {
-                    self.set_tyvar_kind(tv_to_kind[&tv.name].clone())
-                } else {
-                    self.clone()
-                }
-            }
+            Type::TyVar(tv) => self.set_tyvar(scope.set_tv(tv)),
             Type::TyCon(_tc) => self.clone(),
             Type::TyApp(fun, arg) => self
-                .set_tyapp_fun(fun.set_kinds(tv_to_kind))
-                .set_tyapp_arg(arg.set_kinds(tv_to_kind)),
+                .set_tyapp_fun(fun.set_kinds(scope))
+                .set_tyapp_arg(arg.set_kinds(scope)),
             Type::AssocTy(_, args) => {
                 let args = args
                     .iter()
-                    .map(|arg| arg.set_kinds(tv_to_kind))
+                    .map(|arg| arg.set_kinds(scope))
                     .collect::<Vec<_>>();
                 self.set_assocty_args(args)
             }
@@ -512,6 +506,7 @@ impl TypeNode {
         }
     }
 
+    #[allow(dead_code)]
     pub fn set_tyvar_kind(&self, kind: Arc<Kind>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -523,7 +518,6 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_tyvar(&self, tv: Arc<TyVar>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -1865,20 +1859,16 @@ impl Scheme {
 
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
         let mut ret = self.clone();
-        let mut scope: Map<Name, Arc<Kind>> = Default::default();
         // If a kind in `self.vars` is not `*`, then the kind is explicitly specified by user, so we insert it into `scope`.
+        let mut kind_scope = KindScope::new();
         for tv in &self.gen_vars {
             if tv.kind != kind_star() {
-                scope.insert(tv.name.clone(), tv.kind.clone());
+                kind_scope
+                    .insert(tv.name.clone(), tv.kind.clone())
+                    .map_err(|msg| Errors::from_msg_srcs(msg, &[&ret.ty.get_source()]))?;
             }
         }
-        let res = QualPred::extend_kind_scope(
-            &mut scope,
-            &ret.predicates,
-            &ret.equalities,
-            &vec![],
-            kind_env,
-        );
+        let res = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
         if let Err(msg) = res {
             let mut span = ret.predicates[0].source.clone();
             for i in 1..ret.predicates.len() {
@@ -1887,16 +1877,14 @@ impl Scheme {
             return Err(Errors::from_msg_srcs(msg, &[&span]));
         }
         for p in &mut ret.predicates {
-            p.set_kinds(&scope);
+            p.set_kinds(&kind_scope);
         }
         for eq in &mut ret.equalities {
-            eq.set_kinds(&scope);
+            eq.set_kinds(&kind_scope);
         }
-        ret.ty = ret.ty.set_kinds(&scope);
+        ret.ty = ret.ty.set_kinds(&kind_scope);
         for tv in &mut ret.gen_vars {
-            if scope.contains_key(&tv.name) {
-                *tv = tv.set_kind(scope[&tv.name].clone());
-            }
+            *tv = kind_scope.set_tv(tv);
         }
         Ok(Arc::new(ret))
     }
@@ -1997,11 +1985,4 @@ impl Scheme {
         }
         self.ty.find_node_at(pos)
     }
-}
-
-#[derive(Default, Clone)]
-pub struct KindEnv {
-    pub tycons: Map<TyCon, Arc<Kind>>,
-    pub assoc_tys: Map<TyAssoc, AssocTypeKindInfo>,
-    pub traits_and_aliases: Map<TraitId, Arc<Kind>>,
 }

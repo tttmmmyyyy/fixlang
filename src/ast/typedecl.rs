@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use misc::{Map, Set};
+use misc::Set;
 use name::{FullName, Name};
 
+use crate::ast::kind_scope::KindScope;
 use crate::error::Errors;
 
 use super::*;
@@ -156,13 +157,20 @@ impl TypeDefn {
     }
 
     // Set kinds to type variables in `self.value` using kind information in `self.tyvars`.
-    pub fn set_kinds_in_value(&mut self) {
-        let kind_scope: Map<_, _> = self
-            .tyvars
-            .iter()
-            .map(|tv| (tv.name.clone(), tv.kind.clone()))
-            .collect();
+    pub fn set_kinds_in_value(&mut self) -> Result<(), Errors> {
+        let mut kind_scope = KindScope::default();
+        for tv in &self.tyvars {
+            kind_scope
+                .insert(tv.name.clone(), tv.kind.clone())
+                .map_err(|e| {
+                    Errors::from_msg_srcs(
+                        e,
+                        &[&self.source.as_ref().map(|s| s.to_head_character())],
+                    )
+                })?;
+        }
         self.value.set_kinds(&kind_scope);
+        Ok(())
     }
 
     pub fn is_alias(&self) -> bool {
@@ -211,7 +219,7 @@ impl TypeDeclValue {
         }
     }
 
-    pub fn set_kinds(&mut self, kinds: &Map<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &KindScope) {
         match self {
             TypeDeclValue::Struct(s) => s.set_kinds(kinds),
             TypeDeclValue::Union(u) => u.set_kinds(kinds),
@@ -251,7 +259,7 @@ impl Struct {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, kinds: &Map<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &KindScope) {
         for f in &mut self.fields {
             f.set_kinds(kinds);
         }
@@ -293,7 +301,7 @@ impl Union {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, kinds: &Map<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &KindScope) {
         for f in &mut self.fields {
             f.set_kinds(kinds);
         }
@@ -320,7 +328,7 @@ impl TypeAlias {
         Ok(())
     }
 
-    pub fn set_kinds(&mut self, scope: &Map<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &KindScope) {
         self.value = self.value.set_kinds(scope);
     }
 }
@@ -365,7 +373,7 @@ impl Field {
         return None;
     }
 
-    pub fn set_kinds(&mut self, kinds: &Map<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, kinds: &KindScope) {
         self.ty = self.ty.set_kinds(kinds);
     }
 }

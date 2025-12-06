@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use crate::ast::name::Name;
+use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
 use crate::ast::traits::{TraitAliasEnv, TraitId};
-use crate::ast::types::{Kind, KindEnv, TyVar, TypeNode};
+use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
-use crate::misc::Map;
 use crate::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 
@@ -57,7 +56,7 @@ impl Predicate {
         format!("{} : {}", self.ty.to_string(), self.trait_id.to_string())
     }
 
-    pub fn set_kinds(&mut self, scope: &Map<Name, Arc<Kind>>) {
+    pub fn set_kinds(&mut self, scope: &KindScope) {
         self.ty = self.ty.set_kinds(scope);
     }
 

@@ -2,11 +2,12 @@ use crate::ast::equality::Equality;
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
 use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{self, ImportItem, ImportStatement};
+use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{FullName, Name};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
 use crate::ast::types::{
-    Kind, KindEnv, Scheme, TyAliasInfo, TyCon, TyConInfo, TyConVariant, TypeNode,
+    Kind, Scheme, TyAliasInfo, TyCon, TyConInfo, TyConVariant, TypeNode,
 };
 use crate::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
@@ -756,7 +757,7 @@ impl Program {
         let mut aliases: Map<TyCon, TyAliasInfo> = Map::default();
         for type_decl in &mut self.type_defns {
             // Set kinds of type variables in the right hand side of type definition.
-            type_decl.set_kinds_in_value();
+            type_decl.set_kinds_in_value()?;
 
             // Check duplicate type definition.
             let tycon = type_decl.tycon();
