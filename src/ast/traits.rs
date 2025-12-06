@@ -714,13 +714,13 @@ impl TraitEnv {
         // Forbid unrelated trait member:
         // Check that the type variable in trait definition appears each of the members' type.
         // This assumption is used in `InstanciatedSymbol::dependent_modules`.
-        for (_trait_id, trait_info) in &self.traits {
-            for member in &trait_info.members {
-                if !member.qual_ty.ty.contains_tyvar(&trait_info.type_var) {
+        for (_trait_id, trait_defn) in &self.traits {
+            for member in &trait_defn.members {
+                if !member.qual_ty.ty.contains_tyvar(&trait_defn.type_var) {
                     errors.append(Errors::from_msg_srcs(
                         format!(
                             "Type variable `{}` used in trait definition has to appear in the type of a member `{}`.",
-                            trait_info.type_var.name,
+                            trait_defn.type_var.name,
                             member.name,
                         ),
                         &[&member.qual_ty.ty.get_source()],
