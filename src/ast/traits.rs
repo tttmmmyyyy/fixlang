@@ -741,8 +741,7 @@ impl TraitEnv {
             Arc::new(typecheckcache::FileCache::new()),
             0,
         );
-        let trait_env = self.clone();
-        // Validate trait instances.
+        // Validate trait implementations.
         for (trait_id, impls) in &self.impls {
             for inst in impls.iter() {
                 // check implementation is given for trait, not for trait alias.
@@ -886,7 +885,7 @@ impl TraitEnv {
                     // Check the method type signature matches the trait definition.
                     let type_by_defn = inst.member_scheme_by_defn(method_name, trait_info);
                     let type_by_sig = inst.member_scheme(method_name, trait_info);
-                    if !Scheme::equivalent(&type_by_defn, &type_by_sig, &trait_env)? {
+                    if !Scheme::equivalent(&type_by_defn, &type_by_sig, &self)? {
                         errors.append(Errors::from_msg_srcs(
                             format!(
                                 "Type signature of member `{}` is not equivalent to the one in the trait definition. \
