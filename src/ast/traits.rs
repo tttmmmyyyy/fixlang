@@ -458,7 +458,7 @@ impl TraitImpl {
     //
     // Users can also write type annotations in trait implementations.
     // This function trusts and returns the type annotation if the user has written one.
-    pub fn member_scheme(&self, member: &Name, trait_info: &TraitDefn) -> Arc<Scheme> {
+    pub fn member_scheme(&self, member: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         if let Some(qual_ty) = self.member_sigs.get(member) {
             // If type annotation is provided by user, use it.
             let mut preds = self.qual_pred.pred_constraints.clone();
@@ -473,7 +473,7 @@ impl TraitImpl {
             Scheme::generalize(&kind_signs, preds, eqs, qual_ty.ty.clone())
         } else {
             // Otherwise, construct the type from trait definition and impl declaration.
-            self.member_scheme_by_defn(member, trait_info)
+            self.member_scheme_by_defn(member, trait_defn)
         }
     }
 
@@ -483,11 +483,11 @@ impl TraitImpl {
     //
     // Users can also write type annotations in trait implementations.
     // The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
-    fn member_scheme_by_defn(&self, method_name: &Name, trait_info: &TraitDefn) -> Arc<Scheme> {
+    fn member_scheme_by_defn(&self, method_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
-        let tv = &trait_info.type_var.name; // `a` in the above example.
-        let mut method_qualty = trait_info.member_ty(method_name); // `a -> String` in the above example.
+        let tv = &trait_defn.type_var.name; // `a` in the above example.
+        let mut method_qualty = trait_defn.member_ty(method_name); // `a -> String` in the above example.
 
         // Next, see the trait implementation to get the type for which the trait is implemented.
         let impl_type = self.impl_type(); // `(a, b)` in the above example.
@@ -753,8 +753,6 @@ impl TraitEnv {
                     continue;
                 }
 
-                let trait_info = &self.traits[trait_id];
-
                 // Check instance head.
                 let implemented_ty = &inst.qual_pred.predicate.ty;
                 if !implemented_ty.is_implementable() {
@@ -882,9 +880,10 @@ impl TraitEnv {
                         continue;
                     }
 
-                    // Check the method type signature matches the trait definition.
-                    let type_by_defn = inst.member_scheme_by_defn(method_name, trait_info);
-                    let type_by_sig = inst.member_scheme(method_name, trait_info);
+                    // Check the member type signature is equivalent to the one in the trait definition.
+                    let trait_defn = &self.traits[trait_id];
+                    let type_by_defn = inst.member_scheme_by_defn(method_name, trait_defn);
+                    let type_by_sig = inst.member_scheme(method_name, trait_defn);
                     if !Scheme::equivalent(&type_by_defn, &type_by_sig, &self)? {
                         errors.append(Errors::from_msg_srcs(
                             format!(
