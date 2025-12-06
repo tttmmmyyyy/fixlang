@@ -103,6 +103,19 @@ impl TypeEnv {
             None => None,
         }
     }
+
+    // Resolve type aliases in type constructors.
+    pub fn resolve_type_aliases_in_tycons(&mut self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+        let type_env = self.clone();
+        let mut tycons = (*self.tycons).clone();
+        for (_, ti) in &mut tycons {
+            errors.eat_err(ti.resolve_type_aliases(&type_env));
+        }
+        errors.to_result()?; // Throw errors if any.
+        self.tycons = Arc::new(tycons);
+        Ok(())
+    }
 }
 
 // Symbols are Fix values that are instantiated:
@@ -1703,18 +1716,13 @@ impl Program {
         let mut errors = Errors::empty();
 
         // Resolve aliases in type constructors.
-        let type_env = self.type_env();
-        let mut tycons = (*self.type_env.tycons).clone();
-        for (_, ti) in &mut tycons {
-            errors.eat_err(ti.resolve_type_aliases(&type_env));
-        }
-        errors.to_result()?; // Throw errors if any.
-        self.type_env.tycons = Arc::new(tycons);
+        errors.eat_err(self.type_env.resolve_type_aliases_in_tycons());
+        errors.to_result()?;
 
         // Get the updated type env.
         let type_env = self.type_env();
 
-        // Resolve aliases in type aliases.
+        // Resolve aliases in trait env.
         errors.eat_err(self.trait_env.resolve_type_aliases(&type_env));
 
         // Resolve aliases in type definitions.
