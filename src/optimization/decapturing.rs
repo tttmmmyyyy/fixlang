@@ -574,7 +574,7 @@ impl DecapturingVisitor {
         // let tycon_hash = format!("{:x}", md5::compute(tycon_hash_data));
         let tycon_hash = tycon_hash_data;
         let tycon_name = TyCon {
-            name: FullName::from_strs(&[STD_NAME], &format!("#DecapList<{}>", tycon_hash)),
+            name: FullName::from_strs(&[STD_NAME], &format!("#CapList<{}>", tycon_hash)),
         };
         let tycon = Arc::new(tycon_name);
         let tycon_info = TyConInfo {
