@@ -726,7 +726,7 @@ fn trait_entries(
 fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
     let mut entries = vec![];
 
-    for (_id, impls) in &program.trait_env.instances {
+    for (_id, impls) in &program.trait_env.impls {
         for impl_ in impls {
             if &impl_.define_module != mod_name {
                 continue;

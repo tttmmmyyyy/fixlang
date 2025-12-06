@@ -1490,7 +1490,7 @@ fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, program: &Prog
     }
 
     // Extract trait instances from trait environment
-    for (trait_, instances) in &program.trait_env.instances {
+    for (trait_, instances) in &program.trait_env.impls {
         // Skip compiler-defined entities
         if trait_.name.to_string().contains('#') {
             continue;

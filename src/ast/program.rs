@@ -1556,7 +1556,7 @@ impl Program {
                 let member_scm = trait_.member_scheme(&member.name, false);
                 let syntactic_member_scm = trait_.member_scheme(&member.name, true);
                 let mut member_impls: Vec<TraitMemberImpl> = vec![];
-                let instances = self.trait_env.instances.get(trait_id);
+                let instances = self.trait_env.impls.get(trait_id);
                 if let Some(insntances) = instances {
                     for trait_impl in insntances {
                         let scm = trait_impl.member_scheme(&member.name, trait_);

@@ -621,7 +621,7 @@ impl KindSignature {
 #[derive(Clone, Default)]
 pub struct TraitEnv {
     pub traits: Map<TraitId, TraitDefn>,
-    pub instances: Map<TraitId, Vec<TraitImpl>>,
+    pub impls: Map<TraitId, Vec<TraitImpl>>,
     pub aliases: Map<TraitId, TraitAlias>,
 }
 
@@ -634,7 +634,7 @@ impl TraitEnv {
                 return node;
             }
         }
-        for (_, insts) in &self.instances {
+        for (_, insts) in &self.impls {
             for inst in insts {
                 let node = inst.find_node_at(pos);
                 if node.is_some() {
@@ -743,8 +743,8 @@ impl TraitEnv {
         );
         let trait_env = self.clone();
         // Validate trait instances.
-        for (trait_id, insts) in &mut self.instances {
-            for inst in insts.iter_mut() {
+        for (trait_id, impls) in &mut self.impls {
+            for inst in impls.iter_mut() {
                 // check implementation is given for trait, not for trait alias.
                 if aliases.contains(trait_id) {
                     errors.append(Errors::from_msg_srcs(
@@ -931,10 +931,10 @@ impl TraitEnv {
             errors.to_result()?;
 
             // Check overlapping instance.
-            for i in 0..insts.len() {
-                for j in (i + 1)..insts.len() {
-                    let inst_i = &insts[i];
-                    let inst_j = &insts[j];
+            for i in 0..impls.len() {
+                for j in (i + 1)..impls.len() {
+                    let inst_i = &impls[i];
+                    let inst_j = &impls[j];
                     let mut tc = tc.clone();
                     if UnifOrOtherErr::extract_others(
                         tc.unify(&inst_i.impl_type(), &inst_j.impl_type()),
@@ -995,7 +995,7 @@ impl TraitEnv {
         errors.to_result()?; // Throw errors if any.
 
         // Resolve names in trait implementations.
-        let insntaces = std::mem::replace(&mut self.instances, Default::default());
+        let insntaces = std::mem::replace(&mut self.impls, Default::default());
         let mut instances_resolved: Map<TraitId, Vec<TraitImpl>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
@@ -1020,7 +1020,7 @@ impl TraitEnv {
         }
 
         errors.to_result()?; // Throw errors if any.
-        self.instances = instances_resolved;
+        self.impls = instances_resolved;
         Ok(())
     }
 
@@ -1033,7 +1033,7 @@ impl TraitEnv {
         }
 
         // Resolve aliases in trait implementations.
-        let insntaces = std::mem::replace(&mut self.instances, Default::default());
+        let insntaces = std::mem::replace(&mut self.impls, Default::default());
         let mut instances_resolved: Map<TraitId, Vec<TraitImpl>> = Default::default();
         for (trait_id, insts) in insntaces {
             for mut inst in insts {
@@ -1048,7 +1048,7 @@ impl TraitEnv {
             }
         }
         errors.to_result()?; // Throw errors if any.
-        self.instances = instances_resolved;
+        self.impls = instances_resolved;
         Ok(())
     }
 
@@ -1092,10 +1092,10 @@ impl TraitEnv {
     // Add an instance.
     pub fn add_instance(&mut self, inst: TraitImpl) -> Result<(), Errors> {
         let trait_id = inst.trait_id();
-        if !self.instances.contains_key(&trait_id) {
-            self.instances.insert(trait_id.clone(), vec![]);
+        if !self.impls.contains_key(&trait_id) {
+            self.impls.insert(trait_id.clone(), vec![]);
         }
-        self.instances.get_mut(&trait_id).unwrap().push(inst);
+        self.impls.get_mut(&trait_id).unwrap().push(inst);
         Ok(())
     }
 
@@ -1118,7 +1118,7 @@ impl TraitEnv {
 
     pub fn qualified_predicates(&self) -> Map<TraitId, Vec<QualPredScheme>> {
         let mut qps = Map::default();
-        for (trait_id, insts) in &self.instances {
+        for (trait_id, insts) in &self.impls {
             for inst in insts {
                 let mut vars = vec![];
                 inst.qual_pred.free_vars_vec(&mut vars);
@@ -1138,7 +1138,7 @@ impl TraitEnv {
     // From implementation of associated types, get generalized type equalities.
     pub fn type_equalities(&self) -> Map<TyAssoc, Vec<EqualityScheme>> {
         let mut eq_scms = Map::default();
-        for (trait_id, insts) in &self.instances {
+        for (trait_id, insts) in &self.impls {
             for inst in insts {
                 for (assoc_type_name, assoc_type_impl) in &inst.assoc_types {
                     let assoc_type_namespace = trait_id.name.to_namespace();
@@ -1282,7 +1282,7 @@ impl TraitEnv {
 
     pub fn set_kinds_in_trait_instances(&mut self, kind_env: &KindEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for (_trait_id, trait_impls) in &mut self.instances {
+        for (_trait_id, trait_impls) in &mut self.impls {
             for inst in trait_impls {
                 errors.eat_err(inst.set_kinds_in_qual_pred_and_member_sigs(kind_env));
                 let mut assoc_tys = std::mem::replace(&mut inst.assoc_types, Map::default());
@@ -1313,7 +1313,7 @@ impl TraitEnv {
                 errors.append(es);
             }
         }
-        for (_, insts) in other.instances {
+        for (_, insts) in other.impls {
             for inst in insts {
                 errors.eat_err(self.add_instance(inst));
             }
