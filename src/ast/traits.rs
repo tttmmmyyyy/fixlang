@@ -670,7 +670,7 @@ impl TraitEnv {
         res
     }
 
-    pub fn validate(&mut self, kind_env: KindEnv) -> Result<(), Errors> {
+    pub fn validate(&self, kind_env: KindEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
         // Check name confliction of traits and aliases.
@@ -743,8 +743,8 @@ impl TraitEnv {
         );
         let trait_env = self.clone();
         // Validate trait instances.
-        for (trait_id, impls) in &mut self.impls {
-            for inst in impls.iter_mut() {
+        for (trait_id, impls) in &self.impls {
+            for inst in impls.iter() {
                 // check implementation is given for trait, not for trait alias.
                 if aliases.contains(trait_id) {
                     errors.append(Errors::from_msg_srcs(
@@ -753,7 +753,6 @@ impl TraitEnv {
                     ));
                     continue;
                 }
-                *inst.trait_id_mut() = trait_id.clone();
 
                 let trait_info = &self.traits[trait_id];
 
@@ -995,9 +994,9 @@ impl TraitEnv {
         errors.to_result()?; // Throw errors if any.
 
         // Resolve names in trait implementations.
-        let insntaces = std::mem::replace(&mut self.impls, Default::default());
-        let mut instances_resolved: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, insts) in insntaces {
+        let impls = std::mem::replace(&mut self.impls, Default::default());
+        let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
+        for (trait_id, insts) in impls {
             for mut inst in insts {
                 // Set up NameResolutionContext.
                 ctx.import_statements = imported_modules[&inst.define_module].clone();
@@ -1008,19 +1007,20 @@ impl TraitEnv {
                     trait_id.resolve_namespace(ctx, &inst.qual_pred.predicate.source.clone()),
                 );
 
-                // Resolve names in TrantInstance.
+                // Resolve names in TrantImpl
+                inst.trait_id_mut().name = trait_id.name.clone(); // This is a "just in case" process, and may not be necessary.
                 errors.eat_err(inst.resolve_namespace(ctx));
 
-                // Insert to instances_resolved
-                if !instances_resolved.contains_key(&trait_id) {
-                    instances_resolved.insert(trait_id.clone(), vec![]);
+                // Insert to new_impls
+                if !new_impls.contains_key(&trait_id) {
+                    new_impls.insert(trait_id.clone(), vec![]);
                 }
-                instances_resolved.get_mut(&trait_id).unwrap().push(inst);
+                new_impls.get_mut(&trait_id).unwrap().push(inst);
             }
         }
 
         errors.to_result()?; // Throw errors if any.
-        self.impls = instances_resolved;
+        self.impls = new_impls;
         Ok(())
     }
 
@@ -1033,22 +1033,22 @@ impl TraitEnv {
         }
 
         // Resolve aliases in trait implementations.
-        let insntaces = std::mem::replace(&mut self.impls, Default::default());
-        let mut instances_resolved: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, insts) in insntaces {
+        let impls = std::mem::replace(&mut self.impls, Default::default());
+        let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
+        for (trait_id, insts) in impls {
             for mut inst in insts {
                 // Resolve names in TrantInstance.
                 errors.eat_err(inst.resolve_type_aliases(type_env));
 
-                // Insert to instances_resolved
-                if !instances_resolved.contains_key(&trait_id) {
-                    instances_resolved.insert(trait_id.clone(), vec![]);
+                // Insert to new_impls
+                if !new_impls.contains_key(&trait_id) {
+                    new_impls.insert(trait_id.clone(), vec![]);
                 }
-                instances_resolved.get_mut(&trait_id).unwrap().push(inst);
+                new_impls.get_mut(&trait_id).unwrap().push(inst);
             }
         }
         errors.to_result()?; // Throw errors if any.
-        self.impls = instances_resolved;
+        self.impls = new_impls;
         Ok(())
     }
 
