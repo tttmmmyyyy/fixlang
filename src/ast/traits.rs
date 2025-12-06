@@ -816,28 +816,28 @@ impl TraitEnv {
                     continue;
                 }
 
-                // Validate the set of trait methods.
-                let trait_methods = &self.traits[trait_id].members;
-                let impl_methods = &inst.members;
-                let method_sigs = &inst.member_sigs;
-                for trait_method in trait_methods {
-                    if !impl_methods.contains_key(&trait_method.name) {
+                // Validate the set of trait members.
+                let trait_members = &self.traits[trait_id].members;
+                let impl_members = &inst.members;
+                let member_sigs = &inst.member_sigs;
+                for trait_member in trait_members {
+                    if !impl_members.contains_key(&trait_member.name) {
                         errors.append(Errors::from_msg_srcs(
-                            format!("Lacking implementation of member `{}`.", trait_method.name),
+                            format!("Lacking implementation of member `{}`.", trait_member.name),
                             &[&inst.source],
                         ));
                     }
                 }
-                for (impl_method, impl_expr) in impl_methods {
-                    if !trait_methods
+                for (impl_member, impl_expr) in impl_members {
+                    if !trait_members
                         .iter()
-                        .find(|mi| mi.name == *impl_method)
+                        .find(|mi| mi.name == *impl_member)
                         .is_some()
                     {
                         errors.append(Errors::from_msg_srcs(
                             format!(
                                 "`{}` is not a member of trait `{}`.",
-                                impl_method,
+                                impl_member,
                                 trait_id.to_string(),
                             ),
                             &[&impl_expr.source],
@@ -891,8 +891,8 @@ impl TraitEnv {
 
                 // For members without type signature, type variables used in type annotations in the member
                 // must appear in the type being implemented.
-                for (method_name, method_expr) in impl_methods {
-                    if !method_sigs.contains_key(method_name) {
+                for (method_name, method_expr) in impl_members {
+                    if !member_sigs.contains_key(method_name) {
                         let mut allowed_tyvars = vec![];
                         inst.impl_type().free_vars_to_vec(&mut allowed_tyvars);
                         for (used_tv, tv_src) in collect_annotation_tyvars(&method_expr) {
@@ -910,9 +910,9 @@ impl TraitEnv {
                 }
 
                 // Validate member type signatures.
-                for (member_name, member_sig) in method_sigs {
+                for (member_name, member_sig) in member_sigs {
                     // Check the member is defined in the trait.
-                    if !trait_methods
+                    if !trait_members
                         .iter()
                         .find(|mi| &mi.name == member_name)
                         .is_some()
