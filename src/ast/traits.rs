@@ -700,6 +700,7 @@ impl TraitEnv {
             }
         }
 
+        // Validate trait aliases:
         // Check that values of trait aliases are defined.
         for (_, ta) in &self.aliases.data {
             for (t, _) in &ta.value {
@@ -711,7 +712,8 @@ impl TraitEnv {
                 }
             }
         }
-
+        // Now TraitAliasEnv is valid: we can use it to check trait implementations.
+        let aliases = self.aliases.clone();
         // If some errors are found upto here, throw them.
         errors.to_result()?;
 
@@ -737,7 +739,6 @@ impl TraitEnv {
         // If some errors are found upto here, throw them.
         errors.to_result()?;
 
-        let aliases: Set<_> = self.aliases.data.keys().collect();
         // Prepare TypeCheckContext to use `unify`.
         let tc = TypeCheckContext::new(
             TraitEnv::default(),
@@ -751,7 +752,7 @@ impl TraitEnv {
         for (trait_id, impls) in &self.impls {
             for inst in impls.iter() {
                 // check implementation is given for trait, not for trait alias.
-                if aliases.contains(trait_id) {
+                if aliases.data.contains_key(trait_id) {
                     errors.append(Errors::from_msg_srcs(
                         "A trait alias cannot be implemented directly. Implement each aliased trait instead.".to_string(),
                         &[&inst.qual_pred.predicate.source],
