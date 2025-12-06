@@ -79,7 +79,6 @@ use dependency_lockfile::DependecyLockFile;
 use error::panic_if_err;
 use generator::*;
 use git_version::git_version;
-use graph::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;

@@ -1,16 +1,38 @@
 use crate::ast::equality::Equality;
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
-use crate::error::{Error, Errors};
-use import::{ImportItem, ImportStatement};
-use misc::{collect_results, to_absolute_path, Map, Set};
-use name::{FullName, Name};
-use printer::Text;
+use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
+use crate::ast::import::{self, ImportItem, ImportStatement};
+use crate::ast::name::{FullName, Name};
+use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
+use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
+use crate::ast::types::{
+    Kind, KindEnv, Scheme, TyAliasInfo, TyCon, TyConInfo, TyConVariant, TypeNode,
+};
+use crate::builtin::{
+    boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
+    struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
+    struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
+    union_new,
+};
+use crate::configuration::Configuration;
+use crate::constants::{
+    DOT_FIXLANG, ERR_UNKNOWN_NAME, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME,
+    MAIN_MODULE_NAME, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL,
+    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
+    TUPLE_SIZE_BASE,
+};
+use crate::error::{panic_if_err, Error, Errors};
+use crate::graph::Graph;
+use crate::misc::{collect_results, to_absolute_path, Map, Set};
+use crate::printer::Text;
+use crate::sourcefile::{SourcePos, Span};
+use crate::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use std::{sync::Arc, vec};
-
-use super::*;
 
 #[derive(Clone)]
 pub struct TypeEnv {
