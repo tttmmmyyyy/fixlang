@@ -1,20 +1,37 @@
 use crate::ast::equality::Equality;
 use crate::ast::kind_scope::{KindEnv, KindScope};
+use crate::ast::name::FullName;
+use crate::ast::name::Name;
+use crate::ast::name::NameSpace;
 use crate::ast::predicate::Predicate;
+use crate::ast::program::{EndNode, NameResolutionContext, NameResolutionType, TypeEnv};
+use crate::ast::traits::{KindSignature, TraitAliasEnv, TraitEnv, TraitId};
+use crate::ast::typedecl::Field;
+use crate::builtin::{
+    get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
+    is_funptr_tycon, make_array_tycon, make_arrow_name, make_arrow_tycon, make_funptr_tycon,
+    make_iostate_name, make_tuple_name,
+};
+use crate::constants::{
+    TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
+    PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+};
 use crate::error::Errors;
+use crate::generator::GenerationContext;
+use crate::misc::collect_results;
+use crate::misc::number_to_varname;
+use crate::misc::Map;
+use crate::misc::Set;
+use crate::object::{ty_to_object_ty, ObjectType};
+use crate::sourcefile::{SourcePos, Span};
+use crate::typecheck::{Substitution, TypeCheckContext};
 use core::panic;
-use inkwell::types::BasicType;
-use misc::collect_results;
-use misc::number_to_varname;
-use misc::Map;
-use misc::Set;
-use name::FullName;
-use name::Name;
-use name::NameSpace;
+use inkwell::context::Context;
+use inkwell::types::{BasicType, BasicTypeEnum, StructType};
+use inkwell::AddressSpace;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-
-use super::*;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
