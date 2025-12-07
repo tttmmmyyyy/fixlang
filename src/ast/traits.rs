@@ -816,11 +816,9 @@ impl TraitEnv {
                     let inst_i = &impls[i];
                     let inst_j = &impls[j];
                     let mut tc = tc.clone();
-                    if UnifOrOtherErr::extract_others(
-                        tc.unify(&inst_i.impl_type(), &inst_j.impl_type()),
-                    )?
-                    .is_err()
-                    {
+                    let type_i = tc.instantiate_type(&inst_i.impl_type());
+                    let type_j = tc.instantiate_type(&inst_j.impl_type());
+                    if UnifOrOtherErr::extract_others(tc.unify(&type_i, &type_j))?.is_err() {
                         continue;
                     }
                     let mut msg = format!(

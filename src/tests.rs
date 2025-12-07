@@ -10612,3 +10612,44 @@ main : IO () = (
         "Unknown trait name `MyFunctor`.",
     );
 }
+
+#[test]
+pub fn test_regression_issue_69() {
+    let source = r#"
+module Main;
+
+trait a: GetInt {
+    get_int: a -> I64;
+}
+
+impl I64: GetInt {
+    get_int = |a| a;
+}
+
+impl [a: GetInt] Array a: GetInt {
+    get_int = |arr| arr.@(0).get_int;
+}
+
+impl [a: GetInt] (Array a, b): GetInt {
+    get_int = |(a, b)| a.get_int;
+}
+
+impl [b: GetInt] (a, Array b): GetInt {
+    get_int = |(a, b)| b.get_int;
+}
+
+main: IO ();
+main = (
+    println(("a", [2]).get_int.to_string);;    // impl (a, Array b) is used (OK)
+    println(([1], "b").get_int.to_string);;    // impl (Array a, b) is used (OK)
+    println(([1], [2]).get_int.to_string);;    // impl (Array a, b) is used (why?)
+    // If two or more implementations are matched, the first implementation is used?
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Two trait implementations for `Main::GetInt` are overlapping.",
+    );
+}

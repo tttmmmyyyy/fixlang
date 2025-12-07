@@ -502,6 +502,15 @@ impl TypeCheckContext {
         self.substitution.substitute_equality(eq)
     }
 
+    pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+        let mut sub = Substitution::default();
+        for tv in ty.free_vars_vec() {
+            let new_tv = self.new_tyvar_by(&tv);
+            sub.add_substitution(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+        }
+        sub.substitute_type(ty)
+    }
+
     // Instantiate a scheme.
     pub fn instantiate_scheme(
         &mut self,
