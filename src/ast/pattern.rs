@@ -251,52 +251,6 @@ impl PatternNode {
         }
     }
 
-    // Validate pattern and raise error if invalid,
-    pub fn validate(&self, te: &TypeEnv) -> Result<(), Errors> {
-        match &self.pattern {
-            Pattern::Var(_, _) => {}
-            Pattern::Struct(tc, pats) => {
-                let ti = te.tycons.get(&tc).unwrap();
-                let fields_str = ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
-                let fields_pat = pats
-                    .iter()
-                    .map(|(name, _)| name.clone())
-                    .collect::<Set<_>>();
-                if fields_pat.len() < pats.len() {
-                    return Err(Errors::from_msg_srcs(
-                        "Duplicate field in struct pattern.".to_string(),
-                        &[&self.info.source],
-                    ));
-                }
-                for f in fields_pat {
-                    if !fields_str.contains(&f) {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Unknown field `{}` for struct `{}`.",
-                                f,
-                                tc.name.to_string()
-                            ),
-                            &[&self.info.source],
-                        ));
-                    }
-                }
-                for (_, p) in pats {
-                    p.validate(te)?;
-                }
-            }
-            Pattern::Union(_, subpat) => {
-                subpat.validate(te)?;
-            }
-        }
-        if self.pattern.has_duplicate_vars() {
-            return Err(Errors::from_msg_srcs(
-                "Duplicate name defined by pattern.".to_string(),
-                &[&self.info.source],
-            ));
-        }
-        Ok(())
-    }
-
     pub fn resolve_namespace(
         self: &PatternNode,
         ctx: &NameResolutionContext,

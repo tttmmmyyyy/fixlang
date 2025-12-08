@@ -10653,3 +10653,60 @@ main = (
         "Two trait implementations for `Main::GetInt` are overlapping.",
     );
 }
+
+#[test]
+pub fn test_associated_type_in_type_sign_lacking_assumption() {
+    let source = r#"
+module Main;
+
+trait a: MyTrait {
+    type MyAssoc a;
+}
+
+impl I64: MyTrait {
+    type MyAssoc I64 = ();
+}
+
+func : a -> MyAssoc a;
+func = undefined("");
+
+main: IO ();
+main = (
+    let x = func(0);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "`a : Main::MyTrait` is required",
+    );
+}
+
+#[test]
+pub fn test_regression_issue_70() {
+    let source = r#"
+module Main;
+
+trait a: MyTrait {
+    type MyAssoc a;
+    type MyAssoc2 a b;
+}
+
+impl I64: MyTrait {
+    type MyAssoc I64 = ();
+    type MyAssoc2 I64 b = MyAssoc b;
+}
+
+main: IO ();
+main = (
+    let f: MyAssoc2 I64 String -> () = |_| ();
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "`a : Main::MyTrait` is required",
+    );
+}

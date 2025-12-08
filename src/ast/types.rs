@@ -1440,13 +1440,13 @@ impl TypeNode {
     // Returns the list of predicates for this type to be well-formed.
     // See all associated type usages (for example, `Elem c`) in this type and returns a preducate `c : Collects`.
     pub fn predicates_from_associated_types(&self) -> Vec<Predicate> {
-        fn predicates_from_associated_types_inner(ty: &TypeNode, buf: &mut Vec<Predicate>) {
+        fn predicates_from_associated_types_internal(ty: &TypeNode, buf: &mut Vec<Predicate>) {
             match &ty.ty {
                 Type::TyVar(_) => {}
                 Type::TyCon(_) => {}
                 Type::TyApp(fun, arg) => {
-                    predicates_from_associated_types_inner(fun, buf);
-                    predicates_from_associated_types_inner(arg, buf);
+                    predicates_from_associated_types_internal(fun, buf);
+                    predicates_from_associated_types_internal(arg, buf);
                 }
                 Type::AssocTy(assoc_ty, args) => {
                     let pred = Predicate {
@@ -1456,13 +1456,13 @@ impl TypeNode {
                     };
                     buf.push(pred);
                     for arg in args {
-                        predicates_from_associated_types_inner(arg, buf);
+                        predicates_from_associated_types_internal(arg, buf);
                     }
                 }
             }
         }
         let mut buf = vec![];
-        predicates_from_associated_types_inner(self, &mut buf);
+        predicates_from_associated_types_internal(self, &mut buf);
         buf
     }
 }

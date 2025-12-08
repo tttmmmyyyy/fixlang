@@ -604,13 +604,6 @@ impl TypeCheckContext {
         };
         let ty = sub.substitute_type(ty);
 
-        // Add predicates required by associated type usages in `anno_ty`.
-        let mut req_preds = ty.predicates_from_associated_types();
-        for req_pred in &mut req_preds {
-            self.substitute_predicate(req_pred);
-        }
-        self.predicates.append(&mut req_preds.clone());
-
         Ok(ty)
     }
 
@@ -825,7 +818,7 @@ impl TypeCheckContext {
                 Ok(ei.set_lam_body(body))
             }
             Expr::Let(pat, val, body) => {
-                pat.validate(&self.type_env)?;
+                self.validate_pattern(pat)?;
                 let (pat, var_ty) = pat.get_typed(self)?;
                 let val = self.unify_type_of_expr(val, pat.info.type_.as_ref().unwrap().clone())?;
                 for (var_name, var_ty) in &var_ty {
@@ -862,7 +855,7 @@ impl TypeCheckContext {
                         ));
                     }
 
-                    pat.validate(&self.type_env)?;
+                    self.validate_pattern(pat)?;
                     let pat = if pat.is_union() {
                         // Check if the union variant name is valid.
 
@@ -1083,6 +1076,56 @@ impl TypeCheckContext {
         }
     }
 
+    // Validate pattern and raise error if invalid,
+    fn validate_pattern(&mut self, pat: &PatternNode) -> Result<(), Errors> {
+        match &pat.pattern {
+            Pattern::Var(_, opt_ty) => {
+                if let Some(anno_ty) = opt_ty {
+                    self.validate_type_annotation(anno_ty)?;
+                }
+            }
+            Pattern::Struct(tc, pats) => {
+                let ti = self.type_env.tycons.get(&tc).unwrap();
+                let fields_str = ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
+                let fields_pat = pats
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect::<Set<_>>();
+                if fields_pat.len() < pats.len() {
+                    return Err(Errors::from_msg_srcs(
+                        "Duplicate field in struct pattern.".to_string(),
+                        &[&pat.info.source],
+                    ));
+                }
+                for f in fields_pat {
+                    if !fields_str.contains(&f) {
+                        return Err(Errors::from_msg_srcs(
+                            format!(
+                                "Unknown field `{}` for struct `{}`.",
+                                f,
+                                tc.name.to_string()
+                            ),
+                            &[&pat.info.source],
+                        ));
+                    }
+                }
+                for (_, p) in pats {
+                    self.validate_pattern(p)?;
+                }
+            }
+            Pattern::Union(_, subpat) => {
+                self.validate_pattern(subpat)?;
+            }
+        }
+        if pat.pattern.has_duplicate_vars() {
+            return Err(Errors::from_msg_srcs(
+                "Duplicate name defined by pattern.".to_string(),
+                &[&pat.info.source],
+            ));
+        }
+        Ok(())
+    }
+
     fn create_tyvar_location_messages(
         &self,
         tvs: &[Arc<TyVar>],
@@ -1262,13 +1305,13 @@ impl TypeCheckContext {
 
     // Reduce a type by replacing associated type to its value.
     fn reduce_type_by_equality(&mut self, ty: Arc<TypeNode>) -> Result<Arc<TypeNode>, Errors> {
-        Ok(match &ty.ty {
-            Type::TyVar(_) => ty,
-            Type::TyCon(_) => ty,
+        match &ty.ty {
+            Type::TyVar(_) => Ok(ty),
+            Type::TyCon(_) => Ok(ty),
             Type::TyApp(tyfun, tyarg) => {
                 let tyfun = self.reduce_type_by_equality(tyfun.clone())?;
                 let tyarg = self.reduce_type_by_equality(tyarg.clone())?;
-                ty.set_tyapp_fun(tyfun).set_tyapp_arg(tyarg)
+                Ok(ty.set_tyapp_fun(tyfun).set_tyapp_arg(tyarg))
             }
             Type::AssocTy(assoc_ty, args) => {
                 // Reduce each arguments.
@@ -1276,6 +1319,13 @@ impl TypeCheckContext {
                     args.iter()
                         .map(|arg| self.reduce_type_by_equality(arg.clone())),
                 )?;
+                // // The first argument should implement the trait of the associated type.
+                // let pred = Predicate {
+                //     trait_id: assoc_ty.trait_id(),
+                //     ty: args[0].clone(),
+                //     source: None,
+                // };
+                // self.predicates.push(pred);
                 let ty = ty.set_assocty_args(args);
 
                 // Try matching to assumed equality.
@@ -1303,9 +1353,9 @@ impl TypeCheckContext {
                     let rhs = subst.substitute_type(&equality.value);
                     return self.reduce_type_by_equality(rhs);
                 }
-                ty
+                Ok(ty)
             }
-        })
+        }
     }
 
     // Unify two types.
