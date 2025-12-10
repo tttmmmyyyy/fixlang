@@ -10679,7 +10679,7 @@ main = (
     test_source_fail(
         source,
         Configuration::compiler_develop_mode(),
-        "`a : Main::MyTrait` is required",
+        "`a : Main::MyTrait` cannot be deduced",
     );
 }
 
@@ -10707,6 +10707,6 @@ main = (
     test_source_fail(
         source,
         Configuration::compiler_develop_mode(),
-        "`a : Main::MyTrait` is required",
+        "`Std::String : Main::MyTrait` cannot be deduced",
     );
 }

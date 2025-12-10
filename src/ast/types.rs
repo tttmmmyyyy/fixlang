@@ -1439,6 +1439,7 @@ impl TypeNode {
 
     // Returns the list of predicates for this type to be well-formed.
     // See all associated type usages (for example, `Elem c`) in this type and returns a preducate `c : Collects`.
+    #[allow(dead_code)]
     pub fn predicates_from_associated_types(&self) -> Vec<Predicate> {
         fn predicates_from_associated_types_internal(ty: &TypeNode, buf: &mut Vec<Predicate>) {
             match &ty.ty {

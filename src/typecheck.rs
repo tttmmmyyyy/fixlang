@@ -9,13 +9,11 @@ use crate::{
         qual_type::QualType,
     },
     error::Errors,
-    lsp::language_server::write_log,
 };
 use ast::{
     import::ImportStatement,
     name::{FullName, NameSpace},
 };
-use chrono::format;
 use error::Error;
 use misc::{collect_results, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
@@ -605,8 +603,6 @@ impl TypeCheckContext {
             ),
         };
         let ty = sub.substitute_type(ty);
-        // let preds = ty.predicates_from_associated_types();
-        // self.predicates.extend(preds);
 
         Ok(ty)
     }
@@ -1236,9 +1232,6 @@ impl TypeCheckContext {
         // Check if the type of `expr` is unifiable to the specified type.
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
 
-        // // Specified type should valid as a type annotation.
-        // self.validate_type_annotation(&specified_ty)?;
-
         // Check if all type variables are fixed.
         let expr = self.finalize_types(expr)?;
 
@@ -1507,14 +1500,14 @@ impl TypeCheckContext {
         skip: &mut Set<String>,
     ) -> Result<(), UnifOrOtherErr> {
         for pred in pred.resolve_trait_aliases(&self.trait_env.aliases)? {
-            self.add_predicate_reducing_noalias(pred, irr_preds, skip)?;
+            self.reduce_predicate_noalias(pred, irr_preds, skip)?;
         }
         Ok(())
     }
 
     // Add a predicate after reducing it.
     // Trait in `pred` should not be a trait alias.
-    fn add_predicate_reducing_noalias(
+    fn reduce_predicate_noalias(
         &mut self,
         mut pred: Predicate,
         irr_preds: &mut Vec<Predicate>,
