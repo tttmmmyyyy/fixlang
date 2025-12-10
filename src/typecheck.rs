@@ -9,11 +9,13 @@ use crate::{
         qual_type::QualType,
     },
     error::Errors,
+    lsp::language_server::write_log,
 };
 use ast::{
     import::ImportStatement,
     name::{FullName, NameSpace},
 };
+use chrono::format;
 use error::Error;
 use misc::{collect_results, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
@@ -603,6 +605,8 @@ impl TypeCheckContext {
             ),
         };
         let ty = sub.substitute_type(ty);
+        // let preds = ty.predicates_from_associated_types();
+        // self.predicates.extend(preds);
 
         Ok(ty)
     }
@@ -1232,6 +1236,9 @@ impl TypeCheckContext {
         // Check if the type of `expr` is unifiable to the specified type.
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
 
+        // // Specified type should valid as a type annotation.
+        // self.validate_type_annotation(&specified_ty)?;
+
         // Check if all type variables are fixed.
         let expr = self.finalize_types(expr)?;
 
@@ -1319,13 +1326,15 @@ impl TypeCheckContext {
                     args.iter()
                         .map(|arg| self.reduce_type_by_equality(arg.clone())),
                 )?;
-                // // The first argument should implement the trait of the associated type.
-                // let pred = Predicate {
-                //     trait_id: assoc_ty.trait_id(),
-                //     ty: args[0].clone(),
-                //     source: None,
-                // };
-                // self.predicates.push(pred);
+
+                // The first argument should implement the trait of the associated type.
+                let pred = Predicate {
+                    trait_id: assoc_ty.trait_id(),
+                    ty: args[0].clone(),
+                    source: None,
+                };
+                self.predicates.push(pred);
+
                 let ty = ty.set_assocty_args(args);
 
                 // Try matching to assumed equality.
@@ -1478,25 +1487,27 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // Reduce predicates as long as possible.
-    // If predicates are unsatisfiable, return Err.
+    // Reduce predicates stored in `self.predicates` as long as possible.
+    // If a predicates is unsatisfiable, return Err.
     fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
-        let preds = std::mem::replace(&mut self.predicates, vec![]);
-        let mut already_added: Set<String> = Set::default();
-        for pred in preds {
-            self.add_predicate_reducing(pred, &mut already_added)?;
+        let mut irr_preds = vec![];
+        let mut skip: Set<String> = Set::default();
+        while let Some(pred) = self.predicates.pop() {
+            self.reduce_predicate(pred, &mut irr_preds, &mut skip)?;
         }
+        self.predicates = irr_preds;
         Ok(())
     }
 
-    // Add a predicate after reducing it.
-    fn add_predicate_reducing(
+    // Reduce a predicate and add reduced predicates to `irr_preds`.
+    fn reduce_predicate(
         &mut self,
         pred: Predicate,
-        already_added: &mut Set<Name>,
+        irr_preds: &mut Vec<Predicate>,
+        skip: &mut Set<String>,
     ) -> Result<(), UnifOrOtherErr> {
         for pred in pred.resolve_trait_aliases(&self.trait_env.aliases)? {
-            self.add_predicate_reducing_noalias(pred, already_added)?;
+            self.add_predicate_reducing_noalias(pred, irr_preds, skip)?;
         }
         Ok(())
     }
@@ -1506,15 +1517,16 @@ impl TypeCheckContext {
     fn add_predicate_reducing_noalias(
         &mut self,
         mut pred: Predicate,
-        already_added: &mut Set<Name>,
+        irr_preds: &mut Vec<Predicate>,
+        skip: &mut Set<String>,
     ) -> Result<(), UnifOrOtherErr> {
         self.substitute_predicate(&mut pred);
-        pred.ty = self.reduce_type_by_equality(pred.ty)?;
         let pred_str = pred.to_string();
-        if already_added.contains(&pred_str) {
+        if skip.contains(&pred_str) {
             return Ok(());
         }
-        already_added.insert(pred_str);
+        skip.insert(pred_str);
+        pred.ty = self.reduce_type_by_equality(pred.ty)?;
         let mut unifiable = false;
         for qual_pred_scm in &self
             .assumed_preds
@@ -1544,7 +1556,7 @@ impl TypeCheckContext {
                 }
                 for mut pred in qual_pred.pred_constraints {
                     subst.substitute_predicate(&mut pred);
-                    self.add_predicate_reducing(pred, already_added)?;
+                    self.reduce_predicate(pred, irr_preds, skip)?;
                 }
                 return Ok(());
             } else {
@@ -1562,7 +1574,7 @@ impl TypeCheckContext {
         if !unifiable {
             return Err(UnificationErr::Unsatisfiable(pred).into());
         }
-        self.predicates.push(pred);
+        irr_preds.push(pred);
         return Ok(());
     }
 
