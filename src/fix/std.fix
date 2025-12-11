@@ -346,8 +346,6 @@ namespace Array {
     // 
     // Note: this can be an unstable sort.
     // 
-    // Added in v1.1.0.
-    // 
     // # Parameters
     // - `arr`: An array of elements to be sorted.
     sort : [a : LessThan] Array a -> Array a;
@@ -357,8 +355,6 @@ namespace Array {
     //
     // Note: this can be an unstable sort.
     // 
-    // Added in v1.1.0.
-    //
     // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
     //   less than the second.
@@ -370,8 +366,6 @@ namespace Array {
     );
 
     // Reverse an array.
-    //
-    // Added in v1.1.0.
     //
     // # Parameters
     // - `array` - The array to be reversed.
@@ -520,8 +514,6 @@ namespace Array {
     // 
     // Note: Currently this is implemented by merge sort, which is not in-place.
     // 
-    // Added in v1.1.0.
-    // 
     // # Parameters
     // - `arr`: An array of elements to be sorted.
     sort_stable : [a : LessThan] Array a -> Array a;
@@ -623,8 +615,6 @@ namespace Array {
     // Resizes an array to the given size, filling with the given value if the new size is larger than the current size, 
     // or truncating if the new size is smaller than the current size.
     // 
-    // Added in v1.1.0.
-    // 
     // # Parameters
     // * `new_size` - The new size of the array.
     // * `fill_value` - The value to fill if the new size is larger than the current size.
@@ -643,8 +633,6 @@ namespace Array {
     // 
     // The returned value x satisfies 0 <= x <= `arr.get_size`. If `arr` is empty, it returns 0.
     // 
-    // Added in v1.1.0.
-    // 
     // # Parameters
     // 
     // * `predicate` - The predicate function.
@@ -662,8 +650,6 @@ namespace Array {
     );
 
     // Remove consecutive duplicates from an array.
-    // 
-    // Added in v1.1.0.
     // 
     // # Parameters
     // * `arr` - The input array.
@@ -1660,8 +1646,6 @@ namespace Iterator {
     // This function is similar to `loop_iter`, but it returns a `LoopState`. 
     // This allows you to return different types for `break` and `continue`.
     // 
-    // Added in v1.1.0.
-    // 
     // # Parameters
     //
     // * `s` - The initial state.
@@ -1701,8 +1685,6 @@ namespace Iterator {
     // This function is similar to `loop_iter_s`, but it returns a `LoopState`.
     // This allows you to return different types for `break_m` and `continue_m`.
     //
-    // Added in v1.1.0.
-    // 
     // # Parameters
     //
     // * `s` - The initial state.
@@ -2335,16 +2317,12 @@ namespace Iterator {
     
     // Creates an iterator that yields elements along with their index.
     // 
-    // Added in v1.1.0.
-    // 
     // # Parameters
     // * `iter` - The iterator to be enumerated.
     enumerate : [i : Iterator] i -> EnumerateIterator i;
     enumerate = |iter| EnumerateIterator { it: iter, index: 0 };
 
     // Check if all elements of an iterator satisfy a given predicate.
-    // 
-    // Added in v1.1.0.
     // 
     // # Parameters
     //
@@ -2359,8 +2337,6 @@ namespace Iterator {
 
     // Check if any element of an iterator satisfies a given predicate.
     // 
-    // Added in v1.1.0.
-    //
     // # Parameters
     // 
     // * `pred` - The predicate function to be applied to each element of the iterator.
@@ -2984,8 +2960,6 @@ namespace String {
     // 
     // If the number of placeholders does not match with the number of strings, this function halts the program.
     // 
-    // Added in v1.1.0.
-    //
     // # Parameters
     // - `vs`: The array of strings ("values") to be inserted into the template string.
     // - `template`: The template string.
