@@ -7,7 +7,6 @@ use crate::constants::{
     chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
 };
 use crate::docgen::MarkdownSection;
-use crate::log::write_log;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::runner::check_program_via_config;
@@ -188,7 +187,7 @@ pub fn launch_language_server() {
         if res.is_err() {
             let mut msg = "Failed to read a line: \n".to_string();
             msg.push_str(&format!("{:?}", res.unwrap_err()));
-            write_log(msg.as_str());
+            write_log!("{}", msg);
             continue;
         }
         if content_length.trim().is_empty() {
@@ -199,7 +198,7 @@ pub fn launch_language_server() {
         if !content_length.starts_with("Content-Length:") {
             let mut msg = "Expected `Content-Length:`. The line is: \n".to_string();
             msg.push_str(&format!("{:?}", content_length));
-            write_log(msg.as_str());
+            write_log!("{}", msg);
             continue;
         }
 
@@ -211,7 +210,7 @@ pub fn launch_language_server() {
         if content_length.is_err() {
             let mut msg = "Failed to parse the content length: \n".to_string();
             msg.push_str(&format!("{:?}", content_length.err().unwrap()));
-            write_log(msg.as_str());
+            write_log!("{}", msg);
             continue;
         }
         let content_length = content_length.unwrap();
@@ -224,7 +223,7 @@ pub fn launch_language_server() {
                 let e = res.unwrap_err();
                 let mut msg = "Failed to read a line: \n".to_string();
                 msg.push_str(&format!("{:?}", e));
-                write_log(msg.as_str());
+                write_log!("{}", msg);
                 continue;
             }
             if line.trim().is_empty() {
@@ -238,13 +237,13 @@ pub fn launch_language_server() {
         if res.is_err() {
             let mut msg = "Failed to read the message: \n".to_string();
             msg.push_str(&format!("{:?}", res.unwrap_err()));
-            write_log(msg.as_str());
+            write_log!("{}", msg);
             continue;
         }
         let message = String::from_utf8(message);
         if message.is_err() {
-            write_log("Failed to parse the message as utf-8 string: ");
-            write_log(&format!("{:?}", message.unwrap_err()));
+            write_log!("Failed to parse the message as utf-8 string: ");
+            write_log!("{:?}", message.unwrap_err());
             continue;
         }
         let message = message.unwrap();
@@ -252,8 +251,8 @@ pub fn launch_language_server() {
         // Parse the message as JSONRPCMessage.
         let message: Result<JSONRPCMessage, _> = serde_json::from_str(&message);
         if message.is_err() {
-            write_log("Failed to parse the message as JSONRPCMessage: ");
-            write_log(&format!("{:?}", message.err().unwrap()));
+            write_log!("Failed to parse the message as JSONRPCMessage: ");
+            write_log!("{:?}", message.err().unwrap());
             continue;
         }
         let message = message.unwrap();
@@ -277,7 +276,7 @@ pub fn launch_language_server() {
                 }
                 if diag_req_recv.is_none() {
                     let msg = "\"initialized\" method is sent twice.".to_string();
-                    write_log(msg.as_str());
+                    write_log!("{}", msg);
                     continue;
                 }
                 handle_initialized(
@@ -293,7 +292,7 @@ pub fn launch_language_server() {
                 }
                 handle_shutdown(id.unwrap(), diag_req_send.clone());
             } else if method == "exit" {
-                write_log("Exiting the language server.");
+                write_log!("Exiting the language server.");
                 break;
             } else if method == "textDocument/didOpen" {
                 let params: Option<DidOpenTextDocumentParams> =
@@ -444,7 +443,7 @@ fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
     if params.is_err() {
         let mut msg = "Failed to parse the params: \n".to_string();
         msg.push_str(&format!("{:?}", params.err().unwrap()));
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         return None;
     }
     params.ok()
@@ -452,12 +451,9 @@ fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
 
 fn parse_id(message: &JSONRPCMessage, method: &str) -> Option<u32> {
     if message.id.is_none() {
-        write_log(
-            format!(
-                "Failed to get \"id\" from the message for method \"{}\".\n",
-                method
-            )
-            .as_str(),
+        write_log!(
+            "Failed to get \"id\" from the message for method \"{}\".\n",
+            method
         );
         return None;
     }
@@ -596,7 +592,7 @@ fn handle_initialized(
             );
             let mut msg = "Panic occurred in the diagnostics thread: \n".to_string();
             msg.push_str(&format!("{}", any_to_string(res.err().as_ref().unwrap())));
-            write_log(msg.as_str());
+            write_log!("{}", msg);
         }
     });
 
@@ -604,7 +600,7 @@ fn handle_initialized(
     if let Err(e) = diag_req_send.send(DiagnosticsMessage::Start) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
         msg.push_str(&format!("{:?}", e));
-        write_log(msg.as_str());
+        write_log!("{}", msg);
     }
 }
 
@@ -614,7 +610,7 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>) {
     if let Err(e) = diag_send.send(DiagnosticsMessage::Stop) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
         msg.push_str(&format!("{:?}", e));
-        write_log(msg.as_str());
+        write_log!("{}", msg);
     }
 
     // Respond to the client.
@@ -665,7 +661,7 @@ fn handle_textdocument_did_save(
         );
     } else {
         let msg = "No text data in \"textDocument/didSave\" notification.".to_string();
-        write_log(msg.as_str());
+        write_log!("{}", msg);
     }
 
     // Get the path of the saved file.
@@ -675,7 +671,7 @@ fn handle_textdocument_did_save(
     if let Err(e) = diag_send.send(DiagnosticsMessage::OnSaveFile(path)) {
         let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
         msg.push_str(&format!("{:?}", e));
-        write_log(msg.as_str());
+        write_log!("{}", msg);
     }
 }
 
@@ -890,7 +886,7 @@ fn handle_completion_resolve_document(
 ) {
     if params.data.is_none() {
         let msg = "In textDocument/completion, params.data is null.".to_string();
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
@@ -902,7 +898,7 @@ fn handle_completion_resolve_document(
             "In textDocument/completion, failed to parse params.data as EndNode: {}",
             e
         );
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         send_response(id, Err::<CompletionItem, String>(msg));
         return;
     }
@@ -1016,7 +1012,7 @@ fn create_text_edit_to_import(
         let msg = format!(
             "In create_text_edit_import_to_use, found an import statement with None source.",
         );
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         return vec![];
     }
 
@@ -1150,7 +1146,7 @@ fn get_line_string_from_position(
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
         let msg = format!("No stored content for the uri \"{}\".", uri.to_string());
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         return None;
     }
     let latest_content = uri_to_content.get(uri).unwrap();
@@ -1172,7 +1168,7 @@ fn get_node_at(
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
         let msg = format!("No stored content for the uri \"{}\".", uri.to_string());
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         return None;
     }
     let latest_content = uri_to_content.get(uri).unwrap();
@@ -1183,7 +1179,7 @@ fn get_node_at(
     // Get the file content at the time of the last successful diagnostics.
     let saved_content = get_file_content_at_previous_diagnostics(program, &path);
     if let Err(e) = saved_content {
-        write_log(&e);
+        write_log!("{}", e);
         return None;
     }
     let saved_content = saved_content.ok().unwrap();
@@ -1294,7 +1290,7 @@ fn handle_goto_definition(
     if cdir.is_err() {
         let mut msg = "Failed to get the current directory: \n".to_string();
         msg.push_str(&format!("{:?}", cdir.err().unwrap()));
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         return;
     }
     let cdir = cdir.unwrap();
@@ -1343,7 +1339,7 @@ fn handle_document_symbol(id: u32, params: &DocumentSymbolParams, program: &Prog
         let path = to_absolute_path(path);
         if let Err(e) = path {
             let msg = e.to_string();
-            write_log(&msg);
+            write_log!("{}", msg);
             return None;
         }
         path.ok()
@@ -1958,7 +1954,7 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
     if cdir.is_err() {
         let mut msg = "Failed to get the current directory: \n".to_string();
         msg.push_str(&format!("{:?}", cdir.err().unwrap()));
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         return err_paths;
     }
     let cdir = cdir.unwrap();
@@ -1971,10 +1967,7 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(path));
         if uri.is_err() {
-            write_log(&format!(
-                "Failed to convert path to uri: {:?}",
-                uri.unwrap_err()
-            ));
+            write_log!("Failed to convert path to uri: {:?}", uri.unwrap_err());
             continue;
         }
         let uri = uri.unwrap();
@@ -1996,7 +1989,7 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(path));
         if uri.is_err() {
-            write_log(&(uri.unwrap_err()));
+            write_log!("{}", (uri.unwrap_err()));
             continue;
         }
         let uri = uri.unwrap();
@@ -2020,17 +2013,14 @@ fn send_diagnostics_error_message(msg: String) {
     if cdir.is_err() {
         let mut msg = "Failed to get the current directory: \n".to_string();
         msg.push_str(&format!("{:?}", cdir.err().unwrap()));
-        write_log(msg.as_str());
+        write_log!("{}", msg);
         return;
     }
     let cdir = cdir.unwrap();
     // Convert path to uri.
     let cdir_uri = path_to_uri(&cdir);
     if cdir_uri.is_err() {
-        write_log(&format!(
-            "Failed to convert path to uri: {:?}",
-            cdir_uri.unwrap_err()
-        ));
+        write_log!("Failed to convert path to uri: {:?}", cdir_uri.unwrap_err());
         return;
     }
     let cdir_uri = cdir_uri.unwrap();
@@ -2078,10 +2068,7 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
         // Convert path to uri.
         let uri = path_to_uri(&cdir.join(&span.input.file_path));
         if uri.is_err() {
-            write_log(&format!(
-                "Failed to convert path to uri: {:?}",
-                uri.unwrap_err()
-            ));
+            write_log!("Failed to convert path to uri: {:?}", uri.unwrap_err());
             continue;
         }
         let uri = uri.unwrap();

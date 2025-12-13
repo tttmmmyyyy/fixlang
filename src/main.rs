@@ -39,6 +39,7 @@ mod docgen;
 mod error;
 mod generator;
 mod graph;
+#[macro_use]
 mod log;
 mod lsp;
 mod misc;

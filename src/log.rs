@@ -30,7 +30,8 @@ fn open_log_file() -> Mutex<File> {
     Mutex::new(file)
 }
 
-pub fn write_log(message: &str) {
+#[doc(hidden)]
+pub fn write_log_impl(message: &str) {
     let mut file = LOG_FILE.lock().expect("Failed to lock the log file.");
     if WRITE_LOG {
         let message = message.to_string() + "\n";
@@ -38,4 +39,11 @@ pub fn write_log(message: &str) {
             .expect("Failed to write a message to the log file.");
         file.flush().expect("Failed to flush the log file.");
     }
+}
+
+#[macro_export]
+macro_rules! write_log {
+    ($($arg:tt)*) => {
+        $crate::log::write_log_impl(&format!($($arg)*))
+    };
 }
