@@ -270,6 +270,19 @@ Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` 
 * `second` - The array to be appended.
 * `first` - The array to which `second` is appended.
 
+#### check_range
+
+Type: `Std::I64 -> Std::I64 -> Std::I64`
+
+Given the `idx` and `size`, checks whether `0 <= idx < size`.
+
+If not, this function aborts the program.
+
+##### Parameters
+
+* `idx` - The index to check.
+* `size` - The size to check the index against.
+
 #### dedup
 
 Type: `[a : Std::Eq] Std::Array a -> Std::Array a`

@@ -1994,86 +1994,6 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayGetBody {
-    arr_name: FullName,
-    idx_name: FullName,
-}
-
-impl InlineLLVMArrayGetBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.Array::@({})",
-            self.arr_name.to_string(),
-            self.idx_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.idx_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut GenerationContext<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
-        // let array = gc.get_var_retained_if_used_later(&self.arr_name);
-        let array = gc.get_scoped_obj_noretain(&self.arr_name);
-
-        let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-        let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx);
-
-        if !gc.is_var_used_later(&self.arr_name) {
-            gc.release(array);
-        }
-        elem
-    }
-}
-
-// Implementation of Array::get built-in function.
-fn get_array_body(a: &str, array: &str, idx: &str) -> Arc<ExprNode> {
-    let elem_ty = type_tyvar_star(a);
-
-    let arr_name = FullName::local(array);
-    let idx_name = FullName::local(idx);
-
-    expr_llvm(
-        LLVMGenerator::ArrayGetBody(InlineLLVMArrayGetBody { arr_name, idx_name }),
-        elem_ty,
-        None,
-    )
-}
-
-// "Array::@ : Array a -> I64 -> a" built-in function.
-pub fn get_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-    let expr = expr_abs(
-        vec![var_local("idx")],
-        expr_abs(
-            vec![var_local("array")],
-            get_array_body("a", "array", "idx"),
-            None,
-        ),
-        None,
-    );
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(
-            make_i64_ty(),
-            type_fun(
-                type_tyapp(make_array_ty(), type_tyvar_star("a")),
-                type_tyvar_star("a"),
-            ),
-        ),
-    );
-    (expr, scm)
-}
-
 // Force array object to be unique.
 // If it is unique, do nothing.
 // If it is shared, clone the object.
@@ -2234,110 +2154,6 @@ pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common()
 }
 
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct InlineLLVMArrayModBody {
-//     array_name: FullName,
-//     idx_name: FullName,
-//     modifier_name: FullName,
-// }
-
-// impl InlineLLVMArrayModBody {
-//     pub fn name(&self) -> String {
-//         format!(
-//             "{}.Array::mod({}, {})",
-//             self.array_name.to_string(),
-//             self.idx_name.to_string(),
-//             self.modifier_name.to_string()
-//         )
-//     }
-
-//     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-//         vec![
-//             &mut self.array_name,
-//             &mut self.idx_name,
-//             &mut self.modifier_name,
-//         ]
-//     }
-
-//     pub fn generate<'c, 'm, 'b>(
-//         &self,
-//         gc: &mut GenerationContext<'c, 'm>,
-//         _ty: &Arc<TypeNode>,
-//     ) -> Object<'c> {
-//         // Get argments
-//         let array = gc.get_scoped_obj(&self.array_name);
-//         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-//         let modifier = gc.get_scoped_obj(&self.modifier_name);
-
-//         // Make array unique
-//         let array = make_array_unique(gc, array);
-
-//         // Get old element without retain.
-//         let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
-//         let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-//         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-//         let elem = ObjectFieldType::read_from_array_buf_noretain(
-//             gc,
-//             Some(array_len),
-//             array_buf,
-//             elem_ty,
-//             idx,
-//         );
-
-//         // Apply modifier to get a new value.
-//         let elem = gc.apply_lambda(modifier, vec![elem], false).unwrap();
-
-//         // Perform write and return.
-//         ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, elem, false);
-//         array
-//     }
-// }
-
-// pub fn mod_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-//     const MODIFIED_ARRAY_NAME: &str = "arr";
-//     const MODIFIER_NAME: &str = "f";
-//     const INDEX_NAME: &str = "idx";
-//     const ELEM_TYPE: &str = "a";
-
-//     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-//     let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
-
-//     let expr = expr_abs(
-//         vec![var_local(INDEX_NAME)],
-//         expr_abs(
-//             vec![var_local(MODIFIER_NAME)],
-//             expr_abs(
-//                 vec![var_local(MODIFIED_ARRAY_NAME)],
-//                 expr_llvm(
-//                     LLVMGenerator::ArrayModBody(InlineLLVMArrayModBody {
-//                         array_name: FullName::local(MODIFIED_ARRAY_NAME),
-//                         idx_name: FullName::local(INDEX_NAME),
-//                         modifier_name: FullName::local(MODIFIER_NAME),
-//                     }),
-//                     array_ty.clone(),
-//                     None,
-//                 ),
-//                 None,
-//             ),
-//             None,
-//         ),
-//         None,
-//     );
-//     let scm = Scheme::generalize(
-//         &[],
-//         vec![],
-//         vec![],
-//         type_fun(
-//             make_i64_ty(),
-//             type_fun(
-//                 type_fun(elem_tyvar.clone(), elem_tyvar),
-//                 type_fun(array_ty.clone(), array_ty),
-//             ),
-//         ),
-//     );
-//     (expr, scm)
-// }
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayForceUniqueBody {
     arr_name: FullName,
@@ -2391,8 +2207,8 @@ pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayCheckRange {
-    arr_name: FullName,
     idx_name: FullName,
+    size_name: FullName,
 }
 
 impl InlineLLVMArrayCheckRange {
@@ -2401,12 +2217,12 @@ impl InlineLLVMArrayCheckRange {
             "Array::{}({}, {})",
             ARRAY_CHECK_RANGE,
             self.idx_name.to_string(),
-            self.arr_name.to_string()
+            self.size_name.to_string()
         )
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.idx_name, &mut self.arr_name]
+        vec![&mut self.idx_name, &mut self.size_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -2414,34 +2230,26 @@ impl InlineLLVMArrayCheckRange {
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        // Get argments
-        let arr = gc.get_scoped_obj(&self.arr_name);
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-
-        let size = arr.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
         ObjectFieldType::panic_if_out_of_range(gc, size, idx);
-
-        arr
+        gc.get_scoped_obj(&self.idx_name)
     }
 }
 
-// _check_range : I64 -> Array a -> Array a
+// _check_range : I64 -> I64 -> I64
 pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
-    const ARR_NAME: &str = "arr";
-    const ELEM_TYPE: &str = "a";
-
-    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+    const SIZE_NAME: &str = "size";
 
     let expr = expr_abs_many(
-        vec![var_local(IDX_NAME), var_local(ARR_NAME)],
+        vec![var_local(IDX_NAME), var_local(SIZE_NAME)],
         expr_llvm(
             LLVMGenerator::ArrayCheckRange(InlineLLVMArrayCheckRange {
                 idx_name: FullName::local(IDX_NAME),
-                arr_name: FullName::local(ARR_NAME),
+                size_name: FullName::local(SIZE_NAME),
             }),
-            array_ty.clone(),
+            make_i64_ty(),
             None,
         ),
     );
@@ -2449,7 +2257,7 @@ pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+        type_fun(make_i64_ty(), type_fun(make_i64_ty(), make_i64_ty())),
     );
     (expr, scm)
 }

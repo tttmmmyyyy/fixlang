@@ -62,14 +62,13 @@ pub const INDEXABLE_TRAIT_NAME: &str = "Indexable";
 pub const INDEXABLE_TRAIT_ACT_NAME: &str = "act_at_index";
 
 // Array methods.
-pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
 pub const ARRAY_GET_SIZE_NAME: &str = "get_size";
 pub const ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED: &str =
     "_unsafe_set_bounds_uniqueness_unchecked_unreleased";
 pub const ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED: &str =
     "_unsafe_get_linear_bounds_unchecked_unretained";
 pub const ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED: &str = "_unsafe_get_bounds_unchecked";
-pub const ARRAY_CHECK_RANGE: &str = "_check_range";
+pub const ARRAY_CHECK_RANGE: &str = "check_range";
 
 // Structure methods.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";

@@ -486,12 +486,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_array_check_range.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        array_getter_function_name(),
-        get_array(),
-        None,
-        Some(include_str!("./docs/std_array_get.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
         set_array(),
         None,
@@ -608,10 +602,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     errors.to_result()?;
     Ok(fix_module)
-}
-
-pub fn array_getter_function_name() -> FullName {
-    FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_GETTER_FUNCTION_NAME)
 }
 
 // Create source code to define traits such as ToString or Eq for tuples.
