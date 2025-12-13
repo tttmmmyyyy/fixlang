@@ -1240,7 +1240,7 @@ impl Expr {
                 for arg in args {
                     arg_texts.push(arg.expr.stringify());
                 }
-                let args = Text::join(arg_texts, ", ").brace();
+                let args = Text::join(arg_texts, ", ", FORMAT_LINE_LIMIT).brace();
 
                 fun.append_nobreak(args)
             }
@@ -1299,7 +1299,7 @@ impl Expr {
                         .append_nobreak(expr.expr.stringify().brace_if_multiline());
                     field_lines.push(field);
                 }
-                let fields = Text::join(field_lines, ", ").curly_brace();
+                let fields = Text::join(field_lines, ", ", FORMAT_LINE_LIMIT).curly_brace();
                 Text::from_str(&tc.to_string()).append_nobreak(fields)
             }
             Expr::ArrayLit(elems) => {
@@ -1308,7 +1308,7 @@ impl Expr {
                     let elem = elem.expr.stringify();
                     elem_lines.push(elem);
                 }
-                Text::join(elem_lines, ", ").square_brace()
+                Text::join(elem_lines, ", ", FORMAT_LINE_LIMIT).square_brace()
             }
             Expr::FFICall(fun_name, _, _, args, is_ios) => {
                 let mut arg_texts: Vec<Text> = vec![];
@@ -1316,7 +1316,7 @@ impl Expr {
                 for arg in args {
                     arg_texts.push(arg.expr.stringify());
                 }
-                let args = Text::join(arg_texts, ", ").square_brace();
+                let args = Text::join(arg_texts, ", ", FORMAT_LINE_LIMIT).square_brace();
                 Text::from_str(&format!("FFI_CALL{}", if *is_ios { "_IOS" } else { "" }))
                     .append_nobreak(args)
             }

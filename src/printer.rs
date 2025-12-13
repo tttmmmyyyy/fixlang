@@ -41,6 +41,10 @@ impl Text {
         Text { lines: Vec::new() }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.lines.is_empty()
+    }
+
     pub fn line(line: Line) -> Self {
         Text { lines: vec![line] }
     }
@@ -111,10 +115,16 @@ impl Text {
 
     // Join a list of texts with a separator.
     //
-    // If consecutive texts A, B in `texts` satisfies the any of following conditions, this function puts a line break between A (+ sep) and B.
+    // First, if consecutive texts A, B in `texts` satisfies the any of following conditions, this function puts a line break between A (+ sep) and B.
     // - Any of A and B has multiple lines.
     // - Any of A and B has a non-zero indent.
-    pub fn join(mut texts: Vec<Text>, sep: &str) -> Text {
+    //
+    // Next, consider the case where the above conditions are not met, i.e., both A and B are single-line texts with zero indent.
+    // In this case, if the sum of the lengths of the last line of A and the first line of B exceeds `line_limit`,
+    // then a line break is inserted between A (+ sep) and B.
+    //
+    // If none of the above conditions are met, this function appends `sep` and the (unique) line of B to the (unique) line of A.
+    pub fn join(mut texts: Vec<Text>, sep: &str, line_limit: usize) -> Text {
         // If `texts` is empty or has only one element, return it as is.
         if texts.is_empty() {
             return Text::empty();
@@ -124,22 +134,34 @@ impl Text {
         }
 
         // A function to check if a text has multiple lines or a non-zero indent.
-        fn should_break(text: &Text) -> bool {
+        fn multiline_or_indented(text: &Text) -> bool {
             text.num_lines() > 1 || text.lines.iter().any(|line| line.indent > 0)
         }
 
         let mut res = Text::empty();
-        let mut prev_should_break = false;
-        for (i, text) in texts.into_iter().enumerate() {
-            if i == 0 {
-                prev_should_break = should_break(&text);
+        let mut prev_multiline_or_indented = false;
+        for (_i, text) in texts.into_iter().enumerate() {
+            if text.is_empty() {
+                continue;
+            }
+            if res.is_empty() {
+                prev_multiline_or_indented = multiline_or_indented(&text);
                 res = text;
             } else {
+                assert!(!text.is_empty());
+                assert!(!res.is_empty());
+
                 res = res.append_to_last_line(sep);
 
-                let this_should_break = should_break(&text);
-                let should_break = prev_should_break || this_should_break;
-                prev_should_break = this_should_break;
+                let this_multiline_or_indented = multiline_or_indented(&text);
+                let should_break = if prev_multiline_or_indented || this_multiline_or_indented {
+                    true
+                } else {
+                    let last_line_len = res.lines.last().unwrap().content.len();
+                    let first_line_len = text.lines.first().unwrap().content.len();
+                    last_line_len + first_line_len > line_limit
+                };
+                prev_multiline_or_indented = this_multiline_or_indented;
 
                 if should_break {
                     res = res.append(text);
@@ -155,7 +177,7 @@ impl Text {
     //
     // If the text has only one line, this function adds braces to the line.
     // Otherwise, this function adds braces to the first and last lines of the text, and indents all lines in the text.
-    fn brace_inner(self, open: &str, close: &str) -> Text {
+    fn brace_internal(self, open: &str, close: &str) -> Text {
         if self.num_lines() == 0 {
             Text::from_str(&format!("{}{}", open, close))
         } else if self.num_lines() == 1 {
@@ -168,7 +190,7 @@ impl Text {
     }
 
     pub fn brace(self) -> Text {
-        self.brace_inner("(", ")")
+        self.brace_internal("(", ")")
     }
 
     pub fn brace_if_multiline(self) -> Text {
@@ -179,10 +201,10 @@ impl Text {
     }
 
     pub fn curly_brace(self) -> Text {
-        self.brace_inner("{", "}")
+        self.brace_internal("{", "}")
     }
 
     pub fn square_brace(self) -> Text {
-        self.brace_inner("[", "]")
+        self.brace_internal("[", "]")
     }
 }

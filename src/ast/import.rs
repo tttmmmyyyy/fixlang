@@ -144,6 +144,7 @@ impl ImportStatement {
                         .map(|item| item.stringify())
                         .collect::<Vec<_>>(),
                     ", ",
+                    FORMAT_LINE_LIMIT,
                 );
                 let brace = self.items.len() >= 2;
                 let items = if brace { items.curly_brace() } else { items };
@@ -161,6 +162,7 @@ impl ImportStatement {
                     .map(|item| item.stringify())
                     .collect::<Vec<_>>(),
                 ", ",
+                FORMAT_LINE_LIMIT,
             );
             let brace = self.hiding.len() >= 2;
             let items = if brace { items.curly_brace() } else { items };
@@ -416,6 +418,7 @@ impl ImportTreeNode {
                             .map(|item| item.stringify())
                             .collect::<Vec<_>>(),
                         ", ",
+                        FORMAT_LINE_LIMIT,
                     );
                     let brace = items.len() >= 2;
                     let items_text = if brace {
