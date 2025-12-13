@@ -10,7 +10,6 @@
 - Added the [index syntax](./Document.md#index-syntax), `Indexable` trait and `Indexable` namespace in `Std` module.
 - Implement `Array a : Indexable`, `String : Indexable`.
 - Added the `Identity` and `Const` types in `Std`. They are functors, and `Identity` is also a monad.
-- Added `Std::Array::check_size : I64 -> I64 -> I64` built-in function, which checks whether `0 <= idx < size` holds or not.
 - LSP: Added a feature to automatically add import statements when completing entity names, if necessary.
 - LSP: Added Quick Fix for "Unknown name" and "Unknown type" errors to add import statements.
 - LSP: You can now search documents and jump to definitions from entities written in import statements.
