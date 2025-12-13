@@ -110,8 +110,9 @@ namespace Array {
     // * `array` - The array to modify.
     mod : I64 -> (a -> a) -> Array a -> Array a;
     mod = |idx, fun, arr| (
-        let size = arr.get_size;
-        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
+        // let size = arr.get_size;
+        // if !(0 <= idx && idx < size) { undefined("Index out of range.") };
+        let arr = arr._check_range(idx);
         let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_forceunique(idx);
         let elm = fun(elm);
         arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm)
@@ -160,8 +161,9 @@ namespace Array {
     // * `array` - The array.
     act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     act = |idx, fun, arr| (
-        let size = arr.get_size;
-        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
+        // let size = arr.get_size;
+        // if !(0 <= idx && idx < size) { undefined("Index out of range.") };
+        let arr = arr._check_range(idx);
         arr._unsafe_act_bounds_unchecked(idx, fun)
     );
 

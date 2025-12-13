@@ -2390,6 +2390,71 @@ pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayCheckRange {
+    arr_name: FullName,
+    idx_name: FullName,
+}
+
+impl InlineLLVMArrayCheckRange {
+    pub fn name(&self) -> String {
+        format!(
+            "Array::{}({}, {})",
+            ARRAY_CHECK_RANGE,
+            self.idx_name.to_string(),
+            self.arr_name.to_string()
+        )
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.idx_name, &mut self.arr_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // Get argments
+        let arr = gc.get_scoped_obj(&self.arr_name);
+        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
+
+        let size = arr.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        ObjectFieldType::panic_if_out_of_range(gc, size, idx);
+
+        arr
+    }
+}
+
+// _check_range : I64 -> Array a -> Array a
+pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const IDX_NAME: &str = "idx";
+    const ARR_NAME: &str = "arr";
+    const ELEM_TYPE: &str = "a";
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs_many(
+        vec![var_local(IDX_NAME), var_local(ARR_NAME)],
+        expr_llvm(
+            LLVMGenerator::ArrayCheckRange(InlineLLVMArrayCheckRange {
+                idx_name: FullName::local(IDX_NAME),
+                arr_name: FullName::local(ARR_NAME),
+            }),
+            array_ty.clone(),
+            None,
+        ),
+    );
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayGetPtrBody {
     arr_name: FullName,
 }

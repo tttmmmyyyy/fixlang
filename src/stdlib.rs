@@ -480,6 +480,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_array_force_unique.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_CHECK_RANGE),
+        array_check_range(),
+        None,
+        Some(include_str!("./docs/std_array_check_range.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
         array_getter_function_name(),
         get_array(),
         None,

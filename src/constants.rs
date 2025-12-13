@@ -69,6 +69,7 @@ pub const ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED: &str =
 pub const ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED: &str =
     "_unsafe_get_linear_bounds_unchecked_unretained";
 pub const ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED: &str = "_unsafe_get_bounds_unchecked";
+pub const ARRAY_CHECK_RANGE: &str = "_check_range";
 
 // Structure methods.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";

@@ -33,6 +33,7 @@ pub enum LLVMGenerator {
     ArrayGetPtrBody(InlineLLVMArrayGetPtrBody),
     ArrayGetSizeBody(InlineLLVMArrayGetSizeBody),
     ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody),
+    ArrayCheckRange(InlineLLVMArrayCheckRange),
     StructGetBody(InlineLLVMStructGetBody),
     StructSetBody(InlineLLVMStructSetBody),
     StructPunchBody(InlineLLVMStructPunchBody),
@@ -156,6 +157,7 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => {
                 Some(x.generate(gc, ty))
             }
+            LLVMGenerator::ArrayCheckRange(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::IOStateUnsafeCreate(x) => Some(x.generate(gc, ty)),
         };
         match obj {
@@ -251,6 +253,7 @@ impl LLVMGenerator {
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.free_vars(),
             LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.free_vars(),
             LLVMGenerator::IOStateUnsafeCreate(x) => x.free_vars(),
+            LLVMGenerator::ArrayCheckRange(x) => x.free_vars(),
         }
     }
 
@@ -320,6 +323,7 @@ impl LLVMGenerator {
             LLVMGenerator::UnionIsBody(x) => x.name(),
             LLVMGenerator::UnionModBody(x) => x.name(),
             LLVMGenerator::UndefinedFunctionBody(x) => x.name(),
+            LLVMGenerator::ArrayCheckRange(x) => x.name(),
         };
         format!("LLVM<{}>", raw_name)
     }
