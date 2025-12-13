@@ -683,7 +683,7 @@ impl InlineLLVMNullPtrLit {
 pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::NullPtrLit(InlineLLVMNullPtrLit {}),
-        make_ptr_ty(),
+        make_ptr_ty().set_source(source.clone()),
         source,
     )
 }
@@ -785,13 +785,16 @@ impl InlineLLVMStringBuf {
 }
 
 pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
+    let array_ty = make_array_ty().set_source(source.clone());
+    let u8_ty = make_u8_ty().set_source(source.clone());
+    let byte_array_ty = type_tyapp(array_ty, u8_ty).set_source(source.clone());
     expr_make_struct(
         make_string_tycon(),
         vec![(
             "_data".to_string(),
             expr_llvm(
                 LLVMGenerator::StringBuf(InlineLLVMStringBuf { string }),
-                type_tyapp(make_array_ty(), make_u8_ty()).set_source(source.clone()),
+                byte_array_ty,
                 source.clone(),
             ),
         )],

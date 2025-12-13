@@ -1575,7 +1575,7 @@ fn parse_expr_index(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
                             &[STD_NAME, INDEXABLE_TRAIT_NAME],
                             INDEXABLE_TRAIT_ACT_NAME,
                         ),
-                        None,
+                        Some(index_span_with_braces.clone()),
                     ),
                     vec![index_expr],
                     Some(index_span_with_braces.clone()),
@@ -2027,6 +2027,7 @@ fn parse_expr_number_lit(
             }
         }
     };
+    let ty = ty.set_source(Some(span.clone()));
     if is_float {
         let val = val_str.parse::<f64>();
         if val.is_err() {
