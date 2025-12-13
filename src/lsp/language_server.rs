@@ -7,12 +7,12 @@ use crate::constants::{
     chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
 };
 use crate::docgen::MarkdownSection;
+use crate::log::write_log;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::runner::check_program_via_config;
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::{
-    constants::LOG_FILE_PATH,
     error::{any_to_string, Error, Errors},
     project_file::ProjectFile,
     Configuration, Span,
@@ -31,24 +31,20 @@ use lsp_types::{
     WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
     WorkDoneProgressOptions, WorkspaceEdit,
 };
-use once_cell::sync::Lazy;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::mem;
 use std::path::Path;
 use std::{
-    fs::File,
     io::{Read, Write},
     path::PathBuf,
     str::FromStr,
     sync::{
         mpsc::{self, Receiver, Sender},
-        Arc, Mutex,
+        Arc,
     },
 };
-
-pub const WRITE_LOG: bool = true;
 
 #[derive(Deserialize, Serialize)]
 pub struct JSONRPCMessage {
@@ -104,8 +100,6 @@ pub struct PendingDocumentSymbolRequest {
     id: u32,
     params: DocumentSymbolParams,
 }
-
-static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 
 // The latest content of each file (which may not have been saved to disk yet) and its associated information
 pub struct LatestContent {
@@ -515,38 +509,6 @@ fn send_message(msg: &JSONRPCMessage) {
     std::io::stdout()
         .flush()
         .expect("Failed to flush the stdout.");
-}
-
-fn open_log_file() -> Mutex<File> {
-    // Get parent directory of path `LSP_LOG_FILE_PATH`.
-    let parent_dir = std::path::Path::new(LOG_FILE_PATH)
-        .parent()
-        .expect("Failed to get parent directory of LSP_LOG_FILE_PATH.");
-
-    // Create directories to the parent directory.
-    std::fs::create_dir_all(parent_dir)
-        .expect("Failed to create directories to the parent directory.");
-
-    // Create and open the log file.
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(LOG_FILE_PATH)
-        .expect(format!("Failed to open `{}` file.", LOG_FILE_PATH).as_str());
-
-    // Wrap it into a mutex.
-    Mutex::new(file)
-}
-
-pub fn write_log(message: &str) {
-    let mut file = LOG_FILE.lock().expect("Failed to lock the log file.");
-    if WRITE_LOG {
-        let message = message.to_string() + "\n";
-        file.write_all(message.as_bytes())
-            .expect("Failed to write a message to the log file.");
-        file.flush().expect("Failed to flush the log file.");
-    }
 }
 
 // Handle "initialize" method.

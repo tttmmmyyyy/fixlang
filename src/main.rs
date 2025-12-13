@@ -39,6 +39,7 @@ mod docgen;
 mod error;
 mod generator;
 mod graph;
+mod log;
 mod lsp;
 mod misc;
 mod object;
