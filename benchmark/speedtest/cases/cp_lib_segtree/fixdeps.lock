@@ -2,12 +2,12 @@ proj_file_hash = "f527e4245d7131547a229a1c5d430929"
 
 [[dependencies]]
 name = "cp-library"
-version = "0.7.0"
-path = ".fixlang/deps/cp-library_0.7.0"
+version = "0.7.1"
+path = ".fixlang/deps/cp-library_0.7.1"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/cp-library.git"
-rev = "6f2fbe9fa049bbc1098bcea2db2640a545d55a2d"
+rev = "f1141d4f14a95120032d46c6115cccfa52a39a3c"
 
 [[dependencies]]
 name = "random"
