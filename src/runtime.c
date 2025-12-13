@@ -16,6 +16,8 @@ When running program by `fix build`, then this source file will be compiled into
 #include <unistd.h>
 #include <pthread.h>
 
+__attribute__((noreturn)) void fixruntime_abort(void);
+
 // Print message to stderr, and flush it.
 void fixruntime_eprintln(const char *msg)
 {
@@ -304,6 +306,12 @@ int fixruntime_get_errno()
 void fixruntime_clear_errno()
 {
     errno = 0;
+}
+
+void fixruntime_index_out_of_range(int64_t idx, int64_t size)
+{
+    fprintf(stderr, "Index out of range: index=%" PRId64 ", size=%" PRId64 "\n", idx, size);
+    fixruntime_abort();
 }
 
 #if defined(BACKTRACE)
