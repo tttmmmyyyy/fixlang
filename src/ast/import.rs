@@ -1,5 +1,7 @@
 use name::{FullName, Name, NameSpace};
 
+use crate::printer::Text;
+
 use super::*;
 
 pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {
@@ -119,48 +121,55 @@ impl ImportStatement {
     }
 
     pub fn stringify(&self) -> String {
-        let mut res = format!("import {}", self.module.0);
-        if self.items.len() == 0 {
-            res += "::{}"
-        }
-        if self.items.len() == 1 && matches!(self.items[0], ImportTreeNode::Any(_)) {
-            // "import Std::*" can be written as "import Std"
+        self.stringify_internal().to_string()
+    }
+
+    fn stringify_internal(&self) -> Text {
+        let res = Text::from_str("import ");
+        let res = res.append_to_last_line(&self.module.0);
+        let res = if self.items.len() == 0 {
+            res.append_to_last_line("::{}")
+        } else {
+            res
+        };
+        let res = if self.items.len() == 1 && matches!(self.items[0], ImportTreeNode::Any(_)) {
+            // For example, "import Std::*" should be written as "import Std"
+            res
         } else {
             if self.items.len() >= 1 {
-                res += "::";
-                if self.items.len() >= 2 {
-                    res += "{";
-                }
-                res += self
-                    .items
+                let res = res.append_to_last_line("::");
+                let items = Text::join(
+                    self.items
+                        .iter()
+                        .map(|item| item.stringify())
+                        .collect::<Vec<_>>(),
+                    ", ",
+                );
+                let brace = self.items.len() >= 2;
+                let items = if brace { items.curly_brace() } else { items };
+                let res = res.append_nobreak(items);
+                res
+            } else {
+                res
+            }
+        };
+        let res = if self.hiding.len() >= 1 {
+            let res = res.append_to_last_line(" hiding ");
+            let items = Text::join(
+                self.hiding
                     .iter()
                     .map(|item| item.stringify())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-                    .as_str();
-                if self.items.len() >= 2 {
-                    res += "}";
-                }
-            }
-        }
-        if self.hiding.len() >= 1 {
-            if self.hiding.len() >= 2 {
-                res += " hiding {";
-            } else {
-                res += " hiding ";
-            }
-            res += self
-                .hiding
-                .iter()
-                .map(|item| item.stringify())
-                .collect::<Vec<_>>()
-                .join(", ")
-                .as_str();
-            if self.hiding.len() >= 2 {
-                res += "}";
-            }
-        }
-        res += ";";
+                    .collect::<Vec<_>>(),
+                ", ",
+            );
+            let brace = self.hiding.len() >= 2;
+            let items = if brace { items.curly_brace() } else { items };
+            let res = res.append_nobreak(items);
+            res
+        } else {
+            res
+        };
+        let res = res.append_to_last_line(";");
         res
     }
 
@@ -392,28 +401,33 @@ impl ImportTreeNode {
         }
     }
 
-    fn stringify(&self) -> String {
+    fn stringify(&self) -> Text {
         match self {
-            ImportTreeNode::Any(_) => "*".to_string(),
-            ImportTreeNode::Symbol(name, _) => name.clone(),
-            ImportTreeNode::TypeOrTrait(name, _) => name.clone(),
+            ImportTreeNode::Any(_) => Text::from_str("*"),
+            ImportTreeNode::Symbol(name, _) => Text::from_str(name),
+            ImportTreeNode::TypeOrTrait(name, _) => Text::from_str(name),
             ImportTreeNode::NameSpace(name, items, _) => {
-                let mut res = name.clone();
-                if items.len() >= 1 {
-                    if items.len() >= 2 {
-                        res += "::{";
+                let res = Text::from_str(name);
+                let res = if items.len() >= 1 {
+                    let res = res.append_to_last_line("::");
+                    let items_text = Text::join(
+                        items
+                            .iter()
+                            .map(|item| item.stringify())
+                            .collect::<Vec<_>>(),
+                        ", ",
+                    );
+                    let brace = items.len() >= 2;
+                    let items_text = if brace {
+                        items_text.curly_brace()
                     } else {
-                        res += "::";
-                    }
-                    res += &items
-                        .iter()
-                        .map(|item| item.stringify())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    if items.len() >= 2 {
-                        res += "}";
-                    }
-                }
+                        items_text
+                    };
+                    let res = res.append_nobreak(items_text);
+                    res
+                } else {
+                    res
+                };
                 res
             }
         }
