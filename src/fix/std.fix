@@ -4032,6 +4032,11 @@ trait c : Indexable {
     // The type of indices.
     type Index c;
     // Act on an index.
+    // 
+    // # Parameters
+    // * `i` - The index.
+    // * `f` - The functorial action to be performed on the element at the specified index.
+    // * `c` - The collection.
     act_at_index : [f : Functor] Index c -> (Elem c -> f (Elem c)) -> c -> f c;
 }
 
