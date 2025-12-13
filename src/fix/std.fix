@@ -112,7 +112,7 @@ namespace Array {
     mod = |idx, fun, arr| (
         let size = arr.get_size;
         if !(0 <= idx && idx < size) { undefined("Index out of range.") };
-        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_fu(idx);
+        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_forceunique(idx);
         let elm = fun(elm);
         arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm)
     );
@@ -120,7 +120,7 @@ namespace Array {
     // Optimized implementation of `_unsafe_act_bounds_unchecked` function specialized for `Identity` functor.
     _unsafe_act_bounds_unchecked_identity : I64 -> (a -> Identity a) -> Array a -> Identity (Array a);
     _unsafe_act_bounds_unchecked_identity = |idx, fun, arr| (
-        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_fu(idx);
+        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_forceunique(idx);
         let Identity { data : elm } = fun(elm);
         Identity { data : arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm) }
     );
@@ -136,7 +136,7 @@ namespace Array {
     // Optimized implementation of `_unsafe_act_bounds_unchecked` function specialized for `Tuple2 x` functor.
     _unsafe_act_bounds_unchecked_tuple2 : I64 -> (a -> (x, a)) -> Array a -> (x, Array a);
     _unsafe_act_bounds_unchecked_tuple2 = |idx, fun, arr| (
-        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_fu(idx);
+        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_forceunique(idx);
         let (x, elm) = fun(elm);
         (x, arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm))
     );

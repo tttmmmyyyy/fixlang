@@ -1833,7 +1833,11 @@ impl InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
         format!(
             "Array::{}{}({}, {})",
             ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-            if self.force_unique { "_fu" } else { "" },
+            if self.force_unique {
+                "_forceunique"
+            } else {
+                ""
+            },
             self.idx_name.to_string(),
             self.arr_name.to_string(),
         )

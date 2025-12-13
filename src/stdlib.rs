@@ -458,7 +458,10 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         fix_module.add_global_value(
             FullName::from_strs(
                 &[STD_NAME, ARRAY_NAME],
-                &format!("{}_fu", ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED),
+                &format!(
+                    "{}_forceunique",
+                    ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED
+                ),
             ),
             array_unsafe_get_linear_bounds_unchecked_unretained(true),
             None,

@@ -3548,19 +3548,6 @@ Returns the containing value if the value is ok, or otherwise aborts the program
 
 ### namespace Std::String
 
-#### @
-
-Type: `Std::I64 -> Std::String -> Std::U8`
-
-Get the `idx`-th byte of a string.
-
-`str.@(idx)` for `idx == str.get_size` is valid and returns the null-terminator.
-
-##### Parameters
-
-* `idx` - The index of the byte to be retrieved.
-* `str` - The string.
-
 #### borrow_c_str
 
 Type: `(Std::Ptr -> a) -> Std::String -> a`
