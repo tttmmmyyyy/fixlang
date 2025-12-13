@@ -5,14 +5,9 @@ use super::*;
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
-// pub const RUNTIME_RETAIN_BOXED_OBJECT: &str = "fixruntime_retain_obj";
-// pub const RUNTIME_RELEASE_BOXED_OBJECT: &str = "fixruntime_release_obj";
-// pub const RUNTIME_MARK_GLOBAL_BOXED_OBJECT: &str = "fixruntime_mark_global_obj";
-// pub const RUNTIME_MARK_THREADED_BOXED_OBJECT: &str = "fixruntime_mark_threaded_obj";
 pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
 pub const RUNTIME_PTR_ADD_OFFSET: &str = "fixruntime_ptr_add_offset";
 pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
-// pub const RUNTIME_RUN_FUNCTION: &str = "fixruntime_run_function_llvm";
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
 pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
 
@@ -20,16 +15,11 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: Build
     build_abort_function(gc, mode);
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
-    // build_retain_boxed_function(gc, mode);
-    // build_release_boxed_function(gc, mode);
-    // build_mark_global_boxed_object_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
     build_ptr_add_offset_function(gc, mode);
     if gc.config.threaded {
         build_pthread_once_function(gc, mode);
-        // build_mark_threaded_boxed_object_function(gc, mode);
     }
-    // build_run_function(gc, mode); // This should be built after `build_mark_threaded_boxed_object_function`.
     build_get_argc_function(gc, mode);
     build_get_argv_function(gc, mode);
 }
