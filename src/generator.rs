@@ -2,16 +2,80 @@
 // --
 // GenerationContext struct, code generation and convenient functions.
 
-use std::{cell::RefCell, env, sync::Arc};
-
+use crate::ast::expr::Expr;
+use crate::ast::expr::ExprNode;
+use crate::ast::expr::Var;
+use crate::ast::inline_llvm::InlineLLVM;
+use crate::ast::name::FullName;
+use crate::ast::name::Name;
+use crate::ast::pattern::Pattern;
+use crate::ast::pattern::PatternNode;
+use crate::ast::program::Symbol;
+use crate::ast::program::TypeEnv;
+use crate::ast::types::type_tycon;
+use crate::ast::types::TyCon;
+use crate::ast::types::TypeNode;
+use crate::builtin::make_dynamic_object_ty;
+use crate::builtin::make_iostate_ty;
+use crate::builtin::make_tuple_ty;
+use crate::builtin::run_io_or_ios_runner;
+use crate::configuration::Configuration;
+use crate::constants::pthread_once_init_flag_type;
+use crate::constants::pthread_once_init_flag_value;
+use crate::constants::TraverserWorkType;
+use crate::constants::ARRAY_BUF_IDX;
+use crate::constants::ARRAY_LEN_IDX;
+use crate::constants::CAP_NAME;
+use crate::constants::CLOSURE_CAPTURE_IDX;
+use crate::constants::CLOSURE_FUNPTR_IDX;
+use crate::constants::CTRL_BLK_REFCNT_IDX;
+use crate::constants::CTRL_BLK_REFCNT_STATE_IDX;
+use crate::constants::DESTRUCTOR_OBJECT_DTOR_FIELD_IDX;
+use crate::constants::DESTRUCTOR_OBJECT_VALUE_FIELD_IDX;
+use crate::constants::DYNAMIC_OBJ_CAP_IDX;
+use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
+use crate::constants::REFCNT_STATE_GLOBAL;
+use crate::constants::REFCNT_STATE_LOCAL;
+use crate::constants::REFCNT_STATE_THREADED;
+use crate::constants::TRAVERSER_WORK_RELEASE;
 use crate::error::panic_with_err;
 use crate::error::panic_with_err_src;
-use ast::name::FullName;
-use ast::name::Name;
+use crate::misc::flatten_opt;
+use crate::misc::Map;
+use crate::misc::Set;
+use crate::object;
+use crate::object::control_block_type;
+use crate::object::create_obj;
+use crate::object::create_traverser;
+use crate::object::lambda_function_type;
+use crate::object::refcnt_state_type;
+use crate::object::refcnt_type;
+use crate::object::traverser_type;
+use crate::object::traverser_work_type;
+use crate::object::ty_to_debug_embedded_ty;
+use crate::object::ty_to_object_ty;
+use crate::object::ObjectFieldType;
+use crate::runtime::RUNTIME_ABORT;
+use crate::runtime::RUNTIME_EPRINTLN;
+use crate::runtime::RUNTIME_PTHREAD_ONCE;
+use crate::sourcefile::SourceFile;
+use crate::sourcefile::Span;
 use either::Either;
 use either::Either::Left;
 use either::Either::Right;
+use inkwell::builder::Builder;
+use inkwell::context::Context;
+use inkwell::module::Module;
+use inkwell::types::BasicTypeEnum;
+use inkwell::types::StructType;
+use inkwell::values::BasicValue;
+use inkwell::values::BasicValueEnum;
+use inkwell::values::FunctionValue;
 use inkwell::values::GlobalValue;
+use inkwell::values::IntValue;
+use inkwell::values::PointerValue;
+use inkwell::AddressSpace;
+use inkwell::IntPredicate;
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{
@@ -23,11 +87,7 @@ use inkwell::{
     types::{AnyType, BasicMetadataTypeEnum, BasicType},
     values::{BasicMetadataValueEnum, CallSiteValue},
 };
-use misc::flatten_opt;
-use misc::Map;
-use misc::Set;
-
-use super::*;
+use std::{cell::RefCell, env, sync::Arc};
 
 #[derive(Clone)]
 pub struct ScopedValue<'c> {
