@@ -55,15 +55,20 @@ pub const TEST_FUNCTION_NAME: &str = "test";
 pub const TEST_MODULE_NAME: &str = "Test";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";
 pub const WITH_RETAINED_NAME: &str = "with_retained";
+#[allow(unused)]
 pub const ARRAY_ACT_NAME: &str = "act";
+pub const BUILTIN_ACT_NAME: &str = "_unsafe_act_bounds_unchecked";
 pub const INDEXABLE_TRAIT_NAME: &str = "Indexable";
 pub const INDEXABLE_TRAIT_ACT_NAME: &str = "act_at_index";
 
 // Array methods.
 pub const ARRAY_GETTER_FUNCTION_NAME: &str = "@";
 pub const ARRAY_GET_SIZE_NAME: &str = "get_size";
-pub const ARRAY_UNSAFE_GET_LINEAR_FU_NAME: &str = "_unsafe_get_linear_fu";
-pub const ARRAY_UNSAFE_SET_NAME: &str = "_unsafe_set";
+pub const ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED: &str =
+    "_unsafe_set_bounds_uniqueness_unchecked_unreleased";
+pub const ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED: &str =
+    "_unsafe_get_linear_bounds_unchecked_unretained";
+pub const ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED: &str = "_unsafe_get_bounds_unchecked";
 
 // Structure methods.
 pub const STRUCT_GETTER_SYMBOL: &str = "@";

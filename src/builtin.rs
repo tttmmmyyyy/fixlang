@@ -1640,19 +1640,20 @@ pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeSetBody {
+pub struct InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
     arr_name: FullName,
     idx_name: FullName,
     value_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeSetBody {
+impl InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
     pub fn name(&self) -> String {
         format!(
-            "{}.Array::unsafe_set({}, {})",
-            self.arr_name.to_string(),
+            "Array::{}({}, {}, {})",
+            ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED,
             self.idx_name.to_string(),
-            self.value_name.to_string()
+            self.value_name.to_string(),
+            self.arr_name.to_string(),
         )
     }
 
@@ -1680,7 +1681,7 @@ impl InlineLLVMArrayUnsafeSetBody {
 }
 
 // Set an element to an array, with no uniqueness checking and without releasing the old value.
-pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn array_unsafe_set_bounds_uniqueness_unchecked_unreleased() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const VALUE_NAME: &str = "val";
@@ -1696,11 +1697,13 @@ pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
             expr_abs(
                 vec![var_local(ARR_NAME)],
                 expr_llvm(
-                    LLVMGenerator::ArrayUnsafeSetBody(InlineLLVMArrayUnsafeSetBody {
-                        arr_name: FullName::local(ARR_NAME),
-                        idx_name: FullName::local(IDX_NAME),
-                        value_name: FullName::local(VALUE_NAME),
-                    }),
+                    LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(
+                        InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
+                            arr_name: FullName::local(ARR_NAME),
+                            idx_name: FullName::local(IDX_NAME),
+                            value_name: FullName::local(VALUE_NAME),
+                        },
+                    ),
                     array_ty.clone(),
                     None,
                 ),
@@ -1724,17 +1727,18 @@ pub fn unsafe_set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeGetBody {
+pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
     arr_name: FullName,
     idx_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeGetBody {
+impl InlineLLVMArrayUnsafeGetBoundsUnchecked {
     pub fn name(&self) -> String {
         format!(
-            "{}.Array::unsafe_get({})",
+            "Array::{}({}, {})",
+            ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
+            self.idx_name.to_string(),
             self.arr_name.to_string(),
-            self.idx_name.to_string()
         )
     }
 
@@ -1747,6 +1751,20 @@ impl InlineLLVMArrayUnsafeGetBody {
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
+        // // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
+        // // let array = gc.get_var_retained_if_used_later(&self.arr_name);
+        // let array = gc.get_scoped_obj_noretain(&self.arr_name);
+
+        // let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        // let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        // let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
+        // let elem = ObjectFieldType::read_from_array_buf(gc, Some(len), buf, ty.clone(), idx);
+
+        // if !gc.is_var_used_later(&self.arr_name) {
+        //     gc.release(array);
+        // }
+        // elem
+
         // Get argments
         let array = gc.get_scoped_obj_noretain(&self.arr_name);
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
@@ -1755,7 +1773,7 @@ impl InlineLLVMArrayUnsafeGetBody {
         let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
 
         // Get element
-        let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, ty.clone(), idx);
+        let elem = ObjectFieldType::read_from_array_buf(gc, None, buf, ty.clone(), idx);
 
         // Release the array.
         if !gc.is_var_used_later(&self.arr_name) {
@@ -1766,8 +1784,8 @@ impl InlineLLVMArrayUnsafeGetBody {
     }
 }
 
-// Gets a value from an array, without bounds checking and retaining the returned value.
-pub fn array_unsafe_get_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+// Gets a value from an array, without bounds checking
+pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";
@@ -1780,10 +1798,12 @@ pub fn array_unsafe_get_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_llvm(
-                LLVMGenerator::ArrayUnsafeGetBody(InlineLLVMArrayUnsafeGetBody {
-                    arr_name: FullName::local(ARR_NAME),
-                    idx_name: FullName::local(IDX_NAME),
-                }),
+                LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(
+                    InlineLLVMArrayUnsafeGetBoundsUnchecked {
+                        arr_name: FullName::local(ARR_NAME),
+                        idx_name: FullName::local(IDX_NAME),
+                    },
+                ),
                 elem_tyvar.clone(),
                 None,
             ),
@@ -1802,19 +1822,20 @@ pub fn array_unsafe_get_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeGetLinearFunctionBody {
+pub struct InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
     force_unique: bool,
     arr_name: FullName,
     idx_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
+impl InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
     pub fn name(&self) -> String {
         format!(
-            "{}.Array::unsafe_get_linear{}({})",
-            self.arr_name.to_string(),
+            "Array::{}{}({}, {})",
+            ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
             if self.force_unique { "_fu" } else { "" },
-            self.idx_name.to_string()
+            self.idx_name.to_string(),
+            self.arr_name.to_string(),
         )
     }
 
@@ -1850,7 +1871,10 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
             &vec![],
             None,
             gc,
-            Some("alloca@array_unsafe_get_linear"),
+            Some(&format!(
+                "alloca@{}",
+                ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED
+            )),
         );
         let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &array);
         let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &elem);
@@ -1861,7 +1885,9 @@ impl InlineLLVMArrayUnsafeGetLinearFunctionBody {
 
 // Gets a value from an array, without bounds checking and retaining the returned value.
 // Type: I64 -> Array a -> (Array a, a)
-pub fn array_unsafe_get_linear(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn array_unsafe_get_linear_bounds_unchecked_unretained(
+    force_unique: bool,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const IDX_NAME: &str = "idx";
     const ARR_NAME: &str = "array";
     const ELEM_TYPE: &str = "a";
@@ -1873,8 +1899,8 @@ pub fn array_unsafe_get_linear(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme
     let expr = expr_abs_many(
         vec![var_local(IDX_NAME), var_local(ARR_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(
-                InlineLLVMArrayUnsafeGetLinearFunctionBody {
+            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(
+                InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
                     force_unique,
                     arr_name: FullName::local(ARR_NAME),
                     idx_name: FullName::local(IDX_NAME),

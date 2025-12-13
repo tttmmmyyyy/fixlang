@@ -10,5 +10,5 @@ files = ["main.fix"]
 
 [[dependencies]]
 name = "ez-scripting"
-version = "0.1.0"
+version = "0.2.0"
 git = { url = "https://github.com/tttmmmyyyy/ez_scripting.git" }

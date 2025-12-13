@@ -413,35 +413,63 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     // Array
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_SET_NAME),
-        unsafe_set_array(),
-        None,
-        Some(include_str!("./docs/std_array_unsafe_set.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set_size"),
         unsafe_set_size_array(),
         None,
         Some(include_str!("./docs/std_array_unsafe_set_size.md").to_string()),
     ));
+    errors.eat_err(
+        fix_module.add_global_value(
+            FullName::from_strs(
+                &[STD_NAME, ARRAY_NAME],
+                ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED,
+            ),
+            array_unsafe_set_bounds_uniqueness_unchecked_unreleased(),
+            None,
+            Some(
+                include_str!(
+                    "./docs/std_array_unsafe_set_bounds_uniqueness_unchecked_unreleased.md"
+                )
+                .to_string(),
+            ),
+        ),
+    );
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_get"),
-        array_unsafe_get_function(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED),
+        array_unsafe_get_bounds_unchecked(),
         None,
-        Some(include_str!("./docs/std_array_unsafe_get.md").to_string()),
+        Some(include_str!("./docs/std_array_unsafe_get_bounds_unchecked.md").to_string()),
     ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_get_linear"),
-        array_unsafe_get_linear(false),
-        None,
-        Some(include_str!("./docs/std_array_unsafe_get_linear.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_GET_LINEAR_FU_NAME),
-        array_unsafe_get_linear(true),
-        None,
-        Some(include_str!("./docs/std_array_unsafe_get_linear_fu.md").to_string()),
-    ));
+    errors.eat_err(
+        fix_module.add_global_value(
+            FullName::from_strs(
+                &[STD_NAME, ARRAY_NAME],
+                ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
+            ),
+            array_unsafe_get_linear_bounds_unchecked_unretained(false),
+            None,
+            Some(
+                include_str!("./docs/std_array_unsafe_get_linear_bounds_unchecked_unretained.md")
+                    .to_string(),
+            ),
+        ),
+    );
+    errors.eat_err(
+        fix_module.add_global_value(
+            FullName::from_strs(
+                &[STD_NAME, ARRAY_NAME],
+                &format!("{}_fu", ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED),
+            ),
+            array_unsafe_get_linear_bounds_unchecked_unretained(true),
+            None,
+            Some(
+                include_str!(
+                    "./docs/std_array_unsafe_get_linear_bounds_unchecked_unretained_fu.md"
+                )
+                .to_string(),
+            ),
+        ),
+    );
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_force_unique"),
         force_unique_array(),

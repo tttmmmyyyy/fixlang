@@ -146,7 +146,7 @@ main = (
     let log = log.set(_COMMIT_HASH, log.get_size - 1, commit_hash);
 
     // See the cases directory.
-    ez_cd(_CASES_PATH);;
+    ez_cd(config, _CASES_PATH);;
     let dirs = *["find", ".", "-maxdepth", "1", "-type", "d"].ez_run_o(config);
     let dirs = dirs.split("\n").filter_map(|line|
         let line = line.strip_spaces;
@@ -156,7 +156,7 @@ main = (
         some(line)
     );
     let log = *dirs.fold_m(log, |dir, log|
-        ez_cd(dir);;
+        ez_cd(config, dir);;
         let com = ["cargo", "run", "--", "build", "-O", "experimental", "--emit-symbols", "--disable-cpu-feature", "avx512.*"];
         let com = if args.@llvm_passes_file != "" {
             com.push_back("--llvm-passes-file")
@@ -182,11 +182,11 @@ main = (
         let log = log.set(inst, log.get_size - 1, bench.@(0));
         let log = log.set(mem, log.get_size - 1, bench.@(1));
         // Change back to the parent directory.
-        ez_cd("..");;
+        ez_cd(config, "..");;
         log.pure
     );
 
-    ez_cd("..");;
+    ez_cd(config, "..");;
 
     // Save the log to the log file and update the graph.
     unless(args.@no_save, 

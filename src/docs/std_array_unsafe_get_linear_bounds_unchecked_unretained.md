@@ -1,4 +1,4 @@
-Gets a value from an array at the specified index.
+Gets a value from an array at the specified index linearly in the array.
 
 This function is unsafe in the following sense:
 * Does not check if the array index is within bounds.

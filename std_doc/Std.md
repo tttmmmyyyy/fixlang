@@ -276,8 +276,6 @@ Type: `[a : Std::Eq] Std::Array a -> Std::Array a`
 
 Remove consecutive duplicates from an array.
 
-Added in v1.1.0.
-
 ##### Parameters
 
 * `arr` - The input array.
@@ -466,8 +464,6 @@ Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
 Resizes an array to the given size, filling with the given value if the new size is larger than the current size,
 or truncating if the new size is smaller than the current size.
 
-Added in v1.1.0.
-
 ##### Parameters
 
 * `new_size` - The new size of the array.
@@ -479,8 +475,6 @@ Added in v1.1.0.
 Type: `Std::Array a -> Std::Array a`
 
 Reverse an array.
-
-Added in v1.1.0.
 
 ##### Parameters
 
@@ -495,8 +489,6 @@ Type: `(a -> Std::Bool) -> Std::Array a -> Std::I64`
 When we put an order on `Bool` as `false < true`, `pred` must be monotonically decreasing on `arr`.
 
 The returned value x satisfies 0 <= x <= `arr.get_size`. If `arr` is empty, it returns 0.
-
-Added in v1.1.0.
 
 ##### Parameters
 
@@ -525,8 +517,6 @@ Sort by `LessThan` trait.
 
 Note: this can be an unstable sort.
 
-Added in v1.1.0.
-
 ##### Parameters
 
 - `arr`: An array of elements to be sorted.
@@ -538,8 +528,6 @@ Type: `((a, a) -> Std::Bool) -> Std::Array a -> Std::Array a`
 Sort by a "less than" comparator.
 
 Note: this can be an unstable sort.
-
-Added in v1.1.0.
 
 ##### Parameters
 
@@ -554,8 +542,6 @@ Type: `[a : Std::LessThan] Std::Array a -> Std::Array a`
 Stable sort by `LessThan` trait.
 
 Note: Currently this is implemented by merge sort, which is not in-place.
-
-Added in v1.1.0.
 
 ##### Parameters
 
@@ -2878,8 +2864,6 @@ Type: `[it : Std::Iterator, Std::Iterator::Item it = a] (a -> Std::Bool) -> it -
 
 Check if all elements of an iterator satisfy a given predicate.
 
-Added in v1.1.0.
-
 ##### Parameters
 
 * `pred` - The predicate function to be applied to each element of the iterator.
@@ -2889,8 +2873,6 @@ Added in v1.1.0.
 Type: `[it : Std::Iterator, Std::Iterator::Item it = a] (a -> Std::Bool) -> it -> Std::Bool`
 
 Check if any element of an iterator satisfies a given predicate.
-
-Added in v1.1.0.
 
 ##### Parameters
 
@@ -2931,8 +2913,6 @@ NOTE: When using this iterator, you may need to specify the type of the iterator
 Type: `[i : Std::Iterator] i -> Std::Iterator::EnumerateIterator i`
 
 Creates an iterator that yields elements along with their index.
-
-Added in v1.1.0.
 
 ##### Parameters
 
@@ -3148,8 +3128,6 @@ Loop over the elements of an iterator by monadic action.
 This function is similar to `loop_iter_s`, but it returns a `LoopState`.
 This allows you to return different types for `break_m` and `continue_m`.
 
-Added in v1.1.0.
-
 ##### Parameters
 
 * `s` - The initial state.
@@ -3164,8 +3142,6 @@ Loop over the elements of an iterator.
 
 This function is similar to `loop_iter`, but it returns a `LoopState`.
 This allows you to return different types for `break` and `continue`.
-
-Added in v1.1.0.
 
 ##### Parameters
 
@@ -3572,6 +3548,19 @@ Returns the containing value if the value is ok, or otherwise aborts the program
 
 ### namespace Std::String
 
+#### @
+
+Type: `Std::I64 -> Std::String -> Std::U8`
+
+Get the `idx`-th byte of a string.
+
+`str.@(idx)` for `idx == str.get_size` is valid and returns the null-terminator.
+
+##### Parameters
+
+* `idx` - The index of the byte to be retrieved.
+* `str` - The string.
+
 #### borrow_c_str
 
 Type: `(Std::Ptr -> a) -> Std::String -> a`
@@ -3760,8 +3749,6 @@ Example:
 `"{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string])` => "{ x = 1, y = 2 }",
 
 If the number of placeholders does not match with the number of strings, this function halts the program.
-
-Added in v1.1.0.
 
 ##### Parameters
 
@@ -6053,6 +6040,8 @@ Creates a string from a byte array.
 The byte array must include a null terminator (`'\0'`). If not, `from_bytes` returns an error.
 
 The length of the string is the number of bytes until the first null character.
+
+### impl `Std::String : Std::Indexable`
 
 ### impl `Std::String : Std::LessThan`
 

@@ -22,8 +22,10 @@ pub enum LLVMGenerator {
     BitNotBody(InlineLLVMBitNotBody),
     FillArrayBody(InlineLLVMFillArrayBody),
     MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody),
-    ArrayUnsafeSetBody(InlineLLVMArrayUnsafeSetBody),
-    ArrayUnsafeGetBody(InlineLLVMArrayUnsafeGetBody),
+    ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(
+        InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased,
+    ),
+    ArrayUnsafeGetBoundsUnchecked(InlineLLVMArrayUnsafeGetBoundsUnchecked),
     ArrayUnsafeSetSizeBody(InlineLLVMArrayUnsafeSetSizeBody),
     ArrayGetBody(InlineLLVMArrayGetBody),
     ArraySetBody(InlineLLVMArraySetBody),
@@ -71,7 +73,9 @@ pub enum LLVMGenerator {
     WithRetainedFunctionBody(InlineLLVMWithRetainedFunctionBody),
     UnsafeMutateBoxedInternalBody(InlineLLVMUnsafeMutateBoxedInternalFunctionBody),
     UnsafeMutateBoxedIOSInternalBody(InlineLLVMUnsafeMutateBoxedIOSInternalBody),
-    ArrayUnsafeGetLinearFunctionBody(InlineLLVMArrayUnsafeGetLinearFunctionBody),
+    ArrayUnsafeGetLinearBoundsUncheckedUnretained(
+        InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained,
+    ),
     IOStateUnsafeCreate(InlineLLVMIOStateUnsafeCreate),
 }
 
@@ -98,8 +102,10 @@ impl LLVMGenerator {
             LLVMGenerator::BitNotBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::FillArrayBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::MakeEmptyArrayBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayUnsafeSetBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayUnsafeGetBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
+                Some(x.generate(gc, ty))
+            }
+            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::ArrayUnsafeSetSizeBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::ArrayGetBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::ArraySetBody(x) => Some(x.generate(gc, ty)),
@@ -147,7 +153,9 @@ impl LLVMGenerator {
             LLVMGenerator::WithRetainedFunctionBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => {
+                Some(x.generate(gc, ty))
+            }
             LLVMGenerator::IOStateUnsafeCreate(x) => Some(x.generate(gc, ty)),
         };
         match obj {
@@ -194,8 +202,8 @@ impl LLVMGenerator {
             LLVMGenerator::BitNotBody(x) => x.free_vars(),
             LLVMGenerator::FillArrayBody(x) => x.free_vars(),
             LLVMGenerator::MakeEmptyArrayBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeSetBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeGetBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.free_vars(),
             LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.free_vars(),
             LLVMGenerator::ArrayGetBody(x) => x.free_vars(),
             LLVMGenerator::ArraySetBody(x) => x.free_vars(),
@@ -241,7 +249,7 @@ impl LLVMGenerator {
             LLVMGenerator::WithRetainedFunctionBody(x) => x.free_vars(),
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.free_vars(),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.free_vars(),
             LLVMGenerator::IOStateUnsafeCreate(x) => x.free_vars(),
         }
     }
@@ -277,7 +285,7 @@ impl LLVMGenerator {
             LLVMGenerator::WithRetainedFunctionBody(x) => x.name(),
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.name(),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeGetLinearFunctionBody(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.name(),
             LLVMGenerator::IOStateUnsafeCreate(x) => x.name(),
             LLVMGenerator::IntLit(x) => x.name(),
             LLVMGenerator::FloatLit(x) => x.name(),
@@ -294,8 +302,8 @@ impl LLVMGenerator {
             LLVMGenerator::BitNotBody(x) => x.name(),
             LLVMGenerator::FillArrayBody(x) => x.name(),
             LLVMGenerator::MakeEmptyArrayBody(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeSetBody(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeGetBody(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.name(),
             LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.name(),
             LLVMGenerator::ArrayGetBody(x) => x.name(),
             LLVMGenerator::ArraySetBody(x) => x.name(),

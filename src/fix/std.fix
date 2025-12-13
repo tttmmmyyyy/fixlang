@@ -95,7 +95,7 @@ namespace Array {
             let res = res.push_back(arr.@(i));
             continue $ (i + 1, res)
         ))
-    ); 
+    );
 
     // Updates an array by applying a function to the element at the specified index.
     //
@@ -112,37 +112,33 @@ namespace Array {
     mod = |idx, fun, arr| (
         let size = arr.get_size;
         if !(0 <= idx && idx < size) { undefined("Index out of range.") };
-        let (arr, elm) = arr._unsafe_get_linear_fu(idx);
+        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_fu(idx);
         let elm = fun(elm);
-        arr._unsafe_set(idx, elm)
+        arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm)
     );
 
-    // Optimized implementation of `act` function specialized for `Identity` functor.
-    _act_identity : I64 -> (a -> Identity a) -> Array a -> Identity (Array a);
-    _act_identity = |idx, fun, arr| (
-        let size = arr.get_size;
-        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
-        let (arr, elm) = arr._unsafe_get_linear_fu(idx);
+    // Optimized implementation of `_unsafe_act_bounds_unchecked` function specialized for `Identity` functor.
+    _unsafe_act_bounds_unchecked_identity : I64 -> (a -> Identity a) -> Array a -> Identity (Array a);
+    _unsafe_act_bounds_unchecked_identity = |idx, fun, arr| (
+        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_fu(idx);
         let Identity { data : elm } = fun(elm);
-        Identity { data : arr._unsafe_set(idx, elm) }
+        Identity { data : arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm) }
     );
 
-    // Optimized implementation of `act` function specialized for `Const r` functor.
-    _act_const : I64 -> (a -> Const r a) -> Array a -> Const r (Array a);
-    _act_const = |idx, fun, arr| (
-        let elm = arr.@(idx);
+    // Optimized implementation of `_unsafe_act_bounds_unchecked` function specialized for `Const r` functor.
+    _unsafe_act_bounds_unchecked_const : I64 -> (a -> Const r a) -> Array a -> Const r (Array a);
+    _unsafe_act_bounds_unchecked_const = |idx, fun, arr| (
+        let elm = arr._unsafe_get_bounds_unchecked(idx);
         let Const { data : res } = fun(elm);
         Const { data : res }
     );
 
-    // Optimized implementation of `act` function specialized for `Tuple2 x` functor.
-    _act_tuple2 : I64 -> (a -> (x, a)) -> Array a -> (x, Array a);
-    _act_tuple2 = |idx, fun, arr| (
-        let size = arr.get_size;
-        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
-        let (arr, elm) = arr._unsafe_get_linear_fu(idx);
+    // Optimized implementation of `_unsafe_act_bounds_unchecked` function specialized for `Tuple2 x` functor.
+    _unsafe_act_bounds_unchecked_tuple2 : I64 -> (a -> (x, a)) -> Array a -> (x, Array a);
+    _unsafe_act_bounds_unchecked_tuple2 = |idx, fun, arr| (
+        let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_fu(idx);
         let (x, elm) = fun(elm);
-        (x, arr._unsafe_set(idx, elm))
+        (x, arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm))
     );
 
     // Modifies an array by a functorial action. 
@@ -164,12 +160,28 @@ namespace Array {
     // * `array` - The array.
     act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     act = |idx, fun, arr| (
+        let size = arr.get_size;
+        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
+        arr._unsafe_act_bounds_unchecked(idx, fun)
+    );
+
+    // Modifies an array by a functorial action. 
+    // 
+    // This function is similar to `Array::act`, but it does not check the bounds of `idx`.
+    // 
+    // # Parameters
+    //
+    // * `i` - The index of the element to be acted on.
+    // * `action` - The functorial action to be performed on the element at index `idx`.
+    // * `array` - The array.
+    _unsafe_act_bounds_unchecked : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
+    _unsafe_act_bounds_unchecked = |idx, fun, arr| (
         let (unique, arr) = arr.unsafe_is_unique;
         if unique {
-            let (parr, elm) = PunchedArray::_unsafe_punch(idx, arr);
+            let (parr, elm) = PunchedArray::_unsafe_punch_bounds_uniqueness_unchecked(idx, arr);
             fun(elm).map(|elm| parr._plug_in(elm))
         } else {
-            fun(arr.@(idx)).map(|elm| arr.set(idx, elm))
+            fun(arr._unsafe_get_bounds_unchecked(idx)).map(|elm| arr.set(idx, elm))
         }
     );
 
@@ -200,7 +212,7 @@ namespace Array {
         // Copy elements of v2 to v1.
         loop((0, v1), |(idx, v1)|(
             if idx >= v2_len { break $ v1 };
-            let v1 = v1._unsafe_set(v1_len + idx, v2.@(idx));
+            let v1 = v1._unsafe_set_bounds_uniqueness_unchecked_unreleased(v1_len + idx, v2.@(idx));
             continue $ (idx+1, v1)
         ))
     );
@@ -242,7 +254,7 @@ namespace Array {
             if idx == size {
                 break $ arr
             } else {
-                let arr = arr._unsafe_set(idx, map(idx));
+                let arr = arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, map(idx));
                 continue $ (idx + 1, arr)
             }
         ))
@@ -301,7 +313,7 @@ namespace Array {
     pop_back = |arr| (
         let len = arr.get_size;
         if len == 0 { arr };
-        arr._unsafe_force_unique._unsafe_set_size(len-1)._unsafe_get_linear(len-1).@0
+        arr._unsafe_force_unique._unsafe_set_size(len-1)._unsafe_get_linear_bounds_unchecked_unretained(len-1).@0
     );
 
     // Pushes an element to the back of an array.
@@ -318,7 +330,7 @@ namespace Array {
         } else {
             arr
         };
-        arr._unsafe_force_unique._unsafe_set_size(len+1)._unsafe_set(len, e)
+        arr._unsafe_force_unique._unsafe_set_size(len+1)._unsafe_set_bounds_uniqueness_unchecked_unreleased(len, e)
     );
 
     // Reserves the memory region for an array.
@@ -336,7 +348,7 @@ namespace Array {
             if idx == len {
                 break $ new
             } else {
-                let new = new._unsafe_set(idx, arr.@(idx));
+                let new = new._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, arr.@(idx));
                 continue $ (idx + 1, new)
             }
         ))
@@ -505,9 +517,9 @@ namespace Array {
     _unsafe_swap : I64 -> I64 -> Array a -> Array a;
     _unsafe_swap = |i, j, arr| (
         let arr = arr;
-        let (arr, a) = arr._unsafe_get_linear(i);
-        let (arr, b) = arr._unsafe_get_linear(j);
-        arr._unsafe_set(i, b)._unsafe_set(j, a)
+        let (arr, a) = arr._unsafe_get_linear_bounds_unchecked_unretained(i);
+        let (arr, b) = arr._unsafe_get_linear_bounds_unchecked_unretained(j);
+        arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(i, b)._unsafe_set_bounds_uniqueness_unchecked_unreleased(j, a)
     );
 
     // Stable sort by `LessThan` trait.
@@ -624,7 +636,7 @@ namespace Array {
         if n <= xs.get_size { xs.truncate(n) };
         let m = xs.get_size;
         let xs = xs.reserve(n)._unsafe_force_unique._unsafe_set_size(n);
-        range(m, n).fold(xs, |i, xs| xs._unsafe_set(i, x) )
+        range(m, n).fold(xs, |i, xs| xs._unsafe_set_bounds_uniqueness_unchecked_unreleased(i, x) )
     );
 
     // `arr.search_partition_point(pred)` returns an index x such that `pred` is true on [0, x) and false on [x, n) by binary search.
@@ -2527,38 +2539,38 @@ namespace PunchedArray {
 
         // Move the element at the `idx` to the last.
         let arr = if idx == size - 1 { arr } else {
-            let (arr, last) = arr._unsafe_get_linear(idx);
-            arr._unsafe_set(size - 1, last)
+            let (arr, last) = arr._unsafe_get_linear_bounds_unchecked_unretained(idx);
+            arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(size - 1, last)
         };
 
         // Insert the element.
-        arr._unsafe_set(idx, elm)
+        arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm)
     );
 
     // Creates a punched array by moving out the element at the specified index.
     // 
-    // NOTE: this function assumes that the given array is unique WITHOUT CHECKING.
-    // The uniqueness of the array is ensured in the `Array::act` function.
+    // This function is unsafe because:
+    // - It does not perform bounds checking on the index.
+    // - It does not check the uniqueness of the array.
     //
     // # Parameters
     //
     // * `i` - The index of the element to be punched.
     // * `array` - The array to be punched.
-    _unsafe_punch : I64 -> Array a -> (PunchedArray a, a);
-    _unsafe_punch = |idx, arr| (
+    _unsafe_punch_bounds_uniqueness_unchecked : I64 -> Array a -> (PunchedArray a, a);
+    _unsafe_punch_bounds_uniqueness_unchecked = |idx, arr| (
         // Bounds check.
         let size = arr.get_size;
-        if !(0 <= idx && idx < size) { undefined("Index out of range.") };
 
         // Decrement the size.
-        let (arr, elm) = arr._unsafe_set_size(size - 1)._unsafe_get_linear(idx);
+        let (arr, elm) = arr._unsafe_set_size(size - 1)._unsafe_get_linear_bounds_unchecked_unretained(idx);
 
         // Move the last element to the punched index.
         let arr = if idx == size - 1 {
             arr
         } else {
-            let (arr, last) = arr._unsafe_get_linear(size-1);
-            arr._unsafe_set(idx, last)
+            let (arr, last) = arr._unsafe_get_linear_bounds_unchecked_unretained(size-1);
+            arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, last)
         };
 
         let parr = PunchedArray { _arr : arr, _idx : idx };
@@ -2656,6 +2668,21 @@ namespace String {
         let (buf, _) = buf.mutate_boxed(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
         String { _data : buf }
     );
+
+    // We refrain from adding this function because it may conflict with Array::@.
+    // 
+    // // Get the `idx`-th byte of a string.
+    // // 
+    // // # Parameters
+    // // * `idx` - The index of the byte to be retrieved.
+    // // * `str` - The string.
+    // @ : I64 -> String -> U8;
+    // @ = |idx, s| (
+    //     if !(0 <= idx && idx < s.get_size) {
+    //         undefined("Index out of range.")
+    //     };
+    //     s.@_data._unsafe_get_bounds_unchecked(idx)
+    // );
 
     // Create a `String` from a pointer to a null-terminated C string.
     // 
@@ -4018,6 +4045,17 @@ impl Array a : Indexable {
     type Elem (Array a) = a;
     type Index (Array a) = I64;
     act_at_index = Array::act;
+}
+
+impl String : Indexable {
+    type Elem String = U8;
+    type Index String = I64;
+    act_at_index = |i, f, s| (
+        if !(0 <= i && i < s.get_size) {
+            undefined("index out of range.")
+        };
+        s[^_data].iact(Array::_unsafe_act_bounds_unchecked(i, f))
+    );
 }
 
 // The identity functor.

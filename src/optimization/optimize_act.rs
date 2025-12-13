@@ -30,7 +30,7 @@ use crate::{
     builtin::make_tuple_name,
     configuration::Configuration,
     constants::{
-        ARRAY_ACT_NAME, ARRAY_NAME, CONST_NAME, IDENTITY_NAME, STD_NAME, STRUCT_ACT_SYMBOL,
+        ARRAY_NAME, BUILTIN_ACT_NAME, CONST_NAME, IDENTITY_NAME, STD_NAME, STRUCT_ACT_SYMBOL,
     },
     error::Errors,
     misc::info_msg,
@@ -65,7 +65,7 @@ fn run_internal(prg: &mut Program, config: &Configuration) -> Result<(), Errors>
 }
 
 fn run_on_symbol(sym: &mut Symbol, prg: &mut Program, tc: &TypeCheckContext) -> Result<(), Errors> {
-    if is_array_act(&sym.generic_name) {
+    if is_builtin_array_act(&sym.generic_name) {
         return run_on_array_act(sym, prg, tc);
     } else if let Some((str, field)) = prg.type_env.is_struct_act(&sym.generic_name) {
         return run_on_struct_field_act(&str, &field, sym, prg, tc);
@@ -85,17 +85,17 @@ fn run_on_array_act(
     let opt_func_name = if is_functor_identity(&lens_ty) {
         Some(FullName::from_strs(
             &[STD_NAME, ARRAY_NAME],
-            &format!("_{}_identity", ARRAY_ACT_NAME),
+            &format!("{}_identity", BUILTIN_ACT_NAME),
         ))
     } else if is_functor_const(&lens_ty) {
         Some(FullName::from_strs(
             &[STD_NAME, ARRAY_NAME],
-            &format!("_{}_const", ARRAY_ACT_NAME),
+            &format!("{}_const", BUILTIN_ACT_NAME),
         ))
     } else if is_functor_tuple2(&lens_ty) {
         Some(FullName::from_strs(
             &[STD_NAME, ARRAY_NAME],
-            &format!("_{}_tuple2", ARRAY_ACT_NAME),
+            &format!("{}_tuple2", BUILTIN_ACT_NAME),
         ))
     } else {
         None
@@ -111,8 +111,8 @@ fn run_on_array_act(
     Ok(())
 }
 
-fn is_array_act(generic_name: &FullName) -> bool {
-    generic_name == &FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_ACT_NAME)
+fn is_builtin_array_act(generic_name: &FullName) -> bool {
+    generic_name == &FullName::from_strs(&[STD_NAME, ARRAY_NAME], BUILTIN_ACT_NAME)
 }
 
 fn run_on_struct_field_act(

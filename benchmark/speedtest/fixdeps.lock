@@ -1,13 +1,13 @@
-proj_file_hash = "9a6a24dc0e6f4017985f4affb52bd113"
+proj_file_hash = "7521fe2aa800bc8fa7223d8771b88ad4"
 
 [[dependencies]]
 name = "ez-scripting"
-version = "0.1.0"
-path = ".fixlang/deps/ez-scripting_0.1.0"
+version = "0.2.0"
+path = ".fixlang/deps/ez-scripting_0.2.0"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/ez_scripting.git"
-rev = "1c2e7be5b8d5a97ff475456a0596736bacb6e9e9"
+rev = "359d00f71771250e7e964d866f8f919edc8be79d"
 
 [[dependencies]]
 name = "subprocess"

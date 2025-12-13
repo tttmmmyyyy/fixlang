@@ -8,6 +8,7 @@
 - Added `backtrace` field to `build` and `build.test` section of `fixproj.toml` file. If it is true, backtrace will be enabled by default.
 - Added `--disable-cpu-feature <feature>` option to `build`, `run`, `test` commands to disable specific CPU features. Add `disable_cpu_features` field to `build` and `build.test` section of `fixproj.toml` file.
 - Added the [index syntax](./Document.md#index-syntax), `Indexable` trait and `Indexable` namespace in `Std` module.
+- Implement `Array a : Indexable`, `String : Indexable`.
 - Added the `Identity` and `Const` types in `Std`. They are functors, and `Identity` is also a monad.
 - LSP: Added a feature to automatically add import statements when completing entity names, if necessary.
 - LSP: Added Quick Fix for "Unknown name" and "Unknown type" errors to add import statements.
