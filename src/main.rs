@@ -36,6 +36,7 @@ mod dependency_lockfile;
 mod dependency_resolver;
 mod deps_list;
 mod docgen;
+mod edit;
 mod error;
 mod generator;
 mod graph;
@@ -368,6 +369,16 @@ fn main() {
         .about("Generates a project file \"fixproj.toml\" in the current directory.")
         .arg(project_name.clone());
 
+    // "fix edit" subcommand
+    let edit_explicit_import = App::new("explicit-import").about(
+        "Rewrite import statements to import only the necessary entities explicitly.\n\
+                This command checks if the project has errors, and for each source file,\n\
+                collects all referenced names and rewrites import statements.",
+    );
+    let mut edit_subc = App::new("edit")
+        .about("Edit source code.")
+        .subcommand(edit_explicit_import);
+
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -379,7 +390,8 @@ fn main() {
         .subcommand(lsp_subc)
         .subcommand(deps_subc.clone())
         .subcommand(docs_subc)
-        .subcommand(init_subc);
+        .subcommand(init_subc)
+        .subcommand(edit_subc.clone());
 
     fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
         let files = m.get_many::<String>("source-files");
@@ -681,6 +693,12 @@ fn main() {
             panic_if_err(ProjectFile::validate_project_name(&prj_name, None));
             panic_if_err(ProjectFile::create_example_file(prj_name));
         }
+        Some(("edit", args)) => match args.subcommand() {
+            Some(("explicit-import", _args)) => {
+                panic_if_err(edit::edit_explict_import::run_explicit_import_command());
+            }
+            _ => edit_subc.print_help().unwrap(),
+        },
         _ => eprintln!("Unknown command. To show list of available commands, run `fix --help`."),
     }
 }

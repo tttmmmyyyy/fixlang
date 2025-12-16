@@ -971,6 +971,70 @@ fn handle_completion_resolve_document(
     send_response(id, Ok::<_, ()>(item));
 }
 
+// Generate TextEdits that erase all existing import statements in a file.
+// Returns a vector of TextEdit objects that delete import statement lines.
+pub fn create_text_edits_to_erase_imports(
+    content: &str,
+    import_stmts: &[ImportStatement],
+) -> Vec<TextEdit> {
+    let content_lines = content.lines().collect::<Vec<_>>();
+    let mut text_edits = vec![];
+
+    for import_stmt in import_stmts {
+        if import_stmt.source.is_none() {
+            continue;
+        }
+        let mut range = span_to_range(&import_stmt.source.as_ref().unwrap());
+        // If there are no whitespace characters and line breaks after range.end,
+        // expand the range to remove whitespace characters and line breaks as well.
+        loop {
+            let end_line_content = content_lines.get(range.end.line as usize);
+            if let Some(end_line_content) = end_line_content {
+                let end_col_content = &end_line_content[range.end.character as usize..];
+                if end_col_content.trim().is_empty() {
+                    range.end.line += 1;
+                    range.end.character = 0;
+                    continue;
+                }
+            }
+            break;
+        }
+
+        text_edits.push(TextEdit {
+            range,
+            new_text: "".to_string(),
+        });
+    }
+
+    text_edits
+}
+
+// Generate a TextEdit that inserts import statements at the end of the module definition.
+// Returns a TextEdit object that inserts the import statements.
+pub fn create_text_edit_to_insert_imports(
+    module_info: &ModuleInfo,
+    new_import_stmts: &[ImportStatement],
+) -> TextEdit {
+    let inserted_text = if new_import_stmts.is_empty() {
+        String::new()
+    } else {
+        let import_text = new_import_stmts
+            .iter()
+            .map(|stmt| stmt.stringify())
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("\n\n{}", import_text)
+    };
+
+    let span = module_info.source.to_end_position();
+    let range = span_to_range(&span);
+
+    TextEdit {
+        range,
+        new_text: inserted_text,
+    }
+}
+
 fn create_text_edit_to_import(
     item_name: &FullName,
     latest_content: &mut LatestContent,
@@ -1020,46 +1084,21 @@ fn create_text_edit_to_import(
     let mut new_import_stmts = import_stmts.clone();
     ImportStatement::add_import(&mut new_import_stmts, mod_name, item_name.clone());
     ImportStatement::sort(&mut new_import_stmts);
-    let inserted_text = new_import_stmts
-        .iter()
-        .map(|stmt| stmt.stringify())
-        .collect::<Vec<_>>()
-        .join("\n");
 
     let mut text_edits = vec![];
 
-    // Insert the import statement at the end of the module definition.
-    let inserted_text = format!("\n\n{}", inserted_text);
-    let span = mod_info.source.to_end_position();
-    let range = span_to_range(&span);
-    text_edits.push(TextEdit {
-        range,
-        new_text: inserted_text,
-    });
-
     // Erase all existing import statements.
-    let content_lines = latest_content.content.lines().collect::<Vec<_>>();
-    for import_stmt in &import_stmts {
-        let mut range = span_to_range(&import_stmt.source.as_ref().unwrap());
-        // If there are no whitespace characters and line breaks after range.end, expand the range to remove whitespace characters and line breaks as well.
-        loop {
-            let end_line_content = content_lines.get(range.end.line as usize);
-            if let Some(end_line_content) = end_line_content {
-                let end_col_content = &end_line_content[range.end.character as usize..];
-                if end_col_content.trim().is_empty() {
-                    range.end.line += 1;
-                    range.end.character = 0;
-                    continue;
-                }
-            }
-            break;
-        }
+    text_edits.extend(create_text_edits_to_erase_imports(
+        &latest_content.content,
+        &import_stmts,
+    ));
 
-        text_edits.push(TextEdit {
-            range,
-            new_text: "".to_string(),
-        });
-    }
+    // Insert the import statement at the end of the module definition.
+    text_edits.push(create_text_edit_to_insert_imports(
+        &mod_info,
+        &new_import_stmts,
+    ));
+
     text_edits
 }
 

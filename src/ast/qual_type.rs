@@ -6,6 +6,7 @@ use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
 use crate::ast::traits::KindSignature;
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
+use crate::misc::Set;
 use crate::sourcefile::SourcePos;
 
 #[derive(Clone)]
@@ -94,5 +95,19 @@ impl QualType {
                 }
             }
         }
+    }
+
+    // Collect all referenced type and trait names.
+    pub fn collect_referenced_names(&self, names: &mut Set<crate::ast::name::FullName>) {
+        // Collect names from predicates
+        for pred in &self.preds {
+            pred.collect_referenced_names(names);
+        }
+        // Collect names from equalities
+        for eq in &self.eqs {
+            eq.collect_referenced_names(names);
+        }
+        // Collect names from the type
+        self.ty.collect_referenced_names(names);
     }
 }

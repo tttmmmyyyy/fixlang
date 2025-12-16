@@ -280,7 +280,11 @@ pub fn make_funptr_tycon(arity: u32) -> TyCon {
 }
 
 pub fn make_array_tycon() -> TyCon {
-    TyCon::new(FullName::from_strs(&[STD_NAME], ARRAY_NAME))
+    TyCon::new(make_array_name())
+}
+
+pub fn make_array_name() -> FullName {
+    FullName::from_strs(&[STD_NAME], ARRAY_NAME)
 }
 
 // If given tycon is function pointer, returns its arity

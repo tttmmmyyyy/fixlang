@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
+use crate::ast::name::FullName;
 use crate::error::Errors;
+use crate::misc::Set;
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -37,6 +39,18 @@ impl Equality {
             arg.free_vars_to_vec(buf);
         }
         self.value.free_vars_to_vec(buf);
+    }
+
+    // Collect all referenced type names (both type constructors and associated types).
+    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+        // Collect the associated type name
+        names.insert(self.assoc_type.name.clone());
+        // Collect names from arguments
+        for arg in &self.args {
+            arg.collect_referenced_names(names);
+        }
+        // Collect names from value
+        self.value.collect_referenced_names(names);
     }
 
     pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {

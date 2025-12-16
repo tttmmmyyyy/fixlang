@@ -181,7 +181,7 @@ impl ImportStatement {
         if is_accessible(&imports, &name) {
             return;
         }
-        // Find an import statement which has the same module name to `name` no hiding items.
+        // Find an import statement which has the same module name to `name` and has no hiding items.
         let module = name.module();
         let import = imports
             .iter()

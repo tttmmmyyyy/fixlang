@@ -350,6 +350,11 @@ impl Field {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+        self.syn_ty = self
+            .syn_ty
+            .clone()
+            .map(|ty| ty.resolve_namespace(ctx))
+            .transpose()?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())
     }

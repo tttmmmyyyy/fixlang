@@ -1640,6 +1640,29 @@ impl TypeNode {
         }
     }
 
+    // Collect all referenced type names (both type constructors and associated types) that appear in this type.
+    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+        match &self.ty {
+            Type::TyVar(_) => {
+                // Type variables don't contain TyCons
+            }
+            Type::TyCon(tycon) => {
+                names.insert(tycon.name.clone());
+            }
+            Type::TyApp(tyfun, arg) => {
+                tyfun.collect_referenced_names(names);
+                arg.collect_referenced_names(names);
+            }
+            Type::AssocTy(assoc_ty, args) => {
+                // Associated types are also type constructors
+                names.insert(assoc_ty.name.clone());
+                for arg in args {
+                    arg.collect_referenced_names(names);
+                }
+            }
+        }
+    }
+
     pub fn collect_tyvar_names(&self, tyvar_names: &mut Set<Name>) {
         match &self.ty {
             Type::TyVar(tv) => {
@@ -2002,5 +2025,21 @@ impl Scheme {
             }
         }
         self.ty.find_node_at(pos)
+    }
+
+    // Collect all type constructor names (including associated types) and trait names from the scheme.
+    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+        // Collect type constructor names from the type
+        self.ty.collect_referenced_names(names);
+
+        // Collect names from predicates
+        for pred in &self.predicates {
+            pred.collect_referenced_names(names);
+        }
+
+        // Collect names from equalities
+        for eq in &self.equalities {
+            eq.collect_referenced_names(names);
+        }
     }
 }

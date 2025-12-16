@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
+use crate::ast::name::FullName;
 use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
 use crate::ast::traits::{TraitAliasEnv, TraitId};
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
+use crate::misc::Set;
 use crate::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +21,14 @@ pub struct Predicate {
 impl Predicate {
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         self.ty.free_vars_to_vec(buf);
+    }
+
+    // Collect all referenced type and trait names.
+    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+        // Collect the trait name
+        names.insert(self.trait_id.name.clone());
+        // Collect type names
+        self.ty.collect_referenced_names(names);
     }
 
     pub fn set_source(&mut self, source: Span) {

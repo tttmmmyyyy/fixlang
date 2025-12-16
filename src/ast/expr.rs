@@ -1149,6 +1149,86 @@ impl ExprNode {
         free_vars
     }
 
+    // Collect all referenced names (values, types, traits) in this expression.
+    // Unlike free_vars(), this also collects type names from type annotations.
+    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+        // First, collect free variables (value names)
+        names.extend(self.free_vars());
+
+        // Then, collect names from the expression
+        match &*self.expr {
+            Expr::Var(name) => {
+                if name.name.is_global() {
+                    names.insert(name.name.clone());
+                }
+            }
+            Expr::LLVM(_) => {
+                // LLVM references no names.
+            }
+            Expr::App(func, args) => {
+                func.collect_referenced_names(names);
+                for arg in args {
+                    arg.collect_referenced_names(names);
+                }
+            }
+            Expr::Lam(_args, body) => {
+                body.collect_referenced_names(names);
+            }
+            Expr::Let(pat, bound, val) => {
+                pat.collect_referenced_names(names);
+                bound.collect_referenced_names(names);
+                val.collect_referenced_names(names);
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                cond.collect_referenced_names(names);
+                then_expr.collect_referenced_names(names);
+                else_expr.collect_referenced_names(names);
+            }
+            Expr::Match(cond, pat_vals) => {
+                cond.collect_referenced_names(names);
+                for (pat, val) in pat_vals {
+                    pat.collect_referenced_names(names);
+                    val.collect_referenced_names(names);
+                }
+            }
+            Expr::TyAnno(e, ty) => {
+                e.collect_referenced_names(names);
+                // Collect type names from the type annotation
+                ty.collect_referenced_names(names);
+            }
+            Expr::MakeStruct(tc, fields) => {
+                // Collect the struct type constructor name
+                names.insert(tc.name.clone());
+                for (_field_name, field_expr) in fields {
+                    field_expr.collect_referenced_names(names);
+                }
+            }
+            Expr::ArrayLit(elems) => {
+                names.insert(make_array_name());
+                for e in elems {
+                    e.collect_referenced_names(names);
+                }
+            }
+            Expr::FFICall(_name, ret_ty, param_tys, args, is_ios) => {
+                // Collect type constructor names from FFI types
+                names.insert(ret_ty.name.clone());
+                for param_ty in param_tys {
+                    names.insert(param_ty.name.clone());
+                }
+                for arg in args {
+                    arg.collect_referenced_names(names);
+                }
+                if *is_ios {
+                    names.insert(make_iostate_name());
+                }
+            }
+            Expr::Eval(side, main) => {
+                side.collect_referenced_names(names);
+                main.collect_referenced_names(names);
+            }
+        }
+    }
+
     // Get the names which are captured by a lambda expressions.
     pub fn lambda_cap_names(&self) -> Vec<FullName> {
         assert!(self.is_lam());
