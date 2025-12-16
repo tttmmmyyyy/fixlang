@@ -2722,6 +2722,12 @@ Type: `[c : Std::Indexable, f : Std::Functor] Std::Indexable::Index c -> (Std::I
 
 Act on an index.
 
+##### Parameters
+
+* `i` - The index.
+* `f` - The functorial action to be performed on the element at the specified index.
+* `c` - The collection.
+
 #### iact
 
 Type: `[f : Std::Functor] (a -> f a) -> ((a -> f a) -> f b) -> f b`
@@ -5528,6 +5534,12 @@ The type of elements.
 Type: `[f : Std::Functor] Std::Indexable::Index c -> (Std::Indexable::Elem c -> f (Std::Indexable::Elem c)) -> c -> f c`
 
 Act on an index.
+
+###### Parameters
+
+* `i` - The index.
+* `f` - The functorial action to be performed on the element at the specified index.
+* `c` - The collection.
 
 #### trait `iter : Iterator`
 

@@ -2370,15 +2370,18 @@ fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
         }
         types.push(parse_type(pair, ctx));
     }
+    // Is it just a bracketed type?, e.g., (I64)
     let is_bracketed_type = types.len() == 1 && !extra_comma;
     if is_bracketed_type {
         types[0].clone()
     } else {
+        // It is a genuine tuple type.
         let tuple_size = types.len();
         ctx.tuple_sizes.push(tuple_size as u32);
-        let mut res = type_tycon(&tycon(make_tuple_name(tuple_size as u32)));
+        let mut res =
+            type_tycon(&tycon(make_tuple_name(tuple_size as u32))).set_source(Some(span.clone()));
         for ty in types {
-            res = type_tyapp(res, ty);
+            res = type_tyapp(res, ty).set_source(Some(span.clone()));
         }
         res
     }

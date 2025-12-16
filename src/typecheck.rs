@@ -374,7 +374,7 @@ pub struct TypeCheckContext {
     pub import_statements: Arc<Map<Name, Vec<ImportStatement>>>,
     // In which module is the current expression defined?
     // This is used as a state variable for typechecking.
-    pub current_module: Option<Name>,
+    pub current_module: Option<ModuleInfo>,
     // Equalities assumed.
     pub assumed_eqs: Map<TyAssoc, Vec<EqualityScheme>>,
     // Predicates assumed.
@@ -460,7 +460,7 @@ impl TypeCheckContext {
     // Get modules imported by current module.
     pub fn imported_statements(&self) -> &Vec<ImportStatement> {
         self.import_statements
-            .get(self.current_module.as_ref().unwrap())
+            .get(&self.current_module.as_ref().unwrap().name)
             .unwrap()
     }
 
@@ -632,9 +632,13 @@ impl TypeCheckContext {
                         .collect();
                 }
                 if candidates.is_empty() {
+                    let src = ei
+                        .source
+                        .clone()
+                        .or(self.current_module.as_ref().map(|m| m.source.clone()));
                     let mut err = Error::from_msg_srcs(
                         format!("Unknown name `{}`.", var.name.to_string()),
-                        &[&ei.source],
+                        &[&src],
                     );
                     err.code = Some(ERR_UNKNOWN_NAME);
                     err.data = Some(serde_json::Value::String(var.name.to_string()));
