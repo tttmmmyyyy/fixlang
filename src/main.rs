@@ -371,7 +371,8 @@ fn main() {
 
     // "fix edit" subcommand
     let edit_explicit_import = App::new("explicit-import").about(
-        "Rewrite import statements to import only the necessary entities explicitly.\n\
+        "(Experimental)\n\
+                Rewrite import statements to import only the necessary entities explicitly.\n\
                 This command checks if the project has errors, and for each source file,\n\
                 collects all referenced names and rewrites import statements.",
     );

@@ -1162,8 +1162,8 @@ impl ExprNode {
                     names.insert(name.name.clone());
                 }
             }
-            Expr::LLVM(_) => {
-                // LLVM references no names.
+            Expr::LLVM(llvm) => {
+                llvm.generic_ty.collect_referenced_names(names);
             }
             Expr::App(func, args) => {
                 func.collect_referenced_names(names);

@@ -209,7 +209,7 @@ fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName>
         alias_info.value.collect_referenced_names(&mut names);
     }
 
-    names
+    names.into_iter().filter(|name| name.is_global()).collect()
 }
 
 // Generate import statements for the given names.
