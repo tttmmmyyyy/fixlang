@@ -372,9 +372,9 @@ fn main() {
     // "fix edit" subcommand
     let edit_explicit_import = App::new("explicit-import").about(
         "(Experimental)\n\
-                Rewrite import statements to import only the necessary entities explicitly.\n\
-                This command checks if the project has errors, and for each source file,\n\
-                collects all referenced names and rewrites import statements.",
+         Rewrite import statements to import only the necessary entities explicitly.\n\
+         This command checks if the project has errors, and for each source file,\n\
+         collects all referenced names and rewrites import statements.",
     );
     let mut edit_subc = App::new("edit")
         .about("Edit source code.")
