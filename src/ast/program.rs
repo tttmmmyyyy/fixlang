@@ -410,6 +410,11 @@ impl<'a> NameResolutionContext {
         }
     }
 
+    // Resolve the given short name to a full name.
+    //
+    // If there are multiple candidates, or no candidates, return an error.
+    //
+    // If the `short_name` is an absolute name, the returned full name will also be set as an absolute name.
     pub fn resolve(
         &self,
         short_name: &FullName,

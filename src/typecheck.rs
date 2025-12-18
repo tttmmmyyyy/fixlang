@@ -87,11 +87,17 @@ where
     }
 
     // Get candidates list for overload resolution.
+    //
+    // If `name` is an absolute name, the returned (at most one) candidates will also be set as absolute names.
     fn overloaded_candidates(
         &self,
         name: &FullName,
         import_stmts: &[ImportStatement],
     ) -> Vec<(NameSpace, T)> {
+        if name.to_string() == "Std::Indexable::act_at_index" {
+            write_log!("Getting candidates for {:?}", name);
+        }
+
         if name.is_local() && self.has_value(&name.name) {
             vec![(
                 NameSpace::local(),
@@ -100,11 +106,18 @@ where
         } else {
             self.global
                 .iter()
-                .filter(|(full_name, _)| {
-                    (name.is_suffix(full_name) && import::is_accessible(import_stmts, full_name))
-                        || (name == full_name && name.is_absolute())
+                .filter_map(|(full_name, v)| {
+                    if name == full_name && name.is_absolute() {
+                        // Inherit the absolute property.
+                        let mut full_name = full_name.clone();
+                        full_name.set_absolute();
+                        return Some((full_name.namespace.clone(), v.clone()));
+                    }
+                    if name.is_suffix(full_name) && import::is_accessible(import_stmts, full_name) {
+                        return Some((full_name.namespace.clone(), v.clone()));
+                    }
+                    return None;
                 })
-                .map(|(full_name, v)| (full_name.namespace.clone(), v.clone()))
                 .collect()
         }
     }

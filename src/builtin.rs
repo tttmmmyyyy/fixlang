@@ -691,6 +691,7 @@ pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
         make_ptr_ty().set_source(source.clone()),
         source,
     )
+    .global_to_absolute()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
