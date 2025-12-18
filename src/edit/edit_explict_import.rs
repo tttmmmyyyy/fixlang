@@ -25,6 +25,8 @@ use std::sync::Arc;
 //    - Removes all existing import statements
 //    - Writes explicit import statements for all collected names
 pub fn run_explicit_import_command() -> Result<(), Errors> {
+    println!("Running diagnostics on the program...");
+
     // Read the project file to get the list of source files.
     let proj_file = ProjectFile::read_root_file()?;
 
