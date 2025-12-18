@@ -730,6 +730,7 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
         make_bool_ty(),
         source,
     )
+    .global_to_absolute()
 }
 
 // Create a byte array by copying from given pointer.

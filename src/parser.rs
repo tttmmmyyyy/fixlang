@@ -1149,6 +1149,12 @@ impl BinaryOpInfo {
         }
     }
 
+    fn method_fullname(&self) -> FullName {
+        let mut fullname = FullName::from_strs(&[STD_NAME, &self.trait_name], &self.method_name);
+        fullname.global_to_absolute();
+        fullname
+    }
+
     fn add_post_unary(mut self, unary_op: UnaryOpInfo) -> BinaryOpInfo {
         self.post_unary = Some(unary_op);
         self
@@ -1185,13 +1191,7 @@ fn parse_binary_operator_sequence(
             let span = unite_span(&unite_span(&next_op_span, &lhs.source), &rhs.source);
             expr = expr_app(
                 expr_app(
-                    expr_var(
-                        FullName::from_strs(
-                            &[STD_NAME, &next_operation.trait_name],
-                            &next_operation.method_name,
-                        ),
-                        next_op_span.clone(),
-                    ),
+                    expr_var(next_operation.method_fullname(), next_op_span.clone()),
                     vec![lhs],
                     span.clone(),
                 ),
@@ -1201,10 +1201,7 @@ fn parse_binary_operator_sequence(
             match next_operation.post_unary.as_ref() {
                 Some(op) => {
                     expr = expr_app(
-                        expr_var(
-                            FullName::from_strs(&[STD_NAME, &op.trait_name], &op.method_name),
-                            next_op_span.clone(),
-                        ),
+                        expr_var(op.method_fullname(), next_op_span.clone()),
                         vec![expr.clone()],
                         span,
                     );
@@ -1357,6 +1354,12 @@ impl UnaryOpInfo {
             method_name: method_name.to_string(),
         }
     }
+
+    fn method_fullname(&self) -> FullName {
+        let mut fullname = FullName::from_strs(&[STD_NAME, &self.trait_name], &self.method_name);
+        fullname.global_to_absolute();
+        fullname
+    }
 }
 
 // Unary opeartors
@@ -1384,10 +1387,7 @@ fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
                 for (i, op) in ops.iter().enumerate().rev() {
                     let op_span = spans[i].clone();
                     expr = expr_app(
-                        expr_var(
-                            FullName::from_strs(&[STD_NAME, &op.trait_name], &op.method_name),
-                            Some(op_span.clone()),
-                        ),
+                        expr_var(op.method_fullname(), Some(op_span.clone())),
                         vec![expr.clone()],
                         expr.source.as_ref().map(|s0| s0.unite(&op_span)),
                     );
