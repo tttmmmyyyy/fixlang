@@ -425,15 +425,24 @@ impl<'a> NameResolutionContext {
             .candidates
             .iter()
             .filter_map(|(full_name, nrt)| {
-                if !import::is_accessible(&self.import_statements, full_name) {
-                    None
-                } else if !accept_types.contains(nrt) {
-                    None
-                } else if !short_name.is_suffix(full_name) {
-                    None
-                } else {
-                    Some(full_name.clone())
+                if !accept_types.contains(nrt) {
+                    return None;
                 }
+                if !short_name.is_suffix(full_name) {
+                    return None;
+                }
+                // Absolute name are accepted even if it is not imported.
+                let inaccessible = !short_name.is_absolute()
+                    && !import::is_accessible(&self.import_statements, full_name);
+                if inaccessible {
+                    return None;
+                }
+                // Inherit the abosolute property from the short name.
+                let mut full_name = full_name.clone();
+                if short_name.is_absolute() {
+                    full_name.set_absolute();
+                }
+                return Some(full_name);
             })
             .collect::<Vec<_>>();
         if candidates.len() == 0 {
@@ -862,6 +871,11 @@ impl Program {
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
         document: Option<String>,
     ) -> Result<(), Errors> {
+        // When the compiler automatically adds functions to user-defined modules,
+        // the symbol names and type names used in those functions should not require the user to import them.
+        // Therefore, convert all global names to absolute names before registering.
+        let expr = expr.global_to_absolute();
+        let scm = scm.global_to_absolute();
         self.add_global_value_common(name, (expr, scm), None, document, true)
     }
 

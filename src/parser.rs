@@ -1569,14 +1569,13 @@ fn parse_expr_index(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
     for (index, index_span_with_braces) in indices.into_iter().rev() {
         match index {
             IndexAccessor::Expr(index_expr) => {
+                let mut act_at_index = FullName::from_strs(
+                    &[STD_NAME, INDEXABLE_TRAIT_NAME],
+                    INDEXABLE_TRAIT_ACT_NAME,
+                );
+                act_at_index.set_absolute();
                 let act_func = expr_app(
-                    expr_var(
-                        FullName::from_strs(
-                            &[STD_NAME, INDEXABLE_TRAIT_NAME],
-                            INDEXABLE_TRAIT_ACT_NAME,
-                        ),
-                        Some(index_span_with_braces.clone()),
-                    ),
+                    expr_var(act_at_index, Some(index_span_with_braces.clone())),
                     vec![index_expr],
                     Some(index_span_with_braces.clone()),
                 );

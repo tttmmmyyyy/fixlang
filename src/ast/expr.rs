@@ -1152,10 +1152,6 @@ impl ExprNode {
     // Collect all referenced names (values, types, traits) in this expression.
     // Unlike free_vars(), this also collects type names from type annotations.
     pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
-        // First, collect free variables (value names)
-        names.extend(self.free_vars());
-
-        // Then, collect names from the expression
         match &*self.expr {
             Expr::Var(name) => {
                 if name.name.is_global() {
@@ -1204,12 +1200,11 @@ impl ExprNode {
                 }
             }
             Expr::ArrayLit(elems) => {
-                names.insert(make_array_name());
                 for e in elems {
                     e.collect_referenced_names(names);
                 }
             }
-            Expr::FFICall(_name, ret_ty, param_tys, args, is_ios) => {
+            Expr::FFICall(_name, ret_ty, param_tys, args, _is_ios) => {
                 // Collect type constructor names from FFI types
                 names.insert(ret_ty.name.clone());
                 for param_ty in param_tys {
@@ -1218,15 +1213,92 @@ impl ExprNode {
                 for arg in args {
                     arg.collect_referenced_names(names);
                 }
-                if *is_ios {
-                    names.insert(make_iostate_name());
-                }
             }
             Expr::Eval(side, main) => {
                 side.collect_referenced_names(names);
                 main.collect_referenced_names(names);
             }
         }
+    }
+
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Arc<ExprNode> {
+        let mut node = self.clone_except_fvs();
+        node.expr = match &*self.expr {
+            Expr::Var(var) => {
+                let new_var = var.global_to_absolute();
+                Arc::new(Expr::Var(new_var))
+            }
+            Expr::LLVM(llvm) => {
+                let new_llvm = llvm.global_to_absolute();
+                Arc::new(Expr::LLVM(new_llvm))
+            }
+            Expr::App(func, args) => {
+                let new_func = func.global_to_absolute();
+                let new_args = args.iter().map(|arg| arg.global_to_absolute()).collect();
+                Arc::new(Expr::App(new_func, new_args))
+            }
+            Expr::Lam(args, body) => {
+                let new_args = args.iter().map(|arg| arg.global_to_absolute()).collect();
+                let new_body = body.global_to_absolute();
+                Arc::new(Expr::Lam(new_args, new_body))
+            }
+            Expr::Let(pat, bound, val) => {
+                let new_pat = pat.global_to_absolute();
+                let new_bound = bound.global_to_absolute();
+                let new_val = val.global_to_absolute();
+                Arc::new(Expr::Let(new_pat, new_bound, new_val))
+            }
+            Expr::If(cond, then_expr, else_expr) => {
+                let new_cond = cond.global_to_absolute();
+                let new_then = then_expr.global_to_absolute();
+                let new_else = else_expr.global_to_absolute();
+                Arc::new(Expr::If(new_cond, new_then, new_else))
+            }
+            Expr::Match(cond, pat_vals) => {
+                let new_cond = cond.global_to_absolute();
+                let new_pat_vals = pat_vals
+                    .iter()
+                    .map(|(pat, val)| (pat.global_to_absolute(), val.global_to_absolute()))
+                    .collect();
+                Arc::new(Expr::Match(new_cond, new_pat_vals))
+            }
+            Expr::TyAnno(e, ty) => {
+                let new_e = e.global_to_absolute();
+                let new_ty = ty.global_to_absolute();
+                Arc::new(Expr::TyAnno(new_e, new_ty))
+            }
+            Expr::MakeStruct(tc, fields) => {
+                let new_tc = tc.global_to_absolute();
+                let new_fields = fields
+                    .iter()
+                    .map(|(name, expr)| (name.clone(), expr.global_to_absolute()))
+                    .collect();
+                Arc::new(Expr::MakeStruct(new_tc, new_fields))
+            }
+            Expr::ArrayLit(elems) => {
+                let new_elems = elems.iter().map(|e| e.global_to_absolute()).collect();
+                Arc::new(Expr::ArrayLit(new_elems))
+            }
+            Expr::FFICall(name, ret_ty, param_tys, args, is_ios) => {
+                let new_ret_ty = ret_ty.global_to_absolute();
+                let new_param_tys = param_tys.iter().map(|ty| ty.global_to_absolute()).collect();
+                let new_args = args.iter().map(|arg| arg.global_to_absolute()).collect();
+                Arc::new(Expr::FFICall(
+                    name.clone(),
+                    new_ret_ty,
+                    new_param_tys,
+                    new_args,
+                    *is_ios,
+                ))
+            }
+            Expr::Eval(side, main) => {
+                let new_side = side.global_to_absolute();
+                let new_main = main.global_to_absolute();
+                Arc::new(Expr::Eval(new_side, new_main))
+            }
+        };
+        Arc::new(node)
     }
 
     // Get the names which are captured by a lambda expressions.
@@ -1423,6 +1495,13 @@ impl Var {
     pub fn set_name(&self, fullname: FullName) -> Arc<Self> {
         let mut ret = self.clone();
         ret.name = fullname;
+        Arc::new(ret)
+    }
+
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.name.global_to_absolute();
         Arc::new(ret)
     }
 

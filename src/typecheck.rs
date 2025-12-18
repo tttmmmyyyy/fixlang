@@ -101,9 +101,8 @@ where
             self.global
                 .iter()
                 .filter(|(full_name, _)| {
-                    full_name.name == name.name
-                        && name.namespace.is_suffix_of(&full_name.namespace)
-                        && import::is_accessible(import_stmts, full_name)
+                    (name.is_suffix(full_name) && import::is_accessible(import_stmts, full_name))
+                        || (name == full_name && name.is_absolute())
                 })
                 .map(|(full_name, v)| (full_name.namespace.clone(), v.clone()))
                 .collect()

@@ -31,6 +31,15 @@ impl Predicate {
         self.ty.collect_referenced_names(names);
     }
 
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Predicate {
+        Predicate {
+            trait_id: self.trait_id.global_to_absolute(),
+            ty: self.ty.global_to_absolute(),
+            source: self.source.clone(),
+        }
+    }
+
     pub fn set_source(&mut self, source: Span) {
         self.source = Some(source);
     }

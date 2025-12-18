@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +6,7 @@ use super::*;
 
 pub type Name = String;
 
-#[derive(Hash, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct NameSpace {
     // Items in the namespace.
     pub names: Vec<String>,
@@ -14,6 +14,13 @@ pub struct NameSpace {
     // For example, `Main::x` has a relative namespace, but `::Main::x` has an absolute namespace.
     // The latter expresses that `Main` is a module name and cannot be a namespace.
     pub is_absolute: bool,
+}
+
+impl std::hash::Hash for NameSpace {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Ignore `is_absolute` field.
+        self.names.hash(state);
+    }
 }
 
 impl PartialEq for NameSpace {
@@ -182,25 +189,40 @@ impl NameSpace {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FullName {
     pub namespace: NameSpace,
     pub name: String,
 }
 
+impl std::hash::Hash for FullName {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Ignore `is_absolute` field in namespace.
+        self.namespace.names.hash(state);
+        self.name.hash(state);
+    }
+}
+
 impl Debug for FullName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            if self.is_absolute() { "::" } else { "" },
+            self.to_string()
+        )
     }
 }
 
 impl PartialOrd for FullName {
+    // Ignore `is_absolute` field in namespace.
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.to_string().cmp(&other.to_string()))
     }
 }
 
 impl Ord for FullName {
+    // Ignore `is_absolute` field in namespace.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.to_string().cmp(&other.to_string())
     }
@@ -287,5 +309,19 @@ impl FullName {
             namespace: names,
             name: name.unwrap(),
         })
+    }
+
+    pub fn is_absolute(&self) -> bool {
+        self.namespace.is_absolute
+    }
+
+    pub fn set_absolute(&mut self) {
+        self.namespace.is_absolute = true;
+    }
+
+    pub fn global_to_absolute(&mut self) {
+        if !self.is_local() {
+            self.namespace.is_absolute = true;
+        }
     }
 }

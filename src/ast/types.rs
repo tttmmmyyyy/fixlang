@@ -83,6 +83,13 @@ impl TyAssoc {
             name: FullName::new(&NameSpace::new(namespace), &name),
         }
     }
+
+    // Convert global FullName to absolute path.
+    pub fn global_to_absolute(&self) -> TyAssoc {
+        let mut name = self.name.clone();
+        name.global_to_absolute();
+        TyAssoc { name }
+    }
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -151,6 +158,13 @@ impl TyCon {
             span,
         )?;
         Ok(())
+    }
+
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Arc<Self> {
+        let mut ret = self.clone();
+        ret.name.global_to_absolute();
+        Arc::new(ret)
     }
 
     // Get the type of struct / union value.
@@ -1682,6 +1696,29 @@ impl TypeNode {
             }
         }
     }
+
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Arc<TypeNode> {
+        match &self.ty {
+            Type::TyVar(_) => Arc::new(self.clone()),
+            Type::TyCon(tycon) => {
+                let new_tycon = tycon.global_to_absolute();
+                self.set_tycon_tc(new_tycon)
+            }
+            Type::TyApp(tyfun, arg) => {
+                let new_fun = tyfun.global_to_absolute();
+                let new_arg = arg.global_to_absolute();
+                self.set_tyapp_fun(new_fun).set_tyapp_arg(new_arg)
+            }
+            Type::AssocTy(assoc_ty, args) => {
+                let mut new_assoc_ty = assoc_ty.clone();
+                new_assoc_ty.name.global_to_absolute();
+                let new_args = args.iter().map(|arg| arg.global_to_absolute()).collect();
+                self.set_assocty_name(new_assoc_ty)
+                    .set_assocty_args(new_args)
+            }
+        }
+    }
 }
 
 // Type scheme.
@@ -2041,5 +2078,23 @@ impl Scheme {
         for eq in &self.equalities {
             eq.collect_referenced_names(names);
         }
+    }
+
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Arc<Scheme> {
+        Arc::new(Scheme {
+            gen_vars: self.gen_vars.clone(),
+            predicates: self
+                .predicates
+                .iter()
+                .map(|p| p.global_to_absolute())
+                .collect(),
+            equalities: self
+                .equalities
+                .iter()
+                .map(|eq| eq.global_to_absolute())
+                .collect(),
+            ty: self.ty.global_to_absolute(),
+        })
     }
 }

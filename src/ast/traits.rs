@@ -45,6 +45,13 @@ impl TraitId {
         self.name = ctx.resolve(&self.name, &[NameResolutionType::Trait], span)?;
         Ok(())
     }
+
+    // Convert global FullName to absolute path.
+    pub fn global_to_absolute(&self) -> TraitId {
+        let mut name = self.name.clone();
+        name.global_to_absolute();
+        TraitId { name }
+    }
 }
 
 // Definition of associated type.

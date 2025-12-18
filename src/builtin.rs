@@ -614,6 +614,7 @@ pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<Ex
         ty,
         source,
     )
+    .global_to_absolute()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -792,7 +793,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
     let array_ty = make_array_ty().set_source(source.clone());
     let u8_ty = make_u8_ty().set_source(source.clone());
     let byte_array_ty = type_tyapp(array_ty, u8_ty).set_source(source.clone());
-    expr_make_struct(
+    let expr = expr_make_struct(
         make_string_tycon(),
         vec![(
             "_data".to_string(),
@@ -804,6 +805,9 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
         )],
     )
     .set_source(source)
+    .global_to_absolute();
+
+    expr
 }
 
 #[derive(Clone, Serialize, Deserialize)]

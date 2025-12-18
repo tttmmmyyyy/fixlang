@@ -345,3 +345,13 @@ pub struct InlineLLVM {
     // Note that `generic_ty` may contain type variables, and it is not changed in type instantiation.
     pub generic_ty: Arc<TypeNode>,
 }
+
+impl InlineLLVM {
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Arc<InlineLLVM> {
+        Arc::new(InlineLLVM {
+            generator: self.generator.clone(),
+            generic_ty: self.generic_ty.global_to_absolute(),
+        })
+    }
+}

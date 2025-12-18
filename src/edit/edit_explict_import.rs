@@ -91,7 +91,7 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     // Filter out names that are defined in the same module.
     let mut names_to_import: Vec<FullName> = referenced_names
         .into_iter()
-        .filter(|name| &name.module() != mod_name)
+        .filter(|name| &name.module() != mod_name && !name.is_absolute())
         .collect();
     names_to_import.sort();
     names_to_import.dedup();

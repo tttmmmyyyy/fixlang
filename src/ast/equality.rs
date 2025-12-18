@@ -53,6 +53,16 @@ impl Equality {
         self.value.collect_referenced_names(names);
     }
 
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Equality {
+        Equality {
+            assoc_type: self.assoc_type.global_to_absolute(),
+            args: self.args.iter().map(|arg| arg.global_to_absolute()).collect(),
+            value: self.value.global_to_absolute(),
+            source: self.source.clone(),
+        }
+    }
+
     pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {
         let kind_info = kind_env.assoc_tys.get(&self.assoc_type).unwrap();
         if self.args.len() != kind_info.param_kinds.len() {

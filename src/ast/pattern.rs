@@ -340,6 +340,33 @@ impl PatternNode {
         }
     }
 
+    // Convert all global FullNames to absolute paths.
+    pub fn global_to_absolute(&self) -> Arc<PatternNode> {
+        let mut node = self.clone();
+        match &self.pattern {
+            Pattern::Var(v, ty) => {
+                let new_v = v.global_to_absolute();
+                let new_ty = ty.as_ref().map(|t| t.global_to_absolute());
+                node.pattern = Pattern::Var(new_v, new_ty);
+            }
+            Pattern::Struct(tc, field_to_pat) => {
+                let new_tc = tc.global_to_absolute();
+                let new_field_to_pat = field_to_pat
+                    .iter()
+                    .map(|(name, pat)| (name.clone(), pat.global_to_absolute()))
+                    .collect();
+                node.pattern = Pattern::Struct(new_tc, new_field_to_pat);
+            }
+            Pattern::Union(variant_name, subpat) => {
+                let mut new_variant_name = variant_name.clone();
+                new_variant_name.global_to_absolute();
+                let new_subpat = subpat.global_to_absolute();
+                node.pattern = Pattern::Union(new_variant_name, new_subpat);
+            }
+        }
+        Arc::new(node)
+    }
+
     pub fn set_var_tyanno(self: &PatternNode, tyanno: Option<Arc<TypeNode>>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
