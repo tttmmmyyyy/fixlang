@@ -1517,7 +1517,7 @@ fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         if args_local.len() == 0 {
             // `f()` is interpreted as application to unit: `f $ ()`.
             args_local.push(
-                expr_make_struct(tycon(make_tuple_name(0)), vec![]).set_source(Some(args_span)),
+                expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]).set_source(Some(args_span)),
             )
         }
         args.append(&mut args_local);
@@ -1881,7 +1881,7 @@ fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
         let tuple_size = exprs.len();
         ctx.tuple_sizes.push(tuple_size as u32);
         let expr = expr_make_struct(
-            tycon(make_tuple_name(tuple_size as u32)),
+            tycon(make_tuple_name_abs(tuple_size as u32)),
             exprs
                 .iter()
                 .cloned()
@@ -1965,8 +1965,8 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
 
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
-    let name = if pair.as_str() == "()" {
-        make_tuple_name(0)
+    let mut name = if pair.as_str() == "()" {
+        make_tuple_name_abs(0)
     } else {
         let mut name = pair.as_str().to_string();
         for (c_type_name, sign, size) in ctx.config.c_type_sizes.get_c_types() {
@@ -1976,6 +1976,7 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
         }
         FullName::from_strs(&[STD_NAME], &name)
     };
+    name.set_absolute();
     tycon(name)
 }
 
@@ -2371,8 +2372,8 @@ fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
         // It is a genuine tuple type.
         let tuple_size = types.len();
         ctx.tuple_sizes.push(tuple_size as u32);
-        let mut res =
-            type_tycon(&tycon(make_tuple_name(tuple_size as u32))).set_source(Some(span.clone()));
+        let mut res = type_tycon(&tycon(make_tuple_name_abs(tuple_size as u32)))
+            .set_source(Some(span.clone()));
         for ty in types {
             res = type_tyapp(res, ty).set_source(Some(span.clone()));
         }
@@ -2427,7 +2428,7 @@ fn parse_pattern_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
     let tuple_size = pats.len();
     ctx.tuple_sizes.push(tuple_size as u32);
     PatternNode::make_struct(
-        tycon(make_tuple_name(tuple_size as u32)),
+        tycon(make_tuple_name_abs(tuple_size as u32)),
         pats.iter()
             .enumerate()
             .map(|(i, pat)| (i.to_string(), pat.clone()))
@@ -2464,7 +2465,7 @@ fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
     let pat = if let Some(pair) = pairs.next() {
         parse_pattern_nounion(pair, ctx)
     } else {
-        PatternNode::make_struct(tycon(make_tuple_name(0 as u32)), vec![])
+        PatternNode::make_struct(tycon(make_tuple_name_abs(0 as u32)), vec![])
     };
     PatternNode::make_union(variant, pat).set_source(span)
 }

@@ -6206,6 +6206,38 @@ main = (
 }
 
 #[test]
+pub fn test_import_required_using_tuples() {
+    // Using tuple literals does not require importing anything.
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, IO};
+
+main : IO ::Std::Tuple0;
+main = (
+    eval ();
+    eval (1,2);
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_import_required_absolute_names() {
+    // Using absolute does not require importing anything.
+    let source = r##"
+module Main;
+
+import Std::{}; // Hide all standard library entities
+
+main : ::Std::IO ();
+main = ::Std::Monad::pure();
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
 pub fn test_associated_type_collects() {
     let source = r##"
     module Main;

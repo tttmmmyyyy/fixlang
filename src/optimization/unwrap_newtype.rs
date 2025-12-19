@@ -18,7 +18,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
         types::{tycon, TyCon, TyConInfo, TyConVariant, Type, TypeNode},
     },
-    builtin::{make_tuple_name, make_unit_ty},
+    builtin::{make_tuple_name_abs, make_unit_ty},
     misc::{Map, Set},
 };
 use std::sync::Arc;
@@ -180,9 +180,9 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
                     let unit_ty = make_unit_ty();
                     let struct_expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
                     let unit_expr =
-                        expr_make_struct(tycon(make_tuple_name(0)), vec![]).set_type(unit_ty);
+                        expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]).set_type(unit_ty);
                     expr = expr_make_struct(
-                        tycon(make_tuple_name(2)),
+                        tycon(make_tuple_name_abs(2)),
                         vec![("0".to_string(), struct_expr), ("1".to_string(), unit_expr)],
                     )
                     .set_type(field_unit_ty);

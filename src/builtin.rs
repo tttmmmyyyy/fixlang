@@ -484,7 +484,7 @@ pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
 
 // Get tuple type.
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    let mut ty = type_tycon(&tycon(make_tuple_name(tys.len() as u32)));
+    let mut ty = type_tycon(&tycon(make_tuple_name_abs(tys.len() as u32)));
     for field_ty in tys {
         ty = type_tyapp(ty, field_ty);
     }
@@ -492,9 +492,11 @@ pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
 }
 
 // Make tuple name.
-pub fn make_tuple_name(size: u32) -> FullName {
+pub fn make_tuple_name_abs(size: u32) -> FullName {
     let name = format!("{}{}", TUPLE_NAME, size);
-    FullName::from_strs(&[STD_NAME], &name)
+    let mut name = FullName::from_strs(&[STD_NAME], &name);
+    name.set_absolute();
+    name
 }
 
 // Get Unit type.
@@ -552,7 +554,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
         .map(|i| make_tyvar(&("t".to_string() + &i.to_string()), &kind_star()))
         .collect::<Vec<_>>();
     TypeDefn {
-        name: make_tuple_name(size),
+        name: make_tuple_name_abs(size),
         tyvars: tyvars.clone(),
         value: TypeDeclValue::Struct(Struct {
             fields: (0..size)
@@ -2741,7 +2743,7 @@ pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
     // #plug_in_{field}(p, f(x))
     let let_expr = expr_let(
         PatternNode::make_struct(
-            tycon(make_tuple_name(2)),
+            tycon(make_tuple_name_abs(2)),
             vec![
                 ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
                 ("1".to_string(), PatternNode::make_var(var_local("p"), None)),
@@ -2825,7 +2827,7 @@ pub fn struct_act(
     // `map` can call `#plug_in_fu_{field}(ps)` multiple times, so the argument to `#plug_in_fu_{field}` can be shared.
     let expr_unique = expr_let(
         PatternNode::make_struct(
-            tycon(make_tuple_name(2)),
+            tycon(make_tuple_name_abs(2)),
             vec![
                 ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
                 (
@@ -2936,7 +2938,7 @@ pub fn struct_act(
             vec![var_local("s")],
             expr_let(
                 PatternNode::make_struct(
-                    tycon(make_tuple_name(2)),
+                    tycon(make_tuple_name_abs(2)),
                     vec![
                         (
                             "0".to_string(),
@@ -3002,7 +3004,7 @@ pub fn struct_act_tuple2(
         .clone();
     let u_ty = type_tyvar(&u_name, &kind_star());
 
-    let tuple2_tycon = tycon(make_tuple_name(2));
+    let tuple2_tycon = tycon(make_tuple_name_abs(2));
     // (U, F)
     let tuple2_u_f_ty = type_tyapp(
         type_tyapp(type_tycon(&tuple2_tycon), u_ty.clone()),
@@ -3218,7 +3220,7 @@ pub fn struct_act_identity(
     // Identity { data : p }
     let let_expr = expr_let(
         PatternNode::make_struct(
-            tycon(make_tuple_name(2)),
+            tycon(make_tuple_name_abs(2)),
             vec![
                 ("0".to_string(), PatternNode::make_var(var_local("x"), None)),
                 ("1".to_string(), PatternNode::make_var(var_local("p"), None)),

@@ -27,7 +27,7 @@ use crate::{
         program::{Program, Symbol},
         types::{tycon, type_tyapp, type_tycon, TyCon, Type::TyApp, TypeNode},
     },
-    builtin::make_tuple_name,
+    builtin::make_tuple_name_abs,
     configuration::Configuration,
     constants::{
         ARRAY_NAME, BUILTIN_ACT_NAME, CONST_NAME, IDENTITY_NAME, STD_NAME, STRUCT_ACT_SYMBOL,
@@ -223,7 +223,7 @@ fn is_functor_const(lens_ty: &Arc<TypeNode>) -> bool {
 fn is_functor_tuple2(lens_ty: &Arc<TypeNode>) -> bool {
     let (t_ty, u_ty, ft_ty, fu_ty) = destructure_act_ty(&lens_ty);
 
-    let tuple2_ty = type_tycon(&tycon(make_tuple_name(2)));
+    let tuple2_ty = type_tycon(&tycon(make_tuple_name_abs(2)));
 
     // Try to extract X from ft_ty (which should be Tuple2 X T)
     // ft_ty has the form: (Tuple2 X) T = TyApp(TyApp(Tuple2, X), T)
