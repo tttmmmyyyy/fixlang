@@ -83,10 +83,9 @@ impl DoContext {
             } = self.monads.pop().unwrap();
             let bind_arg_src = expr.source.clone();
             expr = expr_abs(vec![var], expr, bind_arg_src.clone());
-            let bind_function = expr_var(
-                FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME),
-                Some(operator_src),
-            );
+            let mut bind_function = FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME);
+            bind_function.global_to_absolute();
+            let bind_function = expr_var(bind_function, Some(operator_src));
             expr = expr_app(bind_function, vec![expr], bind_arg_src.clone());
             let src = Span::unite_opt(&bind_arg_src, &monad.source);
             expr = expr_app(expr, vec![monad], src).set_app_order(AppSourceCodeOrderType::XDotF);
@@ -1097,10 +1096,9 @@ fn parse_expr_and_then_sequence(
         let next_expr = exprs.pop().unwrap();
         let next_expr_span = next_expr.source.clone();
         let op_span = op_spans.pop().unwrap();
-        let bind_function = expr_var(
-            FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME),
-            Some(op_span.clone()),
-        );
+        let mut bind_function = FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME);
+        bind_function.global_to_absolute();
+        let bind_function = expr_var(bind_function, Some(op_span.clone()));
         let bind_next_expr_span = unite_span(&Some(op_span), &next_expr_span);
         let lazy_next_expr = expr_abs(vec![var_local(PARAM_NAME)], next_expr, next_expr_span);
         let bind_next_expr = expr_app(
@@ -1439,10 +1437,9 @@ fn parse_expr_composition(
         let op = pairs.next().unwrap();
         assert_eq!(op.as_rule(), Rule::operator_composition);
         let op_span = Span::from_pair(&ctx.source, &op);
-        let compose = expr_var(
-            FullName::from_strs(&[STD_NAME], COMPOSE_FUNCTION_NAME),
-            Some(op_span),
-        );
+        let mut compose_function = FullName::from_strs(&[STD_NAME], COMPOSE_FUNCTION_NAME);
+        compose_function.global_to_absolute();
+        let compose = expr_var(compose_function, Some(op_span));
         let rhs = parse_expr_bind(pairs.next().unwrap(), ctx)?;
         match op.as_str() {
             ">>" => {

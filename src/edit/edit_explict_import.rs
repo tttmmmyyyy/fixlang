@@ -34,6 +34,9 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
     let typecheck_cache = Arc::new(MemoryCache::new());
     let result = run_diagnostics(typecheck_cache)?;
     let program = result.program;
+    if program.deferred_errors.has_error() {
+        return Err(program.deferred_errors);
+    }
 
     // Get the list of source files in the project (excluding dependencies).
     let user_files = get_user_source_files(&proj_file)?;
