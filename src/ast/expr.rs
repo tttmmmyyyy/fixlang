@@ -1,6 +1,6 @@
 use crate::error::Errors;
 use misc::{collect_results, Set};
-use name::{FullName, Name, NameSpace};
+use name::{FullName, GlobalRelativeNames, Name, NameSpace};
 use printer::Text;
 use serde::{Deserialize, Serialize};
 
@@ -1149,74 +1149,72 @@ impl ExprNode {
         free_vars
     }
 
-    // Collect all referenced names (values, types, traits) in this expression.
+    // Collect all global relative names (values, types, traits) in this expression.
     // Unlike free_vars(), this also collects type names from type annotations.
-    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
         match &*self.expr {
             Expr::Var(name) => {
-                if name.name.is_global() {
-                    names.insert(name.name.clone());
-                }
+                names.add(name.name.clone());
             }
             Expr::LLVM(llvm) => {
-                llvm.generic_ty.collect_referenced_names(names);
+                llvm.generic_ty.collect_global_relative_names(names);
             }
             Expr::App(func, args) => {
-                func.collect_referenced_names(names);
+                func.collect_global_relative_names(names);
                 for arg in args {
-                    arg.collect_referenced_names(names);
+                    arg.collect_global_relative_names(names);
                 }
             }
             Expr::Lam(_args, body) => {
-                body.collect_referenced_names(names);
+                body.collect_global_relative_names(names);
             }
             Expr::Let(pat, bound, val) => {
-                pat.collect_referenced_names(names);
-                bound.collect_referenced_names(names);
-                val.collect_referenced_names(names);
+                pat.collect_global_relative_names(names);
+                bound.collect_global_relative_names(names);
+                val.collect_global_relative_names(names);
             }
             Expr::If(cond, then_expr, else_expr) => {
-                cond.collect_referenced_names(names);
-                then_expr.collect_referenced_names(names);
-                else_expr.collect_referenced_names(names);
+                cond.collect_global_relative_names(names);
+                then_expr.collect_global_relative_names(names);
+                else_expr.collect_global_relative_names(names);
             }
             Expr::Match(cond, pat_vals) => {
-                cond.collect_referenced_names(names);
+                cond.collect_global_relative_names(names);
                 for (pat, val) in pat_vals {
-                    pat.collect_referenced_names(names);
-                    val.collect_referenced_names(names);
+                    pat.collect_global_relative_names(names);
+                    val.collect_global_relative_names(names);
                 }
             }
             Expr::TyAnno(e, ty) => {
-                e.collect_referenced_names(names);
+                e.collect_global_relative_names(names);
                 // Collect type names from the type annotation
-                ty.collect_referenced_names(names);
+                ty.collect_global_relative_names(names);
             }
             Expr::MakeStruct(tc, fields) => {
                 // Collect the struct type constructor name
-                names.insert(tc.name.clone());
+                names.add(tc.name.clone());
                 for (_field_name, field_expr) in fields {
-                    field_expr.collect_referenced_names(names);
+                    field_expr.collect_global_relative_names(names);
                 }
             }
             Expr::ArrayLit(elems) => {
                 for e in elems {
-                    e.collect_referenced_names(names);
+                    e.collect_global_relative_names(names);
                 }
             }
             Expr::FFICall(_name, ret_ty, param_tys, args, _is_ios) => {
                 // Collect type constructor names from FFI types
-                names.insert(ret_ty.name.clone());
+                names.add(ret_ty.name.clone());
                 for param_ty in param_tys {
-                    names.insert(param_ty.name.clone());
+                    names.add(param_ty.name.clone());
                 }
                 for arg in args {
-                    arg.collect_referenced_names(names);
+                    arg.collect_global_relative_names(names);
                 }
             }
             Expr::Eval(side, main) => {
-                side.collect_referenced_names(names);
-                main.collect_referenced_names(names);
+                side.collect_global_relative_names(names);
+                main.collect_global_relative_names(names);
             }
         }
     }

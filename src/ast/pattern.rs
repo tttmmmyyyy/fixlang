@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::error::Errors;
 use misc::{make_set, Map, Set};
-use name::{FullName, Name};
+use name::{FullName, GlobalRelativeNames, Name};
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -314,28 +314,28 @@ impl PatternNode {
         }
     }
 
-    // Collect all referenced names (types, traits) from this pattern.
-    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+    // Collect all global relative names (types, traits) from this pattern.
+    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
         match &self.pattern {
             Pattern::Var(_, ty) => {
                 // Collect type names from type annotation
                 if let Some(ty) = ty {
-                    ty.collect_referenced_names(names);
+                    ty.collect_global_relative_names(names);
                 }
             }
             Pattern::Struct(tc, field_to_pat) => {
                 // Collect struct type constructor name
-                names.insert(tc.name.clone());
+                names.add(tc.name.clone());
                 // Recursively collect from field patterns
                 for (_field_name, pat) in field_to_pat {
-                    pat.collect_referenced_names(names);
+                    pat.collect_global_relative_names(names);
                 }
             }
             Pattern::Union(variant_name, subpat) => {
                 // Collect union type constructor name
-                names.insert(variant_name.namespace.clone().to_fullname());
+                names.add(variant_name.namespace.clone().to_fullname());
                 // Recursively collect from subpattern
-                subpat.collect_referenced_names(names);
+                subpat.collect_global_relative_names(names);
             }
         }
     }

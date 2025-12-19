@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
-use crate::ast::name::FullName;
+use crate::ast::name::GlobalRelativeNames;
 use crate::error::Errors;
-use crate::misc::Set;
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -41,23 +40,27 @@ impl Equality {
         self.value.free_vars_to_vec(buf);
     }
 
-    // Collect all referenced type names (both type constructors and associated types).
-    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+    // Collect all global relative type names (both type constructors and associated types).
+    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
         // Collect the associated type name
-        names.insert(self.assoc_type.name.clone());
+        names.add(self.assoc_type.name.clone());
         // Collect names from arguments
         for arg in &self.args {
-            arg.collect_referenced_names(names);
+            arg.collect_global_relative_names(names);
         }
         // Collect names from value
-        self.value.collect_referenced_names(names);
+        self.value.collect_global_relative_names(names);
     }
 
     // Convert all global FullNames to absolute paths.
     pub fn global_to_absolute(&self) -> Equality {
         Equality {
             assoc_type: self.assoc_type.global_to_absolute(),
-            args: self.args.iter().map(|arg| arg.global_to_absolute()).collect(),
+            args: self
+                .args
+                .iter()
+                .map(|arg| arg.global_to_absolute())
+                .collect(),
             value: self.value.global_to_absolute(),
             source: self.source.clone(),
         }

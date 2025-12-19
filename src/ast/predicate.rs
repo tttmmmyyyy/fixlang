@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
-use crate::ast::name::FullName;
+use crate::ast::name::GlobalRelativeNames;
 use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
 use crate::ast::traits::{TraitAliasEnv, TraitId};
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
-use crate::misc::Set;
 use crate::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 
@@ -23,12 +22,12 @@ impl Predicate {
         self.ty.free_vars_to_vec(buf);
     }
 
-    // Collect all referenced type and trait names.
-    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+    // Collect all global relative type and trait names.
+    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
         // Collect the trait name
-        names.insert(self.trait_id.name.clone());
+        names.add(self.trait_id.name.clone());
         // Collect type names
-        self.ty.collect_referenced_names(names);
+        self.ty.collect_global_relative_names(names);
     }
 
     // Convert all global FullNames to absolute paths.

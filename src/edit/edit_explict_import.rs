@@ -2,6 +2,7 @@
 // This command rewrites import statements in a Fix project to import only the necessary entities explicitly.
 
 use crate::ast::import::ImportStatement;
+use crate::ast::name::GlobalRelativeNames;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::{Program, SymbolExpr};
 use crate::edit::edit_util::apply_text_edits;
@@ -90,13 +91,13 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
 
     let mod_name = &module_info.name;
 
-    // Collect all names referenced in this module.
-    let referenced_names = collect_referenced_names(program, mod_name);
+    // Collect all global relative names referenced in this module.
+    let referenced_names = collect_global_relative_names(program, mod_name);
 
     // Filter out names that are defined in the same module.
     let mut names_to_import: Vec<FullName> = referenced_names
         .into_iter()
-        .filter(|name| &name.module() != mod_name && !name.is_absolute())
+        .filter(|name| &name.module() != mod_name)
         .collect();
     names_to_import.sort();
     names_to_import.dedup();
@@ -130,9 +131,9 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     Ok(())
 }
 
-// Collect all names (types, traits, values) referenced in a module.
-fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName> {
-    let mut names = Set::default();
+// Collect all global relative names (types, traits, values) referenced in a module.
+fn collect_global_relative_names(program: &Program, mod_name: &Name) -> Set<FullName> {
+    let mut names = GlobalRelativeNames::new();
 
     // Collect names referenced by global values in this module.
     for (full_name, gv) in &program.global_values {
@@ -144,7 +145,7 @@ fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName>
         match &gv.expr {
             SymbolExpr::Simple(typed_expr) => {
                 // Collect all referenced names (values, types, traits) from the expression
-                typed_expr.expr.collect_referenced_names(&mut names);
+                typed_expr.expr.collect_global_relative_names(&mut names);
             }
             SymbolExpr::Method(_) => {
                 // Trait member implementations are handled separately
@@ -153,7 +154,7 @@ fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName>
 
         // Collect referenced type names from the type of the global value.
         // This also includes types of members defined in trait definitions.
-        gv.scm.collect_referenced_names(&mut names);
+        gv.scm.collect_global_relative_names(&mut names);
     }
 
     // Collect names referenced by trait implementations defined in this module.
@@ -163,16 +164,16 @@ fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName>
                 continue;
             }
             // Collect names from the qualified predicate (including constraints).
-            impl_.qual_pred.collect_referenced_names(&mut names);
+            impl_.qual_pred.collect_global_relative_names(&mut names);
 
             // Collect names from method implementations.
             for (_method_name, method_expr) in &impl_.members {
-                method_expr.collect_referenced_names(&mut names);
+                method_expr.collect_global_relative_names(&mut names);
             }
 
             // Collect types from method signatures.
             for (_method_name, qual_type) in &impl_.member_sigs {
-                qual_type.collect_referenced_names(&mut names);
+                qual_type.collect_global_relative_names(&mut names);
             }
         }
     }
@@ -185,7 +186,7 @@ fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName>
         }
         // Collect the aliased trait names.
         for (aliased_trait_id, _span) in &trait_alias.value {
-            names.insert(aliased_trait_id.name.clone());
+            names.add(aliased_trait_id.name.clone());
         }
     }
 
@@ -197,7 +198,7 @@ fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName>
         }
         // Collect type names from field types.
         for field in &tycon_info.fields {
-            field.collect_referenced_names(&mut names);
+            field.collect_global_relative_names(&mut names);
         }
     }
 
@@ -208,10 +209,10 @@ fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName>
             continue;
         }
         // Collect type names from the alias value.
-        alias_info.value.collect_referenced_names(&mut names);
+        alias_info.value.collect_global_relative_names(&mut names);
     }
 
-    names.into_iter().filter(|name| name.is_global()).collect()
+    names.into_set()
 }
 
 // Generate import statements for the given names.

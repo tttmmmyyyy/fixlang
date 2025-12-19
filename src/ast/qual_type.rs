@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use crate::ast::equality::Equality;
+use crate::ast::name::GlobalRelativeNames;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
 use crate::ast::traits::KindSignature;
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
-use crate::misc::Set;
 use crate::sourcefile::SourcePos;
 
 #[derive(Clone)]
@@ -97,17 +97,17 @@ impl QualType {
         }
     }
 
-    // Collect all referenced type and trait names.
-    pub fn collect_referenced_names(&self, names: &mut Set<crate::ast::name::FullName>) {
+    // Collect all global relative type and trait names.
+    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
         // Collect names from predicates
         for pred in &self.preds {
-            pred.collect_referenced_names(names);
+            pred.collect_global_relative_names(names);
         }
         // Collect names from equalities
         for eq in &self.eqs {
-            eq.collect_referenced_names(names);
+            eq.collect_global_relative_names(names);
         }
         // Collect names from the type
-        self.ty.collect_referenced_names(names);
+        self.ty.collect_global_relative_names(names);
     }
 }

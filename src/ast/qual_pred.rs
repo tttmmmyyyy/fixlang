@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use crate::ast::equality::Equality;
-use crate::ast::name::FullName;
+use crate::ast::name::GlobalRelativeNames;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
 use crate::ast::traits::KindSignature;
 use crate::ast::types::TyVar;
 use crate::error::Errors;
-use crate::misc::Set;
 use crate::sourcefile::SourcePos;
 
 // Qualified predicate. Statement such as "[a : Eq] Array a : Eq".
@@ -60,18 +59,18 @@ impl QualPred {
         }
     }
 
-    // Collect all referenced type and trait names.
-    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+    // Collect all global relative type and trait names.
+    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
         // Collect names from predicate constraints
         for pred in &self.pred_constraints {
-            pred.collect_referenced_names(names);
+            pred.collect_global_relative_names(names);
         }
         // Collect names from equality constraints
         for eq in &self.eq_constraints {
-            eq.collect_referenced_names(names);
+            eq.collect_global_relative_names(names);
         }
         // Collect names from the main predicate
-        self.predicate.collect_referenced_names(names);
+        self.predicate.collect_global_relative_names(names);
     }
 
     pub fn to_string(&self) -> String {
