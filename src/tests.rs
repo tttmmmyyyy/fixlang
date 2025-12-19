@@ -6086,14 +6086,15 @@ main = eval [42]; pure();
 }
 
 #[test]
-pub fn test_import_required_using_struct_method() {
-    // Using array literal does not require `Array`
+pub fn test_import_required_using_struct_union_method() {
+    // Using struct/union methods defined in the module itself does not require importing anything.
     let source = r##"
 module Main;
 
-import Std::{Monad::pure, Option::some, IO, Tuple0, I64};
+import Std::{Monad::pure, Option::some, I64, IO, Tuple0};
 
 type A = struct { x : I64 };
+type B = union { x : I64 };
 
 main : IO ();
 main = (
@@ -6102,6 +6103,67 @@ main = (
     eval a.set_x(100);
     eval a.mod_x(|_| 31);
     eval a.act_x(|x| some(x));
+
+    let b = B::x(42);
+    eval b.is_x;
+    eval b.as_x;
+    eval b.mod_x(|_| 31);    
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_import_required_using_index_syntax() {
+    // Using index syntax does not require importing anything.
+    let source = r##"
+module Main;
+
+import Std::{Indexable::iget, Monad::pure, I64, IO, Tuple0};
+
+type A = struct { x : I64 };
+
+main : IO ();
+main = (
+    let a = A { x: 42 };
+    eval [a][0][^x].iget;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_import_required_using_ffi_call_io() {
+    // Using FFI_CALL_IO does not require importing anything.
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, Tuple0};
+
+main : ::Std::IO ();
+main = (
+    eval FFI_CALL_IO[CInt rand()];
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_import_required_using_ffi_call_ios() {
+    // Using FFI_CALL_IOS does not require importing anything.
+    let source = r##"
+module Main;
+
+import Std::{IO::IOState::_unsafe_create, Monad::pure, I32, I64, IO, Tuple0};
+
+main : IO ();
+main = (
+    eval FFI_CALL_IOS[CInt rand(), IOState::_unsafe_create];
     pure()
 );
     "##;

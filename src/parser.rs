@@ -1952,8 +1952,11 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
         args.push(expr_var(FullName::local(IOS_NAME), None));
         let ffi_call = expr_ffi_call(fun_name, ret_ty, param_tys, args, true, Some(span.clone()));
         let runner = expr_abs(vec![var_local(IOS_NAME)], ffi_call, Some(span.clone()));
-        expr_make_struct(make_io_tycon(), vec![(IO_DATA_NAME.to_string(), runner)])
-            .set_source(Some(span))
+        expr_make_struct(
+            make_io_tycon().global_to_absolute(),
+            vec![(IO_DATA_NAME.to_string(), runner)],
+        )
+        .set_source(Some(span))
     } else {
         expr_ffi_call(fun_name, ret_ty, param_tys, args, is_ios, Some(span))
     };
