@@ -6171,6 +6171,41 @@ main = (
 }
 
 #[test]
+pub fn test_import_required_using_operators() {
+    // Using operators does not require importing anything.
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, IO, Tuple0};
+
+main : IO ();
+main = (
+    let _ = *pure();
+    let f = |x| x + 1; eval f >> f; eval f << f;
+    let x = 42; eval -x;
+    eval !true;
+    eval 1 * 2;
+    eval 2 / 1;
+    eval 2 % 1;
+    eval 2 + 1;
+    eval 2 - 1;
+    eval 2 == 1;
+    eval 2 != 1;
+    eval 2 <= 1;
+    eval 2 >= 1;
+    eval 2 < 1;
+    eval 2 > 1;
+    eval true && false;
+    eval true || false;
+    let f = |x| x + 1; eval f $ 1;
+    pure();;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
 pub fn test_associated_type_collects() {
     let source = r##"
     module Main;
