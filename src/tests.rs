@@ -6229,7 +6229,7 @@ pub fn test_import_required_using_arrow_syntax() {
     let source = r##"
 module Main;
 
-import Std::{Monad::pure, IO};
+import Std::{Monad::pure, IO, I64};
 
 f : I64 -> I64 = |x| x + 1;
 
