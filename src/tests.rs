@@ -5874,7 +5874,7 @@ pub fn test_import_any_in_namespace() {
 pub fn test_import_insufficient() {
     let source = r##"
     module Main;
-    import Std::{IO, Tuple0, IO::println};
+    import Std::{Tuple0, IO::println};
 
     main : IO ();
     main = (
@@ -5884,7 +5884,7 @@ pub fn test_import_insufficient() {
     test_source_fail(
         &source,
         Configuration::compiler_develop_mode(),
-        "Unknown type or associated type name `Std::String`.",
+        "Unknown type or associated type name `IO`.",
     );
 }
 
@@ -6041,6 +6041,71 @@ pub fn test_import_unknown_namespace() {
         Configuration::compiler_develop_mode(),
         "Namespace `Std::Piyo` is not defined or empty.",
     );
+}
+
+#[test]
+pub fn test_import_required_using_string_literal() {
+    // Using string literal requires neither `String`, `U8` nor `Array`.
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, IO, Tuple0};
+
+main : IO ();
+main = eval "Hello, World!"; pure();
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_import_required_using_integer_literal() {
+    // Using integer literal requires neither `I64` nor `U64`.
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, IO, Tuple0};
+
+main : IO ();
+main = eval 42; eval 42_U64; pure();
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_import_required_using_array_literal() {
+    // Using array literal does not require `Array`
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, IO, Tuple0};
+
+main : IO ();
+main = eval [42]; pure();
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_import_required_using_struct_method() {
+    // Using array literal does not require `Array`
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, Option::some, IO, Tuple0, I64};
+
+type A = struct { x : I64 };
+
+main : IO ();
+main = (
+    let a = A { x: 42 };
+    eval a.@x;
+    eval a.set_x(100);
+    eval a.mod_x(|_| 31);
+    eval a.act_x(|x| some(x));
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
 }
 
 #[test]

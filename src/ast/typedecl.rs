@@ -336,6 +336,9 @@ impl TypeAlias {
 #[derive(Clone)]
 pub struct Field {
     pub name: Name,
+    // Type of the field.
+    //
+    // This field holds the type after type alias resolution.
     pub ty: Arc<TypeNode>,
     // Syntactic type of the field.
     pub syn_ty: Option<Arc<TypeNode>>,
@@ -363,6 +366,14 @@ impl Field {
         self.syn_ty = Some(self.ty.clone());
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())
+    }
+
+    // Collect all referenced type names from the field's type.
+    pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
+        // Collect from the syntactic type.
+        if let Some(syn_ty) = &self.syn_ty {
+            syn_ty.collect_referenced_names(names);
+        }
     }
 
     // Check if fields are duplicated. If duplication is found, it returns the duplicated field.

@@ -197,10 +197,7 @@ fn collect_referenced_names(program: &Program, mod_name: &Name) -> Set<FullName>
         }
         // Collect type names from field types.
         for field in &tycon_info.fields {
-            // Collect from the syntactic type.
-            if let Some(syn_ty) = &field.syn_ty {
-                syn_ty.collect_referenced_names(&mut names);
-            }
+            field.collect_referenced_names(&mut names);
         }
     }
 
