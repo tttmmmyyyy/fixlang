@@ -6213,7 +6213,7 @@ module Main;
 
 import Std::{Monad::pure, IO};
 
-main : IO ::Std::Tuple0;
+main : IO ();
 main = (
     eval ();
     eval (1,2);
@@ -6224,7 +6224,26 @@ main = (
 }
 
 #[test]
-pub fn test_import_required_absolute_names() {
+pub fn test_import_required_using_arrow_syntax() {
+    // Using tuple literals does not require importing anything.
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, IO};
+
+f : I64 -> I64 = |x| x + 1;
+
+main : IO ();
+main = (
+    eval f(41);
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_import_required_using_absolute_names() {
     // Using absolute does not require importing anything.
     let source = r##"
 module Main;
