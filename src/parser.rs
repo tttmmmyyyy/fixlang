@@ -1019,13 +1019,7 @@ fn parse_type_field(pair: Pair<Rule>, ctx: &mut ParseContext) -> Field {
     let mut pairs = pair.into_inner();
     let name = pairs.next().unwrap().as_str();
     let ty = parse_type(pairs.next().unwrap(), ctx);
-    Field {
-        name: name.to_string(),
-        ty,
-        syn_ty: None,
-        is_punched: false,
-        source: Some(span),
-    }
+    Field::make(name.to_string(), ty, Some(span))
 }
 
 fn parse_expr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {

@@ -183,13 +183,11 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             variant: TyConVariant::Array,
             is_unbox: false,
             tyvars: vec![make_tyvar("a", &kind_star())],
-            fields: vec![Field {
-                name: "array_elem".to_string(), // Unused
-                ty: type_tyvar_star("a"),
-                syn_ty: None,
-                is_punched: false,
-                source: None,
-            }],
+            fields: vec![Field::make(
+                "array_elem".to_string(), // Unused
+                type_tyvar_star("a"),
+                None,
+            )],
             source: None,
             document: Some("The type of variable length arrays. This is a boxed type.".to_string()),
         },
@@ -558,12 +556,12 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
         tyvars: tyvars.clone(),
         value: TypeDeclValue::Struct(Struct {
             fields: (0..size)
-                .map(|i| Field {
-                    name: i.to_string(),
-                    ty: type_from_tyvar(tyvars[i as usize].clone()),
-                    syn_ty: None,
-                    is_punched: false,
-                    source: None,
+                .map(|i| {
+                    Field::make(
+                        i.to_string(),
+                        type_from_tyvar(tyvars[i as usize].clone()),
+                        None,
+                    )
                 })
                 .collect(),
             is_unbox: TUPLE_UNBOX,

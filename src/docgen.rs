@@ -580,10 +580,7 @@ fn field_subsection(
         _ => unreachable!(),
     };
     let mut field_sec = MarkdownSection::new(title);
-    field_sec.add_paragraph(format!(
-        "Type: `{}`",
-        field.syn_ty.as_ref().unwrap().to_string()
-    ));
+    field_sec.add_paragraph(format!("Type: `{}`", field.syn_ty.to_string()));
     if let Some(src) = &field.source {
         let docstring = src.get_document()?;
         let docstring = MarkdownSection::parse_many(docstring.lines().collect());

@@ -584,13 +584,7 @@ impl DecapturingVisitor {
             tyvars: vec![],
             fields: cap_names_types
                 .iter()
-                .map(|(name, ty)| Field {
-                    name: name.name.clone(),
-                    ty: ty.clone(),
-                    syn_ty: None,
-                    is_punched: false,
-                    source: None,
-                })
+                .map(|(name, ty)| Field::make(name.name.clone(), ty.clone(), None))
                 .collect(),
             source: None,
             document: None,

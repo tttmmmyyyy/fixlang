@@ -341,29 +341,34 @@ pub struct Field {
     // This field holds the type after type alias resolution.
     pub ty: Arc<TypeNode>,
     // Syntactic type of the field.
-    pub syn_ty: Option<Arc<TypeNode>>,
+    pub syn_ty: Arc<TypeNode>,
     pub is_punched: bool,
     pub source: Option<Span>,
 }
 
 impl Field {
+    pub fn make(name: Name, syn_ty: Arc<TypeNode>, source: Option<Span>) -> Self {
+        Field {
+            name,
+            ty: syn_ty.clone(),
+            syn_ty,
+            is_punched: false,
+            source,
+        }
+    }
+
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         self.ty.find_node_at(pos)
     }
 
     pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
-        self.syn_ty = self
-            .syn_ty
-            .clone()
-            .map(|ty| ty.resolve_namespace(ctx))
-            .transpose()?;
+        self.syn_ty = self.syn_ty.resolve_namespace(ctx)?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())
     }
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
-        self.syn_ty = Some(self.ty.clone());
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())
     }
@@ -371,9 +376,7 @@ impl Field {
     // Collect all referenced type names from the field's type.
     pub fn collect_referenced_names(&self, names: &mut Set<FullName>) {
         // Collect from the syntactic type.
-        if let Some(syn_ty) = &self.syn_ty {
-            syn_ty.collect_referenced_names(names);
-        }
+        self.syn_ty.collect_referenced_names(names);
     }
 
     // Check if fields are duplicated. If duplication is found, it returns the duplicated field.
