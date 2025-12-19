@@ -1,16 +1,15 @@
-use std::{
-    fs::{self, remove_file, File},
-    io::Write,
-    path::{Path, PathBuf},
-    process::Command,
-};
-
 use crate::{
     misc::{function_name, number_to_varname, split_by_max_size},
     run, test_source, test_source_fail, Configuration, SubCommand, COMPILER_TEST_WORKING_PATH,
     I16_NAME, I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use rand::Rng;
+use std::{
+    fs::{self, remove_file, File},
+    io::Write,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[test]
 pub fn test0() {
