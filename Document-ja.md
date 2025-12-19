@@ -52,6 +52,7 @@
     - [モジュールとインポート文](#モジュールとインポート文)
     - [名前空間とオーバーロード](#名前空間とオーバーロード)
     - [インポート文の詳細: エンティティのフィルタリング](#インポート文の詳細-エンティティのフィルタリング)
+    - [絶対名前空間とインポート](#絶対名前空間とインポート)
     - [モジュールをインポートするか、必要なエンティティをインポートするか](#モジュールをインポートするか必要なエンティティをインポートするか)
     - [再帰](#再帰)
     - [型注釈](#型注釈)
@@ -1178,7 +1179,6 @@ main = (
     println $ (0 + truth).to_string
 );
 ```
-[プレイグラウンドで実行](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCm5hbWVzcGFjZSBCb29sZWFuVHJ1dGggew0KICAgIHRydXRoIDogQm9vbDsNCiAgICB0cnV0aCA9IHRydWU7DQp9DQoNCm5hbWVzcGFjZSBJbnRlZ3JhbFRydXRoIHsNCiAgICB0cnV0aCA6IEk2NDsNCiAgICB0cnV0aCA9IDQyOw0KfQ0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIHByaW50bG4gJCAoMCArIHRydXRoKS50b19zdHJpbmcNCik7)
 
 はコンパイルできます。なぜなら、Fixは`truth`の型を`I64`型の`0`に加算できるという事実から推測できるからです。
 
@@ -1204,7 +1204,7 @@ main = println("Hello, World!");
 
 ```
 module Main;
-import Std::{IO, Tuple0, String, IO::println};
+import Std::{IO, String, IO::println};
 
 main : IO ();
 main = println("Hello, World!");
@@ -1213,20 +1213,20 @@ main = println("Hello, World!");
 さらに`Std::IO::eprintln`をインポートしたい場合は、次のように記述できます。
 
 ```
-import Std::{IO, Tuple0, String, IO::println, IO::eprintln};
+import Std::{IO, String, IO::println, IO::eprintln};
 ```
 
 または
 
 ```
-import Std::{IO, Tuple0, String, IO::{println, eprintln}};
+import Std::{IO, String, IO::{println, eprintln}};
 ```
 
 `Std::IO`名前空間内のすべてのエンティティをインポートしても問題ない場合は、次のように記述できます。
 
 ```
 module Main;
-import Std::{IO, Tuple0, String, IO::*};
+import Std::{IO, String, IO::*};
 
 main : IO ();
 main = println("Hello, World!");
@@ -1273,6 +1273,57 @@ main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
 ```
 
 複数のエンティティを隠す場合は、`import Std hiding {symbol0, Type1, Namespace2::*}`のように書くことができます。
+
+## 絶対名前空間とインポート
+
+`Main`モジュールの中で`Main::truth`を定義しているとします。
+`Main::truth`のように名前空間を完全に指定して参照しても、オーバーロードを解決できない場合があります。
+それは、以下のような場合です。
+
+```
+module Main;
+
+truth : I64 = 42; // Main::truth
+
+namespace Main {
+    truth : I64 = 42; // Main::Main::truth
+}
+
+main : IO ();
+main = Main::truth.to_string.println; // error: Name `Main::truth` is ambiguous: there are `Main::Main::truth`, `Main::truth`.
+```
+
+このプログラムには`Main::truth`と`Main::Main::truth`の2つの`truth`が存在するため、`Main::truth`と書くだけでは、どちらの`truth`を指しているのかが分かりません。
+
+このような場合には、`::Main::truth`のように、名前空間の最初に`::`を付けることで、あなたが「完全な名前」を書いていることをFixに伝えることができます。
+
+```
+module Main;
+
+truth : I64 = 42; // Main::truth
+
+namespace Main {
+    truth : I64 = 42; // Main::Main::truth
+}
+
+main : IO ();
+main = ::Main::truth.to_string.println; // OK
+```
+
+また、このような「絶対名前空間」を用いてエンティティを参照している場合、そのエンティティはインポートされていなくても使用できる、という性質があります。
+例えば、以下のプログラムは、`Std`から何もインポートしていませんが、`IO`, `pure`などを絶対名前空間を指定することで使用しています。
+
+```
+module Main;
+
+import Std::{}; // Hide all standard library entities
+
+main : ::Std::IO ();
+main = ::Std::Monad::pure();
+```
+
+Fixにおいて、インポート文とは、オーバーロード解決における候補を追加したり除去したりするための文法です。
+絶対名前空間を指定してエンティティを参照している場合、オーバーロード解決を行う必要がないため、インポート文は無視されます。
 
 ## モジュールをインポートするか、必要なエンティティをインポートするか
 

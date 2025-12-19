@@ -52,6 +52,7 @@
     - [Modules and import statements](#modules-and-import-statements)
     - [Namespaces and overloading](#namespaces-and-overloading)
     - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
+    - [Absolute Namespace and Imports](#absolute-namespace-and-imports)
     - [Which is better: importing whole module or only necessary entities?](#which-is-better-importing-whole-module-or-only-necessary-entities)
     - [Recursion](#recursion)
     - [Type annotation](#type-annotation)
@@ -1107,7 +1108,6 @@ main = (
     println $ (0 + truth).to_string
 );
 ```
-[Run in playground](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCm5hbWVzcGFjZSBCb29sZWFuVHJ1dGggew0KICAgIHRydXRoIDogQm9vbDsNCiAgICB0cnV0aCA9IHRydWU7DQp9DQoNCm5hbWVzcGFjZSBJbnRlZ3JhbFRydXRoIHsNCiAgICB0cnV0aCA6IEk2NDsNCiAgICB0cnV0aCA9IDQyOw0KfQ0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIHByaW50bG4gJCAoMCArIHRydXRoKS50b19zdHJpbmcNCik7)
 
 will compile because Fix can infer the type of `truth` by the fact that it can be added to `0` of type `I64`.
 
@@ -1133,7 +1133,7 @@ To import only entities that are actually used, you need to import `Std` explici
 
 ```
 module Main;
-import Std::{IO, Tuple0, String, IO::println};
+import Std::{IO, String, IO::println};
 
 main : IO ();
 main = println("Hello, World!");
@@ -1142,20 +1142,20 @@ main = println("Hello, World!");
 If you want to import `Std::IO::eprintln` in addition, you can write:
 
 ```
-import Std::{IO, Tuple0, String, IO::println, IO::eprintln};
+import Std::{IO, String, IO::println, IO::eprintln};
 ```
 
 or
 
 ```
-import Std::{IO, Tuple0, String, IO::{println, eprintln}};
+import Std::{IO, String, IO::{println, eprintln}};
 ```
 
 If importing any entities in the `Std::IO` namespace is OK, you can write:
 
 ```
 module Main;
-import Std::{IO, Tuple0, String, IO::*};
+import Std::{IO, String, IO::*};
 
 main : IO ();
 main = println("Hello, World!");
@@ -1203,6 +1203,57 @@ main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
 ```
 
 You can hide multiple entities by writing such as `import Std hiding {symbol0, Type1, Namespace2::*}`.
+
+## Absolute Namespace and Imports
+
+Suppose you define `Main::truth` in the `Main` module.
+Even if you fully specify the namespace as `Main::truth`, there may be cases where overload resolution fails.
+This happens in situations like the following:
+
+```
+module Main;
+
+truth : I64 = 42; // Main::truth
+
+namespace Main {
+    truth : I64 = 42; // Main::Main::truth
+}
+
+main : IO ();
+main = Main::truth.to_string.println; // error: Name `Main::truth` is ambiguous: there are `Main::Main::truth`, `Main::truth`.
+```
+
+In this program, there are two `truth` values: `Main::truth` and `Main::Main::truth`, so just writing `Main::truth` doesn't clarify which `truth` you're referring to.
+
+In such cases, you can tell Fix that you're writing a "fully qualified name" by adding `::` at the beginning of the namespace, like `::Main::truth`.
+
+```
+module Main;
+
+truth : I64 = 42; // Main::truth
+
+namespace Main {
+    truth : I64 = 42; // Main::Main::truth
+}
+
+main : IO ();
+main = ::Main::truth.to_string.println; // OK
+```
+
+Additionally, when you reference an entity using such an "absolute namespace", that entity can be used even if it hasn't been imported.
+For example, the following program doesn't import anything from `Std`, but uses `IO`, `pure`, etc. by specifying their absolute namespace.
+
+```
+module Main;
+
+import Std::{}; // Hide all standard library entities
+
+main : ::Std::IO ();
+main = ::Std::Monad::pure();
+```
+
+In Fix, import statements are syntax for adding or removing candidates in overload resolution.
+When you reference an entity by specifying its absolute namespace, overload resolution is not needed, so import statements are ignored.
 
 ## Which is better: importing whole module or only necessary entities?
 
