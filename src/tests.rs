@@ -6257,6 +6257,26 @@ main = ::Std::Monad::pure();
 }
 
 #[test]
+pub fn test_import_required_using_trait_alias() {
+    // Using trait alias does not require importing the underlying traits.
+    let source = r##"
+module Main;
+
+import Std::{Additive, undefined, Monad::pure, I64}; // No need to import Std::Zero and Std::Add.
+
+my_add : [a : Additive] a -> a -> a;
+my_add = |_, _| undefined("");
+
+main : ::Std::IO ();
+main = (
+    eval my_add : I64 -> I64 -> I64;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
 pub fn test_associated_type_collects() {
     let source = r##"
     module Main;
