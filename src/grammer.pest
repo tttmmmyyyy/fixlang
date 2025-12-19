@@ -121,7 +121,7 @@ expr_make_struct = {
 // Non Left Recursive expressions
 expr_nlr = { expr_lit | expr_var | expr_let | expr_eval | expr_if | expr_match | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
 
-// Index syntax, e.g., `arr[0, ^field]`.
+// Index syntax, e.g., `arr[0][^field]`.
 expr_index = { expr_nlr ~ (sep* ~ index_syntax)* }
 index_syntax = { "[" ~ sep* ~ index_accessor ~ sep* ~ "]" }
 index_accessor = { expr | field_accessor | tuple_accessor }
