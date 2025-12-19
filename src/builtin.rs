@@ -245,12 +245,14 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret
 }
 
-pub fn make_arrow_name() -> FullName {
-    FullName::from_strs(&[STD_NAME], ARROW_NAME)
+pub fn make_arrow_name_abs() -> FullName {
+    let mut name = FullName::from_strs(&[STD_NAME], ARROW_NAME);
+    name.set_absolute();
+    name
 }
 
 pub fn make_arrow_tycon() -> TyCon {
-    TyCon::new(make_arrow_name())
+    TyCon::new(make_arrow_name_abs())
 }
 
 pub fn make_dynamic_object_name() -> FullName {

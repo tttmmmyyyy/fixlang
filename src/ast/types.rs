@@ -10,7 +10,7 @@ use crate::ast::traits::{KindSignature, TraitAliasEnv, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::builtin::{
     get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
-    is_funptr_tycon, make_array_tycon, make_arrow_name, make_arrow_tycon, make_funptr_tycon,
+    is_funptr_tycon, make_array_tycon, make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon,
     make_iostate_name, make_tuple_name_abs,
 };
 use crate::constants::{
@@ -925,7 +925,7 @@ impl TypeNode {
             return false;
         }
         let tc = tc.unwrap();
-        tc.name == make_arrow_name()
+        tc.name == make_arrow_name_abs()
     }
 
     pub fn is_funptr(&self) -> bool {
@@ -1359,7 +1359,7 @@ impl TypeNode {
                             return format!("({})", arg_strs.join(", "));
                         }
                     }
-                    if tycon.name == make_arrow_name() {
+                    if tycon.name == make_arrow_name_abs() {
                         // `->` case.
                         // In this case we use special notation when the `Arrow` type is fully applied.
                         let args = self.collect_type_argments();
@@ -1522,7 +1522,7 @@ pub fn type_fun_with_arrow_src(
 ) -> Arc<TypeNode> {
     let src_span = src.get_source().clone();
     let partial = type_tyapp(
-        type_tycon(&tycon(make_arrow_name())).set_source(arrow_src),
+        type_tycon(&tycon(make_arrow_name_abs())).set_source(arrow_src),
         src,
     )
     .set_source_if_none(src_span);
