@@ -6262,14 +6262,34 @@ pub fn test_import_required_using_trait_alias() {
     let source = r##"
 module Main;
 
-import Std::{Additive, undefined, Monad::pure, I64}; // No need to import Std::Zero and Std::Add.
+import Std::{IO, Additive, undefined, Monad::pure, I64}; // No need to import Std::Zero and Std::Add.
 
+// Use in type signature
 my_add : [a : Additive] a -> a -> a;
 my_add = |_, _| undefined("");
 
-main : ::Std::IO ();
+// Use in trait alias definition
+trait MyAdditive = Additive;
+
+// Use in trait definition
+trait a : MyTrait {
+    add : [b : Additive] a -> b -> b -> b;
+}
+
+// Use in trait implementation type signature
+impl I64 : MyTrait {
+    add : [b : Additive] I64 -> b -> b -> b;
+    add = |_, x, y| x + y;
+}
+
+// Use in trait implementation precondition
+type MyType a = struct { data : a };
+impl [a : Additive] MyType a : MyTrait {
+    add = |_, x, y| x + y;
+}
+
+main : IO ();
 main = (
-    eval my_add : I64 -> I64 -> I64;
     pure()
 );
     "##;
