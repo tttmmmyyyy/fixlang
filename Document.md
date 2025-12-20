@@ -79,7 +79,7 @@
         - [Accessing fields of Fix's struct value from C](#accessing-fields-of-fixs-struct-value-from-c)
     - [`eval` syntax](#eval-syntax)
     - [Substitute Pattern](#substitute-pattern)
-    - [Operators](#operators)
+    - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
 - [Compiler features](#compiler-features)
     - [Project file](#project-file)
     - [Managing dependencies](#managing-dependencies)
@@ -2248,33 +2248,196 @@ x.set_field1(arr1).set_field2(arr2) // restore field1 and field2 to the original
 This method is only effective when there exists a value that can be used as a "substitute value" for the type of `field1` and `field2` (here `Array I64`) (here, the empty array `[]`).
 If this is not the case, consider changing the type of `field1` and `field2` to an `Option` type or similar, and using `none()` as the substitute value.
 
-## Operators
+## Operator and Syntax Precedence
 
-The following is the table of operators sorted by its precedence (operator of higher precedence appears earlier).
+The precedence and associativity of operators and some syntax in Fix are shown in the following table.
 
-| Operator       | Associativity            | Function                           | Explanation                                                            |
-| -------------- | ------------------------ | ---------------------------------- | ---------------------------------------------------------------------- |
-| .              | left associative binary  | -                                  | right-to-left function application: `x.f` = `f(x)`                     |
-| *              | unary prefix             | Std::Monad::bind                   | monadic bind                                                           |
-| <<             | left associative binary  | Std::compose                       | right-to-left function composition: `g << f` = `&#124;x&#124; g(f(x))` |
-| >>             | left associative binary  | Std::compose                       | left-to-right function composition: `f >> g` = `&#124;x&#124; g(f(x))` |
-| - (minus sign) | unary prefix             | Std::Neg::neg                      | negative of number                                                     |
-| !              | unary prefix             | Std::Not::not                      | logical NOT                                                            |
-| *              | left associative binary  | Std::Mul::mul                      | multiplication of numbers                                              |
-| /              | left associative binary  | Std::Div::div                      | division of numbers                                                    |
-| %              | left associative binary  | Std::Rem::rem                      | reminder of division                                                   |
-| +              | left associative binary  | Std::Add::add                      | addition of numbers                                                    |
-| - (minus sign) | left associative binary  | Std::Sub::sub                      | subtraction of numbers                                                 |
-| ==             | left associative binary  | Std::Eq::eq                        | equality comparison                                                    |
-| !=             | left associative binary  | -                                  | `x != y` is interpreted as `!(x == y)`                                 |
-| <=             | left associative binary  | Std::LessThanOrEq::less_than_or_eq | less-than-or-equal-to comparison                                       |
-| >=             | left associative binary  | -                                  | `x >= y` is interpreted as `y <= x`                                    |
-| <              | left associative binary  | Std::LessThan::less_than           | less-than comparison                                                   |
-| >              | left associative binary  | -                                  | `x > y` is interpreted as `y < x`                                      |
-| &&             | right associative binary | -                                  | short-circuit logical AND.                                             |
-| &#124;&#124;   | right associative binary | -                                  | short-circuit logical OR                                               |
-| $              | right associative binary | -                                  | right associative function application: `f $ g $ x` = `f(g(x))`        |
-| ;;             | right associative binary | -                                  | conjunction of monadic actions: `m0;; m1` = `let _ = *m0; m1`          |
+* Operators with higher precedence bind more tightly.
+    * For example, `*` (binary operator) has higher precedence than `+`, so the expression `x + y * z` is interpreted as `x + (y * z)`.
+* When multiple operators with the same precedence appear, they bind according to their associativity.
+    * For example, `+` (binary operator) and `-` (binary operator) have the same precedence and are left-associative, so the expression `x - y + z` is interpreted as `(x - y) + z`.
+* The index syntax `[...]` has special associativity.
+    * Both `x[i]` and `x[i][j]` are valid expressions, but `x[i][j]` does not match `(x[i])[j]`.
+    * Also, `x[i][j]` does not match `x([i][j])` (in fact, `[i][j]` is not an expression).
+    * `x` and the consecutive sequence of `[...]` that follows form a single expression.
+* The index syntax `[...]` and the dot syntax `.` have the same precedence and are left-associative.
+    * Therefore, `x.f[i].iget` is interpreted as `((x.f)[i]).iget`.
+
+<table>
+    <thead>
+        <tr>
+            <th>Precedence</th>
+            <th>Symbol</th>
+            <th>Type</th>
+            <th>Associativity</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>11</td>
+            <td>(...)</td>
+            <td>postfix</td>
+            <td>left</td>
+            <td>Function application: <code>f(x,y)</code></td>
+        </tr>
+        <tr>
+            <td>10</td>
+            <td>[...]</td>
+            <td>postfix</td>
+            <td>special</td>
+            <td>Index syntax: <code>x[i][^field]</code> = <code>|a| x.(act_at_index(i) $ act_field $ a)</code></td>
+        </tr>    
+        <tr>
+            <td>10</td>
+            <td>.</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Right-to-left function application: <code>x.f</code> = <code>f(x)</code></td>
+        </tr>
+        <tr>
+            <td>9</td>
+            <td>*</td>
+            <td>prefix</td>
+            <td>right</td>
+            <td>Monadic bind: <code>Std::Monad::bind</code></td>
+        </tr>
+        <tr>
+            <td>8</td>
+            <td>&lt;&lt;</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Right-to-left function composition: <code>g &lt;&lt; f</code> = <code>|x| g(f(x))</code> (<code>Std::compose</code>)</td>
+        </tr>
+        <tr>
+            <td>8</td>        
+            <td>&gt;&gt;</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Left-to-right function composition: <code>(f &gt;&gt; g)(x)</code> = <code>|x| g(f(x))</code> (<code>Std::compose</code>)</td>
+        </tr>
+        <tr>
+            <td>7</td>        
+            <td>-</td>
+            <td>prefix</td>
+            <td>right</td>
+            <td>Negation of number: <code>Std::Neg::neg</code></td>
+        </tr>
+        <tr>
+            <td>7</td>        
+            <td>!</td>
+            <td>prefix</td>
+            <td>right</td>
+            <td>Logical NOT: <code>Std::Not::not</code></td>
+        </tr>
+        <tr>
+            <td>6</td>        
+            <td>*</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Multiplication of numbers: <code>Std::Mul::mul</code></td>
+        </tr>
+        <tr>
+            <td>6</td>        
+            <td>/</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Division of numbers: <code>Std::Div::div</code></td>
+        </tr>
+        <tr>
+            <td>6</td>        
+            <td>%</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Remainder of division: <code>Std::Rem::rem</code></td>
+        </tr>
+        <tr>
+            <td>5</td>        
+            <td>+</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Addition of numbers: <code>Std::Add::add</code></td>
+        </tr>
+        <tr>
+            <td>5</td>        
+            <td>-</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Subtraction of numbers: <code>Std::Sub::sub</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>==</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Equality comparison: <code>Std::Eq::eq</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>!=</td>
+            <td>binary</td>
+            <td>left</td>
+            <td><code>x != y</code> = <code>!(x == y)</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>&lt;=</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Less-than-or-equal-to comparison: <code>Std::LessThanOrEq::less_than_or_eq</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>&gt;=</td>
+            <td>binary</td>
+            <td>left</td>
+            <td><code>x &gt;= y</code> = <code>y &lt;= x</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>&lt;</td>
+            <td>binary</td>
+            <td>left</td>
+            <td>Less-than comparison: <code>Std::LessThan::less_than</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>&gt;</td>
+            <td>binary</td>
+            <td>left</td>
+            <td><code>x &gt; y</code> = <code>y &lt; x</code></td>
+        </tr>
+        <tr>
+            <td>3</td>        
+            <td>&amp;&amp;</td>
+            <td>binary</td>
+            <td>right</td>
+            <td>Short-circuit logical AND: <code>x &amp;&amp; y</code> = <code>if x { y } else { false }</code></td>
+        </tr>
+        <tr>
+            <td>2</td>        
+            <td>||</td>
+            <td>binary</td>
+            <td>right</td>
+            <td>Short-circuit logical OR: <code>x || y</code> = <code>if x { true } else { y }</code></td>
+        </tr>
+        <tr>
+            <td>1</td>
+            <td>$</td>
+            <td>binary</td>
+            <td>right</td>
+            <td>Right-associative function application: <code>f $ g $ x</code> = <code>f(g(x))</code></td>
+        </tr>
+        <tr>
+            <td>0</td>
+            <td>;;</td>
+            <td>binary</td>
+            <td>right</td>
+            <td>Conjunction of monadic actions: <code>m0;; m1</code> = <code>let _ = *m0; m1</code></td>
+        </tr>
+    </tbody>
+</table>
+
 
 # Compiler features
 

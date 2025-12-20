@@ -79,7 +79,7 @@
         - [CからFixの構造体値のフィールドにアクセスする](#cからfixの構造体値のフィールドにアクセスする)
     - [`eval`構文](#eval構文)
     - [身代わりパターン](#身代わりパターン)
-    - [演算子](#演算子)
+    - [演算子と構文の優先度](#演算子と構文の優先度)
 - [コンパイラの機能](#コンパイラの機能)
     - [プロジェクトファイル](#プロジェクトファイル)
     - [依存関係の管理](#依存関係の管理)
@@ -2367,33 +2367,195 @@ x.set_field1(arr1).set_field2(arr2) // 元のxにfield1とfield2を戻す
 この方法は、`field1`や`field2`の型（ここでは`Array I64`）に「身代わり値」として使用できるような値（ここでは空配列`[]`）が存在する場合にのみ有効です。
 もしそうでない場合は、`field1`や`field2`の型を`Option`型などに変更し、`none()`を身代わり値として使用することを検討してください。
 
-## 演算子
+## 演算子と構文の優先度
 
-以下は、優先順位でソートされた演算子の表です（優先順位が高いものから低いものへ並べられています）。
+Fixの演算子と一部の構文の優先度と結合性は以下の表の通りです。
 
-| 演算子           | 結合性             | 関数                               | 説明                                                          |
-| ---------------- | ------------------ | ---------------------------------- | ------------------------------------------------------------- |
-| .                | 左結合の二項演算子 | -                                  | 右から左への関数適用：`x.f` = `f(x)`                          |
-| *                | 単項前置           | Std::Monad::bind                   | モナドのバインド                                              |
-| <<               | 左結合の二項演算子 | Std::compose                       | 右から左への関数合成：`g << f` = `&#124;x&#124; g(f(x))`      |
-| >>               | 左結合の二項演算子 | Std::compose                       | 左から右への関数合成：`(f >> g)(x)` = `&#124;x&#124; g(f(x))` |
-| - (マイナス記号) | 単項前置           | Std::Neg::neg                      | 数値の負値                                                    |
-| !                | 単項前置           | Std::Not::not                      | 論理NOT                                                       |
-| *                | 左結合の二項演算子 | Std::Mul::mul                      | 数値の乗算                                                    |
-| /                | 左結合の二項演算子 | Std::Div::div                      | 数値の除算                                                    |
-| %                | 左結合の二項演算子 | Std::Rem::rem                      | 除算の余り                                                    |
-| +                | 左結合の二項演算子 | Std::Add::add                      | 数値の加算                                                    |
-| - (マイナス記号) | 左結合の二項演算子 | Std::Sub::sub                      | 数値の減算                                                    |
-| ==               | 左結合の二項演算子 | Std::Eq::eq                        | 等価比較                                                      |
-| !=               | 左結合の二項演算子 | -                                  | `x != y`は`!(x == y)`として解釈されます                       |
-| <=               | 左結合の二項演算子 | Std::LessThanOrEq::less_than_or_eq | 以下比較                                                      |
-| >=               | 左結合の二項演算子 | -                                  | `x >= y`は`y <= x`として解釈されます                          |
-| <                | 左結合の二項演算子 | Std::LessThan::less_than           | 未満比較                                                      |
-| >                | 左結合の二項演算子 | -                                  | `x > y`は`y < x`として解釈されます                            |
-| &&               | 右結合の二項演算子 | -                                  | ショートサーキット論理AND                                     |
-| &#124;&#124;     | 右結合の二項演算子 | -                                  | ショートサーキット論理OR                                      |
-| $                | 右結合の二項演算子 | -                                  | 右結合の関数適用：`f $ g $ x` = `f(g(x))`                     |
-| ;;               | 右結合の二項演算子 | -                                  | モナドアクションの連結：`m0;; m1` = `let _ = *m0; m1`         |
+* 優先度が大きいほど、結合が強くなります。
+    * 例えば、`*`（二項演算子）の優先度は`+`よりも大きいため、式`x + y * z`は`x + (y * z)`と解釈されます。
+* 同じ優先度の演算子が複数ある場合、結合性に従って結合されます。
+    * 例えば、`+`（二項演算子）および`-`（二項演算子）の優先度は同じであり、左結合であるため、式`x - y + z`は`(x - y) + z`と解釈されます。
+* インデックス構文`[...]`は特殊な結合性を持ちます。
+    * `x[i]`も`x[i][j]`もどちらも有効な式ですが、`x[i][j]`は`(x[i])[j]`とは一致しません。
+    * また、`x[i][j]`は`x([i][j])`とも一致しません（実際、`[i][j]`は式ではありません）。
+    * `x`と、そのあとに連続して現れる`[...]`の列までが、一つの式を構成します。
+* インデックス構文`[...]`とドット構文`.`は、同じ優先度で、左結合です。
+    * そのため、`x.f[i].iget`は`((x.f)[i]).iget`と解釈されます。
+
+<table>
+    <thead>
+        <tr>
+        　  <th>優先度</th>
+            <th>記号</th>
+            <th>種類</th>
+            <th>結合性</th>
+            <th>説明</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>11</td>
+            <td>(...)</td>
+            <td>後置</td>
+            <td>左</td>
+            <td>関数適用<code>f(x,y)</code></td>
+        </tr>
+        <tr>
+            <td>10</td>
+            <td>[...]</td>
+            <td>後置</td>
+            <td>特殊</td>
+            <td>インデックス構文：<code>x[i][^field]</code> = <code>|a| x.(act_at_index(i) $ act_field $ a)</code></td>
+        </tr>    
+        <tr>
+            <td>10</td>
+            <td>.</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>右から左への関数適用：<code>x.f</code> = <code>f(x)</code></td>
+        </tr>
+        <tr>
+            <td>9</td>
+            <td>*</td>
+            <td>前置</td>
+            <td>右</td>
+            <td>モナドのバインド：<code>Std::Monad::bind</code></td>
+        </tr>
+        <tr>
+            <td>8</td>
+            <td>&lt;&lt;</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>右から左への関数合成：<code>g &lt;&lt; f</code> = <code>|x| g(f(x))</code>（<code>Std::compose</code>）</td>
+        </tr>
+        <tr>
+            <td>8</td>        
+            <td>&gt;&gt;</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>左から右への関数合成：<code>(f &gt;&gt; g)(x)</code> = <code>|x| g(f(x))</code>（<code>Std::compose</code>）</td>
+        </tr>
+        <tr>
+            <td>7</td>        
+            <td>-</td>
+            <td>前置</td>
+            <td>右</td>
+            <td>数値の負値：<code>Std::Neg::neg</code></td>
+        </tr>
+        <tr>
+            <td>7</td>        
+            <td>!</td>
+            <td>前置</td>
+            <td>右</td>
+            <td>論理NOT：<code>Std::Not::not</code></td>
+        </tr>
+        <tr>
+            <td>6</td>        
+            <td>*</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>数値の乗算：<code>Std::Mul::mul</code></td>
+        </tr>
+        <tr>
+            <td>6</td>        
+            <td>/</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>数値の除算：<code>Std::Div::div</code></td>
+        </tr>
+        <tr>
+            <td>6</td>        
+            <td>%</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>除算の余り：<code>Std::Rem::rem</code></td>
+        </tr>
+        <tr>
+            <td>5</td>        
+            <td>+</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>数値の加算：<code>Std::Add::add</code></td>
+        </tr>
+        <tr>
+            <td>5</td>        
+            <td>-</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>数値の減算：<code>Std::Sub::sub</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>==</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>等価比較：<code>Std::Eq::eq</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>!=</td>
+            <td>二項</td>
+            <td>左</td>
+            <td><code>x != y</code> = <code>!(x == y)</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>&lt;=</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>以下比較：<code>Std::LessThanOrEq::less_than_or_eq</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>&gt;=</td>
+            <td>二項</td>
+            <td>左</td>
+            <td><code>x &gt;= y</code> = <code>y &lt;= x</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>&lt;</td>
+            <td>二項</td>
+            <td>左</td>
+            <td>未満比較：<code>Std::LessThan::less_than</code></td>
+        </tr>
+        <tr>
+            <td>4</td>        
+            <td>&gt;</td>
+            <td>二項</td>
+            <td>左</td>
+            <td><code>x &gt; y</code> = <code>y &lt; x</code></td>
+        </tr>
+        <tr>
+            <td>3</td>        
+            <td>&amp;&amp;</td>
+            <td>二項</td>
+            <td>右</td>
+            <td>ショートサーキット論理AND：<code>x && y</code> = <code>if x { y } else { false }</code></td>
+        </tr>
+        <tr>
+            <td>2</td>        
+            <td>||</td>
+            <td>二項</td>
+            <td>右</td>
+            <td>ショートサーキット論理OR：<code>x || y</code> = <code>if x { true } else { y }</code></td>
+        </tr>
+        <tr>
+            <td>1</td>
+            <td>$</td>
+            <td>二項</td>
+            <td>右</td>
+            <td>右結合の関数適用：<code>f $ g $ x</code> = <code>f(g(x))</code></td>
+        </tr>
+        <tr>
+            <td>0</td>
+            <td>;;</td>
+            <td>二項</td>
+            <td>右</td>
+            <td>モナドアクションの連結：<code>m0;; m1</code> = <code>let _ = *m0; m1</code></td>
+        </tr>
+    </tbody>
+</table>
 
 # コンパイラの機能
 
