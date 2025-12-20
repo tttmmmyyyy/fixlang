@@ -4025,7 +4025,8 @@ namespace Debug {
 // Implementing this trait for an aggregate value `xs` enables the use of the index syntax `xs[i]`.
 // 
 // The index syntax `xs[i]` returns a "store", which is a value of type `[f : Functor] Elem c -> f (Elem c) -> f c`.
-// By applying `Indexable::iget`, `Indexable::iset`, `Indexable::imod`, and `Indexable::iact` to the store, various operations can be performed on the specified index.
+// By applying `Indexable::iget`, `Indexable::iset`, `Indexable::imod`, and `Indexable::iact` to the store, 
+// various operations can be performed on the specified index.
 trait c : Indexable {
     // The type of elements.
     type Elem c;
