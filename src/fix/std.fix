@@ -395,7 +395,7 @@ namespace Array {
         if arr.get_size <= 1 { arr };
         let arr = arr._unsafe_force_unique;
         let n = arr.get_size;
-        range(0, n/2).fold(arr, |i, arr| arr._unsafe_swap(i, n - 1 - i))
+        range(0, n/2).fold(arr, |i, arr| arr._unsafe_swap_bounds_uniqueness_unchecked(i, n - 1 - i))
     );
 
     // Quicksort for the specified range in an array.
@@ -417,19 +417,19 @@ namespace Array {
         let pivot = arr.@(pivot_i);
 
         // Move pivot to the last.
-        let arr = arr._unsafe_swap(pivot_i, end - 1);
+        let arr = arr._unsafe_swap_bounds_uniqueness_unchecked(pivot_i, end - 1);
 
         let (arr, pivot_i) = range(start, end).fold((arr, start), |j, (arr, i)|
             if less_than((arr.@(j), pivot)) {
                 // Found j such that `arr.@(j)` < pivot, then move it to the left.
-                (arr._unsafe_swap(i, j), i + 1)
+                (arr._unsafe_swap_bounds_uniqueness_unchecked(i, j), i + 1)
             } else {
                 (arr, i)
             }
         );
 
         // Move pivot to pivot_i.
-        let arr = arr._unsafe_swap(pivot_i, end - 1);
+        let arr = arr._unsafe_swap_bounds_uniqueness_unchecked(pivot_i, end - 1);
 
         let arr = arr._introsort_by_internal(less_than, start, pivot_i, depth - 1_U8);
         let arr = arr._introsort_by_internal(less_than, pivot_i + 1, end, depth - 1_U8);
@@ -483,7 +483,7 @@ namespace Array {
 
         // Extract elements from the heap one by one.
         range_step(n-1, 0, -1).fold(heap, |i, heap|
-            let heap = heap._unsafe_swap(start + 0, start + i);
+            let heap = heap._unsafe_swap_bounds_uniqueness_unchecked(start + 0, start + i);
 
             // Call sift down on the reduced heap.
             heap._heap_down_ranged(less_than, start + 0, start + i, start, end)
@@ -511,7 +511,7 @@ namespace Array {
 
         if largest == i { heap };
 
-        let heap = heap._unsafe_swap(i, largest);
+        let heap = heap._unsafe_swap_bounds_uniqueness_unchecked(i, largest);
         heap._heap_down_ranged(less_than, largest, n, start, end)
     );
 
@@ -523,8 +523,8 @@ namespace Array {
     // - `arr`: The array in which to swap elements.
     // - `i`: The index of the first element to swap.
     // - `j`: The index of the second element to swap.
-    _unsafe_swap : I64 -> I64 -> Array a -> Array a;
-    _unsafe_swap = |i, j, arr| (
+    _unsafe_swap_bounds_uniqueness_unchecked : I64 -> I64 -> Array a -> Array a;
+    _unsafe_swap_bounds_uniqueness_unchecked = |i, j, arr| (
         let arr = arr;
         let (arr, a) = arr._unsafe_get_linear_bounds_unchecked_unretained(i);
         let (arr, b) = arr._unsafe_get_linear_bounds_unchecked_unretained(j);
