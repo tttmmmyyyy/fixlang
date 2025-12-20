@@ -2,6 +2,7 @@ use crate::{
     misc::{function_name, number_to_varname, split_by_max_size},
     run, test_source, test_source_fail, Configuration, SubCommand, COMPILER_TEST_WORKING_PATH,
     I16_NAME, I32_NAME, I64_NAME, I8_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    tests::util::install_fix,
 };
 use rand::Rng;
 use std::{
@@ -8485,17 +8486,6 @@ pub fn test_external_project_binary_heap() {
 #[test]
 pub fn test_external_project_cp_library() {
     test_external_project("https://github.com/tttmmmyyyy/cp-library", "cp-library");
-}
-
-// Run `cargo install --locked --path .`.
-pub fn install_fix() {
-    let _ = Command::new("cargo")
-        .arg("install")
-        .arg("--locked")
-        .arg("--path")
-        .arg(".")
-        .output()
-        .expect("Failed to run cargo install.");
 }
 
 pub fn test_external_project(url: &str, test_name: &str) {
