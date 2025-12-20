@@ -14,7 +14,7 @@ use ast::{
 };
 use either::Either;
 use error::Errors;
-use misc::{check_temporary_source, make_map, save_temporary_source, temporary_source_path, Map};
+use misc::{make_map, save_temporary_source, temporary_source_path, Map};
 use num_bigint::BigInt;
 use pest::error::Error;
 use std::{cmp::min, mem::swap, sync::Arc};
@@ -116,9 +116,8 @@ pub fn parse_and_save_to_temporary_file(
     config: &Configuration,
 ) -> Result<Program, Errors> {
     let hash = format!("{:x}", md5::compute(source));
-    if !check_temporary_source(file_name, &hash) {
-        save_temporary_source(source, file_name, &hash);
-    }
+    // Atomically create the file if it doesn't exist (prevents TOCTOU race condition)
+    save_temporary_source(source, file_name, &hash);
     parse_file_path(temporary_source_path(file_name, &hash), config)
 }
 

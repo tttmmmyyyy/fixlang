@@ -30,11 +30,9 @@ pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
     PathBuf::from(TEMPORARY_SRC_PATH).join(file_name)
 }
 
-pub fn check_temporary_source(file_name: &str, hash: &str) -> bool {
-    temporary_source_path(file_name, hash).exists()
-}
-
-pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) {
+// Atomically save temporary source file if it doesn't already exist.
+// Returns true if the file was created, false if it already existed.
+pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) -> bool {
     let path = temporary_source_path(file_name, hash);
     let parent = path.parent().unwrap();
     fs::create_dir_all(parent).expect(
@@ -44,7 +42,27 @@ pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) {
         )
         .as_str(),
     );
-    fs::write(path, source).expect(&format!("Failed to generate temporary file {}", file_name));
+
+    // Use create_new(true) for atomic check-and-create operation
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+    {
+        Ok(mut file) => {
+            use std::io::Write;
+            file.write_all(source.as_bytes())
+                .expect(&format!("Failed to write temporary file {}", file_name));
+            true
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            // File already exists, which is fine
+            false
+        }
+        Err(e) => {
+            panic!("Failed to create temporary file {}: {}", file_name, e);
+        }
+    }
 }
 
 pub fn collect_results<T, E>(results: impl Iterator<Item = Result<T, E>>) -> Result<Vec<T>, E> {
