@@ -2107,26 +2107,86 @@ However, using `Destructor` properly is not easy and requires attention to vario
 
 ### Managing ownership of Fix's boxed value in a foreign language
 
-The function `Std::FFI::boxed_to_retained_ptr : a -> Ptr` returns a retained pointer to a *boxed* value allocated by Fix.
-Here, "retained" means that the pointer has a shared ownership of the value, and you are responsible for decrementing the reference counter to avoid memory leak.
-You can get back a Fix value from a retained pointer by `Std::FFI::boxed_from_retained_ptr : Ptr -> a`.
+In the previous section, we explained how to manage resources allocated by C functions (such as `fopen`) in Fix.
+This section explains the reverse: how to manage Fix's boxed type values in a foreign language such as C.
 
-If you have a retained pointer of a Fix value in a foreign language, you may need to release it (i.e., decrement the reference counter) when you drop the pointer, or retain it (i.e., increment the reference counter) when you copy the pointer.
-To do this, first get the pointer to the retain / release function for a Fix value by `Std::FFI::get_funptr_release` and `Std::FFI::get_funptr_retain`:
+The function `Std::FFI::boxed_to_retained_ptr : [a : Boxed] a -> IO Ptr` returns a pointer to a Fix boxed type value.
+Also, `Std::FFI::boxed_from_retained_ptr : [a : Boxed] Ptr -> IO a` creates a Fix boxed type value from such a pointer.
+Naturally, when creating a boxed type value from a pointer, you must correctly specify (using type annotations, etc.) the type of the value that the pointer points to. Otherwise, the behavior is undefined.
 
-- `Std::FFI::get_funptr_release : a -> Ptr`
-- `Std::FFI::get_funptr_retain : a -> Ptr`
+By converting a boxed type value to a pointer, you can pass Fix values to a foreign language.
+Then, by exporting a Fix function that applies `boxed_from_retained_ptr` to the passed pointer and uses the resulting value to perform some processing,
+you can enable the foreign language to use Fix values.
 
-Each function returns a function pointer of type `void (*)(void*)`.
-Then you can retain / release a Fix's value of type `a` via the function pointer.
+```
+create_fix_array : IO Ptr;
+create_fix_array = (
+    let arr = [1,2,3,4,5];
+    arr.boxed_to_retained_ptr
+);
+FFI_EXPORT[create_fix_array, create_fix_array]; // void* create_fix_array(void); can be called from C.
 
-NOTE:
-Fix's reference counting is not thread-safe by default. 
-So if you get a pointer to a Fix's boxed value and share it between multiple threads, then retaining / releasing the pointer in the way described above may cause data race.
+get_fix_array_element : Ptr -> I64 -> IO I64;
+get_fix_array_element = |ptr, idx| (
+    let arr : Array I64 = *boxed_from_retained_ptr(ptr);
+    pure $ arr.@(idx)
+);
+FFI_EXPORT[get_fix_array_element, get_fix_array_element]; // int64_t get_fix_array_element(void* ptr, int64_t idx); can be called from C.
+```
 
-To avoid this, first add the `--threaded` compiler flag.
-Moreover, call `Std::mark_threaded : a -> a` on the boxed value before obtaining the pointer.
-The `Std::mark_threaded` function traverses all values reachable from the given value, and changes them into multi-threaded mode so that the reference counting on them will be done in thread-safe manner.
+The lifetime of Fix's boxed type values is managed by a reference counter.
+Normally, the increment and decrement of the reference counter is done automatically by the Fix compiler,
+but when you create a pointer from a boxed type value using `boxed_to_retained_ptr`, you must do **exactly one** of the following:
+- Decrement the reference counter
+- Return the responsibility of decrementing the reference counter to the Fix compiler
+
+To decrement the reference counter, first call `Std::FFI::get_funptr_release : a -> Ptr` from the foreign language side to get a function pointer of type `void (*)(void*)`.
+By calling this function pointer (passing the pointer to the value as an argument), you can decrement the reference counter.
+
+To return the responsibility of decrementing the reference counter to the Fix compiler, pass the pointer to `boxed_from_retained_ptr`.
+
+Therefore, when using a Fix value **at most once** on the foreign language side, implement as follows:
+- Use `boxed_to_retained_ptr` to get a pointer and pass it to the foreign language.
+- When using the value on the foreign function side, pass the pointer to the Fix side and do the work using `boxed_from_retained_ptr`.
+- When not using the value on the foreign function side, call the function obtained with `get_funptr_release` from the foreign language side to decrement the reference counter.
+
+However, you may want to use a Fix value multiple times on the foreign language side.
+For such cases, there is a way to increase "the number of times you should fulfill (or return) the responsibility".
+To do this, call `Std::FFI::get_funptr_retain : a -> Ptr` from the foreign language side to get a function pointer of type `void (*)(void*)`, and call that function pointer.
+
+Therefore, when using a Fix value **multiple times** on the foreign language side, implement as follows:
+- Use `boxed_to_retained_ptr` to get a pointer and pass it to the foreign language.
+- When using the value on the foreign function side, call the function obtained with `get_funptr_retain`, then pass the pointer to the Fix side and do the work using `boxed_from_retained_ptr`.
+- When the value is no longer needed on the foreign function side, call the function obtained with `get_funptr_release` to decrement the reference counter.
+
+For example, suppose you use a Fix value N times on the foreign language side.
+"The number of times you should fulfill (or return) the responsibility" is initially 1, but since `get_funptr_retain` is called N times, it becomes N+1 in total.
+Since `boxed_from_retained_ptr` is called N times, the number of times the responsibility is returned to the Fix side is N times.
+The remaining 1 responsibility is fulfilled by calling `get_funptr_release` on the foreign language side.
+
+If the "foreign language" is C++, you can automate the above management by implementing a class that wraps Fix values as follows:
+- Member variable
+    - `void* ptr;`. Pointer to a Fix boxed type value.
+- Constructor
+    - Call a Fix function. In that Fix function, `boxed_to_retained_ptr` is performed to get a pointer, and that pointer is stored in the member variable `ptr`.
+- Copy constructor
+    - Call the function pointer obtained with `Std::FFI::get_funptr_retain` (type `void (*)(void*)`) with `ptr`.
+- Destructor
+    - Call the function pointer obtained with `Std::FFI::get_funptr_release` (type `void (*)(void*)`) with `ptr`.
+- Member functions
+    - Call a Fix function with `ptr`. On the Fix side, `boxed_from_retained_ptr` is performed to convert the pointer to a Fix value, and that value is used.
+
+There are also some things to note in the implementation on the Fix side.
+- The pointer obtained with `boxed_to_retained_ptr` must be passed to the foreign language side exactly once.
+    - To achieve this, processing that exchanges pointers with foreign languages should use `IO`.
+        - When calling a Fix function from the foreign language to request a pointer, that Fix function should be an `IO` action (like `create_fix_array` above). By executing the `IO` action returned by `boxed_to_retained_ptr` in it, it is guaranteed that the created pointer is passed to the foreign language only once.
+        - When calling an external function from the Fix side to pass a pointer, you should use `FFI_CALL_IO` instead of `FFI_CALL`. Also, you should execute the `IO` action returned by `boxed_to_retained_ptr` and `FFI_CALL_IO` by connecting them with `bind`. If you want to pass a pointer to the foreign language in a pure context, execute that connected `IO` action with `unsafe_perform`.
+    - If you don't follow the above, the optimization by the Fix compiler may cause the number of calls to `boxed_to_retained_ptr` and the number of times the pointer is passed to the foreign language to not match.
+- The pointer received from the foreign language must be passed to `boxed_from_retained_ptr` exactly once.
+    - To achieve this, the Fix function that is called from the foreign language and receives a pointer should be an `IO` action (like `get_fix_array_element` above). By executing the `IO` action returned by `boxed_from_retained_ptr` in it, it is guaranteed that the received pointer is converted to a Fix value only once.
+    - If you don't follow the above, the optimization by the Fix compiler may cause the number of times the pointer is received from the foreign language and the number of calls to `boxed_from_retained_ptr` to not match.
+- Fix's reference counting is not thread-safe by default. Therefore, if you distribute a pointer received from Fix to multiple threads on the foreign language side, data races may occur regarding the increment and decrement of the reference counter.
+    - To avoid this, call `Std::mark_threaded : a -> a` on the boxed type value before calling `boxed_to_retained_ptr` to set the reference counting to thread-safe mode.
 
 ### Accessing fields of Fix's struct value from C
 
