@@ -6722,6 +6722,12 @@ pub fn test_monadic_bind_and_make_struct_ordering() {
             assert_eq(|_|"", 
                             pairs.to_iter.map(to_string).join(", "), 
                             "(1, a), (2, a), (1, b), (2, b)");;
+
+            let pairs = do { pure $ (*[1, 2], *["a", "b"]) }; // Fix `0` first, and move `1`
+            assert_eq(|_|"", 
+                            pairs.to_iter.map(to_string).join(", "), 
+                            "(1, a), (1, b), (2, a), (2, b)");;
+
             pure()
         );
     "##;
