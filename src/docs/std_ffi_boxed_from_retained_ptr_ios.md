@@ -1,0 +1,1 @@
+Internal implementation of `Std::FFI::boxed_from_retained_ptr`.

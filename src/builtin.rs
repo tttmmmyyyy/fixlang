@@ -4192,44 +4192,49 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
-    var_name: FullName,
+pub struct InlineLLVMBoxedToRetainedPtr {
+    val_name: FullName,
 }
 
-impl InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
+impl InlineLLVMBoxedToRetainedPtr {
     pub fn name(&self) -> String {
-        format!("{}.get_retained_ptr", self.var_name.to_string())
+        format!("boxed_to_retained_ptr({})", self.val_name.to_string(),)
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
+        vec![&mut self.val_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut GenerationContext<'c, 'm>,
-        _ret_ty: &Arc<TypeNode>,
+        ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argument
-        let obj = gc.get_scoped_obj(&self.var_name);
+        let obj = gc.get_scoped_obj(&self.val_name);
         assert!(obj.is_box(gc.type_env()));
 
-        let ptr = obj.value;
+        // Prepare returned object.
         let ret = create_obj(
-            make_ptr_ty(),
+            ret_ty.clone(),
             &vec![],
             None,
             gc,
-            Some("ret_val@get_ptr_of_boxed_value"),
+            Some("ret@boxed_to_retained_ptr_ios"),
         );
-        ret.insert_field(gc, 0, ptr)
+
+        // Insert fields into returned object.
+        let ret = ret.insert_field(gc, 0, obj.value);
+
+        ret
+
         // Since the object should be retained by calling this function, we do not release `obj`.
     }
 }
 
-pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn boxed_to_retained_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
-    const VAR_NAME: &str = "x";
+    const VAL_NAME: &str = "val";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let ret_type = make_ptr_ty();
     let scm = Scheme::generalize(
@@ -4238,34 +4243,36 @@ pub fn get_retained_ptr_of_boxed_value_function() -> (Arc<ExprNode>, Arc<Scheme>
         vec![],
         type_fun(obj_type.clone(), ret_type.clone()),
     );
-    let expr = expr_abs(
-        vec![var_local(VAR_NAME)],
+    let expr = expr_abs_many(
+        vec![var_local(VAL_NAME)],
         expr_llvm(
-            LLVMGenerator::GetRetainedPtrOfBoxedValueFunctionBody(
-                InlineLLVMGetRetainedPtrOfBoxedValueFunctionBody {
-                    var_name: FullName::local(VAR_NAME),
-                },
-            ),
+            LLVMGenerator::BoxedToRetainedPtr(InlineLLVMBoxedToRetainedPtr {
+                val_name: FullName::local(VAL_NAME),
+            }),
             ret_type,
             None,
         ),
-        None,
     );
     (expr, scm)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
-    var_name: FullName,
+pub struct InlineLLVMBoxedFromRetainedPtrIOS {
+    ptr_name: FullName,
+    ios_name: FullName,
 }
 
-impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
+impl InlineLLVMBoxedFromRetainedPtrIOS {
     pub fn name(&self) -> String {
-        format!("boxed_from_retained_ptr({})", self.var_name.to_string())
+        format!(
+            "boxed_from_retained_ptr_ios({}, {})",
+            self.ptr_name.to_string(),
+            self.ios_name.to_string()
+        )
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
+        vec![&mut self.ptr_name, &mut self.ios_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4273,37 +4280,55 @@ impl InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
         gc: &mut GenerationContext<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        assert!(ret_ty.is_box(gc.type_env()));
         // Get argument.
-        let ptr = gc.get_scoped_obj(&self.var_name);
+        let ptr = gc.get_scoped_obj(&self.ptr_name);
+        let ios = gc.get_scoped_obj(&self.ios_name);
         let ptr = ptr.extract_field(gc, 0);
-        Object::new(ptr, ret_ty.clone(), gc)
+
+        // Prepare returned object.
+        let ret = create_obj(
+            ret_ty.clone(),
+            &vec![],
+            None,
+            gc,
+            Some("ret@boxed_from_retained_ptr_ios"),
+        );
+
+        // Insert fields into returned object.
+        let ret = ret.insert_field(gc, 0, ios.value);
+        let ret = ret.insert_field(gc, 1, ptr);
+
+        ret
     }
 }
 
-pub fn get_boxed_value_from_retained_ptr_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
-    const VAR_NAME: &str = "x";
+    const PTR_NAME: &str = "ptr";
+    const IOS_NAME: &str = "ios";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
     let ptr_type = make_ptr_ty();
+    let ios_type = make_iostate_ty();
+    let ret_type = make_tuple_ty(vec![ios_type.clone(), obj_type.clone()]);
     let scm = Scheme::generalize(
         &[],
         vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
-        type_fun(ptr_type.clone(), obj_type.clone()),
+        type_fun(
+            ptr_type.clone(),
+            type_fun(ios_type.clone(), ret_type.clone()),
+        ),
     );
-    let expr = expr_abs(
-        vec![var_local(VAR_NAME)],
+    let expr = expr_abs_many(
+        vec![var_local(PTR_NAME), var_local(IOS_NAME)],
         expr_llvm(
-            LLVMGenerator::GetBoxedValueFromRetainedPtrFunctionBody(
-                InlineLLVMGetBoxedValueFromRetainedPtrFunctionBody {
-                    var_name: FullName::local(VAR_NAME),
-                },
-            ),
-            obj_type,
+            LLVMGenerator::BoxedFromRetainedPtrIOS(InlineLLVMBoxedFromRetainedPtrIOS {
+                ptr_name: FullName::local(PTR_NAME),
+                ios_name: FullName::local(IOS_NAME),
+            }),
+            ret_type,
             None,
         ),
-        None,
     );
     (expr, scm)
 }

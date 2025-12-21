@@ -1154,11 +1154,11 @@ See also: `borrow_boxed`, `mutate_boxed`, `mutate_boxed_io`.
 
 #### boxed_from_retained_ptr
 
-Type: `[a : Std::Boxed] Std::Ptr -> a`
+Type: `[a : Std::Boxed] Std::Ptr -> Std::IO a`
 
 Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr`.
 
-NOTE: 
+NOTE:
 It is the user's responsibility to ensure that the argument is actually a pointer to the type of the return value, and undefined behavior will occur if it is not.
 
 ##### Parameters
@@ -1172,7 +1172,7 @@ Type: `[a : Std::Boxed] a -> Std::Ptr`
 Gets a retained pointer to a boxed value.
 This function is used to share ownership of Fix's boxed values with foreign languages.
 
-To get back the boxed value from the retained pointer, use `from_retained_ptr`.
+To get back the boxed value from the retained pointer, use `boxed_from_retained_ptr`.
 To release / retain the value in a foreign language, call the function pointer obtained by `get_funptr_release` or `get_funptr_retain` on the pointer.
 
 Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
@@ -5515,7 +5515,8 @@ The trait for indexable types.
 Implementing this trait for an aggregate value `xs` enables the use of the index syntax `xs[i]`.
 
 The index syntax `xs[i]` returns a "store", which is a value of type `[f : Functor] Elem c -> f (Elem c) -> f c`.
-By applying `Indexable::iget`, `Indexable::iset`, `Indexable::imod`, and `Indexable::iact` to the store, various operations can be performed on the specified index.
+By applying `Indexable::iget`, `Indexable::iset`, `Indexable::imod`, and `Indexable::iact` to the store,
+various operations can be performed on the specified index.
 
 ##### type `Index`
 

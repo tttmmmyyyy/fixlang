@@ -553,15 +553,15 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // FFI
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "boxed_to_retained_ptr"),
-        get_retained_ptr_of_boxed_value_function(),
+        boxed_to_retained_ptr(),
         None,
         Some(include_str!("./docs/std_ffi_boxed_to_retained_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "boxed_from_retained_ptr"),
-        get_boxed_value_from_retained_ptr_function(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "_boxed_from_retained_ptr_ios"),
+        boxed_from_retained_ptr_ios(),
         None,
-        Some(include_str!("./docs/std_ffi_boxed_from_retained_ptr.md").to_string()),
+        Some(include_str!("./docs/std_ffi_boxed_from_retained_ptr_ios.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "get_funptr_release"),

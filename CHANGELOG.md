@@ -18,6 +18,7 @@
 
 ### Changed
 
+- Change type of `Std::FFI::boxed_from_retained_ptr` from `Ptr -> a` to `Ptr -> IO a`.
 - When an out-of-range array access occurs, the error message now includes the index that was accessed and the size of the array.
 - Type variables used in trait member definitions can no longer be used in implementations of those trait members. For example, for `trait [f:*->*] f : Functor { map : (a -> b) -> f a -> f b; }`, you cannot use `a`, `b` in `impl MyType : Functor { map = |f : a -> b, x : MyType a| ...}`. This change ensures that renaming type variables in trait definitions does not affect implementations of trait members. Instead, you can introduce type variables in type signatures of trait members. For example, you can write `impl MyType : Functor { map : (a -> b) -> MyType a -> MyType b = |f : a -> b, x : MyType a| ...}`. 
 - When `undefined` is reached, a newline is now added after the user-specified message.
