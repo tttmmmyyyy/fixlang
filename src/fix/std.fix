@@ -896,6 +896,21 @@ namespace FFI {
     borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b;
     borrow_boxed = |act, val| val.with_retained(|val| act(val._get_boxed_ptr));
 
+    // Gets a retained pointer to a boxed value.
+    // This function is used to share ownership of Fix's boxed values with foreign languages.
+    // 
+    // To get back the boxed value from the retained pointer, use `boxed_from_retained_ptr`.
+    // To release / retain the value in a foreign language, call the function pointer obtained by `get_funptr_release` or `get_funptr_retain` on the pointer.
+    // 
+    // Note that the returned pointer points to the control block allocated by Fix, and does not necessary points to the data of the boxed value.
+    // If you want to get a pointer to the data of the boxed value, use `borrow_boxed`.
+    // 
+    // # Parameters
+    // 
+    // * `value` - The boxed value to get the pointer to.
+    boxed_to_retained_ptr : [a : Boxed] a -> IO Ptr;
+    boxed_to_retained_ptr = |val| IO::from_runner $ _boxed_to_retained_ptr_ios(val);
+
     // Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr`.
     // 
     // NOTE: 

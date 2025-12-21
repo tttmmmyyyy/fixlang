@@ -63,7 +63,7 @@ pub enum LLVMGenerator {
     FloatDivBody(InlineLLVMFloatDivBody),
     IntRemBody(InlineLLVMIntRemBody),
     MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody),
-    BoxedToRetainedPtr(InlineLLVMBoxedToRetainedPtr),
+    BoxedToRetainedPtrIOS(InlineLLVMBoxedToRetainedPtrIOS),
     BoxedFromRetainedPtrIOS(InlineLLVMBoxedFromRetainedPtrIOS),
     GetReleaseFunctionOfBoxedValueFunctionBody(
         InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
@@ -139,7 +139,7 @@ impl LLVMGenerator {
             LLVMGenerator::IntDivBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::FloatDivBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::IntRemBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::BoxedToRetainedPtr(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::BoxedToRetainedPtrIOS(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::MarkThreadedFunctionBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => {
                 Some(x.generate(gc, ty))
@@ -240,7 +240,7 @@ impl LLVMGenerator {
             LLVMGenerator::FloatDivBody(x) => x.free_vars(),
             LLVMGenerator::IntRemBody(x) => x.free_vars(),
             LLVMGenerator::MarkThreadedFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::BoxedToRetainedPtr(x) => x.free_vars(),
+            LLVMGenerator::BoxedToRetainedPtrIOS(x) => x.free_vars(),
             LLVMGenerator::BoxedFromRetainedPtrIOS(x) => x.free_vars(),
             LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.free_vars(),
             LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.free_vars(),
@@ -277,7 +277,7 @@ impl LLVMGenerator {
             LLVMGenerator::FloatDivBody(x) => x.name(),
             LLVMGenerator::IntRemBody(x) => x.name(),
             LLVMGenerator::MarkThreadedFunctionBody(x) => x.name(),
-            LLVMGenerator::BoxedToRetainedPtr(x) => x.name(),
+            LLVMGenerator::BoxedToRetainedPtrIOS(x) => x.name(),
             LLVMGenerator::BoxedFromRetainedPtrIOS(x) => x.name(),
             LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.name(),
             LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.name(),

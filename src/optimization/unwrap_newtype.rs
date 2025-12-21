@@ -43,6 +43,10 @@ fn run_on_exported_statements(prg: &mut Program, env: &Map<TyCon, TyConInfo>) {
             export.value_expr = Some(expr);
         }
         if let Some(ft) = &mut export.function_type {
+            for dom in &mut ft.doms {
+                *dom = unwrap_newtype_on_type(dom, env);
+            }
+            ft.codom = unwrap_newtype_on_type(&ft.codom, env);
             if matches!(ft.io_type, IOType::IO) {
                 ft.io_type = IOType::IOState;
             }

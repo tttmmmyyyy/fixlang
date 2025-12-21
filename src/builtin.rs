@@ -4192,17 +4192,22 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBoxedToRetainedPtr {
+pub struct InlineLLVMBoxedToRetainedPtrIOS {
     val_name: FullName,
+    ios_name: FullName,
 }
 
-impl InlineLLVMBoxedToRetainedPtr {
+impl InlineLLVMBoxedToRetainedPtrIOS {
     pub fn name(&self) -> String {
-        format!("boxed_to_retained_ptr({})", self.val_name.to_string(),)
+        format!(
+            "boxed_to_retained_ptr({}, {})",
+            self.val_name.to_string(),
+            self.ios_name.to_string()
+        )
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.val_name]
+        vec![&mut self.val_name, &mut self.ios_name]
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4213,6 +4218,17 @@ impl InlineLLVMBoxedToRetainedPtr {
         // Get argument
         let obj = gc.get_scoped_obj(&self.val_name);
         assert!(obj.is_box(gc.type_env()));
+        let ios = gc.get_scoped_obj(&self.ios_name);
+
+        // Create the retained pointer.
+        let ptr = create_obj(
+            make_ptr_ty(),
+            &vec![],
+            None,
+            gc,
+            Some("ptr@boxed_to_retained_ptr_ios"),
+        );
+        let ptr = ptr.insert_field(gc, 0, obj.value);
 
         // Prepare returned object.
         let ret = create_obj(
@@ -4224,7 +4240,8 @@ impl InlineLLVMBoxedToRetainedPtr {
         );
 
         // Insert fields into returned object.
-        let ret = ret.insert_field(gc, 0, obj.value);
+        let ret = ret.insert_field(gc, 0, ios.value);
+        let ret = ret.insert_field(gc, 1, ptr.value);
 
         ret
 
@@ -4232,22 +4249,28 @@ impl InlineLLVMBoxedToRetainedPtr {
     }
 }
 
-pub fn boxed_to_retained_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAL_NAME: &str = "val";
+    const IOS_NAME: &str = "ios";
     let obj_type = type_tyvar(TYPE_NAME, &kind_star());
-    let ret_type = make_ptr_ty();
+    let ios_type = make_iostate_ty();
+    let ret_type = make_tuple_ty(vec![ios_type.clone(), make_ptr_ty()]);
     let scm = Scheme::generalize(
         &[],
         vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
-        type_fun(obj_type.clone(), ret_type.clone()),
+        type_fun(
+            obj_type.clone(),
+            type_fun(ios_type.clone(), ret_type.clone()),
+        ),
     );
     let expr = expr_abs_many(
-        vec![var_local(VAL_NAME)],
+        vec![var_local(VAL_NAME), var_local(IOS_NAME)],
         expr_llvm(
-            LLVMGenerator::BoxedToRetainedPtr(InlineLLVMBoxedToRetainedPtr {
+            LLVMGenerator::BoxedToRetainedPtrIOS(InlineLLVMBoxedToRetainedPtrIOS {
                 val_name: FullName::local(VAL_NAME),
+                ios_name: FullName::local(IOS_NAME),
             }),
             ret_type,
             None,

@@ -43,10 +43,35 @@ pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym, &mut env);
     }
+    run_on_exported_statements(prg, &mut env);
+    run_on_entry_io_value(prg, &mut env);
+
     // Run on type environment.
     run_on_type_env(&mut env);
 
     prg.type_env.tycons = Arc::new(env);
+}
+
+fn run_on_exported_statements(prg: &mut Program, env: &mut Map<TyCon, TyConInfo>) {
+    for export in &mut prg.export_statements {
+        if let Some(expr) = &export.value_expr {
+            let expr = run_on_inferred_type(expr, env);
+            export.value_expr = Some(expr);
+        }
+        if let Some(ft) = &mut export.function_type {
+            for dom in &mut ft.doms {
+                *dom = run_on_type(dom, env);
+            }
+            ft.codom = run_on_type(&ft.codom, env);
+        }
+    }
+}
+
+fn run_on_entry_io_value(prg: &mut Program, env: &mut Map<TyCon, TyConInfo>) {
+    if let Some(entry_io_value) = &mut prg.entry_io_value {
+        let expr = run_on_inferred_type(entry_io_value, env);
+        prg.entry_io_value = Some(expr);
+    }
 }
 
 fn run_on_type_env(env: &mut Map<TyCon, TyConInfo>) {

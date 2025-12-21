@@ -552,10 +552,10 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     // FFI
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "boxed_to_retained_ptr"),
-        boxed_to_retained_ptr(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "_boxed_to_retained_ptr_ios"),
+        boxed_to_retained_ptr_ios(),
         None,
-        Some(include_str!("./docs/std_ffi_boxed_to_retained_ptr.md").to_string()),
+        Some(include_str!("./docs/std_ffi_boxed_to_retained_ptr_ios.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_boxed_from_retained_ptr_ios"),

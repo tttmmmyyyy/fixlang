@@ -1167,7 +1167,7 @@ It is the user's responsibility to ensure that the argument is actually a pointe
 
 #### boxed_to_retained_ptr
 
-Type: `[a : Std::Boxed] a -> Std::Ptr`
+Type: `[a : Std::Boxed] a -> Std::IO Std::Ptr`
 
 Gets a retained pointer to a boxed value.
 This function is used to share ownership of Fix's boxed values with foreign languages.
