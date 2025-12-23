@@ -10151,3 +10151,44 @@ main = (
     "#;
     test_source(source, Configuration::compiler_develop_mode());
 }
+
+#[test]
+pub fn test_regression_issue_71() {
+    let source = r#"
+module Main;
+
+trait a: ToTypeName {
+    to_typename: a -> String;
+}
+
+impl I64: ToTypeName { to_typename: I64 -> String = |_| "I64"; }
+impl I32: ToTypeName { to_typename: I32 -> String = |_| "I32"; }
+impl I16: ToTypeName { to_typename: I16 -> String = |_| "I16"; }
+
+type TNil = unbox struct {};
+impl TNil: Zero { zero = TNil {}; }
+impl TNil: ToTypeName { to_typename: TNil -> String = |_| "TNil"; }
+
+type TCons a b = unbox struct { a:a, b:b };
+impl [a: Zero, b: Zero] TCons a b: Zero { zero = TCons { a:zero, b: zero }; }
+impl [a: ToTypeName, b: ToTypeName] TCons a b: ToTypeName { 
+    to_typename: TCons a b -> String = |c| c.@a.to_typename + ":" + c.@b.to_typename; 
+}
+
+type TypeList0 = TNil;
+type TypeList1 a = TCons a TypeList0;
+type TypeList2 a b = TCons a (TypeList1 b);
+type TypeList3 a b c = TCons a (TypeList2 b c);
+
+impl [a: ToTypeName, b: ToTypeName, c: ToTypeName,
+      a: Zero, b: Zero, c: Zero] Tuple3 a b c: ToTypeName { 
+    to_typename: Tuple3 a b c -> String = |_| (zero: TypeList3 a b c).to_typename;
+}
+
+main: IO ();
+main = (
+    assert_eq(|_|"", (1_I64, 1_I32, 1_I16).to_typename, "I64:I32:I16:TNil")
+);
+    "#;
+    test_source(source, Configuration::compiler_develop_mode());
+}
