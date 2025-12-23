@@ -138,8 +138,25 @@ impl TypeDefn {
         ret
     }
 
-    // Check if all of type variables in field types appear in lhs of type definition.
-    pub fn check_tyvars(&self) -> Result<(), Errors> {
+    pub fn validate_tyvars(&self) -> Result<(), Errors> {
+        // Check if type variables are not duplicated.
+        let mut names = Set::<String>::default();
+        for tv in &self.tyvars {
+            if names.contains(&tv.name) {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "Type variable `{}` is duplicated in the definition of type `{}`.",
+                        tv.name,
+                        self.name.to_string()
+                    ),
+                    &[&self.source.as_ref().map(|s| s.to_head_character())],
+                ));
+            } else {
+                names.insert(tv.name.clone());
+            }
+        }
+
+        // Check if all of type variables in field types appear in the left hand side of type definition.
         let tyvars = Set::<String>::from_iter(self.tyvars.iter().map(|tv| tv.name.clone()));
         for v in self.free_variables_in_definition() {
             if !tyvars.contains(&v.name) {

@@ -1794,7 +1794,7 @@ impl Program {
     pub fn validate_type_defns(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for type_defn in &self.type_defns {
-            errors.eat_err(type_defn.check_tyvars());
+            errors.eat_err(type_defn.validate_tyvars());
             if errors.has_error() {
                 continue;
             }

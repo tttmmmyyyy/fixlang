@@ -10192,3 +10192,41 @@ main = (
     "#;
     test_source(source, Configuration::compiler_develop_mode());
 }
+
+#[test]
+pub fn test_duplicated_type_var_in_type_defn() {
+    let source = r#"
+module Main;
+
+type A a a = struct { x : a, y : a };
+
+main: IO ();
+main = (
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Type variable `a` is duplicated in the definition of type `Main::A`.",
+    );
+}
+
+#[test]
+pub fn test_duplicated_type_var_in_type_alias_defn() {
+    let source = r#"
+module Main;
+
+type Func a a = a -> a;
+
+main: IO ();
+main = (
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::compiler_develop_mode(),
+        "Type variable `a` is duplicated in the definition of type `Main::Func`.",
+    );
+}
