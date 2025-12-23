@@ -94,10 +94,6 @@ where
         name: &FullName,
         import_stmts: &[ImportStatement],
     ) -> Vec<(NameSpace, T)> {
-        if name.to_string() == "Std::Indexable::act_at_index" {
-            write_log!("Getting candidates for {:?}", name);
-        }
-
         if name.is_local() && self.has_value(&name.name) {
             vec![(
                 NameSpace::local(),

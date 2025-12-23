@@ -27,7 +27,6 @@ use crate::misc::Set;
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::sourcefile::{SourcePos, Span};
 use crate::typecheck::{Substitution, TypeCheckContext};
-use crate::write_log;
 use core::panic;
 use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
@@ -812,13 +811,7 @@ impl TypeNode {
         env: &TypeEnv,
     ) -> Result<Arc<TypeNode>, Errors> {
         let self_src = self.get_source().clone();
-        // write_log!(
-        //     "Resolving type aliases in type `{}`",
-        //     self.to_string_normalize()
-        // );
-        write_log!("Resolving type aliases in type `{}`", self.to_string());
         let ty = self.resolve_type_aliases_internal(env, vec![], &self_src)?;
-        write_log!("Resolved type aliases: `{}`", ty.to_string());
         Ok(ty)
     }
 
