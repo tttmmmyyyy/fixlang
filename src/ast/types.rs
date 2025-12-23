@@ -27,6 +27,7 @@ use crate::misc::Set;
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::sourcefile::{SourcePos, Span};
 use crate::typecheck::{Substitution, TypeCheckContext};
+use crate::write_log;
 use core::panic;
 use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
@@ -726,7 +727,8 @@ impl TypeNode {
         assert_eq!(args.len(), ti.tyvars.len()); // Assumes fully applied
         let mut s = Substitution::default();
         for (i, tv) in ti.tyvars.iter().enumerate() {
-            s.add_substitution(&Substitution::single(&tv.name, args[i].clone()));
+            let merge_ok = s.merge(&Substitution::single(&tv.name, args[i].clone()));
+            assert!(merge_ok);
         }
         ti.fields.iter().map(|f| s.substitute_type(&f.ty)).collect()
     }
@@ -810,7 +812,14 @@ impl TypeNode {
         env: &TypeEnv,
     ) -> Result<Arc<TypeNode>, Errors> {
         let self_src = self.get_source().clone();
-        self.resolve_type_aliases_internal(env, vec![], &self_src)
+        // write_log!(
+        //     "Resolving type aliases in type `{}`",
+        //     self.to_string_normalize()
+        // );
+        write_log!("Resolving type aliases in type `{}`", self.to_string());
+        let ty = self.resolve_type_aliases_internal(env, vec![], &self_src)?;
+        write_log!("Resolved type aliases: `{}`", ty.to_string());
+        Ok(ty)
     }
 
     // Remove type aliases in a type.
@@ -857,7 +866,8 @@ impl TypeNode {
                     let param = &ta.tyvars[i].name;
                     let arg = app_seq[i + 1].clone();
                     src = Span::unite_opt(&src, arg.get_source());
-                    s.add_substitution(&Substitution::single(&param, arg));
+                    let merge_ok = s.merge(&Substitution::single(&param, arg));
+                    assert!(merge_ok);
                 }
                 let resolved = s.substitute_type(&ta.value);
 
@@ -1306,7 +1316,7 @@ impl TypeNode {
             }
             appeared.insert(fv.name.clone());
             let new_name = number_to_varname(next_tyvar_no);
-            s.merge_substitution(&Substitution::single(
+            s.merge(&Substitution::single(
                 &fv.name,
                 type_tyvar(&new_name, &fv.kind),
             ));
@@ -1904,7 +1914,7 @@ impl Scheme {
         for tyvar in &self.gen_vars {
             tyvar_num += 1;
             let new_name = number_to_varname(tyvar_num as usize);
-            s.merge_substitution(&Substitution::single(
+            s.merge(&Substitution::single(
                 &tyvar.name,
                 type_tyvar(&new_name, &tyvar.kind.clone()),
             ));

@@ -531,8 +531,7 @@ impl TraitImpl {
                         && fv_method_quality.iter().all(|x| x.name != new_name)
                     {
                         let new_fv = type_tyvar(&new_name, &fv.kind);
-                        let merge_succ =
-                            s.merge_substitution(&Substitution::single(&fv.name, new_fv));
+                        let merge_succ = s.merge(&Substitution::single(&fv.name, new_fv));
                         assert!(merge_succ);
                         break;
                     }

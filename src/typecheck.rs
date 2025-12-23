@@ -151,13 +151,13 @@ impl Substitution {
         Self { data }
     }
 
-    // Add (=compose) substitution.
-    pub fn add_substitution(&mut self, other: &Self) {
+    // Compose substitution.
+    pub fn compose(&mut self, following: &Self) {
         for (_var, ty) in self.data.iter_mut() {
-            let new_ty = other.substitute_type(&ty);
+            let new_ty = following.substitute_type(&ty);
             *ty = new_ty;
         }
-        for (var, ty) in &other.data {
+        for (var, ty) in &following.data {
             assert!(!self.data.contains_key(var));
             self.data.insert(var.to_string(), ty.clone());
         }
@@ -165,7 +165,7 @@ impl Substitution {
 
     // Merge substitution.
     // Returns true when merge succeeds.
-    pub fn merge_substitution(&mut self, other: &Self) -> bool {
+    pub fn merge(&mut self, other: &Self) -> bool {
         for (var, ty) in &other.data {
             if self.data.contains_key(var) {
                 if self.data[var] != *ty {
@@ -308,7 +308,7 @@ impl Substitution {
                     let mut ret = Self::default();
                     match Self::matching(fun1, fun2, fixed_tyvars, kind_env)? {
                         Some(s) => {
-                            if !ret.merge_substitution(&s) {
+                            if !ret.merge(&s) {
                                 return Ok(None);
                             }
                         }
@@ -316,7 +316,7 @@ impl Substitution {
                     }
                     match Self::matching(arg1, arg2, fixed_tyvars, kind_env)? {
                         Some(s) => {
-                            if !ret.merge_substitution(&s) {
+                            if !ret.merge(&s) {
                                 return Ok(None);
                             }
                         }
@@ -335,7 +335,7 @@ impl Substitution {
                     for i in 0..args1.len() {
                         match Self::matching(&args1[i], &args2[i], fixed_tyvars, kind_env)? {
                             Some(s) => {
-                                if !ret.merge_substitution(&s) {
+                                if !ret.merge(&s) {
                                     return Ok(None);
                                 }
                             }
@@ -518,7 +518,8 @@ impl TypeCheckContext {
         let mut sub = Substitution::default();
         for tv in ty.free_vars_vec() {
             let new_tv = self.new_tyvar_by(&tv);
-            sub.add_substitution(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+            let merge_ok = sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+            assert!(merge_ok);
         }
         sub.substitute_type(ty)
     }
@@ -540,7 +541,9 @@ impl TypeCheckContext {
                 let mut sub = Substitution::default();
                 for tv in &scheme.gen_vars {
                     let new_tv = self.new_tyvar_by(tv);
-                    sub.add_substitution(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+                    let merge_ok =
+                        sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+                    assert!(merge_ok);
                 }
                 // Apply substitution to type, predicates and equalities.
                 let ty = sub.substitute_type(&scheme.ty);
@@ -1271,7 +1274,7 @@ impl TypeCheckContext {
     }
 
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnifOrOtherErr> {
-        self.substitution.add_substitution(subst);
+        self.substitution.compose(subst);
         let eqs = std::mem::replace(&mut self.equalities, vec![]);
         for eq in eqs {
             self.add_equality(eq)?;
@@ -1352,7 +1355,8 @@ impl TypeCheckContext {
                     let mut subst = Substitution::default();
                     for tv in &assumed_eq.gen_vars {
                         let new_tv = type_from_tyvar(self.new_tyvar_by(tv));
-                        subst.add_substitution(&Substitution::single(&tv.name, new_tv));
+                        let merge_ok = subst.merge(&Substitution::single(&tv.name, new_tv));
+                        assert!(merge_ok);
                     }
                     let mut equality = assumed_eq.equality.clone();
                     subst.substitute_equality(&mut equality);
@@ -1547,7 +1551,8 @@ impl TypeCheckContext {
             let mut subst = Substitution::default();
             for tv in &qual_pred_scm.gen_vars {
                 let new_tv = type_from_tyvar(self.new_tyvar_by(tv));
-                subst.add_substitution(&Substitution::single(&tv.name, new_tv));
+                let merge_ok = subst.merge(&Substitution::single(&tv.name, new_tv));
+                assert!(merge_ok);
             }
             let mut qual_pred = qual_pred_scm.qual_pred.clone();
             subst.substitute_qualpred(&mut qual_pred);
