@@ -517,3 +517,30 @@ main = (
     "##;
     test_source(&source, Configuration::compiler_develop_mode());
 }
+
+#[test]
+pub fn test_import_required_using_type_alias() {
+    // Using type alias does not require importing the underlying traits.
+    let source = r##"
+module Main;
+
+import Std::{Monad::pure, IO, Path};
+
+a : Path;
+a = "hoge.fix";
+
+trait a : ToPath {
+    to_path : a -> Path;
+}
+
+impl Path : ToPath {
+    to_path : Path -> Path = |p| p;
+}
+
+main: IO ();
+main = (
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
