@@ -1,0 +1,7 @@
+module Main;
+
+main : IO ();
+main = (
+    eval FFI_CALL_IOS[CInt rand(), IOState::_unsafe_create];
+    pure()
+);

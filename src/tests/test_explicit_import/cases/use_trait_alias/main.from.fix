@@ -1,0 +1,30 @@
+module Main;
+
+// Use in type signature
+my_add : [a : Additive] a -> a -> a;
+my_add = |_, _| undefined("");
+
+// Use in trait alias definition
+trait MyAdditive = Additive;
+
+// Use in trait definition
+trait a : MyTrait {
+    add : [b : Additive] a -> b -> b -> b;
+}
+
+// Use in trait implementation type signature
+impl I64 : MyTrait {
+    add : [b : Additive] I64 -> b -> b -> b;
+    add = |_, x, y| x + y;
+}
+
+// Use in trait implementation precondition
+type MyType a = struct { data : a };
+impl [a : Additive] MyType a : MyTrait {
+    add = |_, x, y| x + y;
+}
+
+main : IO ();
+main = (
+    pure()
+);

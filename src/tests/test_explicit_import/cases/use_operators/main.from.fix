@@ -1,0 +1,25 @@
+module Main;
+
+main : IO ();
+main = (
+    let _ = *pure();
+    let f = |x| x + 1; eval f >> f; eval f << f;
+    let x = 42; eval -x;
+    eval !true;
+    eval 1 * 2;
+    eval 2 / 1;
+    eval 2 % 1;
+    eval 2 + 1;
+    eval 2 - 1;
+    eval 2 == 1;
+    eval 2 != 1;
+    eval 2 <= 1;
+    eval 2 >= 1;
+    eval 2 < 1;
+    eval 2 > 1;
+    eval true && false;
+    eval true || false;
+    let f = |x| x + 1; eval f $ 1;
+    pure();;
+    pure()
+);

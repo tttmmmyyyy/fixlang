@@ -1,0 +1,22 @@
+module Main;
+
+import Std::{Monad::pure, Option::some, I64, IO};
+
+type A = struct { x : I64 };
+type B = union { x : I64 };
+
+main : IO ();
+main = (
+    let a = A { x: 42 };
+    eval a.@x;
+    eval a.set_x(100);
+    eval a.mod_x(|_| 31);
+    eval a.act_x(|x| some(x));
+
+    let b = B::x(42);
+    eval b.is_x;
+    eval b.as_x;
+    eval b.mod_x(|_| 31);    
+
+    pure()
+);

@@ -1,0 +1,9 @@
+module Main;
+
+f : I64 -> I64 = |x| x + 1;
+
+main : IO ();
+main = (
+    eval f(41);
+    pure()
+);

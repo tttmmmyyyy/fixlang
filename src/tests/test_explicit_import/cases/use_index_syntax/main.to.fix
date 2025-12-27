@@ -1,0 +1,13 @@
+module Main;
+
+import Std::{Indexable::iget, Monad::pure, I64, IO};
+
+type A = struct { x : I64 };
+
+main : IO ();
+main = (
+    let a = A { x: 42 };
+    eval [a][0][^x].iget;
+
+    pure()
+);

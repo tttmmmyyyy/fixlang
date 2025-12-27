@@ -1,0 +1,11 @@
+module Main;
+
+type A = struct { x : I64 };
+
+main : IO ();
+main = (
+    let a = A { x: 42 };
+    eval [a][0][^x].iget;
+
+    pure()
+);

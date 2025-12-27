@@ -1,0 +1,7 @@
+module Main;
+
+main : ::Std::IO ();
+main = (
+    eval FFI_CALL_IO[CInt rand()];
+    pure()
+);

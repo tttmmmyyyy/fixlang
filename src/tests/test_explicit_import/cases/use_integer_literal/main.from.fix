@@ -1,0 +1,4 @@
+module Main;
+
+main : IO ();
+main = eval 42; eval 42_U64; pure();
