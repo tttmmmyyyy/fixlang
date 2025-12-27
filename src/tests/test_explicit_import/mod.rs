@@ -27,12 +27,12 @@ pub fn test_edit_explicit_import() {
 
 pub fn run_test_case(case_path: &std::path::Path) {
     // Copy main.from.fix to main.fix (create if it doesn't exist)
-    // Execute fix edit explicit-import
-    // Compare main.to.fix and main.fix to verify they match
     let from_path = case_path.join("main.from.fix");
     let to_path = case_path.join("main.to.fix");
     let target_path = case_path.join("main.fix");
     std::fs::copy(&from_path, &target_path).expect("Failed to copy from main.from.fix to main.fix");
+
+    // Execute fix edit explicit-import
     let output = std::process::Command::new("fix")
         .arg("edit")
         .arg("explicit-import")
@@ -45,16 +45,8 @@ pub fn run_test_case(case_path: &std::path::Path) {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let expected_content = std::fs::read_to_string(&to_path).expect("Failed to read main.to.fix");
-    let actual_content = std::fs::read_to_string(&target_path).expect("Failed to read main.fix");
-    // assert_eq!(
-    //     expected_content,
-    //     actual_content,
-    //     "Test case failed: {}",
-    //     case_path.display()
-    // );
 
-    // And check that "fix build" succeeds after the edit
+    // Check that "fix build" succeeds after the edit
     let build_output = std::process::Command::new("fix")
         .arg("build")
         .current_dir(case_path)
@@ -66,4 +58,14 @@ pub fn run_test_case(case_path: &std::path::Path) {
             String::from_utf8_lossy(&build_output.stderr)
         );
     }
+
+    // Compare main.to.fix and main.fix to verify they match
+    let expected_content = std::fs::read_to_string(&to_path).expect("Failed to read main.to.fix");
+    let actual_content = std::fs::read_to_string(&target_path).expect("Failed to read main.fix");
+    assert_eq!(
+        expected_content,
+        actual_content,
+        "Test case failed: {}",
+        case_path.display()
+    );
 }
