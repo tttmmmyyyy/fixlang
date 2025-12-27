@@ -314,13 +314,13 @@ impl PatternNode {
         }
     }
 
-    // Collect all global relative names (types, traits) from this pattern.
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    // Collect names that should be imported.
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         match &self.pattern {
             Pattern::Var(_, ty) => {
                 // Collect type names from type annotation
                 if let Some(ty) = ty {
-                    ty.collect_global_relative_names(names);
+                    ty.collect_import_names(names);
                 }
             }
             Pattern::Struct(tc, field_to_pat) => {
@@ -328,14 +328,14 @@ impl PatternNode {
                 names.add(tc.name.clone());
                 // Recursively collect from field patterns
                 for (_field_name, pat) in field_to_pat {
-                    pat.collect_global_relative_names(names);
+                    pat.collect_import_names(names);
                 }
             }
             Pattern::Union(variant_name, subpat) => {
                 // Collect union type constructor name
                 names.add(variant_name.namespace.clone().to_fullname());
                 // Recursively collect from subpattern
-                subpat.collect_global_relative_names(names);
+                subpat.collect_import_names(names);
             }
         }
     }

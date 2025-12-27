@@ -22,12 +22,12 @@ impl Predicate {
         self.ty.free_vars_to_vec(buf);
     }
 
-    // Collect all global relative type and trait names.
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    // Collect names that should be imported.
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         // Collect the trait name
         names.add(self.trait_id.name.clone());
         // Collect type names
-        self.ty.collect_global_relative_names(names);
+        self.ty.collect_import_names(names);
     }
 
     // Convert all global FullNames to absolute paths.

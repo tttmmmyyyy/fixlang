@@ -390,10 +390,10 @@ impl Field {
         Ok(())
     }
 
-    // Collect all global relative type names from the field's type.
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    // Collect names that should be imported.
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         // Collect from the syntactic type.
-        self.syn_ty.collect_global_relative_names(names);
+        self.syn_ty.collect_import_names(names);
     }
 
     // Check if fields are duplicated. If duplication is found, it returns the duplicated field.

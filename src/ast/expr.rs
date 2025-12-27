@@ -1149,57 +1149,57 @@ impl ExprNode {
         free_vars
     }
 
-    // Collect all global relative names (values, types, traits) in this expression.
+    // Collect names that should be imported.
     // Unlike free_vars(), this also collects type names from type annotations.
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         match &*self.expr {
             Expr::Var(name) => {
                 names.add(name.name.clone());
             }
             Expr::LLVM(llvm) => {
-                llvm.generic_ty.collect_global_relative_names(names);
+                llvm.generic_ty.collect_import_names(names);
             }
             Expr::App(func, args) => {
-                func.collect_global_relative_names(names);
+                func.collect_import_names(names);
                 for arg in args {
-                    arg.collect_global_relative_names(names);
+                    arg.collect_import_names(names);
                 }
             }
             Expr::Lam(_args, body) => {
-                body.collect_global_relative_names(names);
+                body.collect_import_names(names);
             }
             Expr::Let(pat, bound, val) => {
-                pat.collect_global_relative_names(names);
-                bound.collect_global_relative_names(names);
-                val.collect_global_relative_names(names);
+                pat.collect_import_names(names);
+                bound.collect_import_names(names);
+                val.collect_import_names(names);
             }
             Expr::If(cond, then_expr, else_expr) => {
-                cond.collect_global_relative_names(names);
-                then_expr.collect_global_relative_names(names);
-                else_expr.collect_global_relative_names(names);
+                cond.collect_import_names(names);
+                then_expr.collect_import_names(names);
+                else_expr.collect_import_names(names);
             }
             Expr::Match(cond, pat_vals) => {
-                cond.collect_global_relative_names(names);
+                cond.collect_import_names(names);
                 for (pat, val) in pat_vals {
-                    pat.collect_global_relative_names(names);
-                    val.collect_global_relative_names(names);
+                    pat.collect_import_names(names);
+                    val.collect_import_names(names);
                 }
             }
             Expr::TyAnno(e, ty) => {
-                e.collect_global_relative_names(names);
+                e.collect_import_names(names);
                 // Collect type names from the type annotation
-                ty.collect_global_relative_names(names);
+                ty.collect_import_names(names);
             }
             Expr::MakeStruct(tc, fields) => {
                 // Collect the struct type constructor name
                 names.add(tc.name.clone());
                 for (_field_name, field_expr) in fields {
-                    field_expr.collect_global_relative_names(names);
+                    field_expr.collect_import_names(names);
                 }
             }
             Expr::ArrayLit(elems) => {
                 for e in elems {
-                    e.collect_global_relative_names(names);
+                    e.collect_import_names(names);
                 }
             }
             Expr::FFICall(_name, ret_ty, param_tys, args, _is_ios) => {
@@ -1209,12 +1209,12 @@ impl ExprNode {
                     names.add(param_ty.name.clone());
                 }
                 for arg in args {
-                    arg.collect_global_relative_names(names);
+                    arg.collect_import_names(names);
                 }
             }
             Expr::Eval(side, main) => {
-                side.collect_global_relative_names(names);
-                main.collect_global_relative_names(names);
+                side.collect_import_names(names);
+                main.collect_import_names(names);
             }
         }
     }

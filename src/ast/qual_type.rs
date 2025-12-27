@@ -97,17 +97,17 @@ impl QualType {
         }
     }
 
-    // Collect all global relative type and trait names.
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    // Collect names that should be imported.
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         // Collect names from predicates
         for pred in &self.preds {
-            pred.collect_global_relative_names(names);
+            pred.collect_import_names(names);
         }
         // Collect names from equalities
         for eq in &self.eqs {
-            eq.collect_global_relative_names(names);
+            eq.collect_import_names(names);
         }
         // Collect names from the type
-        self.ty.collect_global_relative_names(names);
+        self.ty.collect_import_names(names);
     }
 }

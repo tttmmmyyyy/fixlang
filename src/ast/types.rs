@@ -1658,8 +1658,8 @@ impl TypeNode {
         }
     }
 
-    // Collect all global relative type names (both type constructors and associated types) that appear in this type.
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    // Collect names that should be imported.
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         match &self.ty {
             Type::TyVar(_) => {
                 // Type variables don't contain TyCons
@@ -1668,14 +1668,14 @@ impl TypeNode {
                 names.add(tycon.name.clone());
             }
             Type::TyApp(tyfun, arg) => {
-                tyfun.collect_global_relative_names(names);
-                arg.collect_global_relative_names(names);
+                tyfun.collect_import_names(names);
+                arg.collect_import_names(names);
             }
             Type::AssocTy(assoc_ty, args) => {
                 // Associated types are also type constructors
                 names.add(assoc_ty.name.clone());
                 for arg in args {
-                    arg.collect_global_relative_names(names);
+                    arg.collect_import_names(names);
                 }
             }
         }
@@ -2068,19 +2068,19 @@ impl Scheme {
         self.ty.find_node_at(pos)
     }
 
-    // Collect all global relative type constructor names (including associated types) and trait names from the scheme.
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    // Collect names that should be imported.
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         // Collect type constructor names from the type
-        self.ty.collect_global_relative_names(names);
+        self.ty.collect_import_names(names);
 
         // Collect names from predicates
         for pred in &self.predicates {
-            pred.collect_global_relative_names(names);
+            pred.collect_import_names(names);
         }
 
         // Collect names from equalities
         for eq in &self.equalities {
-            eq.collect_global_relative_names(names);
+            eq.collect_import_names(names);
         }
     }
 

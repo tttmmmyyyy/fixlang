@@ -59,18 +59,18 @@ impl QualPred {
         }
     }
 
-    // Collect all global relative type and trait names.
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    // Collect names that should be imported.
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         // Collect names from predicate constraints
         for pred in &self.pred_constraints {
-            pred.collect_global_relative_names(names);
+            pred.collect_import_names(names);
         }
         // Collect names from equality constraints
         for eq in &self.eq_constraints {
-            eq.collect_global_relative_names(names);
+            eq.collect_import_names(names);
         }
         // Collect names from the main predicate
-        self.predicate.collect_global_relative_names(names);
+        self.predicate.collect_import_names(names);
     }
 
     pub fn to_string(&self) -> String {

@@ -40,16 +40,16 @@ impl Equality {
         self.value.free_vars_to_vec(buf);
     }
 
-    // Collect all global relative type names (both type constructors and associated types).
-    pub fn collect_global_relative_names(&self, names: &mut GlobalRelativeNames) {
+    // Collect names that should be imported.
+    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
         // Collect the associated type name
         names.add(self.assoc_type.name.clone());
         // Collect names from arguments
         for arg in &self.args {
-            arg.collect_global_relative_names(names);
+            arg.collect_import_names(names);
         }
         // Collect names from value
-        self.value.collect_global_relative_names(names);
+        self.value.collect_import_names(names);
     }
 
     // Convert all global FullNames to absolute paths.
