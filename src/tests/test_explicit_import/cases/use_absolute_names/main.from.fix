@@ -1,17 +1,4 @@
 module Main;
 
-a : Path;
-a = "hoge.fix";
-
-trait a : ToPath {
-    to_path : a -> Path;
-}
-
-impl Path : ToPath {
-    to_path : Path -> Path = |p| p;
-}
-
-main: IO ();
-main = (
-    pure()
-);
+main : ::Std::IO ();
+main = ::Std::Monad::pure();

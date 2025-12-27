@@ -1,6 +1,4 @@
 module Main;
 
-import Std::{Monad::pure, IO};
-
-main : IO ();
-main = eval [42]; pure();
+main : ::Std::IO ();
+main = ::Std::Monad::pure();
