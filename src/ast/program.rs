@@ -376,7 +376,7 @@ pub struct NameResolutionContext {
     pub import_statements: Vec<ImportStatement>,
 }
 
-impl<'a> NameResolutionContext {
+impl NameResolutionContext {
     pub fn new(
         current_module: Option<ModuleInfo>,
         tycon_names_with_aliases: &Set<FullName>,
