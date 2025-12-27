@@ -1098,16 +1098,16 @@ impl TraitEnv {
         // Resolve aliases in trait implementations.
         let impls = std::mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, insts) in impls {
-            for mut inst in insts {
-                // Resolve names in TrantInstance.
-                errors.eat_err(inst.resolve_type_aliases(type_env));
+        for (trait_id, impls) in impls {
+            for mut impl_ in impls {
+                // Resolve names in TraitImpls.
+                errors.eat_err(impl_.resolve_type_aliases(type_env));
 
                 // Insert to new_impls
                 if !new_impls.contains_key(&trait_id) {
                     new_impls.insert(trait_id.clone(), vec![]);
                 }
-                new_impls.get_mut(&trait_id).unwrap().push(inst);
+                new_impls.get_mut(&trait_id).unwrap().push(impl_);
             }
         }
         errors.to_result()?; // Throw errors if any.
