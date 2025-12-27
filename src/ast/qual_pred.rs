@@ -90,7 +90,7 @@ impl QualPred {
         s
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         for p in &mut self.pred_constraints {
             p.resolve_namespace(ctx)?;
         }

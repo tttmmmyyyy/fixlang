@@ -116,6 +116,18 @@ pub fn insert_to_map_vec<K: Clone + Eq + Hash, V>(map: &mut Map<K, Vec<V>>, key:
     }
 }
 
+pub fn insert_to_map_vec_many<K: Clone + Eq + Hash, V>(
+    map: &mut Map<K, Vec<V>>,
+    key: &K,
+    elems: Vec<V>,
+) {
+    if let Some(vec) = map.get_mut(key) {
+        vec.extend(elems);
+    } else {
+        map.insert(key.clone(), elems);
+    }
+}
+
 // A macro to get the name of a function.
 #[allow(unused)]
 macro_rules! function_name {

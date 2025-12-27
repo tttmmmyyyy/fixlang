@@ -1,6 +1,9 @@
 module Main;
 
-import Std::{Monad::pure, IO};
+import Std::{IO::IOState::_unsafe_create, Monad::pure, IO};
 
 main : IO ();
-main = eval [42]; pure();
+main = (
+    eval FFI_CALL_IOS[CInt rand(), IOState::_unsafe_create];
+    pure()
+);

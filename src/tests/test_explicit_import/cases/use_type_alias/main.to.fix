@@ -1,6 +1,19 @@
 module Main;
 
-import Std::{Monad::pure, IO};
+import Std::{Monad::pure, IO, Path};
 
-main : IO ();
-main = eval [42]; pure();
+a : Path;
+a = "hoge.fix";
+
+trait a : ToPath {
+    to_path : a -> Path;
+}
+
+impl Path : ToPath {
+    to_path : Path -> Path = |p| p;
+}
+
+main: IO ();
+main = (
+    pure()
+);

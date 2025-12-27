@@ -3,4 +3,8 @@ module Main;
 import Std::{Monad::pure, IO};
 
 main : IO ();
-main = eval "Hello, World!"; pure();
+main = (
+    eval ();
+    eval (1,2);
+    pure()
+);

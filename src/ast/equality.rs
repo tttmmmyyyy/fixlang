@@ -124,7 +124,7 @@ impl Equality {
         Ok(())
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.assoc_type.resolve_namespace(ctx, &self.source)?;
         for arg in &mut self.args {
             *arg = arg.resolve_namespace(ctx)?;

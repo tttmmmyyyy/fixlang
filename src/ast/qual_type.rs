@@ -57,7 +57,7 @@ impl QualType {
     }
 
     // Resolve namespace.
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         for pred in &mut self.preds {
             pred.resolve_namespace(ctx)?;
         }

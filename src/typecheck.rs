@@ -110,7 +110,9 @@ where
                         full_name.set_absolute();
                         return Some((full_name.namespace.clone(), v.clone()));
                     }
-                    if name.is_suffix(full_name) && import::is_accessible(import_stmts, full_name) {
+                    if name.is_suffix_of(full_name)
+                        && import::is_accessible(import_stmts, full_name)
+                    {
                         return Some((full_name.namespace.clone(), v.clone()));
                     }
                     return None;
@@ -384,6 +386,8 @@ pub struct TypeCheckContext {
     // In which module is the current expression defined?
     // This is used as a state variable for typechecking.
     pub current_module: Option<ModuleInfo>,
+    // Names that should be imported in the current module.
+    pub import_required: Vec<FullName>,
     // Equalities assumed.
     pub assumed_eqs: Map<TyAssoc, Vec<EqualityScheme>>,
     // Predicates assumed.
@@ -412,6 +416,7 @@ impl TypeCheckContext {
         println!("assumed_preds size = {}", self.assumed_preds.len());
         println!("fixed_tyvars size = {}", self.fixed_tyvars.len());
         println!("local_assumed_eqs size = {}", self.local_assumed_eqs.len());
+        println!("import_required size = {}", self.import_required.len());
     }
 
     // Create instance.
@@ -441,6 +446,7 @@ impl TypeCheckContext {
             assumed_eqs,
             fixed_tyvars: vec![],
             local_assumed_eqs: vec![],
+            import_required: vec![],
             cache,
             num_worker_threads,
         }
@@ -784,7 +790,12 @@ impl TypeCheckContext {
                         .find_map(|cand| cand.as_ref().ok())
                         .unwrap();
                     *self = tc.clone();
-                    Ok(ei.set_var_namespace(ns.clone()))
+                    let ei = ei.set_var_namespace(ns.clone());
+                    let name = &ei.get_var().name;
+                    if name.is_global() && !name.is_absolute() {
+                        self.import_required.push(name.clone());
+                    }
+                    Ok(ei)
                 }
             }
             Expr::LLVM(lit) => {
@@ -1206,6 +1217,7 @@ impl TypeCheckContext {
         assert!(self.equalities.is_empty());
         assert!(self.local_assumed_eqs.is_empty());
         assert!(self.fixed_tyvars.is_empty());
+        assert!(self.import_required.is_empty());
     }
 
     // Check if an expression matches the expected type scheme.

@@ -262,7 +262,7 @@ impl FullName {
         }
     }
 
-    pub fn is_suffix(&self, other: &FullName) -> bool {
+    pub fn is_suffix_of(&self, other: &FullName) -> bool {
         self.name == other.name && self.namespace.is_suffix_of(&other.namespace)
     }
 

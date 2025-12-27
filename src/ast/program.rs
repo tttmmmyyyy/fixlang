@@ -24,14 +24,13 @@ use crate::constants::{
 use crate::error::{panic_if_err, Errors};
 use crate::graph::Graph;
 use crate::misc::{collect_results, to_absolute_path, Map, Set};
-use crate::name_resolution::NameResolutionContext;
+use crate::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::printer::Text;
 use crate::sourcefile::{SourcePos, Span};
 use crate::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
-use std::mem::replace;
 use std::path::PathBuf;
 use std::{sync::Arc, vec};
 
@@ -187,9 +186,10 @@ pub struct GlobalValue {
 impl GlobalValue {
     pub fn resolve_namespace_in_declaration(
         &mut self,
-        ctx: &NameResolutionContext,
+        ctx: &mut NameResolutionContext,
     ) -> Result<(), Errors> {
-        // If this function is called for methods, we must call resolve_namespace on MethodImpl.ty.
+        // Currently, global values generated from member implementations do not come here.
+        // This is because name resolution is performed on TraitEnv, and then global values are generated from trait member implementations.
         assert!(matches!(self.expr, SymbolExpr::Simple(_)));
         self.scm = self.scm.resolve_namespace(ctx)?;
         Ok(())
@@ -418,6 +418,8 @@ pub struct Program {
     // Deferred errors.
     // Errors that should be displayed in the diagnostic information.
     pub deferred_errors: Errors,
+    // Names required to be imported in each module.
+    pub import_required: Map<Name, Set<FullName>>,
 
     /* Optimization */
     // Number of optimization steps.
@@ -426,6 +428,18 @@ pub struct Program {
 }
 
 impl Program {
+    pub fn merge_import_required(&mut self, other: Map<Name, Vec<FullName>>) {
+        for (mod_name, names) in other {
+            let entry = self
+                .import_required
+                .entry(mod_name)
+                .or_insert_with(Set::default);
+            for name in names {
+                entry.insert(name);
+            }
+        }
+    }
+
     pub fn find_mod(&self, mod_name: &Name) -> Option<ModuleInfo> {
         for mod_info in &self.modules {
             if &mod_info.name == mod_name {
@@ -480,6 +494,7 @@ impl Program {
             entry_io_value: None,
             export_statements: vec![],
             deferred_errors: Errors::empty(),
+            import_required: Default::default(),
             optimization_step: 0,
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
@@ -870,7 +885,7 @@ impl Program {
         req_scm: &Arc<Scheme>,
         val_name: &FullName,
         def_mod: &ModuleInfo,
-        nrctx: &NameResolutionContext,
+        nrctx: &mut NameResolutionContext,
         ver_hash: &str,
         mut tc: TypeCheckContext,
     ) -> Result<TypedExpr, Errors> {
@@ -883,7 +898,7 @@ impl Program {
         }
 
         // Perform namespace inference.
-        te.expr = te.expr.resolve_namespace(&nrctx)?;
+        te.expr = te.expr.resolve_namespace(nrctx)?;
 
         // Resolve type aliases in expression.
         te.expr = te.expr.resolve_type_aliases(&tc.type_env)?;
@@ -896,18 +911,21 @@ impl Program {
         // Save the result to cache file.
         tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
 
+        // Add names required to be imported found in type-checking to NameResolutionContext's import_required.
+        nrctx.add_import_required(tc.import_required);
+
         Ok(te)
     }
 
-    // Create NameResolutionContext used for symbols defined in the specified module.
-    pub fn create_name_resolution_context(&self, mod_name: &Name) -> NameResolutionContext {
-        NameResolutionContext::new(
-            self.find_mod(mod_name),
+    // Create NameResolutionEnv used for symbols defined in the specified module.
+    pub fn create_name_resolution_env(&self) -> Arc<NameResolutionEnv> {
+        Arc::new(NameResolutionEnv::new(
             &self.tycon_names_with_aliases(),
             &self.trait_names_with_aliases(),
             self.assoc_ty_to_arity(),
-            self.mod_to_import_stmts[mod_name].clone(),
-        )
+            self.mod_to_import_stmts.clone(),
+            self.modules.clone(),
+        ))
     }
 
     pub fn resolve_namespace_and_check_type_in_modules(
@@ -955,23 +973,18 @@ impl Program {
         val_names: &[FullName],
         method_impl_filter: impl Fn(&TraitMemberImpl) -> Result<bool, Errors>,
     ) -> Result<(), Errors> {
+        let nrenv = self.create_name_resolution_env();
+
+        struct CheckTaskOutput {
+            te: TypedExpr,
+            import_required: Map<Name, Vec<FullName>>,
+        }
         struct CheckTask {
             val_name: FullName,
-            task: Box<dyn FnOnce() -> Result<TypedExpr, Errors> + Send>,
+            task: Box<dyn FnOnce() -> Result<CheckTaskOutput, Errors> + Send>,
             method_impl_idx: Option<usize>,
         }
         let mut tasks: Vec<CheckTask> = vec![];
-
-        let mut mod_to_nrctx: Map<Name, Arc<NameResolutionContext>> = Map::default();
-        let mut get_nrctx = |mod_name: &Name| -> Arc<NameResolutionContext> {
-            if !mod_to_nrctx.contains_key(mod_name) {
-                mod_to_nrctx.insert(
-                    mod_name.clone(),
-                    Arc::new(self.create_name_resolution_context(mod_name)),
-                );
-            }
-            mod_to_nrctx.get(mod_name).unwrap().clone()
-        };
 
         // Create tasks.
         for val_name in val_names {
@@ -983,21 +996,25 @@ impl Program {
                     let scm = gv.scm.clone();
                     let val_name_clone = val_name.clone(); // For move into closure.
                     let def_mod = self.find_mod(&val_name.module()).unwrap().clone();
-                    let nrctx = get_nrctx(&def_mod.name);
+                    let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
                     let ver_hash = self.module_dependency_hash(&def_mod.name)?;
                     let tc = tc.clone();
-                    let task = Box::new(move || -> Result<TypedExpr, Errors> {
+                    let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                         // Perform type-checking.
                         let te = Program::resolve_namespace_and_check_type_sub(
                             te,
                             &scm,
                             &val_name_clone,
                             &def_mod,
-                            &nrctx,
+                            &mut nrctx,
                             &ver_hash,
                             tc,
                         )?;
-                        Ok(te)
+                        let output = CheckTaskOutput {
+                            te,
+                            import_required: nrctx.import_required,
+                        };
+                        Ok(output)
                     });
 
                     tasks.push(CheckTask {
@@ -1018,21 +1035,26 @@ impl Program {
                         let method_ty = method.ty.clone();
                         let val_name_clone = val_name.clone(); // For move into closure.
                         let def_mod = self.find_mod(&method.define_module).unwrap().clone();
-                        let nrctx = get_nrctx(&def_mod.name);
+                        let mut nrctx =
+                            NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
                         let ver_hash = self.module_dependency_hash(&def_mod.name)?;
                         let tc = tc.clone();
-                        let task = Box::new(move || -> Result<TypedExpr, Errors> {
+                        let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                             // Perform type-checking.
                             let te = Program::resolve_namespace_and_check_type_sub(
                                 te,
                                 &method_ty,
                                 &val_name_clone,
                                 &def_mod,
-                                &nrctx,
+                                &mut nrctx,
                                 &ver_hash,
                                 tc,
                             )?;
-                            Ok(te)
+                            let output = CheckTaskOutput {
+                                te,
+                                import_required: nrctx.import_required,
+                            };
+                            Ok(output)
                         });
 
                         tasks.push(CheckTask {
@@ -1048,17 +1070,17 @@ impl Program {
         // Run all tasks.
         struct CheckResult {
             val_name: FullName,
-            te: Result<TypedExpr, Errors>,
+            output: Result<CheckTaskOutput, Errors>,
             method_impl_idx: Option<usize>,
         }
         let results = if tc.num_worker_threads <= 1 || tasks.len() <= 1 {
             // Run tasks in the main thread.
             let mut results = vec![];
             for task in tasks {
-                let te = (task.task)();
+                let output = (task.task)();
                 results.push(CheckResult {
                     val_name: task.val_name,
-                    te,
+                    output,
                     method_impl_idx: task.method_impl_idx,
                 });
             }
@@ -1076,10 +1098,10 @@ impl Program {
                 let thread = std::thread::spawn(move || {
                     let mut results = vec![];
                     while let Some(task) = tasks.pop() {
-                        let te = (task.task)();
+                        let output = (task.task)();
                         results.push(CheckResult {
                             val_name: task.val_name,
-                            te,
+                            output,
                             method_impl_idx: task.method_impl_idx,
                         });
                     }
@@ -1094,22 +1116,23 @@ impl Program {
             results
         };
 
-        // Store results to `self.global_values`.
+        // Store results to into members of `self`.
         let mut errors = Errors::empty();
         for result in results {
-            if result.te.is_err() {
-                errors.append(result.te.err().unwrap());
+            if result.output.is_err() {
+                errors.append(result.output.err().unwrap());
                 continue;
             }
-            let te = result.te.ok().unwrap();
+            let output = result.output.ok().unwrap();
+            self.merge_import_required(output.import_required);
             let gv = self.global_values.get_mut(&result.val_name).unwrap();
             match &mut gv.expr {
                 SymbolExpr::Simple(e) => {
-                    *e = te;
+                    *e = output.te;
                 }
                 SymbolExpr::Method(impls) => {
                     let i = result.method_impl_idx.unwrap();
-                    impls[i].expr = te;
+                    impls[i].expr = output.te;
                 }
             };
         }
@@ -1527,21 +1550,16 @@ impl Program {
     // Infer namespaces of traits and types that appear in declarations and associated type implementations.
     // NOTE: names in the lhs of definition of types/traits/global_values have to be full-named already when this function called.
     pub fn resolve_namespace_not_in_expr(&mut self) -> Result<(), Errors> {
-        let mut ctx = NameResolutionContext::new(
-            None,
-            &self.tycon_names_with_aliases(),
-            &self.trait_names_with_aliases(),
-            self.assoc_ty_to_arity(),
-            vec![],
-        );
+        let env = self.create_name_resolution_env();
+        let mut ctx = NameResolutionContext::new("NA".to_string(), env.clone());
+
         // Resolve namespaces in type constructors.
         {
             let mut tycons = (*self.type_env.tycons).clone();
             for (tc, ti) in &mut tycons {
                 let module = tc.name.module();
-                ctx.current_module = self.find_mod(&module);
-                ctx.import_statements = self.mod_to_import_stmts[&module].clone();
-                ti.resolve_namespace(&ctx)?;
+                ctx.set_current_module(module);
+                ti.resolve_namespace(&mut ctx)?;
             }
             self.type_env.tycons = Arc::new(tycons);
         }
@@ -1550,33 +1568,26 @@ impl Program {
             let mut aliases = (*self.type_env.aliases).clone();
             for (tc, ta) in &mut aliases {
                 let module = tc.name.module();
-                ctx.current_module = self.find_mod(&module);
-                ctx.import_statements = self.mod_to_import_stmts[&module].clone();
-                ta.resolve_namespace(&ctx)?;
+                ctx.set_current_module(module);
+                ta.resolve_namespace(&mut ctx)?;
             }
             self.type_env.aliases = Arc::new(aliases);
         }
 
-        self.trait_env
-            .resolve_namespace(&mut ctx, &self.mod_to_import_stmts)?;
+        self.trait_env.resolve_namespace(&mut ctx)?;
 
-        let mut type_defns = replace(&mut self.type_defns, vec![]);
-        for decl in &mut type_defns {
+        for decl in &mut self.type_defns {
             let module = decl.name.module();
-            ctx.current_module = self.find_mod(&module);
-            ctx.import_statements = self.mod_to_import_stmts[&module].clone();
-            decl.resolve_namespace(&ctx)?;
+            ctx.set_current_module(module);
+            decl.resolve_namespace(&mut ctx)?;
         }
-        self.type_defns = type_defns;
 
-        let mut global_values = replace(&mut self.global_values, Map::default());
-        for (name, sym) in &mut global_values {
-            ctx.current_module = self.find_mod(&name.module());
-            ctx.import_statements = self.mod_to_import_stmts[&name.module()].clone();
-            sym.resolve_namespace_in_declaration(&ctx)?;
+        for (name, sym) in &mut self.global_values {
+            ctx.set_current_module(name.module());
+            sym.resolve_namespace_in_declaration(&mut ctx)?;
         }
-        self.global_values = global_values;
 
+        self.merge_import_required(ctx.import_required);
         Ok(())
     }
 

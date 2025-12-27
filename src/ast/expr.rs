@@ -778,11 +778,11 @@ impl ExprNode {
 
     pub fn resolve_namespace(
         self: &Arc<ExprNode>,
-        ctx: &NameResolutionContext,
+        ctx: &mut NameResolutionContext,
     ) -> Result<Arc<ExprNode>, Errors> {
         match &*self.expr {
             Expr::Var(_) => {
-                // Resolution of names of variables will be done in type checking phase.
+                // Name resolution for values will be done in type checking phase.
                 Ok(self.clone())
             }
             Expr::LLVM(llvm) => {

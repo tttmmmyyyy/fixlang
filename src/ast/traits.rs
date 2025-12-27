@@ -1,6 +1,5 @@
 use crate::ast::equality::{Equality, EqualityScheme};
 use crate::ast::expr::ExprNode;
-use crate::ast::import::ImportStatement;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::{FullName, Name};
 use crate::ast::predicate::Predicate;
@@ -40,7 +39,7 @@ impl TraitId {
 
     pub fn resolve_namespace(
         &mut self,
-        ctx: &NameResolutionContext,
+        ctx: &mut NameResolutionContext,
         span: &Option<Span>,
     ) -> Result<(), Errors> {
         self.name = ctx.resolve(&self.name, &[NameResolutionType::Trait], span)?;
@@ -121,7 +120,7 @@ impl AssocTypeImpl {
         Ok(())
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value = self.value.resolve_namespace(ctx)?;
         Ok(())
     }
@@ -197,7 +196,7 @@ impl TraitMember {
         self.qual_ty.find_node_at(pos)
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.qual_ty.resolve_namespace(ctx)
     }
 
@@ -264,7 +263,7 @@ impl TraitDefn {
     }
 
     // Resolve namespace.
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for mi in &mut self.members {
             errors.eat_err(mi.resolve_namespace(ctx));
@@ -428,7 +427,7 @@ impl TraitImpl {
         Ok(())
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.qual_pred.resolve_namespace(ctx)?;
 
         let mut errors = Errors::empty();
@@ -608,7 +607,7 @@ impl TraitAlias {
     }
 
     // Resolve namespace of trait names in value.
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         for (trait_id, _) in &mut self.value {
             trait_id.resolve_namespace(ctx, &self.source)?;
         }
@@ -1028,23 +1027,19 @@ impl TraitEnv {
         Ok(())
     }
 
-    pub fn resolve_namespace(
-        &mut self,
-        ctx: &mut NameResolutionContext,
-        imported_modules: &Map<Name, Vec<ImportStatement>>,
-    ) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
         // Resolve names in trait aliases.
         for (trait_id, alias_info) in &mut self.aliases.data {
-            ctx.import_statements = imported_modules[&trait_id.name.module()].clone();
+            ctx.set_current_module(trait_id.name.module());
             errors.eat_err(alias_info.resolve_namespace(ctx));
         }
         errors.to_result()?; // Throw errors if any.
 
         // Resolve names in trait definitions.
         for (trait_id, trait_info) in &mut self.traits {
-            ctx.import_statements = imported_modules[&trait_id.name.module()].clone();
+            ctx.set_current_module(trait_id.name.module());
             // Keys in self.traits should already be resolved.
             assert!(
                 trait_id.name
@@ -1063,7 +1058,7 @@ impl TraitEnv {
         for (trait_id, impls) in impls {
             for mut impl_ in impls {
                 // Set up NameResolutionContext.
-                ctx.import_statements = imported_modules[&impl_.define_module].clone();
+                ctx.set_current_module(impl_.define_module.clone());
 
                 // Resolve trait_id's namespace.
                 let mut trait_id = trait_id.clone();

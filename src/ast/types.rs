@@ -71,7 +71,7 @@ pub struct TyAssoc {
 impl TyAssoc {
     pub fn resolve_namespace(
         &mut self,
-        ctx: &NameResolutionContext,
+        ctx: &mut NameResolutionContext,
         span: &Option<Span>,
     ) -> Result<(), Errors> {
         self.name = ctx.resolve(&self.name, &[NameResolutionType::AssocTy], span)?;
@@ -151,7 +151,7 @@ impl TyCon {
 
     pub fn resolve_namespace(
         &mut self,
-        ctx: &NameResolutionContext,
+        ctx: &mut NameResolutionContext,
         span: &Option<Span>,
     ) -> Result<(), Errors> {
         self.name = ctx.resolve(
@@ -296,7 +296,7 @@ pub struct TyConInfo {
 }
 
 impl TyConInfo {
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
             errors.eat_err(field.resolve_namespace(ctx));
@@ -351,7 +351,7 @@ impl TyAliasInfo {
         self.source.as_ref().and_then(|src| src.get_document().ok())
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value = self.value.resolve_namespace(ctx)?;
         Ok(())
     }
@@ -633,15 +633,15 @@ impl TypeNode {
     // Also, replaces TyCon node to an AssocTy node if necessary.
     pub fn resolve_namespace(
         self: &Arc<TypeNode>,
-        ctx: &NameResolutionContext,
+        ctx: &mut NameResolutionContext,
     ) -> Result<Arc<TypeNode>, Errors> {
         match &self.ty {
             Type::TyVar(_tv) => Ok(self.clone()),
             Type::TyCon(tc) => {
                 let mut tc = tc.as_ref().clone();
                 tc.resolve_namespace(ctx, &self.info.source)?;
-                if ctx.candidates[&tc.name] == NameResolutionType::AssocTy {
-                    let arity: usize = ctx.assoc_ty_to_arity[&tc.name];
+                if ctx.env.candidates[&tc.name] == NameResolutionType::AssocTy {
+                    let arity: usize = ctx.env.assoc_ty_to_arity[&tc.name];
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Associated type `{}` has arity {}, but supplied 0 types. All appearance of associated type has to be saturated.",
@@ -660,9 +660,9 @@ impl TypeNode {
                         // In this case, replace self to associated type application if necessary.
                         let mut tc = tc.as_ref().clone();
                         tc.resolve_namespace(ctx, &app_seq[0].info.source)?;
-                        if ctx.candidates[&tc.name] == NameResolutionType::AssocTy {
+                        if ctx.env.candidates[&tc.name] == NameResolutionType::AssocTy {
                             let assoc_ty_name = tc.name;
-                            let arity: usize = ctx.assoc_ty_to_arity[&assoc_ty_name];
+                            let arity: usize = ctx.env.assoc_ty_to_arity[&assoc_ty_name];
                             let (_, args) = app_seq.split_at(1);
                             if args.len() < arity {
                                 return Err(Errors::from_msg_srcs(format!(
@@ -2028,7 +2028,10 @@ impl Scheme {
         Scheme::new_arc(vec![], vec![], vec![], ty)
     }
 
-    pub fn resolve_namespace(&self, ctx: &NameResolutionContext) -> Result<Arc<Scheme>, Errors> {
+    pub fn resolve_namespace(
+        &self,
+        ctx: &mut NameResolutionContext,
+    ) -> Result<Arc<Scheme>, Errors> {
         let mut res = self.clone();
         for p in &mut res.predicates {
             p.resolve_namespace(ctx)?;

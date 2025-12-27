@@ -253,7 +253,7 @@ impl PatternNode {
 
     pub fn resolve_namespace(
         self: &PatternNode,
-        ctx: &NameResolutionContext,
+        ctx: &mut NameResolutionContext,
     ) -> Result<Arc<PatternNode>, Errors> {
         match &self.pattern {
             Pattern::Var(_, ty) => {

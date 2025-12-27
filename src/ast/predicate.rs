@@ -52,7 +52,7 @@ impl Predicate {
         }
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.trait_id.resolve_namespace(ctx, &self.source)?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())

@@ -1,6 +1,9 @@
 module Main;
 
-import Std::{Monad::pure, IO};
+import Std::Monad::pure;
 
-main : IO ();
-main = eval [42]; pure();
+main : ::Std::IO ();
+main = (
+    eval FFI_CALL_IO[CInt rand()];
+    pure()
+);

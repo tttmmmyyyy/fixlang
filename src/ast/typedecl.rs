@@ -31,7 +31,7 @@ impl TypeDefn {
         self.value.find_node_at(pos)
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value.resolve_namespace(ctx)?;
         Ok(())
     }
@@ -214,7 +214,7 @@ impl TypeDeclValue {
         }
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         match self {
             TypeDeclValue::Struct(s) => s.resolve_namespace(ctx),
             TypeDeclValue::Union(u) => u.resolve_namespace(ctx),
@@ -263,7 +263,7 @@ impl Struct {
         None
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         for f in &mut self.fields {
             f.resolve_namespace(ctx)?;
         }
@@ -305,7 +305,7 @@ impl Union {
         None
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         for f in &mut self.fields {
             f.resolve_namespace(ctx)?;
         }
@@ -341,7 +341,7 @@ impl TypeAlias {
         self.value.find_node_at(pos)
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value = self.value.resolve_namespace(ctx)?;
         Ok(())
     }
@@ -380,7 +380,7 @@ impl Field {
         self.ty.find_node_at(pos)
     }
 
-    pub fn resolve_namespace(&mut self, ctx: &NameResolutionContext) -> Result<(), Errors> {
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.syn_ty = self.syn_ty.resolve_namespace(ctx)?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())
