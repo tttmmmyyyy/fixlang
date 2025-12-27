@@ -5,6 +5,7 @@ use name::{FullName, GlobalRelativeNames, Name};
 
 use crate::ast::kind_scope::KindScope;
 use crate::error::Errors;
+use crate::name_resolution::NameResolutionContext;
 
 use super::*;
 

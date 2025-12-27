@@ -3,10 +3,11 @@ use std::sync::Arc;
 use crate::ast::equality::Equality;
 use crate::ast::name::GlobalRelativeNames;
 use crate::ast::predicate::Predicate;
-use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
+use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::KindSignature;
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
+use crate::name_resolution::NameResolutionContext;
 use crate::sourcefile::SourcePos;
 
 #[derive(Clone)]

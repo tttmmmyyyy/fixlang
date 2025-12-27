@@ -5,7 +5,7 @@ use crate::ast::name::GlobalRelativeNames;
 use crate::ast::name::Name;
 use crate::ast::name::NameSpace;
 use crate::ast::predicate::Predicate;
-use crate::ast::program::{EndNode, NameResolutionContext, NameResolutionType, TypeEnv};
+use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitAliasEnv, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::builtin::{
@@ -24,6 +24,7 @@ use crate::misc::collect_results;
 use crate::misc::number_to_varname;
 use crate::misc::Map;
 use crate::misc::Set;
+use crate::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::sourcefile::{SourcePos, Span};
 use crate::typecheck::{Substitution, TypeCheckContext};

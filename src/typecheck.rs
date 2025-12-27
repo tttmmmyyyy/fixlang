@@ -9,6 +9,7 @@ use crate::{
         qual_type::QualType,
     },
     error::Errors,
+    name_resolution::NameResolutionContext,
 };
 use ast::{
     import::ImportStatement,

@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::GlobalRelativeNames;
-use crate::ast::program::{EndNode, NameResolutionContext, TypeEnv};
+use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{TraitAliasEnv, TraitId};
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
+use crate::name_resolution::NameResolutionContext;
 use crate::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 

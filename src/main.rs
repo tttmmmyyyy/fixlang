@@ -40,6 +40,7 @@ mod edit;
 mod error;
 mod generator;
 mod graph;
+mod name_resolution;
 #[macro_use]
 mod log;
 mod lsp;

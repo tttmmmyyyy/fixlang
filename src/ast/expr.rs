@@ -1,4 +1,4 @@
-use crate::error::Errors;
+use crate::{error::Errors, name_resolution::NameResolutionContext};
 use misc::{collect_results, Set};
 use name::{FullName, GlobalRelativeNames, Name, NameSpace};
 use printer::Text;
