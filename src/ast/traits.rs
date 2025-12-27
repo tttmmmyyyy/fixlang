@@ -1059,26 +1059,26 @@ impl TraitEnv {
         // Resolve names in trait implementations.
         let impls = std::mem::replace(&mut self.impls, Default::default());
         let mut new_impls: Map<TraitId, Vec<TraitImpl>> = Default::default();
-        for (trait_id, insts) in impls {
-            for mut inst in insts {
+        for (trait_id, impls) in impls {
+            for mut impl_ in impls {
                 // Set up NameResolutionContext.
-                ctx.import_statements = imported_modules[&inst.define_module].clone();
+                ctx.import_statements = imported_modules[&impl_.define_module].clone();
 
                 // Resolve trait_id's namespace.
                 let mut trait_id = trait_id.clone();
                 errors.eat_err(
-                    trait_id.resolve_namespace(ctx, &inst.qual_pred.predicate.source.clone()),
+                    trait_id.resolve_namespace(ctx, &impl_.qual_pred.predicate.source.clone()),
                 );
 
                 // Resolve names in TrantImpl
-                inst.trait_id_mut().name = trait_id.name.clone(); // This is a "just in case" process, and may not be necessary.
-                errors.eat_err(inst.resolve_namespace(ctx));
+                impl_.trait_id_mut().name = trait_id.name.clone(); // This is a "just in case" process, and may not be necessary.
+                errors.eat_err(impl_.resolve_namespace(ctx));
 
                 // Insert to new_impls
                 if !new_impls.contains_key(&trait_id) {
                     new_impls.insert(trait_id.clone(), vec![]);
                 }
-                new_impls.get_mut(&trait_id).unwrap().push(inst);
+                new_impls.get_mut(&trait_id).unwrap().push(impl_);
             }
         }
 
