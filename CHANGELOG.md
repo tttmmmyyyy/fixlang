@@ -15,6 +15,7 @@
 - LSP: You can now search documents and jump to definitions from entities written in import statements.
 - Optimization: Added `unwrap-newtype` optimization, which removes unnecessary newtype wrappers, e.g., `type Foo = unbox struct { data : Bar }`.
 - Optimization: Added `inline-local` optimization, which tries to inline local functions.
+- Edit: Added `fix edit explicit-import` command to rewrite import statements to explicitly import only the necessary entities.
 
 ### Changed
 

@@ -1271,6 +1271,7 @@ import Lib::{value0, Type1};
 
 The latter requires you to update the `import` statement every time you use an entity from `Lib`.
 The former avoids this overhead.
+If you want to code speedily, adopting this style is recommended.
 
 On the other hand, the latter has advantages from a maintenance perspective.
 Suppose your code defines a value named `value`.
@@ -1278,11 +1279,13 @@ Then, the library `Lib` is updated and adds a value with the same name `value`.
 In this case, if you had imported the entire `Lib` module, `value` would become ambiguous in your code, potentially resulting in a compilation error.
 If you only import the necessary entities, you can avoid this problem.
 
-Currently, with the Language Server Protocol functionality of the fix compiler, you can automatically update `import` statements through entity name completion or Quick Fix for "Unknown name" errors. This makes importing necessary entities less burdensome.
-
 In Fix, to make it easy to start writing programs, `import Std;` is implicitly performed.
 Therefore, when functionality is added to the `Std` module, there is a possibility that the names of entities defined in your code will collide with the names of newly added entities in the `Std` module, resulting in a compilation error.
 If you want to avoid this, we recommend a style where you write `import Std::{};` at the beginning and import the necessary entities (entities that cause "Unknown name" errors) as needed.
+
+When adopting a style of importing only the necessary entities, the following tools are useful:
+- The Language Server Protocol support of the Fix compiler can automatically update `import` statements through entity name completion operations or Quick Fix for "Unknown name" errors.
+- Using the `fix edit explicit-import` command, you can automatically rewrite `import` statements to import only the necessary entities based on the entities used in the source file.
 
 ## Recursion
 
