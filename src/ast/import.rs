@@ -21,7 +21,6 @@ pub struct ImportStatement {
 }
 
 impl ImportStatement {
-    #[allow(dead_code)]
     pub fn sort(stmts: &mut [ImportStatement]) {
         stmts.sort_by(|a, b| a.module.0.cmp(&b.module.0));
         for stmt in stmts {
@@ -282,7 +281,7 @@ impl ImportTreeNode {
                     ImportTreeNode::TypeOrTrait(name_b, _),
                 ) => name_a.cmp(name_b),
                 (ImportTreeNode::TypeOrTrait(_, _), _) => std::cmp::Ordering::Less,
-                (_, ImportTreeNode::TypeOrTrait(_, _)) => std::cmp::Ordering::Less,
+                (_, ImportTreeNode::TypeOrTrait(_, _)) => std::cmp::Ordering::Greater,
                 (
                     ImportTreeNode::NameSpace(name_a, _, _),
                     ImportTreeNode::NameSpace(name_b, _, _),
