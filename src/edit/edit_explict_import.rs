@@ -2,16 +2,14 @@
 // This command rewrites import statements in a Fix project to import only the necessary entities explicitly.
 
 use crate::ast::import::ImportStatement;
-use crate::ast::name::GlobalRelativeNames;
 use crate::ast::name::{FullName, Name};
-use crate::ast::program::{Program, SymbolExpr};
+use crate::ast::program::Program;
 use crate::edit::edit_util::apply_text_edits;
 use crate::error::Errors;
 use crate::lsp::language_server::{
     create_text_edit_to_insert_imports, create_text_edits_to_erase_imports, run_diagnostics,
 };
 use crate::misc::to_absolute_path;
-use crate::misc::Set;
 use crate::project_file::ProjectFile;
 use crate::typecheckcache::MemoryCache;
 use std::fs;
@@ -134,90 +132,6 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     println!("Rewrote imports for: {}", file_path.display());
 
     Ok(())
-}
-
-// Collect names that should be imported.
-fn collect_import_names(program: &Program, mod_name: &Name) -> Set<FullName> {
-    let mut names = GlobalRelativeNames::new();
-
-    // Collect names referenced by global values in this module.
-    for (full_name, gv) in &program.global_values {
-        // Check if this global value is defined in the module we're processing.
-        if &full_name.module() != mod_name {
-            continue;
-        }
-
-        match &gv.expr {
-            SymbolExpr::Simple(typed_expr) => {
-                // Collect all referenced names (values, types, traits) from the expression
-                typed_expr.expr.collect_import_names(&mut names);
-            }
-            SymbolExpr::Method(_) => {
-                // Trait member implementations are handled separately
-            }
-        }
-
-        // Collect referenced type names from the type of the global value.
-        // This also includes types of members defined in trait definitions.
-        gv.scm.collect_import_names(&mut names);
-    }
-
-    // Collect names referenced by trait implementations defined in this module.
-    for impls in program.trait_env.impls.values() {
-        for impl_ in impls {
-            if &impl_.define_module != mod_name {
-                continue;
-            }
-            // Collect names from the qualified predicate (including constraints).
-            impl_.qual_pred.collect_import_names(&mut names);
-
-            // Collect names from method implementations.
-            for (_method_name, method_expr) in &impl_.members {
-                method_expr.collect_import_names(&mut names);
-            }
-
-            // Collect types from method signatures.
-            for (_method_name, qual_type) in &impl_.member_sigs {
-                qual_type.collect_import_names(&mut names);
-            }
-        }
-    }
-
-    // Collect names from trait alias definitions in this module.
-    for (trait_id, trait_alias) in &program.trait_env.aliases.data {
-        // Check if this trait alias is defined in the module.
-        if &trait_id.name.module() != mod_name {
-            continue;
-        }
-        // Collect the aliased trait names.
-        for (aliased_trait_id, _span) in &trait_alias.value {
-            names.add(aliased_trait_id.name.clone());
-        }
-    }
-
-    // Collect names from type definitions (struct/union fields) in this module.
-    for (tycon, tycon_info) in program.type_env.tycons.iter() {
-        // Check if this type is defined in the module.
-        if &tycon.name.module() != mod_name {
-            continue;
-        }
-        // Collect type names from field types.
-        for field in &tycon_info.fields {
-            field.collect_import_names(&mut names);
-        }
-    }
-
-    // Collect names from type alias definitions in this module.
-    for (tycon, alias_info) in program.type_env.aliases.iter() {
-        // Check if this type alias is defined in the module.
-        if &tycon.name.module() != mod_name {
-            continue;
-        }
-        // Collect type names from the alias value.
-        alias_info.value.collect_import_names(&mut names);
-    }
-
-    names.into_set()
 }
 
 // Generate import statements for the given names.

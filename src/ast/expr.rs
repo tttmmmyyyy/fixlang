@@ -1,6 +1,6 @@
 use crate::{error::Errors, name_resolution::NameResolutionContext};
 use misc::{collect_results, Set};
-use name::{FullName, GlobalRelativeNames, Name, NameSpace};
+use name::{FullName, Name, NameSpace};
 use printer::Text;
 use serde::{Deserialize, Serialize};
 
@@ -1147,76 +1147,6 @@ impl ExprNode {
         let mut free_vars = self.free_vars().into_iter().collect::<Vec<_>>();
         free_vars.sort();
         free_vars
-    }
-
-    // Collect names that should be imported.
-    // Unlike free_vars(), this also collects type names from type annotations.
-    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
-        match &*self.expr {
-            Expr::Var(name) => {
-                names.add(name.name.clone());
-            }
-            Expr::LLVM(llvm) => {
-                llvm.generic_ty.collect_import_names(names);
-            }
-            Expr::App(func, args) => {
-                func.collect_import_names(names);
-                for arg in args {
-                    arg.collect_import_names(names);
-                }
-            }
-            Expr::Lam(_args, body) => {
-                body.collect_import_names(names);
-            }
-            Expr::Let(pat, bound, val) => {
-                pat.collect_import_names(names);
-                bound.collect_import_names(names);
-                val.collect_import_names(names);
-            }
-            Expr::If(cond, then_expr, else_expr) => {
-                cond.collect_import_names(names);
-                then_expr.collect_import_names(names);
-                else_expr.collect_import_names(names);
-            }
-            Expr::Match(cond, pat_vals) => {
-                cond.collect_import_names(names);
-                for (pat, val) in pat_vals {
-                    pat.collect_import_names(names);
-                    val.collect_import_names(names);
-                }
-            }
-            Expr::TyAnno(e, ty) => {
-                e.collect_import_names(names);
-                // Collect type names from the type annotation
-                ty.collect_import_names(names);
-            }
-            Expr::MakeStruct(tc, fields) => {
-                // Collect the struct type constructor name
-                names.add(tc.name.clone());
-                for (_field_name, field_expr) in fields {
-                    field_expr.collect_import_names(names);
-                }
-            }
-            Expr::ArrayLit(elems) => {
-                for e in elems {
-                    e.collect_import_names(names);
-                }
-            }
-            Expr::FFICall(_name, ret_ty, param_tys, args, _is_ios) => {
-                // Collect type constructor names from FFI types
-                names.add(ret_ty.name.clone());
-                for param_ty in param_tys {
-                    names.add(param_ty.name.clone());
-                }
-                for arg in args {
-                    arg.collect_import_names(names);
-                }
-            }
-            Expr::Eval(side, main) => {
-                side.collect_import_names(names);
-                main.collect_import_names(names);
-            }
-        }
     }
 
     // Convert all global FullNames to absolute paths.

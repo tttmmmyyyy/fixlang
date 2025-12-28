@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use crate::ast::equality::Equality;
-use crate::ast::name::GlobalRelativeNames;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::KindSignature;
@@ -58,20 +57,6 @@ impl QualPred {
                 }
             }
         }
-    }
-
-    // Collect names that should be imported.
-    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
-        // Collect names from predicate constraints
-        for pred in &self.pred_constraints {
-            pred.collect_import_names(names);
-        }
-        // Collect names from equality constraints
-        for eq in &self.eq_constraints {
-            eq.collect_import_names(names);
-        }
-        // Collect names from the main predicate
-        self.predicate.collect_import_names(names);
     }
 
     pub fn to_string(&self) -> String {

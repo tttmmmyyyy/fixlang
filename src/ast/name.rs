@@ -1,9 +1,6 @@
-use std::fmt::{Debug, Formatter};
-
-use serde::{Deserialize, Serialize};
-
 use super::*;
-use crate::misc::Set;
+use serde::{Deserialize, Serialize};
+use std::fmt::{Debug, Formatter};
 
 pub type Name = String;
 
@@ -324,36 +321,5 @@ impl FullName {
         if !self.is_local() {
             self.namespace.is_absolute = true;
         }
-    }
-
-    // Check if this FullName is global and relative (not absolute and not local).
-    pub fn is_global_relative(&self) -> bool {
-        !self.is_absolute() && !self.is_local()
-    }
-}
-
-// A collection of global relative names (names that are global but not absolute).
-#[derive(Default, Clone)]
-pub struct GlobalRelativeNames {
-    names: Set<FullName>,
-}
-
-impl GlobalRelativeNames {
-    pub fn new() -> Self {
-        Self {
-            names: Set::default(),
-        }
-    }
-
-    // Add a FullName to the collection if it's global and relative.
-    pub fn add(&mut self, name: FullName) {
-        if name.is_global_relative() {
-            self.names.insert(name);
-        }
-    }
-
-    // Convert to a Set<FullName>.
-    pub fn into_set(self) -> Set<FullName> {
-        self.names
     }
 }

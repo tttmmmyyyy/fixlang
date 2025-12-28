@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{error::Errors, name_resolution::NameResolutionContext};
 use misc::{make_set, Map, Set};
-use name::{FullName, GlobalRelativeNames, Name};
+use name::{FullName, Name};
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -310,32 +310,6 @@ impl PatternNode {
             Pattern::Union(_, subpat) => {
                 let subpat = subpat.resolve_type_aliases(type_env)?;
                 Ok(self.set_union_pat(subpat))
-            }
-        }
-    }
-
-    // Collect names that should be imported.
-    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
-        match &self.pattern {
-            Pattern::Var(_, ty) => {
-                // Collect type names from type annotation
-                if let Some(ty) = ty {
-                    ty.collect_import_names(names);
-                }
-            }
-            Pattern::Struct(tc, field_to_pat) => {
-                // Collect struct type constructor name
-                names.add(tc.name.clone());
-                // Recursively collect from field patterns
-                for (_field_name, pat) in field_to_pat {
-                    pat.collect_import_names(names);
-                }
-            }
-            Pattern::Union(variant_name, subpat) => {
-                // Collect union type constructor name
-                names.add(variant_name.namespace.clone().to_fullname());
-                // Recursively collect from subpattern
-                subpat.collect_import_names(names);
             }
         }
     }

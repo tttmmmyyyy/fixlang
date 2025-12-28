@@ -1,7 +1,6 @@
 use crate::ast::equality::Equality;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::FullName;
-use crate::ast::name::GlobalRelativeNames;
 use crate::ast::name::Name;
 use crate::ast::name::NameSpace;
 use crate::ast::predicate::Predicate;
@@ -1659,29 +1658,6 @@ impl TypeNode {
         }
     }
 
-    // Collect names that should be imported.
-    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
-        match &self.ty {
-            Type::TyVar(_) => {
-                // Type variables don't contain TyCons
-            }
-            Type::TyCon(tycon) => {
-                names.add(tycon.name.clone());
-            }
-            Type::TyApp(tyfun, arg) => {
-                tyfun.collect_import_names(names);
-                arg.collect_import_names(names);
-            }
-            Type::AssocTy(assoc_ty, args) => {
-                // Associated types are also type constructors
-                names.add(assoc_ty.name.clone());
-                for arg in args {
-                    arg.collect_import_names(names);
-                }
-            }
-        }
-    }
-
     pub fn collect_tyvar_names(&self, tyvar_names: &mut Set<Name>) {
         match &self.ty {
             Type::TyVar(tv) => {
@@ -2070,22 +2046,6 @@ impl Scheme {
             }
         }
         self.ty.find_node_at(pos)
-    }
-
-    // Collect names that should be imported.
-    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
-        // Collect type constructor names from the type
-        self.ty.collect_import_names(names);
-
-        // Collect names from predicates
-        for pred in &self.predicates {
-            pred.collect_import_names(names);
-        }
-
-        // Collect names from equalities
-        for eq in &self.equalities {
-            eq.collect_import_names(names);
-        }
     }
 
     // Convert all global FullNames to absolute paths.

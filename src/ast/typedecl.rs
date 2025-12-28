@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use misc::Set;
-use name::{FullName, GlobalRelativeNames, Name};
-
 use crate::ast::kind_scope::KindScope;
 use crate::error::Errors;
 use crate::name_resolution::NameResolutionContext;
+use misc::Set;
+use name::{FullName, Name};
 
 use super::*;
 
@@ -389,12 +388,6 @@ impl Field {
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())
-    }
-
-    // Collect names that should be imported.
-    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
-        // Collect from the syntactic type.
-        self.syn_ty.collect_import_names(names);
     }
 
     // Check if fields are duplicated. If duplication is found, it returns the duplicated field.

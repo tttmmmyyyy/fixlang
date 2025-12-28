@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
-use crate::ast::name::GlobalRelativeNames;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{TraitAliasEnv, TraitId};
 use crate::ast::types::{TyVar, TypeNode};
@@ -21,14 +20,6 @@ pub struct Predicate {
 impl Predicate {
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         self.ty.free_vars_to_vec(buf);
-    }
-
-    // Collect names that should be imported.
-    pub fn collect_import_names(&self, names: &mut GlobalRelativeNames) {
-        // Collect the trait name
-        names.add(self.trait_id.name.clone());
-        // Collect type names
-        self.ty.collect_import_names(names);
     }
 
     // Convert all global FullNames to absolute paths.
