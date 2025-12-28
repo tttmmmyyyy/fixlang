@@ -1,6 +1,6 @@
 module Main;
 
-import Std::{undefined, Monad::pure, Additive, I64, IO};
+import Std::{undefined, Additive, I64, IO, Monad::pure};
 
 // Use in type signature
 my_add : [a : Additive] a -> a -> a;

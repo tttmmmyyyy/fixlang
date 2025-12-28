@@ -1,6 +1,6 @@
 module Main;
 
-import Std::{Monad::pure, IO, Path};
+import Std::{IO, Path, Monad::pure};
 
 a : Path;
 a = "hoge.fix";

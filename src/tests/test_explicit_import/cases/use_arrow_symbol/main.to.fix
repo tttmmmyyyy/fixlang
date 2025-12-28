@@ -1,6 +1,6 @@
 module Main;
 
-import Std::{Monad::pure, I64, IO};
+import Std::{I64, IO, Monad::pure};
 
 f : I64 -> I64 = |x| x + 1;
 

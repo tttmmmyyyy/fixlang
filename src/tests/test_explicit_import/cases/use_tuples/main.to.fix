@@ -1,10 +1,11 @@
 module Main;
 
-import Std::{Monad::pure, IO};
+import Std::{IO, Monad::pure, Tuple3::@1};
 
 main : IO ();
 main = (
     eval ();
     eval (1,2);
+    eval (1,2,3).@1;
     pure()
 );

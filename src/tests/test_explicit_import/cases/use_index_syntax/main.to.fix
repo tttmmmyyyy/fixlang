@@ -1,6 +1,6 @@
 module Main;
 
-import Std::{Indexable::iget, Monad::pure, I64, IO};
+import Std::{I64, IO, Indexable::iget, Monad::pure};
 
 type A = struct { x : I64 };
 

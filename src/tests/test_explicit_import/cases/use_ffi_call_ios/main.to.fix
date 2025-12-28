@@ -1,6 +1,6 @@
 module Main;
 
-import Std::{IO::IOState::_unsafe_create, Monad::pure, IO};
+import Std::{IO, IO::IOState::_unsafe_create, Monad::pure};
 
 main : IO ();
 main = (
