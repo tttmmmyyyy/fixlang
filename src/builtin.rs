@@ -493,10 +493,14 @@ pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     ty
 }
 
-// Make tuple name.
+// Make tuple name
+pub fn make_tuple_name(size: u32) -> FullName {
+    FullName::from_strs(&[STD_NAME], &format!("{}{}", TUPLE_NAME, size))
+}
+
+// Make absolute tuple name, e.g., `::Std::Tuple3`
 pub fn make_tuple_name_abs(size: u32) -> FullName {
-    let name = format!("{}{}", TUPLE_NAME, size);
-    let mut name = FullName::from_strs(&[STD_NAME], &name);
+    let mut name = make_tuple_name(size);
     name.set_absolute();
     name
 }
@@ -556,7 +560,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
         .map(|i| make_tyvar(&("t".to_string() + &i.to_string()), &kind_star()))
         .collect::<Vec<_>>();
     TypeDefn {
-        name: make_tuple_name_abs(size),
+        name: make_tuple_name(size),
         tyvars: tyvars.clone(),
         value: TypeDeclValue::Struct(Struct {
             fields: (0..size)
