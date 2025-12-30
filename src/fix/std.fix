@@ -999,7 +999,7 @@ namespace FFI {
         // 
         // # Parameters
         //
-        // * `clone` - The constructor function of the contained value.
+        // * `ctor` - The copy constructor function of the contained value.
         // * `action` - The action to be performed on the contained value.
         // * `dtor` - The destructor value.
         mutate_unique : (a -> IO a) -> (a -> IO b) -> Destructor a -> (Destructor a, b);
@@ -1011,7 +1011,7 @@ namespace FFI {
         // 
         // # Parameters
         // 
-        // * `clone` - The constructor function of the contained value.
+        // * `ctor` - The copy constructor function of the contained value.
         // * `action` - The action to be performed on the contained value.
         // * `dtor` - The destructor value.
         mutate_unique_io : (a -> IO a) -> (a -> IO b) -> Destructor a -> IO (Destructor a, b);
