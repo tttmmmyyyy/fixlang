@@ -3330,49 +3330,53 @@ pub fn test114() {
 pub fn test_destructor() {
     // Test Std::Destructor
     let source = r#"
-        module Main; 
-        main : IO ();
-        main = (
+module Main;
 
-            // Boxed case
-            let dtor0 = Destructor { 
-                _value : [1,2,3], 
-                dtor : |val| (
-                    let arr_str = val.to_iter.map(to_string).join(", ");
-                    println("dtor0 destructed. val: " + arr_str);;
-                    pure $ val
-                )
-            };
-
-            // Unboxed case
-            let dtor1 = Destructor { 
-                _value : 42, 
-                dtor : |val| (
-                    println("dtor1 destructed. val: " + val.to_string);;
-                    pure $ val
-                )
-            };
-
-            // Dtor in dtor
-            let dtor3 = Destructor { 
-                _value : 2, 
-                dtor : |val| (
-                    println("dtor3 destructed. val: " + val.to_string);;
-                    pure $ val
-                )
-            };
-            let dtor2 = Destructor { 
-                _value : dtor3, 
-                dtor : |val| (
-                    println("dtor2 destructed. val.@_value: " + val.@_value.to_string);;
-                    pure $ val
-                )
-            };
-
-            pure()
-        );
+main : IO ();
+main = (
+    let ptr = *FFI_CALL_IO[Ptr mymalloc()];
+    let dtor = *Destructor::make(ptr, |ptr| FFI_CALL_IO[() myfree(Ptr), ptr];; nullptr.pure);
+    eval dtor;
+    FFI_CALL_IO[() check(CInt, CInt), 1.to_CInt, 1.to_CInt];;
+    pure()
+);
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+
+    let c_source = r#"
+#include <stdio.h>
+#include <stdlib.h>
+
+int malloc_called = 0;
+int free_called = 0;
+
+void *mymalloc()
+{
+    malloc_called++;
+    return malloc(100);
+}
+
+void myfree(void *p)
+{
+    free_called++;
+    free(p);
+}
+
+void check(int expect_malloc, int expect_free)
+{
+    if (malloc_called != expect_malloc)
+    {
+        printf("Expected malloc calls: %d, Actual: %d\n", expect_malloc, malloc_called);
+        exit(1);
+    }
+    if (free_called != expect_free)
+    {
+        printf("Expected free calls: %d, Actual: %d\n", expect_free, free_called);
+        exit(1);
+    }
+}
+    "#;
+
+    test_fix_linked_with_c(&source, &c_source, function_name!());
 }
 
 #[test]

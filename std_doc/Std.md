@@ -1316,7 +1316,7 @@ Performs an IO action borrowing the contained value.
 
 #### make
 
-Type: `a -> (a -> Std::IO a) -> Std::FFI::Destructor a`
+Type: `a -> (a -> Std::IO a) -> Std::IO (Std::FFI::Destructor a)`
 
 Make a destructor value.
 
@@ -1339,7 +1339,7 @@ Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resou
 
 ##### Parameters
 
-* `clone` - The constructor function of the contained value.
+* `ctor` - The copy constructor function of the contained value.
 * `action` - The action to be performed on the contained value.
 * `dtor` - The destructor value.
 
@@ -1353,7 +1353,7 @@ This is similar to `mutate_unique`, but the `ctor` and `action` is executed in t
 
 ##### Parameters
 
-* `clone` - The constructor function of the contained value.
+* `ctor` - The copy constructor function of the contained value.
 * `action` - The action to be performed on the contained value.
 * `dtor` - The destructor value.
 
@@ -2685,7 +2685,7 @@ Converts an `IOFail` value to an `IO` value by an error handler (i.e., a `catch`
 
 #### from_file_ptr
 
-Type: `Std::Ptr -> Std::IO::IOHandle`
+Type: `Std::Ptr -> Std::IO Std::IO::IOHandle`
 
 Creates an `IOHandle` from a file pointer (i.e., pointer to C's `FILE`).
 
@@ -5054,9 +5054,9 @@ and there is a possibility that the value is used after the destructor function 
 
 Type: `a`
 
-##### field `dtor`
+##### field `_dtor`
 
-Type: `a -> Std::IO a`
+Type: `a -> Std::IO::IOState -> (Std::IO::IOState, a)`
 
 ### namespace Std::IO
 

@@ -954,7 +954,7 @@ namespace FFI {
     // 
     // NOTE: Of course, if the value stored in `Destructor` also exists outside of `Destructor`, the value still exists in the Fix program even after the destructor function is called, 
     // and there is a possibility that the value is used after the destructor function is called.
-    type Destructor a = box struct { _value : a, dtor : a -> IO a };
+    type Destructor a = box struct { _value : a, _dtor : a -> IOState -> (IOState, a) };
 
     namespace Destructor {
         // Borrow the contained value.
@@ -986,8 +986,11 @@ namespace FFI {
         // 
         // * `value` - The value to be wrapped.
         // * `dtor` - The destructor function to be called on the value.
-        make : a -> (a -> IO a) -> Destructor a;
-        make = |val, dtor| Destructor { _value : val, dtor : dtor };
+        make : a -> (a -> IO a) -> IO (Destructor a);
+        make = |val, dtor| (
+            let dtor : a -> IOState -> (IOState, a) = |val, ios| (dtor(val).@runner)(ios);
+            IO::from_runner $ Destructor::_make(val, dtor)
+        );
 
         // Apply an IO action which mutates the semantics of the value.
         //
@@ -1025,7 +1028,7 @@ namespace FFI {
                 let val = dtor.@_value;
                 let val = *ctor(val);
                 let res = *action(val);
-                let dtor = Destructor::make(val, dtor.@dtor);
+                let dtor = *Destructor::make(val, dtor.@dtor);
                 pure $ (dtor, res)
             }
         );
@@ -1287,7 +1290,7 @@ namespace IO {
             if file_ptr == nullptr { 
                 pure $ Result::err $ "Failed to open a file: " + path
             } else {
-                pure $ Result::ok $ IOHandle::from_file_ptr $ file_ptr
+                pure $ Result::ok $ *IOHandle::from_file_ptr(file_ptr)
             }
         ))
     );
@@ -1391,15 +1394,15 @@ namespace IO {
 
     // The handle for standard input.
     stdin : IOHandle;
-    stdin = IOHandle::from_file_ptr $ FFI_CALL[Ptr fixruntime_c_stdin()];
+    stdin = do { IOHandle::from_file_ptr $ *FFI_CALL_IO[Ptr fixruntime_c_stdin()] }.unsafe_perform;
 
     // The handle for standard output.
     stdout : IOHandle;
-    stdout = IOHandle::from_file_ptr $ FFI_CALL[Ptr fixruntime_c_stdout()];
+    stdout = do { IOHandle::from_file_ptr $ *FFI_CALL_IO[Ptr fixruntime_c_stdout()] }.unsafe_perform;
 
     // The handle for standard error.
     stderr : IOHandle;
-    stderr = IOHandle::from_file_ptr $ FFI_CALL[Ptr fixruntime_c_stderr()];
+    stderr = do { IOHandle::from_file_ptr $ *FFI_CALL_IO[Ptr fixruntime_c_stderr()] }.unsafe_perform;
 
     // Performs a function with a file handle. The second argument is a mode string for `fopen` C function. 
     // 
@@ -1542,11 +1545,12 @@ namespace IO::IOHandle {
     // # Parameters
     // 
     // * `file_ptr` - The file pointer to be wrapped.
-    from_file_ptr : Ptr -> IOHandle;
+    from_file_ptr : Ptr -> IO IOHandle;
     from_file_ptr = |file_ptr| (
-        let handle_ptr = FFI_CALL[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
+        let handle_ptr = *FFI_CALL_IO[Ptr fixruntime_iohandle_create(Ptr), file_ptr];
         let dtor = |handle_ptr| FFI_CALL_IO[() fixruntime_iohandle_delete(Ptr), handle_ptr];; pure $ nullptr;
-        IOHandle { _data : Destructor::make(handle_ptr, dtor) }
+        let dtor = *Destructor::make(handle_ptr, dtor);
+        pure $ IOHandle { _data : dtor }
     );
 }
 

@@ -263,8 +263,12 @@ pub fn make_dynamic_object_tycon() -> TyCon {
     TyCon::new(make_dynamic_object_name())
 }
 
-pub fn make_destructor_object_name() -> FullName {
-    FullName::from_strs(&[STD_NAME, FFI_NAME], DESTRUCTOR_OBJECT_NAME)
+pub fn make_destructor_name() -> FullName {
+    FullName::from_strs(&[STD_NAME, FFI_NAME], DESTRUCTOR_NAME)
+}
+
+pub fn make_destructor_ty(val_ty: Arc<TypeNode>) -> Arc<TypeNode> {
+    type_tyapp(type_tycon(&tycon(make_destructor_name())), val_ty)
 }
 
 pub fn make_functor_name() -> FullName {
@@ -310,7 +314,7 @@ pub fn is_dynamic_object_tycon(tc: &TyCon) -> bool {
 
 // Returns whether given tycon is Std::Destructor
 pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
-    tc.name == make_destructor_object_name()
+    tc.name == make_destructor_name()
 }
 
 // Returns whether given tycon is array
@@ -4891,6 +4895,108 @@ pub fn make_iostate_unsafe_create() -> (Arc<ExprNode>, Arc<Scheme>) {
         ios_ty,
         None,
     );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMDestructorMake {
+    value: FullName,
+    dtor: FullName,
+    ios: FullName,
+}
+
+impl InlineLLVMDestructorMake {
+    pub fn name(&self) -> String {
+        "Std::FFI::Destructor::_make".to_string()
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.value, &mut self.dtor, &mut self.ios]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        ret_ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // Get arguments.
+        let value = gc.get_scoped_obj(&self.value); // a
+        let dtor = gc.get_scoped_obj(&self.dtor); // a -> IOState -> (IOState, a)
+        let ios = gc.get_scoped_obj(&self.ios); // IOState
+
+        let ret_tys = ret_ty.field_types(gc.type_env()); // (IOState, Destructor a)
+        let dtor_type = ret_tys[1].clone(); // Destructor a
+
+        // Create destructor object.
+        let dtor_obj = create_obj(dtor_type.clone(), &vec![], None, gc, Some("dtor_obj"));
+        let dtor_obj = ObjectFieldType::move_into_struct_field(
+            gc,
+            dtor_obj,
+            DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
+            &value,
+        );
+        let dtor_obj = ObjectFieldType::move_into_struct_field(
+            gc,
+            dtor_obj,
+            DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
+            &dtor,
+        );
+
+        // Create returned object.
+        let ret_obj = create_obj(
+            ret_ty.clone(),
+            &vec![],
+            None,
+            gc,
+            Some("ret_obj@destructor_make"),
+        );
+        let ret_obj = ObjectFieldType::move_into_struct_field(gc, ret_obj, 0, &ios);
+        let ret_obj = ObjectFieldType::move_into_struct_field(gc, ret_obj, 1, &dtor_obj);
+
+        ret_obj
+    }
+}
+
+// Std::FFI::Destructor::_make : a -> (a -> IOState -> (IOState, a)) -> IOState -> (IOState, Destructor a);
+pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const TYPE_NAME: &str = "a";
+
+    const VAR_NAME: &str = "x";
+    const DTOR_NAME: &str = "dtor";
+    const IOS_NAME: &str = "ios";
+
+    let a_ty = type_tyvar(TYPE_NAME, &kind_star());
+
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            type_tyvar(TYPE_NAME, &kind_star()),
+            type_fun(
+                type_fun(a_ty.clone(), make_io_runner_ty(a_ty.clone())),
+                make_io_runner_ty(make_destructor_ty(a_ty.clone())),
+            ),
+        ),
+    );
+
+    let expr = expr_abs_many(
+        vec![
+            var_local(VAR_NAME),
+            var_local(DTOR_NAME),
+            var_local(IOS_NAME),
+        ],
+        expr_llvm(
+            LLVMGenerator::DestructorMake(InlineLLVMDestructorMake {
+                value: FullName::local(VAR_NAME),
+                dtor: FullName::local(DTOR_NAME),
+                ios: FullName::local(IOS_NAME),
+            }),
+            make_tuple_ty(vec![make_iostate_ty(), make_destructor_ty(a_ty.clone())]),
+            None,
+        ),
+    );
+
     (expr, scm)
 }
 

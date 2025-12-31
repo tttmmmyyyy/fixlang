@@ -77,6 +77,7 @@ pub enum LLVMGenerator {
         InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained,
     ),
     IOStateUnsafeCreate(InlineLLVMIOStateUnsafeCreate),
+    DestructorMake(InlineLLVMDestructorMake),
 }
 
 impl LLVMGenerator {
@@ -157,6 +158,7 @@ impl LLVMGenerator {
             }
             LLVMGenerator::ArrayCheckRange(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::IOStateUnsafeCreate(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::DestructorMake(x) => Some(x.generate(gc, ty)),
         };
         match obj {
             None => {
@@ -251,6 +253,7 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.free_vars(),
             LLVMGenerator::IOStateUnsafeCreate(x) => x.free_vars(),
             LLVMGenerator::ArrayCheckRange(x) => x.free_vars(),
+            LLVMGenerator::DestructorMake(x) => x.free_vars(),
         }
     }
 
@@ -320,6 +323,7 @@ impl LLVMGenerator {
             LLVMGenerator::UnionModBody(x) => x.name(),
             LLVMGenerator::UndefinedFunctionBody(x) => x.name(),
             LLVMGenerator::ArrayCheckRange(x) => x.name(),
+            LLVMGenerator::DestructorMake(x) => x.name(),
         };
         format!("LLVM<{}>", raw_name)
     }

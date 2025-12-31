@@ -26,6 +26,7 @@
 - Changed the condition for inlining optimization. A function will be inlined if its complexity is below a certain threshold, regardless of the number of times it is called.
 - Made all values in the `Std::PunchedArray` namespace private (since they are not intended to be used directly from outside).
 - You can now refer to entities using absolute namespace syntax (e.g., `::Std::String`) without importing them.
+- Changed the type of `Std::FFI::Destructor::make` function to return `IO`. Correspondingly, `Std::IO::IOHandle::from_file_ptr` also returns `IO`.
 
 ### Fixed
 
