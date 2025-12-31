@@ -1020,17 +1020,28 @@ namespace FFI {
         mutate_unique_io : (a -> IO a) -> (a -> IO b) -> Destructor a -> IO (Destructor a, b);
         mutate_unique_io = |ctor, action, dtor| (
             let (unique, dtor) = dtor.unsafe_is_unique;
+            // Unique case
             if unique {
                 let val = dtor.@_value;
                 let res = *action(val);
                 pure $ (dtor, res)
-            } else {
-                let val = dtor.@_value;
+            };
+            // Shared case
+            // 
+            // Here, it is essential to use `borrow_io`:
+            // Consider the case where `dtor` is shared across multiple threads, which caused us to enter this branch.
+            // In this case, `dtor` may be released by other threads immediately, and `dtor` may actually become unique.
+            // However, the processing below assumes that `dtor` is shared.
+            // Therefore, `dtor` should be kept shared by using `borrow_io`.
+            // 
+            // In fact, if `dtor` remains unique while processing, `Destructor` is changed in-place by `set__value`, 
+            // and the old resource leaks.
+            dtor.borrow_io(|val|
                 let val = *ctor(val);
                 let res = *action(val);
-                let dtor = *Destructor::make(val, dtor.@_dtor);
+                let dtor = dtor.set__value(val); // The `Destructor` SHOULD be cloned here.
                 pure $ (dtor, res)
-            }
+            )
         );
     }
 }
