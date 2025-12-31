@@ -1028,7 +1028,7 @@ namespace FFI {
                 let val = dtor.@_value;
                 let val = *ctor(val);
                 let res = *action(val);
-                let dtor = *Destructor::make(val, dtor.@dtor);
+                let dtor = *Destructor::make(val, dtor.@_dtor);
                 pure $ (dtor, res)
             }
         );
