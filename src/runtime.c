@@ -374,6 +374,7 @@ __attribute__((noreturn)) void fixruntime_abort(void)
 
     void *callstack[MAX_BACKTRACE_FRAMES];
     int frames = backtrace(callstack, MAX_BACKTRACE_FRAMES);
+    fprintf(stderr, "Backtrace (%d frames):\n", frames);
     char **strs = backtrace_symbols(callstack, frames);
     if (strs)
     {
@@ -382,6 +383,10 @@ __attribute__((noreturn)) void fixruntime_abort(void)
             fprintf(stderr, "  #%02d  %s\n", i - 1, strs[i]);
         }
         free(strs);
+    }
+    else
+    {
+        fprintf(stderr, "Failed to get backtrace symbols\n");
     }
 
 #endif // __linux__

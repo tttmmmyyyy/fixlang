@@ -177,6 +177,11 @@ pub fn build_object_files<'c>(
             // If debug info is generated, finalize it.
             gc.finalize_di();
 
+            // Add frame-pointer attribute to all functions for better backtraces on macOS
+            if config.no_elim_frame_pointers() {
+                gc.add_frame_pointer_attribute_to_all_functions();
+            }
+
             if config.emit_llvm {
                 // Print LLVM-IR to file before optimization.
                 emit_llvm(gc.module, &config, false);

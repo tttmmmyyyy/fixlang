@@ -204,6 +204,8 @@ pub struct Configuration {
     pub emit_symbols: bool,
     // Is in compiler development mode?
     pub develop_mode: bool,
+    // Enable backtrace support (keep frame pointers and add backtrace library).
+    pub backtrace: bool,
 }
 
 #[derive(Clone)]
@@ -318,6 +320,7 @@ impl Configuration {
             run_program_args: vec![],
             emit_symbols: false,
             develop_mode: false,
+            backtrace: false,
         })
     }
 }
@@ -506,10 +509,17 @@ impl Configuration {
     }
 
     pub fn set_backtrace(&mut self) {
+        self.backtrace = true;
         self.runtime_c_macro.push("BACKTRACE".to_string());
         if env::consts::OS == "linux" {
             self.add_dynamic_library("backtrace");
         }
+    }
+
+    // Check if frame pointers should not be eliminated.
+    // This is necessary on macOS when backtrace is enabled, as backtrace() relies on frame pointers.
+    pub fn no_elim_frame_pointers(&self) -> bool {
+        self.backtrace && env::consts::OS == "macos"
     }
 
     // Get hash value of the configurations that affect the object file generation.
@@ -518,6 +528,7 @@ impl Configuration {
         data.push_str(&self.fix_opt_level.to_string());
         data.push_str(&self.debug_info.to_string());
         data.push_str(&self.threaded.to_string());
+        data.push_str(&self.backtrace.to_string());
         data.push_str(&self.c_type_sizes.to_string());
         for disabled_cpu_feature in &self.disable_cpu_features_regex {
             // To ensure that the arrays ["xy", "x"] and ["x", "xy"] produce different hash values, we hash each element before concatenation instead of simply joining them.

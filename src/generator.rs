@@ -2873,4 +2873,19 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         self.builder().build_store(ptr, val).unwrap();
         self.builder().build_load(to_ty, ptr, "bit_cast").unwrap()
     }
+
+    // Add frame-pointer attribute to all functions in the module
+    // This is especially important on macOS where backtrace() relies on frame pointers
+    pub fn add_frame_pointer_attribute_to_all_functions(&self) {
+        let mut func = self.module.get_first_function();
+        while let Some(function) = func {
+            // Add "frame-pointer"="all" attribute to ensure frame pointers are always kept
+            function.add_attribute(
+                inkwell::attributes::AttributeLoc::Function,
+                self.context
+                    .create_string_attribute("frame-pointer", "all"),
+            );
+            func = function.get_next_function();
+        }
+    }
 }

@@ -361,7 +361,12 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         let mut com = Command::new("gcc");
         let mut com = com
             .arg("-ffunction-sections")
-            .arg("-fdata-sections")
+            .arg("-fdata-sections");
+        // Keep frame pointers for better backtraces on macOS when backtrace is enabled
+        if config.no_elim_frame_pointers() {
+            com = com.arg("-fno-omit-frame-pointer");
+        }
+        let mut com = com
             .arg("-o")
             .arg(runtime_tmp_path.to_str().unwrap())
             .arg("-c")
