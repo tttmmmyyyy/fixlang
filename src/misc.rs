@@ -30,18 +30,18 @@ pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
     PathBuf::from(TEMPORARY_SRC_PATH).join(file_name)
 }
 
-// Atomically save temporary source file if it doesn't already exist.
-// Returns true if the file was created, false if it already existed.
-pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) -> bool {
-    let path = temporary_source_path(file_name, hash);
+// Save a file with the specified content in a temporary directory with the specified name (with a hash value added to avoid collisions).
+pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile, Errors> {
+    let hash = format!("{:x}", md5::compute(source));
+    let path = temporary_source_path(file_name, &hash);
     let parent = path.parent().unwrap();
-    fs::create_dir_all(parent).expect(
-        format!(
-            "Failed to create directory \"{}\".",
-            parent.to_string_lossy().to_string()
-        )
-        .as_str(),
-    );
+    fs::create_dir_all(parent).map_err(|e| {
+        Errors::from_msg(format!(
+            "Failed to create directory \"{}\": {}",
+            parent.to_string_lossy().to_string(),
+            e
+        ))
+    })?;
 
     // Use create_new(true) for atomic check-and-create operation
     match fs::OpenOptions::new()
@@ -51,18 +51,28 @@ pub fn save_temporary_source(source: &str, file_name: &str, hash: &str) -> bool 
     {
         Ok(mut file) => {
             use std::io::Write;
-            file.write_all(source.as_bytes())
-                .expect(&format!("Failed to write temporary file {}", file_name));
-            true
+            // file.write_all(source.as_bytes())
+            //     .expect(&format!("Failed to write temporary file {}", file_name));
+            file.write_all(source.as_bytes()).map_err(|e| {
+                Errors::from_msg(format!(
+                    "Failed to write temporary file \"{}\": {}",
+                    file_name, e
+                ))
+            })?;
         }
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
             // File already exists, which is fine
-            false
         }
         Err(e) => {
-            panic!("Failed to create temporary file {}: {}", file_name, e);
+            return Err(Errors::from_msg(format!(
+                "Failed to create temporary file \"{}\": {}",
+                file_name, e
+            )));
         }
     }
+
+    let source = SourceFile::from_file_path_and_content(path, source.to_string());
+    Ok(source)
 }
 
 pub fn collect_results<T, E>(results: impl Iterator<Item = Result<T, E>>) -> Result<Vec<T>, E> {

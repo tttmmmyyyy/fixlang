@@ -3,7 +3,7 @@ use crate::constants::RUN_PATH;
 use crate::error::{any_to_string, panic_if_err, panic_with_err, Errors};
 use crate::make_std_mod;
 use crate::make_tuple_traits_mod;
-use crate::misc::{info_msg, save_temporary_source, temporary_source_path};
+use crate::misc::{info_msg, save_temporary_source};
 use crate::parse_file_path;
 use crate::stopwatch::StopWatch;
 use crate::Configuration;
@@ -117,11 +117,8 @@ fn check_program(mut program: Program, config: &Configuration) -> Result<Program
 #[allow(dead_code)]
 pub fn test_source(source: &str, mut config: Configuration) {
     const MAIN_RUN: &str = "main_run";
-    let source_hash = format!("{:x}", md5::compute(source));
-    save_temporary_source(source, MAIN_RUN, &source_hash);
-    config
-        .source_files
-        .push(temporary_source_path(MAIN_RUN, &source_hash));
+    let src = save_temporary_source(source, MAIN_RUN).ok().unwrap();
+    config.source_files.push(src.file_path);
     assert_eq!(run(config), 0);
 }
 
