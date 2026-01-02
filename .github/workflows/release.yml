@@ -49,11 +49,6 @@ jobs:
               llvm-url: "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz", 
               extension: "" }
           - { os: macos,  
-              image: macos-13, 
-              target: x86_64-apple-darwin, 
-              use-cross: false, 
-              extension: "" }
-          - { os: macos,  
               image: macos-14, 
               target: aarch64-apple-darwin, 
               use-cross: false, 
