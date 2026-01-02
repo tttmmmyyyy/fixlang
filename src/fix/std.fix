@@ -1555,20 +1555,6 @@ namespace IO::IOHandle {
     // NOTE: 
     // Do not directly close the file pointer by `fclose` or other functions.
     // Instead you should close `IOHandle` by `IO::close_file`.
-    //
-    // DEPRECATED: 
-    // Use `get_file_ptr` instead.
-    // This function is deprecated because it has a pure function interface, but the value of `_file_ptr` changes by calling `IO::close_file`.
-    _file_ptr : IOHandle -> Ptr;
-    _file_ptr = |handle| handle.@_data.borrow(|handle_ptr| FFI_CALL[Ptr fixruntime_iohandle_get_file(Ptr), handle_ptr]);
-
-    // Gets pointer to C's `FILE` value from an `IOHandle`.
-    //
-    // If the `IOHandle` is already closed, the function returns `nullptr`.
-    // 
-    // NOTE: 
-    // Do not directly close the file pointer by `fclose` or other functions.
-    // Instead you should close `IOHandle` by `IO::close_file`.
     // 
     // NOTE: 
     // If `IO::close` is called while using the `Ptr` obtained by this function, the `Ptr` becomes invalid and may cause undefined behavior.
