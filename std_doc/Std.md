@@ -1291,34 +1291,42 @@ Internal implementation of the `mutate_boxed_io` function.
 
 Type: `(a -> b) -> Std::FFI::Destructor a -> b`
 
-Borrow the contained value.
+Applies a function to the resource held by `Destructor` and returns the result.
 
-`borrow(worker, dtor)` calls `worker` on the contained value captured by `dtor`, and returns the value returned by `worker`.
-
-It is guaranteed that the `dtor` is alive during the call of `worker`.
-In other words, the `worker` receives the contained value for which the destructor is not called yet.
+The reason for not simply providing a function `get : Destructor a -> a` is as follows:
+If the expression `fun(dtor.get)` is the last use of `dtor`, the compiler will call the destructor function after the call to `get`, and the released resource will be passed to `fun`.
 
 ##### Parameters
 
-* `borrower` - The function to be called on the contained value.
+* `work` - The function to be called on the resource.
 * `dtor` - The destructor value.
 
 #### borrow_io
 
 Type: `(a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO b`
 
-Performs an IO action borrowing the contained value.
+Applies an IO action to the resource held by `Destructor` and returns the result.
+
+It works the same as `borrow` except that it executes an `IO` action.
 
 ##### Parameters
 
-* `action` - The IO action to be performed on the contained value.
+* `action` - The IO action to be performed on the resource.
 * `dtor` - The destructor value.
 
 #### make
 
 Type: `a -> (a -> Std::IO a) -> Std::IO (Std::FFI::Destructor a)`
 
-Make a destructor value.
+Make a `Destructor` value.
+
+Takes a resource and a destructor function, and creates a `Destructor` value.
+
+After receiving a resource from a foreign language, you must create exactly one `Destructor` value from that resource.
+To ensure this, you must implement as follows:
+- Resource creation (calling a foreign function) must be done using `FFI_CALL_IO`.
+- Call `Destructor::make` within the same `IO` context.
+If resource creation is done with `FFI_CALL`, it will be treated as a pure function by the Fix compiler, so the number of calls may be changed by optimization.
 
 ##### Parameters
 
@@ -1329,32 +1337,36 @@ Make a destructor value.
 
 Type: `(a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> (Std::FFI::Destructor a, b)`
 
-Apply an IO action which mutates the semantics of the value.
+Makes `dtor` unique if necessary, then modifies the value of the resource.
 
-`dtor.mutate_unique(ctor, action)` applies `action` to `dtor` if `dtor` is unique.
-If `dtor` is shared, it creates a new `Destructor` value using `ctor` and applies `action` to the new value.
+For example, use this function when you have a `Destructor` managing a memory region allocated with `malloc`, and want to modify the contents of that memory region.
 
-The `action` is allowed to modify the external resource stored in `dtor` (e.g., if `value` is a pointer, it can modify the value pointed by the pointer).
-Also, `ctor` should be a "copy constructor" (e.g., memcpy) of the external resource stored in `dtor`.
+The first argument `ctor` is a "copy constructor" for that resource.
+For example, it is an `IO` action that allocates a new memory region with `malloc` and copies the contents of the original memory region with `memcpy`.
+
+The second argument `action` is an IO action to modify the value of the contained resource.
+
+`dtor.mutate_unique(ctor, action)` creates a new resource using `ctor` if `dtor` is shared, and creates a new `Destructor` value containing it.
+Then, it applies `action` to the contained resource and returns the result.
 
 ##### Parameters
 
-* `ctor` - The copy constructor function of the contained value.
-* `action` - The action to be performed on the contained value.
+* `ctor` - The copy constructor function of the resource.
+* `action` - The action to be performed on the resource.
 * `dtor` - The destructor value.
 
 #### mutate_unique_io
 
 Type: `(a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> Std::IO (Std::FFI::Destructor a, b)`
 
-Apply an IO action which mutates the semantics of the value.
+Makes `dtor` unique if necessary, then executes an IO action that modifies the value of the resource.
 
 This is similar to `mutate_unique`, but the `ctor` and `action` is executed in the context of the external `IO` context.
 
 ##### Parameters
 
-* `ctor` - The copy constructor function of the contained value.
-* `action` - The action to be performed on the contained value.
+* `ctor` - The copy constructor function of the resource.
+* `action` - The action to be performed on the resource.
 * `dtor` - The destructor value.
 
 ### namespace Std::FromBytes
@@ -5040,15 +5052,33 @@ Defined as: `type CUnsignedShort = Std::U16`
 
 Defined as: `type Destructor a = box struct { ...fields... }`
 
-`Destructor a` is a wrapper type for `a`, which can have a destructor function `a -> IO a`.
-Just before a value of type `Destructor a` is dropped, the destructor function is called on the contained value, and the value can be modified by the `IO` action.
+`Destructor` is a type for managing resources allocated in foreign languages.
+It contains a handle to the resource (of type `a`) and a destructor function `a -> IO a` to release the resource.
+The Fix compiler calls the destructor function to release the resource just before destroying the `Destructor`.
 
-This type is used to create a Fix's type that wraps a resource allocated by FFI. In such cases, the destructor release the resource by FFI.
+##### Why does the destructor function return `a`?
 
-NOTE: In the destructor, only IO actions for finalizing the passed value are allowed, and you should not perform other IO actions such as writing standard output.
+For those who only want to know what to return, not the reason: Please return any (valid) value of type `a`.
 
-NOTE: Of course, if the value stored in `Destructor` also exists outside of `Destructor`, the value still exists in the Fix program even after the destructor function is called,
-and there is a possibility that the value is used after the destructor function is called.
+Let the two fields of `Destructor` be `value : a` and `dtor : a -> IO a` respectively.
+
+When destroying a `Destructor`, the Fix compiler performs the following operations:
+1. Similar to calling `mod` or `act` functions, it updates the value of the `value` field of `Destructor` using `dtor`.
+2. Similar to destroying a normal Fix struct, it performs the process to destroy `value : a` and `dtor : a -> IO a`, and then releases the memory region occupied by `Destructor`.
+
+By being implemented as in step 1, it is guaranteed that `dtor` receives a unique value.
+Therefore, for example, when `a` is `Array Ptr` (a collection of handles to multiple resources), the received `Array a` can be directly edited,
+enabling efficient processing.
+
+Also, to properly execute step 2, a valid value of type `a` must remain in the `value` field after step 1, so the destructor function is designed to return a value of type `a`.
+
+##### Notes
+
+As with other FFI features, improper use of `Destructor` may compromise Fix's purity or cause undefined behavior.
+The following are some examples of such precautions, but not all:
+- Performing operations other than "releasing resources" in the destructor function will compromise Fix's purity.
+- Creating multiple `Destructor`s from a handle to a single resource will cause double-free.
+- Copying a handle to a single resource, putting one in a `Destructor` and continuing to use the other directly, may result in accessing a released resource.
 
 ##### field `_value`
 
