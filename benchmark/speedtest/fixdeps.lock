@@ -11,9 +11,9 @@ rev = "359d00f71771250e7e964d866f8f919edc8be79d"
 
 [[dependencies]]
 name = "subprocess"
-version = "1.0.6"
-path = ".fixlang/deps/subprocess_1.0.6"
+version = "1.0.7"
+path = ".fixlang/deps/subprocess_1.0.7"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/fixlang-subprocess.git"
-rev = "f7cf6914889bc8b2631462ca38c343d5deff779a"
+rev = "68f84481b864abdbe01a5964e1f798dc44d9dfa5"
