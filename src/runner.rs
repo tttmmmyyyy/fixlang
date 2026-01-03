@@ -1,9 +1,9 @@
 use crate::build_object_files::build_object_files;
 use crate::constants::RUN_PATH;
-use crate::error::{any_to_string, panic_if_err, panic_with_err, Errors};
+use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::make_std_mod;
 use crate::make_tuple_traits_mod;
-use crate::misc::{info_msg, save_temporary_source};
+use crate::misc::info_msg;
 use crate::parse_file_path;
 use crate::stopwatch::StopWatch;
 use crate::Configuration;
@@ -18,10 +18,11 @@ use build_time::build_time_utc;
 use rand::Rng;
 use std::fs::File;
 use std::io::Read;
+use std::io::{self};
 use std::path::Path;
+use std::process::{self, Output};
 use std::{
     fs::{self, create_dir_all, remove_dir_all},
-    panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -114,24 +115,6 @@ fn check_program(mut program: Program, config: &Configuration) -> Result<Program
     Ok(program)
 }
 
-#[allow(dead_code)]
-pub fn test_source(source: &str, mut config: Configuration) {
-    const MAIN_RUN: &str = "main_run";
-    let src = save_temporary_source(source, MAIN_RUN).ok().unwrap();
-    config.source_files.push(src.file_path);
-    assert_eq!(run(config), 0);
-}
-
-#[allow(dead_code)]
-pub fn test_source_fail(source: &str, config: Configuration, contained_msg: &str) {
-    let any = catch_unwind(AssertUnwindSafe(|| {
-        test_source(source, config);
-    }))
-    .unwrap_err();
-    let msg = any_to_string(any.as_ref());
-    assert!(msg.contains(contained_msg));
-}
-
 // Return file content and last modified.
 pub fn read_file(path: &Path) -> Result<String, String> {
     let mut file = match File::open(&path) {
@@ -220,8 +203,11 @@ pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     Ok(program)
 }
 
-// Run the program specified in the configuration, and return the exit code.
-pub fn run(mut config: Configuration) -> i32 {
+// Build & run the program specified in the configuration. Return the `Output` of the child prrocess.
+pub fn run(
+    mut config: Configuration,
+    inherit_streams: bool,
+) -> Result<Result<Output, io::Error>, Errors> {
     fs::create_dir_all(DOT_FIXLANG)
         .expect(format!("Failed to create \"{}\" directory.", DOT_FIXLANG).as_str());
     fs::create_dir_all(RUN_PATH)
@@ -235,7 +221,7 @@ pub fn run(mut config: Configuration) -> i32 {
     );
 
     // Build executable file.
-    panic_if_err(build(&mut config));
+    build(&mut config)?;
 
     // Run the executable file.
     let mut com = if config.valgrind_tool == ValgrindTool::None {
@@ -248,9 +234,11 @@ pub fn run(mut config: Configuration) -> i32 {
     for arg in &config.run_program_args {
         com.arg(arg);
     }
-    com.stdout(Stdio::inherit())
-        .stdin(Stdio::inherit())
-        .stderr(Stdio::inherit());
+    if inherit_streams {
+        com.stdout(Stdio::inherit())
+            .stdin(Stdio::inherit())
+            .stderr(Stdio::inherit());
+    }
     let output = com.output();
 
     // Clean up the temporary executable file.
@@ -259,7 +247,7 @@ pub fn run(mut config: Configuration) -> i32 {
             // Move the temporary executable file to the specified output file.
             if let Err(e) = fs::rename(exec_path.clone(), out_path.clone()) {
                 let _ = fs::remove_file(exec_path.clone()); // Ignore the error.
-                panic_with_err(&format!(
+                panic_with_msg(&format!(
                     "Failed to rename \"{}\" to \"{}\": {}",
                     exec_path,
                     out_path.display(),
@@ -273,16 +261,25 @@ pub fn run(mut config: Configuration) -> i32 {
         }
     }
 
+    Ok(output)
+}
+
+// Implementation of `fix run` command.
+pub fn run_command(config: &Configuration) {
+    let output = run(config.clone(), true);
+    let output = panic_if_err(output);
+
     if let Err(e) = output {
-        panic_with_err(&format!("Failed to run \"{}\": {}", exec_path, e));
+        panic_with_msg(&format!("Failed to run the program: {}", e));
     }
     let output = output.unwrap();
 
-    if let Some(code) = output.status.code() {
-        code
-    } else {
-        panic_with_err("Program terminated abnormally.")
+    if output.status.code().is_none() {
+        panic_with_msg("Program terminated by signal");
     }
+    let code = output.status.code().unwrap();
+
+    process::exit(code);
 }
 
 // Load the program specified by the Configuration, perform validations and type checking.
@@ -359,9 +356,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         ));
         // Create library object file.
         let mut com = Command::new("gcc");
-        let mut com = com
-            .arg("-ffunction-sections")
-            .arg("-fdata-sections");
+        let mut com = com.arg("-ffunction-sections").arg("-fdata-sections");
         // Keep frame pointers for better backtraces on macOS when backtrace is enabled
         if config.no_elim_frame_pointers() {
             com = com.arg("-fno-omit-frame-pointer");
@@ -380,11 +375,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         let output = com.output().expect("Failed to run gcc.");
 
         if output.stderr.len() > 0 {
-            eprintln!(
-                "{}",
-                String::from_utf8(output.stderr)
-                    .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
-            );
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
         }
 
         // Rename the temporary file to the final file.
@@ -419,11 +410,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         .args(libs_opts);
     let output = com.output().expect("Failed to run gcc.");
     if output.stderr.len() > 0 {
-        eprintln!(
-            "{}",
-            String::from_utf8(output.stderr)
-                .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
-        );
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
     }
 
     Ok(())

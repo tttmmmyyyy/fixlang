@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     ast::{predicate::Predicate, qual_pred::QualPred},
-    error::panic_with_err,
+    error::panic_with_msg,
     misc::Set,
 };
 use ast::name::{FullName, Name, NameSpace};
@@ -5094,7 +5094,7 @@ impl InlineLLVMMarkThreadedFunctionBody {
     ) -> Object<'c> {
         // Check if the `threaded` compiler flag is true.
         if !gc.config.threaded {
-            panic_with_err(
+            panic_with_msg(
                 "The `threaded` compiler flag must be set to true to use `Std::mark_threaded`.",
             );
         }

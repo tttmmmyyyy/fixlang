@@ -38,8 +38,8 @@ use crate::constants::REFCNT_STATE_GLOBAL;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
 use crate::constants::TRAVERSER_WORK_RELEASE;
-use crate::error::panic_with_err;
-use crate::error::panic_with_err_src;
+use crate::error::panic_with_msg;
+use crate::error::panic_with_msg_src;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
 use crate::misc::Set;
@@ -646,7 +646,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         ty: Arc<TypeNode>,
     ) {
         if self.global.contains_key(&name) {
-            panic_with_err(&format!("Duplicate symbol: {}", name.to_string()));
+            panic_with_msg(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
             let used_later = if ty.is_box(self.type_env()) {
                 // We do not need to retain global objects. Always move out it.
@@ -2479,7 +2479,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                     .map(|param_ty| {
                         let c_type = param_ty.get_c_type(self.context);
                         if c_type.is_none() {
-                            panic_with_err_src(
+                            panic_with_msg_src(
                                 "Cannot use `()` as a parameter type of C function.",
                                 &expr.source,
                             )

@@ -1,6 +1,7 @@
-mod basic;
-mod external_projects;
-mod import;
-mod index_syntax;
+mod test_array_bounds_check;
+mod test_basic;
 mod test_explicit_import;
+mod test_external_projects;
+mod test_import;
+mod test_index_syntax;
 mod util;

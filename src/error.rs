@@ -200,12 +200,12 @@ pub fn any_to_string(any: &dyn std::any::Any) -> String {
     }
 }
 
-pub fn panic_with_err(msg: &str) -> ! {
+pub fn panic_with_msg(msg: &str) -> ! {
     let errs = Errors::from_msg(msg.to_string());
     panic_notrace(&errs.to_string())
 }
 
-pub fn panic_with_err_src(msg: &str, src: &Option<Span>) -> ! {
+pub fn panic_with_msg_src(msg: &str, src: &Option<Span>) -> ! {
     let errs = Errors::from_msg_srcs(msg.to_string(), &[src]);
     panic_notrace(&errs.to_string())
 }

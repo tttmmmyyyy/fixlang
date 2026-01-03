@@ -23,7 +23,7 @@ use crate::{
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
     constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
     cpu_features::CpuFeatures,
-    error::{panic_with_err, Errors},
+    error::{panic_with_msg, Errors},
     generator::GenerationContext,
     misc::warn_msg,
     optimization,
@@ -319,12 +319,12 @@ fn build_object_files_cache_hash(
 
 fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> TargetMachine {
     let _native = Target::initialize_native(&InitializationConfig::default())
-        .map_err(|e| panic_with_err(&format!("failed to initialize native: {}", e)))
+        .map_err(|e| panic_with_msg(&format!("failed to initialize native: {}", e)))
         .unwrap();
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple)
         .map_err(|e| {
-            panic_with_err(&format!("failed to create target: {}", e));
+            panic_with_msg(&format!("failed to create target: {}", e));
         })
         .unwrap();
     let cpu_name = TargetMachine::get_host_cpu_name();
@@ -345,7 +345,7 @@ fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> T
     );
     match target_machine {
         Some(tm) => tm,
-        None => panic_with_err("Failed to create target machine."),
+        None => panic_with_msg("Failed to create target machine."),
     }
 }
 
@@ -354,7 +354,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     let dir_path = obj_path.parent().unwrap();
     match fs::create_dir_all(dir_path) {
         Err(e) => {
-            panic_with_err(&format!(
+            panic_with_msg(&format!(
                 "Failed to create directory \"{}\": {}",
                 dir_path.to_string_lossy().to_string(),
                 e
@@ -368,7 +368,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     target_machine
         .write_to_file(&module, inkwell::targets::FileType::Object, &tmp_file_path)
         .map_err(|e| {
-            panic_with_err(&format!(
+            panic_with_msg(&format!(
                 "Failed to write to file \"{}\": {}",
                 obj_path.to_string_lossy().to_string(),
                 e
@@ -379,7 +379,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     // Rename the temporary file to the final file.
     match fs::rename(&tmp_file_path, obj_path) {
         Err(e) => {
-            panic_with_err(&format!(
+            panic_with_msg(&format!(
                 "Failed to rename \"{}\" to \"{}\": {}",
                 tmp_file_path.to_string_lossy().to_string(),
                 obj_path.to_string_lossy().to_string(),
@@ -394,7 +394,7 @@ fn emit_llvm<'c>(module: &Module<'c>, config: &Configuration, optimized: bool) {
     let unit_name = module.get_name().to_str().unwrap();
     let path = config.get_output_llvm_ir_path(optimized, unit_name);
     if let Err(e) = module.print_to_file(path.clone()) {
-        panic_with_err(&format!("Failed to emit LLVM-IR: {}", e.to_string()));
+        panic_with_msg(&format!("Failed to emit LLVM-IR: {}", e.to_string()));
     }
 }
 
@@ -406,7 +406,7 @@ fn optimize_and_verify<'c>(
     fn run_passes_or_panic(module: &Module, passes: &[&str], target_machine: &TargetMachine) {
         for pass in passes {
             if let Err(e) = module.run_passes(pass, target_machine, PassBuilderOptions::create()) {
-                panic_with_err(&format!(
+                panic_with_msg(&format!(
                     "Failed to run pass \"{}\": {}",
                     pass,
                     e.to_string()

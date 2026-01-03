@@ -1,4 +1,7 @@
-use crate::{test_source, test_source_fail, Configuration};
+use crate::{
+    tests::util::{test_source, test_source_fail},
+    Configuration,
+};
 
 #[test]
 pub fn test_import_empty() {

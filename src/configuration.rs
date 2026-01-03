@@ -3,7 +3,7 @@ use crate::cpu_features::CpuFeatures;
 use crate::error::{panic_if_err, Errors};
 use crate::misc::{split_string_by_space_not_quated, to_absolute_path, Finally};
 use crate::typecheckcache::{self, TypeCheckCache};
-use crate::{error::panic_with_err, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
+use crate::{error::panic_with_msg, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
@@ -327,10 +327,10 @@ impl Configuration {
 
 impl Configuration {
     // Configuration for release build.
-    pub fn release_mode(subcommand: SubCommand) -> Configuration {
-        let mut config = panic_if_err(Self::new(subcommand));
+    pub fn release_mode(subcommand: SubCommand) -> Result<Configuration, Errors> {
+        let mut config = Self::new(subcommand)?;
         config.num_worker_thread = num_cpus::get();
-        config
+        Ok(config)
     }
 
     // Configuration for compiler development
@@ -391,7 +391,7 @@ impl Configuration {
             Some(out_file_path) => {
                 let file_name = out_file_path.file_name();
                 if file_name.is_none() {
-                    panic_with_err(&format!(
+                    panic_with_msg(&format!(
                         "Invalid output file path: `{}`",
                         out_file_path.to_str().unwrap()
                     ))
@@ -556,7 +556,7 @@ impl Configuration {
         com.arg("--suppressions=valgrind.supp");
         match self.valgrind_tool {
             ValgrindTool::None => {
-                panic_with_err("Valgrind tool is not specified.");
+                panic_with_msg("Valgrind tool is not specified.");
             }
             ValgrindTool::MemCheck => {
                 // Check memory leaks.

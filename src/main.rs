@@ -625,7 +625,7 @@ fn main() {
 
     // Create configuration from the command line arguments and the project file.
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
-        let mut config = Configuration::release_mode(subcommand);
+        let mut config = panic_if_err(Configuration::release_mode(subcommand));
 
         // Set up configuration from the project file if it exists.
         if Path::new(PROJECT_FILE_PATH).exists() {
@@ -650,10 +650,10 @@ fn main() {
             panic_if_err(build(&mut create_config(SubCommand::Build, args)));
         }
         Some(("run", args)) => {
-            process::exit(run(create_config(SubCommand::Run, args)));
+            run_command(&create_config(SubCommand::Run, args));
         }
         Some(("test", args)) => {
-            process::exit(run(create_config(SubCommand::Test, args)));
+            run_command(&create_config(SubCommand::Test, args));
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", _args)) => {

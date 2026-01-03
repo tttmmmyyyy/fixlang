@@ -1,7 +1,7 @@
 use crate::{
+    error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
-    run, test_source, test_source_fail,
-    tests::util::install_fix,
+    tests::util::{install_fix, test_files_in_directory, test_source, test_source_fail},
     Configuration, SubCommand, COMPILER_TEST_WORKING_PATH, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
@@ -418,7 +418,7 @@ pub fn test22() {
     );
     test_source(
         source.as_str(),
-        Configuration::release_mode(SubCommand::Run),
+        panic_if_err(Configuration::release_mode(SubCommand::Run)),
     );
 }
 
@@ -911,7 +911,7 @@ pub fn test43() {
     );
     test_source(
         source.as_str(),
-        Configuration::release_mode(SubCommand::Run),
+        panic_if_err(Configuration::release_mode(SubCommand::Run)),
     );
 }
 
@@ -3442,7 +3442,7 @@ pub fn test119() {
 }
 
 #[test]
-pub fn test_undefined() {
+pub fn test_undefined_0() {
     // Test undefined of type Array or function.
     let source = r#"
         module Main; 
@@ -3458,6 +3458,25 @@ pub fn test_undefined() {
         );
     "#;
     test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_undefined_1() {
+    // Undefined reached.
+    let source = r#"
+        module Main; 
+        
+        main : IO ();
+        main = (
+            eval undefined("Undefined reached") : I64;
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::compiler_develop_mode(),
+        "Undefined reached",
+    );
 }
 
 #[test]
@@ -4736,41 +4755,6 @@ pub fn test_iterator_flatten() {
 #[test]
 pub fn test_run_examples() {
     test_files_in_directory(Path::new("./examples"));
-}
-
-// Run all "*.fix" files in the specified directory.
-// If the directory contains subdirectories, run Fix program consists of all "*.fix" files in each subdirectory.
-pub fn test_files_in_directory(path: &Path) {
-    let paths = fs::read_dir(path).unwrap();
-    for path in paths {
-        let path = path.unwrap().path();
-        let mut config = Configuration::compiler_develop_mode();
-        if path.is_dir() {
-            // Skip hidden directories.
-            if path.file_name().unwrap().to_str().unwrap().starts_with(".") {
-                continue;
-            }
-
-            // For each directory in "tests" directory, run Fix program which consists of "*.fix" files in the directory.
-            let files = fs::read_dir(&path).unwrap();
-            for file in files {
-                let file = file.unwrap().path();
-                if file.extension().is_none() || file.extension().unwrap() != "fix" {
-                    continue;
-                }
-                config.source_files.push(file);
-            }
-        } else {
-            // For each file which has extention "fix" in "tests" directory, run it as Fix program.
-            if path.extension().is_none() || path.extension().unwrap() != "fix" {
-                continue;
-            }
-            config.source_files.push(path.clone());
-        }
-        println!("[{}]:", path.to_string_lossy().to_string());
-        run(config);
-        remove_file("test_process_text_file.txt").unwrap_or(());
-    }
 }
 
 #[test]
@@ -7447,6 +7431,30 @@ pub fn test_mutate_boxed_union_shared() {
 }
 
 #[test]
+pub fn test_union_variant_mismatch() {
+    let source = r##"
+        module Main;
+
+        type MyUnion = union {
+            a : I64,
+            b : Bool
+        };
+
+        main: IO ();
+        main = (
+            let uni = MyUnion::a(42);
+            eval uni.as_b;
+            pure()
+        );
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::compiler_develop_mode(),
+        "Union variant mismatch",
+    );
+}
+
+#[test]
 pub fn test_mutate_boxed_io_union_shared() {
     let source = r##"
         module Main;
@@ -8178,16 +8186,16 @@ type Pipe a b r = box union {
 
 namespace Pipe {
     read: Pipe a b a;
-    read = undefined("");
+    read = undefined("program running!");
 
     write: b -> Pipe a b ();
-    write = undefined("");
+    write = undefined("program running!");
 }
 
 impl Pipe a b: Monad {
 //impl Pipe x y: Monad {        // Ok if this line is used instead of the above line.
-    pure = undefined("");
-    bind = undefined("");
+    pure = undefined("program running!");
+    bind = undefined("program running!");
 }
 
 main: IO ();
@@ -8199,10 +8207,11 @@ main = (
     pure()
 );
     "##;
+    // Verify that the compilation went well, and the program started running.
     test_source_fail(
         &source,
         Configuration::compiler_develop_mode(),
-        "Program terminated abnormally.", // This implies that the compilation went well, and the program started running.
+        "program running!",
     );
 }
 
