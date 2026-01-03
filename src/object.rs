@@ -62,7 +62,7 @@ impl ObjectFieldType {
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
-            ObjectFieldType::UnionTag => gc.context.i8_type().into(),
+            ObjectFieldType::UnionTag => union_tag_type(gc.context).into(),
             ObjectFieldType::UnionBuf(field_tys) => {
                 let mut max_size = 0;
                 let mut max_align = 1;
@@ -712,16 +712,16 @@ impl ObjectFieldType {
             .get_parent()
             .unwrap();
         let end_bb = gc.context.append_basic_block(curr_func, "end");
-        let mut last_unmatch_bb: Option<BasicBlock> = None;
+        let mut last_mismatch_bb: Option<BasicBlock> = None;
         let tag = ObjectFieldType::get_union_tag(gc, &union);
         for (i, variant_ty) in variant_types.iter().enumerate() {
             // Compare tag and jump.
             let match_bb = gc
                 .context
                 .append_basic_block(curr_func, &format!("match_tag{}", i));
-            let unmatch_bb = gc
+            let mismatch_bb = gc
                 .context
-                .append_basic_block(curr_func, &format!("unmatch_tag{}", i));
+                .append_basic_block(curr_func, &format!("mismatch_tag{}", i));
             let expect_tag_val = ObjectFieldType::UnionTag
                 .to_basic_type(gc, vec![])
                 .into_int_type()
@@ -736,7 +736,7 @@ impl ObjectFieldType {
                 )
                 .unwrap();
             gc.builder()
-                .build_conditional_branch(is_match, match_bb, unmatch_bb)
+                .build_conditional_branch(is_match, match_bb, mismatch_bb)
                 .unwrap();
 
             // Implement the case tag is match.
@@ -750,14 +750,14 @@ impl ObjectFieldType {
             }
             gc.builder().build_unconditional_branch(end_bb).unwrap();
 
-            // Implement the case tag is unmatch.
-            gc.builder().position_at_end(unmatch_bb);
-            last_unmatch_bb = Some(unmatch_bb);
+            // Implement the case tag mismatch.
+            gc.builder().position_at_end(mismatch_bb);
+            last_mismatch_bb = Some(mismatch_bb);
         }
 
-        // Implement last unmatch bb.
-        let last_unmatch_bb = last_unmatch_bb.unwrap();
-        gc.builder().position_at_end(last_unmatch_bb);
+        // Implement last mismatch bb.
+        let last_mismatch_bb = last_mismatch_bb.unwrap();
+        gc.builder().position_at_end(last_mismatch_bb);
         gc.builder().build_unreachable().unwrap();
 
         gc.builder().position_at_end(end_bb);
@@ -859,7 +859,7 @@ impl ObjectFieldType {
         union.insert_field(gc, union_buf_idx, value)
     }
 
-    pub fn panic_if_union_tag_unmatch<'c, 'm>(
+    pub fn panic_if_union_tag_mismatch<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         union: Object<'c>,
         expect_tag: IntValue<'c>,
@@ -868,22 +868,22 @@ impl ObjectFieldType {
         let offset = if is_unbox { 0 } else { 1 };
 
         // Get tag value.
-        let tag_value = union.extract_field(gc, 0 + offset).into_int_value();
+        let actual_tag = union.extract_field(gc, 0 + offset).into_int_value();
 
-        // If tag unmatch, panic.
-        let is_tag_unmatch = gc
+        // If tag mismatch, panic.
+        let is_tag_mismatch = gc
             .builder()
-            .build_int_compare(IntPredicate::NE, expect_tag, tag_value, "is_tag_unmatch")
+            .build_int_compare(IntPredicate::NE, expect_tag, actual_tag, "is_tag_mismatch")
             .unwrap();
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
-        let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
+        let mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
         let match_bb = gc.context.append_basic_block(current_func, "match_bb");
         gc.builder()
-            .build_conditional_branch(is_tag_unmatch, unmatch_bb, match_bb)
+            .build_conditional_branch(is_tag_mismatch, mismatch_bb, match_bb)
             .unwrap();
-        gc.builder().position_at_end(unmatch_bb);
-        gc.panic("Union variant unmatch.");
+        gc.builder().position_at_end(mismatch_bb);
+        gc.panic("Union variant mismatch");
         gc.builder().build_unconditional_branch(match_bb).unwrap();
         gc.builder().position_at_end(match_bb);
     }
@@ -1171,6 +1171,10 @@ pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut GenerationContext<'c, 'm>) -> DI
         .create_basic_type(name, size_in_bits, DW_ATE_ADDRESS, 0)
         .unwrap()
         .as_type()
+}
+
+pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
+    context.i8_type()
 }
 
 pub fn lambda_function_type<'c, 'm>(

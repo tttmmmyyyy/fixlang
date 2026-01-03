@@ -3718,8 +3718,8 @@ impl InlineLLVMUnionAsBody {
             .into_int_type()
             .const_int(self.field_idx as u64, false);
 
-        // If tag unmatch, panic.
-        ObjectFieldType::panic_if_union_tag_unmatch(gc, obj.clone(), specified_tag_value);
+        // If tag mismatch, panic.
+        ObjectFieldType::panic_if_union_tag_mismatch(gc, obj.clone(), specified_tag_value);
 
         // If tag match, return the field value.
         ObjectFieldType::get_union_value(gc, obj, &elem_ty)
@@ -3808,24 +3808,24 @@ impl InlineLLVMUnionIsBody {
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let match_bb = gc.context.append_basic_block(current_func, "match_bb");
-        let unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
+        let mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
         let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
         gc.builder()
-            .build_conditional_branch(is_tag_match, match_bb, unmatch_bb)
+            .build_conditional_branch(is_tag_match, match_bb, mismatch_bb)
             .unwrap();
 
         gc.builder().position_at_end(match_bb);
         let one = gc.context.i8_type().const_int(1 as u64, false);
         gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
-        gc.builder().position_at_end(unmatch_bb);
+        gc.builder().position_at_end(mismatch_bb);
         let zero = gc.context.i8_type().const_int(0 as u64, false);
         gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Return the value.
         gc.builder().position_at_end(cont_bb);
         let phi = gc.builder().build_phi(gc.context.i8_type(), "phi").unwrap();
-        phi.add_incoming(&[(&one, match_bb), (&zero, unmatch_bb)]);
+        phi.add_incoming(&[(&one, match_bb), (&zero, mismatch_bb)]);
         let ret = create_obj(
             make_bool_ty(),
             &vec![],
@@ -3905,10 +3905,10 @@ impl InlineLLVMUnionModBody {
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
         let mut match_bb = gc.context.append_basic_block(current_func, "match_bb");
-        let mut unmatch_bb = gc.context.append_basic_block(current_func, "unmatch_bb");
+        let mut mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
         let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
         gc.builder()
-            .build_conditional_branch(is_tag_match, match_bb, unmatch_bb)
+            .build_conditional_branch(is_tag_match, match_bb, mismatch_bb)
             .unwrap();
 
         // Implement match_bb
@@ -3933,11 +3933,11 @@ impl InlineLLVMUnionModBody {
         match_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
-        // Implement unmatch_bb
-        gc.builder().position_at_end(unmatch_bb);
+        // Implement mismatch_bb
+        gc.builder().position_at_end(mismatch_bb);
         gc.release(modifier);
-        let unmatch_val = obj.value;
-        unmatch_bb = gc.builder().get_insert_block().unwrap();
+        let mismatch_val = obj.value;
+        mismatch_bb = gc.builder().get_insert_block().unwrap();
         gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Return the value.
@@ -3946,7 +3946,7 @@ impl InlineLLVMUnionModBody {
             .builder()
             .build_phi(match_val.get_type(), "phi@union_mod_function")
             .unwrap();
-        phi.add_incoming(&[(&match_val, match_bb), (&unmatch_val, unmatch_bb)]);
+        phi.add_incoming(&[(&match_val, match_bb), (&mismatch_val, mismatch_bb)]);
         Object::new(phi.as_basic_value(), union_ty.clone(), gc)
     }
 }

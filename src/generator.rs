@@ -2882,8 +2882,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             // Add "frame-pointer"="all" attribute to ensure frame pointers are always kept
             function.add_attribute(
                 inkwell::attributes::AttributeLoc::Function,
-                self.context
-                    .create_string_attribute("frame-pointer", "all"),
+                self.context.create_string_attribute("frame-pointer", "all"),
             );
             func = function.get_next_function();
         }
