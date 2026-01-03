@@ -1,0 +1,1 @@
+Internal implementation of the `Array::empty` function.

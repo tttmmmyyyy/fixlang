@@ -486,6 +486,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_array_check_range.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_CHECK_SIZE),
+        array_check_size(),
+        None,
+        Some(include_str!("./docs/std_array_check_size.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
         set_array(),
         None,
@@ -510,16 +516,16 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_array_get_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "empty"),
-        make_empty(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_EMPTY_NAME),
+        array_unsafe_empty(),
         None,
-        Some(include_str!("./docs/std_array_empty.md").to_string()),
+        Some(include_str!("./docs/std_array_unsafe_empty.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "fill"),
-        fill_array(),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_FILL_NAME),
+        array_unsafe_fill(),
         None,
-        Some(include_str!("./docs/std_array_fill.md").to_string()),
+        Some(include_str!("./docs/std_array_unsafe_fill.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "_undefined_internal"),

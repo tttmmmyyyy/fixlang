@@ -1516,16 +1516,15 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFillArrayBody {
+pub struct InlineLLVMArrayUnsafeFill {
     size_name: FullName,
     value_name: FullName,
-    array_name: String,
 }
 
-impl InlineLLVMFillArrayBody {
+impl InlineLLVMArrayUnsafeFill {
     pub fn name(&self) -> String {
         format!(
-            "Array::fill({}, {})",
+            "{ARRAY_NAME}::{ARRAY_UNSAFE_FILL_NAME}({}, {})",
             self.size_name.to_string(),
             self.value_name.to_string()
         )
@@ -1547,7 +1546,7 @@ impl InlineLLVMFillArrayBody {
             &vec![],
             Some(size),
             gc,
-            Some(&self.array_name.as_str()),
+            Some(format!("array@{}", self.name()).as_str()),
         );
         let array = array.insert_field(gc, ARRAY_LEN_IDX, size);
         let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
@@ -1560,13 +1559,10 @@ impl InlineLLVMFillArrayBody {
 fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let size_name = FullName::local(size);
     let value_name = FullName::local(value);
-    let name = format!("Array::fill({}, {})", size, value);
-    let name_cloned = name.clone();
     expr_llvm(
-        LLVMGenerator::FillArrayBody(InlineLLVMFillArrayBody {
+        LLVMGenerator::ArrayUnsafeFill(InlineLLVMArrayUnsafeFill {
             size_name,
             value_name,
-            array_name: name_cloned,
         }),
         type_tyapp(make_array_ty(), type_tyvar_star(a)),
         None,
@@ -1575,7 +1571,7 @@ fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
 
 // "Array::fill : I64 -> a -> Array a" built-in function.
 // Creates an array with same capacity.
-pub fn fill_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn array_unsafe_fill() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local("size")],
         expr_abs(
@@ -1601,13 +1597,18 @@ pub fn fill_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMMakeEmptyArrayBody {
+pub struct InlineLLVMArrayUnsafeEmpty {
     capacity_name: FullName,
 }
 
-impl InlineLLVMMakeEmptyArrayBody {
+impl InlineLLVMArrayUnsafeEmpty {
     pub fn name(&self) -> String {
-        format!("Array::empty({})", self.capacity_name.to_string())
+        format!(
+            "{}::{}({})",
+            ARRAY_NAME,
+            ARRAY_UNSAFE_EMPTY_NAME,
+            self.capacity_name.to_string()
+        )
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
@@ -1630,7 +1631,10 @@ impl InlineLLVMMakeEmptyArrayBody {
             &vec![],
             Some(cap),
             gc,
-            Some(&format!("Array::empty({})", self.capacity_name.to_string())),
+            Some(&format!(
+                "{ARRAY_NAME}::{ARRAY_UNSAFE_EMPTY_NAME}({})",
+                self.capacity_name.to_string()
+            )),
         );
 
         // Set size to zero.
@@ -1640,8 +1644,8 @@ impl InlineLLVMMakeEmptyArrayBody {
 }
 
 // Make an empty array.
-pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const CAPACITY_NAME: &str = "capacity";
+pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const CAPACITY_NAME: &str = "cap";
     const ELEM_TYPE: &str = "a";
 
     let elem_tyvar = type_tyvar_star(ELEM_TYPE);
@@ -1650,7 +1654,7 @@ pub fn make_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(CAPACITY_NAME)],
         expr_llvm(
-            LLVMGenerator::MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody {
+            LLVMGenerator::ArrayUnsafeEmpty(InlineLLVMArrayUnsafeEmpty {
                 capacity_name: FullName::local(CAPACITY_NAME),
             }),
             array_ty.clone(),
@@ -2282,6 +2286,53 @@ pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![],
         type_fun(make_i64_ty(), type_fun(make_i64_ty(), make_i64_ty())),
     );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayCheckSize {
+    size_name: FullName,
+}
+
+impl InlineLLVMArrayCheckSize {
+    pub fn name(&self) -> String {
+        format!(
+            "Array::{}({})",
+            ARRAY_CHECK_SIZE,
+            self.size_name.to_string()
+        )
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.size_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut GenerationContext<'c, 'm>,
+        _ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
+        ObjectFieldType::panic_if_size_negative(gc, size);
+        gc.get_scoped_obj(&self.size_name)
+    }
+}
+
+// _check_size : I64 -> I64
+pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const SIZE_NAME: &str = "size";
+
+    let expr = expr_abs_many(
+        vec![var_local(SIZE_NAME)],
+        expr_llvm(
+            LLVMGenerator::ArrayCheckSize(InlineLLVMArrayCheckSize {
+                size_name: FullName::local(SIZE_NAME),
+            }),
+            make_i64_ty(),
+            None,
+        ),
+    );
+    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(make_i64_ty(), make_i64_ty()));
     (expr, scm)
 }
 

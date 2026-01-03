@@ -295,21 +295,21 @@ Creates an empty array with specified capacity.
 
 ##### Parameters
 
-* `capacity` - The number of elements the array can hold without allocating more space. The array is created with this capacity but is empty.
+* `capacity` - The number of elements the array can hold without allocating more space. If negative, the program will abort.
 
 #### fill
 
 Type: `Std::I64 -> a -> Std::Array a`
 
-Creates an array of the specified length filled with the initial value.
+Creates an array of the specified size filled with the initial value.
 
-The capacity is set to the same value as the length.
+The capacity is set to the same value as the size.
 
 Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
 
 ##### Parameters
 
-* `length` - The number of elements in the array.
+* `size` - The number of elements in the array.
 * `value` - The value to fill the array with.
 
 #### find_by

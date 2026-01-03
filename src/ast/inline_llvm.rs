@@ -20,8 +20,8 @@ pub enum LLVMGenerator {
     ShiftBody(InlineLLVMShiftBody),
     BitwiseOperationBody(InlineLLVMBitwiseOperationBody),
     BitNotBody(InlineLLVMBitNotBody),
-    FillArrayBody(InlineLLVMFillArrayBody),
-    MakeEmptyArrayBody(InlineLLVMMakeEmptyArrayBody),
+    ArrayUnsafeFill(InlineLLVMArrayUnsafeFill),
+    ArrayUnsafeEmpty(InlineLLVMArrayUnsafeEmpty),
     ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(
         InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased,
     ),
@@ -33,6 +33,7 @@ pub enum LLVMGenerator {
     ArrayGetSizeBody(InlineLLVMArrayGetSizeBody),
     ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody),
     ArrayCheckRange(InlineLLVMArrayCheckRange),
+    ArrayCheckSize(InlineLLVMArrayCheckSize),
     StructGetBody(InlineLLVMStructGetBody),
     StructSetBody(InlineLLVMStructSetBody),
     StructPunchBody(InlineLLVMStructPunchBody),
@@ -101,8 +102,8 @@ impl LLVMGenerator {
             LLVMGenerator::ShiftBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::BitwiseOperationBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::BitNotBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FillArrayBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::MakeEmptyArrayBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayUnsafeFill(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayUnsafeEmpty(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
                 Some(x.generate(gc, ty))
             }
@@ -157,6 +158,7 @@ impl LLVMGenerator {
                 Some(x.generate(gc, ty))
             }
             LLVMGenerator::ArrayCheckRange(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayCheckSize(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::IOStateUnsafeCreate(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::DestructorMake(x) => Some(x.generate(gc, ty)),
         };
@@ -202,8 +204,8 @@ impl LLVMGenerator {
             LLVMGenerator::ShiftBody(x) => x.free_vars(),
             LLVMGenerator::BitwiseOperationBody(x) => x.free_vars(),
             LLVMGenerator::BitNotBody(x) => x.free_vars(),
-            LLVMGenerator::FillArrayBody(x) => x.free_vars(),
-            LLVMGenerator::MakeEmptyArrayBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeFill(x) => x.free_vars(),
+            LLVMGenerator::ArrayUnsafeEmpty(x) => x.free_vars(),
             LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => x.free_vars(),
             LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.free_vars(),
             LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.free_vars(),
@@ -253,6 +255,7 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.free_vars(),
             LLVMGenerator::IOStateUnsafeCreate(x) => x.free_vars(),
             LLVMGenerator::ArrayCheckRange(x) => x.free_vars(),
+            LLVMGenerator::ArrayCheckSize(x) => x.free_vars(),
             LLVMGenerator::DestructorMake(x) => x.free_vars(),
         }
     }
@@ -303,8 +306,8 @@ impl LLVMGenerator {
             LLVMGenerator::ShiftBody(x) => x.name(),
             LLVMGenerator::BitwiseOperationBody(x) => x.name(),
             LLVMGenerator::BitNotBody(x) => x.name(),
-            LLVMGenerator::FillArrayBody(x) => x.name(),
-            LLVMGenerator::MakeEmptyArrayBody(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeFill(x) => x.name(),
+            LLVMGenerator::ArrayUnsafeEmpty(x) => x.name(),
             LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => x.name(),
             LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.name(),
             LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.name(),
@@ -323,6 +326,7 @@ impl LLVMGenerator {
             LLVMGenerator::UnionModBody(x) => x.name(),
             LLVMGenerator::UndefinedFunctionBody(x) => x.name(),
             LLVMGenerator::ArrayCheckRange(x) => x.name(),
+            LLVMGenerator::ArrayCheckSize(x) => x.name(),
             LLVMGenerator::DestructorMake(x) => x.name(),
         };
         format!("LLVM<{}>", raw_name)

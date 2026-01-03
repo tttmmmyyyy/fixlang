@@ -489,6 +489,32 @@ impl ObjectFieldType {
         gc.builder().position_at_end(in_range_bb);
     }
 
+    // Panic if size is negative
+    pub fn panic_if_size_negative<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, len: IntValue<'c>) {
+        let curr_bb = gc.builder().get_insert_block().unwrap();
+        let curr_func = curr_bb.get_parent().unwrap();
+        let is_neg_size = gc
+            .builder()
+            .build_int_compare(
+                IntPredicate::SLT,
+                len,
+                gc.context.i64_type().const_zero(),
+                "is_neg_size",
+            )
+            .unwrap();
+        let neg_size_bb = gc.context.append_basic_block(curr_func, "neg_size_bb");
+        let pos_size_bb = gc.context.append_basic_block(curr_func, "pos_size_bb");
+        gc.builder()
+            .build_conditional_branch(is_neg_size, neg_size_bb, pos_size_bb)
+            .unwrap();
+        gc.builder().position_at_end(neg_size_bb);
+        gc.call_runtime(RUNTIME_NEGATIVE_ARRAY_SIZE, &[len.into()]);
+        gc.builder()
+            .build_unconditional_branch(pos_size_bb)
+            .unwrap();
+        gc.builder().position_at_end(pos_size_bb);
+    }
+
     // Read an element of array.
     // Returned object is not retained.
     pub fn read_from_array_buf_noretain<'c, 'm>(

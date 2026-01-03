@@ -4,6 +4,7 @@ use super::*;
 
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";
+pub const RUNTIME_NEGATIVE_ARRAY_SIZE: &str = "fixruntime_negative_array_size";
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
 pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
@@ -15,6 +16,7 @@ pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
     build_abort_function(gc, mode);
     build_index_out_of_range_function(gc, mode);
+    build_negative_array_size_function(gc, mode);
     build_eprintf_function(gc, mode);
     build_sprintf_function(gc, mode);
     build_subtract_ptr_function(gc, mode);
@@ -59,6 +61,23 @@ fn build_index_out_of_range_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>,
     );
     gc.module
         .add_function(RUNTIME_INDEX_OUT_OF_RANGE, fn_ty, None);
+    return;
+}
+
+fn build_negative_array_size_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
+    if mode != BuildMode::Declare {
+        return;
+    }
+    if let Some(_func) = gc.module.get_function(RUNTIME_NEGATIVE_ARRAY_SIZE) {
+        return;
+    }
+
+    let fn_ty = gc
+        .context
+        .void_type()
+        .fn_type(&[gc.context.i64_type().into()], false);
+    gc.module
+        .add_function(RUNTIME_NEGATIVE_ARRAY_SIZE, fn_ty, None);
     return;
 }
 

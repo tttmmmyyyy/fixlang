@@ -314,6 +314,12 @@ void fixruntime_index_out_of_range(int64_t idx, int64_t size)
     fixruntime_abort();
 }
 
+void fixruntime_negative_array_size(int64_t size)
+{
+    fprintf(stderr, "Negative array size or capacity: %" PRId64 "\n", size);
+    fixruntime_abort();
+}
+
 #if defined(BACKTRACE)
 #if defined(__linux__)
 #include <backtrace.h>

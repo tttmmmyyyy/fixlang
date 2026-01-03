@@ -108,6 +108,33 @@ namespace Array {
         arr._unsafe_get_bounds_unchecked(idx)
     );
 
+    // Creates an empty array with specified capacity.
+    // 
+    // # Parameters
+    // 
+    // * `capacity` - The number of elements the array can hold without allocating more space. If negative, the program will abort.
+    empty : I64 -> Array a;
+    empty = |cap|(
+        let cap = Array::_check_size(cap);
+        Array::_unsafe_empty_capacity_unchecked(cap)
+    );
+
+    // Creates an array of the specified size filled with the initial value.
+    // 
+    // The capacity is set to the same value as the size.
+    // 
+    // Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
+    // 
+    // # Parameters
+    // 
+    // * `size` - The number of elements in the array.
+    // * `value` - The value to fill the array with.
+    fill : I64 -> a -> Array a;
+    fill = |size, value| (
+        let size = Array::_check_size(size);
+        Array::_unsafe_fill_size_unchecked(size, value)
+    );
+
     // Updates an array by applying a function to the element at the specified index.
     //
     // This function clones the given array if it is shared.
