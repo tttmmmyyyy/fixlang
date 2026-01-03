@@ -3787,45 +3787,25 @@ impl InlineLLVMUnionIsBody {
         let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
 
         // Create specified tag value.
-        let specified_tag_value = ObjectFieldType::UnionTag
+        let expected_tag = ObjectFieldType::UnionTag
             .to_basic_type(gc, vec![])
             .into_int_type()
             .const_int(self.field_idx as u64, false);
 
         // Get tag value.
-        let tag_value = ObjectFieldType::get_union_tag(gc, &obj);
+        let actual_tag = ObjectFieldType::get_union_tag(gc, &obj);
 
-        // Branch and store result to ret_ptr.
+        // Compare tags and convert the boolean result to i8.
         let is_tag_match = gc
             .builder()
-            .build_int_compare(
-                IntPredicate::EQ,
-                specified_tag_value,
-                tag_value,
-                "is_tag_match",
-            )
+            .build_int_compare(IntPredicate::EQ, expected_tag, actual_tag, "is_tag_match")
             .unwrap();
-        let current_bb = gc.builder().get_insert_block().unwrap();
-        let current_func = current_bb.get_parent().unwrap();
-        let match_bb = gc.context.append_basic_block(current_func, "match_bb");
-        let mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
-        let cont_bb = gc.context.append_basic_block(current_func, "cont_bb");
-        gc.builder()
-            .build_conditional_branch(is_tag_match, match_bb, mismatch_bb)
+        let match_bool = gc
+            .builder()
+            .build_int_z_extend(is_tag_match, gc.context.i8_type(), "match_bool")
             .unwrap();
-
-        gc.builder().position_at_end(match_bb);
-        let one = gc.context.i8_type().const_int(1 as u64, false);
-        gc.builder().build_unconditional_branch(cont_bb).unwrap();
-
-        gc.builder().position_at_end(mismatch_bb);
-        let zero = gc.context.i8_type().const_int(0 as u64, false);
-        gc.builder().build_unconditional_branch(cont_bb).unwrap();
 
         // Return the value.
-        gc.builder().position_at_end(cont_bb);
-        let phi = gc.builder().build_phi(gc.context.i8_type(), "phi").unwrap();
-        phi.add_incoming(&[(&one, match_bb), (&zero, mismatch_bb)]);
         let ret = create_obj(
             make_bool_ty(),
             &vec![],
@@ -3833,7 +3813,7 @@ impl InlineLLVMUnionIsBody {
             gc,
             Some(format!("is_union_{}", self.field_idx).as_str()),
         );
-        let ret = ret.insert_field(gc, 0, phi.as_basic_value());
+        let ret = ret.insert_field(gc, 0, match_bool.as_basic_value_enum());
         if !gc.is_var_used_later(&self.union_arg_name) {
             gc.release(obj);
         }
