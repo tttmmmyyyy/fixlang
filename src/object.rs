@@ -758,8 +758,7 @@ impl ObjectFieldType {
         // Implement last unmatch bb.
         let last_unmatch_bb = last_unmatch_bb.unwrap();
         gc.builder().position_at_end(last_unmatch_bb);
-        gc.panic("All union variants unmatch."); // unreachable didn't work as I expected.
-        gc.builder().build_unconditional_branch(end_bb).unwrap();
+        gc.builder().build_unreachable().unwrap();
 
         gc.builder().position_at_end(end_bb);
     }
