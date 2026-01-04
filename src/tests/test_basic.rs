@@ -7409,11 +7409,9 @@ pub fn test_union_variant_mismatch() {
             pure()
         );
     "##;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Union variant mismatch",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Union variant mismatch");
 }
 
 #[test]
@@ -8170,11 +8168,9 @@ main = (
 );
     "##;
     // Verify that the compilation went well, and the program started running.
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "program running!",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "program running!");
 }
 
 #[test]

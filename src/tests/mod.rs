@@ -5,5 +5,6 @@ mod test_explicit_import;
 mod test_external_projects;
 mod test_import;
 mod test_index_syntax;
+mod test_memcheck;
 mod test_undefined;
 mod util;

@@ -38,9 +38,21 @@ pub fn test_source(source: &str, config: Configuration) {
     let output = res.unwrap();
     let code = match output.status.code() {
         Some(code) => code,
-        None => panic_with_msg("The process was terminated by signal."),
+        None => {
+            eprintln!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            panic_with_msg("The process was terminated by signal.")
+        },
     };
-    assert_eq!(code, 0);
+    if code != 0 {
+        eprintln!(
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        panic_with_msg(&format!("The program exited with non-zero code: {}", code));
+    }
 }
 
 pub fn test_source_fail(source: &str, config: Configuration, included_errmsg: &str) {
@@ -61,7 +73,7 @@ pub fn test_source_fail(source: &str, config: Configuration, included_errmsg: &s
         },
     };
     assert!(errmsg.contains(included_errmsg), 
-        "Error message did not contain expected text.\nExpected to include:\n{}\nActual message:\n{}", included_errmsg, errmsg);
+        "Error message did not contain expected text.\nExpected to include:\n{}\n\nActual message:\n{}", included_errmsg, errmsg);
 }
 
 // Run all "*.fix" files in the specified directory.
