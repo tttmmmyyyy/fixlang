@@ -310,8 +310,7 @@ fn main() {
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
         .arg(program_args.clone())
-        .arg(backtrace.clone())
-        .arg(no_runtime_check.clone());
+        .arg(backtrace.clone());
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
