@@ -5,7 +5,9 @@
 ### Added
 
 - Added `--backtrace` option to `build`, `run`, `test` commands to enable printing backtrace when a runtime error occurs.
-- Added `backtrace` field to `build` and `build.test` section of `fixproj.toml` file. If it is true, backtrace will be enabled by default.
+- Added `backtrace` field to `build` and `build.test` section of `fixproj.toml` file.
+- Added `--no-runtime-check` option to `build`, `run`, `test` commands to disable runtime checks (e.g., out-of-range check for array access).
+- Added `no_runtime_check` field to `build` section of `fixproj.toml` file.
 - Added `--disable-cpu-feature <feature>` option to `build`, `run`, `test` commands to disable specific CPU features. Add `disable_cpu_features` field to `build` and `build.test` section of `fixproj.toml` file.
 - Added the [index syntax](./Document.md#index-syntax), `Indexable` trait and `Indexable` namespace in `Std` module.
 - Implement `Array a : Indexable`, `String : Indexable`.
