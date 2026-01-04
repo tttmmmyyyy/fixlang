@@ -60,6 +60,9 @@ files = ["main.fix"]
 ## Whether to enable backtrace when a runtime error occurs.
 # backtrace = false
 
+## Whether to disable runtime checks (e.g., out-of-range check for array access).
+# no_runtime_check = false
+
 ## Preliminary commands to be executed before the Fix program is compiled.
 ## This is useful when you need to compile a object files / library before compiling the Fix program.
 ## (Experimental) Furthermore, you can change the Fix compiler options by outputting lines with specific formats in the preliminary commands.
