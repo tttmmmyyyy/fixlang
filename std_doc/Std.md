@@ -146,6 +146,10 @@ if condition {
 }
 ```
 
+When the `--no-runtime-check` option is enabled, the compiler assumes that the program will never reach `undefined`.
+This may lead to improved performance by eliminating branches like the one in the above example,
+but if the program does reach `undefined`, it will result in undefined behavior.
+
 ##### Parameters
 
 * `msg` - The message to print to the stderr when the undefined value is reached.

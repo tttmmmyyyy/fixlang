@@ -353,11 +353,11 @@ fn main() {
 
     // "fix docs" subcommand
     let docs_subc = App::new("docs")
-        .about(
-            "Generate documentations (markdown files) for specified Fix modules.\n\
-            This command requires the project file to be present in the current directory, and the project should be in the state that it can be built successfully.\n\
-            Consecutive line comments above declarations are recognized as documentations.",
-        )
+        .about("Generate documentations (Markdown files).")
+        .long_about("Generate documentations (Markdown files).\n\n\
+This command generates documentation for the Fix project located in the current directory.\n\n\
+The target Fix project must be free of errors.\n\n\
+Consecutive line comments immediately preceding an entity declaration in the source files are treated as documentation for that entity.")
         .arg(
             Arg::new("modules")
                 .long("mods")
