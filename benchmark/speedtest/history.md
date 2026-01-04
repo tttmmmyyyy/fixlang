@@ -2,6 +2,10 @@
 
 Newer is above.
 
+## 0bec40c5d5765799987c474f93c6f2bb50369cf9
+
+Temporarily enabled no-runtime-check. (Will be reverted in the next commit)
+
 ## ba06b2f2ced3ce16719038b71bdf790dccfdeb2c
 
 Performance degradation due to adding checks for non-negative capacity and size in Array::fill and Array::empty.
