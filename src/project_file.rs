@@ -66,6 +66,8 @@ pub struct ProjectFileBuild {
     backtrace: Option<bool>,
     #[serde(default)]
     disable_cpu_features: Vec<String>,
+    #[serde(default)]
+    no_runtime_check: bool,
     test: Option<ProjectFileBuildTest>,
 }
 
@@ -88,7 +90,7 @@ pub struct ProjectFileBuildTest {
     preliminary_commands: Vec<Vec<String>>,
     backtrace: Option<bool>,
     #[serde(default)]
-    disable_cpu_features: Vec<String>,    
+    disable_cpu_features: Vec<String>,
     memcheck: Option<bool>,
 }
 
@@ -605,6 +607,12 @@ impl ProjectFile {
                     .as_ref()
                     .map_or(vec![], |test| test.disable_cpu_features.clone()),
             );
+        }
+
+        // Set no_runtime_check.
+        config.no_runtime_check = self.build.no_runtime_check;
+        if use_build_test {
+            config.no_runtime_check = false;
         }
 
         Ok(())

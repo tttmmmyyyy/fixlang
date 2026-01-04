@@ -206,6 +206,8 @@ pub struct Configuration {
     pub develop_mode: bool,
     // Enable backtrace support (keep frame pointers and add backtrace library).
     pub backtrace: bool,
+    // Disable runtime checks such as array bounds check.
+    pub no_runtime_check: bool,
 }
 
 #[derive(Clone)]
@@ -321,6 +323,7 @@ impl Configuration {
             emit_symbols: false,
             develop_mode: false,
             backtrace: false,
+            no_runtime_check: false,
         })
     }
 }
@@ -588,6 +591,10 @@ impl Configuration {
             SubCommand::Diagnostics(_) => true,
             _ => false,
         }
+    }
+
+    pub fn runtime_check(&self) -> bool {
+        !self.no_runtime_check
     }
 }
 

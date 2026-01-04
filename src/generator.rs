@@ -167,6 +167,20 @@ impl<'c> Object<'c> {
         Object { value, ty }
     }
 
+    pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut GenerationContext<'c, 'm>) -> Self {
+        let val = if ty.is_unbox(gc.type_env()) {
+            ty.get_struct_type(gc, &vec![])
+                .get_undef()
+                .as_basic_value_enum()
+        } else {
+            gc.context
+                .ptr_type(AddressSpace::from(0))
+                .get_undef()
+                .as_basic_value_enum()
+        };
+        Object::new(val, ty.clone(), gc)
+    }
+
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.ty.is_unbox(type_env)
     }

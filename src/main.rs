@@ -232,6 +232,12 @@ fn main() {
         .index(1)
         .takes_value(true)
         .help("Name of this Fix project.");
+    let no_runtime_check = Arg::new("no-runtime-check")
+        .long("no-runtime-check")
+        .help(
+            "Disable runtime checks that would abort the program.\n\
+            This includes disabling array bounds checks, union variant checks in `as_` functions, and `Std::undefined`, etc."
+        );
 
     // "fix version" subcommand
     let version_subc = App::new("version").about("Prints the version of the Fix compiler.");
@@ -256,7 +262,8 @@ fn main() {
         .arg(max_cu_size.clone())
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
-        .arg(backtrace.clone());
+        .arg(backtrace.clone())
+        .arg(no_runtime_check.clone());
 
     // "fix run" subcommand
     let run_subc = App::new("run")
@@ -279,7 +286,8 @@ fn main() {
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
         .arg(program_args.clone())
-        .arg(backtrace.clone());
+        .arg(backtrace.clone())
+        .arg(no_runtime_check.clone());
 
     // "fix test" subcommand
     let test_subc = App::new("test")
@@ -302,7 +310,8 @@ fn main() {
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
         .arg(program_args.clone())
-        .arg(backtrace.clone());
+        .arg(backtrace.clone())
+        .arg(no_runtime_check.clone());
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
@@ -605,6 +614,11 @@ fn main() {
         // Set `backtrace`.
         if args.contains_id("backtrace") {
             config.set_backtrace();
+        }
+
+        // Set `no_runtime_check`.
+        if args.contains_id("no-runtime-check") {
+            config.no_runtime_check = true;
         }
 
         // Set `run_program_args`.

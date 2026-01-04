@@ -2257,9 +2257,11 @@ impl InlineLLVMArrayCheckRange {
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-        let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
-        ObjectFieldType::panic_if_out_of_range(gc, size, idx);
+        if gc.config.runtime_check() {
+            let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
+            let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
+            ObjectFieldType::panic_if_out_of_range(gc, size, idx);
+        }
         gc.get_scoped_obj(&self.idx_name)
     }
 }
@@ -2312,8 +2314,10 @@ impl InlineLLVMArrayCheckSize {
         gc: &mut GenerationContext<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
-        ObjectFieldType::panic_if_size_negative(gc, size);
+        if gc.config.runtime_check() {
+            let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
+            ObjectFieldType::panic_if_size_negative(gc, size);
+        }
         gc.get_scoped_obj(&self.size_name)
     }
 }
@@ -3712,14 +3716,15 @@ impl InlineLLVMUnionAsBody {
 
         let elem_ty = ty.clone();
 
-        // Create specified tag value.
-        let specified_tag_value = ObjectFieldType::UnionTag
-            .to_basic_type(gc, vec![])
-            .into_int_type()
-            .const_int(self.field_idx as u64, false);
+        if gc.config.runtime_check() {
+            let expected_tag = ObjectFieldType::UnionTag
+                .to_basic_type(gc, vec![])
+                .into_int_type()
+                .const_int(self.field_idx as u64, false);
 
-        // If tag mismatch, panic.
-        ObjectFieldType::panic_if_union_tag_mismatch(gc, obj.clone(), specified_tag_value);
+            // If tag mismatch, panic.
+            ObjectFieldType::panic_if_union_tag_mismatch(gc, obj.clone(), expected_tag);
+        }
 
         // If tag match, return the field value.
         ObjectFieldType::get_union_value(gc, obj, &elem_ty)
@@ -3990,30 +3995,44 @@ impl InlineLLVMUndefinedInternalBody {
         gc: &mut GenerationContext<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        // Get the first argument.
-        let msg = gc.get_scoped_obj(&self.msg_name);
+        if gc.config.runtime_check() {
+            // Runtime check is enabled.
+            // Print the message and abort the program.
 
-        // Get the pointer to the message.
-        let c_str = msg.gep_boxed(gc, ARRAY_BUF_IDX);
+            // Get the first argument.
+            let msg = gc.get_scoped_obj(&self.msg_name);
 
-        // Write it to stderr, and flush.
-        gc.call_runtime(RUNTIME_EPRINTLN, &[c_str.into()]);
+            // Get the pointer to the message.
+            let c_str = msg.gep_boxed(gc, ARRAY_BUF_IDX);
 
-        // Abort the program.
-        gc.call_runtime(RUNTIME_ABORT, &[]);
+            // Write it to stderr, and flush.
+            gc.call_runtime(RUNTIME_EPRINTLN, &[c_str.into()]);
+
+            // Abort the program.
+            gc.call_runtime(RUNTIME_ABORT, &[]);
+        } else {
+            // Runtime check is disabled.
+            // Just generate unreachable instruction.
+
+            // Generate unreachable instruction.
+            gc.builder().build_unreachable().unwrap();
+
+            // To satisfy LLVM, we need to create a valid control flow.
+            let current_func = gc
+                .builder()
+                .get_insert_block()
+                .unwrap()
+                .get_parent()
+                .unwrap();
+            let unreachable_bb = gc
+                .context
+                .append_basic_block(current_func, "unreachable_bb");
+            // Following codes should be implemented in unreachable_bb.
+            gc.builder().position_at_end(unreachable_bb);
+        }
 
         // Return undefined value.
-        let val = if ty.is_unbox(gc.type_env()) {
-            ty.get_struct_type(gc, &vec![])
-                .get_undef()
-                .as_basic_value_enum()
-        } else {
-            gc.context
-                .ptr_type(AddressSpace::from(0))
-                .get_undef()
-                .as_basic_value_enum()
-        };
-        Object::new(val, ty.clone(), gc)
+        Object::undef(ty.clone(), gc)
     }
 }
 

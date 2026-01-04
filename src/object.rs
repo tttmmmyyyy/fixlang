@@ -862,7 +862,7 @@ impl ObjectFieldType {
     pub fn panic_if_union_tag_mismatch<'c, 'm>(
         gc: &mut GenerationContext<'c, 'm>,
         union: Object<'c>,
-        expect_tag: IntValue<'c>,
+        expected_tag: IntValue<'c>,
     ) {
         let is_unbox = union.ty.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { 1 };
@@ -873,7 +873,12 @@ impl ObjectFieldType {
         // If tag mismatch, panic.
         let is_tag_mismatch = gc
             .builder()
-            .build_int_compare(IntPredicate::NE, expect_tag, actual_tag, "is_tag_mismatch")
+            .build_int_compare(
+                IntPredicate::NE,
+                expected_tag,
+                actual_tag,
+                "is_tag_mismatch",
+            )
             .unwrap();
         let current_bb = gc.builder().get_insert_block().unwrap();
         let current_func = current_bb.get_parent().unwrap();
