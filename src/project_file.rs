@@ -54,20 +54,22 @@ pub struct ProjectFileBuild {
     static_links: Option<Vec<String>>,
     dynamic_links: Option<Vec<String>>,
     library_paths: Option<Vec<PathBuf>>,
+    #[serde(default)]
+    ld_flags: Vec<String>,
+    #[serde(default)]
+    preliminary_commands: Vec<Vec<String>>,
+
     threaded: Option<bool>,
     debug: Option<bool>,
     opt_level: Option<String>,
     output: Option<PathBuf>,
     output_type: Option<String>,
-    #[serde(default)]
-    ld_flags: Vec<String>,
-    #[serde(default)]
-    preliminary_commands: Vec<Vec<String>>,
     backtrace: Option<bool>,
     #[serde(default)]
-    no_runtime_check: bool,
-    #[serde(default)]
     disable_cpu_features: Vec<String>,
+    #[serde(default)]
+    no_runtime_check: bool,
+
     test: Option<ProjectFileBuildTest>,
 }
 
@@ -81,16 +83,18 @@ pub struct ProjectFileBuildTest {
     static_links: Option<Vec<String>>,
     dynamic_links: Option<Vec<String>>,
     library_paths: Option<Vec<PathBuf>>,
+    #[serde(default)]
+    ld_flags: Vec<String>,    
+    #[serde(default)]
+    preliminary_commands: Vec<Vec<String>>,
+
     threaded: Option<bool>,
     debug: Option<bool>,
     opt_level: Option<String>,
-    #[serde(default)]
-    ld_flags: Vec<String>,
-    #[serde(default)]
-    preliminary_commands: Vec<Vec<String>>,
     backtrace: Option<bool>,
     #[serde(default)]
     disable_cpu_features: Vec<String>,
+
     memcheck: Option<bool>,
 }
 
@@ -369,11 +373,6 @@ impl ProjectFile {
         // If the project is a dependent project, we do not consider the `[build.test]` section.
         let use_build_test = !is_dependent_proj && config.subcommand.use_test_files();
 
-        // Set the output file type.
-        if let Some(output_file_type) = self.build.output_type.as_ref() {
-            config.output_file_type = OutputFileType::from_str(output_file_type)?;
-        }
-
         // Append source files.
         config
             .source_files
@@ -581,6 +580,11 @@ impl ProjectFile {
         // Set output file.
         if let Some(output) = self.build.output.as_ref() {
             config.out_file_path = Some(PathBuf::from(output));
+        }
+
+        // Set the output file type.
+        if let Some(output_file_type) = self.build.output_type.as_ref() {
+            config.output_file_type = OutputFileType::from_str(output_file_type)?;
         }
 
         // Set backtrace mode.

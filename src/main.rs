@@ -534,14 +534,6 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .object_files
             .append(&mut read_object_files_options(args)?);
 
-        // Set `output_file_type`.
-        if let Some(type_) = read_output_file_type_option(args)? {
-            config.output_file_type = type_;
-        }
-
-        // Set `output_file_path`.
-        config.out_file_path = read_output_file_option(args).or(config.out_file_path.clone());
-
         // Set `linked_libraries`.
         config
             .linked_libraries
@@ -581,6 +573,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
                 }
                 _ => panic!("Unknown optimization level: {}", opt_level),
             }
+        }
+
+        // Set `output_file_path`.
+        config.out_file_path = read_output_file_option(args).or(config.out_file_path.clone());
+
+        // Set `output_file_type`.
+        if let Some(type_) = read_output_file_type_option(args)? {
+            config.output_file_type = type_;
         }
 
         // Set `disable_cpu_features_regex`.

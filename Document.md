@@ -82,6 +82,7 @@
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
 - [Compiler features](#compiler-features)
     - [Project file](#project-file)
+        - [About Duplicated Build Settings](#about-duplicated-build-settings)
     - [Managing dependencies](#managing-dependencies)
     - [Configuration file](#configuration-file)
     - [Generating documentation](#generating-documentation)
@@ -2520,6 +2521,153 @@ Moreover, some subcommands (e.g., "fix deps", "fix docs" or "fix language-server
 
 "fix init" command generates [a template project file](./src/docs/project_template.toml).
 This file contains a list of available fields (almost all of which are commented out by default), examples, and explanations, so please refer to it.
+
+### About Duplicated Build Settings
+
+When building a Fix program, settings can be specified in the following locations:
+
+(In order of priority, from highest to lowest)
+- Compiler options
+- `build.test` section of the project file ("fixproj.toml")
+    - This only affects the `fix test` command.
+- `build` section of the project file ("fixproj.toml")
+- `build` section of the dependent library's project file ("fixproj.toml")
+
+When the same setting is specified in multiple locations, how the final setting value is determined varies depending on the setting item. There are the following patterns:
+- (Overwrite) Overwritten by the setting in the location with higher priority (e.g., optimization level).
+- (Merge) All setting values are merged (e.g., list of source files).
+
+Additionally, some settings specified in a dependent library's project file have no effect on the main project's build at all.
+
+The following table shows how each setting is handled.
+
+- Field: Field name in "fixproj.toml"
+- Option: Option name for the `fix` command
+- Type: Whether settings with higher priority overwrite or are merged
+- Dependent Project: Whether settings in a dependent library's project file affect the main project's build
+
+<table>
+    <thead>
+        <tr>
+            <th>Field</th>
+            <th>Option</th>
+            <th>Type</th>
+            <th>Dependent Project</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>files</td>
+            <td>-f, --file</td>
+            <td>Merge</td>
+            <td>Affects</td>
+            <td>Source files</td>
+        </tr>
+        <tr>
+            <td>objects</td>
+            <td>-b, --object</td>
+            <td>Merge</td>
+            <td>Affects</td>
+            <td>Object files to be linked</td>
+        </tr>
+        <tr>
+            <td>static_links</td>
+            <td>-s, --static-link</td>
+            <td>Merge</td>
+            <td>Affects</td>
+            <td>Static libraries to be linked</td>
+        </tr>
+        <tr>
+            <td>dynamic_links</td>
+            <td>-d, --dynamic-link</td>
+            <td>Merge</td>
+            <td>Affects</td>
+            <td>Dynamic libraries to be linked</td>
+        </tr>
+        <tr>
+            <td>library_paths</td>
+            <td>-L, --library-paths</td>
+            <td>Merge</td>
+            <td>Affects</td>
+            <td>Library search paths</td>
+        </tr>
+        <tr>
+            <td>ld_flags</td>
+            <td>--ld-flags</td>
+            <td>Merge</td>
+            <td>Affects</td>
+            <td>Linker flags</td>
+        </tr>
+        <tr>
+            <td>preliminary_commands</td>
+            <td>None</td>
+            <td>Merge</td>
+            <td>Affects</td>
+            <td>Commands to be executed before compilation</td>
+        </tr>
+        <tr>
+            <td>threaded</td>
+            <td>--threaded</td>
+            <td>Merge (OR)</td>
+            <td>Affects</td>
+            <td>Enable multi-threading</td>
+        </tr>
+        <tr>
+            <td>debug</td>
+            <td>-g, --debug</td>
+            <td>Merge (OR)</td>
+            <td>Does not affect</td>
+            <td>Generate debugging information</td>
+        </tr>
+        <tr>
+            <td>opt_level</td>
+            <td>-O, --opt-level</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Optimization level</td>
+        </tr>
+        <tr>
+            <td>output</td>
+            <td>-o, --output</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Output file path</td>
+        </tr>
+        <tr>
+            <td>output_type</td>
+            <td>--output-type</td>
+            <td>Overwrite</td>
+            <td>Does not affect</td>
+            <td>Output file type (executable/dynamic library)</td>
+        </tr>
+        <tr>
+            <td>backtrace</td>
+            <td>--backtrace</td>
+            <td>Merge (OR)</td>
+            <td>Does not affect</td>
+            <td>Generate backtrace</td>
+        </tr>
+        <tr>
+            <td>disable_cpu_features</td>
+            <td>--disable-cpu-feature</td>
+            <td>Merge</td>
+            <td>Does not affect</td>
+            <td>CPU features to be disabled</td>
+        </tr>
+        <tr>
+            <td>no_runtime_check</td>
+            <td>--no-runtime-check</td>
+            <td>Merge (OR)</td>
+            <td>Does not affect</td>
+            <td>Disable runtime checks</td>
+        </tr>
+    </tbody>
+</table>
+
+Note:
+For some settings, such as optimization level and debugging information generation, you might expect that settings in dependent projects would take effect only within the scope of those dependent projects, rather than not affecting the main project at all.
+However, the Fix build system currently does not have a mechanism to separate compilation units on a per-dependent-project basis, so settings like optimization level and debugging information generation use a single value across the entire build.
 
 ## Managing dependencies
 
