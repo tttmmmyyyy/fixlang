@@ -11,11 +11,9 @@ pub fn test_get() {
                 pure()
             );
         "#;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Index out of range: index=3, size=3",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Index out of range: index=3, size=3");
 }
 
 #[test]
@@ -29,11 +27,9 @@ pub fn test_set() {
                 pure()
             );
         "#;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Index out of range",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Index out of range");
 }
 
 #[test]
@@ -47,11 +43,9 @@ pub fn test_mod() {
                 pure()
             );
         "#;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Index out of range",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Index out of range");
 }
 
 #[test]
@@ -65,11 +59,9 @@ pub fn test_act() {
                 pure()
             );
         "#;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Index out of range",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Index out of range");
 }
 
 #[test]
@@ -83,11 +75,9 @@ pub fn test_index_syntax() {
                 pure()
             );
         "#;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Index out of range",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Index out of range");
 }
 
 #[test]
@@ -101,11 +91,9 @@ pub fn test_empty_negative_capacity() {
                 pure()
             );
         "#;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Negative array size or capacity: -1",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Negative array size or capacity: -1");
 }
 
 #[test]
@@ -119,9 +107,7 @@ pub fn test_fill_negative_size() {
                 pure()
             );
         "#;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Negative array size or capacity",
-    );
+    let mut config = Configuration::compiler_develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Negative array size or capacity");
 }

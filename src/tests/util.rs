@@ -36,7 +36,10 @@ pub fn test_source(source: &str, config: Configuration) {
     let res = run_source(source, config);
     let res = panic_if_err(res);
     let output = res.unwrap();
-    let code = output.status.code().unwrap();
+    let code = match output.status.code() {
+        Some(code) => code,
+        None => panic_with_msg("The process was terminated by signal."),
+    };
     assert_eq!(code, 0);
 }
 

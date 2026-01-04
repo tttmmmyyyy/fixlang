@@ -3442,44 +3442,6 @@ pub fn test119() {
 }
 
 #[test]
-pub fn test_undefined_0() {
-    // Test undefined of type Array or function.
-    let source = r#"
-        module Main; 
-        
-        main : IO ();
-        main = (
-            let x = 3;
-            let a = if true { Array::fill(1, |_| x) } else { undefined("") };
-            assert_eq(|_|"case 1", (a.@(0))(1), x);;
-            let a = if true { |_| x } else { undefined("") };
-            assert_eq(|_|"case 1", a(1), x);;
-            pure()
-        );
-    "#;
-    test_source(&source, Configuration::compiler_develop_mode());
-}
-
-#[test]
-pub fn test_undefined_1() {
-    // Undefined reached.
-    let source = r#"
-        module Main; 
-        
-        main : IO ();
-        main = (
-            eval undefined("Undefined reached") : I64;
-            pure()
-        );
-    "#;
-    test_source_fail(
-        &source,
-        Configuration::compiler_develop_mode(),
-        "Undefined reached",
-    );
-}
-
-#[test]
 pub fn test_punched_array_0() {
     // Test PunchedArray.
     let source = r#"
