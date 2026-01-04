@@ -65,9 +65,9 @@ pub struct ProjectFileBuild {
     preliminary_commands: Vec<Vec<String>>,
     backtrace: Option<bool>,
     #[serde(default)]
-    disable_cpu_features: Vec<String>,
-    #[serde(default)]
     no_runtime_check: bool,
+    #[serde(default)]
+    disable_cpu_features: Vec<String>,
     test: Option<ProjectFileBuildTest>,
 }
 

@@ -2519,7 +2519,7 @@ Many of features of "fix" command tries to read the project file in the current 
 Moreover, some subcommands (e.g., "fix deps", "fix docs" or "fix language-server") requires the project file to be present.
 
 "fix init" command generates [a template project file](./src/docs/project_template.toml).
-To learn more about the project file, read the comments in it.
+This file contains a list of available fields (almost all of which are commented out by default), examples, and explanations, so please refer to it.
 
 ## Managing dependencies
 
