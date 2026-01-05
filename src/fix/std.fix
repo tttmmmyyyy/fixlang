@@ -1488,9 +1488,9 @@ namespace IO {
     with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a;
     with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
-        let res = *action(handle);
-        IOFail::lift(close_file(handle));;
-        pure $ res
+        let res = *action(handle).to_result.lift;
+        close_file(handle).lift;;
+        res.from_result
     );
 
     // Writes a byte array into an IOHandle.
