@@ -37,9 +37,68 @@ use crate::{
     misc::{Map, Set},
 };
 
+struct Env {
+    tycons: Map<TyCon, TyConInfo>,
+    removed_tycons: Set<TyCon>,
+}
+
+impl Env {
+    fn new(tycons: Map<TyCon, TyConInfo>) -> Self {
+        let mut env = Self {
+            tycons,
+            removed_tycons: Set::default(),
+        };
+        let tycons = env.tycons.keys().cloned().collect::<Vec<_>>();
+        let mut visited = Set::default();
+        for tycon in tycons {
+            env.calculate_removed_tycons_internal(&tycon, &mut visited);
+        }
+        env
+    }
+
+    fn is_removed(&self, tycon: &TyCon) -> bool {
+        self.removed_tycons.contains(tycon)
+    }
+
+    fn calculate_removed_tycons_internal(&mut self, now: &TyCon, visited: &mut Set<TyCon>) {
+        if visited.contains(now) {
+            return;
+        }
+        visited.insert(now.clone());
+        let ti = self.tycons.get(now).unwrap();
+        match ti.variant {
+            TyConVariant::Struct | TyConVariant::Union => {}
+            _ => {
+                return;
+            }
+        }
+        if ti.tyvars.iter().any(|tv| tv.kind != kind_star()) {
+            self.removed_tycons.insert(now.clone());
+            return;
+        }
+        let field_tys = ti
+            .fields
+            .iter()
+            .map(|field| field.ty.clone())
+            .collect::<Vec<_>>();
+        for field_ty in field_tys {
+            let mut tycons = Set::default();
+            field_ty.collect_tycons(&mut tycons);
+            for tycon in tycons {
+                self.calculate_removed_tycons_internal(&tycon, visited);
+                if self.removed_tycons.contains(&tycon) {
+                    self.removed_tycons.insert(now.clone());
+                    return;
+                }
+            }
+        }
+    }
+}
+
 pub fn run(prg: &mut Program) {
     // Run on all symbols.
-    let mut env = prg.type_env.tycons.as_ref().clone();
+    let mut env = Env::new(prg.type_env.tycons.as_ref().clone());
+
     for (_name, sym) in &mut prg.symbols {
         run_on_symbol(sym, &mut env);
     }
@@ -49,10 +108,10 @@ pub fn run(prg: &mut Program) {
     // Run on type environment.
     run_on_type_env(&mut env);
 
-    prg.type_env.tycons = Arc::new(env);
+    prg.type_env.tycons = Arc::new(env.tycons);
 }
 
-fn run_on_exported_statements(prg: &mut Program, env: &mut Map<TyCon, TyConInfo>) {
+fn run_on_exported_statements(prg: &mut Program, env: &mut Env) {
     for export in &mut prg.export_statements {
         if let Some(expr) = &export.value_expr {
             let expr = run_on_inferred_type(expr, env);
@@ -67,16 +126,16 @@ fn run_on_exported_statements(prg: &mut Program, env: &mut Map<TyCon, TyConInfo>
     }
 }
 
-fn run_on_entry_io_value(prg: &mut Program, env: &mut Map<TyCon, TyConInfo>) {
+fn run_on_entry_io_value(prg: &mut Program, env: &mut Env) {
     if let Some(entry_io_value) = &mut prg.entry_io_value {
         let expr = run_on_inferred_type(entry_io_value, env);
         prg.entry_io_value = Some(expr);
     }
 }
 
-fn run_on_type_env(env: &mut Map<TyCon, TyConInfo>) {
+fn run_on_type_env(env: &mut Env) {
     let mut todo = Set::default();
-    for (tc, _ti) in env.iter() {
+    for (tc, _ti) in env.tycons.iter() {
         todo.insert(tc.clone());
     }
     let mut done = Set::default();
@@ -84,11 +143,11 @@ fn run_on_type_env(env: &mut Map<TyCon, TyConInfo>) {
         // Apply run_on_type to the right-hand side of the type definition
         for tc in &todo {
             done.insert(tc.clone());
-            if is_subject_to_removal(tc, env) {
+            if env.is_removed(tc) {
                 // Skip types that are scheduled for removal.
                 continue;
             }
-            let mut ti = env.get(tc).unwrap().clone();
+            let mut ti = env.tycons.get(tc).unwrap().clone();
             if ti.tyvars.len() > 0 {
                 // If there are type variables, we cannot process it.
                 continue;
@@ -96,11 +155,11 @@ fn run_on_type_env(env: &mut Map<TyCon, TyConInfo>) {
             for field in &mut ti.fields {
                 field.ty = run_on_type(&field.ty, env);
             }
-            env.insert(tc.clone(), ti);
+            env.tycons.insert(tc.clone(), ti);
         }
         // Detect newly added types in the above loop
         todo.clear();
-        for (tc, _ti) in env.iter() {
+        for (tc, _ti) in env.tycons.iter() {
             if done.contains(tc) {
                 continue;
             }
@@ -109,17 +168,17 @@ fn run_on_type_env(env: &mut Map<TyCon, TyConInfo>) {
     }
     // Remove types that are no longer needed
     let mut to_remove = vec![];
-    for (tc, _ti) in env.iter() {
-        if is_subject_to_removal(&tc, env) {
+    for (tc, _ti) in env.tycons.iter() {
+        if env.is_removed(&tc) {
             to_remove.push(tc.clone());
         }
     }
     for tc in to_remove {
-        env.remove(&tc);
+        env.tycons.remove(&tc);
     }
 }
 
-fn run_on_symbol(sym: &mut Symbol, env: &mut Map<TyCon, TyConInfo>) {
+fn run_on_symbol(sym: &mut Symbol, env: &mut Env) {
     let mut remover = RGT { env: env };
     let res = remover.traverse(&sym.expr.as_ref().unwrap());
     if res.changed {
@@ -128,58 +187,58 @@ fn run_on_symbol(sym: &mut Symbol, env: &mut Map<TyCon, TyConInfo>) {
     }
 }
 
-fn is_subject_to_removal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
-    let mut visited = Set::default();
-    is_subject_to_removal_internal(tc, env, &mut visited)
-}
+// fn is_subject_to_removal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
+//     let mut visited = Set::default();
+//     is_subject_to_removal_internal(tc, env, &mut visited)
+// }
 
-fn is_subject_to_removal_internal(
-    tc: &TyCon,
-    env: &Map<TyCon, TyConInfo>,
-    visited: &mut Set<TyCon>,
-) -> bool {
-    let ti = env.get(tc).unwrap();
-    match ti.variant {
-        TyConVariant::Struct | TyConVariant::Union => {}
-        _ => {
-            return false;
-        }
-    }
-    if ti.tyvars.iter().any(|tv| tv.kind != kind_star()) {
-        return true;
-    }
-    visited.insert(tc.clone());
-    for field in &ti.fields {
-        let field_ty = &field.ty;
-        let mut tycons = Set::default();
-        field_ty.collect_tycons(&mut tycons);
-        for tycon in tycons {
-            if visited.contains(&tycon) {
-                continue;
-            }
-            if is_subject_to_removal(&tycon, env) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
+// fn is_subject_to_removal_internal(
+//     tc: &TyCon,
+//     env: &Map<TyCon, TyConInfo>,
+//     visited: &mut Set<TyCon>,
+// ) -> bool {
+//     let ti = env.get(tc).unwrap();
+//     match ti.variant {
+//         TyConVariant::Struct | TyConVariant::Union => {}
+//         _ => {
+//             return false;
+//         }
+//     }
+//     if ti.tyvars.iter().any(|tv| tv.kind != kind_star()) {
+//         return true;
+//     }
+//     visited.insert(tc.clone());
+//     for field in &ti.fields {
+//         let field_ty = &field.ty;
+//         let mut tycons = Set::default();
+//         field_ty.collect_tycons(&mut tycons);
+//         for tycon in tycons {
+//             if visited.contains(&tycon) {
+//                 continue;
+//             }
+//             if is_subject_to_removal(&tycon, env) {
+//                 return true;
+//             }
+//         }
+//     }
+//     return false;
+// }
 
-fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeNode> {
+fn run_on_type(ty: &Arc<TypeNode>, env: &mut Env) -> Arc<TypeNode> {
     assert!(
         ty.free_vars_vec().is_empty(),
         "A type `{}` with free type variables.",
         ty.to_string()
     );
     let top_tc = ty.toplevel_tycon().as_ref().unwrap().clone();
-    let top_ti = env.get(top_tc.as_ref()).unwrap();
+    let top_ti = env.tycons.get(top_tc.as_ref()).unwrap();
     let is_fully_applied = top_ti.tyvars.len() == ty.collect_type_argments().len();
     assert!(
         is_fully_applied,
         "A type `{}` which is not fully applied.",
         ty.to_string()
     );
-    if !is_subject_to_removal(&top_tc, env) {
+    if !env.is_removed(&top_tc) {
         let mut app_cmps = ty.flatten_type_application();
         if app_cmps.len() <= 1 {
             return ty.clone();
@@ -195,12 +254,12 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeN
         }
         return res;
     }
-    let top_ti = env.get(top_tc.as_ref()).unwrap().clone();
+    let top_ti = env.tycons.get(top_tc.as_ref()).unwrap().clone();
     let name = format!("#RHKTV<{}>", ty.to_string());
     let mut new_tc = top_tc.as_ref().clone();
     *new_tc.name.name_as_mut() = name;
 
-    if !env.contains_key(&new_tc) {
+    if !env.tycons.contains_key(&new_tc) {
         let mut new_ti = TyConInfo {
             kind: kind_star(),
             variant: top_ti.variant.clone(),
@@ -211,9 +270,9 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeN
             document: top_ti.document.clone(),
         };
         // Register the new type constructor before processing field types to handle recursive types.
-        env.insert(new_tc.clone(), new_ti.clone());
+        env.tycons.insert(new_tc.clone(), new_ti.clone());
 
-        let mut field_types = ty.field_types_via_tycons(env);
+        let mut field_types = ty.field_types_via_tycons(&env.tycons);
         for field_type in &mut field_types {
             *field_type = run_on_type(field_type, env);
         }
@@ -227,13 +286,13 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeN
             };
             new_ti.fields.push(new_field);
         }
-        env.insert(new_tc.clone(), new_ti.clone());
+        env.tycons.insert(new_tc.clone(), new_ti.clone());
     }
 
     return type_tycon(&tycon(new_tc.name));
 }
 
-fn run_on_pattern(pat: &Arc<PatternNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<PatternNode> {
+fn run_on_pattern(pat: &Arc<PatternNode>, env: &mut Env) -> Arc<PatternNode> {
     match &pat.pattern {
         Pattern::Var(v, ty) => {
             // Ignore the type annotation given by the user.
@@ -278,17 +337,17 @@ fn run_on_pattern(pat: &Arc<PatternNode>, env: &mut Map<TyCon, TyConInfo>) -> Ar
     }
 }
 
-fn run_on_pattern_info(pat_info: &mut PatternInfo, env: &mut Map<TyCon, TyConInfo>) {
+fn run_on_pattern_info(pat_info: &mut PatternInfo, env: &mut Env) {
     if let Some(ty) = &mut pat_info.type_ {
         *ty = run_on_type(ty, env);
     }
 }
 
 struct RGT<'a> {
-    env: &'a mut Map<TyCon, TyConInfo>,
+    env: &'a mut Env,
 }
 
-fn run_on_inferred_type(expr: &Arc<ExprNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<ExprNode> {
+fn run_on_inferred_type(expr: &Arc<ExprNode>, env: &mut Env) -> Arc<ExprNode> {
     let type_ = expr.type_.as_ref().unwrap();
     let type_ = run_on_type(type_, env);
     expr.set_type(type_)
