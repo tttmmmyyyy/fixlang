@@ -11,9 +11,9 @@ type [f : (* -> *) -> *] Foo f = struct { data : f IO };
 type [f : * -> *] Bar f = struct { data : f () };
 ```
 When the type `Foo Bar` appears in the program:
-- Define `type #RGT<Foo Bar> = struct { data : Bar IO };`
-- Define `type #RGT<Bar IO> = struct { data : IO () };`
-And replace usages of `Foo Bar` and `Bar IO` with `#RGT<Foo Bar>` and `#RGT<Bar IO>` respectively.
+- Define `type #RHKTV<Foo Bar> = struct { data : Bar IO };`
+- Define `type #RHKTV<Bar IO> = struct { data : IO () };`
+And replace usages of `Foo Bar` and `Bar IO` with `#RHKTV<Foo Bar>` and `#RHKTV<Bar IO>` respectively.
 
 Purpose:
 - This transformation simplifies the implementation of subsequent optimizations.
@@ -129,6 +129,15 @@ fn run_on_symbol(sym: &mut Symbol, env: &mut Map<TyCon, TyConInfo>) {
 }
 
 fn is_subject_to_removal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
+    let mut visited = Set::default();
+    is_subject_to_removal_internal(tc, env, &mut visited)
+}
+
+fn is_subject_to_removal_internal(
+    tc: &TyCon,
+    env: &Map<TyCon, TyConInfo>,
+    visited: &mut Set<TyCon>,
+) -> bool {
     let ti = env.get(tc).unwrap();
     match ti.variant {
         TyConVariant::Struct | TyConVariant::Union => {}
@@ -136,7 +145,24 @@ fn is_subject_to_removal(tc: &TyCon, env: &Map<TyCon, TyConInfo>) -> bool {
             return false;
         }
     }
-    ti.tyvars.iter().any(|tv| tv.kind != kind_star())
+    if ti.tyvars.iter().any(|tv| tv.kind != kind_star()) {
+        return true;
+    }
+    visited.insert(tc.clone());
+    for field in &ti.fields {
+        let field_ty = &field.ty;
+        let mut tycons = Set::default();
+        field_ty.collect_tycons(&mut tycons);
+        for tycon in tycons {
+            if visited.contains(&tycon) {
+                continue;
+            }
+            if is_subject_to_removal(&tycon, env) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 fn run_on_type(ty: &Arc<TypeNode>, env: &mut Map<TyCon, TyConInfo>) -> Arc<TypeNode> {

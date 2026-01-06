@@ -10119,3 +10119,23 @@ main = (
         "Type variable `a` is duplicated in the definition of type `Main::Func`.",
     );
 }
+
+#[test]
+pub fn test_regression_72() {
+    let source = r#"
+module Main;
+
+type [m: *->*] ReaderT e m a = struct {};
+
+type Obj e a = struct {
+    data: ReaderT e IO a 
+};
+
+main: IO () = (
+    let obj: Obj I64 I64 = Obj { data: ReaderT {} };
+    eval obj;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::compiler_develop_mode());
+}
