@@ -1,14 +1,11 @@
 use std::{
-    fs::{self, remove_file},
-    io,
-    path::Path,
+    fs::{self, File, remove_file},
+    io::{self, Write},
+    path::{Path, PathBuf},
     process::{Command, Output},
 };
 use crate::{
-    configuration::Configuration,
-    error::{panic_if_err, panic_with_msg, Errors},
-    misc::save_temporary_source,
-    runner::run,
+    configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, error::{Errors, panic_if_err, panic_with_msg}, misc::save_temporary_source, runner::run
 };
 
 // Run `cargo install --locked --path .`.
@@ -113,4 +110,46 @@ pub fn test_files_in_directory(path: &Path) {
         assert_eq!(code, 0);
         remove_file("test_process_text_file.txt").unwrap_or(());
     }
+}
+
+pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
+    // Create a working directory.
+    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+
+    // Save `c_source` to a file.
+    let c_file = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, test_name);
+    let mut file = File::create(&c_file).unwrap();
+    file.write_all(c_src.as_bytes()).unwrap();
+
+    // Build `c_source` into a shared library.
+    let lib_name = test_name;
+    let so_file_path = format!("lib{}.so", lib_name);
+    let mut com = Command::new("gcc");
+    let output = com
+        .arg("-shared")
+        .arg("-fPIC")
+        .arg("-o")
+        .arg(so_file_path.clone())
+        .arg(&c_file)
+        .output()
+        .expect("Failed to run gcc.");
+    if output.stderr.len() > 0 {
+        eprintln!(
+            "{}",
+            String::from_utf8(output.stderr)
+                .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
+        );
+    }
+
+    // Link the shared library to the Fix program.
+    let mut config = Configuration::compiler_develop_mode();
+    config.add_dynamic_library(lib_name);
+    // Add the library search path.
+    config.library_search_paths.push(PathBuf::from("."));
+
+    // Run the Fix program.
+    test_source(&fix_src, config);
+
+    // Remove the shared library.
+    let _ = fs::remove_file(so_file_path);
 }

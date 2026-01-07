@@ -1,6 +1,8 @@
 use crate::{
-    configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, misc::function_name,
-    tests::util::test_source,
+    configuration::Configuration,
+    constants::COMPILER_TEST_WORKING_PATH,
+    misc::function_name,
+    tests::util::{test_source, test_source_with_c},
 };
 use std::fs;
 
@@ -103,5 +105,119 @@ pub fn test_write_read_file_bytes() {
         tmp_file
     );
     test_source(&source, Configuration::compiler_develop_mode());
+    fs::remove_file(tmp_file).unwrap();
+}
+
+#[test]
+pub fn test_with_file_closed_when_ok() {
+    // Create a working directory.
+    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+
+    // Test write_file_bytes, read_file_bytes.
+    let source = format!(
+        r#"
+module Main; 
+
+main : IO ();
+main = (
+    let file_path = "{}";
+    let content = "Hello, This is a test file.";
+    do {{
+        write_file_string(file_path, content);;
+        with_file(file_path, "r", |file|
+            let dtor = file.@_data;
+            let ptr = *dtor.boxed_to_retained_ptr.lift;
+            FFI_CALL_IO[() store(Ptr), ptr].lift;;
+            pure() : IOFail ()
+        )
+    }}.try(|_| pure());;
+
+    let ptr = *FFI_CALL_IO[Ptr load()];
+    let dtor = *ptr.boxed_from_retained_ptr;
+    let handle = IOHandle {{ _data : dtor }};
+    let file_ptr = *get_file_ptr(handle);
+    assert_eq(|_|"file_ptr is not closed!", file_ptr, nullptr);;
+
+    pure()
+);
+    "#,
+        tmp_file
+    );
+
+    let c_source = r#"
+#include <stdlib.h>
+
+void *storage = NULL;
+
+void store(void *ptr)
+{
+    storage = ptr;
+}
+
+void *load()
+{
+    return storage;
+}
+    "#;
+
+    test_source_with_c(&source, c_source, function_name!());
+    fs::remove_file(tmp_file).unwrap();
+}
+
+#[test]
+pub fn test_with_file_closed_when_err() {
+    // Create a working directory.
+    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+
+    // Test write_file_bytes, read_file_bytes.
+    let source = format!(
+        r#"
+module Main; 
+
+main : IO ();
+main = (
+    let file_path = "{}";
+    let content = "Hello, This is a test file.";
+    do {{
+        write_file_string(file_path, content);;
+        with_file(file_path, "r", |file|
+            let dtor = file.@_data;
+            let ptr = *dtor.boxed_to_retained_ptr.lift;
+            FFI_CALL_IO[() store(Ptr), ptr].lift;;
+            throw("Error") : IOFail ()
+        )
+    }}.try(|_| pure());;
+
+    let ptr = *FFI_CALL_IO[Ptr load()];
+    let dtor = *ptr.boxed_from_retained_ptr;
+    let handle = IOHandle {{ _data : dtor }};
+    let file_ptr = *get_file_ptr(handle);
+    assert_eq(|_|"file_ptr is not closed!", file_ptr, nullptr);;
+
+    pure()
+);
+    "#,
+        tmp_file
+    );
+
+    let c_source = r#"
+#include <stdlib.h>
+
+void *storage = NULL;
+
+void store(void *ptr)
+{
+    storage = ptr;
+}
+
+void *load()
+{
+    return storage;
+}
+    "#;
+
+    test_source_with_c(&source, c_source, function_name!());
     fs::remove_file(tmp_file).unwrap();
 }
