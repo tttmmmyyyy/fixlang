@@ -862,7 +862,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
             to_name,
             to_name,
             upper_camel_to_lower_snake(&to_name),
-            to_name
+            to_name,
         );
 
         // Add trait implementations.
@@ -872,7 +872,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
                 from_name,
                 to_name,
                 upper_camel_to_lower_snake(&to_name),
-                upper_camel_to_lower_snake(&to_name)
+                to_name,
             );
         }
     }

@@ -351,4 +351,41 @@ mod tests {
         assert_eq!(upper_camel_to_lower_snake("I64"), "i64");
         assert_eq!(upper_camel_to_lower_snake("CUnsignedInt"), "c_unsigned_int");
     }
+
+    #[test]
+    fn test_utf16_pos_to_utf8_byte_pos() {
+        // ASCII only
+        assert_eq!(utf16_pos_to_utf8_byte_pos("hello", 0), 0);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("hello", 3), 3);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("hello", 5), 5);
+
+        // Japanese characters (3 bytes in UTF-8, 1 code unit in UTF-16)
+        assert_eq!(utf16_pos_to_utf8_byte_pos("こんにちは", 0), 0);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("こんにちは", 1), 3);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("こんにちは", 2), 6);
+
+        // Emoji (4 bytes in UTF-8, 2 code units in UTF-16)
+        assert_eq!(utf16_pos_to_utf8_byte_pos("😀", 0), 0);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("😀", 2), 4);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("a😀b", 0), 0);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("a😀b", 1), 1);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("a😀b", 3), 5);
+        assert_eq!(utf16_pos_to_utf8_byte_pos("a😀b", 4), 6);
+    }
+}
+
+// Convert a UTF-16 code unit position to a UTF-8 byte position in a string.
+// This is useful for converting LSP positions (which use UTF-16) to Rust string indices (which use UTF-8).
+pub fn utf16_pos_to_utf8_byte_pos(s: &str, utf16_pos: usize) -> usize {
+    let mut utf16_count = 0;
+
+    for (byte_idx, ch) in s.char_indices() {
+        if utf16_count >= utf16_pos {
+            return byte_idx;
+        }
+        utf16_count += ch.len_utf16();
+    }
+
+    // If we reach here, utf16_pos is at or beyond the end of the string
+    s.len()
 }

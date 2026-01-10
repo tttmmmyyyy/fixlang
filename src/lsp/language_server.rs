@@ -24,11 +24,11 @@ use lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
     DocumentSymbol, DocumentSymbolParams, Documentation, GotoDefinitionParams, HoverParams,
     HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, MarkupContent,
-    NumberOrString, ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, SaveOptions,
-    ServerCapabilities, SymbolKind, TextDocumentPositionParams, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Uri,
-    WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
-    WorkDoneProgressOptions, WorkspaceEdit,
+    NumberOrString, PositionEncodingKind, ProgressParams, ProgressParamsValue,
+    PublishDiagnosticsParams, SaveOptions, ServerCapabilities, SymbolKind,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, TextEdit, Uri, WorkDoneProgressBegin,
+    WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions, WorkspaceEdit,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -512,7 +512,7 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
     // Return server capabilities.
     let result = InitializeResult {
         capabilities: ServerCapabilities {
-            position_encoding: None,
+            position_encoding: Some(PositionEncodingKind::UTF16),
             text_document_sync: Some(TextDocumentSyncCapability::Options(
                 TextDocumentSyncOptions {
                     open_close: Some(true),
@@ -990,7 +990,12 @@ pub fn create_text_edits_to_erase_imports(
         loop {
             let end_line_content = content_lines.get(range.end.line as usize);
             if let Some(end_line_content) = end_line_content {
-                let end_col_content = &end_line_content[range.end.character as usize..];
+                // Convert UTF-16 code unit position to UTF-8 byte position
+                let byte_pos = crate::misc::utf16_pos_to_utf8_byte_pos(
+                    end_line_content,
+                    range.end.character as usize,
+                );
+                let end_col_content = &end_line_content[byte_pos..];
                 if end_col_content.trim().is_empty() {
                     range.end.line += 1;
                     range.end.character = 0;
