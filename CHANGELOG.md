@@ -4,37 +4,57 @@
 
 ### Added
 
+#### Language 
+
+- Added the [index syntax](./Document.md#index-syntax), `Indexable` trait and `Indexable` namespace in `Std` module.
+
+#### Std
+
+- Implement `Array a : Indexable`, `String : Indexable`.
+- Added the `Identity` and `Const` types in `Std`. They are functors, and `Identity` is also a monad.
+- Add `Std::ToX` traits for all primitive numeric types and C types (e.g., `Std::ToI32`, `Std::ToCUnsignedInt`, etc.). Each trait has a method to cast a value into the target type. The conversion functions are named in lower snake case, such as `i32` and `c_unsigned_int`. They do not have prefixes like `to_`.
+
+#### Compiler 
+
 - Added `--backtrace` option to `build`, `run`, `test` commands to enable printing backtrace when a runtime error occurs.
 - Added `backtrace` field to `build` and `build.test` section of `fixproj.toml` file.
 - Added `--no-runtime-check` option to `build`, `run` commands to disable runtime checks (e.g., out-of-range check for array access).
 - Added `no_runtime_check` field to `build` section of `fixproj.toml` file.
 - Added `--disable-cpu-feature <feature>` option to `build`, `run`, `test` commands to disable specific CPU features. Add `disable_cpu_features` field to `build` and `build.test` section of `fixproj.toml` file.
-- Added the [index syntax](./Document.md#index-syntax), `Indexable` trait and `Indexable` namespace in `Std` module.
-- Implement `Array a : Indexable`, `String : Indexable`.
-- Added the `Identity` and `Const` types in `Std`. They are functors, and `Identity` is also a monad.
+- Added `unwrap-newtype` optimization, which removes unnecessary newtype wrappers, e.g., `type Foo = unbox struct { data : Bar }`.
+- Added `inline-local` optimization, which tries to inline local functions.
+
+#### Tool
+
+- Edit: Added `fix edit explicit-import` command to rewrite import statements to explicitly import only the necessary entities.
 - LSP: Added a feature to automatically add import statements when completing entity names, if necessary.
 - LSP: Added Quick Fix for "Unknown name" and "Unknown type" errors to add import statements.
-- LSP: You can now search documents and jump to definitions from entities written in import statements.
-- Optimization: Added `unwrap-newtype` optimization, which removes unnecessary newtype wrappers, e.g., `type Foo = unbox struct { data : Bar }`.
-- Optimization: Added `inline-local` optimization, which tries to inline local functions.
-- Edit: Added `fix edit explicit-import` command to rewrite import statements to explicitly import only the necessary entities.
+- LSP: You can now show documents and jump to definitions from entities written in import statements.
 
 ### Changed
 
-- Change type of `Std::FFI::boxed_from_retained_ptr` from `Ptr -> a` to `Ptr -> IO a`. Change type of `Std::FFI::boxed_to_retained_ptr` from `a -> Ptr` to `a -> IO Ptr`.
-- When an out-of-range array access occurs, the error message now includes the index that was accessed and the size of the array.
+#### Language
+
 - Type variables used in trait member definitions can no longer be used in implementations of those trait members. For example, for `trait [f:*->*] f : Functor { map : (a -> b) -> f a -> f b; }`, you cannot use `a`, `b` in `impl MyType : Functor { map = |f : a -> b, x : MyType a| ...}`. This change ensures that renaming type variables in trait definitions does not affect implementations of trait members. Instead, you can introduce type variables in type signatures of trait members. For example, you can write `impl MyType : Functor { map : (a -> b) -> MyType a -> MyType b = |f : a -> b, x : MyType a| ...}`. 
+- You can now refer to entities using absolute namespace syntax (e.g., `::Std::String`) without importing them.
+
+#### Std
+
+- Change type of `Std::FFI::boxed_from_retained_ptr` from `Ptr -> a` to `Ptr -> IO a`. Change type of `Std::FFI::boxed_to_retained_ptr` from `a -> Ptr` to `a -> IO Ptr`.
+- Changed the type of `Std::FFI::Destructor::make` function to return `IO`. Correspondingly, `Std::IO::IOHandle::from_file_ptr` also returns `IO`.
+- Made all values in the `Std::PunchedArray` namespace private (since they are not intended to be used directly from outside).
+- `Array::empty` and `Array::fill` now verifies the capacity and size arguments at runtime to ensure they are non-negative, and raises an error if they are negative.
+
+#### Compiler
+
+- When an out-of-range array access occurs, the error message now includes the index that was accessed and the size of the array.
 - When `undefined` is reached, a newline is now added after the user-specified message.
 - Changed the condition for inlining optimization. A function will be inlined if its complexity is below a certain threshold, regardless of the number of times it is called.
-- Made all values in the `Std::PunchedArray` namespace private (since they are not intended to be used directly from outside).
-- You can now refer to entities using absolute namespace syntax (e.g., `::Std::String`) without importing them.
-- Changed the type of `Std::FFI::Destructor::make` function to return `IO`. Correspondingly, `Std::IO::IOHandle::from_file_ptr` also returns `IO`.
-- `Array::empty` and `Array::fill` now verifies the capacity and size arguments at runtime to ensure they are non-negative, and raises an error if they are negative.
 
 ### Fixed
 
 - LSP: Fixed an issue where documents were not displayed when hovering over type aliases and trait aliases.
-- Fixed an issue where trait aliases were not displayed in the documentation generated by `fix docs`.
+- Docs: Fixed an issue where trait aliases were not displayed in the documentation generated by `fix docs`.
 - Fixed an issue where `close_file` was not called if the `action` passed to `with_file` function returned an error.
 - Fix #64, #65, #69, #70, #71, #72.
 
