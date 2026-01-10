@@ -109,7 +109,7 @@ impl AssocTypeImpl {
             return None;
         }
         let src = self.source.as_ref().unwrap();
-        if !src.includes_pos(pos) {
+        if !src.includes_pos_lsp(pos) {
             return None;
         }
         self.value.find_node_at(pos)
@@ -190,7 +190,7 @@ impl TraitMember {
             return None;
         }
         let src = self.source.as_ref().unwrap();
-        if !src.includes_pos(pos) {
+        if !src.includes_pos_lsp(pos) {
             return None;
         }
         self.qual_ty.find_node_at(pos)
@@ -599,7 +599,7 @@ impl TraitAlias {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         for (t, s) in &self.value {
-            if s.includes_pos(pos) {
+            if s.includes_pos_lsp(pos) {
                 return Some(EndNode::Trait(t.clone()));
             }
         }

@@ -867,11 +867,7 @@ fn get_typing_text(
 ) -> String {
     let current_line = get_line_string_from_position(uri_to_content, &text_document_position);
     let typing_text = current_line
-        .map(|(line, pos)| {
-            let mut line = line.chars().collect::<Vec<_>>();
-            line.truncate(pos as usize);
-            line.into_iter().collect::<String>()
-        })
+        .map(|(line, byte_pos)| line[..byte_pos].to_string())
         .unwrap_or_default();
     typing_text
 }
@@ -1180,12 +1176,13 @@ fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> O
     None
 }
 
-// Given a `TextDocumentPositionParams`, get the line string and the line number.
+// Given a `TextDocumentPositionParams`, get the line string and the byte position in that line.
 // `uri_to_content` is a map to get the source string from the uri of the source file.
+// The returned byte position is converted from the UTF-16 code unit position in the text_position.
 fn get_line_string_from_position(
     uri_to_content: &Map<lsp_types::Uri, LatestContent>,
     text_position: &TextDocumentPositionParams,
-) -> Option<(String, u32)> {
+) -> Option<(String, usize)> {
     // Get the latest file content.
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
@@ -1200,7 +1197,14 @@ fn get_line_string_from_position(
     let line = text_position.position.line;
     let line = line as usize;
     let line_str = latest_content.lines().nth(line).unwrap_or("").to_string();
-    Some((line_str, text_position.position.character as u32))
+
+    // Convert UTF-16 code unit position to byte position
+    let byte_pos = crate::misc::utf16_pos_to_utf8_byte_pos(
+        &line_str,
+        text_position.position.character as usize,
+    );
+
+    Some((line_str, byte_pos))
 }
 
 fn get_node_at(
@@ -1901,16 +1905,18 @@ fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
 fn position_to_bytes(string: &str, position: lsp_types::Position) -> usize {
     let mut bytes = 0;
     let mut line = 0;
-    let mut pos = 0;
+    let mut utf16_count = 0;
+
     for c in string.chars() {
+        if line == position.line && utf16_count >= position.character as usize {
+            break;
+        }
         bytes += c.len_utf8();
-        pos += 1;
         if c == '\n' {
             line += 1;
-            pos = 0;
-        }
-        if line == position.line && pos == position.character as usize {
-            break;
+            utf16_count = 0;
+        } else {
+            utf16_count += c.len_utf16();
         }
     }
     bytes
@@ -1975,14 +1981,26 @@ fn span_to_range(span: &Span) -> lsp_types::Range {
 
     let (start_line, start_column) = pair_to_zero_indexed(span.start_line_col());
     let (end_line, end_column) = pair_to_zero_indexed(span.end_line_col());
+
+    // Convert character-based column positions to UTF-16 code unit positions
+    let source_string = span.input.string();
+    let (start_utf16_col, end_utf16_col) = if let Ok(source_string) = source_string {
+        let start_utf16 =
+            crate::misc::char_pos_to_utf16_pos(&source_string, start_line, start_column);
+        let end_utf16 = crate::misc::char_pos_to_utf16_pos(&source_string, end_line, end_column);
+        (start_utf16, end_utf16)
+    } else {
+        (start_column, end_column)
+    };
+
     lsp_types::Range {
         start: lsp_types::Position {
             line: start_line as u32,
-            character: start_column as u32,
+            character: start_utf16_col as u32,
         },
         end: lsp_types::Position {
             line: end_line as u32,
-            character: end_column as u32,
+            character: end_utf16_col as u32,
         },
     }
 }

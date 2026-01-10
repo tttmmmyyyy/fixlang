@@ -31,7 +31,7 @@ impl ImportStatement {
 
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         let span = self.module.1.as_ref()?;
-        if span.includes_pos(pos) {
+        if span.includes_pos_lsp(pos) {
             return Some(EndNode::Module(self.module.0.clone()));
         }
         let namespace = NameSpace::new(vec![self.module.0.clone()]);
@@ -225,7 +225,7 @@ impl ImportTreeNode {
                     return None;
                 }
                 let span = span.as_ref().unwrap();
-                if !span.includes_pos(pos) {
+                if !span.includes_pos_lsp(pos) {
                     return None;
                 }
                 let name = FullName::new(namespace, name);
@@ -237,7 +237,7 @@ impl ImportTreeNode {
                     return None;
                 }
                 let span = span.as_ref().unwrap();
-                if !span.includes_pos(pos) {
+                if !span.includes_pos_lsp(pos) {
                     return None;
                 }
                 let name = FullName::new(namespace, name);
@@ -248,7 +248,7 @@ impl ImportTreeNode {
                     return None;
                 }
                 let span = span.as_ref().unwrap();
-                if !span.includes_pos(pos) {
+                if !span.includes_pos_lsp(pos) {
                     return None;
                 }
                 let mut namespace = namespace.clone();

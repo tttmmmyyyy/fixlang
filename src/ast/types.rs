@@ -384,7 +384,7 @@ impl TypeNode {
             return None;
         }
         let src: &Span = self.info.source.as_ref().unwrap();
-        if !src.includes_pos(pos) {
+        if !src.includes_pos_lsp(pos) {
             return None;
         }
         match &self.ty {

@@ -24,7 +24,7 @@ impl TypeDefn {
             return None;
         }
         let span = self.source.as_ref().unwrap();
-        if !span.includes_pos(pos) {
+        if !span.includes_pos_lsp(pos) {
             return None;
         }
         self.value.find_node_at(pos)

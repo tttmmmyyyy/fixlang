@@ -94,7 +94,9 @@ pub struct SourcePos {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Span {
     pub input: SourceFile,
+    // Start byte index (inclusive).
     pub start: usize,
+    // End byte index (exclusive).
     pub end: usize,
 }
 
@@ -160,16 +162,15 @@ impl Span {
     }
 
     // Get line number of start.
+    //
+    // Returns 1-based line number.
     pub fn start_line_no(&self) -> usize {
         self.start_line_col().0
     }
 
-    #[allow(dead_code)]
-    pub fn range(&self) -> (usize, usize) {
-        (self.start, self.end)
-    }
-
     // Get line and column number of start.
+    //
+    // Returns character indices (not byte indices) starting from 1.
     pub fn start_line_col(&self) -> (usize, usize) {
         let source_string = self.input.string();
         if let Err(_e) = source_string {
@@ -181,6 +182,8 @@ impl Span {
     }
 
     // Get line and column number of end.
+    //
+    // Returns character indices (not byte indices) starting from 1.
     pub fn end_line_col(&self) -> (usize, usize) {
         let source_string = self.input.string();
         if let Err(_e) = source_string {
@@ -302,7 +305,9 @@ impl Span {
     }
 
     // Check if the position is included in the span.
-    pub fn includes_pos(&self, pos: &SourcePos) -> bool {
+    //
+    // This is intended for LSP (Language Server Protocol) usage.
+    pub fn includes_pos_lsp(&self, pos: &SourcePos) -> bool {
         let file_path_abs = to_absolute_path(&self.input.file_path);
         let pos_file_path_abs = to_absolute_path(&pos.input.file_path);
         if file_path_abs.is_err() || pos_file_path_abs.is_err() {
@@ -311,7 +316,14 @@ impl Span {
         if file_path_abs.ok().unwrap() != pos_file_path_abs.ok().unwrap() {
             return false;
         }
-        // Like rust-analyzer, we use not `pos.pos < self.end` but `pos.pos <= self.end`, because VSCode sometimes sends a position that is one character beyond the end of the symbol string.
+        // We use not `pos.pos < self.end` but `pos.pos <= self.end` here:
+        //
+        // When you double-click a symbol in VSCode to select it, and then right-click to choose "Go to Definition",
+        // the LSP client sends the position next to the last character of the symbol, not a position within the symbol string.
+        // Therefore, we need to include self.end to enable "Go to Definition" for symbols.
+        //
+        // As a side effect, when Ctrl-clicking a symbol, it will also jump even if the cursor is placed after the last character of the symbol.
+        // This behavior is also observed in Rust-analyzer.
         self.start <= pos.pos && pos.pos <= self.end
     }
 }

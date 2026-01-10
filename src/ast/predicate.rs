@@ -108,7 +108,7 @@ impl Predicate {
             return None;
         }
         let src = self.source.as_ref().unwrap();
-        if !src.includes_pos(pos) {
+        if !src.includes_pos_lsp(pos) {
             return None;
         }
         let node = self.ty.find_node_at(pos);

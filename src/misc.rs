@@ -372,6 +372,48 @@ mod tests {
         assert_eq!(utf16_pos_to_utf8_byte_pos("a😀b", 3), 5);
         assert_eq!(utf16_pos_to_utf8_byte_pos("a😀b", 4), 6);
     }
+
+    #[test]
+    fn test_char_pos_to_utf16_pos() {
+        // ASCII only - single line
+        assert_eq!(char_pos_to_utf16_pos("hello", 0, 0), 0);
+        assert_eq!(char_pos_to_utf16_pos("hello", 0, 3), 3);
+        assert_eq!(char_pos_to_utf16_pos("hello", 0, 5), 5);
+
+        // ASCII only - multiple lines
+        let multiline = "line1\nline2\nline3";
+        assert_eq!(char_pos_to_utf16_pos(multiline, 0, 0), 0);
+        assert_eq!(char_pos_to_utf16_pos(multiline, 0, 3), 3);
+        assert_eq!(char_pos_to_utf16_pos(multiline, 1, 0), 0);
+        assert_eq!(char_pos_to_utf16_pos(multiline, 1, 3), 3);
+        assert_eq!(char_pos_to_utf16_pos(multiline, 2, 0), 0);
+        assert_eq!(char_pos_to_utf16_pos(multiline, 2, 3), 3);
+
+        // Japanese characters (1 character = 1 code unit in UTF-16)
+        let japanese = "こんにちは\n世界";
+        assert_eq!(char_pos_to_utf16_pos(japanese, 0, 0), 0);
+        assert_eq!(char_pos_to_utf16_pos(japanese, 0, 2), 2);
+        assert_eq!(char_pos_to_utf16_pos(japanese, 0, 5), 5);
+        assert_eq!(char_pos_to_utf16_pos(japanese, 1, 0), 0);
+        assert_eq!(char_pos_to_utf16_pos(japanese, 1, 2), 2);
+
+        // Emoji (1 character = 2 code units in UTF-16)
+        let emoji = "a😀b\nc😀d";
+        assert_eq!(char_pos_to_utf16_pos(emoji, 0, 0), 0); // 'a'
+        assert_eq!(char_pos_to_utf16_pos(emoji, 0, 1), 1); // before '😀'
+        assert_eq!(char_pos_to_utf16_pos(emoji, 0, 2), 3); // after '😀', before 'b'
+        assert_eq!(char_pos_to_utf16_pos(emoji, 0, 3), 4); // 'b'
+        assert_eq!(char_pos_to_utf16_pos(emoji, 1, 0), 0); // 'c'
+        assert_eq!(char_pos_to_utf16_pos(emoji, 1, 1), 1); // before '😀'
+        assert_eq!(char_pos_to_utf16_pos(emoji, 1, 2), 3); // after '😀', before 'd'
+
+        // Mixed content
+        let mixed = "ASCII\nこんにちは\na😀b";
+        assert_eq!(char_pos_to_utf16_pos(mixed, 0, 3), 3);
+        assert_eq!(char_pos_to_utf16_pos(mixed, 1, 2), 2);
+        assert_eq!(char_pos_to_utf16_pos(mixed, 2, 1), 1);
+        assert_eq!(char_pos_to_utf16_pos(mixed, 2, 2), 3);
+    }
 }
 
 // Convert a UTF-16 code unit position to a UTF-8 byte position in a string.
@@ -388,4 +430,35 @@ pub fn utf16_pos_to_utf8_byte_pos(s: &str, utf16_pos: usize) -> usize {
 
     // If we reach here, utf16_pos is at or beyond the end of the string
     s.len()
+}
+
+// Convert character position to UTF-16 code unit position
+// This is useful for converting source span positions (which use character counts) to LSP positions (which use UTF-16).
+pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usize {
+    let mut current_line = 0;
+    let mut char_count = 0;
+    let mut utf16_count = 0;
+
+    for c in source.chars() {
+        if c == '\n' {
+            if current_line == line {
+                // We've reached the end of the target line
+                break;
+            }
+            current_line += 1;
+            char_count = 0;
+            utf16_count = 0;
+            continue;
+        }
+
+        if current_line == line {
+            if char_count >= char_col {
+                break;
+            }
+            char_count += 1;
+            utf16_count += c.len_utf16();
+        }
+    }
+
+    utf16_count
 }

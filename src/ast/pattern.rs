@@ -215,7 +215,7 @@ impl PatternNode {
             return None;
         }
         let span = self.info.source.as_ref().unwrap();
-        if !span.includes_pos(pos) {
+        if !span.includes_pos_lsp(pos) {
             return None;
         }
         match &self.pattern {
