@@ -3874,11 +3874,195 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 Type: `[a : Std::ToBytes] a -> Std::Array Std::U8`
 
+### namespace Std::ToCChar
+
+#### c_char
+
+Type: `[a : Std::ToCChar] a -> Std::FFI::CChar`
+
+Casts a value into `CChar` type.
+
+### namespace Std::ToCDouble
+
+#### c_double
+
+Type: `[a : Std::ToCDouble] a -> Std::FFI::CDouble`
+
+Casts a value into `CDouble` type.
+
+### namespace Std::ToCFloat
+
+#### c_float
+
+Type: `[a : Std::ToCFloat] a -> Std::FFI::CFloat`
+
+Casts a value into `CFloat` type.
+
+### namespace Std::ToCInt
+
+#### c_int
+
+Type: `[a : Std::ToCInt] a -> Std::FFI::CInt`
+
+Casts a value into `CInt` type.
+
+### namespace Std::ToCLong
+
+#### c_long
+
+Type: `[a : Std::ToCLong] a -> Std::FFI::CLong`
+
+Casts a value into `CLong` type.
+
+### namespace Std::ToCLongLong
+
+#### c_long_long
+
+Type: `[a : Std::ToCLongLong] a -> Std::FFI::CLongLong`
+
+Casts a value into `CLongLong` type.
+
+### namespace Std::ToCShort
+
+#### c_short
+
+Type: `[a : Std::ToCShort] a -> Std::FFI::CShort`
+
+Casts a value into `CShort` type.
+
+### namespace Std::ToCSizeT
+
+#### c_size_t
+
+Type: `[a : Std::ToCSizeT] a -> Std::FFI::CSizeT`
+
+Casts a value into `CSizeT` type.
+
+### namespace Std::ToCUnsignedChar
+
+#### c_unsigned_char
+
+Type: `[a : Std::ToCUnsignedChar] a -> Std::FFI::CUnsignedChar`
+
+Casts a value into `CUnsignedChar` type.
+
+### namespace Std::ToCUnsignedInt
+
+#### c_unsigned_int
+
+Type: `[a : Std::ToCUnsignedInt] a -> Std::FFI::CUnsignedInt`
+
+Casts a value into `CUnsignedInt` type.
+
+### namespace Std::ToCUnsignedLong
+
+#### c_unsigned_long
+
+Type: `[a : Std::ToCUnsignedLong] a -> Std::FFI::CUnsignedLong`
+
+Casts a value into `CUnsignedLong` type.
+
+### namespace Std::ToCUnsignedLongLong
+
+#### c_unsigned_long_long
+
+Type: `[a : Std::ToCUnsignedLongLong] a -> Std::FFI::CUnsignedLongLong`
+
+Casts a value into `CUnsignedLongLong` type.
+
+### namespace Std::ToCUnsignedShort
+
+#### c_unsigned_short
+
+Type: `[a : Std::ToCUnsignedShort] a -> Std::FFI::CUnsignedShort`
+
+Casts a value into `CUnsignedShort` type.
+
+### namespace Std::ToF32
+
+#### f32
+
+Type: `[a : Std::ToF32] a -> Std::F32`
+
+Casts a value into `F32` type.
+
+### namespace Std::ToF64
+
+#### f64
+
+Type: `[a : Std::ToF64] a -> Std::F64`
+
+Casts a value into `F64` type.
+
+### namespace Std::ToI16
+
+#### i16
+
+Type: `[a : Std::ToI16] a -> Std::I16`
+
+Casts a value into `I16` type.
+
+### namespace Std::ToI32
+
+#### i32
+
+Type: `[a : Std::ToI32] a -> Std::I32`
+
+Casts a value into `I32` type.
+
+### namespace Std::ToI64
+
+#### i64
+
+Type: `[a : Std::ToI64] a -> Std::I64`
+
+Casts a value into `I64` type.
+
+### namespace Std::ToI8
+
+#### i8
+
+Type: `[a : Std::ToI8] a -> Std::I8`
+
+Casts a value into `I8` type.
+
 ### namespace Std::ToString
 
 #### to_string
 
 Type: `[a : Std::ToString] a -> Std::String`
+
+### namespace Std::ToU16
+
+#### u16
+
+Type: `[a : Std::ToU16] a -> Std::U16`
+
+Casts a value into `U16` type.
+
+### namespace Std::ToU32
+
+#### u32
+
+Type: `[a : Std::ToU32] a -> Std::U32`
+
+Casts a value into `U32` type.
+
+### namespace Std::ToU64
+
+#### u64
+
+Type: `[a : Std::ToU64] a -> Std::U64`
+
+Casts a value into `U64` type.
+
+### namespace Std::ToU8
+
+#### u8
+
+Type: `[a : Std::ToU8] a -> Std::U8`
+
+Casts a value into `U8` type.
 
 ### namespace Std::U16
 
@@ -5717,11 +5901,195 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 Type: `a -> Std::Array Std::U8`
 
+#### trait `a : ToCChar`
+
+##### method `c_char`
+
+Type: `a -> Std::I8`
+
+Casts a value into `CChar` type.
+
+#### trait `a : ToCDouble`
+
+##### method `c_double`
+
+Type: `a -> Std::F64`
+
+Casts a value into `CDouble` type.
+
+#### trait `a : ToCFloat`
+
+##### method `c_float`
+
+Type: `a -> Std::F32`
+
+Casts a value into `CFloat` type.
+
+#### trait `a : ToCInt`
+
+##### method `c_int`
+
+Type: `a -> Std::I32`
+
+Casts a value into `CInt` type.
+
+#### trait `a : ToCLong`
+
+##### method `c_long`
+
+Type: `a -> Std::I64`
+
+Casts a value into `CLong` type.
+
+#### trait `a : ToCLongLong`
+
+##### method `c_long_long`
+
+Type: `a -> Std::I64`
+
+Casts a value into `CLongLong` type.
+
+#### trait `a : ToCShort`
+
+##### method `c_short`
+
+Type: `a -> Std::I16`
+
+Casts a value into `CShort` type.
+
+#### trait `a : ToCSizeT`
+
+##### method `c_size_t`
+
+Type: `a -> Std::U64`
+
+Casts a value into `CSizeT` type.
+
+#### trait `a : ToCUnsignedChar`
+
+##### method `c_unsigned_char`
+
+Type: `a -> Std::U8`
+
+Casts a value into `CUnsignedChar` type.
+
+#### trait `a : ToCUnsignedInt`
+
+##### method `c_unsigned_int`
+
+Type: `a -> Std::U32`
+
+Casts a value into `CUnsignedInt` type.
+
+#### trait `a : ToCUnsignedLong`
+
+##### method `c_unsigned_long`
+
+Type: `a -> Std::U64`
+
+Casts a value into `CUnsignedLong` type.
+
+#### trait `a : ToCUnsignedLongLong`
+
+##### method `c_unsigned_long_long`
+
+Type: `a -> Std::U64`
+
+Casts a value into `CUnsignedLongLong` type.
+
+#### trait `a : ToCUnsignedShort`
+
+##### method `c_unsigned_short`
+
+Type: `a -> Std::U16`
+
+Casts a value into `CUnsignedShort` type.
+
+#### trait `a : ToF32`
+
+##### method `f32`
+
+Type: `a -> Std::F32`
+
+Casts a value into `F32` type.
+
+#### trait `a : ToF64`
+
+##### method `f64`
+
+Type: `a -> Std::F64`
+
+Casts a value into `F64` type.
+
+#### trait `a : ToI16`
+
+##### method `i16`
+
+Type: `a -> Std::I16`
+
+Casts a value into `I16` type.
+
+#### trait `a : ToI32`
+
+##### method `i32`
+
+Type: `a -> Std::I32`
+
+Casts a value into `I32` type.
+
+#### trait `a : ToI64`
+
+##### method `i64`
+
+Type: `a -> Std::I64`
+
+Casts a value into `I64` type.
+
+#### trait `a : ToI8`
+
+##### method `i8`
+
+Type: `a -> Std::I8`
+
+Casts a value into `I8` type.
+
 #### trait `a : ToString`
 
 ##### method `to_string`
 
 Type: `a -> Std::String`
+
+#### trait `a : ToU16`
+
+##### method `u16`
+
+Type: `a -> Std::U16`
+
+Casts a value into `U16` type.
+
+#### trait `a : ToU32`
+
+##### method `u32`
+
+Type: `a -> Std::U32`
+
+Casts a value into `U32` type.
+
+#### trait `a : ToU64`
+
+##### method `u64`
+
+Type: `a -> Std::U64`
+
+Casts a value into `U64` type.
+
+#### trait `a : ToU8`
+
+##### method `u8`
+
+Type: `a -> Std::U8`
+
+Casts a value into `U8` type.
 
 #### trait `a : Zero`
 
@@ -5829,7 +6197,53 @@ The empty array with zero capacity.
 
 ### impl `Std::F32 : Std::ToBytes`
 
+### impl `Std::F32 : Std::ToCChar`
+
+### impl `Std::F32 : Std::ToCDouble`
+
+### impl `Std::F32 : Std::ToCFloat`
+
+### impl `Std::F32 : Std::ToCInt`
+
+### impl `Std::F32 : Std::ToCLong`
+
+### impl `Std::F32 : Std::ToCLongLong`
+
+### impl `Std::F32 : Std::ToCShort`
+
+### impl `Std::F32 : Std::ToCSizeT`
+
+### impl `Std::F32 : Std::ToCUnsignedChar`
+
+### impl `Std::F32 : Std::ToCUnsignedInt`
+
+### impl `Std::F32 : Std::ToCUnsignedLong`
+
+### impl `Std::F32 : Std::ToCUnsignedLongLong`
+
+### impl `Std::F32 : Std::ToCUnsignedShort`
+
+### impl `Std::F32 : Std::ToF32`
+
+### impl `Std::F32 : Std::ToF64`
+
+### impl `Std::F32 : Std::ToI16`
+
+### impl `Std::F32 : Std::ToI32`
+
+### impl `Std::F32 : Std::ToI64`
+
+### impl `Std::F32 : Std::ToI8`
+
 ### impl `Std::F32 : Std::ToString`
+
+### impl `Std::F32 : Std::ToU16`
+
+### impl `Std::F32 : Std::ToU32`
+
+### impl `Std::F32 : Std::ToU64`
+
+### impl `Std::F32 : Std::ToU8`
 
 ### impl `Std::F32 : Std::Zero`
 
@@ -5855,7 +6269,53 @@ The empty array with zero capacity.
 
 ### impl `Std::F64 : Std::ToBytes`
 
+### impl `Std::F64 : Std::ToCChar`
+
+### impl `Std::F64 : Std::ToCDouble`
+
+### impl `Std::F64 : Std::ToCFloat`
+
+### impl `Std::F64 : Std::ToCInt`
+
+### impl `Std::F64 : Std::ToCLong`
+
+### impl `Std::F64 : Std::ToCLongLong`
+
+### impl `Std::F64 : Std::ToCShort`
+
+### impl `Std::F64 : Std::ToCSizeT`
+
+### impl `Std::F64 : Std::ToCUnsignedChar`
+
+### impl `Std::F64 : Std::ToCUnsignedInt`
+
+### impl `Std::F64 : Std::ToCUnsignedLong`
+
+### impl `Std::F64 : Std::ToCUnsignedLongLong`
+
+### impl `Std::F64 : Std::ToCUnsignedShort`
+
+### impl `Std::F64 : Std::ToF32`
+
+### impl `Std::F64 : Std::ToF64`
+
+### impl `Std::F64 : Std::ToI16`
+
+### impl `Std::F64 : Std::ToI32`
+
+### impl `Std::F64 : Std::ToI64`
+
+### impl `Std::F64 : Std::ToI8`
+
 ### impl `Std::F64 : Std::ToString`
+
+### impl `Std::F64 : Std::ToU16`
+
+### impl `Std::F64 : Std::ToU32`
+
+### impl `Std::F64 : Std::ToU64`
+
+### impl `Std::F64 : Std::ToU8`
 
 ### impl `Std::F64 : Std::Zero`
 
@@ -5885,7 +6345,53 @@ The empty array with zero capacity.
 
 ### impl `Std::I16 : Std::ToBytes`
 
+### impl `Std::I16 : Std::ToCChar`
+
+### impl `Std::I16 : Std::ToCDouble`
+
+### impl `Std::I16 : Std::ToCFloat`
+
+### impl `Std::I16 : Std::ToCInt`
+
+### impl `Std::I16 : Std::ToCLong`
+
+### impl `Std::I16 : Std::ToCLongLong`
+
+### impl `Std::I16 : Std::ToCShort`
+
+### impl `Std::I16 : Std::ToCSizeT`
+
+### impl `Std::I16 : Std::ToCUnsignedChar`
+
+### impl `Std::I16 : Std::ToCUnsignedInt`
+
+### impl `Std::I16 : Std::ToCUnsignedLong`
+
+### impl `Std::I16 : Std::ToCUnsignedLongLong`
+
+### impl `Std::I16 : Std::ToCUnsignedShort`
+
+### impl `Std::I16 : Std::ToF32`
+
+### impl `Std::I16 : Std::ToF64`
+
+### impl `Std::I16 : Std::ToI16`
+
+### impl `Std::I16 : Std::ToI32`
+
+### impl `Std::I16 : Std::ToI64`
+
+### impl `Std::I16 : Std::ToI8`
+
 ### impl `Std::I16 : Std::ToString`
+
+### impl `Std::I16 : Std::ToU16`
+
+### impl `Std::I16 : Std::ToU32`
+
+### impl `Std::I16 : Std::ToU64`
+
+### impl `Std::I16 : Std::ToU8`
 
 ### impl `Std::I16 : Std::Zero`
 
@@ -5913,7 +6419,53 @@ The empty array with zero capacity.
 
 ### impl `Std::I32 : Std::ToBytes`
 
+### impl `Std::I32 : Std::ToCChar`
+
+### impl `Std::I32 : Std::ToCDouble`
+
+### impl `Std::I32 : Std::ToCFloat`
+
+### impl `Std::I32 : Std::ToCInt`
+
+### impl `Std::I32 : Std::ToCLong`
+
+### impl `Std::I32 : Std::ToCLongLong`
+
+### impl `Std::I32 : Std::ToCShort`
+
+### impl `Std::I32 : Std::ToCSizeT`
+
+### impl `Std::I32 : Std::ToCUnsignedChar`
+
+### impl `Std::I32 : Std::ToCUnsignedInt`
+
+### impl `Std::I32 : Std::ToCUnsignedLong`
+
+### impl `Std::I32 : Std::ToCUnsignedLongLong`
+
+### impl `Std::I32 : Std::ToCUnsignedShort`
+
+### impl `Std::I32 : Std::ToF32`
+
+### impl `Std::I32 : Std::ToF64`
+
+### impl `Std::I32 : Std::ToI16`
+
+### impl `Std::I32 : Std::ToI32`
+
+### impl `Std::I32 : Std::ToI64`
+
+### impl `Std::I32 : Std::ToI8`
+
 ### impl `Std::I32 : Std::ToString`
+
+### impl `Std::I32 : Std::ToU16`
+
+### impl `Std::I32 : Std::ToU32`
+
+### impl `Std::I32 : Std::ToU64`
+
+### impl `Std::I32 : Std::ToU8`
 
 ### impl `Std::I32 : Std::Zero`
 
@@ -5941,7 +6493,53 @@ The empty array with zero capacity.
 
 ### impl `Std::I64 : Std::ToBytes`
 
+### impl `Std::I64 : Std::ToCChar`
+
+### impl `Std::I64 : Std::ToCDouble`
+
+### impl `Std::I64 : Std::ToCFloat`
+
+### impl `Std::I64 : Std::ToCInt`
+
+### impl `Std::I64 : Std::ToCLong`
+
+### impl `Std::I64 : Std::ToCLongLong`
+
+### impl `Std::I64 : Std::ToCShort`
+
+### impl `Std::I64 : Std::ToCSizeT`
+
+### impl `Std::I64 : Std::ToCUnsignedChar`
+
+### impl `Std::I64 : Std::ToCUnsignedInt`
+
+### impl `Std::I64 : Std::ToCUnsignedLong`
+
+### impl `Std::I64 : Std::ToCUnsignedLongLong`
+
+### impl `Std::I64 : Std::ToCUnsignedShort`
+
+### impl `Std::I64 : Std::ToF32`
+
+### impl `Std::I64 : Std::ToF64`
+
+### impl `Std::I64 : Std::ToI16`
+
+### impl `Std::I64 : Std::ToI32`
+
+### impl `Std::I64 : Std::ToI64`
+
+### impl `Std::I64 : Std::ToI8`
+
 ### impl `Std::I64 : Std::ToString`
+
+### impl `Std::I64 : Std::ToU16`
+
+### impl `Std::I64 : Std::ToU32`
+
+### impl `Std::I64 : Std::ToU64`
+
+### impl `Std::I64 : Std::ToU8`
 
 ### impl `Std::I64 : Std::Zero`
 
@@ -5969,7 +6567,53 @@ The empty array with zero capacity.
 
 ### impl `Std::I8 : Std::ToBytes`
 
+### impl `Std::I8 : Std::ToCChar`
+
+### impl `Std::I8 : Std::ToCDouble`
+
+### impl `Std::I8 : Std::ToCFloat`
+
+### impl `Std::I8 : Std::ToCInt`
+
+### impl `Std::I8 : Std::ToCLong`
+
+### impl `Std::I8 : Std::ToCLongLong`
+
+### impl `Std::I8 : Std::ToCShort`
+
+### impl `Std::I8 : Std::ToCSizeT`
+
+### impl `Std::I8 : Std::ToCUnsignedChar`
+
+### impl `Std::I8 : Std::ToCUnsignedInt`
+
+### impl `Std::I8 : Std::ToCUnsignedLong`
+
+### impl `Std::I8 : Std::ToCUnsignedLongLong`
+
+### impl `Std::I8 : Std::ToCUnsignedShort`
+
+### impl `Std::I8 : Std::ToF32`
+
+### impl `Std::I8 : Std::ToF64`
+
+### impl `Std::I8 : Std::ToI16`
+
+### impl `Std::I8 : Std::ToI32`
+
+### impl `Std::I8 : Std::ToI64`
+
+### impl `Std::I8 : Std::ToI8`
+
 ### impl `Std::I8 : Std::ToString`
+
+### impl `Std::I8 : Std::ToU16`
+
+### impl `Std::I8 : Std::ToU32`
+
+### impl `Std::I8 : Std::ToU64`
+
+### impl `Std::I8 : Std::ToU8`
 
 ### impl `Std::I8 : Std::Zero`
 
@@ -6125,7 +6769,53 @@ The empty string.
 
 ### impl `Std::U16 : Std::ToBytes`
 
+### impl `Std::U16 : Std::ToCChar`
+
+### impl `Std::U16 : Std::ToCDouble`
+
+### impl `Std::U16 : Std::ToCFloat`
+
+### impl `Std::U16 : Std::ToCInt`
+
+### impl `Std::U16 : Std::ToCLong`
+
+### impl `Std::U16 : Std::ToCLongLong`
+
+### impl `Std::U16 : Std::ToCShort`
+
+### impl `Std::U16 : Std::ToCSizeT`
+
+### impl `Std::U16 : Std::ToCUnsignedChar`
+
+### impl `Std::U16 : Std::ToCUnsignedInt`
+
+### impl `Std::U16 : Std::ToCUnsignedLong`
+
+### impl `Std::U16 : Std::ToCUnsignedLongLong`
+
+### impl `Std::U16 : Std::ToCUnsignedShort`
+
+### impl `Std::U16 : Std::ToF32`
+
+### impl `Std::U16 : Std::ToF64`
+
+### impl `Std::U16 : Std::ToI16`
+
+### impl `Std::U16 : Std::ToI32`
+
+### impl `Std::U16 : Std::ToI64`
+
+### impl `Std::U16 : Std::ToI8`
+
 ### impl `Std::U16 : Std::ToString`
+
+### impl `Std::U16 : Std::ToU16`
+
+### impl `Std::U16 : Std::ToU32`
+
+### impl `Std::U16 : Std::ToU64`
+
+### impl `Std::U16 : Std::ToU8`
 
 ### impl `Std::U16 : Std::Zero`
 
@@ -6153,7 +6843,53 @@ The empty string.
 
 ### impl `Std::U32 : Std::ToBytes`
 
+### impl `Std::U32 : Std::ToCChar`
+
+### impl `Std::U32 : Std::ToCDouble`
+
+### impl `Std::U32 : Std::ToCFloat`
+
+### impl `Std::U32 : Std::ToCInt`
+
+### impl `Std::U32 : Std::ToCLong`
+
+### impl `Std::U32 : Std::ToCLongLong`
+
+### impl `Std::U32 : Std::ToCShort`
+
+### impl `Std::U32 : Std::ToCSizeT`
+
+### impl `Std::U32 : Std::ToCUnsignedChar`
+
+### impl `Std::U32 : Std::ToCUnsignedInt`
+
+### impl `Std::U32 : Std::ToCUnsignedLong`
+
+### impl `Std::U32 : Std::ToCUnsignedLongLong`
+
+### impl `Std::U32 : Std::ToCUnsignedShort`
+
+### impl `Std::U32 : Std::ToF32`
+
+### impl `Std::U32 : Std::ToF64`
+
+### impl `Std::U32 : Std::ToI16`
+
+### impl `Std::U32 : Std::ToI32`
+
+### impl `Std::U32 : Std::ToI64`
+
+### impl `Std::U32 : Std::ToI8`
+
 ### impl `Std::U32 : Std::ToString`
+
+### impl `Std::U32 : Std::ToU16`
+
+### impl `Std::U32 : Std::ToU32`
+
+### impl `Std::U32 : Std::ToU64`
+
+### impl `Std::U32 : Std::ToU8`
 
 ### impl `Std::U32 : Std::Zero`
 
@@ -6181,7 +6917,53 @@ The empty string.
 
 ### impl `Std::U64 : Std::ToBytes`
 
+### impl `Std::U64 : Std::ToCChar`
+
+### impl `Std::U64 : Std::ToCDouble`
+
+### impl `Std::U64 : Std::ToCFloat`
+
+### impl `Std::U64 : Std::ToCInt`
+
+### impl `Std::U64 : Std::ToCLong`
+
+### impl `Std::U64 : Std::ToCLongLong`
+
+### impl `Std::U64 : Std::ToCShort`
+
+### impl `Std::U64 : Std::ToCSizeT`
+
+### impl `Std::U64 : Std::ToCUnsignedChar`
+
+### impl `Std::U64 : Std::ToCUnsignedInt`
+
+### impl `Std::U64 : Std::ToCUnsignedLong`
+
+### impl `Std::U64 : Std::ToCUnsignedLongLong`
+
+### impl `Std::U64 : Std::ToCUnsignedShort`
+
+### impl `Std::U64 : Std::ToF32`
+
+### impl `Std::U64 : Std::ToF64`
+
+### impl `Std::U64 : Std::ToI16`
+
+### impl `Std::U64 : Std::ToI32`
+
+### impl `Std::U64 : Std::ToI64`
+
+### impl `Std::U64 : Std::ToI8`
+
 ### impl `Std::U64 : Std::ToString`
+
+### impl `Std::U64 : Std::ToU16`
+
+### impl `Std::U64 : Std::ToU32`
+
+### impl `Std::U64 : Std::ToU64`
+
+### impl `Std::U64 : Std::ToU8`
 
 ### impl `Std::U64 : Std::Zero`
 
@@ -6209,6 +6991,52 @@ The empty string.
 
 ### impl `Std::U8 : Std::ToBytes`
 
+### impl `Std::U8 : Std::ToCChar`
+
+### impl `Std::U8 : Std::ToCDouble`
+
+### impl `Std::U8 : Std::ToCFloat`
+
+### impl `Std::U8 : Std::ToCInt`
+
+### impl `Std::U8 : Std::ToCLong`
+
+### impl `Std::U8 : Std::ToCLongLong`
+
+### impl `Std::U8 : Std::ToCShort`
+
+### impl `Std::U8 : Std::ToCSizeT`
+
+### impl `Std::U8 : Std::ToCUnsignedChar`
+
+### impl `Std::U8 : Std::ToCUnsignedInt`
+
+### impl `Std::U8 : Std::ToCUnsignedLong`
+
+### impl `Std::U8 : Std::ToCUnsignedLongLong`
+
+### impl `Std::U8 : Std::ToCUnsignedShort`
+
+### impl `Std::U8 : Std::ToF32`
+
+### impl `Std::U8 : Std::ToF64`
+
+### impl `Std::U8 : Std::ToI16`
+
+### impl `Std::U8 : Std::ToI32`
+
+### impl `Std::U8 : Std::ToI64`
+
+### impl `Std::U8 : Std::ToI8`
+
 ### impl `Std::U8 : Std::ToString`
+
+### impl `Std::U8 : Std::ToU16`
+
+### impl `Std::U8 : Std::ToU32`
+
+### impl `Std::U8 : Std::ToU64`
+
+### impl `Std::U8 : Std::ToU8`
 
 ### impl `Std::U8 : Std::Zero`

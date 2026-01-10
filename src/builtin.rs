@@ -409,6 +409,23 @@ pub fn make_array_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
 }
 
+pub fn integral_types() -> Vec<Arc<TypeNode>> {
+    vec![
+        make_i8_ty(),
+        make_u8_ty(),
+        make_i16_ty(),
+        make_u16_ty(),
+        make_i32_ty(),
+        make_u32_ty(),
+        make_i64_ty(),
+        make_u64_ty(),
+    ]
+}
+
+pub fn floating_types() -> Vec<Arc<TypeNode>> {
+    vec![make_f32_ty(), make_f64_ty()]
+}
+
 // Get the TyCon of String type.
 pub fn make_string_tycon() -> Arc<TyCon> {
     tycon(FullName::from_strs(&[STD_NAME], STRING_NAME))

@@ -14,20 +14,19 @@ use crate::{
         boxed_trait_instance, cast_between_float_function, cast_between_integral_function,
         cast_float_to_int_function, cast_int_to_float_function, destructor_make,
         divide_trait_instance_float, divide_trait_instance_int, eq_trait_instance_float,
-        eq_trait_instance_int, eq_trait_instance_ptr, fix, force_unique_array, get_capacity_array,
-        get_get_boxed_ptr, get_mutate_boxed_internal, get_mutate_boxed_ios_internal, get_ptr_array,
-        get_release_function_of_boxed_value, get_retain_function_of_boxed_value, get_size_array,
-        infinity_value, is_unique_function, less_than_or_equal_to_trait_instance_float,
+        eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types, force_unique_array,
+        get_capacity_array, get_get_boxed_ptr, get_mutate_boxed_internal,
+        get_mutate_boxed_ios_internal, get_ptr_array, get_release_function_of_boxed_value,
+        get_retain_function_of_boxed_value, get_size_array, infinity_value, integral_types,
+        is_unique_function, less_than_or_equal_to_trait_instance_float,
         less_than_or_equal_to_trait_instance_int, less_than_trait_instance_float,
         less_than_trait_instance_int, make_array_ty, make_bool_ty, make_dynamic_object_ty,
-        make_f32_ty, make_f64_ty, make_floating_ty, make_i16_ty, make_i32_ty, make_i64_ty,
-        make_i8_ty, make_integral_ty, make_iostate_unsafe_create, make_ptr_ty, make_u16_ty,
-        make_u32_ty, make_u64_ty, make_u8_ty, mark_threaded_function,
-        multiply_trait_instance_float, multiply_trait_instance_int, negate_trait_instance_float,
-        negate_trait_instance_int, not_trait_instance_bool, quiet_nan_value,
-        remainder_trait_instance_int, set_array, shift_function, subtract_trait_instance_float,
-        subtract_trait_instance_int, undefined_internal_function, unsafe_set_size_array,
-        with_retained_function, BitOperationType,
+        make_floating_ty, make_integral_ty, make_iostate_unsafe_create, make_ptr_ty,
+        mark_threaded_function, multiply_trait_instance_float, multiply_trait_instance_int,
+        negate_trait_instance_float, negate_trait_instance_int, not_trait_instance_bool,
+        quiet_nan_value, remainder_trait_instance_int, set_array, shift_function,
+        subtract_trait_instance_float, subtract_trait_instance_int, undefined_internal_function,
+        unsafe_set_size_array, with_retained_function, BitOperationType,
     },
     configuration::Configuration,
     constants::{
@@ -38,6 +37,7 @@ use crate::{
         F64_NAME, FFI_NAME, IOSTATE_NAME, IO_NAME, STD_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
+    misc::upper_camel_to_lower_snake,
     parser::parse_and_save_to_temporary_file,
 };
 use std::sync::Arc;
@@ -68,18 +68,10 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         }]);
     }
 
+    let integral_types = &integral_types();
+    let float_types = &floating_types();
+
     // Trait instances
-    let integral_types = &[
-        make_i8_ty(),
-        make_u8_ty(),
-        make_i16_ty(),
-        make_u16_ty(),
-        make_i32_ty(),
-        make_u32_ty(),
-        make_i64_ty(),
-        make_u64_ty(),
-    ];
-    let float_types = &[make_f32_ty(), make_f64_ty()];
 
     // Eq
     for ty in integral_types {
@@ -648,6 +640,10 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("./docs/std_ffi_destructor_make.md").to_string()),
     ));
 
+    // Add numeric cast traits
+    let cast_traits_mod = make_numeric_cast_traits_mod(config)?;
+    fix_module.link(cast_traits_mod, true)?;
+
     errors.to_result()?;
     Ok(fix_module)
 }
@@ -838,6 +834,49 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
     }
 
     src
+}
+
+// Create source code to define traits which convert between numeric types.
+pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, Errors> {
+    let mut fix_type_names = vec![];
+    for int_ty in integral_types() {
+        let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
+        fix_type_names.push(ty_name);
+    }
+    for float_ty in floating_types() {
+        let ty_name = float_ty.toplevel_tycon().unwrap().name.name.clone();
+        fix_type_names.push(ty_name);
+    }
+    let mut type_names = fix_type_names.clone();
+    for (c_ty_name, _, _e) in config.c_type_sizes.get_c_types() {
+        type_names.push(c_ty_name.to_string());
+    }
+    let mut src = "module Std; \n\n".to_string();
+    for to_name in &type_names {
+        // Add trait definition.
+        src += &format!(
+            "trait a : To{} {{ \n\
+            // Casts a value into `{}` type.\n\
+            {} : a -> {};\n\
+            }}\n",
+            to_name,
+            to_name,
+            upper_camel_to_lower_snake(&to_name),
+            to_name
+        );
+
+        // Add trait implementations.
+        for from_name in &fix_type_names {
+            src += &format!(
+                "impl {} : To{} {{ {} = to_{}; }}\n",
+                from_name,
+                to_name,
+                upper_camel_to_lower_snake(&to_name),
+                upper_camel_to_lower_snake(&to_name)
+            );
+        }
+    }
+    parse_and_save_to_temporary_file(&src, "std_numeric_cast_traits", config)
 }
 
 // Create module which defines traits such as ToString or Eq for tuples.

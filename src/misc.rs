@@ -272,6 +272,27 @@ pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
     result
 }
 
+// Upper CamelCase to lower_snake_case
+pub fn upper_camel_to_lower_snake(s: &str) -> String {
+    assert!(
+        s.chars().all(|c| c.is_ascii_alphanumeric()),
+        "Input must contain only ASCII alphanumeric characters"
+    );
+
+    let mut result = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if c.is_ascii_uppercase() {
+            if i > 0 {
+                result.push('_');
+            }
+            result.push(c.to_ascii_lowercase());
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,5 +336,19 @@ mod tests {
             split_string_by_space_not_quated("   "),
             Vec::<String>::new()
         );
+    }
+
+    #[test]
+    fn test_upper_camel_to_lower_snake() {
+        assert_eq!(upper_camel_to_lower_snake("HelloWorld"), "hello_world");
+        assert_eq!(upper_camel_to_lower_snake("MyClass"), "my_class");
+        assert_eq!(upper_camel_to_lower_snake("MyClass123"), "my_class123");
+        assert_eq!(upper_camel_to_lower_snake("ABC"), "a_b_c");
+        assert_eq!(upper_camel_to_lower_snake("Hello"), "hello");
+        assert_eq!(upper_camel_to_lower_snake("A"), "a");
+        assert_eq!(upper_camel_to_lower_snake("IOError"), "i_o_error");
+        assert_eq!(upper_camel_to_lower_snake("HTTPServer"), "h_t_t_p_server");
+        assert_eq!(upper_camel_to_lower_snake("I64"), "i64");
+        assert_eq!(upper_camel_to_lower_snake("CUnsignedInt"), "c_unsigned_int");
     }
 }
