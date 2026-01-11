@@ -83,7 +83,7 @@ main = (
 - [Index Syntax](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src3=H4sIAAAAAAAACn2SwWvkIBjF74H8D4%2FSg4KkZnY6hwkDPfQyh6Ww3VtwSprYjpCoRMPSTvO%2FL8YmKZRdL5oX3%2Ffze9qZZmglflZKF2mSJv7NSvySta%2F0aytxgPP9UHtc0gQArHF7kONuy3DcbSmLqlPv8qucJuNUTHW2%2FVJsj9%2Fm0fdKv87lvHlyUTjgo5e1%2F8AVuYwMl5FeZdbYoa28JGX4ld1Z47LFwRDFwF5VQYs0GQO7q5TGHscHEIoDSAS20k8%2BhwPKKIWxnvHy2SJn4JTNneWcYcMpRvY%2FT37LsLldXT84wza4okkUcb65waP08GeJN9TG9I3SlZcwL5NmjVNeGT1%2Fv6jexUNHmjfI%2BfduprnkojxZ40R5ykWmnPQk53S6i0%2FyvRmeQ5GzxB%2FV%2BPNMcbI2ulkx%2FwLkojyF9kR54iJTnWlIN7RkQ1eK7ZX2rcZ1tKyXU6wBlMsqDBLizkPec9Lzy1o2LNmSXUyVLhvESh56SWia0OIv3V%2BEAdcCAAA%3D)
 - For more, see [examples](./examples/).
 
-## Usage
+## Installation
 
 - See [the tutorial](./Document.md#tutorial) for instructions on how to install and use Fix compiler.
 
