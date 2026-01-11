@@ -1138,7 +1138,7 @@ namespace IO {
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
                 let (buf, fgets_res) = *buf.mutate_boxed_io(|buf_ptr| (
-                    FFI_CALL_IO[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.to_I32, file_ptr]
+                    FFI_CALL_IO[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.i32, file_ptr]
                 ));
                 if fgets_res == nullptr {
                     let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
@@ -1196,7 +1196,7 @@ namespace IO {
     // 
     // * `code` - The error code to be returned.
     exit : I64 -> IO a;
-    exit = |code| FFI_CALL_IO[() exit(I32), code.to_I32];; pure $ undefined("");
+    exit = |code| FFI_CALL_IO[() exit(I32), code.i32];; pure $ undefined("");
 
     // Exits the program with an error message and an error code.
     //  
@@ -1217,7 +1217,7 @@ namespace IO {
     flush = |handle| (
         let file_ptr = *handle.get_file_ptr;
         let res = *FFI_CALL_IO[I32 fflush(Ptr), file_ptr];
-        res.to_I32.pure
+        res.i32.pure
     );
 
     // Creates an IO action from a IO runner function, which is a function of type `IOState -> (IOState, a)`.
@@ -1247,7 +1247,7 @@ namespace IO {
     get_arg_count : IO I64;
     get_arg_count = (
         let argc = *(FFI_CALL_IO[I32 fixruntime_get_argc()]);
-        pure $ argc.to_I64
+        pure $ argc.i64
     );
 
     // Gets command line arguments.
@@ -3046,7 +3046,7 @@ namespace String {
     //
     // * `str` - The string to be modified.
     strip_first_spaces : String -> String;
-    strip_first_spaces = strip_first_bytes(|c| FFI_CALL[I32 isspace(I32), c.to_I32] > 0_I32);
+    strip_first_spaces = strip_first_bytes(|c| FFI_CALL[I32 isspace(I32), c.i32] > 0_I32);
 
     // Removes the last byte of a string while it satisifies the specified condition.
     // 
@@ -3079,7 +3079,7 @@ namespace String {
     //
     // * `str` - The string to be modified.
     strip_last_spaces : String -> String;
-    strip_last_spaces = strip_last_bytes(|c| FFI_CALL[I32 isspace(I32), c.to_I32] > 0_I32);
+    strip_last_spaces = strip_last_bytes(|c| FFI_CALL[I32 isspace(I32), c.i32] > 0_I32);
 
     // Strips leading and trailing whitespace characters.
     //
@@ -3658,7 +3658,7 @@ impl U8 : ToString {
     );
 }
 impl U8 : FromString {
-    from_string = |str| str.from_string.map(U64::to_U8);
+    from_string = |str| str.from_string.map(u8 : U64 -> U8);
 }
 
 impl U16 : ToBytes {
@@ -3684,7 +3684,7 @@ impl U16 : ToString {
     );
 }
 impl U16 : FromString {
-    from_string = |str| str.from_string.map(U64::to_U16);
+    from_string = |str| str.from_string.map(u16 : U64 -> U16);
 }
 
 impl U32 : ToBytes {
@@ -3710,7 +3710,7 @@ impl U32 : ToString {
     );
 }
 impl U32 : FromString {
-    from_string = |str| str.from_string.map(U64::to_U32);
+    from_string = |str| str.from_string.map(u32 : U64 -> U32);
 }
 
 impl U64 : ToBytes {
@@ -3771,7 +3771,7 @@ impl I8 : ToString {
     );
 }
 impl I8 : FromString {
-    from_string = |str| str.from_string.map(I64::to_I8);
+    from_string = |str| str.from_string.map(i8 : I64 -> I8);
 }
 
 impl I16 : ToBytes {
@@ -3797,7 +3797,7 @@ impl I16 : ToString {
     );
 }
 impl I16 : FromString {
-    from_string = |str| str.from_string.map(I64::to_I16);
+    from_string = |str| str.from_string.map(i16 : I64 -> I16);
 }
 
 impl I32 : ToBytes {
@@ -3823,7 +3823,7 @@ impl I32 : ToString {
     );
 }
 impl I32 : FromString {
-    from_string = |str| str.from_string.map(I64::to_I32);
+    from_string = |str| str.from_string.map(i32 : I64 -> I32);
 }
 
 impl I64 : ToBytes {
@@ -3902,7 +3902,7 @@ namespace F32 {
     // * `v` - The floating number to be converted to a string.
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
-        let data = Array::empty(50 + prec.to_I64);
+        let data = Array::empty(50 + prec.i64);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_exp_precision(Ptr, F32, U8), ptr, v, prec]);
         String::_unsafe_from_c_str(data)
     );
@@ -3914,7 +3914,7 @@ namespace F32 {
     // * `v` - The floating number to be converted to a string.
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
-        let data = Array::empty(50 + prec.to_I64);
+        let data = Array::empty(50 + prec.i64);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f32_to_str_precision(Ptr, F32, U8), ptr, v, prec]);
         String::_unsafe_from_c_str(data)
     );
@@ -3973,7 +3973,7 @@ namespace F64 {
     // * `v` - The floating number to be converted to a string.
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
-        let data = Array::empty(500 + prec.to_I64);
+        let data = Array::empty(500 + prec.i64);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_exp_precision(Ptr, F64, U8), ptr, v, prec]);
         String::_unsafe_from_c_str(data)
     );
@@ -3985,7 +3985,7 @@ namespace F64 {
     // * `v` - The floating number to be converted to a string.
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
-        let data = Array::empty(500 + prec.to_I64);
+        let data = Array::empty(500 + prec.i64);
         let (data, _) = data.mutate_boxed(|ptr| FFI_CALL_IO[() fixruntime_f64_to_str_precision(Ptr, F64, U8), ptr, v, prec]);
         String::_unsafe_from_c_str(data)
     );

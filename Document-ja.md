@@ -2183,7 +2183,7 @@ Fixの値を外部言語から利用するには、`FFI_EXPORT[{fix_value_name},
 
 ```
 fix_increment : CInt -> CInt;
-fix_increment = |x| x + 1.to_CInt;
+fix_increment = |x| x + 1.c_int;
 FFI_EXPORT[fix_increment, increment]; // 関数`int increment(int)`が定義されます。
 ```
 

@@ -2414,7 +2414,7 @@ pub fn test_ffi_call() {
             main : IO ();
             main = (
                 eval "Hello C function! Number = %d\n".borrow_c_str(|ptr|
-                    FFI_CALL[I32 printf(Ptr, I32), ptr, 42.to_I32]
+                    FFI_CALL[I32 printf(Ptr, I32), ptr, 42.i32]
                 );
                 pure()
             );
@@ -2432,7 +2432,7 @@ pub fn test_ffi_call_ios() {
             main = (
                 IO::from_runner(|ios|
                     "Hello C function! Number = %d\n".borrow_c_str(|ptr|
-                        FFI_CALL_IOS[I32 printf(Ptr, I32), ptr, 42.to_I32, ios]
+                        FFI_CALL_IOS[I32 printf(Ptr, I32), ptr, 42.i32, ios]
                     )
                 );;
                 pure()
@@ -2450,7 +2450,7 @@ pub fn test_ffi_call_io() {
             main : IO ();
             main = (
                 "Hello C function! Number = %d\n".@_data.borrow_boxed_io(|ptr|
-                    FFI_CALL_IO[I32 printf(Ptr, I32), ptr, 42.to_I32]
+                    FFI_CALL_IO[I32 printf(Ptr, I32), ptr, 42.i32]
                 );;
                 pure()
             );
@@ -2677,23 +2677,23 @@ pub fn test99_5() {
         module Main; 
         main : IO ();
         main = (
-            assert_eq(|_|"", -3.14_F32.to_I8, -3_I8);;
-            assert_eq(|_|"", 3.14_F32.to_U8, 3_U8);;
-            assert_eq(|_|"", -3.14_F32.to_I16, -3_I16);;
-            assert_eq(|_|"", 3.14_F32.to_U16, 3_U16);;
-            assert_eq(|_|"", -3.14_F32.to_I32, -3_I32);;
-            assert_eq(|_|"", 3.14_F32.to_U32, 3_U32);;
-            assert_eq(|_|"", -3.14_F32.to_I64, -3_I64);;
-            assert_eq(|_|"", 3.14_F32.to_U64, 3_U64);;
+            assert_eq(|_|"", -3.14_F32.i8, -3_I8);;
+            assert_eq(|_|"", 3.14_F32.u8, 3_U8);;
+            assert_eq(|_|"", -3.14_F32.i16, -3_I16);;
+            assert_eq(|_|"", 3.14_F32.u16, 3_U16);;
+            assert_eq(|_|"", -3.14_F32.i32, -3_I32);;
+            assert_eq(|_|"", 3.14_F32.u32, 3_U32);;
+            assert_eq(|_|"", -3.14_F32.i64, -3_I64);;
+            assert_eq(|_|"", 3.14_F32.u64, 3_U64);;
 
-            assert_eq(|_|"", -3.14_F64.to_I8, -3_I8);;
-            assert_eq(|_|"", 3.14_F64.to_U8, 3_U8);;
-            assert_eq(|_|"", -3.14_F64.to_I16, -3_I16);;
-            assert_eq(|_|"", 3.14_F64.to_U16, 3_U16);;
-            assert_eq(|_|"", -3.14_F64.to_I32, -3_I32);;
-            assert_eq(|_|"", 3.14_F64.to_U32, 3_U32);;
-            assert_eq(|_|"", -3.14_F64.to_I64, -3_I64);;
-            assert_eq(|_|"", 3.14_F64.to_U64, 3_U64);;
+            assert_eq(|_|"", -3.14_F64.i8, -3_I8);;
+            assert_eq(|_|"", 3.14_F64.u8, 3_U8);;
+            assert_eq(|_|"", -3.14_F64.i16, -3_I16);;
+            assert_eq(|_|"", 3.14_F64.u16, 3_U16);;
+            assert_eq(|_|"", -3.14_F64.i32, -3_I32);;
+            assert_eq(|_|"", 3.14_F64.u32, 3_U32);;
+            assert_eq(|_|"", -3.14_F64.i64, -3_I64);;
+            assert_eq(|_|"", 3.14_F64.u64, 3_U64);;
 
             pure()
         );
@@ -2708,23 +2708,23 @@ pub fn test99_51() {
         module Main; 
         main : IO ();
         main = (
-            assert_eq(|_|"", -123_I8.to_F32, -123.0_F32);;
-            assert_eq(|_|"", 123_U8.to_F32, 123.0_F32);;
-            assert_eq(|_|"", -123_I16.to_F32, -123.0_F32);;
-            assert_eq(|_|"", 123_U16.to_F32, 123.0_F32);;
-            assert_eq(|_|"", -123_I32.to_F32, -123.0_F32);;
-            assert_eq(|_|"", 123_U32.to_F32, 123.0_F32);;
-            assert_eq(|_|"", -123_I64.to_F32, -123.0_F32);;
-            assert_eq(|_|"", 123_U64.to_F32, 123.0_F32);;
+            assert_eq(|_|"", -123_I8.f32, -123.0_F32);;
+            assert_eq(|_|"", 123_U8.f32, 123.0_F32);;
+            assert_eq(|_|"", -123_I16.f32, -123.0_F32);;
+            assert_eq(|_|"", 123_U16.f32, 123.0_F32);;
+            assert_eq(|_|"", -123_I32.f32, -123.0_F32);;
+            assert_eq(|_|"", 123_U32.f32, 123.0_F32);;
+            assert_eq(|_|"", -123_I64.f32, -123.0_F32);;
+            assert_eq(|_|"", 123_U64.f32, 123.0_F32);;
 
-            assert_eq(|_|"", -123_I8.to_F64, -123.0);;
-            assert_eq(|_|"", 123_U8.to_F64, 123.0);;
-            assert_eq(|_|"", -123_I16.to_F64, -123.0);;
-            assert_eq(|_|"", 123_U16.to_F64, 123.0);;
-            assert_eq(|_|"", -123_I32.to_F64, -123.0);;
-            assert_eq(|_|"", 123_U32.to_F64, 123.0);;
-            assert_eq(|_|"", -123_I64.to_F64, -123.0);;
-            assert_eq(|_|"", 123_U64.to_F64, 123.0);;
+            assert_eq(|_|"", -123_I8.f64, -123.0);;
+            assert_eq(|_|"", 123_U8.f64, 123.0);;
+            assert_eq(|_|"", -123_I16.f64, -123.0);;
+            assert_eq(|_|"", 123_U16.f64, 123.0);;
+            assert_eq(|_|"", -123_I32.f64, -123.0);;
+            assert_eq(|_|"", 123_U32.f64, 123.0);;
+            assert_eq(|_|"", -123_I64.f64, -123.0);;
+            assert_eq(|_|"", 123_U64.f64, 123.0);;
 
             pure()
         );
@@ -3107,27 +3107,27 @@ pub fn test110b() {
 
             let x = 3.1415_F32;
             let y = 3.1415_F32;
-            assert(|_|"case 19.1", x.to_F32 == y);;
+            assert(|_|"case 19.1", x.f32 == y);;
 
             let x = 3.1415;
             let y = 3.1415;
-            assert(|_|"case 19.1", x.to_F64 == y);;
+            assert(|_|"case 19.1", x.f64 == y);;
 
             let x = 3.1415_F32;
             let y = 3.1415;
-            assert(|_|"case 19.3", (x.to_F64 - y) < 1.0e-4);;
+            assert(|_|"case 19.3", (x.f64 - y) < 1.0e-4);;
 
             let x = 3.1415;
             let y = 3.1415_F32;
-            assert(|_|"case 19.4", (x.to_F32 - y) < 1.0e-4_F32);;
+            assert(|_|"case 19.4", (x.f32 - y) < 1.0e-4_F32);;
 
             let x = 3141;
             let y = 3141.0;
-            assert(|_|"case 20", x.to_F64 == y);;
+            assert(|_|"case 20", x.f64 == y);;
 
             let x = 3141.0;
             let y = 3141;            
-            assert(|_|"case 21", x.to_I64 == y);;
+            assert(|_|"case 21", x.i64 == y);;
 
             let x = 3.14;
             let z : F64 = 3.14.to_string.from_string.as_ok;
@@ -3257,7 +3257,7 @@ main = (
     let ptr = *FFI_CALL_IO[Ptr mymalloc()];
     let dtor = *Destructor::make(ptr, |ptr| FFI_CALL_IO[() myfree(Ptr), ptr];; nullptr.pure);
     eval dtor;
-    FFI_CALL_IO[() check(CInt, CInt), 1.to_CInt, 1.to_CInt];;
+    FFI_CALL_IO[() check(CInt, CInt), 1.c_int, 1.c_int];;
     pure()
 );
     "#;
@@ -6254,44 +6254,44 @@ pub fn test_c_type_aliases() {
                 
         main: IO ();
         main = (
-            let x : CChar = 42.to_CChar;
-            let x : CChar = 42.0.to_CChar;
+            let x : CChar = 42.c_char;
+            let x : CChar = 42.0.c_char;
 
-            let x : CUnsignedChar = 42.to_CUnsignedChar;
-            let x : CUnsignedChar = 42.0.to_CUnsignedChar;
+            let x : CUnsignedChar = 42.c_unsigned_char;
+            let x : CUnsignedChar = 42.0.c_unsigned_char;
             
-            let x : CShort = 42.to_CShort;
-            let x : CShort = 42.0.to_CShort;
+            let x : CShort = 42.c_short;
+            let x : CShort = 42.0.c_short;
 
-            let x : CUnsignedShort = 42.to_CUnsignedShort;
-            let x : CUnsignedShort = 42.0.to_CUnsignedShort;
+            let x : CUnsignedShort = 42.c_unsigned_short;
+            let x : CUnsignedShort = 42.0.c_unsigned_short;
 
-            let x : CInt = 42.to_CInt;
-            let x : CInt = 42.0.to_CInt;
+            let x : CInt = 42.c_int;
+            let x : CInt = 42.0.c_int;
 
-            let x : CUnsignedInt = 42.to_CUnsignedInt;
-            let x : CUnsignedInt = 42.0.to_CUnsignedInt;
+            let x : CUnsignedInt = 42.c_unsigned_int;
+            let x : CUnsignedInt = 42.0.c_unsigned_int;
 
-            let x : CLong = 42.to_CLong;
-            let x : CLong = 42.0.to_CLong;
+            let x : CLong = 42.c_long;
+            let x : CLong = 42.0.c_long;
 
-            let x : CUnsignedLong = 42.to_CUnsignedLong;
-            let x : CUnsignedLong = 42.0.to_CUnsignedLong;
+            let x : CUnsignedLong = 42.c_unsigned_long;
+            let x : CUnsignedLong = 42.0.c_unsigned_long;
 
-            let x : CLongLong = 42.to_CLongLong;
-            let x : CLongLong = 42.0.to_CLongLong;
+            let x : CLongLong = 42.c_long_long;
+            let x : CLongLong = 42.0.c_long_long;
 
-            let x : CUnsignedLongLong = 42.to_CUnsignedLongLong;
-            let x : CUnsignedLongLong = 42.0.to_CUnsignedLongLong;
+            let x : CUnsignedLongLong = 42.c_unsigned_long_long;
+            let x : CUnsignedLongLong = 42.0.c_unsigned_long_long;
 
-            let x : CSizeT = 42.to_CSizeT;
-            let x : CSizeT = 42.0.to_CSizeT;
+            let x : CSizeT = 42.c_size_t;
+            let x : CSizeT = 42.0.c_size_t;
 
-            let x : CFloat = 42.to_CFloat;
-            let x : CFloat = 42.0.to_CFloat;
+            let x : CFloat = 42.c_float;
+            let x : CFloat = 42.0.c_float;
 
-            let x : CDouble = 42.to_CDouble;
-            let x : CDouble = 42.0.to_CDouble;
+            let x : CDouble = 42.c_double;
+            let x : CDouble = 42.0.c_double;
 
             pure()
         );
@@ -6309,7 +6309,7 @@ pub fn test_mutate_boxed() {
             let x : Box I32 = Box { value : 0_I32 };
             let (x, _) = x.mutate_boxed(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.c_size_t, c_str, 123.c_int, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
@@ -6330,7 +6330,7 @@ pub fn test_mutate_boxed_io() {
             let x : Box I32 = Box { value : 0_I32 };
             let (x, _) = *x.mutate_boxed_io(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.c_size_t, c_str, 123.c_int, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
@@ -6350,7 +6350,7 @@ pub fn test_mutate_boxed_shared() {
             let x : Box I32 = Box { value : 0_I32 };
             let (y, _) = x.mutate_boxed(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.c_size_t, c_str, 123.c_int, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0_I32);;
@@ -6371,7 +6371,7 @@ pub fn test_mutate_boxed_io_shared() {
             let x : Box I32 = Box { value : 0_I32 };
             let (y, _) = *x.mutate_boxed_io(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.to_CSizeT, c_str, 123.to_CInt, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt), ptr, 4.c_size_t, c_str, 123.c_int, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0_I32);;
@@ -6396,7 +6396,7 @@ pub fn test_get_errno() {
                     (get_errno.@runner)(state)
                 )
             ));
-            assert(|_|"", errno != 0.to_CInt);;
+            assert(|_|"", errno != 0.c_int);;
             pure()
         );
     "##;
@@ -6773,15 +6773,15 @@ pub fn test_export() {
         module Main;
         
         value : CInt;
-        value = 42.to_CInt;
+        value = 42.c_int;
         FFI_EXPORT[value, c_value];
 
         increment : CInt -> CInt;
-        increment = |x| x + 1.to_CInt;
+        increment = |x| x + 1.c_int;
         FFI_EXPORT[increment, c_increment];
 
         two_variable : CInt -> CInt -> CInt;
-        two_variable = |x, y| 2.to_CInt * x + y;
+        two_variable = |x, y| 2.c_int * x + y;
         FFI_EXPORT[two_variable, c_two_variable];
 
         io_action : IO ();
@@ -6798,14 +6798,14 @@ pub fn test_export() {
         io_action3 : CInt -> IO CInt;
         io_action3 = |x| do {
             println("io_action3");;
-            pure(x + 1.to_CInt)
+            pure(x + 1.c_int)
         };
         FFI_EXPORT[io_action3, c_io_action3];
 
         main: IO ();
         main = (
             let res = FFI_CALL[CInt call_fix_values()];
-            assert_eq(|_|"", res, 0.to_CInt);;
+            assert_eq(|_|"", res, 0.c_int);;
             pure()
         );
     "##;
@@ -7292,7 +7292,7 @@ pub fn test_create_dylib() {
         module Main;
     
         get_truth : IO CInt;
-        get_truth = pure $ 42.to_CInt;
+        get_truth = pure $ 42.c_int;
 
         FFI_EXPORT[get_truth, get_truth];
     "##;
@@ -9559,7 +9559,7 @@ impl MyType : MyFunctor {
 }
 
 main : IO () = (
-    eval (MyType{} : MyType I64).mymap(to_U64);
+    eval (MyType{} : MyType I64).mymap(u64);
     pure()
 );
     "#;
@@ -9586,7 +9586,7 @@ impl MyType : MyFunctor {
 }
 
 main : IO () = (
-    eval (MyType{} : MyType I64).mymap(to_U64);
+    eval (MyType{} : MyType I64).mymap(u64);
     pure()
 );
     "#;
@@ -9609,7 +9609,7 @@ impl MyType : MyFunctor {
 }
 
 main : IO () = (
-    eval (MyType{} : MyType I64).mymap(to_U64);
+    eval (MyType{} : MyType I64).mymap(u64);
     pure()
 );
     "#;
@@ -9637,7 +9637,7 @@ impl MyType : MyFunctor {
 }
 
 main : IO () = (
-    eval (MyType{} : MyType I64).mymap(to_U64);
+    eval (MyType{} : MyType I64).mymap(u64);
     pure()
 );
     "#;
@@ -9660,7 +9660,7 @@ impl MyType : MyFunctor {
 }
 
 main : IO () = (
-    eval (MyType{} : MyType I64).mymap(to_U64);
+    eval (MyType{} : MyType I64).mymap(u64);
     pure()
 );
     "#;

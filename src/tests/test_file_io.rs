@@ -91,7 +91,7 @@ pub fn test_write_read_file_bytes() {
         main : IO ();
         main = (
             let file_path = "{}";
-            let data = Array::from_map(1024 + 512, |n| n.to_U8);
+            let data = Array::from_map(1024 + 512, |n| n.u8);
             do {{
                 write_file_bytes(file_path, data);;
 

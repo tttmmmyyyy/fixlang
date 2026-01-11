@@ -2071,7 +2071,7 @@ To use a Fix value from an external language, you use the `FFI_EXPORT[{fix_value
 
 ```
 fix_increment : CInt -> CInt;
-fix_increment = |x| x + 1.to_CInt;
+fix_increment = |x| x + 1.c_int;
 FFI_EXPORT[fix_increment, increment]; // Defines the function `int increment(int);`
 ```
 
