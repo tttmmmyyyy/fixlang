@@ -7,5 +7,6 @@ mod test_file_io;
 mod test_import;
 mod test_index_syntax;
 mod test_memcheck;
+mod test_string;
 mod test_undefined;
 mod util;
