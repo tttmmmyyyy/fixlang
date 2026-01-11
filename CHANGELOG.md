@@ -13,6 +13,7 @@
 - Implement `Array a : Indexable`, `String : Indexable`.
 - Added the `Identity` and `Const` types in `Std`. They are functors, and `Identity` is also a monad.
 - Add `Std::ToX` traits for all primitive numeric types and C types (e.g., `Std::ToI32`, `Std::ToCUnsignedInt`, etc.). Each trait has a member function to cast a value into the target type. The cast functions are named in lower snake case, such as `i32` and `c_unsigned_int`. They do not have prefixes like `to_`.
+- Add `Std::String::starts_with` and `Std::String::ends_with` functions.
 
 #### Compiler 
 

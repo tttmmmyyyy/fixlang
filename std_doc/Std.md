@@ -3625,11 +3625,22 @@ Create an empty string with a given capacity.
 
 * `capacity` - The capacity of the string to be created.
 
+#### ends_with
+
+Type: `Std::String -> Std::String -> Std::Bool`
+
+Checks if a string ends with a given suffix.
+
+##### Parameters
+
+* `suffix` - The suffix to be checked.
+* `str` - The string
+
 #### find
 
 Type: `Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`
 
-`str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
+`str.find(token, start_idx)` finds the index where `token` firstly appears in `str` starting from `start_idx`.
 
 Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
 `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
@@ -3690,7 +3701,7 @@ Gets the last byte of a string. Returns none if the string is empty.
 
 Type: `Std::String -> Std::I64`
 
-Gets the length of a string.
+Gets the length of a string without counting the null-terminator.
 
 ##### Parameters
 
@@ -3782,6 +3793,17 @@ assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special be
 * `sep` - The separator to be used for splitting.
 * `str` - The string to be split.
 
+#### starts_with
+
+Type: `Std::String -> Std::String -> Std::Bool`
+
+Checks if a string starts with a given prefix.
+
+##### Parameters
+
+* `prefix` - The prefix to be checked.
+* `str` - The string
+
 #### strip_first_bytes
 
 Type: `(Std::U8 -> Std::Bool) -> Std::String -> Std::String`
@@ -3850,6 +3872,8 @@ Type: `Std::Ptr -> Std::String`
 Create a `String` from a pointer to a null-terminated C string.
 
 If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+
+If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
 
 ##### Parameters
 
@@ -6718,6 +6742,8 @@ Creates a string from a byte array.
 The byte array must include a null terminator (`'\0'`). If not, `from_bytes` returns an error.
 
 The length of the string is the number of bytes until the first null character.
+
+If you have a pointer to a null-terminated byte array, use `String::unsafe_from_c_str_ptr` instead.
 
 ### impl `Std::String : Std::Indexable`
 

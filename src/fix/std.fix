@@ -2857,6 +2857,38 @@ namespace String {
         )
     );
 
+    // Checks if a string starts with a given prefix.
+    // 
+    // # Parameters
+    // * `prefix` - The prefix to be checked.
+    // * `str` - The string
+    starts_with : String -> String -> Bool = |prefix, str| (
+        let prefix_len = prefix.get_size;
+        let str_len = str.get_size;
+        if prefix_len > str_len { false };
+        str.borrow_c_str(|str_c_str|
+            prefix.borrow_c_str(|prefix_c_str|
+                FFI_CALL[CInt strncmp(Ptr, Ptr, CSizeT), str_c_str, prefix_c_str, prefix_len.c_size_t] == 0.c_int
+            )
+        )
+    );
+
+    // Checks if a string ends with a given suffix.
+    // 
+    // # Parameters
+    // * `suffix` - The suffix to be checked.
+    // * `str` - The string
+    ends_with : String -> String -> Bool = |suffix, str| (
+        let suffix_len = suffix.get_size;
+        let str_len = str.get_size;
+        if suffix_len > str_len { false };
+        str.borrow_c_str(|str_c_str|
+            suffix.borrow_c_str(|suffix_c_str|
+                FFI_CALL[CInt strncmp(Ptr, Ptr, CSizeT), str_c_str.add_offset(str_len - suffix_len), suffix_c_str, suffix_len.c_size_t] == 0.c_int
+            )
+        )
+    );
+
     // Gets the byte array of a string, containing null-terminator.
     //
     // # Parameters

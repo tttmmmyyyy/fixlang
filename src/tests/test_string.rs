@@ -212,3 +212,63 @@ main = (
     "##;
     test_source(&source, Configuration::compiler_develop_mode());
 }
+
+#[test]
+pub fn test_string_starts_with() {
+    let source = r##"
+module Main;
+
+main: IO ();
+main = (
+    // Basic tests
+    assert(|_|"1", "Hello World".starts_with("Hello"));;
+    assert(|_|"2", "Hello World".starts_with("H"));;
+    assert(|_|"3", "Hello World".starts_with(""));;
+    assert(|_|"4", !"Hello World".starts_with("World"));;
+    assert(|_|"5", !"Hello World".starts_with("hello"));;
+    
+    // Edge cases
+    assert(|_|"6", "".starts_with(""));;
+    assert(|_|"7", !"".starts_with("Hello"));;
+    assert(|_|"8", "abc".starts_with("abc"));;
+    assert(|_|"9", !"abc".starts_with("abcd"));;
+    
+    // Longer prefix
+    assert(|_|"10", "abcdefgh".starts_with("abcde"));;
+    assert(|_|"11", !"abcdefgh".starts_with("abcdf"));;
+    
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
+
+#[test]
+pub fn test_string_ends_with() {
+    let source = r##"
+module Main;
+
+main: IO ();
+main = (
+    // Basic tests
+    assert(|_|"1", "Hello World".ends_with("World"));;
+    assert(|_|"2", "Hello World".ends_with("d"));;
+    assert(|_|"3", "Hello World".ends_with(""));;
+    assert(|_|"4", !"Hello World".ends_with("Hello"));;
+    assert(|_|"5", !"Hello World".ends_with("world"));;
+    
+    // Edge cases
+    assert(|_|"6", "".ends_with(""));;
+    assert(|_|"7", !"".ends_with("Hello"));;
+    assert(|_|"8", "abc".ends_with("abc"));;
+    assert(|_|"9", !"abc".ends_with("zabc"));;
+    
+    // Longer suffix
+    assert(|_|"10", "abcdefgh".ends_with("defgh"));;
+    assert(|_|"11", !"abcdefgh".ends_with("xefgh"));;
+    
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::compiler_develop_mode());
+}
