@@ -211,7 +211,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_between_integral_function(from.clone(), to.clone(), None),
                 None,
                 Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
+                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
+                    to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -242,7 +243,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_between_integral_function(from.clone(), to_type_fix, Some(to_type_c)),
                 None,
                 Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
+                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
+                    to_name_c, upper_camel_to_lower_snake(&to_name_c),
                     from_name, to_name_c
                 )),
             ));
@@ -259,7 +261,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_between_float_function(from.clone(), to.clone(), None),
                 None,
                 Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
+                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
+                    to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -290,7 +293,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_between_float_function(from.clone(), to_type_fix.clone(), Some(to_type_c)),
                 None,
                 Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
+                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
+                    to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -307,7 +311,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_int_to_float_function(from.clone(), to.clone()),
                 None,
                 Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
+                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
+                    to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -331,7 +336,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_int_to_float_function(from.clone(), to_type),
                 None,
                 Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
+                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
+                    to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -348,7 +354,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_float_to_int_function(from.clone(), to.clone()),
                 None,
                 Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
+                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
+                    to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -372,7 +379,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_float_to_int_function(from.clone(), to_type),
                 None,
                 Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
+                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
+                    to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));

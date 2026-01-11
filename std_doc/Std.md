@@ -759,11 +759,15 @@ A floating number represented by `01...1` in binary.
 
 Type: `Std::F32 -> Std::I8`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `F32` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::F32 -> Std::FFI::CDouble`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `F32` into a value of `CDouble`.
 
@@ -771,11 +775,15 @@ Casts a value of `F32` into a value of `CDouble`.
 
 Type: `Std::F32 -> Std::FFI::CFloat`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `F32` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::F32 -> Std::I32`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `F32` into a value of `CInt`.
 
@@ -783,11 +791,15 @@ Casts a value of `F32` into a value of `CInt`.
 
 Type: `Std::F32 -> Std::I64`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `F32` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::F32 -> Std::I64`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `F32` into a value of `CLongLong`.
 
@@ -795,11 +807,15 @@ Casts a value of `F32` into a value of `CLongLong`.
 
 Type: `Std::F32 -> Std::I16`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `F32` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::F32 -> Std::U64`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `F32` into a value of `CSizeT`.
 
@@ -807,11 +823,15 @@ Casts a value of `F32` into a value of `CSizeT`.
 
 Type: `Std::F32 -> Std::U8`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `F32` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::F32 -> Std::U32`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `F32` into a value of `CUnsignedInt`.
 
@@ -819,11 +839,15 @@ Casts a value of `F32` into a value of `CUnsignedInt`.
 
 Type: `Std::F32 -> Std::U64`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `F32` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::F32 -> Std::U64`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `F32` into a value of `CUnsignedLongLong`.
 
@@ -831,11 +855,15 @@ Casts a value of `F32` into a value of `CUnsignedLongLong`.
 
 Type: `Std::F32 -> Std::U16`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `F32` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::F32 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `F32` into a value of `F32`.
 
@@ -843,11 +871,15 @@ Casts a value of `F32` into a value of `F32`.
 
 Type: `Std::F32 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `F32` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::F32 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `F32` into a value of `I16`.
 
@@ -855,11 +887,15 @@ Casts a value of `F32` into a value of `I16`.
 
 Type: `Std::F32 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `F32` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::F32 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `F32` into a value of `I64`.
 
@@ -867,11 +903,15 @@ Casts a value of `F32` into a value of `I64`.
 
 Type: `Std::F32 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `F32` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::F32 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `F32` into a value of `U16`.
 
@@ -879,17 +919,23 @@ Casts a value of `F32` into a value of `U16`.
 
 Type: `Std::F32 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `F32` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::F32 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `F32` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::F32 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `F32` into a value of `U8`.
 
@@ -947,11 +993,15 @@ A floating number represented by `01...1` in binary.
 
 Type: `Std::F64 -> Std::I8`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `F64` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::F64 -> Std::FFI::CDouble`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `F64` into a value of `CDouble`.
 
@@ -959,11 +1009,15 @@ Casts a value of `F64` into a value of `CDouble`.
 
 Type: `Std::F64 -> Std::FFI::CFloat`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `F64` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::F64 -> Std::I32`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `F64` into a value of `CInt`.
 
@@ -971,11 +1025,15 @@ Casts a value of `F64` into a value of `CInt`.
 
 Type: `Std::F64 -> Std::I64`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `F64` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::F64 -> Std::I64`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `F64` into a value of `CLongLong`.
 
@@ -983,11 +1041,15 @@ Casts a value of `F64` into a value of `CLongLong`.
 
 Type: `Std::F64 -> Std::I16`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `F64` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::F64 -> Std::U64`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `F64` into a value of `CSizeT`.
 
@@ -995,11 +1057,15 @@ Casts a value of `F64` into a value of `CSizeT`.
 
 Type: `Std::F64 -> Std::U8`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `F64` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::F64 -> Std::U32`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `F64` into a value of `CUnsignedInt`.
 
@@ -1007,11 +1073,15 @@ Casts a value of `F64` into a value of `CUnsignedInt`.
 
 Type: `Std::F64 -> Std::U64`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `F64` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::F64 -> Std::U64`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `F64` into a value of `CUnsignedLongLong`.
 
@@ -1019,11 +1089,15 @@ Casts a value of `F64` into a value of `CUnsignedLongLong`.
 
 Type: `Std::F64 -> Std::U16`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `F64` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::F64 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `F64` into a value of `F32`.
 
@@ -1031,11 +1105,15 @@ Casts a value of `F64` into a value of `F32`.
 
 Type: `Std::F64 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `F64` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::F64 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `F64` into a value of `I16`.
 
@@ -1043,11 +1121,15 @@ Casts a value of `F64` into a value of `I16`.
 
 Type: `Std::F64 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `F64` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::F64 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `F64` into a value of `I64`.
 
@@ -1055,11 +1137,15 @@ Casts a value of `F64` into a value of `I64`.
 
 Type: `Std::F64 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `F64` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::F64 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `F64` into a value of `U16`.
 
@@ -1067,17 +1153,23 @@ Casts a value of `F64` into a value of `U16`.
 
 Type: `Std::F64 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `F64` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::F64 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `F64` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::F64 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `F64` into a value of `U8`.
 
@@ -1503,11 +1595,15 @@ Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Type: `Std::I16 -> Std::FFI::CChar`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `I16` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::I16 -> Std::F64`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `I16` into a value of `CDouble`.
 
@@ -1515,11 +1611,15 @@ Casts a value of `I16` into a value of `CDouble`.
 
 Type: `Std::I16 -> Std::F32`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `I16` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::I16 -> Std::FFI::CInt`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `I16` into a value of `CInt`.
 
@@ -1527,11 +1627,15 @@ Casts a value of `I16` into a value of `CInt`.
 
 Type: `Std::I16 -> Std::FFI::CLong`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `I16` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::I16 -> Std::FFI::CLongLong`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `I16` into a value of `CLongLong`.
 
@@ -1539,11 +1643,15 @@ Casts a value of `I16` into a value of `CLongLong`.
 
 Type: `Std::I16 -> Std::FFI::CShort`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `I16` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::I16 -> Std::FFI::CSizeT`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `I16` into a value of `CSizeT`.
 
@@ -1551,11 +1659,15 @@ Casts a value of `I16` into a value of `CSizeT`.
 
 Type: `Std::I16 -> Std::FFI::CUnsignedChar`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `I16` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::I16 -> Std::FFI::CUnsignedInt`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `I16` into a value of `CUnsignedInt`.
 
@@ -1563,11 +1675,15 @@ Casts a value of `I16` into a value of `CUnsignedInt`.
 
 Type: `Std::I16 -> Std::FFI::CUnsignedLong`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `I16` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::I16 -> Std::FFI::CUnsignedLongLong`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `I16` into a value of `CUnsignedLongLong`.
 
@@ -1575,11 +1691,15 @@ Casts a value of `I16` into a value of `CUnsignedLongLong`.
 
 Type: `Std::I16 -> Std::FFI::CUnsignedShort`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `I16` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::I16 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `I16` into a value of `F32`.
 
@@ -1587,11 +1707,15 @@ Casts a value of `I16` into a value of `F32`.
 
 Type: `Std::I16 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `I16` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::I16 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `I16` into a value of `I16`.
 
@@ -1599,11 +1723,15 @@ Casts a value of `I16` into a value of `I16`.
 
 Type: `Std::I16 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `I16` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::I16 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `I16` into a value of `I64`.
 
@@ -1611,11 +1739,15 @@ Casts a value of `I16` into a value of `I64`.
 
 Type: `Std::I16 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `I16` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::I16 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `I16` into a value of `U16`.
 
@@ -1623,17 +1755,23 @@ Casts a value of `I16` into a value of `U16`.
 
 Type: `Std::I16 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `I16` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::I16 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `I16` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::I16 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `I16` into a value of `U8`.
 
@@ -1720,11 +1858,15 @@ Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Type: `Std::I32 -> Std::FFI::CChar`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `I32` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::I32 -> Std::F64`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `I32` into a value of `CDouble`.
 
@@ -1732,11 +1874,15 @@ Casts a value of `I32` into a value of `CDouble`.
 
 Type: `Std::I32 -> Std::F32`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `I32` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::I32 -> Std::FFI::CInt`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `I32` into a value of `CInt`.
 
@@ -1744,11 +1890,15 @@ Casts a value of `I32` into a value of `CInt`.
 
 Type: `Std::I32 -> Std::FFI::CLong`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `I32` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::I32 -> Std::FFI::CLongLong`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `I32` into a value of `CLongLong`.
 
@@ -1756,11 +1906,15 @@ Casts a value of `I32` into a value of `CLongLong`.
 
 Type: `Std::I32 -> Std::FFI::CShort`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `I32` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::I32 -> Std::FFI::CSizeT`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `I32` into a value of `CSizeT`.
 
@@ -1768,11 +1922,15 @@ Casts a value of `I32` into a value of `CSizeT`.
 
 Type: `Std::I32 -> Std::FFI::CUnsignedChar`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `I32` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::I32 -> Std::FFI::CUnsignedInt`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `I32` into a value of `CUnsignedInt`.
 
@@ -1780,11 +1938,15 @@ Casts a value of `I32` into a value of `CUnsignedInt`.
 
 Type: `Std::I32 -> Std::FFI::CUnsignedLong`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `I32` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::I32 -> Std::FFI::CUnsignedLongLong`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `I32` into a value of `CUnsignedLongLong`.
 
@@ -1792,11 +1954,15 @@ Casts a value of `I32` into a value of `CUnsignedLongLong`.
 
 Type: `Std::I32 -> Std::FFI::CUnsignedShort`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `I32` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::I32 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `I32` into a value of `F32`.
 
@@ -1804,11 +1970,15 @@ Casts a value of `I32` into a value of `F32`.
 
 Type: `Std::I32 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `I32` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::I32 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `I32` into a value of `I16`.
 
@@ -1816,11 +1986,15 @@ Casts a value of `I32` into a value of `I16`.
 
 Type: `Std::I32 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `I32` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::I32 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `I32` into a value of `I64`.
 
@@ -1828,11 +2002,15 @@ Casts a value of `I32` into a value of `I64`.
 
 Type: `Std::I32 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `I32` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::I32 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `I32` into a value of `U16`.
 
@@ -1840,17 +2018,23 @@ Casts a value of `I32` into a value of `U16`.
 
 Type: `Std::I32 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `I32` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::I32 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `I32` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::I32 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `I32` into a value of `U8`.
 
@@ -1937,11 +2121,15 @@ Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Type: `Std::I64 -> Std::FFI::CChar`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `I64` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::I64 -> Std::F64`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `I64` into a value of `CDouble`.
 
@@ -1949,11 +2137,15 @@ Casts a value of `I64` into a value of `CDouble`.
 
 Type: `Std::I64 -> Std::F32`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `I64` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::I64 -> Std::FFI::CInt`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `I64` into a value of `CInt`.
 
@@ -1961,11 +2153,15 @@ Casts a value of `I64` into a value of `CInt`.
 
 Type: `Std::I64 -> Std::FFI::CLong`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `I64` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::I64 -> Std::FFI::CLongLong`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `I64` into a value of `CLongLong`.
 
@@ -1973,11 +2169,15 @@ Casts a value of `I64` into a value of `CLongLong`.
 
 Type: `Std::I64 -> Std::FFI::CShort`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `I64` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::I64 -> Std::FFI::CSizeT`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `I64` into a value of `CSizeT`.
 
@@ -1985,11 +2185,15 @@ Casts a value of `I64` into a value of `CSizeT`.
 
 Type: `Std::I64 -> Std::FFI::CUnsignedChar`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `I64` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::I64 -> Std::FFI::CUnsignedInt`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `I64` into a value of `CUnsignedInt`.
 
@@ -1997,11 +2201,15 @@ Casts a value of `I64` into a value of `CUnsignedInt`.
 
 Type: `Std::I64 -> Std::FFI::CUnsignedLong`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `I64` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::I64 -> Std::FFI::CUnsignedLongLong`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `I64` into a value of `CUnsignedLongLong`.
 
@@ -2009,11 +2217,15 @@ Casts a value of `I64` into a value of `CUnsignedLongLong`.
 
 Type: `Std::I64 -> Std::FFI::CUnsignedShort`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `I64` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::I64 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `I64` into a value of `F32`.
 
@@ -2021,11 +2233,15 @@ Casts a value of `I64` into a value of `F32`.
 
 Type: `Std::I64 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `I64` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::I64 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `I64` into a value of `I16`.
 
@@ -2033,11 +2249,15 @@ Casts a value of `I64` into a value of `I16`.
 
 Type: `Std::I64 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `I64` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::I64 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `I64` into a value of `I64`.
 
@@ -2045,11 +2265,15 @@ Casts a value of `I64` into a value of `I64`.
 
 Type: `Std::I64 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `I64` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::I64 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `I64` into a value of `U16`.
 
@@ -2057,17 +2281,23 @@ Casts a value of `I64` into a value of `U16`.
 
 Type: `Std::I64 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `I64` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::I64 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `I64` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::I64 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `I64` into a value of `U8`.
 
@@ -2154,11 +2384,15 @@ Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Type: `Std::I8 -> Std::FFI::CChar`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `I8` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::I8 -> Std::F64`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `I8` into a value of `CDouble`.
 
@@ -2166,11 +2400,15 @@ Casts a value of `I8` into a value of `CDouble`.
 
 Type: `Std::I8 -> Std::F32`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `I8` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::I8 -> Std::FFI::CInt`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `I8` into a value of `CInt`.
 
@@ -2178,11 +2416,15 @@ Casts a value of `I8` into a value of `CInt`.
 
 Type: `Std::I8 -> Std::FFI::CLong`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `I8` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::I8 -> Std::FFI::CLongLong`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `I8` into a value of `CLongLong`.
 
@@ -2190,11 +2432,15 @@ Casts a value of `I8` into a value of `CLongLong`.
 
 Type: `Std::I8 -> Std::FFI::CShort`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `I8` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::I8 -> Std::FFI::CSizeT`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `I8` into a value of `CSizeT`.
 
@@ -2202,11 +2448,15 @@ Casts a value of `I8` into a value of `CSizeT`.
 
 Type: `Std::I8 -> Std::FFI::CUnsignedChar`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `I8` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::I8 -> Std::FFI::CUnsignedInt`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `I8` into a value of `CUnsignedInt`.
 
@@ -2214,11 +2464,15 @@ Casts a value of `I8` into a value of `CUnsignedInt`.
 
 Type: `Std::I8 -> Std::FFI::CUnsignedLong`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `I8` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::I8 -> Std::FFI::CUnsignedLongLong`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `I8` into a value of `CUnsignedLongLong`.
 
@@ -2226,11 +2480,15 @@ Casts a value of `I8` into a value of `CUnsignedLongLong`.
 
 Type: `Std::I8 -> Std::FFI::CUnsignedShort`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `I8` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::I8 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `I8` into a value of `F32`.
 
@@ -2238,11 +2496,15 @@ Casts a value of `I8` into a value of `F32`.
 
 Type: `Std::I8 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `I8` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::I8 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `I8` into a value of `I16`.
 
@@ -2250,11 +2512,15 @@ Casts a value of `I8` into a value of `I16`.
 
 Type: `Std::I8 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `I8` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::I8 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `I8` into a value of `I64`.
 
@@ -2262,11 +2528,15 @@ Casts a value of `I8` into a value of `I64`.
 
 Type: `Std::I8 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `I8` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::I8 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `I8` into a value of `U16`.
 
@@ -2274,17 +2544,23 @@ Casts a value of `I8` into a value of `U16`.
 
 Type: `Std::I8 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `I8` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::I8 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `I8` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::I8 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `I8` into a value of `U8`.
 
@@ -4167,11 +4443,15 @@ Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Type: `Std::U16 -> Std::FFI::CChar`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `U16` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::U16 -> Std::F64`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `U16` into a value of `CDouble`.
 
@@ -4179,11 +4459,15 @@ Casts a value of `U16` into a value of `CDouble`.
 
 Type: `Std::U16 -> Std::F32`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `U16` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::U16 -> Std::FFI::CInt`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `U16` into a value of `CInt`.
 
@@ -4191,11 +4475,15 @@ Casts a value of `U16` into a value of `CInt`.
 
 Type: `Std::U16 -> Std::FFI::CLong`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `U16` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::U16 -> Std::FFI::CLongLong`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `U16` into a value of `CLongLong`.
 
@@ -4203,11 +4491,15 @@ Casts a value of `U16` into a value of `CLongLong`.
 
 Type: `Std::U16 -> Std::FFI::CShort`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `U16` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::U16 -> Std::FFI::CSizeT`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `U16` into a value of `CSizeT`.
 
@@ -4215,11 +4507,15 @@ Casts a value of `U16` into a value of `CSizeT`.
 
 Type: `Std::U16 -> Std::FFI::CUnsignedChar`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `U16` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::U16 -> Std::FFI::CUnsignedInt`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `U16` into a value of `CUnsignedInt`.
 
@@ -4227,11 +4523,15 @@ Casts a value of `U16` into a value of `CUnsignedInt`.
 
 Type: `Std::U16 -> Std::FFI::CUnsignedLong`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `U16` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::U16 -> Std::FFI::CUnsignedLongLong`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `U16` into a value of `CUnsignedLongLong`.
 
@@ -4239,11 +4539,15 @@ Casts a value of `U16` into a value of `CUnsignedLongLong`.
 
 Type: `Std::U16 -> Std::FFI::CUnsignedShort`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `U16` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::U16 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `U16` into a value of `F32`.
 
@@ -4251,11 +4555,15 @@ Casts a value of `U16` into a value of `F32`.
 
 Type: `Std::U16 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `U16` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::U16 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `U16` into a value of `I16`.
 
@@ -4263,11 +4571,15 @@ Casts a value of `U16` into a value of `I16`.
 
 Type: `Std::U16 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `U16` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::U16 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `U16` into a value of `I64`.
 
@@ -4275,11 +4587,15 @@ Casts a value of `U16` into a value of `I64`.
 
 Type: `Std::U16 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `U16` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::U16 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `U16` into a value of `U16`.
 
@@ -4287,17 +4603,23 @@ Casts a value of `U16` into a value of `U16`.
 
 Type: `Std::U16 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `U16` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::U16 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `U16` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::U16 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `U16` into a value of `U8`.
 
@@ -4380,11 +4702,15 @@ Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Type: `Std::U32 -> Std::FFI::CChar`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `U32` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::U32 -> Std::F64`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `U32` into a value of `CDouble`.
 
@@ -4392,11 +4718,15 @@ Casts a value of `U32` into a value of `CDouble`.
 
 Type: `Std::U32 -> Std::F32`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `U32` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::U32 -> Std::FFI::CInt`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `U32` into a value of `CInt`.
 
@@ -4404,11 +4734,15 @@ Casts a value of `U32` into a value of `CInt`.
 
 Type: `Std::U32 -> Std::FFI::CLong`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `U32` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::U32 -> Std::FFI::CLongLong`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `U32` into a value of `CLongLong`.
 
@@ -4416,11 +4750,15 @@ Casts a value of `U32` into a value of `CLongLong`.
 
 Type: `Std::U32 -> Std::FFI::CShort`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `U32` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::U32 -> Std::FFI::CSizeT`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `U32` into a value of `CSizeT`.
 
@@ -4428,11 +4766,15 @@ Casts a value of `U32` into a value of `CSizeT`.
 
 Type: `Std::U32 -> Std::FFI::CUnsignedChar`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `U32` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::U32 -> Std::FFI::CUnsignedInt`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `U32` into a value of `CUnsignedInt`.
 
@@ -4440,11 +4782,15 @@ Casts a value of `U32` into a value of `CUnsignedInt`.
 
 Type: `Std::U32 -> Std::FFI::CUnsignedLong`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `U32` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::U32 -> Std::FFI::CUnsignedLongLong`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `U32` into a value of `CUnsignedLongLong`.
 
@@ -4452,11 +4798,15 @@ Casts a value of `U32` into a value of `CUnsignedLongLong`.
 
 Type: `Std::U32 -> Std::FFI::CUnsignedShort`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `U32` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::U32 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `U32` into a value of `F32`.
 
@@ -4464,11 +4814,15 @@ Casts a value of `U32` into a value of `F32`.
 
 Type: `Std::U32 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `U32` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::U32 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `U32` into a value of `I16`.
 
@@ -4476,11 +4830,15 @@ Casts a value of `U32` into a value of `I16`.
 
 Type: `Std::U32 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `U32` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::U32 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `U32` into a value of `I64`.
 
@@ -4488,11 +4846,15 @@ Casts a value of `U32` into a value of `I64`.
 
 Type: `Std::U32 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `U32` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::U32 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `U32` into a value of `U16`.
 
@@ -4500,17 +4862,23 @@ Casts a value of `U32` into a value of `U16`.
 
 Type: `Std::U32 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `U32` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::U32 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `U32` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::U32 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `U32` into a value of `U8`.
 
@@ -4593,11 +4961,15 @@ Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Type: `Std::U64 -> Std::FFI::CChar`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `U64` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::U64 -> Std::F64`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `U64` into a value of `CDouble`.
 
@@ -4605,11 +4977,15 @@ Casts a value of `U64` into a value of `CDouble`.
 
 Type: `Std::U64 -> Std::F32`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `U64` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::U64 -> Std::FFI::CInt`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `U64` into a value of `CInt`.
 
@@ -4617,11 +4993,15 @@ Casts a value of `U64` into a value of `CInt`.
 
 Type: `Std::U64 -> Std::FFI::CLong`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `U64` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::U64 -> Std::FFI::CLongLong`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `U64` into a value of `CLongLong`.
 
@@ -4629,11 +5009,15 @@ Casts a value of `U64` into a value of `CLongLong`.
 
 Type: `Std::U64 -> Std::FFI::CShort`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `U64` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::U64 -> Std::FFI::CSizeT`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `U64` into a value of `CSizeT`.
 
@@ -4641,11 +5025,15 @@ Casts a value of `U64` into a value of `CSizeT`.
 
 Type: `Std::U64 -> Std::FFI::CUnsignedChar`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `U64` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::U64 -> Std::FFI::CUnsignedInt`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `U64` into a value of `CUnsignedInt`.
 
@@ -4653,11 +5041,15 @@ Casts a value of `U64` into a value of `CUnsignedInt`.
 
 Type: `Std::U64 -> Std::FFI::CUnsignedLong`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `U64` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::U64 -> Std::FFI::CUnsignedLongLong`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `U64` into a value of `CUnsignedLongLong`.
 
@@ -4665,11 +5057,15 @@ Casts a value of `U64` into a value of `CUnsignedLongLong`.
 
 Type: `Std::U64 -> Std::FFI::CUnsignedShort`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `U64` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::U64 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `U64` into a value of `F32`.
 
@@ -4677,11 +5073,15 @@ Casts a value of `U64` into a value of `F32`.
 
 Type: `Std::U64 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `U64` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::U64 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `U64` into a value of `I16`.
 
@@ -4689,11 +5089,15 @@ Casts a value of `U64` into a value of `I16`.
 
 Type: `Std::U64 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `U64` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::U64 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `U64` into a value of `I64`.
 
@@ -4701,11 +5105,15 @@ Casts a value of `U64` into a value of `I64`.
 
 Type: `Std::U64 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `U64` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::U64 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `U64` into a value of `U16`.
 
@@ -4713,17 +5121,23 @@ Casts a value of `U64` into a value of `U16`.
 
 Type: `Std::U64 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `U64` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::U64 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `U64` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::U64 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `U64` into a value of `U8`.
 
@@ -4806,11 +5220,15 @@ Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Type: `Std::U8 -> Std::FFI::CChar`
 
+(Deprecated) Use instead `ToCChar::c_char`
+
 Casts a value of `U8` into a value of `CChar`.
 
 #### to_CDouble
 
 Type: `Std::U8 -> Std::F64`
+
+(Deprecated) Use instead `ToCDouble::c_double`
 
 Casts a value of `U8` into a value of `CDouble`.
 
@@ -4818,11 +5236,15 @@ Casts a value of `U8` into a value of `CDouble`.
 
 Type: `Std::U8 -> Std::F32`
 
+(Deprecated) Use instead `ToCFloat::c_float`
+
 Casts a value of `U8` into a value of `CFloat`.
 
 #### to_CInt
 
 Type: `Std::U8 -> Std::FFI::CInt`
+
+(Deprecated) Use instead `ToCInt::c_int`
 
 Casts a value of `U8` into a value of `CInt`.
 
@@ -4830,11 +5252,15 @@ Casts a value of `U8` into a value of `CInt`.
 
 Type: `Std::U8 -> Std::FFI::CLong`
 
+(Deprecated) Use instead `ToCLong::c_long`
+
 Casts a value of `U8` into a value of `CLong`.
 
 #### to_CLongLong
 
 Type: `Std::U8 -> Std::FFI::CLongLong`
+
+(Deprecated) Use instead `ToCLongLong::c_long_long`
 
 Casts a value of `U8` into a value of `CLongLong`.
 
@@ -4842,11 +5268,15 @@ Casts a value of `U8` into a value of `CLongLong`.
 
 Type: `Std::U8 -> Std::FFI::CShort`
 
+(Deprecated) Use instead `ToCShort::c_short`
+
 Casts a value of `U8` into a value of `CShort`.
 
 #### to_CSizeT
 
 Type: `Std::U8 -> Std::FFI::CSizeT`
+
+(Deprecated) Use instead `ToCSizeT::c_size_t`
 
 Casts a value of `U8` into a value of `CSizeT`.
 
@@ -4854,11 +5284,15 @@ Casts a value of `U8` into a value of `CSizeT`.
 
 Type: `Std::U8 -> Std::FFI::CUnsignedChar`
 
+(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+
 Casts a value of `U8` into a value of `CUnsignedChar`.
 
 #### to_CUnsignedInt
 
 Type: `Std::U8 -> Std::FFI::CUnsignedInt`
+
+(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
 
 Casts a value of `U8` into a value of `CUnsignedInt`.
 
@@ -4866,11 +5300,15 @@ Casts a value of `U8` into a value of `CUnsignedInt`.
 
 Type: `Std::U8 -> Std::FFI::CUnsignedLong`
 
+(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+
 Casts a value of `U8` into a value of `CUnsignedLong`.
 
 #### to_CUnsignedLongLong
 
 Type: `Std::U8 -> Std::FFI::CUnsignedLongLong`
+
+(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
 
 Casts a value of `U8` into a value of `CUnsignedLongLong`.
 
@@ -4878,11 +5316,15 @@ Casts a value of `U8` into a value of `CUnsignedLongLong`.
 
 Type: `Std::U8 -> Std::FFI::CUnsignedShort`
 
+(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+
 Casts a value of `U8` into a value of `CUnsignedShort`.
 
 #### to_F32
 
 Type: `Std::U8 -> Std::F32`
+
+(Deprecated) Use instead `ToF32::f32`
 
 Casts a value of `U8` into a value of `F32`.
 
@@ -4890,11 +5332,15 @@ Casts a value of `U8` into a value of `F32`.
 
 Type: `Std::U8 -> Std::F64`
 
+(Deprecated) Use instead `ToF64::f64`
+
 Casts a value of `U8` into a value of `F64`.
 
 #### to_I16
 
 Type: `Std::U8 -> Std::I16`
+
+(Deprecated) Use instead `ToI16::i16`
 
 Casts a value of `U8` into a value of `I16`.
 
@@ -4902,11 +5348,15 @@ Casts a value of `U8` into a value of `I16`.
 
 Type: `Std::U8 -> Std::I32`
 
+(Deprecated) Use instead `ToI32::i32`
+
 Casts a value of `U8` into a value of `I32`.
 
 #### to_I64
 
 Type: `Std::U8 -> Std::I64`
+
+(Deprecated) Use instead `ToI64::i64`
 
 Casts a value of `U8` into a value of `I64`.
 
@@ -4914,11 +5364,15 @@ Casts a value of `U8` into a value of `I64`.
 
 Type: `Std::U8 -> Std::I8`
 
+(Deprecated) Use instead `ToI8::i8`
+
 Casts a value of `U8` into a value of `I8`.
 
 #### to_U16
 
 Type: `Std::U8 -> Std::U16`
+
+(Deprecated) Use instead `ToU16::u16`
 
 Casts a value of `U8` into a value of `U16`.
 
@@ -4926,17 +5380,23 @@ Casts a value of `U8` into a value of `U16`.
 
 Type: `Std::U8 -> Std::U32`
 
+(Deprecated) Use instead `ToU32::u32`
+
 Casts a value of `U8` into a value of `U32`.
 
 #### to_U64
 
 Type: `Std::U8 -> Std::U64`
 
+(Deprecated) Use instead `ToU64::u64`
+
 Casts a value of `U8` into a value of `U64`.
 
 #### to_U8
 
 Type: `Std::U8 -> Std::U8`
+
+(Deprecated) Use instead `ToU8::u8`
 
 Casts a value of `U8` into a value of `U8`.
 

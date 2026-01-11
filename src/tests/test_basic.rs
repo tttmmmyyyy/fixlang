@@ -8104,7 +8104,7 @@ main = (
 }
 
 #[test]
-pub fn test_generate_docs() {
+pub fn test_generate_documents() {
     install_fix();
 
     // Run `fix doc -m Std` in `std_doc` directory.
