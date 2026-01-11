@@ -2769,6 +2769,8 @@ namespace String {
     // Create a `String` from a pointer to a null-terminated C string.
     // 
     // If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+    // 
+    // If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
     //
     // # Parameters
     //
@@ -2832,7 +2834,7 @@ namespace String {
     empty : I64 -> String;
     empty = |n| String { _data : Array::empty(n+1).push_back(0_U8) };
 
-    // `str.find(token, start_idx)` finds the index where `token` firstly appears in `str`, starting from `start_idx`.
+    // `str.find(token, start_idx)` finds the index where `token` firstly appears in `str` starting from `start_idx`.
     // 
     // Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
     // `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
@@ -2886,7 +2888,7 @@ namespace String {
         Option::some $ s.@_data.@(len - 1)
     );
 
-    // Gets the length of a string.
+    // Gets the length of a string without counting the null-terminator.
     //
     // # Parameters
     //
@@ -3154,6 +3156,8 @@ impl () : Eq {
 // The byte array must include a null terminator (`'\0'`). If not, `from_bytes` returns an error.
 // 
 // The length of the string is the number of bytes until the first null character.
+// 
+// If you have a pointer to a null-terminated byte array, use `String::unsafe_from_c_str_ptr` instead.
 impl String : FromBytes {
     from_bytes = |buf| (
         // Search for null terminator.
