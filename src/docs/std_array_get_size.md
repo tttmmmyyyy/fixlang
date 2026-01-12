@@ -1,3 +1,5 @@
+(Deprecated) Use `Std::Array::@size` instead.
+
 Gets the length of an array.
 
 # Parameters

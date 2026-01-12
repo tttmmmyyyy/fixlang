@@ -112,6 +112,12 @@ namespace Array {
         arr._unsafe_get_bounds_unchecked(idx)
     );
 
+    // Gets the size of an array.
+    // 
+    // # Parameters
+    // * `array` - The array to get the size from.
+    @size : Array a -> I64 = |arr| arr.get_size;
+
     // Creates an empty array with specified capacity.
     // 
     // # Parameters
@@ -2920,6 +2926,8 @@ namespace String {
         Option::some $ s.@_data.@(len - 1)
     );
 
+    // (Deprecated) Use `Std::String::@size instead.
+    // 
     // Gets the length of a string without counting the null-terminator.
     //
     // # Parameters
@@ -2927,6 +2935,12 @@ namespace String {
     // * `str` - The string to be converted.
     get_size : String -> I64;
     get_size = |s| s.@_data.get_size - 1; // exclude null terminator
+
+    // Gets the size of a string without counting the null-terminator.
+    // 
+    // # Parameters
+    // * `string` - The string to get the size from.
+    @size : String -> I64 = |s| s.@_data.get_size - 1; // exclude null terminator
 
     // `String` version of `Array::get_sub`.
     //
