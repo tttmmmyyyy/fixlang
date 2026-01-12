@@ -1880,7 +1880,7 @@ pub fn test82() {
         let v1 = [];
         let v2 = [3,4];
         let v = v1.append(v2);
-        assert_eq(|_|"wrong reserved length (0+2)", v.get_capacity, 2);;
+        assert_eq(|_|"wrong reserved length (0+2)", v.@capacity, 2);;
         assert_eq(|_|"wrong length (0+2)", v.@size, 2);;
         assert_eq(|_|"wrong element (0+2)", v.@(0), 3);;
         assert_eq(|_|"wrong element (0+2)", v.@(1), 4);;
@@ -1889,7 +1889,7 @@ pub fn test82() {
         let v1 = [1,2];
         let v2 = [];
         let v = v1.append(v2);
-        assert_eq(|_|"wrong reserved length (2+0)", v.get_capacity, 2);;
+        assert_eq(|_|"wrong reserved length (2+0)", v.@capacity, 2);;
         assert_eq(|_|"wrong length (2+0)", v.@size, 2);;
         assert_eq(|_|"wrong element (2+0)", v.@(0), 1);;
         assert_eq(|_|"wrong element (2+0)", v.@(1), 2);;
@@ -1898,7 +1898,7 @@ pub fn test82() {
         let v1: Array (I64 -> Bool) = [];
         let v2 = [];
         let v = v1.append(v2);
-        assert_eq(|_|"wrong capacity (0+0)", v.get_capacity, 0);;
+        assert_eq(|_|"wrong capacity (0+0)", v.@capacity, 0);;
         assert_eq(|_|"wrong length (0+0)", v.@size, 0);;
 
         // Test boxed elements.
@@ -1962,7 +1962,7 @@ pub fn test83() {
             continue $ (idx+1, v)
         ));
         assert_eq(|_|"wrong length after pop", 0, v.@size);;
-        assert(|_|"wrong reserved length after pop", v.get_capacity >= 100);;
+        assert(|_|"wrong reserved length after pop", v.@capacity >= 100);;
     
         // Boxed element
         let v = [];
@@ -1983,7 +1983,7 @@ pub fn test83() {
             continue $ (idx+1, v)
         ));
         assert_eq(|_|"wrong length after pop (boxed)", 0, v.@size);;
-        assert(|_|"wrong reserved length after pop (boxed)", v.get_capacity >= 100);;
+        assert(|_|"wrong reserved length after pop (boxed)", v.@capacity >= 100);;
     
         pure()
     );

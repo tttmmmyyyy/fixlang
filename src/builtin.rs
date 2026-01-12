@@ -2515,7 +2515,7 @@ impl InlineLLVMArrayGetCapacityBody {
 }
 
 // `Array::get_capacity : Array a -> I64` built-in function.
-pub fn get_capacity_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
     let expr = expr_abs(

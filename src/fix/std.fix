@@ -118,6 +118,17 @@ namespace Array {
     // * `array` - The array to get the size from.
     @size : Array a -> I64 = |arr| arr.get_size;
 
+    // Gets the capacity of an array.
+    // 
+    // The capacity of an array is the number of elements that can be stored in the currently allocated memory region.
+    // Up to this number of elements, you can add elements without additional memory allocation.
+    // If you try to add more elements than this number, the array will automatically reallocate memory,
+    // which may be a costly operation.
+    // 
+    // # Parameters
+    // * `array` - The array to get the capacity from.
+    @capacity : Array a -> I64 = |arr| arr.get_capacity;
+
     // Creates an empty array with specified capacity.
     // 
     // # Parameters
@@ -246,8 +257,8 @@ namespace Array {
 
         // Reserve v1's buffer and force uniqueness.        
         let len = v1_len + v2_len;
-        let v1 = if v1.get_capacity < len {
-            v1.reserve(max(len, 2 * v1.get_capacity))
+        let v1 = if v1.@capacity < len {
+            v1.reserve(max(len, 2 * v1.@capacity))
         } else {
             v1._unsafe_force_unique
         };
@@ -371,7 +382,7 @@ namespace Array {
     push_back : a -> Array a -> Array a;
     push_back = |e, arr| (
         let len = arr.@size;
-        let arr = if arr.get_capacity < len + 1 {
+        let arr = if arr.@capacity < len + 1 {
             arr.reserve(2*(len + 1))
         } else {
             arr
@@ -387,7 +398,7 @@ namespace Array {
     // * `array` - The array to be reserved.
     reserve : I64 -> Array a -> Array a;
     reserve = |cap, arr| (
-        if cap <= arr.get_capacity { arr };
+        if cap <= arr.@capacity { arr };
         let len = arr.@size;
         let new = Array::empty(cap)._unsafe_set_size(len);
         loop((0, new), |(idx, new)|(

@@ -239,6 +239,21 @@ Gets an element of an array at the specified index.
 * `i` - The index of the element to get.
 * `array` - The array to get the element from.
 
+#### @capacity
+
+Type: `Std::Array a -> Std::I64`
+
+Gets the capacity of an array.
+
+The capacity of an array is the number of elements that can be stored in the currently allocated memory region.
+Up to this number of elements, you can add elements without additional memory allocation.
+If you try to add more elements than this number, the array will automatically reallocate memory,
+which may be a costly operation.
+
+##### Parameters
+
+* `array` - The array to get the capacity from.
+
 #### @size
 
 Type: `Std::Array a -> Std::I64`
@@ -361,6 +376,8 @@ Creates an array by a mapping function.
 #### get_capacity
 
 Type: `Std::Array a -> Std::I64`
+
+(Deprecated) Renamed `Std::Array::get_capacity` to `Std::Array::@capacity` for brevity. The old name `Std::Array::get_capacity` is now deprecated but will remain available for the foreseeable future to maintain backward compatibility.
 
 Gets the capacity of an array.
 

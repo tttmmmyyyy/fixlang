@@ -14,6 +14,7 @@
 - Added the `Identity` and `Const` types in `Std`. They are functors, and `Identity` is also a monad.
 - Add `Std::ToX` traits for all primitive numeric types and C types (e.g., `Std::ToI32`, `Std::ToCUnsignedInt`, etc.). Each trait has a member function to cast a value into the target type. The cast functions are named in lower snake case, such as `i32` and `c_unsigned_int`. They do not have prefixes like `to_`.
 - Add `Std::String::starts_with` and `Std::String::ends_with` functions.
+- Add `Std::Array::@size`, `Std::Array::@capacity`, `Std::String::@size` functions to get the size and capacity of arrays and strings.
 
 #### Compiler 
 
@@ -47,6 +48,7 @@
 - `Array::empty` and `Array::fill` now verifies the capacity and size arguments at runtime to ensure they are non-negative, and raises an error if they are negative.
 - Deprecated `Std::Array::get_size` in favor of `Std::Array::@size` for brevity. The old name will remain available for the foreseeable future to maintain backward compatibility.
 - Deprecated `Std::String::get_size` in favor of `Std::String::@size` for brevity. The old name will remain available for the foreseeable future to maintain backward compatibility.
+- Deprecated `Std::Array::get_capacity` in favor of `Std::Array::@capacity` for brevity. The old name will remain available for the foreseeable future to maintain backward compatibility.
 - Deprecated numeric conversion functions `Std::<Type>::to_<target_type>` (e.g., `Std::I32::to_f64`) in favor of trait members `To<TargetType>::<target_type>` (e.g., `ToF64::f64`). The old function names will remain available for the foreseeable future to maintain backward compatibility.
 
 #### Compiler
