@@ -2434,7 +2434,11 @@ pub struct InlineLLVMArrayGetSizeBody {
 
 impl InlineLLVMArrayGetSizeBody {
     pub fn name(&self) -> String {
-        format!("{}.Array::get_size", self.arr_name.to_string())
+        format!(
+            "{}.Array::{}",
+            self.arr_name.to_string(),
+            ARRAY_GET_SIZE_NAME
+        )
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
@@ -2459,7 +2463,7 @@ impl InlineLLVMArrayGetSizeBody {
 }
 
 // `get_size` built-in function for Array.
-pub fn get_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
 
     let expr = expr_abs(

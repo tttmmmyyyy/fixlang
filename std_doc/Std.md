@@ -3999,7 +3999,7 @@ Gets the last byte of a string. Returns none if the string is empty.
 
 Type: `Std::String -> Std::I64`
 
-(Deprecated) Use `Std::String::@size instead.
+(Deprecated) Renamed `Std::String::get_size` to `Std::String::@size` for brevity. The old name `Std::String::get_size` is now deprecated but will remain available for the foreseeable future to maintain backward compatibility.
 
 Gets the length of a string without counting the null-terminator.
 
