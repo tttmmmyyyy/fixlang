@@ -492,7 +492,7 @@ pub fn test24() {
         module Main;         main : IO ();
         main = (
             let arr = Array::fill(100, 42);
-            assert_eq(|_|"", arr.get_size, 100);;
+            assert_eq(|_|"", arr.@size, 100);;
             pure()
         );
         "#;
@@ -968,7 +968,7 @@ pub fn test44_5() {
         sum : Array I64 -> I64;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
-                if idx == arr.get_size { sum };
+                if idx == arr.@size { sum };
                 loop(idx + 1, sum + arr.@(idx))
             );
             loop(0, 0)
@@ -996,14 +996,14 @@ pub fn test45() {
 
         impl Array : MyFunctor {
             my_map = |f, arr| (
-                Array::from_map(arr.get_size, |idx| f $ arr.@(idx))
+                Array::from_map(arr.@size, |idx| f $ arr.@(idx))
             );
         }
 
         sum : Array I64 -> I64;
         sum = |arr| (
             let loop = fix $ |loop, idx, sum| (
-                if idx == arr.get_size { sum };
+                if idx == arr.@size { sum };
                 loop(idx + 1, sum + arr.@(idx))
             );
             loop(0, 0)
@@ -1113,7 +1113,7 @@ pub fn test_union_mod_array() {
             let uni = Option::some([1,2,3]).mod_some(|arr| arr.append([4,5,6]));
 
             let arr = uni.as_some;
-            assert_eq(|_|"", arr.get_size, 6);;
+            assert_eq(|_|"", arr.@size, 6);;
             assert_eq(|_|"", arr.@(0), 1);;
             assert_eq(|_|"", arr.@(1), 2);;
             assert_eq(|_|"", arr.@(2), 3);;
@@ -1141,13 +1141,13 @@ pub fn test_shared_union_mod() {
             let uni1 = uni0.mod_some(|arr| arr.append([4,5,6]));
 
             let arr = uni0.as_some;
-            assert_eq(|_|"", arr.get_size, 3);;
+            assert_eq(|_|"", arr.@size, 3);;
             assert_eq(|_|"", arr.@(0), 1);;
             assert_eq(|_|"", arr.@(1), 2);;
             assert_eq(|_|"", arr.@(2), 3);;
 
             let arr = uni1.as_some;
-            assert_eq(|_|"", arr.get_size, 6);;
+            assert_eq(|_|"", arr.@size, 6);;
             assert_eq(|_|"", arr.@(0), 1);;
             assert_eq(|_|"", arr.@(1), 2);;
             assert_eq(|_|"", arr.@(2), 3);;
@@ -1271,7 +1271,7 @@ pub fn test51() {
     module Main;     
     search : [a: Eq] a -> Array a -> I64;
     search = |elem, arr| loop(0) $ |idx| (
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ -1
         } else if arr.@(idx) == elem { 
             break $ idx
@@ -1335,7 +1335,7 @@ pub fn test52() {
         loop((0, 0)) $ |state| (
             let i = state.@0;
             let sum = state.@1;
-            if arr.get_size == i { break $ sum };
+            if arr.@size == i { break $ sum };
             let sum = sum + (if arr.@(i) == elem {1} else {0});
             continue $ (i+1, sum)
         )
@@ -1567,7 +1567,7 @@ pub fn test62() {
     module Main; 
     main : IO ();
     main = (
-        let len = "Hello World!".get_size;
+        let len = "Hello World!".@size;
         assert_eq(|_|"", len, 12);;
         pure()
     );
@@ -1859,9 +1859,9 @@ pub fn test81() {
     main : IO ();
     main = (
         let arr = [1,2,3,4];
-        assert_eq(|_|"", arr.get_size, 4);;
+        assert_eq(|_|"", arr.@size, 4);;
         let arr: Array Bool = [];
-        assert_eq(|_|"", arr.get_size, 0);;
+        assert_eq(|_|"", arr.@size, 0);;
         pure()
     );
     "#;
@@ -1881,7 +1881,7 @@ pub fn test82() {
         let v2 = [3,4];
         let v = v1.append(v2);
         assert_eq(|_|"wrong reserved length (0+2)", v.get_capacity, 2);;
-        assert_eq(|_|"wrong length (0+2)", v.get_size, 2);;
+        assert_eq(|_|"wrong length (0+2)", v.@size, 2);;
         assert_eq(|_|"wrong element (0+2)", v.@(0), 3);;
         assert_eq(|_|"wrong element (0+2)", v.@(1), 4);;
 
@@ -1890,7 +1890,7 @@ pub fn test82() {
         let v2 = [];
         let v = v1.append(v2);
         assert_eq(|_|"wrong reserved length (2+0)", v.get_capacity, 2);;
-        assert_eq(|_|"wrong length (2+0)", v.get_size, 2);;
+        assert_eq(|_|"wrong length (2+0)", v.@size, 2);;
         assert_eq(|_|"wrong element (2+0)", v.@(0), 1);;
         assert_eq(|_|"wrong element (2+0)", v.@(1), 2);;
 
@@ -1899,7 +1899,7 @@ pub fn test82() {
         let v2 = [];
         let v = v1.append(v2);
         assert_eq(|_|"wrong capacity (0+0)", v.get_capacity, 0);;
-        assert_eq(|_|"wrong length (0+0)", v.get_size, 0);;
+        assert_eq(|_|"wrong length (0+0)", v.@size, 0);;
 
         // Test boxed elements.
         let v1 = [add(1), add(2)];
@@ -1961,7 +1961,7 @@ pub fn test83() {
             let v = v.pop_back;
             continue $ (idx+1, v)
         ));
-        assert_eq(|_|"wrong length after pop", 0, v.get_size);;
+        assert_eq(|_|"wrong length after pop", 0, v.@size);;
         assert(|_|"wrong reserved length after pop", v.get_capacity >= 100);;
     
         // Boxed element
@@ -1982,7 +1982,7 @@ pub fn test83() {
             let v = v.pop_back;
             continue $ (idx+1, v)
         ));
-        assert_eq(|_|"wrong length after pop (boxed)", 0, v.get_size);;
+        assert_eq(|_|"wrong length after pop (boxed)", 0, v.@size);;
         assert(|_|"wrong reserved length after pop (boxed)", v.get_capacity >= 100);;
     
         pure()
@@ -2168,17 +2168,17 @@ main = (
 
 heap_sort : ((a, a) -> Bool) -> Array a -> Array a;
 heap_sort = |less_than, arr| (
-    arr._heap_sort_by_ranged(less_than, 0, arr.get_size)
+    arr._heap_sort_by_ranged(less_than, 0, arr.@size)
 );
 
 insertion_sort : ((a, a) -> Bool) -> Array a -> Array a;
 insertion_sort = |less_than, arr| (
-    arr._insertion_sort_by_ranged(less_than, 0, arr.get_size)
+    arr._insertion_sort_by_ranged(less_than, 0, arr.@size)
 );
 
 introsort_small_depth : ((a, a) -> Bool) -> Array a -> Array a;
 introsort_small_depth = |less_than, arr| (
-    arr._introsort_by_internal(less_than, 0, arr.get_size, 2_U8)
+    arr._introsort_by_internal(less_than, 0, arr.@size, 2_U8)
 );
 
 comparator : [a : LessThan] (a, a) -> Bool;
@@ -2208,7 +2208,7 @@ impl BoxedI64 : LessThanOrEq {
 is_increasing : [a : LessThanOrEq] Array a -> Bool;
 is_increasing = |arr| (
     if arr.is_empty { true };
-    range(0, arr.get_size - 1).loop_iter(true, |i, _|
+    range(0, arr.@size - 1).loop_iter(true, |i, _|
         let lhs = arr.@(i);
         let rhs = arr.@(i + 1);
         if lhs <= rhs {
@@ -3308,7 +3308,7 @@ pub fn test117() {
         main = (
             let str = String::_unsafe_from_c_str([65_U8, 66_U8, 67_U8, 0_U8, 0_U8]);
             assert_eq(|_|"case 1", str, "ABC");;
-            assert_eq(|_|"case 2", str.get_size, 3);;
+            assert_eq(|_|"case 2", str.@size, 3);;
             pure()
         );
     "#;
@@ -3541,7 +3541,7 @@ pub fn test_array_act_1() {
             let arr = [MyBox { x : 0 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act0);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
-            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
+            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.@size, 2);;
             assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);;
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);;
 
@@ -3556,7 +3556,7 @@ pub fn test_array_act_1() {
             let arr = [MyBox { x : 0 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act1);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
-            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
+            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.@size, 2);;
             assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);;
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);;
 
@@ -3597,7 +3597,7 @@ pub fn test_array_act_2() {
             let arr = [MyBox { x : 0 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act01);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
-            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
+            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.@size, 2);;
             assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);;
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);;
             assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);;
@@ -3614,7 +3614,7 @@ pub fn test_array_act_2() {
             let arr = [MyBox { x : 0 }, MyBox { x : 3 }];
             let opt_arr = arr.act(0, act1);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
-            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
+            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.@size, 2);;
             assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0).@x, 5);;
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1).@x, 3);;
             assert_eq(|_|"Case " + case + "-e", arr.@(0).@x + arr.@(1).@x, 3);;
@@ -3660,7 +3660,7 @@ pub fn test_array_act_3() {
             let arr = [0, 3];
             let opt_arr = arr.act(0, act2);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
-            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
+            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.@size, 2);;
             assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0), 5);;
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1), 3);;
 
@@ -3675,7 +3675,7 @@ pub fn test_array_act_3() {
             let arr = [0, 3];
             let opt_arr = arr.act(0, act2);
             assert(|_|"Case " + case + "-a", opt_arr.is_some);;
-            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.get_size, 2);;
+            assert_eq(|_|"Case " + case + "-b", opt_arr.as_some.@size, 2);;
             assert_eq(|_|"Case " + case + "-c", opt_arr.as_some.@(0), 5);;
             assert_eq(|_|"Case " + case + "-d", opt_arr.as_some.@(1), 3);;
             assert_eq(|_|"Case " + case + "-e", arr.@(0) + arr.@(1), 3);;
@@ -3891,7 +3891,7 @@ pub fn test_trait_alias() {
         my_sum : [a : MyAdditive] Array a -> a;
         my_sum = |arr| (
             loop((0, Zero::zero), |(i, sum)| (
-                if i == arr.get_size { break $ sum };
+                if i == arr.@size { break $ sum };
                 continue $ (i+1, sum + arr.@(i))
             ))
         );
@@ -4255,7 +4255,7 @@ pub fn test_array_get_sub() {
     main = (
         // Unboxed case
         let arr = [0, 1, 2, 3, 4];
-        let n = arr.get_size;
+        let n = arr.@size;
         assert_eq(|_|"1", arr.get_sub(2, 4), [2, 3]);;
         assert_eq(|_|"2", arr.get_sub(0, 0), []);;
         assert_eq(|_|"3", arr.get_sub(3, n+1), [3, 4]);;
@@ -4267,7 +4267,7 @@ pub fn test_array_get_sub() {
     
         // Boxed case
         let arr = [[0], [1], [2], [3], [4]];
-        let n = arr.get_size;
+        let n = arr.@size;
         assert_eq(|_|"7", arr.get_sub(2, 4), [[2], [3]]);;
         assert_eq(|_|"8", arr.get_sub(0, 0), []);;
         assert_eq(|_|"9", arr.get_sub(3, n+1), [[3], [4]]);;
@@ -4809,8 +4809,8 @@ pub fn test_result_eq() {
         let ress = [ok1, ok2, err1, err2];
 
         let indices = do {
-            let i = *Iterator::range(0, ress.get_size).to_dyn;
-            let j = *Iterator::range(0, ress.get_size).to_dyn;
+            let i = *Iterator::range(0, ress.@size).to_dyn;
+            let j = *Iterator::range(0, ress.@size).to_dyn;
             pure $ (i, j)
         };
         indices.loop_iter_m((), |(i, j), _| (
@@ -4844,8 +4844,8 @@ pub fn test_array_less_than_and_less_than_or_eq() {
         let arrs = [arr1, arr2, arr3, arr4, arr5];
 
         let indices = do {
-            let i = *Iterator::range(0, arrs.get_size).to_dyn;
-            let j = *Iterator::range(0, arrs.get_size).to_dyn;
+            let i = *Iterator::range(0, arrs.@size).to_dyn;
+            let j = *Iterator::range(0, arrs.@size).to_dyn;
             pure $ (i, j)
         };
         indices.loop_iter_m((), |(i, j), _| (
@@ -5721,7 +5721,7 @@ pub fn test_iterator_filtermap() {
 }
 
 #[test]
-pub fn test_get_size() {
+pub fn test_iterator_get_size() {
     let source = r##"
     module Main;
     
@@ -6501,7 +6501,7 @@ pub fn test_struct_act() {
         main = (
             pure();; // To make the `s` defined below not global and therefore unique.
 
-            let actor_array = |x| let x = x.assert_unique(|_|""); if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
+            let actor_array = |x| let x = x.assert_unique(|_|""); if x.Array::@size > 0 { Option::some(x) } else { Option::none() };
             let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
 
             // BB case 1
@@ -6582,7 +6582,7 @@ pub fn test_struct_act2() {
             let actor_bool = |x| if x { Option::some(x) } else { Option::none() };
 
             // GB case 1
-            let actor_array = |x| if x.Array::get_size > 0 { Option::some(x) } else { Option::none() };
+            let actor_array = |x| if x.Array::@size > 0 { Option::some(x) } else { Option::none() };
             let s = GB { x : [true], y : [1, 2], z : 3 };
             assert_eq(|_|"", s.act_x(actor_array), Option::some(GB { x : [true], y : [1, 2], z : 3 }));;
 
@@ -6591,7 +6591,7 @@ pub fn test_struct_act2() {
             assert_eq(|_|"", s.act_x(actor_array), Option::none());;
 
             // Case where BB is shared.
-            let actor_array = |x| if x.Array::get_size > 0 { Option::some(x.set(0, false)) } else { Option::none() };
+            let actor_array = |x| if x.Array::@size > 0 { Option::some(x.set(0, false)) } else { Option::none() };
             let s = BB { x : [true], y : [1, 2], z : 3 };
             assert_eq(|_|"", s.act_x(actor_array), Option::some(BB { x : [false], y : [1, 2], z : 3 }));;
             assert_eq(|_|"", s, BB { x : [true], y : [1, 2], z : 3 });;
@@ -8686,7 +8686,7 @@ module Main;
 
 main : IO ();
 main = (
-    assert_eq(|_|"", [].get_size, 0)
+    assert_eq(|_|"", [].@size, 0)
 );
     "##;
     test_source_fail(
@@ -9136,7 +9136,7 @@ create_array : Array I64 = (
 main : IO () = (
     let sum = range(0, 100).fold(0, |_, sum| 
         let arr = create_array;
-        sum + arr.get_size
+        sum + arr.@size
     );
     assert_eq(|_|"", sum, 5*100);;
 
@@ -9777,8 +9777,8 @@ module Main;
 main: IO ();
 main = (
     let s = "Hello, World!";
-    let s = range(0, s.get_size).fold(s, |i, s|
-        let j = (i - 1 + s.get_size) % s.get_size;
+    let s = range(0, s.@size).fold(s, |i, s|
+        let j = (i - 1 + s.@size) % s.@size;
         s[i].iset(s[j].iget)
     );
     s.println;;

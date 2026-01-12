@@ -27,9 +27,9 @@ namespace CSV {
     serialize : CSV -> String;
     serialize = |csv| (
         if csv.is_empty { "" };
-        let header_n = csv.@(0).get_size;
+        let header_n = csv.@(0).@size;
         let csv = csv.map(|row| 
-            if row.get_size > header_n {
+            if row.@size > header_n {
                 undefined("error: Row has more columns than header: " + row.to_string)
             };
             row.resize(header_n, "")
@@ -42,7 +42,7 @@ namespace CSV {
         if csv.is_empty {
             [[name]]
         } else {
-            range(0, csv.get_size).fold(csv, |i, csv|
+            range(0, csv.@size).fold(csv, |i, csv|
                 csv.mod(i, |row|
                     if i == 0 {
                         row.push_back(name)
@@ -60,13 +60,13 @@ namespace CSV {
         let csv = if csv.is_empty { [[col]] } else { csv };
         let col_idx = csv.@(0).find_by(|x| x == col);
         let (csv, col_idx) = if col_idx.is_none {
-            let col_idx = csv.@(0).get_size;
+            let col_idx = csv.@(0).@size;
             let csv = csv.add_column(col);
             (csv, col_idx)
         } else {
             (csv, col_idx.as_some)
         };
-        if row < 0 || row >= csv.get_size {
+        if row < 0 || row >= csv.@size {
             undefined("error: Row index out of bounds: " + row.to_string)
         };
         csv.mod(row, set(col_idx, value))
@@ -77,7 +77,7 @@ namespace CSV {
         if csv.is_empty {
             undefined("error: Cannot add row to empty CSV")
         };
-        let header_n = csv.@(0).get_size;
+        let header_n = csv.@(0).@size;
         csv.push_back(Array::fill(header_n, ""))
     );
 }
@@ -101,11 +101,11 @@ main = (
 
     let arg_ss = *get_args;
     let args = loop((1, Args::default), |(i, args)|
-        if i >= arg_ss.get_size { break $ args };
+        if i >= arg_ss.@size { break $ args };
         if arg_ss.@(i) == "--no-save" {
             continue $ (i + 1, args.set_no_save(true))
         } else if arg_ss.@(i) == "--llvm-passes-file" {
-            if i + 1 >= arg_ss.get_size {
+            if i + 1 >= arg_ss.@size {
                 undefined("error: --llvm-passes-file requires a file path argument")
             };
             let llvm_passes_file = arg_ss.@(i + 1);
@@ -143,7 +143,7 @@ main = (
 
     // Add the new row to the log.
     let log = log.add_row;
-    let log = log.set(_COMMIT_HASH, log.get_size - 1, commit_hash);
+    let log = log.set(_COMMIT_HASH, log.@size - 1, commit_hash);
 
     // See the cases directory.
     ez_cd(config, _CASES_PATH);;
@@ -151,7 +151,7 @@ main = (
     let dirs = dirs.split("\n").filter_map(|line|
         let line = line.strip_spaces;
         if line == "" || line == "." { none() };
-        let line = line.get_sub(2, line.get_size); // Remove "./"
+        let line = line.get_sub(2, line.@size); // Remove "./"
         if line.get_bytes.@(0) == '_' { none() };
         some(line)
     );
@@ -179,8 +179,8 @@ main = (
         let inst = case_name + "-inst";
         let mem = case_name + "-mem";
         // Add to the log.
-        let log = log.set(inst, log.get_size - 1, bench.@(0));
-        let log = log.set(mem, log.get_size - 1, bench.@(1));
+        let log = log.set(inst, log.@size - 1, bench.@(0));
+        let log = log.set(mem, log.@size - 1, bench.@(1));
         // Change back to the parent directory.
         ez_cd(config, "..");;
         log.pure
@@ -195,7 +195,7 @@ main = (
     );;
 
     // Print the latest log.
-    log.@(log.get_size - 1).to_iter.join(",").println;;
+    log.@(log.@size - 1).to_iter.join(",").println;;
     
     pure()
 );

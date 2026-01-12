@@ -31,7 +31,7 @@ calc_fib = |n| (
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ arr
         } else {
             let x = arr.@(idx-1);

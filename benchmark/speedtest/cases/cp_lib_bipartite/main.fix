@@ -19,7 +19,7 @@ main = (
         (bg, rng)
     ));
     let (matching, time) = consumed_time_while_lazy(|_| bg.maximize_flow.get_max_matching);
-    assert_eq(|_|"test_speed", matching.to_iter.filter(|v|v).get_size, 5466);;
+    assert_eq(|_|"test_speed", matching.to_iter.filter(|v|v).@size, 5466);;
     println $ "[CPLib.Bipartite.Test] BipartiteGraph({}, {}): {}".populate([n.to_string, m.to_string, time.to_string]);;
 
     pure()

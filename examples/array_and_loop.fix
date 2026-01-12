@@ -15,7 +15,7 @@ main = (
     // continue : s -> LoopState s r -- Takes the next state and continues the loop.
     // break : r -> LoopState s r -- Breaks the loop and returns the given value.
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ arr
         } else {
             // To get a value of an array, use `@ : I64 -> Array a -> a`.

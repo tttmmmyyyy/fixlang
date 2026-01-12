@@ -211,8 +211,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_between_integral_function(from.clone(), to.clone(), None),
                 None,
                 Some(format!(
-                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
-                    to_name, upper_camel_to_lower_snake(&to_name),
+                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
+                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -243,8 +243,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_between_integral_function(from.clone(), to_type_fix, Some(to_type_c)),
                 None,
                 Some(format!(
-                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
-                    to_name_c, upper_camel_to_lower_snake(&to_name_c),
+                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
+                    from_name, to_name_c, to_name_c, upper_camel_to_lower_snake(&to_name_c),
                     from_name, to_name_c
                 )),
             ));
@@ -261,8 +261,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_between_float_function(from.clone(), to.clone(), None),
                 None,
                 Some(format!(
-                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
-                    to_name, upper_camel_to_lower_snake(&to_name),
+                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
+                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -293,8 +293,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_between_float_function(from.clone(), to_type_fix.clone(), Some(to_type_c)),
                 None,
                 Some(format!(
-                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
-                    to_name, upper_camel_to_lower_snake(&to_name),
+                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
+                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -311,8 +311,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_int_to_float_function(from.clone(), to.clone()),
                 None,
                 Some(format!(
-                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
-                    to_name, upper_camel_to_lower_snake(&to_name),
+                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
+                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -336,8 +336,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_int_to_float_function(from.clone(), to_type),
                 None,
                 Some(format!(
-                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
-                    to_name, upper_camel_to_lower_snake(&to_name),
+                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
+                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -354,8 +354,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_float_to_int_function(from.clone(), to.clone()),
                 None,
                 Some(format!(
-                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
-                    to_name, upper_camel_to_lower_snake(&to_name),
+                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
+                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));
@@ -379,8 +379,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 cast_float_to_int_function(from.clone(), to_type),
                 None,
                 Some(format!(
-                    "(Deprecated) Use instead `To{}::{}`\n\nCasts a value of `{}` into a value of `{}`.",
-                    to_name, upper_camel_to_lower_snake(&to_name),
+                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
+                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
                     from_name, to_name
                 )),
             ));

@@ -142,7 +142,7 @@ calc_fib = |n| (
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ arr
         } else {
             let x = arr.@(idx-1);
@@ -432,7 +432,7 @@ calc_fib = |n| (
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ arr
         } else {
             let x = arr.@(idx-1);
@@ -454,7 +454,7 @@ let arr = Array::fill(n, 0);
 let arr = arr.set(0, 1);
 let arr = arr.set(1, 1);
 let arr = loop((2, arr), |(idx, arr)|
-    if idx == arr.get_size {
+    if idx == arr.@size {
         break $ arr
     } else {
         let x = arr.@(idx-1);
@@ -477,7 +477,7 @@ arr;
 
 フィボナッチ数列のプログラムでは、以下が演算子`.`の使用例です。
 
-- `arr.get_size`: `get_size`は型`Array a -> I64`の関数で、配列の長さを返します。他の言語のように`arr.get_size()`と書いてはいけません。単に`arr.get_size`と書くだけで、`get_size(arr)`と同じ意味になります。
+- `arr.@size`: `@size`は型`Array a -> I64`の関数で、配列の長さを返します。他の言語のように`arr.@size()`と書いてはいけません。単に`arr.@size`と書くだけで、`@size(arr)`と同じ意味になります。
 - `arr.set(0, 1)`: `set`は型`I64 -> a -> Array a -> Array a`の関数で、配列の要素を指定された値に更新します。
 - `arr.@(idx-1)`: `@`は型`I64 -> Array a -> a`の関数で、指定されたインデックスの要素を返します。
 
@@ -555,7 +555,7 @@ swap = |(fst, snd)| (snd, fst);
 
 ```
 loop((2, arr), |(idx, arr)|
-    if idx == arr.get_size {
+    if idx == arr.@size {
         break $ arr
     } else {
         let x = arr.@(idx-1);
@@ -570,7 +570,7 @@ loop((2, arr), |(idx, arr)|
 ループ本体はタプル型の状態`(idx, arr)`を受け取ります。
 ここで、`idx`は次に更新すべき配列のインデックスであり、`arr`はインデックス`0`から`idx-1`までが計算済みになっているフィボナッチ数列の配列です。
 
-`idx`が`arr.get_size`に達した場合、`break $ arr`を返してループを終了します。
+`idx`が`arr.@size`に達した場合、`break $ arr`を返してループを終了します。
 そうでない場合は、`idx`番目のフィボナッチ数列の値を計算し、それを`arr`に格納してから、`continue $ (idx+1, arr)`を返してループを継続します。
 
 ## ユニオン
@@ -800,7 +800,7 @@ calc_fib = |n| (
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ arr
         } else {
             let x = arr.@(idx-1);
@@ -1507,7 +1507,7 @@ impl [a : Eq, b : Eq] Pair a b : Eq {
 // 型シグネチャの前の`[]`括弧内で型変数に制約を指定できます。
 search : [a : Eq] a -> Array a -> I64;
 search = |elem, arr| loop(0, |idx|
-    if idx == arr.get_size { break $ -1 };
+    if idx == arr.@size { break $ -1 };
     if arr.@(idx) == elem { break $ idx };
     continue $ (idx + 1)
 );
@@ -1525,7 +1525,7 @@ impl Array : MyFunctor {
     mymap : (a -> b) -> Array a -> Array b;
     // また、メンバの型シグネチャで定義された型変数（`a`や`b`など）は、メンバの実装内の型注釈で使用できます。
     mymap = |f : a -> b, arr : Array a| (
-        Array::from_map(arr.get_size, |idx| f(arr.@(idx)))
+        Array::from_map(arr.@size, |idx| f(arr.@(idx)))
     );
 }
 

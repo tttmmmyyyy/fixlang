@@ -3,7 +3,7 @@ module Main;
 sum_by_loop_iter : Array I64 -> I64;
 sum_by_loop_iter = |arr| (
     arr.to_iter.loop_iter(0, |x, sum| 
-        if x == arr.get_size { break $ sum };
+        if x == arr.@size { break $ sum };
         continue $ x + sum
     )
 );

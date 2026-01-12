@@ -141,7 +141,7 @@ calc_fib = |n| (
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ arr
         } else {
             let x = arr.@(idx-1);
@@ -406,7 +406,7 @@ calc_fib = |n| (
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ arr
         } else {
             let x = arr.@(idx-1);
@@ -427,7 +427,7 @@ let arr = Array::fill(n, 0);
 let arr = arr.set(0, 1);
 let arr = arr.set(1, 1);
 let arr = loop((2, arr), |(idx, arr)|
-    if idx == arr.get_size {
+    if idx == arr.@size {
         break $ arr
     } else {
         let x = arr.@(idx-1);
@@ -449,7 +449,7 @@ The precedence of the `.` operator is lower than that of function application us
 
 In the Fibonacci program, here are examples of the `.` operator's usage:
 
-* `arr.get_size`: `get_size` is a function of type `Array a -> I64` that returns the length of an array. You should not write `arr.get_size()` like in other languages. Simply writing `arr.get_size` has the same meaning as `get_size(arr)`.
+* `arr.@size`: `@size` is a function of type `Array a -> I64` that returns the length of an array. You should not write `arr.@size()` like in other languages. Simply writing `arr.@size` has the same meaning as `@size(arr)`.
 * `arr.set(0, 1)`: `set` is a function of type `I64 -> a -> Array a -> Array a` that updates an array's element with a specified value.
 * `arr.@(idx-1)`: `@` is a function of type `I64 -> Array a -> a` that returns the element at a specified index.
 
@@ -514,7 +514,7 @@ In the Fibonacci program, the `loop` function is used in the following expressio
 
 ```
 loop((2, arr), |(idx, arr)|
-    if idx == arr.get_size {
+    if idx == arr.@size {
         break $ arr
     } else {
         let x = arr.@(idx-1);
@@ -527,7 +527,7 @@ loop((2, arr), |(idx, arr)|
 
 The initial state of this loop is `(2, arr)`. The loop body accepts a state of tuple type `(idx, arr)`. Here, `idx` is the index of the array to be updated next, and `arr` is the array of Fibonacci numbers where indices from `0` to `idx-1` have already been computed.
 
-If `idx` reaches `arr.get_size`, the loop terminates by returning `break $arr`. Otherwise, it computes the Fibonacci number at index `idx`, stores it in `arr`, and then returns `continue$ (idx+1, arr)` to continue the loop.
+If `idx` reaches `arr.@size`, the loop terminates by returning `break $arr`. Otherwise, it computes the Fibonacci number at index `idx`, stores it in `arr`, and then returns `continue$ (idx+1, arr)` to continue the loop.
 
 ## Unions
 
@@ -746,7 +746,7 @@ calc_fib = |n| (
     let arr = arr.set(0, 1);
     let arr = arr.set(1, 1);
     let arr = loop((2, arr), |(idx, arr)|
-        if idx == arr.get_size {
+        if idx == arr.@size {
             break $ arr
         } else {
             let x = arr.@(idx-1);
@@ -1436,7 +1436,7 @@ impl [a : Eq, b : Eq] Pair a b : Eq {
 // You can specify constraints on type variables in the `[]` bracket before a type signature.
 search : [a : Eq] a -> Array a -> I64;
 search = |elem, arr| loop(0, |idx|
-    if idx == arr.get_size { break $ -1 };
+    if idx == arr.@size { break $ -1 };
     if arr.@(idx) == elem { break $ idx };
     continue $ (idx + 1)
 );
@@ -1454,7 +1454,7 @@ impl Array : MyFunctor {
     mymap : (a -> b) -> Array a -> Array b;
     // Also, type variables (like `a` and `b`) defined in the member's type signature can be used in type annotations in the member's implementation.
     mymap = |f : a -> b, arr : Array a| (
-        Array::from_map(arr.get_size, |idx| f(arr.@(idx)))
+        Array::from_map(arr.@size, |idx| f(arr.@(idx)))
     );
 }
 

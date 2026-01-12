@@ -108,7 +108,7 @@ namespace Array {
     // * `array` - The array to get the element from.
     @ : I64 -> Array a -> a;
     @ = |idx, arr| (
-        let idx = _check_range(idx, arr.get_size);
+        let idx = _check_range(idx, arr.@size);
         arr._unsafe_get_bounds_unchecked(idx)
     );
 
@@ -158,7 +158,7 @@ namespace Array {
     // * `array` - The array to modify.
     mod : I64 -> (a -> a) -> Array a -> Array a;
     mod = |idx, fun, arr| (
-        let idx = _check_range(idx, arr.get_size);
+        let idx = _check_range(idx, arr.@size);
         let (arr, elm) = arr._unsafe_get_linear_bounds_unchecked_unretained_forceunique(idx);
         let elm = fun(elm);
         arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm)
@@ -207,7 +207,7 @@ namespace Array {
     // * `array` - The array.
     act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     act = |idx, fun, arr| (
-        let idx = _check_range(idx, arr.get_size);
+        let idx = _check_range(idx, arr.@size);
         arr._unsafe_act_bounds_unchecked(idx, fun)
     );
 
@@ -241,8 +241,8 @@ namespace Array {
     // * `first` - The array to which `second` is appended.
     append : Array a -> Array a -> Array a;
     append = |v2, v1| (
-        let v1_len = v1.get_size;
-        let v2_len = v2.get_size;
+        let v1_len = v1.@size;
+        let v2_len = v2.@size;
 
         // Reserve v1's buffer and force uniqueness.        
         let len = v1_len + v2_len;
@@ -271,7 +271,7 @@ namespace Array {
     // * `array` - The array to be searched.
     find_by : (a -> Bool) -> Array a -> Option I64;
     find_by = |cond, arr| (
-        let len = arr.get_size;
+        let len = arr.@size;
         loop(0, |idx| (
             if idx == len { break $ Option::none $ () };
             if cond(arr.@(idx)) { break $ Option::some $ idx };
@@ -324,14 +324,14 @@ namespace Array {
     // * `arr` - The array.
     get_last : Array a -> Option a;
     get_last = |arr| (
-        let len = arr.get_size;
+        let len = arr.@size;
         if len == 0 { Option::none() };
         Option::some $ arr.@(len - 1)
     );
 
     // `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`.
     // 
-    // `s` and `e` are clamped to the range `[0, arr.get_size]`.
+    // `s` and `e` are clamped to the range `[0, arr.@size]`.
     // 
     // # Parameters
     // 
@@ -339,7 +339,7 @@ namespace Array {
     // * `end` - The end index of the subarray.
     // * `array` - The array to be sliced.
     get_sub : I64 -> I64 -> Array a -> Array a;
-    get_sub = |s, e, arr| arr._get_sub_size_with_length_and_additional_capacity(arr.get_size, 0, s, e);
+    get_sub = |s, e, arr| arr._get_sub_size_with_length_and_additional_capacity(arr.@size, 0, s, e);
 
     // Gets whether the array is empty.
     // 
@@ -347,7 +347,7 @@ namespace Array {
     // 
     // * `array` - The array to be checked.
     is_empty : Array a -> Bool;
-    is_empty = |arr| ( arr.get_size == 0 );
+    is_empty = |arr| ( arr.@size == 0 );
 
     // Pops an element at the back of an array.
     // If the array is empty, this function does nothing.
@@ -357,7 +357,7 @@ namespace Array {
     // * `array` - The array to be popped.
     pop_back : Array a -> Array a;
     pop_back = |arr| (
-        let len = arr.get_size;
+        let len = arr.@size;
         if len == 0 { arr };
         arr._unsafe_force_unique._unsafe_set_size(len-1)._unsafe_get_linear_bounds_unchecked_unretained(len-1).@0
     );
@@ -370,7 +370,7 @@ namespace Array {
     // * `array` - The array to which the element is pushed.
     push_back : a -> Array a -> Array a;
     push_back = |e, arr| (
-        let len = arr.get_size;
+        let len = arr.@size;
         let arr = if arr.get_capacity < len + 1 {
             arr.reserve(2*(len + 1))
         } else {
@@ -388,7 +388,7 @@ namespace Array {
     reserve : I64 -> Array a -> Array a;
     reserve = |cap, arr| (
         if cap <= arr.get_capacity { arr };
-        let len = arr.get_size;
+        let len = arr.@size;
         let new = Array::empty(cap)._unsafe_set_size(len);
         loop((0, new), |(idx, new)|(
             if idx == len {
@@ -419,8 +419,8 @@ namespace Array {
     // - `arr`: An array of elements to be sorted.
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, arr| (
-        let depth = loop((arr.get_size, 0_U8), |(n, depth)| if n == 0 { break $ depth } else { continue $ (n/2, depth+1_U8) } );
-        arr._unsafe_force_unique._introsort_by_internal(less_than, 0, arr.get_size, depth)
+        let depth = loop((arr.@size, 0_U8), |(n, depth)| if n == 0 { break $ depth } else { continue $ (n/2, depth+1_U8) } );
+        arr._unsafe_force_unique._introsort_by_internal(less_than, 0, arr.@size, depth)
     );
 
     // Reverse an array.
@@ -429,9 +429,9 @@ namespace Array {
     // - `array` - The array to be reversed.
     reverse : Array a -> Array a;
     reverse = |arr| (
-        if arr.get_size <= 1 { arr };
+        if arr.@size <= 1 { arr };
         let arr = arr._unsafe_force_unique;
-        let n = arr.get_size;
+        let n = arr.@size;
         range(0, n/2).fold(arr, |i, arr| arr._unsafe_swap_bounds_uniqueness_unchecked(i, n - 1 - i))
     );
 
@@ -587,8 +587,8 @@ namespace Array {
     // * `array` - The array to be sorted.
     sort_stable_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_stable_by = |less_than, vec| (
-        let buffer = Array::empty(vec.get_size);
-        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, 0, vec.get_size, less_than);
+        let buffer = Array::empty(vec.@size);
+        let (vec, buffer) = vec._mergesort_range_using_buffer(buffer, 0, vec.@size, less_than);
         vec
     );
 
@@ -655,7 +655,7 @@ namespace Array {
 
     // Truncates an array, keeping the given number of first elements.
     // 
-    // `truncante(len, arr)` does nothing if `len >= arr.get_size`.
+    // `truncante(len, arr)` does nothing if `len >= arr.@size`.
     // 
     // # Parameters
     // 
@@ -665,7 +665,7 @@ namespace Array {
     truncate = |length, vec| (
         if length < 0 { undefined("[Std::Array::truncate] Negative size is not allowed.") };
         loop(vec, |vec|(
-            if length >= vec.get_size { break $ vec };
+            if length >= vec.@size { break $ vec };
             continue $ vec.pop_back
         ))
     );
@@ -679,8 +679,8 @@ namespace Array {
     // * `array` - The array to be resized.
     resize : I64 -> a -> Array a -> Array a;
     resize = |n, x, xs| (
-        if n <= xs.get_size { xs.truncate(n) };
-        let m = xs.get_size;
+        if n <= xs.@size { xs.truncate(n) };
+        let m = xs.@size;
         let xs = xs.reserve(n)._unsafe_force_unique._unsafe_set_size(n);
         range(m, n).fold(xs, |i, xs| xs._unsafe_set_bounds_uniqueness_unchecked_unreleased(i, x) )
     );
@@ -689,7 +689,7 @@ namespace Array {
     // 
     // When we put an order on `Bool` as `false < true`, `pred` must be monotonically decreasing on `arr`.
     // 
-    // The returned value x satisfies 0 <= x <= `arr.get_size`. If `arr` is empty, it returns 0.
+    // The returned value x satisfies 0 <= x <= `arr.@size`. If `arr` is empty, it returns 0.
     // 
     // # Parameters
     // 
@@ -697,7 +697,7 @@ namespace Array {
     // * `array` - The array to be searched.
     search_partition_point : (a -> Bool) -> Array a -> I64;
     search_partition_point = |pred, arr| (
-        let n = arr.get_size;
+        let n = arr.@size;
         if n == 0 { 0 };
         if !pred(arr.@(0)) { 0 };
         loop((0, n), |(left, right)|
@@ -720,7 +720,7 @@ namespace Array {
     dedup : [a : Eq] Array a -> Array a;
     dedup = |arr| (
         if arr.is_empty { arr };
-        let (arr, i, _) = range(1, arr.get_size).fold((arr, 1, arr.@(0)), |j, (arr, i, prev)|
+        let (arr, i, _) = range(1, arr.@size).fold((arr, 1, arr.@(0)), |j, (arr, i, prev)|
             let now = arr.@(j);
             if now != prev {
                 let arr = arr.set(i, now);
@@ -745,8 +745,8 @@ impl Array a : Add {
 
 impl [a : Eq] Array a : Eq {
     eq = |lhs, rhs| (
-        if lhs.get_size != rhs.get_size { false };
-        let len = lhs.get_size;
+        if lhs.@size != rhs.@size { false };
+        let len = lhs.@size;
         loop(0, |idx| (
             if idx == len { break $ true };
             if lhs.@(idx) != rhs.@(idx) { break $ false };
@@ -761,9 +761,9 @@ impl [a : Eq] Array a : Eq {
 impl [a : Eq, a : LessThan] Array a : LessThan {
     less_than = |lhs, rhs| (
         loop(0, |i| (
-            if i == lhs.get_size && i == rhs.get_size { break $ false };
-            if i == lhs.get_size { break $ true };
-            if i == rhs.get_size { break $ false };
+            if i == lhs.@size && i == rhs.@size { break $ false };
+            if i == lhs.@size { break $ true };
+            if i == rhs.@size { break $ false };
             let l = lhs.@(i);
             let r = rhs.@(i);
             if l != r { break $ l < r };
@@ -778,9 +778,9 @@ impl [a : Eq, a : LessThan] Array a : LessThan {
 impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq {
     less_than_or_eq = |lhs, rhs| (
         loop(0, |i| (
-            if i == lhs.get_size && i == rhs.get_size { break $ true };
-            if i == lhs.get_size { break $ true };
-            if i == rhs.get_size { break $ false };
+            if i == lhs.@size && i == rhs.@size { break $ true };
+            if i == lhs.@size { break $ true };
+            if i == rhs.@size { break $ false };
             let l = lhs.@(i);
             let r = rhs.@(i);
             if l != r { break $ l <= r };
@@ -791,7 +791,7 @@ impl [a : Eq, a : LessThanOrEq] Array a : LessThanOrEq {
 
 impl Array : Functor {
     map = |f, arr| (
-        let n = arr.get_size;
+        let n = arr.@size;
         let res = Array::empty(n);
         loop((0, res), |(i, res)| (
             if i == n { break $ res };
@@ -804,12 +804,12 @@ impl Array : Functor {
 impl Array : Monad {
     pure = |e| [e];
     bind = |f, arr| (
-        let size = arr.get_size;
+        let size = arr.@size;
         let arr_arr = Array::empty(size);
         let (arr_arr, count) = loop((0, arr_arr, 0), |(idx, arr_arr, count)| (
             if idx == size { break $ (arr_arr, count) };
             let inner = f $ arr.@(idx);
-            let count = count + inner.get_size;
+            let count = count + inner.@size;
             let arr_arr = arr_arr.push_back(inner);
             continue $ (idx + 1, arr_arr, count)
         ));
@@ -818,7 +818,7 @@ impl Array : Monad {
             if i == size { break $ ret };
             let inner = arr_arr.@(i);
             continue $ loop((0, ret), |(j, ret)|(
-                if j == inner.get_size {
+                if j == inner.@size {
                     break $ (i + 1, ret)
                 } else {
                     let ret = ret.push_back(inner.@(j));
@@ -1427,7 +1427,7 @@ namespace IO {
             if buf.is_empty {
                 break_m $ (bufs, len)
             } else {
-                continue_m $ (bufs.push_back(buf), len + buf.get_size)
+                continue_m $ (bufs.push_back(buf), len + buf.@size)
             }
         ));
         // Concatenate all buffers.
@@ -1508,7 +1508,7 @@ namespace IO {
     write_bytes : IOHandle -> Array U8 -> IOFail ();
     write_bytes = |handle, array| IOFail::from_io_result $ do {
         let file_ptr = *handle.get_file_ptr;
-        let arr_size = array.get_size;
+        let arr_size = array.@size;
         array.borrow_boxed_io(|array_buf|
             let written = *FFI_CALL_IO[I64 fwrite(Ptr, I64, I64, Ptr), array_buf, 1, arr_size, file_ptr];
             if written < arr_size { pure $ Result::err $ "`Std::IO::write_bytes` failed!: some error occurred in `fwrite`." };
@@ -1878,7 +1878,7 @@ namespace Iterator {
     impl ArrayIterator a : Iterator {
         type Item (ArrayIterator a) = a;
         advance = |ArrayIterator { arr : arr, idx : idx }| (
-            if idx == arr.get_size { none() };
+            if idx == arr.@size { none() };
             let v = arr.@(idx);
             some((ArrayIterator { arr: arr, idx: idx + 1 }, v))
         );
@@ -2345,7 +2345,7 @@ namespace Iterator {
     reverse : [i : Iterator, Item i = a] i -> ReverseIterator i a;
     reverse = |iter| (
         let arr = iter.to_array;
-        let n = arr.get_size;
+        let n = arr.@size;
         ReverseIterator { idx: n - 1, arr: arr }
     );
 
@@ -2635,7 +2635,7 @@ namespace PunchedArray {
     _plug_in : a -> PunchedArray a -> Array a;
     _plug_in = |elm, parr| (
         let PunchedArray { _arr : arr, _idx : idx } = parr;
-        let size = arr.get_size + 1;
+        let size = arr.@size + 1;
 
         // Increment the size.
         let arr = arr._unsafe_force_unique._unsafe_set_size(size);
@@ -2663,7 +2663,7 @@ namespace PunchedArray {
     _unsafe_punch_bounds_uniqueness_unchecked : I64 -> Array a -> (PunchedArray a, a);
     _unsafe_punch_bounds_uniqueness_unchecked = |idx, arr| (
         // Bounds check.
-        let size = arr.get_size;
+        let size = arr.@size;
 
         // Decrement the size.
         let (arr, elm) = arr._unsafe_set_size(size - 1)._unsafe_get_linear_bounds_unchecked_unretained(idx);
@@ -2825,7 +2825,7 @@ namespace String {
     // * `iter_strs` - The iterator of strings.
     concat_iter : [strs : Iterator, Item strs = String] strs -> String;
     concat_iter = |iter| (
-        let len = iter.map(get_size).fold(0, add);
+        let len = iter.map(@size).fold(0, add);
         let data_len = len + 1; // Add space for null terminator.
         let data = "".@_data.reserve(data_len);
         let data = iter.fold(data, |str, data| data.pop_back.append(str.@_data));
@@ -2843,7 +2843,7 @@ namespace String {
     // `str.find(token, start_idx)` finds the index where `token` firstly appears in `str` starting from `start_idx`.
     // 
     // Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
-    // `str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
+    // `str.find("", start_idx)` with `start_idx >= str.@size` returns `str.@size`, not `start_idx`.
     //
     // # Parameters
     //
@@ -2853,7 +2853,7 @@ namespace String {
     find : String -> I64 -> String -> Option I64;
     find = |tok, start, str| (
         str.borrow_c_str(|c_str|
-            let start = min(start, str.get_size);
+            let start = min(start, str.@size);
             let pos = tok.borrow_c_str(|tok_c_str| FFI_CALL[Ptr strstr(Ptr, Ptr), c_str.add_offset(start), tok_c_str]);
             if pos == nullptr {
                 Option::none()
@@ -2869,8 +2869,8 @@ namespace String {
     // * `prefix` - The prefix to be checked.
     // * `str` - The string
     starts_with : String -> String -> Bool = |prefix, str| (
-        let prefix_len = prefix.get_size;
-        let str_len = str.get_size;
+        let prefix_len = prefix.@size;
+        let str_len = str.@size;
         if prefix_len > str_len { false };
         str.borrow_c_str(|str_c_str|
             prefix.borrow_c_str(|prefix_c_str|
@@ -2885,8 +2885,8 @@ namespace String {
     // * `suffix` - The suffix to be checked.
     // * `str` - The string
     ends_with : String -> String -> Bool = |suffix, str| (
-        let suffix_len = suffix.get_size;
-        let str_len = str.get_size;
+        let suffix_len = suffix.@size;
+        let str_len = str.@size;
         if suffix_len > str_len { false };
         str.borrow_c_str(|str_c_str|
             suffix.borrow_c_str(|suffix_c_str|
@@ -2921,12 +2921,12 @@ namespace String {
     // * `str` - The string to be converted.
     get_last_byte : String -> Option U8;
     get_last_byte = |s| (
-        let len = s.get_size;
+        let len = s.@size;
         if len == 0 { Option::none() };
         Option::some $ s.@_data.@(len - 1)
     );
 
-    // (Deprecated) Use `Std::String::@size instead.
+    // (Deprecated) Renamed `Std::String::get_size` to `Std::String::@size` for brevity. The old name `Std::String::get_size` is now deprecated but will remain available for the foreseeable future to maintain backward compatibility.
     // 
     // Gets the length of a string without counting the null-terminator.
     //
@@ -2940,7 +2940,7 @@ namespace String {
     // 
     // # Parameters
     // * `string` - The string to get the size from.
-    @size : String -> I64 = |s| s.@_data.get_size - 1; // exclude null terminator
+    @size : String -> I64 = |s| s.@_data.@size - 1; // exclude null terminator
 
     // `String` version of `Array::get_sub`.
     //
@@ -2951,7 +2951,7 @@ namespace String {
     // * `str` - The string to be sliced.
     get_sub : I64 -> I64 -> String -> String;
     get_sub = |s, e, str| (
-        let len = str.get_size;
+        let len = str.@size;
         String::_unsafe_from_c_str $ str.get_bytes._get_sub_size_with_length_and_additional_capacity(len, 1, s, e).push_back('\0')
     );
 
@@ -2961,7 +2961,7 @@ namespace String {
     //
     // * `str` - The string to be checked.
     is_empty : String -> Bool;
-    is_empty = |s| s.get_size == 0;
+    is_empty = |s| s.@size == 0;
 
     // Joins (an iterator of) strings by a separator.
     //
@@ -3001,7 +3001,7 @@ namespace String {
     // * `sep` - The separator to be used for splitting.
     // * `str` - The string to be split.
     split : String -> String -> StringSplitIterator;
-    split = |sep, str| StringSplitIterator { idx: 0, str: str, strlen: str.get_size, sep: sep, sep_len: sep.get_size };
+    split = |sep, str| StringSplitIterator { idx: 0, str: str, strlen: str.@size, sep: sep, sep_len: sep.@size };
 
     type StringSplitIterator = unbox struct { idx : I64, str : String, strlen : I64, sep : String, sep_len : I64 };
 
@@ -3044,7 +3044,7 @@ namespace String {
     // * `str` - The string to be modified.
     strip_first_bytes : (U8 -> Bool) -> String -> String;
     strip_first_bytes = |cond, str| (
-        let len = str.get_size;
+        let len = str.@size;
         let bytes = str.get_bytes;
         let n = loop(0, |i| (
             if i == len { break $ i };
@@ -3123,7 +3123,7 @@ namespace String {
     populate : Array String -> String -> String;
     populate = |vs, template| (
         let template = template.get_bytes;
-        let end = template.get_size - 1;
+        let end = template.@size - 1;
         let out = [];
         let (out, vi) = loop((out, 0, 0), |(out, i, vi)|
             if i == end { break $ (out, vi) };
@@ -3144,7 +3144,7 @@ namespace String {
             // replace "{}" to `vs.@(vi)`
             if c == '{' &&
             i + 1 < end && template.@(i+1) == '}' {
-                if vi >= vs.get_size { undefined("[populate] Too many placeholders!") };
+                if vi >= vs.@size { undefined("[populate] Too many placeholders!") };
                 let out = out.append(vs.@(vi).get_bytes.pop_back);
                 continue $ (out, i + 2, vi + 1)
             };
@@ -3159,7 +3159,7 @@ namespace String {
             continue $ (out, i + 1, vi)
         );
 
-        if vi < vs.get_size {
+        if vi < vs.@size {
             undefined("[populate] Not enough placeholders!")
         };
 
@@ -3207,7 +3207,7 @@ impl () : Eq {
 impl String : FromBytes {
     from_bytes = |buf| (
         // Search for null terminator.
-        let buf_n = buf.get_size;
+        let buf_n = buf.@size;
         let null_idx = range(0, buf_n).loop_iter(buf_n, |i, _|
             if buf.@(i) == '\0' { break $ i };
             continue $ buf_n
@@ -3658,8 +3658,8 @@ impl U8 : ToBytes {
 }
 impl U8 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 1 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U8."
+        if bs.@size != 1 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U8."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
@@ -3684,8 +3684,8 @@ impl U16 : ToBytes {
 }
 impl U16 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 2 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U16."
+        if bs.@size != 2 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U16."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
@@ -3710,8 +3710,8 @@ impl U32 : ToBytes {
 }
 impl U32 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 4 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U32."
+        if bs.@size != 4 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U32."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
@@ -3736,8 +3736,8 @@ impl U64 : ToBytes {
 }
 impl U64 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 8 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as U64."
+        if bs.@size != 8 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U64."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
@@ -3771,8 +3771,8 @@ impl I8 : ToBytes {
 }
 impl I8 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 1 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I8."
+        if bs.@size != 1 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I8."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I8 fixruntime_u8_from_bytes(Ptr), ptr])
     );
@@ -3797,8 +3797,8 @@ impl I16 : ToBytes {
 }
 impl I16 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 2 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I16."
+        if bs.@size != 2 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I16."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I16 fixruntime_u16_from_bytes(Ptr), ptr])
     );
@@ -3823,8 +3823,8 @@ impl I32 : ToBytes {
 }
 impl I32 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 4 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I32."
+        if bs.@size != 4 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I32."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I32 fixruntime_u32_from_bytes(Ptr), ptr])
     );
@@ -3849,8 +3849,8 @@ impl I64 : ToBytes {
 }
 impl I64 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 8 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as I64."
+        if bs.@size != 8 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I64."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[I64 fixruntime_u64_from_bytes(Ptr), ptr])
     );
@@ -3884,8 +3884,8 @@ impl F32 : ToBytes {
 }
 impl F32 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 4 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F32."
+        if bs.@size != 4 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as F32."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[F32 fixruntime_f32_from_bytes(Ptr), ptr])
     );
@@ -3955,8 +3955,8 @@ impl F64 : ToBytes {
 }
 impl F64 : FromBytes {
     from_bytes = |bs| (
-        if bs.get_size != 8 {
-            Result::err $ "Byte array of length " + bs.get_size.to_string + " cannot be interpreted as F64."
+        if bs.@size != 8 {
+            Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as F64."
         };
         Result::ok $ bs.borrow_boxed(|ptr| FFI_CALL[F64 fixruntime_f64_from_bytes(Ptr), ptr])
     );
@@ -4189,7 +4189,7 @@ impl String : Indexable {
     type Elem String = U8;
     type Index String = I64;
     act_at_index = |i, f, s| (
-        let i = _check_range(i, s.get_size);
+        let i = _check_range(i, s.@size);
         s[^_data].iact(Array::_unsafe_act_bounds_unchecked(i, f))
     );
 }

@@ -239,6 +239,16 @@ Gets an element of an array at the specified index.
 * `i` - The index of the element to get.
 * `array` - The array to get the element from.
 
+#### @size
+
+Type: `Std::Array a -> Std::I64`
+
+Gets the size of an array.
+
+##### Parameters
+
+* `array` - The array to get the size from.
+
 #### act
 
 Type: `[f : Std::Functor] Std::I64 -> (a -> f a) -> Std::Array a -> f (Std::Array a)`
@@ -382,6 +392,8 @@ Gets the last element of an array. Returns none if the array is empty.
 
 Type: `Std::Array a -> Std::I64`
 
+(Deprecated) Renamed `Std::Array::get_size` to `Std::Array::@size` for brevity. The old name `Std::Array::get_size` is now deprecated but will remain available for the foreseeable future to maintain backward compatibility.
+
 Gets the length of an array.
 
 ##### Parameters
@@ -394,7 +406,7 @@ Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
 
 `arr.get_sub(s, e)` returns an array `[ arr.@(i) | i ∈ [s, e) ]`.
 
-`s` and `e` are clamped to the range `[0, arr.get_size]`.
+`s` and `e` are clamped to the range `[0, arr.@size]`.
 
 ##### Parameters
 
@@ -492,7 +504,7 @@ Type: `(a -> Std::Bool) -> Std::Array a -> Std::I64`
 
 When we put an order on `Bool` as `false < true`, `pred` must be monotonically decreasing on `arr`.
 
-The returned value x satisfies 0 <= x <= `arr.get_size`. If `arr` is empty, it returns 0.
+The returned value x satisfies 0 <= x <= `arr.@size`. If `arr` is empty, it returns 0.
 
 ##### Parameters
 
@@ -580,7 +592,7 @@ Type: `Std::I64 -> Std::Array a -> Std::Array a`
 
 Truncates an array, keeping the given number of first elements.
 
-`truncante(len, arr)` does nothing if `len >= arr.get_size`.
+`truncante(len, arr)` does nothing if `len >= arr.@size`.
 
 ##### Parameters
 
@@ -759,7 +771,7 @@ A floating number represented by `01...1` in binary.
 
 Type: `Std::F32 -> Std::I8`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::F32::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CChar`.
 
@@ -767,7 +779,7 @@ Casts a value of `F32` into a value of `CChar`.
 
 Type: `Std::F32 -> Std::FFI::CDouble`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::F32::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CDouble`.
 
@@ -775,7 +787,7 @@ Casts a value of `F32` into a value of `CDouble`.
 
 Type: `Std::F32 -> Std::FFI::CFloat`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::F32::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CFloat`.
 
@@ -783,7 +795,7 @@ Casts a value of `F32` into a value of `CFloat`.
 
 Type: `Std::F32 -> Std::I32`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::F32::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CInt`.
 
@@ -791,7 +803,7 @@ Casts a value of `F32` into a value of `CInt`.
 
 Type: `Std::F32 -> Std::I64`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::F32::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CLong`.
 
@@ -799,7 +811,7 @@ Casts a value of `F32` into a value of `CLong`.
 
 Type: `Std::F32 -> Std::I64`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::F32::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CLongLong`.
 
@@ -807,7 +819,7 @@ Casts a value of `F32` into a value of `CLongLong`.
 
 Type: `Std::F32 -> Std::I16`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::F32::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CShort`.
 
@@ -815,7 +827,7 @@ Casts a value of `F32` into a value of `CShort`.
 
 Type: `Std::F32 -> Std::U64`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::F32::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CSizeT`.
 
@@ -823,7 +835,7 @@ Casts a value of `F32` into a value of `CSizeT`.
 
 Type: `Std::F32 -> Std::U8`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::F32::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CUnsignedChar`.
 
@@ -831,7 +843,7 @@ Casts a value of `F32` into a value of `CUnsignedChar`.
 
 Type: `Std::F32 -> Std::U32`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::F32::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CUnsignedInt`.
 
@@ -839,7 +851,7 @@ Casts a value of `F32` into a value of `CUnsignedInt`.
 
 Type: `Std::F32 -> Std::U64`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::F32::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CUnsignedLong`.
 
@@ -847,7 +859,7 @@ Casts a value of `F32` into a value of `CUnsignedLong`.
 
 Type: `Std::F32 -> Std::U64`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::F32::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CUnsignedLongLong`.
 
@@ -855,7 +867,7 @@ Casts a value of `F32` into a value of `CUnsignedLongLong`.
 
 Type: `Std::F32 -> Std::U16`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::F32::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `CUnsignedShort`.
 
@@ -863,7 +875,7 @@ Casts a value of `F32` into a value of `CUnsignedShort`.
 
 Type: `Std::F32 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::F32::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `F32`.
 
@@ -871,7 +883,7 @@ Casts a value of `F32` into a value of `F32`.
 
 Type: `Std::F32 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::F32::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `F64`.
 
@@ -879,7 +891,7 @@ Casts a value of `F32` into a value of `F64`.
 
 Type: `Std::F32 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::F32::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `I16`.
 
@@ -887,7 +899,7 @@ Casts a value of `F32` into a value of `I16`.
 
 Type: `Std::F32 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::F32::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `I32`.
 
@@ -895,7 +907,7 @@ Casts a value of `F32` into a value of `I32`.
 
 Type: `Std::F32 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::F32::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `I64`.
 
@@ -903,7 +915,7 @@ Casts a value of `F32` into a value of `I64`.
 
 Type: `Std::F32 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::F32::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `I8`.
 
@@ -911,7 +923,7 @@ Casts a value of `F32` into a value of `I8`.
 
 Type: `Std::F32 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::F32::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `U16`.
 
@@ -919,7 +931,7 @@ Casts a value of `F32` into a value of `U16`.
 
 Type: `Std::F32 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::F32::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `U32`.
 
@@ -927,7 +939,7 @@ Casts a value of `F32` into a value of `U32`.
 
 Type: `Std::F32 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::F32::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `U64`.
 
@@ -935,7 +947,7 @@ Casts a value of `F32` into a value of `U64`.
 
 Type: `Std::F32 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::F32::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F32` into a value of `U8`.
 
@@ -993,7 +1005,7 @@ A floating number represented by `01...1` in binary.
 
 Type: `Std::F64 -> Std::I8`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::F64::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CChar`.
 
@@ -1001,7 +1013,7 @@ Casts a value of `F64` into a value of `CChar`.
 
 Type: `Std::F64 -> Std::FFI::CDouble`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::F64::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CDouble`.
 
@@ -1009,7 +1021,7 @@ Casts a value of `F64` into a value of `CDouble`.
 
 Type: `Std::F64 -> Std::FFI::CFloat`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::F64::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CFloat`.
 
@@ -1017,7 +1029,7 @@ Casts a value of `F64` into a value of `CFloat`.
 
 Type: `Std::F64 -> Std::I32`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::F64::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CInt`.
 
@@ -1025,7 +1037,7 @@ Casts a value of `F64` into a value of `CInt`.
 
 Type: `Std::F64 -> Std::I64`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::F64::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CLong`.
 
@@ -1033,7 +1045,7 @@ Casts a value of `F64` into a value of `CLong`.
 
 Type: `Std::F64 -> Std::I64`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::F64::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CLongLong`.
 
@@ -1041,7 +1053,7 @@ Casts a value of `F64` into a value of `CLongLong`.
 
 Type: `Std::F64 -> Std::I16`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::F64::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CShort`.
 
@@ -1049,7 +1061,7 @@ Casts a value of `F64` into a value of `CShort`.
 
 Type: `Std::F64 -> Std::U64`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::F64::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CSizeT`.
 
@@ -1057,7 +1069,7 @@ Casts a value of `F64` into a value of `CSizeT`.
 
 Type: `Std::F64 -> Std::U8`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::F64::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CUnsignedChar`.
 
@@ -1065,7 +1077,7 @@ Casts a value of `F64` into a value of `CUnsignedChar`.
 
 Type: `Std::F64 -> Std::U32`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::F64::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CUnsignedInt`.
 
@@ -1073,7 +1085,7 @@ Casts a value of `F64` into a value of `CUnsignedInt`.
 
 Type: `Std::F64 -> Std::U64`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::F64::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CUnsignedLong`.
 
@@ -1081,7 +1093,7 @@ Casts a value of `F64` into a value of `CUnsignedLong`.
 
 Type: `Std::F64 -> Std::U64`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::F64::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CUnsignedLongLong`.
 
@@ -1089,7 +1101,7 @@ Casts a value of `F64` into a value of `CUnsignedLongLong`.
 
 Type: `Std::F64 -> Std::U16`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::F64::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `CUnsignedShort`.
 
@@ -1097,7 +1109,7 @@ Casts a value of `F64` into a value of `CUnsignedShort`.
 
 Type: `Std::F64 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::F64::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `F32`.
 
@@ -1105,7 +1117,7 @@ Casts a value of `F64` into a value of `F32`.
 
 Type: `Std::F64 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::F64::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `F64`.
 
@@ -1113,7 +1125,7 @@ Casts a value of `F64` into a value of `F64`.
 
 Type: `Std::F64 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::F64::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `I16`.
 
@@ -1121,7 +1133,7 @@ Casts a value of `F64` into a value of `I16`.
 
 Type: `Std::F64 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::F64::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `I32`.
 
@@ -1129,7 +1141,7 @@ Casts a value of `F64` into a value of `I32`.
 
 Type: `Std::F64 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::F64::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `I64`.
 
@@ -1137,7 +1149,7 @@ Casts a value of `F64` into a value of `I64`.
 
 Type: `Std::F64 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::F64::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `I8`.
 
@@ -1145,7 +1157,7 @@ Casts a value of `F64` into a value of `I8`.
 
 Type: `Std::F64 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::F64::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `U16`.
 
@@ -1153,7 +1165,7 @@ Casts a value of `F64` into a value of `U16`.
 
 Type: `Std::F64 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::F64::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `U32`.
 
@@ -1161,7 +1173,7 @@ Casts a value of `F64` into a value of `U32`.
 
 Type: `Std::F64 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::F64::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `U64`.
 
@@ -1169,7 +1181,7 @@ Casts a value of `F64` into a value of `U64`.
 
 Type: `Std::F64 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::F64::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `F64` into a value of `U8`.
 
@@ -1595,7 +1607,7 @@ Type: `Std::I16 -> Std::I16 -> Std::I16`
 
 Type: `Std::I16 -> Std::FFI::CChar`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::I16::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CChar`.
 
@@ -1603,7 +1615,7 @@ Casts a value of `I16` into a value of `CChar`.
 
 Type: `Std::I16 -> Std::F64`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::I16::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CDouble`.
 
@@ -1611,7 +1623,7 @@ Casts a value of `I16` into a value of `CDouble`.
 
 Type: `Std::I16 -> Std::F32`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::I16::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CFloat`.
 
@@ -1619,7 +1631,7 @@ Casts a value of `I16` into a value of `CFloat`.
 
 Type: `Std::I16 -> Std::FFI::CInt`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::I16::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CInt`.
 
@@ -1627,7 +1639,7 @@ Casts a value of `I16` into a value of `CInt`.
 
 Type: `Std::I16 -> Std::FFI::CLong`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::I16::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CLong`.
 
@@ -1635,7 +1647,7 @@ Casts a value of `I16` into a value of `CLong`.
 
 Type: `Std::I16 -> Std::FFI::CLongLong`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::I16::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CLongLong`.
 
@@ -1643,7 +1655,7 @@ Casts a value of `I16` into a value of `CLongLong`.
 
 Type: `Std::I16 -> Std::FFI::CShort`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::I16::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CShort`.
 
@@ -1651,7 +1663,7 @@ Casts a value of `I16` into a value of `CShort`.
 
 Type: `Std::I16 -> Std::FFI::CSizeT`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::I16::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CSizeT`.
 
@@ -1659,7 +1671,7 @@ Casts a value of `I16` into a value of `CSizeT`.
 
 Type: `Std::I16 -> Std::FFI::CUnsignedChar`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::I16::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CUnsignedChar`.
 
@@ -1667,7 +1679,7 @@ Casts a value of `I16` into a value of `CUnsignedChar`.
 
 Type: `Std::I16 -> Std::FFI::CUnsignedInt`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::I16::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CUnsignedInt`.
 
@@ -1675,7 +1687,7 @@ Casts a value of `I16` into a value of `CUnsignedInt`.
 
 Type: `Std::I16 -> Std::FFI::CUnsignedLong`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::I16::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CUnsignedLong`.
 
@@ -1683,7 +1695,7 @@ Casts a value of `I16` into a value of `CUnsignedLong`.
 
 Type: `Std::I16 -> Std::FFI::CUnsignedLongLong`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::I16::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CUnsignedLongLong`.
 
@@ -1691,7 +1703,7 @@ Casts a value of `I16` into a value of `CUnsignedLongLong`.
 
 Type: `Std::I16 -> Std::FFI::CUnsignedShort`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::I16::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `CUnsignedShort`.
 
@@ -1699,7 +1711,7 @@ Casts a value of `I16` into a value of `CUnsignedShort`.
 
 Type: `Std::I16 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::I16::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `F32`.
 
@@ -1707,7 +1719,7 @@ Casts a value of `I16` into a value of `F32`.
 
 Type: `Std::I16 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::I16::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `F64`.
 
@@ -1715,7 +1727,7 @@ Casts a value of `I16` into a value of `F64`.
 
 Type: `Std::I16 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::I16::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `I16`.
 
@@ -1723,7 +1735,7 @@ Casts a value of `I16` into a value of `I16`.
 
 Type: `Std::I16 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::I16::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `I32`.
 
@@ -1731,7 +1743,7 @@ Casts a value of `I16` into a value of `I32`.
 
 Type: `Std::I16 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::I16::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `I64`.
 
@@ -1739,7 +1751,7 @@ Casts a value of `I16` into a value of `I64`.
 
 Type: `Std::I16 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::I16::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `I8`.
 
@@ -1747,7 +1759,7 @@ Casts a value of `I16` into a value of `I8`.
 
 Type: `Std::I16 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::I16::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `U16`.
 
@@ -1755,7 +1767,7 @@ Casts a value of `I16` into a value of `U16`.
 
 Type: `Std::I16 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::I16::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `U32`.
 
@@ -1763,7 +1775,7 @@ Casts a value of `I16` into a value of `U32`.
 
 Type: `Std::I16 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::I16::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `U64`.
 
@@ -1771,7 +1783,7 @@ Casts a value of `I16` into a value of `U64`.
 
 Type: `Std::I16 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::I16::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I16` into a value of `U8`.
 
@@ -1858,7 +1870,7 @@ Type: `Std::I32 -> Std::I32 -> Std::I32`
 
 Type: `Std::I32 -> Std::FFI::CChar`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::I32::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CChar`.
 
@@ -1866,7 +1878,7 @@ Casts a value of `I32` into a value of `CChar`.
 
 Type: `Std::I32 -> Std::F64`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::I32::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CDouble`.
 
@@ -1874,7 +1886,7 @@ Casts a value of `I32` into a value of `CDouble`.
 
 Type: `Std::I32 -> Std::F32`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::I32::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CFloat`.
 
@@ -1882,7 +1894,7 @@ Casts a value of `I32` into a value of `CFloat`.
 
 Type: `Std::I32 -> Std::FFI::CInt`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::I32::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CInt`.
 
@@ -1890,7 +1902,7 @@ Casts a value of `I32` into a value of `CInt`.
 
 Type: `Std::I32 -> Std::FFI::CLong`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::I32::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CLong`.
 
@@ -1898,7 +1910,7 @@ Casts a value of `I32` into a value of `CLong`.
 
 Type: `Std::I32 -> Std::FFI::CLongLong`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::I32::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CLongLong`.
 
@@ -1906,7 +1918,7 @@ Casts a value of `I32` into a value of `CLongLong`.
 
 Type: `Std::I32 -> Std::FFI::CShort`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::I32::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CShort`.
 
@@ -1914,7 +1926,7 @@ Casts a value of `I32` into a value of `CShort`.
 
 Type: `Std::I32 -> Std::FFI::CSizeT`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::I32::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CSizeT`.
 
@@ -1922,7 +1934,7 @@ Casts a value of `I32` into a value of `CSizeT`.
 
 Type: `Std::I32 -> Std::FFI::CUnsignedChar`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::I32::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CUnsignedChar`.
 
@@ -1930,7 +1942,7 @@ Casts a value of `I32` into a value of `CUnsignedChar`.
 
 Type: `Std::I32 -> Std::FFI::CUnsignedInt`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::I32::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CUnsignedInt`.
 
@@ -1938,7 +1950,7 @@ Casts a value of `I32` into a value of `CUnsignedInt`.
 
 Type: `Std::I32 -> Std::FFI::CUnsignedLong`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::I32::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CUnsignedLong`.
 
@@ -1946,7 +1958,7 @@ Casts a value of `I32` into a value of `CUnsignedLong`.
 
 Type: `Std::I32 -> Std::FFI::CUnsignedLongLong`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::I32::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CUnsignedLongLong`.
 
@@ -1954,7 +1966,7 @@ Casts a value of `I32` into a value of `CUnsignedLongLong`.
 
 Type: `Std::I32 -> Std::FFI::CUnsignedShort`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::I32::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `CUnsignedShort`.
 
@@ -1962,7 +1974,7 @@ Casts a value of `I32` into a value of `CUnsignedShort`.
 
 Type: `Std::I32 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::I32::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `F32`.
 
@@ -1970,7 +1982,7 @@ Casts a value of `I32` into a value of `F32`.
 
 Type: `Std::I32 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::I32::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `F64`.
 
@@ -1978,7 +1990,7 @@ Casts a value of `I32` into a value of `F64`.
 
 Type: `Std::I32 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::I32::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `I16`.
 
@@ -1986,7 +1998,7 @@ Casts a value of `I32` into a value of `I16`.
 
 Type: `Std::I32 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::I32::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `I32`.
 
@@ -1994,7 +2006,7 @@ Casts a value of `I32` into a value of `I32`.
 
 Type: `Std::I32 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::I32::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `I64`.
 
@@ -2002,7 +2014,7 @@ Casts a value of `I32` into a value of `I64`.
 
 Type: `Std::I32 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::I32::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `I8`.
 
@@ -2010,7 +2022,7 @@ Casts a value of `I32` into a value of `I8`.
 
 Type: `Std::I32 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::I32::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `U16`.
 
@@ -2018,7 +2030,7 @@ Casts a value of `I32` into a value of `U16`.
 
 Type: `Std::I32 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::I32::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `U32`.
 
@@ -2026,7 +2038,7 @@ Casts a value of `I32` into a value of `U32`.
 
 Type: `Std::I32 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::I32::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `U64`.
 
@@ -2034,7 +2046,7 @@ Casts a value of `I32` into a value of `U64`.
 
 Type: `Std::I32 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::I32::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I32` into a value of `U8`.
 
@@ -2121,7 +2133,7 @@ Type: `Std::I64 -> Std::I64 -> Std::I64`
 
 Type: `Std::I64 -> Std::FFI::CChar`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::I64::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CChar`.
 
@@ -2129,7 +2141,7 @@ Casts a value of `I64` into a value of `CChar`.
 
 Type: `Std::I64 -> Std::F64`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::I64::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CDouble`.
 
@@ -2137,7 +2149,7 @@ Casts a value of `I64` into a value of `CDouble`.
 
 Type: `Std::I64 -> Std::F32`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::I64::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CFloat`.
 
@@ -2145,7 +2157,7 @@ Casts a value of `I64` into a value of `CFloat`.
 
 Type: `Std::I64 -> Std::FFI::CInt`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::I64::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CInt`.
 
@@ -2153,7 +2165,7 @@ Casts a value of `I64` into a value of `CInt`.
 
 Type: `Std::I64 -> Std::FFI::CLong`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::I64::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CLong`.
 
@@ -2161,7 +2173,7 @@ Casts a value of `I64` into a value of `CLong`.
 
 Type: `Std::I64 -> Std::FFI::CLongLong`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::I64::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CLongLong`.
 
@@ -2169,7 +2181,7 @@ Casts a value of `I64` into a value of `CLongLong`.
 
 Type: `Std::I64 -> Std::FFI::CShort`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::I64::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CShort`.
 
@@ -2177,7 +2189,7 @@ Casts a value of `I64` into a value of `CShort`.
 
 Type: `Std::I64 -> Std::FFI::CSizeT`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::I64::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CSizeT`.
 
@@ -2185,7 +2197,7 @@ Casts a value of `I64` into a value of `CSizeT`.
 
 Type: `Std::I64 -> Std::FFI::CUnsignedChar`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::I64::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CUnsignedChar`.
 
@@ -2193,7 +2205,7 @@ Casts a value of `I64` into a value of `CUnsignedChar`.
 
 Type: `Std::I64 -> Std::FFI::CUnsignedInt`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::I64::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CUnsignedInt`.
 
@@ -2201,7 +2213,7 @@ Casts a value of `I64` into a value of `CUnsignedInt`.
 
 Type: `Std::I64 -> Std::FFI::CUnsignedLong`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::I64::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CUnsignedLong`.
 
@@ -2209,7 +2221,7 @@ Casts a value of `I64` into a value of `CUnsignedLong`.
 
 Type: `Std::I64 -> Std::FFI::CUnsignedLongLong`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::I64::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CUnsignedLongLong`.
 
@@ -2217,7 +2229,7 @@ Casts a value of `I64` into a value of `CUnsignedLongLong`.
 
 Type: `Std::I64 -> Std::FFI::CUnsignedShort`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::I64::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `CUnsignedShort`.
 
@@ -2225,7 +2237,7 @@ Casts a value of `I64` into a value of `CUnsignedShort`.
 
 Type: `Std::I64 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::I64::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `F32`.
 
@@ -2233,7 +2245,7 @@ Casts a value of `I64` into a value of `F32`.
 
 Type: `Std::I64 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::I64::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `F64`.
 
@@ -2241,7 +2253,7 @@ Casts a value of `I64` into a value of `F64`.
 
 Type: `Std::I64 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::I64::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `I16`.
 
@@ -2249,7 +2261,7 @@ Casts a value of `I64` into a value of `I16`.
 
 Type: `Std::I64 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::I64::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `I32`.
 
@@ -2257,7 +2269,7 @@ Casts a value of `I64` into a value of `I32`.
 
 Type: `Std::I64 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::I64::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `I64`.
 
@@ -2265,7 +2277,7 @@ Casts a value of `I64` into a value of `I64`.
 
 Type: `Std::I64 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::I64::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `I8`.
 
@@ -2273,7 +2285,7 @@ Casts a value of `I64` into a value of `I8`.
 
 Type: `Std::I64 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::I64::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `U16`.
 
@@ -2281,7 +2293,7 @@ Casts a value of `I64` into a value of `U16`.
 
 Type: `Std::I64 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::I64::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `U32`.
 
@@ -2289,7 +2301,7 @@ Casts a value of `I64` into a value of `U32`.
 
 Type: `Std::I64 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::I64::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `U64`.
 
@@ -2297,7 +2309,7 @@ Casts a value of `I64` into a value of `U64`.
 
 Type: `Std::I64 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::I64::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I64` into a value of `U8`.
 
@@ -2384,7 +2396,7 @@ Type: `Std::I8 -> Std::I8 -> Std::I8`
 
 Type: `Std::I8 -> Std::FFI::CChar`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::I8::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CChar`.
 
@@ -2392,7 +2404,7 @@ Casts a value of `I8` into a value of `CChar`.
 
 Type: `Std::I8 -> Std::F64`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::I8::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CDouble`.
 
@@ -2400,7 +2412,7 @@ Casts a value of `I8` into a value of `CDouble`.
 
 Type: `Std::I8 -> Std::F32`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::I8::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CFloat`.
 
@@ -2408,7 +2420,7 @@ Casts a value of `I8` into a value of `CFloat`.
 
 Type: `Std::I8 -> Std::FFI::CInt`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::I8::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CInt`.
 
@@ -2416,7 +2428,7 @@ Casts a value of `I8` into a value of `CInt`.
 
 Type: `Std::I8 -> Std::FFI::CLong`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::I8::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CLong`.
 
@@ -2424,7 +2436,7 @@ Casts a value of `I8` into a value of `CLong`.
 
 Type: `Std::I8 -> Std::FFI::CLongLong`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::I8::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CLongLong`.
 
@@ -2432,7 +2444,7 @@ Casts a value of `I8` into a value of `CLongLong`.
 
 Type: `Std::I8 -> Std::FFI::CShort`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::I8::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CShort`.
 
@@ -2440,7 +2452,7 @@ Casts a value of `I8` into a value of `CShort`.
 
 Type: `Std::I8 -> Std::FFI::CSizeT`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::I8::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CSizeT`.
 
@@ -2448,7 +2460,7 @@ Casts a value of `I8` into a value of `CSizeT`.
 
 Type: `Std::I8 -> Std::FFI::CUnsignedChar`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::I8::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CUnsignedChar`.
 
@@ -2456,7 +2468,7 @@ Casts a value of `I8` into a value of `CUnsignedChar`.
 
 Type: `Std::I8 -> Std::FFI::CUnsignedInt`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::I8::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CUnsignedInt`.
 
@@ -2464,7 +2476,7 @@ Casts a value of `I8` into a value of `CUnsignedInt`.
 
 Type: `Std::I8 -> Std::FFI::CUnsignedLong`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::I8::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CUnsignedLong`.
 
@@ -2472,7 +2484,7 @@ Casts a value of `I8` into a value of `CUnsignedLong`.
 
 Type: `Std::I8 -> Std::FFI::CUnsignedLongLong`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::I8::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CUnsignedLongLong`.
 
@@ -2480,7 +2492,7 @@ Casts a value of `I8` into a value of `CUnsignedLongLong`.
 
 Type: `Std::I8 -> Std::FFI::CUnsignedShort`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::I8::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `CUnsignedShort`.
 
@@ -2488,7 +2500,7 @@ Casts a value of `I8` into a value of `CUnsignedShort`.
 
 Type: `Std::I8 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::I8::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `F32`.
 
@@ -2496,7 +2508,7 @@ Casts a value of `I8` into a value of `F32`.
 
 Type: `Std::I8 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::I8::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `F64`.
 
@@ -2504,7 +2516,7 @@ Casts a value of `I8` into a value of `F64`.
 
 Type: `Std::I8 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::I8::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `I16`.
 
@@ -2512,7 +2524,7 @@ Casts a value of `I8` into a value of `I16`.
 
 Type: `Std::I8 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::I8::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `I32`.
 
@@ -2520,7 +2532,7 @@ Casts a value of `I8` into a value of `I32`.
 
 Type: `Std::I8 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::I8::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `I64`.
 
@@ -2528,7 +2540,7 @@ Casts a value of `I8` into a value of `I64`.
 
 Type: `Std::I8 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::I8::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `I8`.
 
@@ -2536,7 +2548,7 @@ Casts a value of `I8` into a value of `I8`.
 
 Type: `Std::I8 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::I8::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `U16`.
 
@@ -2544,7 +2556,7 @@ Casts a value of `I8` into a value of `U16`.
 
 Type: `Std::I8 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::I8::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `U32`.
 
@@ -2552,7 +2564,7 @@ Casts a value of `I8` into a value of `U32`.
 
 Type: `Std::I8 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::I8::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `U64`.
 
@@ -2560,7 +2572,7 @@ Casts a value of `I8` into a value of `U64`.
 
 Type: `Std::I8 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::I8::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `I8` into a value of `U8`.
 
@@ -3846,6 +3858,16 @@ Returns the containing value if the value is ok, or otherwise aborts the program
 
 ### namespace Std::String
 
+#### @size
+
+Type: `Std::String -> Std::I64`
+
+Gets the size of a string without counting the null-terminator.
+
+##### Parameters
+
+* `string` - The string to get the size from.
+
 #### borrow_c_str
 
 Type: `(Std::Ptr -> a) -> Std::String -> a`
@@ -3919,7 +3941,7 @@ Type: `Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`
 `str.find(token, start_idx)` finds the index where `token` firstly appears in `str` starting from `start_idx`.
 
 Note that this function basically returns a number less than or equal to `start_idx`, but there is an exception:
-`str.find("", start_idx)` with `start_idx >= str.get_size` returns `str.get_size`, not `start_idx`.
+`str.find("", start_idx)` with `start_idx >= str.@size` returns `str.@size`, not `start_idx`.
 
 ##### Parameters
 
@@ -3976,6 +3998,8 @@ Gets the last byte of a string. Returns none if the string is empty.
 #### get_size
 
 Type: `Std::String -> Std::I64`
+
+(Deprecated) Use `Std::String::@size instead.
 
 Gets the length of a string without counting the null-terminator.
 
@@ -4443,7 +4467,7 @@ Type: `Std::U16 -> Std::U16 -> Std::U16`
 
 Type: `Std::U16 -> Std::FFI::CChar`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::U16::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CChar`.
 
@@ -4451,7 +4475,7 @@ Casts a value of `U16` into a value of `CChar`.
 
 Type: `Std::U16 -> Std::F64`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::U16::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CDouble`.
 
@@ -4459,7 +4483,7 @@ Casts a value of `U16` into a value of `CDouble`.
 
 Type: `Std::U16 -> Std::F32`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::U16::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CFloat`.
 
@@ -4467,7 +4491,7 @@ Casts a value of `U16` into a value of `CFloat`.
 
 Type: `Std::U16 -> Std::FFI::CInt`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::U16::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CInt`.
 
@@ -4475,7 +4499,7 @@ Casts a value of `U16` into a value of `CInt`.
 
 Type: `Std::U16 -> Std::FFI::CLong`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::U16::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CLong`.
 
@@ -4483,7 +4507,7 @@ Casts a value of `U16` into a value of `CLong`.
 
 Type: `Std::U16 -> Std::FFI::CLongLong`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::U16::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CLongLong`.
 
@@ -4491,7 +4515,7 @@ Casts a value of `U16` into a value of `CLongLong`.
 
 Type: `Std::U16 -> Std::FFI::CShort`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::U16::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CShort`.
 
@@ -4499,7 +4523,7 @@ Casts a value of `U16` into a value of `CShort`.
 
 Type: `Std::U16 -> Std::FFI::CSizeT`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::U16::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CSizeT`.
 
@@ -4507,7 +4531,7 @@ Casts a value of `U16` into a value of `CSizeT`.
 
 Type: `Std::U16 -> Std::FFI::CUnsignedChar`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::U16::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CUnsignedChar`.
 
@@ -4515,7 +4539,7 @@ Casts a value of `U16` into a value of `CUnsignedChar`.
 
 Type: `Std::U16 -> Std::FFI::CUnsignedInt`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::U16::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CUnsignedInt`.
 
@@ -4523,7 +4547,7 @@ Casts a value of `U16` into a value of `CUnsignedInt`.
 
 Type: `Std::U16 -> Std::FFI::CUnsignedLong`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::U16::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CUnsignedLong`.
 
@@ -4531,7 +4555,7 @@ Casts a value of `U16` into a value of `CUnsignedLong`.
 
 Type: `Std::U16 -> Std::FFI::CUnsignedLongLong`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::U16::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CUnsignedLongLong`.
 
@@ -4539,7 +4563,7 @@ Casts a value of `U16` into a value of `CUnsignedLongLong`.
 
 Type: `Std::U16 -> Std::FFI::CUnsignedShort`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::U16::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `CUnsignedShort`.
 
@@ -4547,7 +4571,7 @@ Casts a value of `U16` into a value of `CUnsignedShort`.
 
 Type: `Std::U16 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::U16::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `F32`.
 
@@ -4555,7 +4579,7 @@ Casts a value of `U16` into a value of `F32`.
 
 Type: `Std::U16 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::U16::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `F64`.
 
@@ -4563,7 +4587,7 @@ Casts a value of `U16` into a value of `F64`.
 
 Type: `Std::U16 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::U16::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `I16`.
 
@@ -4571,7 +4595,7 @@ Casts a value of `U16` into a value of `I16`.
 
 Type: `Std::U16 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::U16::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `I32`.
 
@@ -4579,7 +4603,7 @@ Casts a value of `U16` into a value of `I32`.
 
 Type: `Std::U16 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::U16::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `I64`.
 
@@ -4587,7 +4611,7 @@ Casts a value of `U16` into a value of `I64`.
 
 Type: `Std::U16 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::U16::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `I8`.
 
@@ -4595,7 +4619,7 @@ Casts a value of `U16` into a value of `I8`.
 
 Type: `Std::U16 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::U16::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `U16`.
 
@@ -4603,7 +4627,7 @@ Casts a value of `U16` into a value of `U16`.
 
 Type: `Std::U16 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::U16::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `U32`.
 
@@ -4611,7 +4635,7 @@ Casts a value of `U16` into a value of `U32`.
 
 Type: `Std::U16 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::U16::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `U64`.
 
@@ -4619,7 +4643,7 @@ Casts a value of `U16` into a value of `U64`.
 
 Type: `Std::U16 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::U16::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U16` into a value of `U8`.
 
@@ -4702,7 +4726,7 @@ Type: `Std::U32 -> Std::U32 -> Std::U32`
 
 Type: `Std::U32 -> Std::FFI::CChar`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::U32::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CChar`.
 
@@ -4710,7 +4734,7 @@ Casts a value of `U32` into a value of `CChar`.
 
 Type: `Std::U32 -> Std::F64`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::U32::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CDouble`.
 
@@ -4718,7 +4742,7 @@ Casts a value of `U32` into a value of `CDouble`.
 
 Type: `Std::U32 -> Std::F32`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::U32::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CFloat`.
 
@@ -4726,7 +4750,7 @@ Casts a value of `U32` into a value of `CFloat`.
 
 Type: `Std::U32 -> Std::FFI::CInt`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::U32::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CInt`.
 
@@ -4734,7 +4758,7 @@ Casts a value of `U32` into a value of `CInt`.
 
 Type: `Std::U32 -> Std::FFI::CLong`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::U32::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CLong`.
 
@@ -4742,7 +4766,7 @@ Casts a value of `U32` into a value of `CLong`.
 
 Type: `Std::U32 -> Std::FFI::CLongLong`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::U32::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CLongLong`.
 
@@ -4750,7 +4774,7 @@ Casts a value of `U32` into a value of `CLongLong`.
 
 Type: `Std::U32 -> Std::FFI::CShort`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::U32::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CShort`.
 
@@ -4758,7 +4782,7 @@ Casts a value of `U32` into a value of `CShort`.
 
 Type: `Std::U32 -> Std::FFI::CSizeT`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::U32::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CSizeT`.
 
@@ -4766,7 +4790,7 @@ Casts a value of `U32` into a value of `CSizeT`.
 
 Type: `Std::U32 -> Std::FFI::CUnsignedChar`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::U32::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CUnsignedChar`.
 
@@ -4774,7 +4798,7 @@ Casts a value of `U32` into a value of `CUnsignedChar`.
 
 Type: `Std::U32 -> Std::FFI::CUnsignedInt`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::U32::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CUnsignedInt`.
 
@@ -4782,7 +4806,7 @@ Casts a value of `U32` into a value of `CUnsignedInt`.
 
 Type: `Std::U32 -> Std::FFI::CUnsignedLong`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::U32::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CUnsignedLong`.
 
@@ -4790,7 +4814,7 @@ Casts a value of `U32` into a value of `CUnsignedLong`.
 
 Type: `Std::U32 -> Std::FFI::CUnsignedLongLong`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::U32::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CUnsignedLongLong`.
 
@@ -4798,7 +4822,7 @@ Casts a value of `U32` into a value of `CUnsignedLongLong`.
 
 Type: `Std::U32 -> Std::FFI::CUnsignedShort`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::U32::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `CUnsignedShort`.
 
@@ -4806,7 +4830,7 @@ Casts a value of `U32` into a value of `CUnsignedShort`.
 
 Type: `Std::U32 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::U32::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `F32`.
 
@@ -4814,7 +4838,7 @@ Casts a value of `U32` into a value of `F32`.
 
 Type: `Std::U32 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::U32::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `F64`.
 
@@ -4822,7 +4846,7 @@ Casts a value of `U32` into a value of `F64`.
 
 Type: `Std::U32 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::U32::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `I16`.
 
@@ -4830,7 +4854,7 @@ Casts a value of `U32` into a value of `I16`.
 
 Type: `Std::U32 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::U32::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `I32`.
 
@@ -4838,7 +4862,7 @@ Casts a value of `U32` into a value of `I32`.
 
 Type: `Std::U32 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::U32::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `I64`.
 
@@ -4846,7 +4870,7 @@ Casts a value of `U32` into a value of `I64`.
 
 Type: `Std::U32 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::U32::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `I8`.
 
@@ -4854,7 +4878,7 @@ Casts a value of `U32` into a value of `I8`.
 
 Type: `Std::U32 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::U32::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `U16`.
 
@@ -4862,7 +4886,7 @@ Casts a value of `U32` into a value of `U16`.
 
 Type: `Std::U32 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::U32::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `U32`.
 
@@ -4870,7 +4894,7 @@ Casts a value of `U32` into a value of `U32`.
 
 Type: `Std::U32 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::U32::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `U64`.
 
@@ -4878,7 +4902,7 @@ Casts a value of `U32` into a value of `U64`.
 
 Type: `Std::U32 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::U32::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U32` into a value of `U8`.
 
@@ -4961,7 +4985,7 @@ Type: `Std::U64 -> Std::U64 -> Std::U64`
 
 Type: `Std::U64 -> Std::FFI::CChar`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::U64::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CChar`.
 
@@ -4969,7 +4993,7 @@ Casts a value of `U64` into a value of `CChar`.
 
 Type: `Std::U64 -> Std::F64`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::U64::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CDouble`.
 
@@ -4977,7 +5001,7 @@ Casts a value of `U64` into a value of `CDouble`.
 
 Type: `Std::U64 -> Std::F32`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::U64::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CFloat`.
 
@@ -4985,7 +5009,7 @@ Casts a value of `U64` into a value of `CFloat`.
 
 Type: `Std::U64 -> Std::FFI::CInt`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::U64::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CInt`.
 
@@ -4993,7 +5017,7 @@ Casts a value of `U64` into a value of `CInt`.
 
 Type: `Std::U64 -> Std::FFI::CLong`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::U64::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CLong`.
 
@@ -5001,7 +5025,7 @@ Casts a value of `U64` into a value of `CLong`.
 
 Type: `Std::U64 -> Std::FFI::CLongLong`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::U64::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CLongLong`.
 
@@ -5009,7 +5033,7 @@ Casts a value of `U64` into a value of `CLongLong`.
 
 Type: `Std::U64 -> Std::FFI::CShort`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::U64::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CShort`.
 
@@ -5017,7 +5041,7 @@ Casts a value of `U64` into a value of `CShort`.
 
 Type: `Std::U64 -> Std::FFI::CSizeT`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::U64::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CSizeT`.
 
@@ -5025,7 +5049,7 @@ Casts a value of `U64` into a value of `CSizeT`.
 
 Type: `Std::U64 -> Std::FFI::CUnsignedChar`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::U64::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CUnsignedChar`.
 
@@ -5033,7 +5057,7 @@ Casts a value of `U64` into a value of `CUnsignedChar`.
 
 Type: `Std::U64 -> Std::FFI::CUnsignedInt`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::U64::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CUnsignedInt`.
 
@@ -5041,7 +5065,7 @@ Casts a value of `U64` into a value of `CUnsignedInt`.
 
 Type: `Std::U64 -> Std::FFI::CUnsignedLong`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::U64::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CUnsignedLong`.
 
@@ -5049,7 +5073,7 @@ Casts a value of `U64` into a value of `CUnsignedLong`.
 
 Type: `Std::U64 -> Std::FFI::CUnsignedLongLong`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::U64::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CUnsignedLongLong`.
 
@@ -5057,7 +5081,7 @@ Casts a value of `U64` into a value of `CUnsignedLongLong`.
 
 Type: `Std::U64 -> Std::FFI::CUnsignedShort`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::U64::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `CUnsignedShort`.
 
@@ -5065,7 +5089,7 @@ Casts a value of `U64` into a value of `CUnsignedShort`.
 
 Type: `Std::U64 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::U64::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `F32`.
 
@@ -5073,7 +5097,7 @@ Casts a value of `U64` into a value of `F32`.
 
 Type: `Std::U64 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::U64::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `F64`.
 
@@ -5081,7 +5105,7 @@ Casts a value of `U64` into a value of `F64`.
 
 Type: `Std::U64 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::U64::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `I16`.
 
@@ -5089,7 +5113,7 @@ Casts a value of `U64` into a value of `I16`.
 
 Type: `Std::U64 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::U64::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `I32`.
 
@@ -5097,7 +5121,7 @@ Casts a value of `U64` into a value of `I32`.
 
 Type: `Std::U64 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::U64::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `I64`.
 
@@ -5105,7 +5129,7 @@ Casts a value of `U64` into a value of `I64`.
 
 Type: `Std::U64 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::U64::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `I8`.
 
@@ -5113,7 +5137,7 @@ Casts a value of `U64` into a value of `I8`.
 
 Type: `Std::U64 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::U64::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `U16`.
 
@@ -5121,7 +5145,7 @@ Casts a value of `U64` into a value of `U16`.
 
 Type: `Std::U64 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::U64::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `U32`.
 
@@ -5129,7 +5153,7 @@ Casts a value of `U64` into a value of `U32`.
 
 Type: `Std::U64 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::U64::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `U64`.
 
@@ -5137,7 +5161,7 @@ Casts a value of `U64` into a value of `U64`.
 
 Type: `Std::U64 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::U64::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U64` into a value of `U8`.
 
@@ -5220,7 +5244,7 @@ Type: `Std::U8 -> Std::U8 -> Std::U8`
 
 Type: `Std::U8 -> Std::FFI::CChar`
 
-(Deprecated) Use instead `ToCChar::c_char`
+(Deprecated) The function `Std::U8::to_CChar` has been deprecated in favor of the trait member `ToCChar::c_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CChar`.
 
@@ -5228,7 +5252,7 @@ Casts a value of `U8` into a value of `CChar`.
 
 Type: `Std::U8 -> Std::F64`
 
-(Deprecated) Use instead `ToCDouble::c_double`
+(Deprecated) The function `Std::U8::to_CDouble` has been deprecated in favor of the trait member `ToCDouble::c_double`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CDouble`.
 
@@ -5236,7 +5260,7 @@ Casts a value of `U8` into a value of `CDouble`.
 
 Type: `Std::U8 -> Std::F32`
 
-(Deprecated) Use instead `ToCFloat::c_float`
+(Deprecated) The function `Std::U8::to_CFloat` has been deprecated in favor of the trait member `ToCFloat::c_float`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CFloat`.
 
@@ -5244,7 +5268,7 @@ Casts a value of `U8` into a value of `CFloat`.
 
 Type: `Std::U8 -> Std::FFI::CInt`
 
-(Deprecated) Use instead `ToCInt::c_int`
+(Deprecated) The function `Std::U8::to_CInt` has been deprecated in favor of the trait member `ToCInt::c_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CInt`.
 
@@ -5252,7 +5276,7 @@ Casts a value of `U8` into a value of `CInt`.
 
 Type: `Std::U8 -> Std::FFI::CLong`
 
-(Deprecated) Use instead `ToCLong::c_long`
+(Deprecated) The function `Std::U8::to_CLong` has been deprecated in favor of the trait member `ToCLong::c_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CLong`.
 
@@ -5260,7 +5284,7 @@ Casts a value of `U8` into a value of `CLong`.
 
 Type: `Std::U8 -> Std::FFI::CLongLong`
 
-(Deprecated) Use instead `ToCLongLong::c_long_long`
+(Deprecated) The function `Std::U8::to_CLongLong` has been deprecated in favor of the trait member `ToCLongLong::c_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CLongLong`.
 
@@ -5268,7 +5292,7 @@ Casts a value of `U8` into a value of `CLongLong`.
 
 Type: `Std::U8 -> Std::FFI::CShort`
 
-(Deprecated) Use instead `ToCShort::c_short`
+(Deprecated) The function `Std::U8::to_CShort` has been deprecated in favor of the trait member `ToCShort::c_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CShort`.
 
@@ -5276,7 +5300,7 @@ Casts a value of `U8` into a value of `CShort`.
 
 Type: `Std::U8 -> Std::FFI::CSizeT`
 
-(Deprecated) Use instead `ToCSizeT::c_size_t`
+(Deprecated) The function `Std::U8::to_CSizeT` has been deprecated in favor of the trait member `ToCSizeT::c_size_t`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CSizeT`.
 
@@ -5284,7 +5308,7 @@ Casts a value of `U8` into a value of `CSizeT`.
 
 Type: `Std::U8 -> Std::FFI::CUnsignedChar`
 
-(Deprecated) Use instead `ToCUnsignedChar::c_unsigned_char`
+(Deprecated) The function `Std::U8::to_CUnsignedChar` has been deprecated in favor of the trait member `ToCUnsignedChar::c_unsigned_char`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CUnsignedChar`.
 
@@ -5292,7 +5316,7 @@ Casts a value of `U8` into a value of `CUnsignedChar`.
 
 Type: `Std::U8 -> Std::FFI::CUnsignedInt`
 
-(Deprecated) Use instead `ToCUnsignedInt::c_unsigned_int`
+(Deprecated) The function `Std::U8::to_CUnsignedInt` has been deprecated in favor of the trait member `ToCUnsignedInt::c_unsigned_int`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CUnsignedInt`.
 
@@ -5300,7 +5324,7 @@ Casts a value of `U8` into a value of `CUnsignedInt`.
 
 Type: `Std::U8 -> Std::FFI::CUnsignedLong`
 
-(Deprecated) Use instead `ToCUnsignedLong::c_unsigned_long`
+(Deprecated) The function `Std::U8::to_CUnsignedLong` has been deprecated in favor of the trait member `ToCUnsignedLong::c_unsigned_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CUnsignedLong`.
 
@@ -5308,7 +5332,7 @@ Casts a value of `U8` into a value of `CUnsignedLong`.
 
 Type: `Std::U8 -> Std::FFI::CUnsignedLongLong`
 
-(Deprecated) Use instead `ToCUnsignedLongLong::c_unsigned_long_long`
+(Deprecated) The function `Std::U8::to_CUnsignedLongLong` has been deprecated in favor of the trait member `ToCUnsignedLongLong::c_unsigned_long_long`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CUnsignedLongLong`.
 
@@ -5316,7 +5340,7 @@ Casts a value of `U8` into a value of `CUnsignedLongLong`.
 
 Type: `Std::U8 -> Std::FFI::CUnsignedShort`
 
-(Deprecated) Use instead `ToCUnsignedShort::c_unsigned_short`
+(Deprecated) The function `Std::U8::to_CUnsignedShort` has been deprecated in favor of the trait member `ToCUnsignedShort::c_unsigned_short`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `CUnsignedShort`.
 
@@ -5324,7 +5348,7 @@ Casts a value of `U8` into a value of `CUnsignedShort`.
 
 Type: `Std::U8 -> Std::F32`
 
-(Deprecated) Use instead `ToF32::f32`
+(Deprecated) The function `Std::U8::to_F32` has been deprecated in favor of the trait member `ToF32::f32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `F32`.
 
@@ -5332,7 +5356,7 @@ Casts a value of `U8` into a value of `F32`.
 
 Type: `Std::U8 -> Std::F64`
 
-(Deprecated) Use instead `ToF64::f64`
+(Deprecated) The function `Std::U8::to_F64` has been deprecated in favor of the trait member `ToF64::f64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `F64`.
 
@@ -5340,7 +5364,7 @@ Casts a value of `U8` into a value of `F64`.
 
 Type: `Std::U8 -> Std::I16`
 
-(Deprecated) Use instead `ToI16::i16`
+(Deprecated) The function `Std::U8::to_I16` has been deprecated in favor of the trait member `ToI16::i16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `I16`.
 
@@ -5348,7 +5372,7 @@ Casts a value of `U8` into a value of `I16`.
 
 Type: `Std::U8 -> Std::I32`
 
-(Deprecated) Use instead `ToI32::i32`
+(Deprecated) The function `Std::U8::to_I32` has been deprecated in favor of the trait member `ToI32::i32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `I32`.
 
@@ -5356,7 +5380,7 @@ Casts a value of `U8` into a value of `I32`.
 
 Type: `Std::U8 -> Std::I64`
 
-(Deprecated) Use instead `ToI64::i64`
+(Deprecated) The function `Std::U8::to_I64` has been deprecated in favor of the trait member `ToI64::i64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `I64`.
 
@@ -5364,7 +5388,7 @@ Casts a value of `U8` into a value of `I64`.
 
 Type: `Std::U8 -> Std::I8`
 
-(Deprecated) Use instead `ToI8::i8`
+(Deprecated) The function `Std::U8::to_I8` has been deprecated in favor of the trait member `ToI8::i8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `I8`.
 
@@ -5372,7 +5396,7 @@ Casts a value of `U8` into a value of `I8`.
 
 Type: `Std::U8 -> Std::U16`
 
-(Deprecated) Use instead `ToU16::u16`
+(Deprecated) The function `Std::U8::to_U16` has been deprecated in favor of the trait member `ToU16::u16`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `U16`.
 
@@ -5380,7 +5404,7 @@ Casts a value of `U8` into a value of `U16`.
 
 Type: `Std::U8 -> Std::U32`
 
-(Deprecated) Use instead `ToU32::u32`
+(Deprecated) The function `Std::U8::to_U32` has been deprecated in favor of the trait member `ToU32::u32`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `U32`.
 
@@ -5388,7 +5412,7 @@ Casts a value of `U8` into a value of `U32`.
 
 Type: `Std::U8 -> Std::U64`
 
-(Deprecated) Use instead `ToU64::u64`
+(Deprecated) The function `Std::U8::to_U64` has been deprecated in favor of the trait member `ToU64::u64`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `U64`.
 
@@ -5396,7 +5420,7 @@ Casts a value of `U8` into a value of `U64`.
 
 Type: `Std::U8 -> Std::U8`
 
-(Deprecated) Use instead `ToU8::u8`
+(Deprecated) The function `Std::U8::to_U8` has been deprecated in favor of the trait member `ToU8::u8`. The old function name will remain available for the foreseeable future to maintain backward compatibility.
 
 Casts a value of `U8` into a value of `U8`.
 

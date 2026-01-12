@@ -24,7 +24,7 @@ pub fn test_string_get_sub() {
     main : IO ();
     main = (
         let str = "Hello";
-        let n = str.get_size;
+        let n = str.@size;
         assert_eq(|_|"", str.get_sub(2, 4), "ll");;
         assert_eq(|_|"", str.get_sub(0, 0), "");;
         assert_eq(|_|"", str.get_sub(3, n+1), "lo");;
@@ -151,8 +151,8 @@ pub fn test_string_less_than_and_less_than_or_eq() {
         let ss = [s1, s2, s3, s4, s5];
 
         let indices = do {
-            let i = *Iterator::range(0, ss.get_size).to_dyn;
-            let j = *Iterator::range(0, ss.get_size).to_dyn;
+            let i = *Iterator::range(0, ss.@size).to_dyn;
+            let j = *Iterator::range(0, ss.@size).to_dyn;
             pure $ (i, j)
         };
         indices.loop_iter_m((), |(i, j), _| (

@@ -45,6 +45,9 @@
 - Changed the type of `Std::FFI::Destructor::make` function to return `IO`. Correspondingly, `Std::IO::IOHandle::from_file_ptr` also returns `IO`.
 - Made all values in the `Std::PunchedArray` namespace private (since they are not intended to be used directly from outside).
 - `Array::empty` and `Array::fill` now verifies the capacity and size arguments at runtime to ensure they are non-negative, and raises an error if they are negative.
+- Deprecated `Std::Array::get_size` in favor of `Std::Array::@size` for brevity. The old name will remain available for the foreseeable future to maintain backward compatibility.
+- Deprecated `Std::String::get_size` in favor of `Std::String::@size` for brevity. The old name will remain available for the foreseeable future to maintain backward compatibility.
+- Deprecated numeric conversion functions `Std::<Type>::to_<target_type>` (e.g., `Std::I32::to_f64`) in favor of trait members `To<TargetType>::<target_type>` (e.g., `ToF64::f64`). The old function names will remain available for the foreseeable future to maintain backward compatibility.
 
 #### Compiler
 

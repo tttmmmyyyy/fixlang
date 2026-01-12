@@ -2,7 +2,7 @@ module Main;
 
 array_mod : Array I64 -> I64;
 array_mod = |arr| (
-    let n = arr.get_size;
+    let n = arr.@size;
     let arr = Iterator::range(1, n).fold(arr, |i, arr| 
         arr.mod(i, add(arr.@(i-1)))
     );

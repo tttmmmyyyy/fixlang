@@ -2,8 +2,8 @@ module Main;
 
 sum_by_loop_iter_cap : Array I64 -> I64;
 sum_by_loop_iter_cap = |arr| (
-    Iterator::range(0, arr.get_size).loop_iter(0, |i, sum|
-        if i == arr.get_size { break $ sum };
+    Iterator::range(0, arr.@size).loop_iter(0, |i, sum|
+        if i == arr.@size { break $ sum };
         continue $ sum + arr.@(i)
     )
 );

@@ -28,7 +28,7 @@ main = (
         (uf, rng)
     )));
     let (uf, grps) = uf.get_groups;
-    assert_eq(|_|"test_speed", grps.get_size, 16102);;
+    assert_eq(|_|"test_speed", grps.@size, 16102);;
     println $ "[CPLib.UnionFind.Test] UnionFind({}): {}".populate([n.to_string, time.to_string]);;
 
     pure()

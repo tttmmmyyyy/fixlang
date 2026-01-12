@@ -8,7 +8,7 @@ main = (
     assert_eq(|_|"test_prime_list 1", create_prime_list(20).map(to_I64), [2, 3, 5, 7, 11, 13, 17, 19]);;
     let (res, time) = consumed_time_while_lazy(|_| create_prime_list(n));
 
-    assert_eq(|_|"test_prime_list 2", res.get_size, 5761455);;
+    assert_eq(|_|"test_prime_list 2", res.@size, 5761455);;
     println $ "[CPLib.Arithmetic.Test] create_prime_list({}): {}".populate([n.to_string, time.to_string]);;
     pure()
 );

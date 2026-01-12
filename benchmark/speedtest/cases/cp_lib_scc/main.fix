@@ -18,7 +18,7 @@ main = (
     );
     // 強連結成分を計算
     let (sccs, time) = consumed_time_while_lazy(|_| graph.calc_sccs);
-    assert_eq(|_|"test_scc_speed", sccs.get_size, 99999);;
+    assert_eq(|_|"test_scc_speed", sccs.@size, 99999);;
     println("[CPLib.Graph.Test] calc_sccs({}): {}".populate([n.to_string, time.to_string]));;
     pure()
 );

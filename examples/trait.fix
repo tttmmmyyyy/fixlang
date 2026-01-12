@@ -39,7 +39,7 @@ impl [a : Eq, b : Eq] Pair a b : Eq {
 // You can specify constraints on type variables in the `[]` bracket before a type signature.
 search : [a : Eq] a -> Array a -> I64;
 search = |elem, arr| loop(0, |idx|
-    if idx == arr.get_size { break $ -1 };
+    if idx == arr.@size { break $ -1 };
     if arr.@(idx) == elem { break $ idx };
     continue $ (idx + 1)
 );
@@ -57,7 +57,7 @@ impl Array : MyFunctor {
     mymap : (a -> b) -> Array a -> Array b;
     // Also, type variables (like `a` and `b`) defined in the member's type signature can be used in type annotations in the member's implementation.
     mymap = |f : a -> b, arr : Array a| (
-        Array::from_map(arr.get_size, |idx| f(arr.@(idx)))
+        Array::from_map(arr.@size, |idx| f(arr.@(idx)))
     );
 }
 
