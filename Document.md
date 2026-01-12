@@ -581,7 +581,7 @@ As in the case of unions, there are methods that are automatically defined for s
 - `mod_price : (I64 -> I64) -> Product -> Product` and `mod_sold : (Bool -> Bool) -> Product -> Product`
     - Modify a `Product` value by a function acting on a field.
 
-I already explained that we can use patterns to destructure tuples. You can also use patterns to destructure a struct value. For example, field accessor function `@price : Product -> I64` can be re-defined as follows: 
+I already explained that we can use patterns to destructure tuples. You can also use patterns to destructure a struct value. For example, you can define a function `get_price` that behaves the same as the field accessor function `@price : Product -> I64` as follows:
 
 ```
 get_price : Product -> I64;

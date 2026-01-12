@@ -629,7 +629,7 @@ let product = Product { price: 100, sold: false };
 
 タプルを分解するためにパターンを使用できることはすでに説明しました。
 構造体の値を分解するためにもパターンを使用できます。
-たとえば、フィールドアクセサ関数`@price : Product -> I64`は次のように再定義できます。
+たとえば、フィールドアクセサ関数`@price : Product -> I64`と同じ動作の関数`get_price`を次のように定義できます。
 
 ```
 get_price : Product -> I64;
