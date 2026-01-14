@@ -2907,6 +2907,7 @@ pub fn struct_act(
     //         f(s.@{field}).map(|e| s.set_{field}(e))
     //     }
     // );
+    // ```
     // (Here, we cannot use the parser because we are using "#" is not allowed as value name)
     //
     // We should use `#plug_in_fu_{field}` here, not `#plug_in_{field}`:
