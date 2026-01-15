@@ -85,6 +85,7 @@
         - [About Duplicated Build Settings](#about-duplicated-build-settings)
     - [Managing dependencies](#managing-dependencies)
     - [Configuration file](#configuration-file)
+    - [Tests](#tests)
     - [Generating documentation](#generating-documentation)
     - [Language Server Protocol](#language-server-protocol)
         - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
@@ -2718,6 +2719,12 @@ registries = [
     "/path/to/my_registry.toml"
 ]
 ```
+
+## Tests
+
+The test feature built into the Fix command is very simple:
+When you run `fix test`, it executes `Test::test : IO ()`.
+Also, at this time, the source files listed in the `build.test` section of the project file are compiled in addition to the source files listed in the `build` section.
 
 ## Generating documentation
 
