@@ -218,7 +218,7 @@ impl DependecyLockFile {
         if lock_file_path.exists() {
             std::fs::remove_file(lock_file_path).expect("Failed to remove the lock file.");
         }
-        ProjectFile::read_root_file()?.open_or_create_lock_file_and_isntall()
+        ProjectFile::read_root_file()?.open_or_create_lock_file_and_install()
     }
 }
 

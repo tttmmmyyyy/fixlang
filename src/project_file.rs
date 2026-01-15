@@ -671,7 +671,7 @@ impl ProjectFile {
     }
 
     // Open the lock file, create a new one if it does not exist, and install the dependencies.
-    pub fn open_or_create_lock_file_and_isntall(&self) -> Result<(), Errors> {
+    pub fn open_or_create_lock_file_and_install(&self) -> Result<(), Errors> {
         self.open_or_create_lock_file().and_then(|lf| lf.install())
     }
 
