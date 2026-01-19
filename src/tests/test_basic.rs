@@ -2414,7 +2414,7 @@ pub fn test_ffi_call() {
             main : IO ();
             main = (
                 eval "Hello C function! Number = %d\n".borrow_c_str(|ptr|
-                    FFI_CALL[I32 printf(Ptr, I32, ...), ptr, 42.i32]
+                    FFI_CALL[I32 printf(Ptr, ...), ptr, 42.i32]
                 );
                 pure()
             );
@@ -2432,7 +2432,7 @@ pub fn test_ffi_call_ios() {
             main = (
                 IO::from_runner(|ios|
                     "Hello C function! Number = %d\n".borrow_c_str(|ptr|
-                        FFI_CALL_IOS[I32 printf(Ptr, I32, ...), ptr, 42.i32, ios]
+                        FFI_CALL_IOS[I32 printf(Ptr, ...), ptr, 42.i32, ios]
                     )
                 );;
                 pure()
@@ -2450,7 +2450,7 @@ pub fn test_ffi_call_io() {
             main : IO ();
             main = (
                 "Hello C function! Number = %d\n".@_data.borrow_boxed_io(|ptr|
-                    FFI_CALL_IO[I32 printf(Ptr, I32, ...), ptr, 42.i32]
+                    FFI_CALL_IO[I32 printf(Ptr, ...), ptr, 42.i32]
                 );;
                 pure()
             );
@@ -6309,7 +6309,7 @@ pub fn test_mutate_boxed() {
             let x : Box I32 = Box { value : 0_I32 };
             let (x, _) = x.mutate_boxed(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt, ...), ptr, 4.c_size_t, c_str, 123.c_int, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, ...), ptr, 4.c_size_t, c_str, 123.c_int, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
@@ -6330,7 +6330,7 @@ pub fn test_mutate_boxed_io() {
             let x : Box I32 = Box { value : 0_I32 };
             let (x, _) = *x.mutate_boxed_io(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt, ...), ptr, 4.c_size_t, c_str, 123.c_int, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, ...), ptr, 4.c_size_t, c_str, 123.c_int, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
@@ -6350,7 +6350,7 @@ pub fn test_mutate_boxed_shared() {
             let x : Box I32 = Box { value : 0_I32 };
             let (y, _) = x.mutate_boxed(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt, ...), ptr, 4.c_size_t, c_str, 123.c_int, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, ...), ptr, 4.c_size_t, c_str, 123.c_int, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0_I32);;
@@ -6371,7 +6371,7 @@ pub fn test_mutate_boxed_io_shared() {
             let x : Box I32 = Box { value : 0_I32 };
             let (y, _) = *x.mutate_boxed_io(|ptr| IO::from_runner $ |ios|
                 "%d".borrow_c_str(|c_str|
-                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, CInt, ...), ptr, 4.c_size_t, c_str, 123.c_int, ios]
+                    FFI_CALL_IOS[CInt snprintf(Ptr, CSizeT, Ptr, ...), ptr, 4.c_size_t, c_str, 123.c_int, ios]
                 )
             );
             assert_eq(|_|"", x.@value, 0_I32);;
