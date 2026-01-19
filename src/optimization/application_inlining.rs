@@ -189,7 +189,7 @@ impl ExprVisitor for AppInliner {
             Expr::MakeStruct(_, _) => {
                 return EndVisitResult::unchanged(expr);
             }
-            Expr::FFICall(_, _, _, _, _) => {
+            Expr::FFICall(_, _, _, _, _, _) => {
                 return EndVisitResult::unchanged(expr);
             }
         }

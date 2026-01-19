@@ -402,7 +402,7 @@ impl ExprNode {
 
     pub fn get_ffi_call_args(&self) -> Vec<Arc<ExprNode>> {
         match &*self.expr {
-            Expr::FFICall(_, _, _, args, _) => args.clone(),
+            Expr::FFICall(_, _, _, _, args, _) => args.clone(),
             _ => {
                 panic!()
             }
@@ -710,13 +710,14 @@ impl ExprNode {
     pub fn set_ffi_call_arg(&self, arg: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
-            Expr::FFICall(fun_name, ret_ty, param_tys, args, is_io) => {
+            Expr::FFICall(fun_name, ret_ty, param_tys, is_va_args, args, is_io) => {
                 let mut args = args.clone();
                 args[idx] = arg;
                 ret.expr = Arc::new(Expr::FFICall(
                     fun_name.clone(),
                     ret_ty.clone(),
                     param_tys.clone(),
+                    *is_va_args,
                     args,
                     *is_io,
                 ));
@@ -731,11 +732,12 @@ impl ExprNode {
     pub fn set_ffi_call_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
-            Expr::FFICall(fun_name, ret_ty, param_tys, _, is_io) => {
+            Expr::FFICall(fun_name, ret_ty, param_tys, is_va_args, _, is_io) => {
                 ret.expr = Arc::new(Expr::FFICall(
                     fun_name.clone(),
                     ret_ty.clone(),
                     param_tys.clone(),
+                    *is_va_args,
                     args,
                     *is_io,
                 ));
@@ -843,7 +845,7 @@ impl ExprNode {
                 }
                 Ok(expr)
             }
-            Expr::FFICall(_, _, _, args, _) => {
+            Expr::FFICall(_, _, _, _, args, _) => {
                 let mut expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {
                     expr = expr.set_ffi_call_arg(arg.resolve_namespace(ctx)?, i);
@@ -928,7 +930,7 @@ impl ExprNode {
                 }
                 Ok(expr)
             }
-            Expr::FFICall(_, _, _, args, _) => {
+            Expr::FFICall(_, _, _, _, args, _) => {
                 let mut expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {
                     expr = expr.set_ffi_call_arg(arg.resolve_type_aliases(type_env)?, i);
@@ -1032,7 +1034,7 @@ impl ExprNode {
                 }
                 None
             }
-            Expr::FFICall(_, _, _, args, _) => {
+            Expr::FFICall(_, _, _, _, args, _) => {
                 for (_, e) in args.iter().enumerate() {
                     let node = e.find_node_at(pos);
                     if node.is_some() {
@@ -1118,7 +1120,7 @@ impl ExprNode {
                 }
                 free_vars
             }
-            Expr::FFICall(_, _, _, args, _) => {
+            Expr::FFICall(_, _, _, _, args, _) => {
                 let mut free_vars = Set::default();
                 for (_i, e) in args.iter().enumerate() {
                     free_vars.extend(e.free_vars());
@@ -1208,7 +1210,7 @@ impl ExprNode {
                 let new_elems = elems.iter().map(|e| e.global_to_absolute()).collect();
                 Arc::new(Expr::ArrayLit(new_elems))
             }
-            Expr::FFICall(name, ret_ty, param_tys, args, is_ios) => {
+            Expr::FFICall(name, ret_ty, param_tys, is_va_args, args, is_ios) => {
                 let new_ret_ty = ret_ty.global_to_absolute();
                 let new_param_tys = param_tys.iter().map(|ty| ty.global_to_absolute()).collect();
                 let new_args = args.iter().map(|arg| arg.global_to_absolute()).collect();
@@ -1216,6 +1218,7 @@ impl ExprNode {
                     name.clone(),
                     new_ret_ty,
                     new_param_tys,
+                    *is_va_args,
                     new_args,
                     *is_ios,
                 ))
@@ -1268,6 +1271,7 @@ pub enum Expr {
         Name,               /* function name */
         Arc<TyCon>,         /* Return type */
         Vec<Arc<TyCon>>,    /* Parameter types */
+        bool,               /* is_va_args */
         Vec<Arc<ExprNode>>, /* Arguments */
         bool,               /* is_ios */
     ),
@@ -1390,11 +1394,14 @@ impl Expr {
                 }
                 Text::join(elem_lines, ", ", FORMAT_LINE_LIMIT).square_brace()
             }
-            Expr::FFICall(fun_name, _, _, args, is_ios) => {
+            Expr::FFICall(fun_name, _, _, is_va_args, args, is_ios) => {
                 let mut arg_texts: Vec<Text> = vec![];
                 arg_texts.push(Text::from_str(&fun_name));
                 for arg in args {
                     arg_texts.push(arg.expr.stringify());
+                }
+                if *is_va_args {
+                    arg_texts.push(Text::from_str("..."));
                 }
                 let args = Text::join(arg_texts, ", ", FORMAT_LINE_LIMIT).square_brace();
                 Text::from_str(&format!("FFI_CALL{}", if *is_ios { "_IOS" } else { "" }))
@@ -1586,11 +1593,15 @@ pub fn expr_ffi_call(
     fun_name: Name,
     ret_ty: Arc<TyCon>,
     param_tys: Vec<Arc<TyCon>>,
+    is_va_args: bool,
     args: Vec<Arc<ExprNode>>,
     is_ios: bool,
     src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::FFICall(fun_name, ret_ty, param_tys, args, is_ios)).into_expr_node(src)
+    Arc::new(Expr::FFICall(
+        fun_name, ret_ty, param_tys, is_va_args, args, is_ios,
+    ))
+    .into_expr_node(src)
 }
 
 // Convert f(y, z) to (f, [y, z]).

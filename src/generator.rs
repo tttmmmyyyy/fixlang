@@ -1696,9 +1696,17 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 self.eval_make_struct(fields.clone(), struct_ty, tail)
             }
             Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.type_.clone().unwrap(), tail),
-            Expr::FFICall(fun_name, ret_ty, param_tys, args, is_io) => {
-                self.eval_ffi_call(&expr, fun_name, ret_ty, param_tys, args, *is_io, tail)
-            }
+            Expr::FFICall(fun_name, ret_ty, param_tys, is_var_args, args, is_io) => self
+                .eval_ffi_call(
+                    &expr,
+                    fun_name,
+                    ret_ty,
+                    param_tys,
+                    *is_var_args,
+                    args,
+                    *is_io,
+                    tail,
+                ),
             Expr::Eval(side, main) => self.eval_eval(side.clone(), main.clone(), tail),
         };
 
@@ -2468,6 +2476,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
         fun_name: &Name,
         ret_tycon: &Arc<TyCon>,
         param_tys: &Vec<Arc<TyCon>>,
+        is_var_args: bool,
         args: &Vec<Arc<ExprNode>>,
         is_io: bool,
         tail: bool,
@@ -2504,9 +2513,9 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
                 let fn_ty = match ret_c_ty {
                     None => {
                         // Void case.
-                        self.context.void_type().fn_type(&parm_c_tys, false)
+                        self.context.void_type().fn_type(&parm_c_tys, is_var_args)
                     }
-                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, false),
+                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_var_args),
                 };
                 self.module.add_function(&fun_name, fn_ty, None)
             }

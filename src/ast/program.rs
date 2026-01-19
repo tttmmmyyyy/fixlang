@@ -1375,7 +1375,7 @@ impl Program {
                 }
                 expr
             }
-            Expr::FFICall(_, _, _, args, _) => {
+            Expr::FFICall(_, _, _, _, args, _) => {
                 let mut expr = expr.clone();
                 for (i, e) in args.iter().enumerate() {
                     let e = self.instantiate_expr(e)?;

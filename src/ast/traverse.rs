@@ -469,7 +469,7 @@ pub trait ExprVisitor {
                 let res = self.end_visit_array_lit(&expr, state).add_changed(changed);
                 self.revisit_if_changed(res, state)
             }
-            Expr::FFICall(_, _, _, args, _) => {
+            Expr::FFICall(_, _, _, _, args, _) => {
                 let mut changed = false;
                 let mut expr = expr.clone();
                 let res = self.start_visit_ffi_call(&expr, state);

@@ -271,7 +271,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
             }
             expr
         }
-        Expr::FFICall(_, _, _, args, _) => {
+        Expr::FFICall(_, _, _, _, args, _) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {
                 expr = expr

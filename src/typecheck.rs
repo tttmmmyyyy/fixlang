@@ -1067,7 +1067,7 @@ impl TypeCheckContext {
                 }
                 Ok(ei)
             }
-            Expr::FFICall(_, ret_ty, param_tys, args, is_io) => {
+            Expr::FFICall(_, ret_ty, param_tys, _, args, is_io) => {
                 let ret_ty = type_tycon(ret_ty);
                 let ret_ty = if *is_io {
                     make_tuple_ty(vec![make_iostate_ty(), ret_ty])
@@ -1724,7 +1724,7 @@ impl TypeCheckContext {
                 let elems = collect_results(elems.iter().map(|e| self.finalize_types(e.clone())))?;
                 expr.set_array_lit_elems(elems)
             }
-            Expr::FFICall(_, _, _, args, _) => {
+            Expr::FFICall(_, _, _, _, args, _) => {
                 let args =
                     collect_results(args.iter().map(|arg| self.finalize_types(arg.clone())))?;
                 expr.set_ffi_call_args(args)

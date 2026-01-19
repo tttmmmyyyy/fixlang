@@ -322,7 +322,7 @@ global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep
 module = { module_defn ~ (sep* ~ (global_defns | import_statement))* }
 
 // === FFI (FFI_CALL) ===
-expr_call_c = { (ffi_call_c_ios_symbol | ffi_call_c_io_symbol | ffi_call_c_symbol) ~ sep* ~ "[" ~ sep* ~ ffi_c_fun_ty ~ sep+ ~ ffi_c_fun_name ~ sep* ~ "(" ~ sep* ~ ffi_param_tys ~ sep* ~ ")" ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ "]" }
+expr_call_c = { (ffi_call_c_ios_symbol | ffi_call_c_io_symbol | ffi_call_c_symbol) ~ sep* ~ "[" ~ sep* ~ ffi_c_fun_ty ~ sep+ ~ ffi_c_fun_name ~ sep* ~ "(" ~ sep* ~ ffi_param_tys ~ (sep* ~ "," ~ sep* ~ ffi_va_args)? ~ sep* ~ ")" ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ "]" }
 
 ffi_call_c_symbol = { "FFI_CALL" }
 
@@ -356,6 +356,8 @@ ffi_c_ty_unit = _{ "()" }
 ffi_c_ty_ptr = _{ "Ptr" }
 
 ffi_param_tys = { (ffi_c_fun_ty ~ (sep* ~ "," ~ sep* ~ ffi_c_fun_ty)*) | "" }
+
+ffi_va_args = { "..." }
 
 // === FFI (FFI_EXPORT) === 
 

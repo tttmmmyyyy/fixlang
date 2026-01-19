@@ -1965,13 +1965,22 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx);
     let fun_name = pairs.next().unwrap().as_str().to_string();
     let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx);
+
+    let mut is_va_args = false;
+    if let Some(pair) = pairs.peek() {
+        if pair.as_rule() == Rule::ffi_va_args {
+            is_va_args = true;
+            pairs.next();
+        }
+    }
+
     let mut args = pairs
         .map(|pair| parse_expr(pair, ctx))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Validate number of arguments.
     let arg_num = param_tys.len() + if is_ios { 1 } else { 0 };
-    if args.len() != arg_num {
+    if !is_va_args && args.len() != arg_num {
         return Err(Errors::from_msg_srcs(
             format!(
                 "Wrong number of arguments in FFI_CALL{} expression.",
@@ -1991,7 +2000,15 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
         // Wrap the function call with IO.
         const IOS_NAME: &str = "#ios";
         args.push(expr_var(FullName::local(IOS_NAME), None));
-        let ffi_call = expr_ffi_call(fun_name, ret_ty, param_tys, args, true, Some(span.clone()));
+        let ffi_call = expr_ffi_call(
+            fun_name,
+            ret_ty,
+            param_tys,
+            is_va_args,
+            args,
+            true,
+            Some(span.clone()),
+        );
         let runner = expr_abs(vec![var_local(IOS_NAME)], ffi_call, Some(span.clone()));
         expr_make_struct(
             make_io_tycon().global_to_absolute(),
@@ -1999,7 +2016,15 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
         )
         .set_source(Some(span))
     } else {
-        expr_ffi_call(fun_name, ret_ty, param_tys, args, is_ios, Some(span))
+        expr_ffi_call(
+            fun_name,
+            ret_ty,
+            param_tys,
+            is_va_args,
+            args,
+            is_ios,
+            Some(span),
+        )
     };
     Ok(expr)
 }
