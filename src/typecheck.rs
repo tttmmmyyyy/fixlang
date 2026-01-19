@@ -1067,7 +1067,7 @@ impl TypeCheckContext {
                 }
                 Ok(ei)
             }
-            Expr::FFICall(_, ret_ty, param_tys, _, args, is_io) => {
+            Expr::FFICall(_, ret_ty, param_tys, is_var_args, args, is_io) => {
                 let ret_ty = type_tycon(ret_ty);
                 let ret_ty = if *is_io {
                     make_tuple_ty(vec![make_iostate_ty(), ret_ty])
@@ -1078,17 +1078,22 @@ impl TypeCheckContext {
                     let err = self.create_type_mismatch_error(&ty, &ret_ty, &e, &ei.source);
                     return Err(Errors::from_err(err));
                 }
-                let mut param_tys = param_tys
-                    .iter()
-                    .map(|tc| type_tycon(tc))
-                    .collect::<Vec<_>>();
-                if *is_io {
-                    param_tys.push(make_iostate_ty());
-                }
                 let mut ei = ei.clone();
                 for (i, e) in args.iter().enumerate() {
-                    assert!(i < param_tys.len());
-                    let e = self.unify_type_of_expr(e, param_tys[i].clone())?;
+                    let param_ty = if i < param_tys.len() {
+                        // The explicitly given parameter type.
+                        type_tycon(&param_tys[i])
+                    } else if i == args.len() - 1 && *is_io {
+                        // The last parameter is iostate for IO FFI call.
+                        make_iostate_ty()
+                    } else {
+                        // An implicitly given parameter type (for variadic arguments).
+                        assert!(*is_var_args);
+                        let tv = self.new_tyvar_star();
+                        self.add_tyvar_source(tv.name.clone(), ei.source.clone());
+                        type_from_tyvar(tv)
+                    };
+                    let e = self.unify_type_of_expr(e, param_ty)?;
                     ei = ei.set_ffi_call_arg(e, i);
                 }
                 Ok(ei)

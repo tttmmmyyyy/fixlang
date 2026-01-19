@@ -1966,10 +1966,10 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     let fun_name = pairs.next().unwrap().as_str().to_string();
     let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx);
 
-    let mut is_va_args = false;
+    let mut is_var_args = false;
     if let Some(pair) = pairs.peek() {
         if pair.as_rule() == Rule::ffi_va_args {
-            is_va_args = true;
+            is_var_args = true;
             pairs.next();
         }
     }
@@ -1979,8 +1979,10 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
         .collect::<Result<Vec<_>, _>>()?;
 
     // Validate number of arguments.
-    let arg_num = param_tys.len() + if is_ios { 1 } else { 0 };
-    if !is_va_args && args.len() != arg_num {
+    let required_arg_num = param_tys.len() + if is_ios { 1 } else { 0 };
+    let wrong_arg_num = (!is_var_args && args.len() != required_arg_num)
+        || (is_var_args && args.len() < required_arg_num);
+    if wrong_arg_num {
         return Err(Errors::from_msg_srcs(
             format!(
                 "Wrong number of arguments in FFI_CALL{} expression.",
@@ -2004,7 +2006,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
             fun_name,
             ret_ty,
             param_tys,
-            is_va_args,
+            is_var_args,
             args,
             true,
             Some(span.clone()),
@@ -2020,7 +2022,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
             fun_name,
             ret_ty,
             param_tys,
-            is_va_args,
+            is_var_args,
             args,
             is_ios,
             Some(span),
