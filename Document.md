@@ -2013,7 +2013,7 @@ However, using FFI can allow external functions to break Fix's guarantees of imm
 
 ### Calling External Functions from Fix
 
-To call an external function from Fix, you use the `FFI_CALL(_IO|_IOS)[...]` expression. The syntax is as follows:
+To call an external function from Fix, you use the `FFI_CALL(_IO)[...]` expression. The syntax is as follows:
 
 ```
 FFI_CALL[{function_signature}, {arg_0}, {arg_1}, ...]
@@ -2023,21 +2023,9 @@ FFI_CALL[{function_signature}, {arg_0}, {arg_1}, ...]
 FFI_CALL_IO[{function_signature}, {arg_0}, {arg_1}, ...]
 ```
 
-```
-FFI_CALL_IOS[{function_signature}, {arg_0}, {arg_1}, ..., {iostate}]
-```
-
 Use `FFI_CALL` to call a pure external function. `FFI_CALL[...]` takes the same arguments as the external function and returns a Fix value corresponding to the external function's return value.
 
 If the external function has side effects, use `FFI_CALL_IO`, which returns an `IO` monad value.
-
-You can also use `FFI_CALL_IOS` instead of `FFI_CALL_IO`. This function takes an additional argument of type `IOState` and returns a value of type `(IOState, a)`, where `a` is the return type of the external function.
-
-Note: `IOState` is a type defined in the Fix standard library that represents the internal state of the `IO` monad. In fact, `IO` is defined as follows:
-
-```
-type IO a = unbox struct { runner : IOState -> (IOState, a) };
-```
 
 As an example of `FFI_CALL` and `FFI_CALL_IO` usage, here is the implementation of `Std::consumed_time_while_io`.
 
@@ -2057,7 +2045,12 @@ consumed_time_while_io = |io| (
 
 Because `fixruntime_clock` is a function with side effects, it's called using `FFI_CALL_IO`. In contrast, `fixruntime_clocks_to_sec` is a pure function, so it's called using `FFI_CALL`.
 
-In the `{c_function_signature}` of `FFI_CALL` (or `FFI_CALL_IO`, `FFI_CALL_IOS`), you specify the name and signature of the external function to be called. The signature is written in the format `{return_type} {function_name}({arg_type_0}, {arg_type_1}, ...)`.
+In the `{c_function_signature}` of `FFI_CALL` (or `FFI_CALL_IO`), you specify the name and signature of the external function to be called.
+The signature is specified in one of the following formats:
+- `{return_type} {function_name}({arg_type_1}, ..., {arg_type_n})` (n >= 0)
+    - Represents a function with a fixed number of arguments.
+- `{return_type} {function_name}({arg_type_1}, ..., {arg_type_n}, ...)` (n >= 0)
+    - Has `, ...` written after the last type. Represents a variadic function.
 
 The following types can be used for `{return_type}` or `{arg_type_i}`:
 
@@ -2065,6 +2058,23 @@ The following types can be used for `{return_type}` or `{arg_type_i}`:
 * Numeric types with explicit bit widths: `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64`
 * C numeric types: `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble`
 * Substitute for `void`: `()`
+
+Note that the function signature must match what is declared in the C language header.
+For example, `scanf` is declared as `int scanf(const char *format, ...);`.
+Suppose that the pointer to the format string is `format_ptr : Ptr` and the pointer to a buffer to store the read value is `buf_ptr : Ptr`.
+In this case, the correct way to call it is as follows:
+```
+FFI_CALL_IO[CInt scanf(Ptr, ...), format_ptr, buf_ptr];
+```
+You should **not** write it as follows, because it does not match the signature of `scanf` in C:
+```
+FFI_CALL_IO[CInt scanf(Ptr, Ptr), format_ptr, buf_ptr];
+```
+
+Note:
+In addition to `FFI_CALL` and `FFI_CALL_IO`, `FFI_CALL_IOS` is also available.
+Like `FFI_CALL_IO`, this is used to call C language functions with side effects.
+However, it differs from `FFI_CALL_IO` in that it takes a value of type `IOState` as the last argument and returns `(IOState, a)` as the return value.
 
 ### Exporting Fix Values and Functions to External Languages
 

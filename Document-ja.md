@@ -2123,32 +2123,19 @@ Fixプログラムに静的または共有ライブラリを`--static-link` (`-s
 
 ### Fixで外部関数を呼び出す
 
-Fixで外部関数を呼び出すには、`FFI_CALL(_IO|_IOS)[...]`式を使用します。構文は次のとおりです：
+Fixで外部関数を呼び出すには、`FFI_CALL(_IO)[...]`式を使用します。構文は次のとおりです：
 
 ```
-FFI_CALL[{function_signature}, {arg_0}, {arg_1}, ...]
-```
-
-```
-FFI_CALL_IO[{function_signature}, {arg_0}, {arg_1}, ...]
+FFI_CALL[<function_signature>, <arg_0>, <arg_1>, ...]
 ```
 
 ```
-FFI_CALL_IOS[{function_signature}, {arg_0}, {arg_1}, ..., {iostate}]
+FFI_CALL_IO[<function_signature>, <arg_0>, <arg_1>, ...]
 ```
 
 純粋な外部関数を呼び出すには`FFI_CALL`を使用します。`FFI_CALL[...]`は外部関数と同じ引数を取り、外部関数の戻り値に対応するFixの値を返します。
 
 外部関数に副作用がある場合は、`FFI_CALL_IO`を使用します。これにより、`IO`モナド値が返されます。
-
-`FFI_CALL_IO`の代わりに`FFI_CALL_IOS`を使用することもできます。
-この関数は、型`IOState`の追加の引数を取り、型`(IOState, a)`の値を返します。ここで、`a`は外部関数の戻り値の型です。
-
-注：`IOState`はFixの標準ライブラリで定義されている型であり、`IO`モナドの内部状態を表します。実際、`IO`は以下のように定義されています。
-
-```
-type IO a = unbox struct { runner : IOState -> (IOState, a) };
-```
 
 `FFI_CALL`および`FFI_CALL_IO`の使用例として、`Std::consumed_time_while_io`の実装を紹介します。
 
@@ -2169,14 +2156,36 @@ consumed_time_while_io = |io| (
 `fixruntime_clock`は副作用のある関数であるため、`FFI_CALL_IO`を使用して呼び出しています。
 一方、`fixruntime_clocks_to_sec`は純粋な関数であるため、`FFI_CALL`を使用して呼び出しています。
 
-`FFI_CALL`（あるいは`FFI_CALL_IO`, `FFI_CALL_IOS`）の`{c_function_signature}`では、呼び出す外部関数の名前とシグネチャを指定します。
-シグネチャは`{return_type} {function_name}({arg_type_0}, {arg_type_1}, ...)`の形式で記述します。
-`{return_type}`または`{arg_type_i}`には、以下の型を使用できます：
+`FFI_CALL`（あるいは`FFI_CALL_IO`）の`<c_function_signature>`では、呼び出す外部関数の名前とシグネチャを指定します。
+シグネチャは、以下のどちらかの形式で指定します。
+- `<return_type> <function_name>(<arg_type_1>, ..., <arg_type_n>)`（n >= 0）
+    - 固定長引数の関数を表します。
+- `<return_type> <function_name>(<arg_type_1>, ..., <arg_type_n>, ...)`（n >= 0）
+    - 最後の型の後に`, ...`が書かれています。可変長引数の関数を表します。
+
+`<return_type>`または`<arg_type_i>`には、以下の型を使用できます。
 
 - ポインタ：`Ptr`
 - 明示的なビット幅を持つ数値型：`I8`、`U8`、`I16`、`U16`、`I32`、`U32`、`I64`、`U64`、`F32`、`F64`
 - Cの数値型：`CChar`、`CUnsignedChar`、`CShort`、`CUnsignedShort`、`CInt`、`CUnsignedInt`、`CLong`、`CUnsignedLong`、`CLongLong`、`CUnsignedLongLong`、`CSizeT`、`CFloat`、`CDouble`
 - `void`の代わり：`()`
+
+関数のシグネチャは、C言語のヘッダで宣言されているものに一致する必要があることに注意してください。
+例えば、`scanf`は`int scanf(const char *format, ...);`として宣言されています。
+フォーマット文字列へのポインタが`format_ptr : Ptr`、読み取った値を格納するバッファへのポインタが`buf_ptr : Ptr`であるとします。
+このとき、正しい呼び出し方は、以下のようになります。
+```
+FFI_CALL_IO[CInt scanf(Ptr, ...), format_ptr, buf_ptr];
+```
+次のように書いては **いけません**。これはC言語の`scanf`のシグネチャと一致しないためです。
+```
+FFI_CALL_IO[CInt scanf(Ptr, Ptr), format_ptr, buf_ptr];
+```
+
+ノート：
+`FFI_CALL`、`FFI_CALL_IO`に加えて、`FFI_CALL_IOS`も利用可能です。
+これは、`FFI_CALL_IO`と同様、副作用のあるC言語関数を呼び出すために用います。
+ただし、最後の引数に`IOState`型の値を取り、戻り値として`(IOState, a)`を返す点で、`FFI_CALL_IO`と異なります。
 
 ### Fixの値や関数を外部言語にエクスポートする
 

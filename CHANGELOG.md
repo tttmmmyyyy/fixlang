@@ -7,6 +7,7 @@
 #### Language 
 
 - Added the [index syntax](./Document.md#index-syntax), `Indexable` trait and `Indexable` namespace in `Std` module.
+- FFI_CALL, FFI_CALL_IO and FFI_CALL_IOS now support variadic functions. You can specify `...` at the end of parameter type list in the function signature to indicate that the function is variadic.
 
 #### Std
 
