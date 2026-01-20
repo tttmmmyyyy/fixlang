@@ -1,4 +1,4 @@
-use crate::{configuration::Configuration, tests::util::test_source};
+use crate::{configuration::Configuration, tests::test_util::test_source};
 
 #[test]
 pub fn test_string_unsafe_from_c_str_ptr() {

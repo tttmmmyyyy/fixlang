@@ -1,4 +1,4 @@
-use crate::{configuration::Configuration, tests::util::test_source_fail};
+use crate::{configuration::Configuration, tests::test_util::test_source_fail};
 
 #[test]
 pub fn test_get() {

@@ -1,4 +1,4 @@
-use crate::tests::util::install_fix;
+use crate::tests::test_util::install_fix;
 
 #[test]
 pub fn test_edit_explicit_import() {

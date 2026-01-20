@@ -1,6 +1,6 @@
 use crate::{
     configuration::Configuration,
-    tests::util::{test_source, test_source_fail},
+    tests::test_util::{test_source, test_source_fail},
 };
 
 #[test]

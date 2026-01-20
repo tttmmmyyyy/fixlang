@@ -1,7 +1,7 @@
 use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
-    tests::util::{
+    tests::test_util::{
         install_fix, test_files_in_directory, test_source, test_source_fail, test_source_with_c,
     },
     Configuration, SubCommand, COMPILER_TEST_WORKING_PATH, I16_NAME, I32_NAME, I64_NAME, I8_NAME,

@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, process::Command};
 
-use crate::{tests::util::install_fix, COMPILER_TEST_WORKING_PATH};
+use crate::{tests::test_util::install_fix, COMPILER_TEST_WORKING_PATH};
 
 #[test]
 pub fn test_external_project_math() {

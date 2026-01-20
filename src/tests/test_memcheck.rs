@@ -1,6 +1,6 @@
 use crate::{
     configuration::{Configuration, ValgrindTool},
-    tests::util::test_source_fail,
+    tests::test_util::test_source_fail,
 };
 
 #[test]

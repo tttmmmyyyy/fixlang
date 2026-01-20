@@ -9,4 +9,4 @@ mod test_index_syntax;
 mod test_memcheck;
 mod test_string;
 mod test_undefined;
-mod util;
+mod test_util;

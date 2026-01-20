@@ -2,7 +2,7 @@ use crate::{
     configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
-    tests::util::{test_source, test_source_with_c},
+    tests::test_util::{test_source, test_source_with_c},
 };
 use std::fs;
 
