@@ -79,7 +79,7 @@ pub fn test_files_in_directory(path: &Path) {
     let paths = fs::read_dir(path).unwrap();
     for path in paths {
         let path = path.unwrap().path();
-        let mut config = Configuration::compiler_develop_mode();
+        let mut config = Configuration::develop_mode();
         if path.is_dir() {
             // Skip hidden directories.
             if path.file_name().unwrap().to_str().unwrap().starts_with(".") {
@@ -142,7 +142,7 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     }
 
     // Link the shared library to the Fix program.
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.add_dynamic_library(lib_name);
     // Add the library search path.
     config.library_search_paths.push(PathBuf::from("."));

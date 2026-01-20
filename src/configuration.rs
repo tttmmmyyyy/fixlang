@@ -338,7 +338,7 @@ impl Configuration {
 
     // Configuration for compiler development
     #[allow(dead_code)]
-    pub fn compiler_develop_mode() -> Configuration {
+    pub fn develop_mode() -> Configuration {
         #[allow(unused_mut)]
         let mut config = panic_if_err(Self::new(SubCommand::Run));
         config.develop_mode = true;

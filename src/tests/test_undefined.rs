@@ -19,7 +19,7 @@ pub fn test_undefined_placeholder() {
             pure()
         );
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -34,7 +34,7 @@ pub fn test_undefined_reached() {
             pure()
         );
     "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Undefined reached");
 }

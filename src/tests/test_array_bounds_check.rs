@@ -11,7 +11,7 @@ pub fn test_get() {
                 pure()
             );
         "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Index out of range: index=3, size=3");
 }
@@ -27,7 +27,7 @@ pub fn test_set() {
                 pure()
             );
         "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Index out of range");
 }
@@ -43,7 +43,7 @@ pub fn test_mod() {
                 pure()
             );
         "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Index out of range");
 }
@@ -59,7 +59,7 @@ pub fn test_act() {
                 pure()
             );
         "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Index out of range");
 }
@@ -75,7 +75,7 @@ pub fn test_index_syntax() {
                 pure()
             );
         "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Index out of range");
 }
@@ -91,7 +91,7 @@ pub fn test_empty_negative_capacity() {
                 pure()
             );
         "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Negative array size or capacity: -1");
 }
@@ -107,7 +107,7 @@ pub fn test_fill_negative_size() {
                 pure()
             );
         "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Negative array size or capacity");
 }

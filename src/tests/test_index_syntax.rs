@@ -36,7 +36,7 @@ main : IO () = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -67,7 +67,7 @@ main: IO () = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -81,7 +81,7 @@ main: IO () = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -113,7 +113,7 @@ main: IO () = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -133,7 +133,7 @@ pub fn test_index_syntax_4() {
     "#;
     test_source_fail(
         source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Unknown name `act_foo`",
     );
 }
@@ -158,7 +158,7 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -181,7 +181,7 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -217,5 +217,5 @@ main: IO () = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }

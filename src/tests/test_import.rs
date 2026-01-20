@@ -16,7 +16,7 @@ pub fn test_import_empty() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Unknown type or associated type name",
     );
 }
@@ -32,7 +32,7 @@ pub fn test_import_any() {
         println("Hello, World!")
     );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -48,7 +48,7 @@ pub fn test_import_hiding_any() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Unknown type or associated type name",
     );
 }
@@ -64,7 +64,7 @@ pub fn test_import_only_necessary() {
         println("Hello, World!")
     );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -78,7 +78,7 @@ pub fn test_import_hierarchy() {
         eprintln("Hello, World!")
     );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -92,7 +92,7 @@ pub fn test_import_any_in_namespace() {
         println("Hello, World!")
     );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -108,7 +108,7 @@ pub fn test_import_insufficient() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Unknown type or associated type name `IO`.",
     );
 }
@@ -126,7 +126,7 @@ pub fn test_import_hiding_necessary() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Unknown type or associated type name `IO`.",
     );
 }
@@ -146,7 +146,7 @@ pub fn test_import_hiding_unnecessary() {
     main : IO ();
     main = println $ Tuple2 { fst : "Hello", snd : "World!" }.to_string;
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -162,7 +162,7 @@ pub fn test_import_hiding_associated_type() {
         assert_eq(|_|"", 42 : Item, 42 : I64)
     );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -182,7 +182,7 @@ pub fn test_type_and_trait_name_collision() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Name confliction: `Main::Piyo` is both a type and a trait.",
     );
 }
@@ -199,7 +199,7 @@ pub fn test_import_unknown_module() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Cannot find module `Piyo`.",
     );
 }
@@ -215,7 +215,7 @@ pub fn test_import_unknown_symbol() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Cannot find value named `Std::piyo`.",
     );
 }
@@ -231,7 +231,7 @@ pub fn test_import_unknown_symbol_hiding() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Cannot find value named `Std::piyo`.",
     );
 }
@@ -247,7 +247,7 @@ pub fn test_import_unknown_type_or_trait() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Cannot find entity named `Std::Piyo`.",
     );
 }
@@ -263,7 +263,7 @@ pub fn test_import_unknown_namespace() {
     "##;
     test_source_fail(
         &source,
-        Configuration::compiler_develop_mode(),
+        Configuration::develop_mode(),
         "Namespace `Std::Piyo` is not defined or empty.",
     );
 }

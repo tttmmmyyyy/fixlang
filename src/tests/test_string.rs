@@ -13,7 +13,7 @@ pub fn test_string_unsafe_from_c_str_ptr() {
             pure()
         );
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -35,7 +35,7 @@ pub fn test_string_get_sub() {
         pure()
     );
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -55,7 +55,7 @@ pub fn test_string_strip_first_spaces() {
         pure()
     );
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -92,7 +92,7 @@ pub fn test_string_find() {
         pure()
     );
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -118,7 +118,7 @@ pub fn test_string_split() {
         pure()
     );
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -132,7 +132,7 @@ pub fn test_ptr_to_string() {
         pure()
     );
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -164,7 +164,7 @@ pub fn test_string_less_than_and_less_than_or_eq() {
         pure()
     );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -179,7 +179,7 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -210,7 +210,7 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -240,7 +240,7 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -270,5 +270,5 @@ main = (
     pure()
 );
     "##;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }

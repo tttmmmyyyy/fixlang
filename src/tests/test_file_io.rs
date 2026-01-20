@@ -38,7 +38,7 @@ pub fn test_write_read_file_string() {
     "#,
         tmp_file
     );
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
     fs::remove_file(tmp_file).unwrap();
 }
 
@@ -74,7 +74,7 @@ pub fn test_is_eof() {
     "#,
         tmp_file
     );
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
     fs::remove_file(tmp_file).unwrap();
 }
 
@@ -104,7 +104,7 @@ pub fn test_write_read_file_bytes() {
     "#,
         tmp_file
     );
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
     fs::remove_file(tmp_file).unwrap();
 }
 

@@ -19,7 +19,7 @@ pub fn test_use_undefined_value() {
             my_none().as_my_some.to_string.println
         );
     "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = true;
     config.set_valgrind(ValgrindTool::MemCheck);
     test_source_fail(&source, config, "uninitialised value");
@@ -37,7 +37,7 @@ pub fn test_memory_leak() {
             pure()
         );
     "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.set_valgrind(ValgrindTool::MemCheck);
     test_source_fail(&source, config, "definitely lost");
 }

@@ -14,7 +14,7 @@ pub fn test_assert_pass() {
             pure()
         );
     "#;
-    test_source(&source, Configuration::compiler_develop_mode());
+    test_source(&source, Configuration::develop_mode());
 }
 
 #[test]
@@ -28,7 +28,7 @@ pub fn test_assert_fail() {
             pure()
         );
     "#;
-    let mut config = Configuration::compiler_develop_mode();
+    let mut config = Configuration::develop_mode();
     config.no_runtime_check = false;
     // config.set_valgrind(ValgrindTool::None);
     test_source_fail(&source, config, "test_assert_fail");
