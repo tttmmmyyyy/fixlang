@@ -3,54 +3,20 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     process::{Command, Output},
-    sync::Once,
 };
 use crate::{
     configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, error::{Errors, panic_if_err, panic_with_msg}, misc::save_temporary_source, runner::run
 };
 
-static INSTALL_FIX: Once = Once::new();
-
-// Install fix command by copying the already-built binary from target/release/fix,
-// or run `cargo install --locked --path .` if it doesn't exist.
-// This function is thread-safe and will only perform the installation once.
+// Run `cargo install --locked --path .`.
 pub fn install_fix() {
-    INSTALL_FIX.call_once(|| {
-        let release_binary = PathBuf::from("target/release/fix");
-        
-        if release_binary.exists() {
-            // Copy the already-built binary to ~/.cargo/bin/
-            let cargo_bin = dirs::home_dir()
-                .expect("Failed to get home directory")
-                .join(".cargo/bin");
-            let _ = fs::create_dir_all(&cargo_bin);
-            let dest = cargo_bin.join("fix");
-            
-            fs::copy(&release_binary, &dest)
-                .expect("Failed to copy fix binary to ~/.cargo/bin/fix");
-            
-            // Make it executable on Unix
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let mut perms = fs::metadata(&dest)
-                    .expect("Failed to get metadata")
-                    .permissions();
-                perms.set_mode(0o755);
-                fs::set_permissions(&dest, perms)
-                    .expect("Failed to set permissions");
-            }
-        } else {
-            // Fallback to cargo install
-            let _ = Command::new("cargo")
-                .arg("install")
-                .arg("--locked")
-                .arg("--path")
-                .arg(".")
-                .output()
-                .expect("Failed to run cargo install.");
-        }
-    });
+    let _ = Command::new("cargo")
+        .arg("install")
+        .arg("--locked")
+        .arg("--path")
+        .arg(".")
+        .output()
+        .expect("Failed to run cargo install.");
 }
 
 fn run_source(
