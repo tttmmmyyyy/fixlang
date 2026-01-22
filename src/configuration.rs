@@ -381,6 +381,8 @@ impl Configuration {
                 "Valgrind is only supported on Linux. Ignoring valgrind settings `{}`",
                 tool
             ));
+            self.valgrind_tool = ValgrindTool::None;
+            return self;
         }
         self.valgrind_tool = tool;
         if tool != ValgrindTool::None {
