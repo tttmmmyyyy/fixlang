@@ -7328,6 +7328,7 @@ pub fn test_create_dylib() {
         .arg("main.c")
         .arg("-L.")
         .arg("-lfixtest")
+        .arg("-Wl,-rpath,.")
         .current_dir(&work_dir)
         .output()
         .unwrap();
