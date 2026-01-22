@@ -12,6 +12,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install LLVM
+        shell: bash
+        run: |
+          LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+          mkdir -p llvm
+          wget -q "$LLVM_URL" -O llvm.tar.xz
+          tar -xf llvm.tar.xz -C llvm --strip-components=1
+          LLVM_PATH="${GITHUB_WORKSPACE}/llvm"
+          echo "LLVM_SYS_170_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
+
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
