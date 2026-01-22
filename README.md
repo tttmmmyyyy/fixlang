@@ -1,7 +1,7 @@
 Fix-lang: Fix Programming Language
 ====
 
-![Test Status](https://github.com/tttmmmyyyy/fixlang/actions/workflows/test.yml/badge.svg)
+![Ubuntu Tests](https://github.com/tttmmmyyyy/fixlang/actions/workflows/test.yml/badge.svg)
 
 ## Overview
 
