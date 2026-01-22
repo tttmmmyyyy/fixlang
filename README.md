@@ -1,6 +1,8 @@
 Fix-lang: Fix Programming Language
 ====
 
+![Test Status](https://github.com/tttmmmyyyy/fixlang/actions/workflows/test.yml/badge.svg)
+
 ## Overview
 
 Fix is a purely functional programming language designed to be easy to learn, easy to use, and enjoyable.
