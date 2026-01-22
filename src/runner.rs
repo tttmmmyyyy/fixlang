@@ -227,7 +227,7 @@ pub fn run(
     let mut com = if config.valgrind_tool == ValgrindTool::None {
         Command::new(exec_path.clone())
     } else {
-        let mut com = config.valgrind_command();
+        let mut com = config.valgrind_command()?;
         com.arg(exec_path.clone());
         com
     };

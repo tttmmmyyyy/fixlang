@@ -570,13 +570,23 @@ impl Configuration {
         features.disable_by_regexes(&self.disable_cpu_features_regex);
     }
 
-    pub fn valgrind_command(&self) -> Command {
+    pub fn valgrind_command(&self) -> Result<Command, Errors> {
+        // Check if valgrind is installed
+        let check = Command::new("which").arg("valgrind").output();
+        if check.is_err() || !check.unwrap().status.success() {
+            return Err(Errors::from_msg(
+                "valgrind is not installed on this system. Please install valgrind to use this feature.".to_string()
+            ));
+        }
+
         let mut com = Command::new("valgrind");
         com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
         com.arg("--suppressions=valgrind.supp");
         match self.valgrind_tool {
             ValgrindTool::None => {
-                panic_with_msg("Valgrind tool is not specified.");
+                return Err(Errors::from_msg(
+                    "Valgrind tool is not specified.".to_string(),
+                ));
             }
             ValgrindTool::MemCheck => {
                 // Check memory leaks.
@@ -584,7 +594,7 @@ impl Configuration {
                 com.arg("--leak-check=yes"); // This option turns memory leak into error.
             }
         }
-        com
+        Ok(com)
     }
 
     pub fn external_if_separated(&self) -> Linkage {
