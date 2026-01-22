@@ -121,15 +121,13 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     let mut file = File::create(&c_file).unwrap();
     file.write_all(c_src.as_bytes()).unwrap();
 
-    // Build `c_source` into a shared library.
-    let lib_name = test_name;
-    let so_file_path = format!("lib{}.so", lib_name);
+    // Build `c_source` into an object file.
+    let o_file_path = format!("{}/{}.o", COMPILER_TEST_WORKING_PATH, test_name);
     let mut com = Command::new("gcc");
     let output = com
-        .arg("-shared")
-        .arg("-fPIC")
+        .arg("-c")
         .arg("-o")
-        .arg(so_file_path.clone())
+        .arg(&o_file_path)
         .arg(&c_file)
         .output()
         .expect("Failed to run gcc.");
@@ -141,15 +139,13 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
         );
     }
 
-    // Link the shared library to the Fix program.
+    // Link the object file to the Fix program.
     let mut config = Configuration::develop_mode();
-    config.add_dynamic_library(lib_name);
-    // Add the library search path.
-    config.library_search_paths.push(PathBuf::from("."));
+    config.object_files.push(PathBuf::from(&o_file_path));
 
     // Run the Fix program.
     test_source(&fix_src, config);
 
-    // Remove the shared library.
-    let _ = fs::remove_file(so_file_path);
+    // Remove the object file.
+    let _ = fs::remove_file(o_file_path);
 }
