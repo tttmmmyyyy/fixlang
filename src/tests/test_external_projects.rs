@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, process::Command};
+use std::{env, fs, path::PathBuf, process::Command};
 
 use crate::{tests::test_util::install_fix, COMPILER_TEST_WORKING_PATH};
 
@@ -129,11 +129,18 @@ pub fn test_external_project(url: &str, test_name: &str) {
         .replace(".git", "");
 
     // Run `fix test`.
-    let output = Command::new("fix")
-        .arg("test")
-        .current_dir(work_dir.join(dir_name))
-        .output()
-        .expect("Failed to run fix test.");
+    let mut cmd = Command::new("fix");
+    cmd.arg("test").current_dir(work_dir.join(dir_name));
+
+    // Inherit necessary environment variables for macOS (GMP, OpenSSL, etc.)
+    if let Ok(val) = env::var("LD_LIBRARY_PATH") {
+        cmd.env("LD_LIBRARY_PATH", val);
+    }
+    if let Ok(val) = env::var("DYLD_LIBRARY_PATH") {
+        cmd.env("DYLD_LIBRARY_PATH", val);
+    }
+
+    let output = cmd.output().expect("Failed to run fix test.");
 
     // Check the result.
     assert_eq!(
