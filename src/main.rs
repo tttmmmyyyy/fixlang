@@ -71,7 +71,6 @@ use ast::program::*;
 use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
-use atty::{self, Stream};
 use builtin::*;
 use clap::ArgMatches;
 use clap::PossibleValue;
