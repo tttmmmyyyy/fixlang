@@ -1,5 +1,11 @@
-use super::*;
-use std::{fs, hash::Hash};
+use crate::{constants::TEMPORARY_SRC_PATH, error::Errors, sourcefile::SourceFile};
+use atty::Stream;
+use colored::Colorize;
+use std::{
+    env, fs,
+    hash::Hash,
+    path::{Path, PathBuf},
+};
 
 pub type Map<K, V> = fxhash::FxHashMap<K, V>;
 
@@ -155,7 +161,7 @@ macro_rules! function_name {
         }
     }};
 }
-use colored::Colorize;
+
 #[allow(unused_imports)]
 pub(crate) use function_name;
 
@@ -461,4 +467,8 @@ pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usiz
     }
 
     utf16_count
+}
+
+pub fn platform_valgrind_supported() -> bool {
+    env::consts::OS == "linux"
 }
