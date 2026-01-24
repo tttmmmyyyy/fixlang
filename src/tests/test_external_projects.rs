@@ -143,6 +143,12 @@ pub fn test_external_project(url: &str, test_name: &str) {
     let output = cmd.output().expect("Failed to run fix test.");
 
     // Check the result.
+    if output.status.code() != Some(0) {
+        eprintln!("=== fix test stdout ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("=== fix test stderr ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+    }
     assert_eq!(
         output.status.code(),
         Some(0),
