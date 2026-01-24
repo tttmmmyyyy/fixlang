@@ -31,6 +31,8 @@ jobs:
             echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
             brew install openssl
             echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
+            brew install gmp
+            echo "LD_LIBRARY_PATH=/opt/homebrew/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
           fi
 
       - name: Install Rust
