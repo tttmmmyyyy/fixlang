@@ -132,13 +132,8 @@ pub fn test_external_project(url: &str, test_name: &str) {
     let mut cmd = Command::new("fix");
     cmd.arg("test").current_dir(work_dir.join(dir_name));
 
-    // Inherit necessary environment variables for macOS (GMP, OpenSSL, etc.)
-    if let Ok(val) = env::var("LD_LIBRARY_PATH") {
-        cmd.env("LD_LIBRARY_PATH", val);
-    }
-    if let Ok(val) = env::var("DYLD_LIBRARY_PATH") {
-        cmd.env("DYLD_LIBRARY_PATH", val);
-    }
+    // Inherit all environment variables from the parent process
+    cmd.envs(env::vars());
 
     let output = cmd.output().expect("Failed to run fix test.");
 

@@ -32,7 +32,7 @@ jobs:
             brew install openssl
             echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
             brew install gmp
-            echo "LD_LIBRARY_PATH=/opt/homebrew/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+            echo "LIBRARY_PATH=/opt/homebrew/lib:$LIBRARY_PATH" >> $GITHUB_ENV
           fi
 
       - name: Install Rust
