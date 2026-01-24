@@ -1,5 +1,5 @@
 use super::*;
-use std::{fs, hash::Hash};
+use std::{env, fs, hash::Hash};
 
 pub type Map<K, V> = fxhash::FxHashMap<K, V>;
 
@@ -461,4 +461,8 @@ pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usiz
     }
 
     utf16_count
+}
+
+pub fn platform_valgrind_supported() -> bool {
+    env::consts::OS == "linux"
 }

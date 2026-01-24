@@ -1,7 +1,10 @@
 use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::cpu_features::CpuFeatures;
 use crate::error::{panic_if_err, Errors};
-use crate::misc::{split_string_by_space_not_quated, to_absolute_path, warn_msg, Finally};
+use crate::misc::{
+    platform_valgrind_supported, split_string_by_space_not_quated, to_absolute_path, warn_msg,
+    Finally,
+};
 use crate::typecheckcache::{self, TypeCheckCache};
 use crate::{error::panic_with_msg, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
@@ -376,9 +379,9 @@ impl Configuration {
     }
 
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
-        if env::consts::OS != "linux" && tool != ValgrindTool::None {
+        if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
-                "Valgrind is only supported on Linux. Ignoring valgrind settings `{}`",
+                "Valgrind is not supported on this platform. Ignoring valgrind settings `{}`",
                 tool
             ));
             self.valgrind_tool = ValgrindTool::None;
