@@ -3,20 +3,60 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     process::{Command, Output},
+    sync::Once,
 };
 use crate::{
     configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, error::{Errors, panic_if_err, panic_with_msg}, misc::save_temporary_source, runner::run
 };
 
-// Run `cargo install --locked --path .`.
+static INSTALL_FIX: Once = Once::new();
+
+// Build fix in release mode and copy it to ~/.cargo/bin/.
+// This uses incremental compilation, so it's much faster than `cargo install` when already built.
+// This function is thread-safe and will only perform the installation once.
 pub fn install_fix() {
-    let _ = Command::new("cargo")
-        .arg("install")
-        .arg("--locked")
-        .arg("--path")
-        .arg(".")
-        .output()
-        .expect("Failed to run cargo install.");
+    INSTALL_FIX.call_once(|| {
+        // Build the fix binary in release mode (uses cache if already built)
+        let output = Command::new("cargo")
+            .arg("build")
+            .arg("--release")
+            .output()
+            .expect("Failed to run cargo build --release");
+        
+        if !output.status.success() {
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            panic!("Failed to build fix in release mode");
+        }
+        
+        // Copy the built binary to ~/.cargo/bin/ using a temporary file to avoid "Text file busy"
+        let release_binary = PathBuf::from("target/release/fix");
+        let cargo_bin = dirs::home_dir()
+            .expect("Failed to get home directory")
+            .join(".cargo/bin");
+        let _ = fs::create_dir_all(&cargo_bin);
+        let dest = cargo_bin.join("fix");
+        let temp_dest = cargo_bin.join(".fix.tmp");
+        
+        // Copy to temporary file first
+        fs::copy(&release_binary, &temp_dest)
+            .expect("Failed to copy fix binary to temporary location");
+        
+        // Make it executable on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&temp_dest)
+                .expect("Failed to get metadata")
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&temp_dest, perms)
+                .expect("Failed to set permissions");
+        }
+        
+        // Atomically rename to final destination (replaces even if file is in use)
+        fs::rename(&temp_dest, &dest)
+            .expect("Failed to move fix binary to ~/.cargo/bin/fix");
+    });
 }
 
 fn run_source(
