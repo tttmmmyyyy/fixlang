@@ -584,7 +584,12 @@ impl Configuration {
 
         let mut com = Command::new("valgrind");
         com.arg("--error-exitcode=1"); // This option makes valgrind return 1 if an error is detected.
-        com.arg("--suppressions=valgrind.supp");
+
+        // Add suppressions file if it exists
+        if PathBuf::from("valgrind.supp").exists() {
+            com.arg("--suppressions=valgrind.supp");
+        }
+
         match self.valgrind_tool {
             ValgrindTool::None => {
                 return Err(Errors::from_msg(

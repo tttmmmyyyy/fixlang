@@ -80,6 +80,11 @@ files = ["main.fix"]
 [build.test]
 files = ["test.fix"]
 
+## (For compiler developers) Enable memory check in tests.
+## When set to `true`, memory check is performed using Valgrind.
+## If a suppression file named `valgrind.supp` exists in the project root, it is automatically loaded.
+# memcheck = true
+
 ## By "[[dependencies]]" array, you can add a Fix project as a dependency.
 ## Each dependency must have "fixproj.toml" file at the project root directory.
 ## If a dependency also has their dependencies, "fix" will consider them recursively.
