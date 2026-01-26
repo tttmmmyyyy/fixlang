@@ -9859,3 +9859,34 @@ main: IO () = (
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+#[test]
+pub fn test_higher_kinded_associated_type() {
+    let source = r#"
+module Main;
+ 
+trait [m : * -> *] m : MyTrait {
+   type MyResult m : * -> *;
+   some_method : m a -> IO (MyResult m a);
+}
+ 
+impl IOFail: MyTrait {
+    type MyResult IOFail = Result ErrMsg;
+    some_method = |iofail| iofail.to_result;
+}
+
+some_func : [m : MyTrait, f : Functor, MyResult m = f] (a -> b) -> m a -> IO (MyResult m b) = |f, ma| (
+   ma.some_method.map(map(f))
+);
+ 
+main: IO () = do {
+    let iof: IOFail I64 = pure(42);
+    let io: IO (Result ErrMsg String) = iof.some_func(to_string);
+    let expected = ok("42");
+    let actual = *io.lift;
+    println(actual.to_string).lift;;
+    assert_eq(|_| "not eq", expected, actual).lift
+}.try(exit_with_msg(1));
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
