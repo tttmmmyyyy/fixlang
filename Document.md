@@ -1543,6 +1543,14 @@ main = (
 );
 ```
 
+You can define a higher-kinded associated type by explicitly specifying the kind after the associated type.
+
+```
+trait a : MyTrait {
+    type MyAssocType a : *->*;
+}
+```
+
 ## Trait alias
 
 You can define an alias of traits. Defining a trait alias by 
