@@ -43,7 +43,7 @@ mod generator;
 mod graph;
 mod name_resolution;
 #[macro_use]
-mod log;
+mod log_file;
 mod lsp;
 mod misc;
 mod object;
