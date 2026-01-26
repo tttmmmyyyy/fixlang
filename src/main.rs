@@ -37,6 +37,7 @@ mod dependency_resolver;
 mod deps_list;
 mod docgen;
 mod edit;
+mod env_vars;
 mod error;
 mod generator;
 mod graph;

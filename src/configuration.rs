@@ -1,5 +1,6 @@
 use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::cpu_features::CpuFeatures;
+use crate::env_vars;
 use crate::error::{panic_if_err, Errors};
 use crate::misc::{
     platform_valgrind_supported, split_string_by_space_not_quated, to_absolute_path, warn_msg,
@@ -166,7 +167,7 @@ pub struct Configuration {
     // Object files to be linked.
     pub object_files: Vec<PathBuf>,
     // Fix's optimization level.
-    pub fix_opt_level: FixOptimizationLevel,
+    fix_opt_level: FixOptimizationLevel,
     // Linked libraries
     pub linked_libraries: Vec<(String, LinkType)>,
     // Library search paths.
@@ -311,7 +312,7 @@ impl Configuration {
             subcommand,
             source_files: vec![],
             object_files: vec![],
-            fix_opt_level: FixOptimizationLevel::Max, // Fix's optimization level.
+            fix_opt_level: env_vars::get_max_opt_level(),
             linked_libraries: vec![],
             ld_flags: vec![],
             debug_info: false,
@@ -356,7 +357,7 @@ impl Configuration {
         config.develop_mode = true;
         config.num_worker_thread = 0;
         config.set_valgrind(ValgrindTool::MemCheck);
-        config.fix_opt_level = FixOptimizationLevel::Experimental;
+        config.set_fix_opt_level(FixOptimizationLevel::Experimental);
         // config.set_sanitize_memory();
         config.emit_llvm = true;
         // config.debug_info = true;
@@ -471,7 +472,11 @@ impl Configuration {
     }
 
     pub fn set_fix_opt_level(&mut self, level: FixOptimizationLevel) {
-        self.fix_opt_level = level;
+        self.fix_opt_level = level.min(env_vars::get_max_opt_level());
+    }
+
+    pub fn fix_opt_level(&self) -> FixOptimizationLevel {
+        self.fix_opt_level
     }
 
     pub fn get_llvm_opt_level(&self) -> OptimizationLevel {

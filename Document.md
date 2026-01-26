@@ -90,6 +90,8 @@
     - [Language Server Protocol](#language-server-protocol)
         - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
     - [Debugging Fix program](#debugging-fix-program)
+    - [Environment Variables](#environment-variables)
+        - [FIX\_MAX\_OPT\_LEVEL](#fix_max_opt_level)
 - [Other documents](#other-documents)
 
 # Tutorial
@@ -2839,6 +2841,15 @@ Moreover, if you add `--backtrace` option to `fix build`, `fix run` or `fix test
 Other notes on debugging Fix program:
 - Unlike other languages, Fix does not release local variables at the end of their scope, but at the last point of use. So if you break after the last use of a local variable, the debugger may show an invalid value.
 - Currently, we are not able to tell the debugger the size of an array which is determined at run time. So we are always setting the array size to 100 in the debug information. You cannot show elements indexed after 100, and if the array is shorter than 100, invalid values are shown.
+
+## Environment Variables
+
+### FIX_MAX_OPT_LEVEL
+
+(For compiler developers)
+
+Limits the optimization level to the specified value or below.
+Specify the name of an optimization level such as `none`, `basic`, `max`, or `experimental`.
 
 # Other documents
 

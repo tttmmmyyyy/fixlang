@@ -428,7 +428,7 @@ fn optimize_and_verify<'c>(
     // Run optimization
     run_passes_or_panic(module, &["verify"], target_machine);
 
-    match config.fix_opt_level {
+    match config.fix_opt_level() {
         FixOptimizationLevel::None => {}
         FixOptimizationLevel::Basic => {
             run_passes_or_panic(module, &passes, target_machine);

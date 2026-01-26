@@ -551,7 +551,7 @@ impl ProjectFile {
         // Set optimization level.
         if let Some(opt_level) = self.build.opt_level.as_ref() {
             if let Some(opt_level) = FixOptimizationLevel::from_str(opt_level) {
-                config.fix_opt_level = opt_level;
+                config.set_fix_opt_level(opt_level);
             } else {
                 return Err(Errors::from_msg_srcs(
                     format!("Unknown optimization level: \"{}\"", opt_level),
@@ -567,7 +567,7 @@ impl ProjectFile {
                 .and_then(|test| test.opt_level.as_ref())
             {
                 if let Some(opt_level) = FixOptimizationLevel::from_str(opt_level) {
-                    config.fix_opt_level = opt_level;
+                    config.set_fix_opt_level(opt_level);
                 } else {
                     return Err(Errors::from_msg_srcs(
                         format!("Unknown optimization level: \"{}\"", opt_level),
