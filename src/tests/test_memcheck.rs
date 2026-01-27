@@ -1,7 +1,7 @@
 use crate::{
     configuration::{Configuration, ValgrindTool},
     misc::{function_name, platform_valgrind_supported},
-    tests::test_util::test_source_fail,
+    tests::test_util::{test_source, test_source_fail},
 };
 
 #[test]
@@ -48,7 +48,8 @@ pub fn test_memory_leak() {
 
         main : IO ();
         main = (
-            Array::fill(128, 42).boxed_to_retained_ptr;;
+            println("");;
+            FFI_CALL_IO[Ptr malloc(CInt), 128.c_int];;
             pure()
         );
     "#;

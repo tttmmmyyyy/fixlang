@@ -1,4 +1,6 @@
 use crate::{
+    configuration::FixOptimizationLevel,
+    env_vars,
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
@@ -9062,6 +9064,10 @@ main = (
 
 #[test]
 pub fn test_regression_issue_63() {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {
+        // This test causes stack overflow unless the optimization level is "Max".
+        return;
+    }
     let source = r##"
 module Main;
 
