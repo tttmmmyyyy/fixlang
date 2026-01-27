@@ -126,6 +126,7 @@ pub struct Symbol {
     pub generic_name: FullName,
     pub ty: Arc<TypeNode>,
     pub expr: Option<Arc<ExprNode>>,
+    // If you add new fields, be sure to update `hash()` method.
 }
 
 impl Symbol {
@@ -142,6 +143,26 @@ impl Symbol {
         // - By orphan rule, trait implementations are given in the module where the trait is defined, or the module where the type is defined.
         // - Moreover, we forbid unrelated trait implementation (see `test_unrelated_trait_method()`),
         // so the type the trait is implemented appears in the type of the symbol.
+    }
+
+    // Calculate MD5 hash of this symbol.
+    pub fn hash(&self) -> String {
+        let mut data = String::new();
+        data.push_str("<name>");
+        data.push_str(&self.name.to_string());
+
+        // data.push_str("<generic name>");
+        // data.push_str(&self.generic_name.to_string());
+
+        data.push_str("<type>");
+        data.push_str(&self.ty.to_string());
+
+        data.push_str("<expr>");
+        if let Some(expr) = &self.expr {
+            data.push_str(&expr.expr.stringify().to_string());
+        }
+
+        format!("{:x}", md5::compute(data))
     }
 }
 

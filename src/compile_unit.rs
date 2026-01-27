@@ -93,7 +93,7 @@ impl CompileUnit {
         // Add dependency to the symbols.
         data.push("<symbols>".to_string());
         for symbol in &self.symbols {
-            data.push(symbol.name.to_string());
+            data.push(symbol.hash());
         }
 
         // Add dependency to source codes of the dependent modules.
