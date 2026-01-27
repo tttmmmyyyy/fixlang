@@ -1,7 +1,7 @@
 use crate::{
     configuration::{Configuration, ValgrindTool},
     misc::{function_name, platform_valgrind_supported},
-    tests::test_util::{test_source, test_source_fail},
+    tests::test_util::test_source_fail,
 };
 
 #[test]
