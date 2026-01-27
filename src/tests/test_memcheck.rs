@@ -16,15 +16,11 @@ pub fn test_use_undefined_value() {
     }
     let source = r#"
         module Main;
-
-        type MyOpt = union {
-            my_none : (),
-            my_some : U64,
-        };
         
         main : IO ();
         main = (
-            my_none().as_my_some.to_string.println
+            let arr = Array::empty(2) : Array U64;
+            arr.@(1).to_string.println
         );
     "#;
     let mut config = Configuration::develop_mode();
