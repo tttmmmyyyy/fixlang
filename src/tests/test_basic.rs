@@ -5603,6 +5603,82 @@ pub fn test_associated_type_type_level_arithmetic() {
 }
 
 #[test]
+pub fn test_associated_type_equality_in_impl_context() {
+    let source = r##"
+module Main;
+
+trait a : MyTraitA {
+    type MyTypeA a;
+    to_mytype : a -> MyTypeA a;
+}
+
+trait a : MyTraitB {
+    to_i64 : a -> I64;
+}
+
+type MyWrapper a = unbox struct {
+    value: a
+};
+
+impl [a : MyTraitA, MyTypeA a = I64] MyWrapper a : MyTraitB {
+    to_i64 = |w: MyWrapper a| w.@value.to_mytype;
+}
+
+impl I64 : MyTraitA {
+    type MyTypeA I64 = I64;
+    to_mytype = |x: I64| x;
+}
+
+main: IO () = (
+    let x = MyWrapper { value : 42 }.to_i64;
+    assert_eq(|_|"", x, 42);;
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_associated_type_equality_in_impl_context_unsatisfied() {
+    let source = r##"
+module Main;
+
+trait a : MyTraitA {
+    type MyTypeA a;
+    to_mytype : a -> MyTypeA a;
+}
+
+trait a : MyTraitB {
+    to_i64 : a -> I64;
+}
+
+type MyWrapper a = unbox struct {
+    value: a
+};
+
+impl [a : MyTraitA, MyTypeA a = I64] MyWrapper a : MyTraitB {
+    to_i64 = |w: MyWrapper a| w.@value.to_mytype;
+}
+
+impl U64 : MyTraitA {
+    type MyTypeA U64 = U64;
+    to_mytype = |x: U64| x;
+}
+
+main: IO () = (
+    let x = MyWrapper { value : 42.u64 }.to_i64;
+    assert_eq(|_|"", x, 42);;
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "since `Std::U64 = Std::I64` cannot be deduced",
+    );
+}
+
+#[test]
 pub fn test_extra_comma() {
     let source = r##"
     module Main;
