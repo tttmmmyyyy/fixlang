@@ -9818,6 +9818,30 @@ main = (
 }
 
 #[test]
+pub fn test_associated_type_use_unknown_type_variable_in_associated_type_implementation() {
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type MyType a;
+}
+
+impl I64 : MyTrait {
+    type MyType I64 = a;
+}
+
+main: IO () = (
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Unknown type variable `a`",
+    );
+}
+
+#[test]
 pub fn test_regression_issue_70() {
     let source = r#"
 module Main;
