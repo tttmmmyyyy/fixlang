@@ -504,8 +504,29 @@ impl TypeNode {
     }
 
     // Is this type can be instance head of trait?
-    pub fn is_implementable(&self) -> bool {
-        self.is_head_tycon() && self.is_assoc_ty_free()
+    pub fn is_implementable(self: &Arc<TypeNode>) -> Result<(), Errors> {
+        if !self.is_head_tycon() {
+            return Err(Errors::from_msg_srcs(
+                        format!(
+                            "Implementing trait for type `{}` is not allowed. \
+                            The head (in this case, `{}`) of the type should be a type constructor.",
+                            self.to_string(),
+                            self.get_head_string(),
+                        ),
+                        &[&self.get_source()],
+                    ));
+        }
+        if !self.is_assoc_ty_free() {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "Implementing trait for type `{}` is not allowed. \
+                    Associated types cannot appear in the type.",
+                    self.to_string(),
+                ),
+                &[&self.get_source()],
+            ));
+        }
+        return Ok(());
     }
 
     pub fn is_tyvar(&self) -> bool {

@@ -863,18 +863,8 @@ impl TraitEnv {
         let trait_id = &defn.trait_;
 
         // Check instance head.
-        let implemented_ty = &impl_.qual_pred.predicate.ty;
-        if !implemented_ty.is_implementable() {
-            return Err(Errors::from_msg_srcs(
-                        format!(
-                            "Implementing trait for type `{}` is not allowed. \
-                            The head (in this case, `{}`) of the type should be a type constructor.",
-                            implemented_ty.to_string(),
-                            implemented_ty.get_head_string(),
-                        ),
-                        &[&implemented_ty.get_source()],
-                    ));
-        }
+        let impl_ty = &impl_.qual_pred.predicate.ty;
+        impl_ty.is_implementable()?;
 
         // Validate the set of trait members.
         let trait_members = &defn.members;

@@ -8,5 +8,6 @@ mod test_import;
 mod test_index_syntax;
 mod test_memcheck;
 mod test_string;
+mod test_trait_implementable_type;
 mod test_undefined;
 mod test_util;
