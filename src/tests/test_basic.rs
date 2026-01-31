@@ -5137,6 +5137,27 @@ pub fn test_unrelated_trait_method() {
 }
 
 #[test]
+pub fn test_unrelated_trait_method_via_type_alias() {
+    let source = r##"
+    module Main;
+
+    type Alias a = I64;
+
+    trait a : MyTrait {
+        value : Alias a;
+    }
+    
+    main : IO ();
+    main = pure();
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type variable `a` used in trait definition has to appear in the type of a member `value`.",
+    );
+}
+
+#[test]
 pub fn test_duplicated_symbols() {
     let source = r##"
     module Main;

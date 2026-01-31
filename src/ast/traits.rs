@@ -771,8 +771,14 @@ impl TraitEnv {
         // Circular aliasing will be detected in `TraitEnv::resolve_aliases`, so we don't need to check it here.
 
         // Forbid unrelated trait member:
-        // Check that the type variable in trait definition appears each of the members' type.
-        // This assumption is used in `InstanciatedSymbol::dependent_modules`.
+        //
+        // Check that the type variable (the impl_type) in trait definition appears each of the members' type.
+        //
+        // The selection of trait member implementations is determined by which type the impl_type is instantiated to.
+        // If there exists an unrelated trait member, i.e., a trait member that does not involve impl_type,
+        // we cannot select the implementation of that member.
+        //
+        // This assumption is also used in `Symbol::dependent_modules`.
         for (_trait_id, trait_defn) in &self.traits {
             for member in &trait_defn.members {
                 if !member.qual_ty.ty.contains_tyvar(&trait_defn.type_var) {
