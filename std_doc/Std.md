@@ -4192,9 +4192,36 @@ If the pointer is not pointing to a valid null-terminated C string, this functio
 
 If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
 
+There is also an IO version of this function, `unsafe_from_c_str_ptr_io`.
+
+Since this function is not an `IO` action, the compiler does not guarantee the order of execution between this function and `IO` actions.
+Do not use this function if you perform `IO` operations that modify the content pointed to by `ptr` or free `ptr`.
+
+For example,
+```
+let str = unsafe_from_c_str_ptr(ptr);
+FFI_CALL_IO[() free(Ptr), ptr];;
+```
+may be rewritten to:
+```
+FFI_CALL_IO[() free(Ptr), ptr];;
+let str = unsafe_from_c_str_ptr(ptr);
+```
+which can cause undefined behavior.
+
 ##### Parameters
 
 * `ptr` - The pointer to a null-terminated C string.
+
+#### unsafe_from_c_str_ptr_io
+
+Type: `Std::Ptr -> Std::IO Std::String`
+
+Create a `String` from a pointer to a null-terminated C string, via an IO action.
+
+If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
+
+If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
 
 ### namespace Std::Sub
 
