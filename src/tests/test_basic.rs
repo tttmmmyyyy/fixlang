@@ -4097,7 +4097,54 @@ pub fn test129() {
 
 #[test]
 pub fn test_consumed_time() {
-    // Test Debug module
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {
+        // Skip this test when the optimization level is low since it takes too long time.
+        return;
+    }
+    let tmp_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::create_dir_all(&tmp_dir);
+    let tmp_file = tmp_dir.join("tmp.txt");
+    let source = r#"
+        module Main; 
+        
+        main : IO ();
+        main = (
+            let (r, t) = consumed_time_while_lazy(|_| (
+                loop((0, 0), |(i, sum)| if i == 1000000000 { break $ sum } else { continue $ (i + 1, sum + i) })
+            ));
+            assert_eq(|_|"consumed_time_while_lazy result", r, 499999999500000000);;
+            println("loop time : " + t.to_string + ", sum : " + r.to_string);;
+
+            let (r, t) = *consumed_time_while_io(
+                let file_path = "{}";
+                write_file_string(file_path, "Hello World!").try(exit_with_msg(1));;
+                let read_content = *read_file_string(file_path).try(exit_with_msg(1));
+                println $ read_content;;
+                read_content.pure
+            );
+            assert_eq(|_|"consumed_time_while_io result", r, "Hello World!");;
+            println("write/read/println time : " + t.to_string);;
+
+            pure()
+        );
+    "#;
+    let source = source.replace("{}", &tmp_file.to_string_lossy());
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_consumed_time_small() {
+    let tmp_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::create_dir_all(&tmp_dir);
+    let tmp_file = tmp_dir.join("tmp.txt");
     let source = r#"
         module Main; 
         
@@ -4106,21 +4153,24 @@ pub fn test_consumed_time() {
             let (r, t) = consumed_time_while_lazy(|_| (
                 loop((0, 0), |(i, sum)| if i == 1000 { break $ sum } else { continue $ (i + 1, sum + i) })
             ));
+            assert_eq(|_|"consumed_time_while_lazy result", r, 499500);;
             println("loop time : " + t.to_string + ", sum : " + r.to_string);;
 
-            let (_, t) = *consumed_time_while_io(
-                let file_path = "test_tMB3iCfTeeES.txt";
+            let (r, t) = *consumed_time_while_io(
+                let file_path = "{}";
                 write_file_string(file_path, "Hello World!").try(exit_with_msg(1));;
                 let read_content = *read_file_string(file_path).try(exit_with_msg(1));
-                println $ read_content
+                println $ read_content;;
+                read_content.pure
             );
+            assert_eq(|_|"consumed_time_while_io result", r, "Hello World!");;
             println("write/read/println time : " + t.to_string);;
 
             pure()
         );
     "#;
+    let source = source.replace("{}", &tmp_file.to_string_lossy());
     test_source(&source, Configuration::develop_mode());
-    remove_file("test_tMB3iCfTeeES.txt").unwrap();
 }
 
 #[test]
