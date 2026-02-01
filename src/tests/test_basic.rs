@@ -4584,6 +4584,10 @@ pub fn test_iterator_flatten() {
 
 #[test]
 pub fn test_run_examples() {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
+        // Skip this test when the optimization level is low since it takes too long time.
+        return;
+    }
     test_files_in_directory(Path::new("./examples"));
 }
 
