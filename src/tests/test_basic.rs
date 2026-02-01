@@ -5811,6 +5811,11 @@ pub fn test_iterator_product() {
 
 #[test]
 pub fn test_iterator_filtermap() {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
+        // Skip this test because it causes stack overflow unless the optimization is enabled.
+        // We run `test_iterator_filtermap_small` in this case.
+        return;
+    }
     let source = r##"
     module Main;
     
@@ -5832,6 +5837,31 @@ pub fn test_iterator_filtermap() {
             (20, 21, 29), (18, 24, 30), (16, 30, 34), (21, 28, 35), (12, 35, 37), (15, 36, 39), (24, 32, 40), (9, 40, 41), (27, 36, 45),
             (30, 40, 50), (14, 48, 50), (24, 45, 51), (20, 48, 52), (28, 45, 53), (33, 44, 55), (40, 42, 58), (36, 48, 60)
         ]);;
+        pure()
+    );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_iterator_filtermap_small() {
+    let source = r##"
+    module Main;
+    
+    main : IO ();
+    main = (
+        let n = 5;
+        let (triples, time) = consumed_time_while_lazy(|_|
+            let r1 = range(1, n);
+            let r2 = range(1, 2*n*n);
+            r1.product(r1).product(r2).filter_map(|((a, b), c)|
+                if a > b { none() };
+                if a*a + b*b != c*c { none() };
+                some((a, b, c))
+            ).to_array
+        );
+        println("pythagorean_triple: " + time.to_string);;
+        assert_eq(|_|"pythagorean_triple", triples, [(3, 4, 5)]);;
         pure()
     );
     "##;
