@@ -783,6 +783,10 @@ impl TraitEnv {
                 // we cannot select the implementation of that member.
                 //
                 // This assumption is also used in `Symbol::dependent_modules`.
+                //
+                // This constraint is weaker than the condition mentioned in section 5.1 (Well-formed programs) of the paper "Associated Type Synonyms"
+                // to prevent unconditionally ambiguous signatures.
+                // Strengthening this constraint is also an option. However, as mentioned in the paper, it is not a mandatory constraint.
                 if !member.qual_ty.ty.contains_tyvar(&trait_defn.type_var) {
                     errors.append(Errors::from_msg_srcs(
                         format!(
@@ -796,7 +800,8 @@ impl TraitEnv {
 
                 // The "impl type" cannot be constrained.
                 //
-                // This is a restriction mentioned in section 5.1 (Well-formed programs) of the paper "Associated Type Synonyms".
+                // This is a restriction mentioned in section 5.1 (Well-formed programs) of the paper "Associated Type Synonyms":
+                // > If σ ≡ (∀α.π ⇒ τ) is a method signature in a class declaration for D β, we require that β not ∈ Fv π.
                 // This is related to Issue #73.
                 if let Some(source) = member
                     .qual_ty
