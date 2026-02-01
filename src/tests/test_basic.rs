@@ -4137,7 +4137,7 @@ pub fn test_consumed_time() {
 }
 
 #[test]
-pub fn test_consumed_time_small() {
+pub fn test_consumed_time_fast() {
     let tmp_dir = PathBuf::from(format!(
         "{}/{}",
         COMPILER_TEST_WORKING_PATH,
@@ -4429,7 +4429,7 @@ pub fn test_tarai() {
 }
 
 #[test]
-pub fn test_tarai_small() {
+pub fn test_tarai_fast() {
     let source = r#"
     module Main;
     
@@ -5925,7 +5925,7 @@ pub fn test_iterator_filtermap() {
 }
 
 #[test]
-pub fn test_iterator_filtermap_small() {
+pub fn test_iterator_filtermap_fast() {
     let source = r##"
     module Main;
     
