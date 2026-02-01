@@ -1841,6 +1841,12 @@ impl Scheme {
             }
         }
         // We do not allow there are two equality constraints with the same left side.
+        //
+        // We should check if two left sides are not unifiable, but this syntactic check is sufficient for now.
+        // Since type variables in the type scheme of a global value are fixed during type checking,
+        // being unifiable is equivalent to being syntactically equal.
+        //
+        // This restriction is necessary to ensure that type reduction by equalities is deterministic.
         for i in 0..self.equalities.len() {
             for j in i + 1..self.equalities.len() {
                 if self.equalities[i].lhs().to_string() == self.equalities[j].lhs().to_string() {
