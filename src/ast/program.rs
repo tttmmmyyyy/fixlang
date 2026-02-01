@@ -1194,7 +1194,7 @@ impl Program {
                 for eq in &e.equalities {
                     tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                 }
-                tc.finalize_types(e.expr.clone())?
+                tc.fix_types(e.expr.clone())?
             }
             SymbolExpr::Method(impls) => {
                 let mut opt_e: Option<Arc<ExprNode>> = None;
@@ -1214,7 +1214,7 @@ impl Program {
                     for eq in &e.equalities {
                         tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                     }
-                    opt_e = Some(tc.finalize_types(e.expr)?);
+                    opt_e = Some(tc.fix_types(e.expr)?);
                     break;
                 }
                 opt_e.unwrap()

@@ -1266,7 +1266,7 @@ impl TypeCheckContext {
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
 
         // Check if all type variables are fixed.
-        let expr = self.finalize_types(expr)?;
+        let expr = self.fix_types(expr)?;
 
         // Check all predicates and equalities are satisfied.
         let reduction_res = UnifOrOtherErr::extract_others(self.reduce_predicates())?;
@@ -1671,7 +1671,7 @@ impl TypeCheckContext {
         errs
     }
 
-    pub fn finalize_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
+    pub fn fix_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ty = self.substitute_type(expr.type_.as_ref().unwrap());
         let ty = self.reduce_type_by_equality(ty)?;
 
@@ -1683,60 +1683,58 @@ impl TypeCheckContext {
             Expr::Var(_) => expr,
             Expr::LLVM(_) => expr,
             Expr::App(fun, args) => {
-                let args =
-                    collect_results(args.iter().map(|arg| self.finalize_types(arg.clone())))?;
-                let fun = self.finalize_types(fun.clone())?;
+                let args = collect_results(args.iter().map(|arg| self.fix_types(arg.clone())))?;
+                let fun = self.fix_types(fun.clone())?;
                 expr.set_app_func(fun).set_app_args(args)
             }
             Expr::Lam(_args, body) => {
-                let body = self.finalize_types(body.clone())?;
+                let body = self.fix_types(body.clone())?;
                 expr.set_lam_body(body)
             }
             Expr::Let(pat, val, body) => {
                 let pat = self.finalize_types_for_pattern(pat.clone())?;
-                let val = self.finalize_types(val.clone())?;
-                let body = self.finalize_types(body.clone())?;
+                let val = self.fix_types(val.clone())?;
+                let body = self.fix_types(body.clone())?;
                 expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
             }
             Expr::If(cond, then_expr, else_expr) => {
-                let cond = self.finalize_types(cond.clone())?;
-                let then_expr = self.finalize_types(then_expr.clone())?;
-                let else_expr = self.finalize_types(else_expr.clone())?;
+                let cond = self.fix_types(cond.clone())?;
+                let then_expr = self.fix_types(then_expr.clone())?;
+                let else_expr = self.fix_types(else_expr.clone())?;
                 expr.set_if_cond(cond)
                     .set_if_then(then_expr)
                     .set_if_else(else_expr)
             }
             Expr::Match(cond, pat_vals) => {
-                let cond = self.finalize_types(cond.clone())?;
+                let cond = self.fix_types(cond.clone())?;
                 let mut new_pat_vals = vec![];
                 for (pat, val) in pat_vals {
                     let pat = self.finalize_types_for_pattern(pat.clone())?;
-                    let val = self.finalize_types(val.clone())?;
+                    let val = self.fix_types(val.clone())?;
                     new_pat_vals.push((pat, val));
                 }
                 expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
             }
-            Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.finalize_types(e.clone())?),
+            Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.fix_types(e.clone())?),
             Expr::MakeStruct(_tc, fields) => {
                 let mut fields_res = vec![];
                 for (name, e) in fields {
-                    let e = self.finalize_types(e.clone())?;
+                    let e = self.fix_types(e.clone())?;
                     fields_res.push((name.clone(), e));
                 }
                 expr.set_make_struct_fields(fields_res)
             }
             Expr::ArrayLit(elems) => {
-                let elems = collect_results(elems.iter().map(|e| self.finalize_types(e.clone())))?;
+                let elems = collect_results(elems.iter().map(|e| self.fix_types(e.clone())))?;
                 expr.set_array_lit_elems(elems)
             }
             Expr::FFICall(_, _, _, _, args, _) => {
-                let args =
-                    collect_results(args.iter().map(|arg| self.finalize_types(arg.clone())))?;
+                let args = collect_results(args.iter().map(|arg| self.fix_types(arg.clone())))?;
                 expr.set_ffi_call_args(args)
             }
             Expr::Eval(side, main) => {
-                let side = self.finalize_types(side.clone())?;
-                let main = self.finalize_types(main.clone())?;
+                let side = self.fix_types(side.clone())?;
+                let main = self.fix_types(main.clone())?;
                 expr.set_eval_side(side).set_eval_main(main)
             }
         });
