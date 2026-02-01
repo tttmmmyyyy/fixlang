@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf, process::Command};
 
-use crate::{tests::test_util::install_fix, COMPILER_TEST_WORKING_PATH};
+use crate::{env_vars, tests::test_util::install_fix, COMPILER_TEST_WORKING_PATH};
 
 #[test]
 pub fn test_external_project_math() {
@@ -68,6 +68,10 @@ pub fn test_external_project_regexp() {
 
 #[test]
 pub fn test_external_project_asynctask() {
+    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
+        // Skip this test when the optimization level is low since it takes too long time.
+        return;
+    }
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-asynctask.git",
         "fixlang-asynctask",
@@ -100,6 +104,10 @@ pub fn test_external_project_binary_heap() {
 
 #[test]
 pub fn test_external_project_cp_library() {
+    if env_vars::get_max_opt_level() <= crate::FixOptimizationLevel::None {
+        // Skip this test when the optimization level is low since it takes too long time.
+        return;
+    }
     test_external_project("https://github.com/tttmmmyyyy/cp-library", "cp-library");
 }
 
