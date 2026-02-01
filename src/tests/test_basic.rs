@@ -5158,6 +5158,49 @@ pub fn test_unrelated_trait_method_via_type_alias() {
 }
 
 #[test]
+pub fn test_constrain_impl_type_in_trait_member_definition_0() {
+    // Related to: Issue #73
+    let source = r##"
+module Main;
+
+trait b : MyTrait {
+    func : [b : MyTrait] b -> I64;
+}
+
+main: IO () = (
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type variable `b` used in trait definition cannot be constrained in the type of a member.",
+    );
+}
+
+#[test]
+pub fn test_constrain_impl_type_in_trait_member_definition_1() {
+    // Related to: Issue #73
+    let source = r##"
+module Main;
+
+trait b : MyTrait {
+    type MyItem b;
+    func : [MyItem b = I64] b -> I64;
+}
+
+main: IO () = (
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type variable `b` used in trait definition cannot be constrained in the type of a member.",
+    );
+}
+
+#[test]
 pub fn test_duplicated_symbols() {
     let source = r##"
     module Main;

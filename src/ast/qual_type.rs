@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use crate::ast::equality::Equality;
+use crate::ast::name::Name;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::KindSignature;
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
 use crate::name_resolution::NameResolutionContext;
-use crate::sourcefile::SourcePos;
+use crate::sourcefile::{SourcePos, Span};
 
 #[derive(Clone)]
 pub struct QualType {
@@ -95,5 +96,23 @@ impl QualType {
                 }
             }
         }
+    }
+
+    pub fn find_var_in_constraint(&self, var_name: &Name) -> Option<Span> {
+        for pred in &self.preds {
+            let mut buf = vec![];
+            pred.ty.free_vars_to_vec(&mut buf);
+            if buf.iter().any(|tv| &tv.name == var_name) {
+                return pred.source.clone();
+            }
+        }
+        for eq in &self.eqs {
+            let mut buf = vec![];
+            eq.free_vars_to_vec(&mut buf);
+            if buf.iter().any(|tv| &tv.name == var_name) {
+                return eq.source.clone();
+            }
+        }
+        None
     }
 }
