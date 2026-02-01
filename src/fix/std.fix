@@ -2768,12 +2768,7 @@ namespace String {
         String { _data : buf }
     );
 
-    // Create a `String` from a pointer to a null-terminated C string.
-    // 
-    // If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
-    // 
-    // DEPRECATED: 
-    // This function is private, but it should be public. Therefore, `unsafe_from_c_str_ptr` is created, and this function is deprecated.
+    // (Deprecated) Renamed to `unsafe_from_c_str_ptr`.
     _unsafe_from_c_str_ptr : Ptr -> String;
     _unsafe_from_c_str_ptr = |ptr| (
         let len = FFI_CALL[I64 strlen(Ptr), ptr];
@@ -2788,12 +2783,43 @@ namespace String {
     // If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
     // 
     // If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
+    // 
+    // There is also an IO version of this function, `unsafe_from_c_str_ptr_io`.
+    // 
+    // Since this function is not an `IO` action, the compiler does not guarantee the order of execution between this function and `IO` actions.
+    // Do not use this function if you perform `IO` operations that modify the content pointed to by `ptr` or free `ptr`.
+    // 
+    // For example,
+    // ```
+    // let str = unsafe_from_c_str_ptr(ptr);
+    // FFI_CALL_IO[() free(Ptr), ptr];;
+    // ```
+    // may be rewritten to:
+    // ```
+    // FFI_CALL_IO[() free(Ptr), ptr];;
+    // let str = unsafe_from_c_str_ptr(ptr);    
+    // ```
+    // which can cause undefined behavior.
     //
     // # Parameters
     //
     // * `ptr` - The pointer to a null-terminated C string.
     unsafe_from_c_str_ptr : Ptr -> String;
     unsafe_from_c_str_ptr = _unsafe_from_c_str_ptr;
+
+    // Create a `String` from a pointer to a null-terminated C string, via an IO action.
+    // 
+    // If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
+    // 
+    // If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
+    unsafe_from_c_str_ptr_io : Ptr -> IO String;
+    unsafe_from_c_str_ptr_io = |ptr| (
+        let len = *FFI_CALL_IO[I64 strlen(Ptr), ptr];
+        let buf_len = len + 1;
+        let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
+        let (buf, _) = *buf.mutate_boxed_io(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
+        String { _data : buf }.pure
+    );
 
     // Call a function with a null-terminated C string.
     //

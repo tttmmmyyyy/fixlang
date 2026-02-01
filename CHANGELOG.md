@@ -16,6 +16,7 @@
 - Add `Std::ToX` traits for all primitive numeric types and C types (e.g., `Std::ToI32`, `Std::ToCUnsignedInt`, etc.). Each trait has a member function to cast a value into the target type. The cast functions are named in lower snake case, such as `i32` and `c_unsigned_int`. They do not have prefixes like `to_`.
 - Add `Std::String::starts_with` and `Std::String::ends_with` functions.
 - Add `Std::Array::@size`, `Std::Array::@capacity`, `Std::String::@size` functions to get the size and capacity of arrays and strings.
+- Add `unsafe_from_c_str_ptr_io : Ptr -> IO String`.
 
 #### Compiler 
 
