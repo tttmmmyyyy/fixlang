@@ -1792,7 +1792,7 @@ impl Scheme {
                 ));
             }
             // The first argument of the left side of an equality constraint should be a type variable.
-            // If this condition is not satisified, then a type can be reduce in two ways, by this equality and by an instance of the associated type,
+            // If this condition is not satisified, then a type can be reduced in two ways, by this equality and by an instance of the associated type,
             // which implies that there is no "normal form" of the type.
             if !eq.args[0].is_tyvar() {
                 return Err(Errors::from_msg_srcs(
