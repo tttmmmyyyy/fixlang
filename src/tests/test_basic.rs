@@ -4399,6 +4399,10 @@ pub fn test_names_literal_prefix() {
 
 #[test]
 pub fn test_tarai() {
+    if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
+        // Skip this test when the optimization level is low since it takes too long time.
+        return;
+    }
     let source = r#"
     module Main;
     
@@ -4418,6 +4422,33 @@ pub fn test_tarai() {
     main = (
         let n = tarai $ (12, 6, 0);
         assert_eq(|_|"", n, 12);;
+        pure()
+    );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_tarai_small() {
+    let source = r#"
+    module Main;
+    
+    tarai : (I64, I64, I64) -> I64;
+    tarai = |(x, y, z)| (
+        if x <= y {
+            y
+        } else {
+            let a = tarai $ (x-1, y, z);
+            let b = tarai $ (y-1, z, x);
+            let c = tarai $ (z-1, x, y);
+            tarai $ (a, b, c)
+        }
+    );
+
+    main : IO ();
+    main = (
+        let n = tarai $ (8, 4, 0);
+        assert_eq(|_|"", n, 8);;
         pure()
     );
     "#;
