@@ -5821,7 +5821,8 @@ pub fn test_extra_comma() {
 
     main : IO ();
     main = (
-        let _ = MyStruct0 { fst : 0, snd : false, };
+        let x = MyStruct0 { fst : 0, snd : false, };
+        let MyStruct0 { fst : fst_val, snd : snd_val , } = x;
 
         assert_eq(|_|"", [1, 2, 3,], [1, 2, 3]);;
         assert_eq(|_|"", [1, 2, 3, ], [1, 2, 3]);;
