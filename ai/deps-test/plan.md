@@ -199,14 +199,78 @@ pub fn get_lock_file_path(mode: DependencyMode) -> &'static str {
 ### フェーズ6: テストとドキュメント
 
 #### 6.1 ユニットテストの追加
-- `ProjectFile::get_dependencies()` のテスト
-- 依存マージのテスト
-- ロックファイルパス取得のテスト
+- `test_get_dependencies_build_mode()`: ビルドモードでの依存取得テスト
+  - `ProjectFile` に通常依存とテスト用依存の両方を設定
+  - `get_dependencies(DependencyMode::Build)` を呼び出し
+  - 通常依存のみが返されることを確認
+  - テスト用依存が含まれていないことを確認
+
+- `test_get_dependencies_test_mode()`: テストモードでの依存取得テスト
+  - `ProjectFile` に通常依存とテスト用依存の両方を設定
+  - `get_dependencies(DependencyMode::Test)` を呼び出し
+  - 通常依存とテスト用依存の両方が返されることを確認
+  - 返されたリストの長さが正しいことを確認
+
+- `test_validate_duplicate_dependency()`: 重複依存の検証テスト
+  - 同じ名前の依存を `dependencies` と `dependencies_test` に設定
+  - `ProjectFile::validate()` を呼び出し
+  - エラーが返されることを確認
+  - エラーメッセージに "Duplicate dependency" が含まれることを確認
+
+- `test_get_lock_file_path()`: ロックファイルパス取得テスト
+  - `get_lock_file_path(DependencyMode::Build)` が `"fixdeps.lock"` を返すことを確認
+  - `get_lock_file_path(DependencyMode::Test)` が `"fixdeps.test.lock"` を返すことを確認
+
+- `test_calculate_dependencies_hash()`: ハッシュ計算のテスト
+  - `ProjectFile` に通常依存とテスト用依存を設定
+  - `calculate_dependencies_hash(DependencyMode::Build)` と `calculate_dependencies_hash(DependencyMode::Test)` を呼び出し
+  - 両者が異なるハッシュ値を返すことを確認
+  - ビルドモードのハッシュが通常依存のみから計算されていることを確認
+  - テストモードのハッシュがマージされた依存から計算されていることを確認
 
 #### 6.2 統合テストの追加
-- テスト依存を含むサンプルプロジェクトを作成
-- `fix test` コマンドの動作確認
-- 通常ビルドとテストビルドで異なるロックファイルが使用されることを確認
+- テスト用プロジェクトの配置: `src/tests/test_dependencies/`
+  - `cases/main_project/`: メインのテストプロジェクト
+    - `fixproj.toml`: 通常依存とテスト用依存 (`[[dependencies.test]]`) を含む
+    - `main.fix`: メイン実装（通常依存のみを使用）
+    - `test.fix`: テストコード（テスト用依存を使用）
+  - `cases/normal_dep/`: 通常の依存プロジェクト
+    - `fixproj.toml`: 基本的なプロジェクト設定
+    - `lib.fix`: ライブラリコード
+  - `cases/test_dep/`: テスト用の依存プロジェクト
+    - `fixproj.toml`: 基本的なプロジェクト設定
+    - `lib.fix`: テストヘルパー関数など
+
+- テスト関数の追加: `src/tests/test_dependencies.rs`
+  - `test_dependencies_build_mode()`: 通常ビルドモードのテスト
+    1. `install_fix()` でfixコマンドをインストール
+    2. テストプロジェクト内の `*.lock` ファイルを削除
+    3. `fix build` を実行
+    4. `fixdeps.lock` が作成されていることを確認
+    5. `fixdeps.test.lock` が作成されて**いない**ことを確認
+    6. `fixdeps.lock` の内容を読み込み、通常依存のみが含まれていることを確認（テスト用依存が含まれていないこと）
+    7. ビルドが成功することを確認
+  
+  - `test_dependencies_test_mode()`: テストモードのテスト
+    1. `install_fix()` でfixコマンドをインストール
+    2. テストプロジェクト内の `*.lock` ファイルを削除
+    3. `fix test` を実行
+    4. `fixdeps.lock` と `fixdeps.test.lock` の両方が作成されていることを確認
+    5. `fixdeps.test.lock` の内容を読み込み、通常依存とテスト用依存の両方が含まれていることを確認
+    6. テストが成功することを確認（テスト用依存が正しくリンクされたことの証明）
+  
+  - `test_dependencies_lock_file_separation()`: ロックファイル分離のテスト
+    1. `install_fix()` でfixコマンドをインストール
+    2. テストプロジェクト内の `*.lock` ファイルを削除
+    3. `fix deps update` を実行
+    4. 両方のロックファイルが生成されることを確認
+    5. 各ロックファイルの依存リストを比較し、異なることを確認
+  
+  - `test_dependencies_duplicate_error()`: 重複依存のエラーテスト
+    1. 同じ依存を `[[dependencies]]` と `[[dependencies.test]]` に記述したプロジェクトを用意
+    2. `fix build` または `fix test` を実行
+    3. エラーが発生することを確認
+    4. エラーメッセージに "Duplicate dependency" が含まれることを確認
 
 #### 6.3 ドキュメント更新
 - `Document.md` に `[[dependencies.test]]` の説明を追加
@@ -270,8 +334,3 @@ fix deps add --test <project-name>
 - 既存のプロジェクトとの互換性を保つ（`dependencies_test` は optional）
 - ロックファイルが2つになることによるユーザー体験への影響を最小化
 - CI/CDでの動作を考慮（両方のロックファイルをバージョン管理に含める）
-
-## 未決定事項
-
-1. テスト依存でのみ必要な依存のバージョン互換性チェックの扱い
-2. `fix deps update --skip-test` フラグの実装優先度（必要に応じて後回し可能）
