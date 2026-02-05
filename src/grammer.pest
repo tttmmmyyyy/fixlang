@@ -193,7 +193,7 @@ pattern_var = { name ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ (sep* ~ ",")? ~ sep* ~ ")" }
 
-pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion)* ~ sep* ~ "}" }
+pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion)* ~ (sep* ~ ",")? ~ sep* ~ "}" }
 
 pattern_union = { (capital_name ~ "::")* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern_nounion? ~ sep* ~ ")" }
 
