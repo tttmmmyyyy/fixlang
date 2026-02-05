@@ -8,6 +8,7 @@ This project implements the Fix programming language compiler and related tools 
 
 - **Programming Language**: This project is written in Rust.
 - **Fix Language Syntax**: Refer to `Document.md` for documentation and `src/tests/test_basic.rs` for Fix code examples.
+- **Comments**: Write all comments in English.
 - **Import Style**: 
   - Use explicit imports at the top of each file to reference identifiers without namespace qualification.
   - Do NOT use `module::*` wildcard imports.
