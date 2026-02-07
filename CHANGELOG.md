@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+#### Tool
+
+- Now you can write `[[test-dependencies]]` in `fixproj.toml`. You can specify dependencies which are only used for tests here. If your project is used as a library, dependencies written in `[[test-dependencies]]` will not be installed.
+
 ## [1.2.0] - 2026-02-10
 
 ### Added
