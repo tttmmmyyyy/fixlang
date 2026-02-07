@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-10
+
 ### Added
 
 #### Language 
@@ -41,7 +43,6 @@
 
 - Type variables used in trait member definitions can no longer be used in implementations of those trait members. For example, for `trait [f:*->*] f : Functor { map : (a -> b) -> f a -> f b; }`, you cannot use `a`, `b` in `impl MyType : Functor { map = |f : a -> b, x : MyType a| ...}`. This change ensures that renaming type variables in trait definitions does not affect implementations of trait members. Instead, you can introduce type variables in type signatures of trait members. For example, you can write `impl MyType : Functor { map : (a -> b) -> MyType a -> MyType b = |f : a -> b, x : MyType a| ...}`. 
 - You can now refer to entities using absolute namespace syntax (e.g., `::Std::String`) without importing them.
-- In struct pattern matching, extra commas are now allowed. For example, you can write `let S { x, y, } = value;`.
 
 #### Std
 
