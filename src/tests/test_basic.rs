@@ -5819,10 +5819,19 @@ pub fn test_extra_comma() {
     type MyUnion1 a b = union { fst : a, snd : b ,};
     type MyUnion2 a b = union { fst : a, snd : b , };
 
+    get_fst : MyStruct0 I64 Bool -> I64 = |MyStruct0 { fst : fst_val, snd : snd_val, }| fst_val;
+
     main : IO ();
     main = (
         let x = MyStruct0 { fst : 0, snd : false, };
         let MyStruct0 { fst : fst_val, snd : snd_val , } = x;
+
+        match x {
+            MyStruct0 { fst : fst_val, snd : snd_val, } => (
+                assert_eq(|_|"", fst_val, 0);;
+                assert_eq(|_|"", snd_val, false)
+            )
+        };;
 
         assert_eq(|_|"", [1, 2, 3,], [1, 2, 3]);;
         assert_eq(|_|"", [1, 2, 3, ], [1, 2, 3]);;
