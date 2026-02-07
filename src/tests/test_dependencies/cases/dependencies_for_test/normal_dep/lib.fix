@@ -1,0 +1,5 @@
+module NormalDep;
+
+// A simple function that returns a greeting message
+greet: String -> String;
+greet = |name| "Hello from normal-dep, " + name + "!";

@@ -5,6 +5,7 @@ use crate::{
         name::{FullName, Name, NameSpace},
         typedecl::Field,
     },
+    dependency_lockfile::DependencyMode,
     error::Errors,
     kind_star,
     misc::to_absolute_path,
@@ -21,7 +22,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     proj_file.set_config(&mut config, false)?;
 
     // Set up the configuration by the lock file.
-    proj_file.open_lock_file()?.set_config(&mut config)?;
+    proj_file.open_lock_file(DependencyMode::Test)?.set_config(&mut config)?;
 
     // Build the file and get the errors.
     let program = check_program_via_config(&config)?;

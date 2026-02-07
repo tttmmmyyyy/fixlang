@@ -1,0 +1,10 @@
+[general]
+name = "normal-dep"
+version = "0.1.0"
+fix_version = "*"
+description = "A normal dependency for integration tests"
+authors = ["Test"]
+license = "MIT"
+
+[build]
+files = ["lib.fix"]

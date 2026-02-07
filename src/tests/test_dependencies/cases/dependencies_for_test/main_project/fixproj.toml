@@ -1,0 +1,21 @@
+[general]
+name = "main-project"
+version = "0.1.0"
+fix_version = "*"
+description = "A main project for integration tests"
+authors = ["Test"]
+license = "MIT"
+
+[build]
+files = ["main.fix"]
+
+[build.test]
+files = ["test.fix"]
+
+[[dependencies]]
+name = "normal-dep"
+path = "../normal_dep"
+
+[[test_dependencies]]
+name = "test-dep"
+path = "../test_dep"

@@ -1,0 +1,10 @@
+[general]
+name = "test-dep"
+version = "0.1.0"
+fix_version = "*"
+description = "A test dependency for integration tests"
+authors = ["Test"]
+license = "MIT"
+
+[build]
+files = ["lib.fix"]

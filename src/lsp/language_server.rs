@@ -6,6 +6,7 @@ use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
 use crate::constants::{
     chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
 };
+use crate::dependency_lockfile::DependencyMode;
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
@@ -2226,7 +2227,9 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     proj_file.set_config(&mut config, false)?;
 
     // Set up the configuration by the lock file.
-    proj_file.open_lock_file()?.set_config(&mut config)?;
+    proj_file
+        .open_lock_file(DependencyMode::Test)?
+        .set_config(&mut config)?;
 
     // Build the file and get the errors.
     let program = check_program_via_config(&config)?;

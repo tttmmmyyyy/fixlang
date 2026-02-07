@@ -1,5 +1,19 @@
 use crate::{
-    config_file::ConfigFile, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH}, dependency_lockfile::{self, DependecyLockFile, ProjectSource}, error::Errors, misc::{info_msg, warn_msg, Set}, registry_file::RegistryFile, Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, SourceFile, Span, LOCK_FILE_PATH, PROJECT_FILE_PATH, TRY_FIX_RESOLVE
+    config_file::ConfigFile,
+    constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH},
+    dependency_lockfile::{self, DependecyLockFile, DependencyMode, ProjectSource, get_lock_file_path},
+    error::Errors,
+    misc::{info_msg, warn_msg, Set},
+    registry_file::RegistryFile,
+    Configuration,
+    ExtraCommand,
+    FixOptimizationLevel,
+    LinkType,
+    OutputFileType,
+    SourceFile,
+    Span,
+    PROJECT_FILE_PATH,
+    TRY_FIX_RESOLVE,
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -142,12 +156,29 @@ pub struct ProjectFile {
     // `dependencies` section
     #[serde(default)]
     pub dependencies: Vec<ProjectFileDependency>,
+    // `test_dependencies` section
+    #[serde(default)]
+    pub test_dependencies: Vec<ProjectFileDependency>,
     // The path to the project file.
     #[serde(skip)]
     pub path: PathBuf,
 }
 
 impl ProjectFile {
+    // Get dependencies based on mode.
+    pub fn get_dependencies(&self, mode: DependencyMode) -> Vec<ProjectFileDependency> {
+        match mode {
+            DependencyMode::Test => {
+                // Merge dependencies and test_dependencies
+                // Note: Duplicate check is already performed in validate()
+                let mut all_deps = self.dependencies.clone();
+                all_deps.extend(self.test_dependencies.clone());
+                all_deps
+            }
+            DependencyMode::Build => self.dependencies.clone(),
+        }
+    }
+
     // Read the project file at `PROJECT_FILE_PATH`.
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
@@ -208,9 +239,19 @@ impl ProjectFile {
     }
 
     // Calculate the hash value of the `dependencies` section.
-    pub fn calculate_dependencies_hash(&self) -> String {
+    pub fn calculate_dependencies_hash(&self, mode: DependencyMode) -> String {
+        // Get dependencies based on mode.
+        let mut deps = match mode {
+            DependencyMode::Test => {
+                // Merge dependencies and test_dependencies
+                let mut all_deps = self.dependencies.clone();
+                all_deps.extend(self.test_dependencies.clone());
+                all_deps
+            }
+            DependencyMode::Build => self.dependencies.clone(),
+        };
+        
         // Sort the dependencies by name.
-        let mut deps = self.dependencies.clone();
         deps.sort_by(|a, b| a.name.cmp(&b.name));
 
         let mut data = String::new();
@@ -238,6 +279,34 @@ impl ProjectFile {
         Ok(())
     }
 
+    // Validate a single dependency entry.
+    fn validate_dependency_entry(dep: &ProjectFileDependency, span: Span) -> Result<(), Errors> {
+        // Validate the project name.
+        Self::validate_project_name(&dep.name, Some(span.clone()))?;
+
+        // Either of `path` or `git` should be specified.
+        if (dep.path.is_none() && dep.git.is_none())
+            || (dep.path.is_some() && dep.git.is_some())
+        {
+            return Err(Errors::from_msg_srcs(
+                "Either of `path` or `git` should be specified in a dependency.".to_string(),
+                &[&Some(span.clone())],
+            ));
+        }
+
+        // Validate the version.
+        if let Some(version) = &dep.version {
+            VersionReq::parse(version).map_err(|e| {
+                Errors::from_msg_srcs(
+                    format!("Failed to parse version: {}", e),
+                    &[&Some(span)],
+                )
+            })?;
+        }
+
+        Ok(())
+    }
+
     pub fn validate(&self) -> Result<(), Errors> {
         // Validate the general section.
 
@@ -262,40 +331,27 @@ impl ProjectFile {
             })?;
         }
 
-        // Validate the dependencies section.
-        let mut dep_names = vec![];
+        // Validate the dependencies section and check for duplicates.
+        let mut dep_names = Set::default();
         for dep in &self.dependencies {
-            // Cannot have duplicate dependencies.
-            if dep_names.contains(&dep.name) {
+            if !dep_names.insert(&dep.name) {
                 return Err(Errors::from_msg_srcs(
                     format!("Duplicate dependency on \"{}\"", dep.name),
                     &[&Some(self.project_file_span(0, 0))],
                 ));
             }
-            dep_names.push(dep.name.clone());
+            Self::validate_dependency_entry(dep, self.project_file_span(0, 0))?;
+        }
 
-            // Validate the project name.
-            Self::validate_project_name(&dep.name, Some(self.project_file_span(0, 0)))?;
-
-            // Either of `path` or `git` should be specified.
-            if (dep.path.is_none() && dep.git.is_none())
-                || (dep.path.is_some() && dep.git.is_some())
-            {
+        // Validate the test_dependencies section and check for duplicates.
+        for dep in &self.test_dependencies {
+            if !dep_names.insert(&dep.name) {
                 return Err(Errors::from_msg_srcs(
-                    "Either of `path` or `git` should be specified in a dependency.".to_string(),
+                    format!("Duplicate dependency on \"{}\"", dep.name),
                     &[&Some(self.project_file_span(0, 0))],
                 ));
             }
-
-            // Validate the version.
-            if let Some(version) = &dep.version {
-                VersionReq::parse(version).map_err(|e| {
-                    Errors::from_msg_srcs(
-                        format!("Failed to parse version: {}", e),
-                        &[&Some(self.project_file_span(0, 0))],
-                    )
-                })?;
-            }
+            Self::validate_dependency_entry(dep, self.project_file_span(0, 0))?;
         }
 
         // Validate disable_cpu_features.
@@ -624,15 +680,16 @@ impl ProjectFile {
 
     // Open the lock file.
     // If the project has no dependencies, return an empty lock file.
-    pub fn open_lock_file(&self) -> Result<DependecyLockFile, Errors> {
+    pub fn open_lock_file(&self, mode: DependencyMode) -> Result<DependecyLockFile, Errors> {
         // If there are no dependencies, the lock file is not necessary.
-        if self.dependencies.is_empty() {
+        if self.get_dependencies(mode).is_empty() {
             return Ok(DependecyLockFile::default());
         }
 
         // Try to open the valid dependency lock file.
         // If the project file hash is different from the one in the lock file, the lock file is invalid.
-        let content = std::fs::read_to_string(LOCK_FILE_PATH).map_err(|e| {
+        let lock_file_path = get_lock_file_path(mode);
+        let content = std::fs::read_to_string(lock_file_path).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to read the lock file: {:?}. {}",
                 e, TRY_FIX_RESOLVE
@@ -644,7 +701,7 @@ impl ProjectFile {
                 e, TRY_FIX_RESOLVE
             ))
         })?;
-        if lock_file.proj_file_hash != self.calculate_dependencies_hash() {
+        if lock_file.proj_file_hash != self.calculate_dependencies_hash(mode) {
             return Err(Errors::from_msg(format!(
                 "The lock file is not up to date. {}",
                 TRY_FIX_RESOLVE
@@ -654,15 +711,16 @@ impl ProjectFile {
     }
 
     // Open the lock file or create a new one if it does not exist.
-    pub fn open_or_create_lock_file(&self) -> Result<DependecyLockFile, Errors> {
-        Ok(match self.open_lock_file() {
+    pub fn open_or_create_lock_file(&self, mode: DependencyMode) -> Result<DependecyLockFile, Errors> {
+        Ok(match self.open_lock_file(mode) {
             Ok(lock_file) => lock_file,
             Err(_) => {
-                let lock_file = DependecyLockFile::create(self)?;
+                let lock_file = DependecyLockFile::create(self, mode)?;
                 let content = toml::to_string(&lock_file).map_err(|e| {
                     Errors::from_msg(format!("Failed to serialize the lock file: {:?}", e))
                 })?;
-                std::fs::write(LOCK_FILE_PATH, content).map_err(|e| {
+                let lock_file_path = get_lock_file_path(mode);
+                std::fs::write(lock_file_path, content).map_err(|e| {
                     Errors::from_msg(format!("Failed to write the lock file: {:?}", e))
                 })?;
                 lock_file
@@ -671,17 +729,18 @@ impl ProjectFile {
     }
 
     // Open the lock file, create a new one if it does not exist, and install the dependencies.
-    pub fn open_or_create_lock_file_and_install(&self) -> Result<(), Errors> {
-        self.open_or_create_lock_file().and_then(|lf| lf.install())
+    pub fn open_or_create_lock_file_and_install(&self, mode: DependencyMode) -> Result<(), Errors> {
+        self.open_or_create_lock_file(mode).and_then(|lf| lf.install())
     }
 
     // Update configuration by adding source files, linking libraries, ... as required by dependencies.
     pub fn install_dependencies(
         self: &ProjectFile,
         config: &mut Configuration,
+        mode: DependencyMode,
     ) -> Result<(), Errors> {
         // Update the lock file if necessary.
-        let lock_file = self.open_or_create_lock_file()?;
+        let lock_file = self.open_or_create_lock_file(mode)?;
 
         // Install the dependencies.
         lock_file.install()?;
@@ -709,7 +768,8 @@ impl ProjectFile {
 
     // Get the source of a dependent project.
     pub fn get_dependency_source(&self, name: &ProjectName) -> ProjectSource {
-        for dep in &self.dependencies {
+        // Search in both dependencies and test_dependencies
+        for dep in self.dependencies.iter().chain(self.test_dependencies.iter()) {
             if &dep.name != name {
                 continue;
             }
@@ -787,6 +847,7 @@ impl ProjectFile {
         &self,
         proj_vers: &Vec<String>,
         fix_config: &ConfigFile,
+        mode: DependencyMode,
     ) -> Result<(), Errors> {
         let mut added = "".to_string();
 
@@ -829,9 +890,10 @@ impl ProjectFile {
         }
 
         // Check if the project file already has the dependencies.
+        let existing_deps = self.get_dependencies(mode);
         for prj_ver in &projs {
             let proj_name = &prj_ver.0;
-            if self.dependencies.iter().any(|dep| &dep.name == proj_name) {
+            if existing_deps.iter().any(|dep| &dep.name == proj_name) {
                 return Err(Errors::from_msg(format!(
                     "The project file already has a dependency on \"{}\".",
                     proj_name
@@ -896,7 +958,12 @@ impl ProjectFile {
                         }
                     };
 
-                    added += "\n\n[[dependencies]]";
+                    let section_name = match mode {
+                        DependencyMode::Build => "[[dependencies]]",
+                        DependencyMode::Test => "[[test_dependencies]]",
+                    };
+                    added += "\n\n";
+                    added += section_name;
                     added += &format!("\nname = \"{}\"", proj_name);
                     added += &format!("\nversion = \"{}\"", version);
                     added += &format!("\ngit = {{ url = \"{}\" }}", proj_info.git);

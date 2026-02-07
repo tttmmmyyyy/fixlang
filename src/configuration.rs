@@ -1,5 +1,6 @@
 use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::cpu_features::CpuFeatures;
+use crate::dependency_lockfile::DependencyMode;
 use crate::env_vars;
 use crate::error::{panic_if_err, Errors};
 use crate::misc::{
@@ -136,6 +137,16 @@ impl SubCommand {
             SubCommand::Test => "test",
             SubCommand::Diagnostics(_) => "diagnostics",
             SubCommand::Docs(_) => "docs",
+        }
+    }
+
+    // Get the dependency mode based on the subcommand.
+    pub fn dependency_mode(&self) -> DependencyMode {
+        match self {
+            SubCommand::Test | SubCommand::Diagnostics(_) | SubCommand::Docs(_) => {
+                DependencyMode::Test
+            }
+            _ => DependencyMode::Build,
         }
     }
 }

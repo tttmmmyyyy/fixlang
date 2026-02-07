@@ -15,8 +15,22 @@ use crate::{
     error::Errors,
     misc::{to_absolute_path, warn_msg},
     project_file::{ProjectFile, ProjectFileDependency, ProjectName},
-    EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, PROJECT_FILE_PATH,
+    EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH, PROJECT_FILE_PATH,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DependencyMode {
+    Build,
+    Test,
+}
+
+// Get the lock file path based on the dependency mode.
+pub fn get_lock_file_path(mode: DependencyMode) -> &'static str {
+    match mode {
+        DependencyMode::Test => LOCK_FILE_TEST_PATH,
+        DependencyMode::Build => LOCK_FILE_PATH,
+    }
+}
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -36,7 +50,10 @@ impl DependecyLockFile {
     }
 
     // Create the lock file (on memory, not on file) to satisfy the dependencies of the given project file.
-    pub fn create(proj_file: &ProjectFile) -> Result<DependecyLockFile, Errors> {
+    pub fn create(
+        proj_file: &ProjectFile,
+        mode: DependencyMode,
+    ) -> Result<DependecyLockFile, Errors> {
         // Resolve the dependency.
         let prjs_info = ProjectsInfo {
             projects: Arc::new(Mutex::new(vec![ProjectInfo::from_project_file(proj_file)])),
@@ -48,6 +65,7 @@ impl DependecyLockFile {
             proj_file,
             packages_retriever.as_ref(),
             versions_retriever.as_ref(),
+            mode,
         )?;
         if res.is_none() {
             return Err(Errors::from_msg(
@@ -58,7 +76,7 @@ impl DependecyLockFile {
 
         // Create a new lock file following the resolved dependencies.
         let mut lock_file = DependecyLockFile {
-            proj_file_hash: proj_file.calculate_dependencies_hash(),
+            proj_file_hash: proj_file.calculate_dependencies_hash(mode),
             dependencies: Vec::new(),
         };
         for prj in prjs {
@@ -212,13 +230,13 @@ impl DependecyLockFile {
     }
 
     // Update the lock file and install the dependencies.
-    pub fn update_and_install() -> Result<(), Errors> {
+    pub fn update_and_install(mode: DependencyMode) -> Result<(), Errors> {
         // Remove lock file.
-        let lock_file_path = Path::new(LOCK_FILE_PATH);
+        let lock_file_path = Path::new(get_lock_file_path(mode));
         if lock_file_path.exists() {
             std::fs::remove_file(lock_file_path).expect("Failed to remove the lock file.");
         }
-        ProjectFile::read_root_file()?.open_or_create_lock_file_and_install()
+        ProjectFile::read_root_file()?.open_or_create_lock_file_and_install(mode)
     }
 }
 
@@ -524,9 +542,10 @@ pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
     Ok((temp_dir, repo))
 }
 
-fn project_file_to_package(proj_file: &ProjectFile) -> Package {
+fn project_file_to_package(proj_file: &ProjectFile, mode: DependencyMode) -> Package {
+    let deps_list = proj_file.get_dependencies(mode);
     let mut deps = Vec::new();
-    for dep in &proj_file.dependencies {
+    for dep in &deps_list {
         let dep = project_file_dep_to_dependency(dep);
         deps.push(dep);
     }
@@ -540,8 +559,8 @@ fn project_file_to_package(proj_file: &ProjectFile) -> Package {
 // Create package retriever which will be passed to `package_resolver::resolve_dependency`.
 fn create_package_retriever(
     projs: ProjectsInfo,
-) -> Box<dyn Fn(&PackageName, &Version) -> Result<Package, Errors>> {
-    Box::new(move |prj_name, ver| {
+) -> Box<dyn Fn(&PackageName, &Version, DependencyMode) -> Result<Package, Errors>> {
+    Box::new(move |prj_name, ver, mode| {
         let mut projs = projs.projects.as_ref().lock().unwrap();
 
         // Find the project.
@@ -575,7 +594,8 @@ fn create_package_retriever(
         }
 
         // Register new dependent projects to the packages cache.
-        for dep in &proj_file.dependencies {
+        let deps_list = proj_file.get_dependencies(mode);
+        for dep in &deps_list {
             let dep_src = proj_file.get_dependency_source(&dep.name);
             if let Some(prj) = projs.iter().find(|pkg| &pkg.name == &dep.name) {
                 // If the project is already in the cache, then check that the sources are the same between `pkg` and `dep`.
@@ -598,7 +618,10 @@ fn create_package_retriever(
             projs.push(prj);
         }
 
-        Ok(project_file_to_package(&proj_file))
+        // Use the mode parameter to get dependencies.
+        // For root project, mode will be Test or Build as specified.
+        // For dependent projects, mode will always be Build (set by dependency resolver).
+        Ok(project_file_to_package(&proj_file, mode))
     })
 }
 

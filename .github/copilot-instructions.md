@@ -14,4 +14,20 @@ This project implements the Fix programming language compiler and related tools 
   - Do NOT use `module::*` wildcard imports.
   - Import all entities explicitly (e.g., `use module::{Type1, Type2, function1};`).
     - Note: Some existing code may not follow this style, but new code should adhere to it.
+- **Data Structures**:
+  - Use `Set` and `Map` from `crate::misc` module instead of `std::collections::HashSet` and `std::collections::HashMap`.
+  - Example: `use crate::misc::{Set, Map};` then use `Set::default()` or `Map::default()`.
+
+## Testing Guidelines
+
+- **When modifying Fix grammar or standard library**:
+  - Add unit tests that compile and execute Fix code.
+  - These tests verify that Fix language features work correctly.
+  
+- **When modifying `fix` command behavior**:
+  - Do NOT write unit tests unless explicitly instructed.
+  - Write integration tests instead.
+  - Place sample Fix projects in the `tests` folder (e.g., `src/tests/test_dependencies/cases/`).
+  - In test code, call `install_fix()` to install Fix to the system.
+  - Test the actual behavior by running `fix` command via `Command::new("fix")`.
 

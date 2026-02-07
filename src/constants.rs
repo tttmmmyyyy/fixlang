@@ -132,6 +132,7 @@ pub const PROJECT_FILE_PATH: &str = "fixproj.toml";
 pub const SAMPLE_MAIN_FILE_PATH: &str = "main.fix";
 pub const SAMPLE_TEST_FILE_PATH: &str = "test.fix";
 pub const LOCK_FILE_PATH: &str = "fixdeps.lock";
+pub const LOCK_FILE_TEST_PATH: &str = "fixdeps.test.lock";
 pub const EXTERNAL_PROJ_INSTALL_PATH: &str = ".fixlang/deps";
 pub const FIX_CONFIG_FILE_NAME: &str = ".fixconfig.toml";
 

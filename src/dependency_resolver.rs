@@ -1,6 +1,6 @@
 // This module implements an algorithm of dependency resolution.
 
-use crate::{error::Errors, project_file::ProjectFile};
+use crate::{dependency_lockfile::DependencyMode, error::Errors, project_file::ProjectFile};
 use semver::{Version, VersionReq};
 
 pub type PackageName = String;
@@ -22,7 +22,7 @@ pub struct Dependency {
 
 // Package retriever function.
 // It takes a package of a specific version and returns its package information.
-pub type PackageRetriever<'a> = &'a dyn Fn(&PackageName, &Version) -> Result<Package, Errors>;
+pub type PackageRetriever<'a> = &'a dyn Fn(&PackageName, &Version, DependencyMode) -> Result<Package, Errors>;
 
 // Version retriever function.
 // It takes a package name and returns a list of versions which exist.
@@ -32,12 +32,14 @@ pub fn resolve_dependency<'a, 'b, 'c>(
     root_proj: &ProjectFile,
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
+    mode: DependencyMode,
 ) -> Result<Option<Vec<Package>>, Errors> {
     try_use_package(
         (&root_proj.general.name, &root_proj.general.version()),
         &[],
         package_retriever,
         versions_retriever,
+        mode,
         0,
     )
 }
@@ -51,6 +53,7 @@ fn try_use_package<'a, 'b, 'c>(
     fixed: &[Package],
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
+    mode: DependencyMode,
     indent: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
     let (pkg_name, pkg_version) = pkg;
@@ -59,7 +62,7 @@ fn try_use_package<'a, 'b, 'c>(
     assert!(!fixed.iter().any(|p| p.name == *pkg_name));
 
     // Get the package information.
-    let package = package_retriever(pkg_name, pkg_version)?;
+    let package = package_retriever(pkg_name, pkg_version, mode)?;
     let deps = package.deps.clone();
 
     // Add the package to the fixed list.
@@ -182,6 +185,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
             fixed,
             package_retriever,
             versions_retriever,
+            DependencyMode::Build,
             indent,
         )?;
         if fixed.is_some() {

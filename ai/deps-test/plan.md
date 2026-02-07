@@ -1,12 +1,44 @@
 # テスト用依存の実装計画
 
+## 実装状態
+
+✅ **完了 (2026-02-07)**
+
+全てのフェーズの実装が完了しました：
+- Phase 1-5: コア機能実装
+- Phase 6.1: ユニットテスト (5 tests passing)
+- Phase 6.2: 統合テスト (3 tests passing)
+- Phase 6.3: ドキュメント更新 (Document.md, Document-ja.md)
+
 ## 概要
 
-Fixのプロジェクトファイル `fixproj.toml` に `[[dependencies.test]]` セクションを追加し、テスト実行時やLSPでの診断時に使用される依存関係を管理できるようにする。
+Fixのプロジェクトファイル `fixproj.toml` に `[[dependencies_test]]` セクションを追加し、テスト実行時やLSPでの診断時に使用される依存関係を管理できるようにする。
 
 テストモード（`fix test` コマンド、LSPでの診断時）では：
-- `[[dependencies]]` と `[[dependencies.test]]` をマージした依存リストを使用
+- `[[dependencies]]` と `[[dependencies_test]]` をマージした依存リストを使用
 - ロックファイル名を `fixdeps.test.lock` とする
+
+### コマンド使用例
+
+```bash
+# 通常依存に追加
+fix deps add some-library
+
+# テスト用依存に追加
+fix deps add --test test-helper
+
+# 通常版ロックファイルを更新
+fix deps update
+
+# テスト版ロックファイルを更新
+fix deps update --test
+
+# 通常版依存をインストール
+fix deps install
+
+# テスト版依存をインストール
+fix deps install --test
+```
 
 ## 実装フェーズ
 
@@ -110,42 +142,42 @@ pub fn get_lock_file_path(mode: DependencyMode) -> &'static str {
 #### 4.1 main.rs の更新 (`src/main.rs`)
 - ロックファイルの読み込み箇所を更新（テストモードに応じたパス）
 - `fix deps update` コマンドの更新
-  - デフォルト動作: `dependencies_test` が存在する場合、両方のロックファイルを生成
-    - `fixdeps.lock` (通常版)
-    - `fixdeps.test.lock` (テスト版)
-  - `dependencies_test` が空または存在しない場合は通常版のみ生成
-  - `--skip-test` フラグの追加: テスト版の生成をスキップし通常版のみ生成/更新
+  - デフォルト動作: 通常版 (`fixdeps.lock`) を生成/更新
+  - `--test` フラグ: テスト版 (`fixdeps.test.lock`) を生成/更新
     ```rust
-    if args.get_flag("skip-test") {
-        // 通常版のみ生成
+    let mode = if args.get_flag("test") {
+        DependencyMode::Test
     } else {
-        // 通常版を生成
-        if !proj_file.dependencies_test.is_empty() {
-            // テスト版も生成
-        }
-    }
+        DependencyMode::Build
+    };
+    proj_file.open_or_create_lock_file(mode)?;
     ```
 - `fix deps install` コマンドの更新
-  - デフォルト: 通常版 (`fixdeps.lock`) のみインストール
-  - `--with-test` フラグ: テスト版も含めてインストール
+  - デフォルト: 通常版 (`fixdeps.lock`) をインストール
+  - `--test` フラグ: テスト版 (`fixdeps.test.lock`) をインストール
     ```rust
-    if args.get_flag("with-test") {
-        // 通常版とテスト版の両方をインストール
+    let mode = if args.get_flag("test") {
+        DependencyMode::Test
     } else {
-        // 通常版のみインストール
-    }
+        DependencyMode::Build
+    };
+    proj_file.open_or_create_lock_file_and_install(mode)?;
     ```
 - `fix deps add` コマンドの更新
   - デフォルト: `[[dependencies]]` セクションに追加
-  - `--test` フラグ: `[[dependencies.test]]` セクションに追加
+  - `--test` フラグ: `[[dependencies_test]]` セクションに追加
     ```rust
-    if args.get_flag("test") {
-        // dependencies_test に追加
+    let mode = if args.get_flag("test") {
+        DependencyMode::Test
     } else {
-        // dependencies に追加
-    }
+        DependencyMode::Build
+    };
+    
+    proj_file.add_dependencies(&proj_vers, &fix_config, mode)?;
+    
+    // 追加後、適切なロックファイルを更新
+    proj_file.open_or_create_lock_file(mode)?;
     ```
-  - 追加後、適切なロックファイル（通常版またはテスト版）を更新
 
 #### 4.2 コンパイル処理の更新
 - `SubCommand` に `dependency_mode()` メソッドを追加して依存モードを導出
@@ -231,7 +263,7 @@ pub fn get_lock_file_path(mode: DependencyMode) -> &'static str {
 #### 6.2 統合テストの追加
 - テスト用プロジェクトの配置: `src/tests/test_dependencies/`
   - `cases/main_project/`: メインのテストプロジェクト
-    - `fixproj.toml`: 通常依存とテスト用依存 (`[[dependencies.test]]`) を含む
+    - `fixproj.toml`: 通常依存とテスト用依存 (`[[dependencies_test]]`) を含む
     - `main.fix`: メイン実装（通常依存のみを使用）
     - `test.fix`: テストコード（テスト用依存を使用）
   - `cases/normal_dep/`: 通常の依存プロジェクト
@@ -262,18 +294,21 @@ pub fn get_lock_file_path(mode: DependencyMode) -> &'static str {
   - `test_dependencies_lock_file_separation()`: ロックファイル分離のテスト
     1. `install_fix()` でfixコマンドをインストール
     2. テストプロジェクト内の `*.lock` ファイルを削除
-    3. `fix deps update` を実行
-    4. 両方のロックファイルが生成されることを確認
-    5. 各ロックファイルの依存リストを比較し、異なることを確認
+    3. `fix deps update` を実行（`--test`フラグなし）
+    4. `fixdeps.lock` のみが生成されることを確認
+    5. `fixdeps.test.lock` が存在しないことを確認
+    6. `fix deps update --test` を実行
+    7. `fixdeps.test.lock` が生成されることを確認
+    8. 各ロックファイルの依存リストを比較し、異なることを確認
   
   - `test_dependencies_duplicate_error()`: 重複依存のエラーテスト
-    1. 同じ依存を `[[dependencies]]` と `[[dependencies.test]]` に記述したプロジェクトを用意
+    1. 同じ依存を `[[dependencies]]` と `[[dependencies_test]]` に記述したプロジェクトを用意
     2. `fix build` または `fix test` を実行
     3. エラーが発生することを確認
     4. エラーメッセージに "Duplicate dependency" が含まれることを確認
 
 #### 6.3 ドキュメント更新
-- `Document.md` に `[[dependencies.test]]` の説明を追加
+- `Document.md` に `[[dependencies_test]]` の説明を追加
 - `Document-ja.md` にも同様の説明を追加
 
 ## 実装の詳細設計
@@ -281,7 +316,7 @@ pub fn get_lock_file_path(mode: DependencyMode) -> &'static str {
 ### 依存マージの仕様
 
 **重複がある場合の処理:**
-- 同じ名前の依存が `[[dependencies]]` と `[[dependencies.test]]` の両方にある場合、エラーとする
+- 同じ名前の依存が `[[dependencies]]` と `[[dependencies_test]]` の両方にある場合、エラーとする
 - 既存の実装では `[[dependencies]]` 内の重複もエラーとしており、一貫性がある
 - ユーザーに明示的な修正を求めることで、意図しない依存の重複を防ぐ
 

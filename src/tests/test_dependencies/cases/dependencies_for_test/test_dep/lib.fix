@@ -1,0 +1,7 @@
+module TestDep;
+
+// A test helper function that creates an assertion message
+assert_msg: String -> String -> String;
+assert_msg = |test_name, result| (
+    test_name + ": " + result
+);

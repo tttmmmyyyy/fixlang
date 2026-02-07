@@ -79,7 +79,7 @@ use clap::{App, AppSettings, Arg};
 use config_file::ConfigFile;
 use configuration::*;
 use constants::*;
-use dependency_lockfile::DependecyLockFile;
+use dependency_lockfile::{DependecyLockFile, DependencyMode};
 use error::panic_if_err;
 use generator::*;
 use git_version::git_version;
@@ -314,11 +314,16 @@ fn main() {
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
-    let deps_install =
-        App::new("install").about("Install dependencies specified in the lock file.");
-    let deps_update = App::new("update").about(
-        "Update the lock file so that it satisfies the dependencies specified in the project file, and install the dependencies."
-    );
+    let test_flag = Arg::new("test")
+        .long("test")
+        .takes_value(false)
+        .help("Operate on test dependencies instead of build dependencies.");
+    let deps_install = App::new("install")
+        .about("Install dependencies specified in the lock file. By default, build dependencies are installed. Use --test to install test dependencies.")
+        .arg(test_flag.clone());
+    let deps_update = App::new("update")
+        .about("Update the lock file so that it satisfies the dependencies specified in the project file, and install the dependencies. By default, build lock file is updated. Use --test to update test lock file.")
+        .arg(test_flag.clone());
     let add_about_str = format!("Update the project file by adding `[[dependencies]]` tables which describe dependencies to specified Fix projects.\n\
     Repositories for a Fix project is searched in the registry files listed in the configuration file (\"~/.fixconfig.toml\") and the default registry \"{}\".", DEFAULT_REGISTRY);
     let add_about_str: &'static str = add_about_str.leak();
@@ -329,7 +334,8 @@ fn main() {
                 .multiple_values(true)
                 .takes_value(true)
                 .help("Projects to be added. \nEach entry should be in the form \"proj-name\" or \"proj-name@ver_req\" (e.g.,\"hashmap@0.1.0\")."),
-        );
+        )
+        .arg(test_flag.clone());
     let deps_list = App::new("list")
         .about("List all available projects in the registry.")
         .arg(
@@ -523,6 +529,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .collect::<Vec<_>>()
     }
 
+    fn get_dependency_mode(args: &ArgMatches) -> DependencyMode {
+        if args.contains_id("test") {
+            DependencyMode::Test
+        } else {
+            DependencyMode::Build
+        }
+    }
+
     fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
         // Set `source_files`.
         config
@@ -638,13 +652,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     // Create configuration from the command line arguments and the project file.
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
+        let mode = subcommand.dependency_mode();
         let mut config = panic_if_err(Configuration::release_mode(subcommand));
 
         // Set up configuration from the project file if it exists.
         if Path::new(PROJECT_FILE_PATH).exists() {
             let proj_file = panic_if_err(ProjectFile::read_root_file());
             panic_if_err(proj_file.set_config(&mut config, false));
-            panic_if_err(proj_file.install_dependencies(&mut config));
+            panic_if_err(proj_file.install_dependencies(&mut config, mode));
         }
 
         // Set up configuration from the command line arguments, to overwrite the configuration described in the project file.
@@ -669,18 +684,23 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             run_command(&create_config(SubCommand::Test, args));
         }
         Some(("deps", args)) => match args.subcommand() {
-            Some(("install", _args)) => {
+            Some(("install", args)) => {
+                let mode = get_dependency_mode(args);
                 let proj_file = panic_if_err(ProjectFile::read_root_file());
-                panic_if_err(proj_file.open_lock_file().and_then(|lf| lf.install()));
+                panic_if_err(proj_file.open_lock_file(mode).and_then(|lf| lf.install()));
             }
-            Some(("update", _args)) => {
-                panic_if_err(DependecyLockFile::update_and_install());
+            Some(("update", args)) => {
+                let mode = get_dependency_mode(args);
+                panic_if_err(DependecyLockFile::update_and_install(mode));
             }
             Some(("add", args)) => {
+                let mode = get_dependency_mode(args);
                 let projects = read_projects_option(args);
                 let proj_file = panic_if_err(ProjectFile::read_root_file());
-                panic_if_err(proj_file.add_dependencies(&projects, &fix_config));
-                panic_if_err(DependecyLockFile::update_and_install());
+                panic_if_err(proj_file.add_dependencies(&projects, &fix_config, mode));
+                
+                // After adding, update the appropriate lock file
+                panic_if_err(DependecyLockFile::update_and_install(mode));
             }
             Some(("list", args)) => {
                 let json = args.contains_id("json");

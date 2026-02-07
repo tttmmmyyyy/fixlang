@@ -1,6 +1,7 @@
 mod test_array_bounds_check;
 mod test_assert;
 mod test_basic;
+mod test_dependencies;
 mod test_explicit_import;
 mod test_external_projects;
 mod test_file_io;

@@ -1,0 +1,9 @@
+module Main;
+
+import NormalDep;
+
+main: IO ();
+main = (
+    let msg = NormalDep::greet("World");
+    println(msg)
+);
