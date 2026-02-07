@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-10
+
 ### Added
 
 #### Language 
