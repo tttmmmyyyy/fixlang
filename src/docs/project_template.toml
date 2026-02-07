@@ -103,3 +103,11 @@ files = ["test.fix"]
 # name = "your-project"
 # version = "1.2.0"
 # git = { url = "https://github.com/tttmmmyyyy/your-project.git" }
+
+## By "[[test-dependencies]]" array, you can add dependencies which are only used for tests.
+## You can write dependencies which are only used for tests here. 
+## If your project is used as a library, dependencies written in `[[test-dependencies]]` will not be installed.
+# [[test-dependencies]]
+# name = "your-test-tool"
+# version = "1.0.0"
+# git = { url = "https://github.com/tttmmmyyyy/your-test-tool.git" }
