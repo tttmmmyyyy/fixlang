@@ -150,7 +150,9 @@ pub const OPTIMIZATION_LEVEL_EXPERIMENTAL: &str = "experimental";
 pub const PRELIMINARY_BUILD_LD_FLAGS: &str = "fix.ld_flags=";
 
 // Messages
-pub const TRY_FIX_RESOLVE: &str = "Try `fix deps update` to update the lock file.";
+pub const TRY_FIX_DEPS_UPDATE: &str = "Try `fix deps update` to update the lock file.";
+pub const TRY_FIX_DEPS_UPDATE_TEST: &str =
+    "Try `fix deps update --test` to update the test dependencies lock file.";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct TraverserWorkType(pub u32);

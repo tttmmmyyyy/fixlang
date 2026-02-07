@@ -1,19 +1,5 @@
 use crate::{
-    config_file::ConfigFile,
-    constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH},
-    dependency_lockfile::{self, DependecyLockFile, DependencyMode, ProjectSource, get_lock_file_path},
-    error::Errors,
-    misc::{info_msg, warn_msg, Set},
-    registry_file::RegistryFile,
-    Configuration,
-    ExtraCommand,
-    FixOptimizationLevel,
-    LinkType,
-    OutputFileType,
-    SourceFile,
-    Span,
-    PROJECT_FILE_PATH,
-    TRY_FIX_RESOLVE,
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, config_file::ConfigFile, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency_lockfile::{self, DependecyLockFile, DependencyMode, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, registry_file::RegistryFile
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -689,22 +675,26 @@ impl ProjectFile {
         // Try to open the valid dependency lock file.
         // If the project file hash is different from the one in the lock file, the lock file is invalid.
         let lock_file_path = get_lock_file_path(mode);
+        let msg_try_fix_deps_update = match mode {
+            DependencyMode::Build => TRY_FIX_DEPS_UPDATE,
+            DependencyMode::Test => TRY_FIX_DEPS_UPDATE_TEST,
+        };
         let content = std::fs::read_to_string(lock_file_path).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to read the lock file: {:?}. {}",
-                e, TRY_FIX_RESOLVE
+                e, msg_try_fix_deps_update
             ))
         })?;
         let lock_file = toml::from_str::<DependecyLockFile>(&content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to parse the lock file: {:?}. {}",
-                e, TRY_FIX_RESOLVE
+                e, msg_try_fix_deps_update
             ))
         })?;
         if lock_file.proj_file_hash != self.calculate_dependencies_hash(mode) {
             return Err(Errors::from_msg(format!(
                 "The lock file is not up to date. {}",
-                TRY_FIX_RESOLVE
+                msg_try_fix_deps_update
             )));
         }
         Ok(lock_file)
