@@ -371,7 +371,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
                 .action(clap::ArgAction::Append)
                 .multiple_values(true)
                 .takes_value(true)
-                .help("Modules for which documents should be generated. If not specified, documents are generated for all modules."),
+                .help("Modules for which documents should be generated. If not specified, documents are generated for all modules. To specify modules that are only included during testing, the --test option must be added."),
         ).arg(
             Arg::new("include-compiler-defined-methods").long("with-compiler-defined-methods").help("Include compiler-defined methods such as `@{field_name}` or `as_{variant_name}` in the documentation."),
         ).arg(
