@@ -115,7 +115,16 @@ impl SubCommand {
             SubCommand::Run => false,
             SubCommand::Test => true,
             SubCommand::Diagnostics(_) => true,
-            SubCommand::Docs(_) => true,
+            SubCommand::Docs(docs_config) => docs_config.mode == DependencyMode::Test,
+        }
+    }
+
+    // Get the dependency mode based on the subcommand.
+    pub fn dependency_mode(&self) -> DependencyMode {
+        match self {
+            SubCommand::Test | SubCommand::Diagnostics(_) => DependencyMode::Test,
+            SubCommand::Docs(docs_config) => docs_config.mode,
+            _ => DependencyMode::Build,
         }
     }
 
@@ -139,16 +148,6 @@ impl SubCommand {
             SubCommand::Docs(_) => "docs",
         }
     }
-
-    // Get the dependency mode based on the subcommand.
-    pub fn dependency_mode(&self) -> DependencyMode {
-        match self {
-            SubCommand::Test | SubCommand::Diagnostics(_) | SubCommand::Docs(_) => {
-                DependencyMode::Test
-            }
-            _ => DependencyMode::Build,
-        }
-    }
 }
 
 // Configuration for diagnostics subcommand.
@@ -169,6 +168,8 @@ pub struct DocsConfig {
     pub include_private: bool,
     // Output directory.
     pub out_dir: PathBuf,
+    // Dependency mode (Build or Test).
+    pub mode: DependencyMode,
 }
 
 #[derive(Clone)]

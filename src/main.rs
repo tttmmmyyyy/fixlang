@@ -377,7 +377,9 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         ).arg(
             Arg::new("out-dir").long("out-dir").short('o').takes_value(true).help("Output directory for generated documents.").default_value("docs"),
         ).arg(
-            Arg::new("private").long("with-private").help("Include private values (i.e., values whose name starts with underscore) in the documentation."));
+            Arg::new("private").long("with-private").help("Include private values (i.e., values whose name starts with underscore) in the documentation."),
+        ).arg(
+            Arg::new("test").long("test").help("Include test modules in the documentation."));
 
     // "fix init" subcommand
     let init_subc = App::new("init")
@@ -469,6 +471,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .map(|s| s.to_string())
             .unwrap_or_default();
         docs_config.out_dir = PathBuf::from(dir);
+
+        // `test` option
+        docs_config.mode = get_dependency_mode(m);
+
         Ok(())
     }
 

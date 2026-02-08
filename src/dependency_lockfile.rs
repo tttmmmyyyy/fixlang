@@ -24,6 +24,12 @@ pub enum DependencyMode {
     Test,
 }
 
+impl Default for DependencyMode {
+    fn default() -> Self {
+        DependencyMode::Build
+    }
+}
+
 // Get the lock file path based on the dependency mode.
 pub fn get_lock_file_path(mode: DependencyMode) -> &'static str {
     match mode {
