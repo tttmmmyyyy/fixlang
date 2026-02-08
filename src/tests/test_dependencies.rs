@@ -3,6 +3,7 @@
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::misc::copy_dir_recursive;
     use crate::tests::test_util::install_fix;
     use crate::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
     use std::{fs, path::PathBuf, process::Command};
@@ -13,24 +14,6 @@ mod integration_tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_dependencies/cases");
         path
-    }
-
-    // Copy directory recursively
-    fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> std::io::Result<()> {
-        fs::create_dir_all(dst)?;
-        for entry in fs::read_dir(src)? {
-            let entry = entry?;
-            let file_type = entry.file_type()?;
-            let src_path = entry.path();
-            let dst_path = dst.join(entry.file_name());
-
-            if file_type.is_dir() {
-                copy_dir_recursive(&src_path, &dst_path)?;
-            } else {
-                fs::copy(&src_path, &dst_path)?;
-            }
-        }
-        Ok(())
     }
 
     // Create a temporary test environment with copied project files

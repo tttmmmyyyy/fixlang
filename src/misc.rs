@@ -472,3 +472,22 @@ pub fn char_pos_to_utf16_pos(source: &str, line: usize, char_col: usize) -> usiz
 pub fn platform_valgrind_supported() -> bool {
     env::consts::OS == "linux"
 }
+
+// Copy directory recursively
+#[allow(dead_code)]
+pub fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if file_type.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
+}
