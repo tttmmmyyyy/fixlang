@@ -45,10 +45,15 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Install valgrind (Ubuntu only)
+      - name: Install dependencies (Ubuntu only)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
+          sudo apt-get install -y libmpfr6
+
+      - name: Install valgrind (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
           sudo apt-get install -y valgrind=1:3.22.*
 
       - name: Run tests
