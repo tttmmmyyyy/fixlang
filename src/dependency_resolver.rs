@@ -1,6 +1,6 @@
 // This module implements an algorithm of dependency resolution.
 
-use crate::{dependency_lockfile::DependencyMode, error::Errors, project_file::ProjectFile};
+use crate::{configuration::BuildMode, error::Errors, project_file::ProjectFile};
 use semver::{Version, VersionReq};
 
 pub type PackageName = String;
@@ -22,7 +22,8 @@ pub struct Dependency {
 
 // Package retriever function.
 // It takes a package of a specific version and returns its package information.
-pub type PackageRetriever<'a> = &'a dyn Fn(&PackageName, &Version, DependencyMode) -> Result<Package, Errors>;
+pub type PackageRetriever<'a> =
+    &'a dyn Fn(&PackageName, &Version, BuildMode) -> Result<Package, Errors>;
 
 // Version retriever function.
 // It takes a package name and returns a list of versions which exist.
@@ -32,7 +33,7 @@ pub fn resolve_dependency<'a, 'b, 'c>(
     root_proj: &ProjectFile,
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
-    mode: DependencyMode,
+    mode: BuildMode,
 ) -> Result<Option<Vec<Package>>, Errors> {
     try_use_package(
         (&root_proj.general.name, &root_proj.general.version()),
@@ -53,7 +54,7 @@ fn try_use_package<'a, 'b, 'c>(
     fixed: &[Package],
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
-    mode: DependencyMode,
+    mode: BuildMode,
     indent: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
     let (pkg_name, pkg_version) = pkg;
@@ -185,7 +186,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
             fixed,
             package_retriever,
             versions_retriever,
-            DependencyMode::Build,
+            BuildMode::Build,
             indent,
         )?;
         if fixed.is_some() {

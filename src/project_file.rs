@@ -1,5 +1,5 @@
 use crate::{
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, config_file::ConfigFile, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency_lockfile::{self, DependecyLockFile, DependencyMode, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, registry_file::RegistryFile
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, config_file::ConfigFile, configuration::BuildMode, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency_lockfile::{self, DependecyLockFile, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, registry_file::RegistryFile
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -152,16 +152,16 @@ pub struct ProjectFile {
 
 impl ProjectFile {
     // Get dependencies based on mode.
-    pub fn get_dependencies(&self, mode: DependencyMode) -> Vec<ProjectFileDependency> {
+    pub fn get_dependencies(&self, mode: BuildMode) -> Vec<ProjectFileDependency> {
         match mode {
-            DependencyMode::Test => {
+            BuildMode::Test => {
                 // Merge dependencies and test_dependencies
                 // Note: Duplicate check is already performed in validate()
                 let mut all_deps = self.dependencies.clone();
                 all_deps.extend(self.test_dependencies.clone());
                 all_deps
             }
-            DependencyMode::Build => self.dependencies.clone(),
+            BuildMode::Build => self.dependencies.clone(),
         }
     }
 
@@ -225,16 +225,16 @@ impl ProjectFile {
     }
 
     // Calculate the hash value of the `dependencies` section.
-    pub fn calculate_dependencies_hash(&self, mode: DependencyMode) -> String {
+    pub fn calculate_dependencies_hash(&self, mode: BuildMode) -> String {
         // Get dependencies based on mode.
         let mut deps = match mode {
-            DependencyMode::Test => {
+            BuildMode::Test => {
                 // Merge dependencies and test_dependencies
                 let mut all_deps = self.dependencies.clone();
                 all_deps.extend(self.test_dependencies.clone());
                 all_deps
             }
-            DependencyMode::Build => self.dependencies.clone(),
+            BuildMode::Build => self.dependencies.clone(),
         };
         
         // Sort the dependencies by name.
@@ -361,15 +361,15 @@ impl ProjectFile {
     }
 
     // Get source files of this project. Does not include files of dependent projects.
-    // - `use_build_test`: If true, include files in the `[build.test]` section.
-    pub fn get_files(&self, use_build_test: bool) -> Vec<PathBuf> {
+    // - `mode`: The build mode (Build or Test). If Test, include files in the `[build.test]` section.
+    pub fn get_files(&self, mode: BuildMode) -> Vec<PathBuf> {
         let mut files: Vec<PathBuf> = self
             .build
             .files
             .iter()
             .map(|p| self.join_to_project_dir(p))
             .collect();
-        if use_build_test {
+        if mode == BuildMode::Test {
             files.append(&mut self.build.test.as_ref().map_or(vec![], |test| {
                 test.files
                     .iter()
@@ -411,14 +411,17 @@ impl ProjectFile {
         config: &mut Configuration,
         is_dependent_proj: bool,
     ) -> Result<(), Errors> {
-        // Should we consider `[build.test]` section?
+        // Determine the build mode.
         // If the project is a dependent project, we do not consider the `[build.test]` section.
-        let use_build_test = !is_dependent_proj && config.subcommand.use_test_files();
+        let mut mode = config.subcommand.build_mode();
+        if is_dependent_proj {
+            mode = BuildMode::Build;
+        }
 
         // Append source files.
         config
             .source_files
-            .append(&mut self.get_files(use_build_test));
+            .append(&mut self.get_files(mode));
 
         // Append object files.
         config.object_files.append(
@@ -429,7 +432,7 @@ impl ProjectFile {
                 .map(|p| self.join_to_project_dir(p))
                 .collect(),
         );
-        if use_build_test {
+        if mode == BuildMode::Test {
             config
                 .object_files
                 .append(&mut self.build.test.as_ref().map_or(vec![], |test| {
@@ -449,7 +452,7 @@ impl ProjectFile {
                     .collect(),
             );
         }
-        if use_build_test {
+        if mode == BuildMode::Test {
             if let Some(static_libs) = self
                 .build
                 .test
@@ -474,7 +477,7 @@ impl ProjectFile {
                     .collect(),
             );
         }
-        if use_build_test {
+        if mode == BuildMode::Test {
             if let Some(dynamic_libs) = self
                 .build
                 .test
@@ -499,7 +502,7 @@ impl ProjectFile {
                     .collect(),
             );
         }
-        if use_build_test {
+        if mode == BuildMode::Test {
             if let Some(lib_paths) = self
                 .build
                 .test
@@ -517,7 +520,7 @@ impl ProjectFile {
 
         // Add ld_flags.
         config.ld_flags.append(&mut self.build.ld_flags.clone());
-        if use_build_test {
+        if mode == BuildMode::Test {
             config.ld_flags.append(
                 &mut self
                     .build
@@ -533,7 +536,7 @@ impl ProjectFile {
                 config.set_threaded();
             }
         }
-        if use_build_test {
+        if mode == BuildMode::Test {
             if let Some(threaded) = self.build.test.as_ref().and_then(|test| test.threaded) {
                 if threaded {
                     config.set_threaded();
@@ -548,7 +551,7 @@ impl ProjectFile {
                 command: command.clone(),
             });
         }
-        if use_build_test {
+        if mode == BuildMode::Test {
             for command in &self
                 .build
                 .test
@@ -563,7 +566,7 @@ impl ProjectFile {
         }
 
         // Set the memory check mode.
-        if use_build_test {
+        if mode == BuildMode::Test {
             if let Some(memcheck) = self.build.test.as_ref().and_then(|test| test.memcheck) {
                 if memcheck {
                     config.set_valgrind(crate::ValgrindTool::MemCheck);
@@ -582,7 +585,7 @@ impl ProjectFile {
                 config.set_debug_info();
             }
         }
-        if use_build_test {
+        if mode == BuildMode::Test {
             if let Some(debug) = self.build.test.as_ref().and_then(|test| test.debug) {
                 if debug {
                     config.set_debug_info();
@@ -601,7 +604,7 @@ impl ProjectFile {
                 ));
             }
         }
-        if use_build_test {
+        if mode == BuildMode::Test {
             if let Some(opt_level) = self
                 .build
                 .test
@@ -635,7 +638,7 @@ impl ProjectFile {
                 config.set_backtrace();
             }
         }
-        if use_build_test {
+        if mode == BuildMode::Test {
             if let Some(backtrace) = self.build.test.as_ref().and_then(|test| test.backtrace) {
                 if backtrace {
                     config.set_backtrace();
@@ -645,7 +648,7 @@ impl ProjectFile {
 
         // Set disable_cpu_features.
         config.disable_cpu_features_regex.append(&mut self.build.disable_cpu_features.clone());
-        if use_build_test {
+        if mode == BuildMode::Test {
             config.disable_cpu_features_regex.append(
                 &mut self
                     .build
@@ -657,7 +660,7 @@ impl ProjectFile {
 
         // Set no_runtime_check.
         config.no_runtime_check = self.build.no_runtime_check;
-        if use_build_test {
+        if mode == BuildMode::Test {
             config.no_runtime_check = false;
         }
 
@@ -666,7 +669,7 @@ impl ProjectFile {
 
     // Open the lock file.
     // If the project has no dependencies, return an empty lock file.
-    pub fn open_lock_file(&self, mode: DependencyMode) -> Result<DependecyLockFile, Errors> {
+    pub fn open_lock_file(&self, mode: BuildMode) -> Result<DependecyLockFile, Errors> {
         // If there are no dependencies, the lock file is not necessary.
         if self.get_dependencies(mode).is_empty() {
             return Ok(DependecyLockFile::default());
@@ -676,8 +679,8 @@ impl ProjectFile {
         // If the project file hash is different from the one in the lock file, the lock file is invalid.
         let lock_file_path = get_lock_file_path(mode);
         let msg_try_fix_deps_update = match mode {
-            DependencyMode::Build => TRY_FIX_DEPS_UPDATE,
-            DependencyMode::Test => TRY_FIX_DEPS_UPDATE_TEST,
+            BuildMode::Build => TRY_FIX_DEPS_UPDATE,
+            BuildMode::Test => TRY_FIX_DEPS_UPDATE_TEST,
         };
         let content = std::fs::read_to_string(lock_file_path).map_err(|e| {
             Errors::from_msg(format!(
@@ -701,7 +704,7 @@ impl ProjectFile {
     }
 
     // Open the lock file or create a new one if it does not exist.
-    pub fn open_or_create_lock_file(&self, mode: DependencyMode) -> Result<DependecyLockFile, Errors> {
+    pub fn open_or_create_lock_file(&self, mode: BuildMode) -> Result<DependecyLockFile, Errors> {
         Ok(match self.open_lock_file(mode) {
             Ok(lock_file) => lock_file,
             Err(_) => {
@@ -719,7 +722,7 @@ impl ProjectFile {
     }
 
     // Open the lock file, create a new one if it does not exist, and install the dependencies.
-    pub fn open_or_create_lock_file_and_install(&self, mode: DependencyMode) -> Result<(), Errors> {
+    pub fn open_or_create_lock_file_and_install(&self, mode: BuildMode) -> Result<(), Errors> {
         self.open_or_create_lock_file(mode).and_then(|lf| lf.install())
     }
 
@@ -727,7 +730,7 @@ impl ProjectFile {
     pub fn install_dependencies(
         self: &ProjectFile,
         config: &mut Configuration,
-        mode: DependencyMode,
+        mode: BuildMode,
     ) -> Result<(), Errors> {
         // Update the lock file if necessary.
         let lock_file = self.open_or_create_lock_file(mode)?;
@@ -837,7 +840,7 @@ impl ProjectFile {
         &self,
         proj_vers: &Vec<String>,
         fix_config: &ConfigFile,
-        mode: DependencyMode,
+        mode: BuildMode,
     ) -> Result<(), Errors> {
         let mut added = "".to_string();
 
@@ -949,8 +952,8 @@ impl ProjectFile {
                     };
 
                     let section_name = match mode {
-                        DependencyMode::Build => "[[dependencies]]",
-                        DependencyMode::Test => "[[test_dependencies]]",
+                        BuildMode::Build => "[[dependencies]]",
+                        BuildMode::Test => "[[test_dependencies]]",
                     };
                     added += "\n\n";
                     added += section_name;

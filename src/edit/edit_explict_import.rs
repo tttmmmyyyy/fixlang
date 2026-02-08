@@ -4,6 +4,7 @@
 use crate::ast::import::ImportStatement;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::Program;
+use crate::configuration::BuildMode;
 use crate::edit::edit_util::apply_text_edits;
 use crate::error::Errors;
 use crate::lsp::language_server::{
@@ -50,9 +51,9 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
 
 // Get the list of source files that belong to the project (not dependencies).
 fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors> {
-    // Use get_files(true) to get the root project's source files (excluding dependencies).
-    // The parameter true includes test files.
-    let files = proj_file.get_files(true);
+    // Use get_files(BuildMode::Test) to get the root project's source files (excluding dependencies).
+    // BuildMode::Test includes test files.
+    let files = proj_file.get_files(BuildMode::Test);
 
     // Convert to absolute paths
     let mut abs_files = Vec::new();

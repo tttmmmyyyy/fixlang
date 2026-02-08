@@ -5,7 +5,7 @@ use crate::{
         name::{FullName, Name, NameSpace},
         typedecl::Field,
     },
-    dependency_lockfile::DependencyMode,
+    configuration::BuildMode,
     error::Errors,
     kind_star,
     misc::to_absolute_path,
@@ -21,7 +21,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     let proj_file = ProjectFile::read_root_file()?;
     proj_file.set_config(&mut config, false)?;
 
-    let mode = match &config.subcommand {
+    let mode: BuildMode = match &config.subcommand {
         crate::SubCommand::Docs(docs_config) => docs_config.mode,
         _ => unreachable!(),
     };
@@ -45,8 +45,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     } else {
         let mut mod_names = vec![];
         // Use all modules defined in the root project file.
-        let use_build_test = mode == DependencyMode::Test;
-        let src_files = proj_file.get_files(use_build_test);
+        let src_files = proj_file.get_files(mode);
         let abs_src_paths = src_files
             .iter()
             .map(|f| to_absolute_path(f))

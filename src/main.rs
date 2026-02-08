@@ -79,7 +79,7 @@ use clap::{App, AppSettings, Arg};
 use config_file::ConfigFile;
 use configuration::*;
 use constants::*;
-use dependency_lockfile::{DependecyLockFile, DependencyMode};
+use dependency_lockfile::DependecyLockFile;
 use error::panic_if_err;
 use generator::*;
 use git_version::git_version;
@@ -473,7 +473,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         docs_config.out_dir = PathBuf::from(dir);
 
         // `test` option
-        docs_config.mode = get_dependency_mode(m);
+        docs_config.mode = get_build_mode(m);
 
         Ok(())
     }
@@ -535,11 +535,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .collect::<Vec<_>>()
     }
 
-    fn get_dependency_mode(args: &ArgMatches) -> DependencyMode {
+    fn get_build_mode(args: &ArgMatches) -> configuration::BuildMode {
         if args.contains_id("test") {
-            DependencyMode::Test
+            configuration::BuildMode::Test
         } else {
-            DependencyMode::Build
+            configuration::BuildMode::Build
         }
     }
 
@@ -658,7 +658,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     // Create configuration from the command line arguments and the project file.
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
-        let mode = subcommand.dependency_mode();
+        let mode = subcommand.build_mode();
         let mut config = panic_if_err(Configuration::release_mode(subcommand));
 
         // Set up configuration from the project file if it exists.
@@ -691,20 +691,20 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", args)) => {
-                let mode = get_dependency_mode(args);
+                let mode = get_build_mode(args);
                 let proj_file = panic_if_err(ProjectFile::read_root_file());
                 panic_if_err(proj_file.open_lock_file(mode).and_then(|lf| lf.install()));
             }
             Some(("update", args)) => {
-                let mode = get_dependency_mode(args);
+                let mode = get_build_mode(args);
                 panic_if_err(DependecyLockFile::update_and_install(mode));
             }
             Some(("add", args)) => {
-                let mode = get_dependency_mode(args);
+                let mode = get_build_mode(args);
                 let projects = read_projects_option(args);
                 let proj_file = panic_if_err(ProjectFile::read_root_file());
                 panic_if_err(proj_file.add_dependencies(&projects, &fix_config, mode));
-                
+
                 // After adding, update the appropriate lock file
                 panic_if_err(DependecyLockFile::update_and_install(mode));
             }

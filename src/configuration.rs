@@ -1,6 +1,5 @@
 use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::cpu_features::CpuFeatures;
-use crate::dependency_lockfile::DependencyMode;
 use crate::env_vars;
 use crate::error::{panic_if_err, Errors};
 use crate::misc::{
@@ -85,6 +84,18 @@ pub enum SubCommand {
     Docs(DocsConfig),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildMode {
+    Build,
+    Test,
+}
+
+impl Default for BuildMode {
+    fn default() -> Self {
+        BuildMode::Build
+    }
+}
+
 impl SubCommand {
     // Should we run preliminary commands before building the program?
     pub fn run_preliminary_commands(&self) -> bool {
@@ -108,23 +119,12 @@ impl SubCommand {
         }
     }
 
-    // Should we use test files?
-    pub fn use_test_files(&self) -> bool {
+    // Get the build mode based on the subcommand.
+    pub fn build_mode(&self) -> BuildMode {
         match self {
-            SubCommand::Build => false,
-            SubCommand::Run => false,
-            SubCommand::Test => true,
-            SubCommand::Diagnostics(_) => true,
-            SubCommand::Docs(docs_config) => docs_config.mode == DependencyMode::Test,
-        }
-    }
-
-    // Get the dependency mode based on the subcommand.
-    pub fn dependency_mode(&self) -> DependencyMode {
-        match self {
-            SubCommand::Test | SubCommand::Diagnostics(_) => DependencyMode::Test,
+            SubCommand::Test | SubCommand::Diagnostics(_) => BuildMode::Test,
             SubCommand::Docs(docs_config) => docs_config.mode,
-            _ => DependencyMode::Build,
+            _ => BuildMode::Build,
         }
     }
 
@@ -169,7 +169,7 @@ pub struct DocsConfig {
     // Output directory.
     pub out_dir: PathBuf,
     // Dependency mode (Build or Test).
-    pub mode: DependencyMode,
+    pub mode: BuildMode,
 }
 
 #[derive(Clone)]

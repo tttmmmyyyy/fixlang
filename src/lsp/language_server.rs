@@ -3,10 +3,10 @@ use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{GlobalValue, ModuleInfo, Program};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitId, TraitImpl};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
+use crate::configuration::BuildMode;
 use crate::constants::{
     chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
 };
-use crate::dependency_lockfile::DependencyMode;
 use crate::docgen::MarkdownSection;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
@@ -2217,7 +2217,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     let proj_file = ProjectFile::read_root_file()?;
 
     // Determine the source files for which diagnostics are run.
-    let files = proj_file.get_files(true);
+    let files = proj_file.get_files(BuildMode::Test);
 
     // Create the configuration.
     let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
@@ -2228,7 +2228,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
 
     // Set up the configuration by the lock file.
     proj_file
-        .open_lock_file(DependencyMode::Test)?
+        .open_lock_file(BuildMode::Test)?
         .set_config(&mut config)?;
 
     // Build the file and get the errors.

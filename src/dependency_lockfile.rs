@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
 use crate::{
-    configuration::Configuration,
+    configuration::{BuildMode, Configuration},
     dependency_resolver::{self, Dependency, Package, PackageName},
     error::Errors,
     misc::{to_absolute_path, warn_msg},
@@ -18,23 +18,11 @@ use crate::{
     EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH, PROJECT_FILE_PATH,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DependencyMode {
-    Build,
-    Test,
-}
-
-impl Default for DependencyMode {
-    fn default() -> Self {
-        DependencyMode::Build
-    }
-}
-
 // Get the lock file path based on the dependency mode.
-pub fn get_lock_file_path(mode: DependencyMode) -> &'static str {
+pub fn get_lock_file_path(mode: BuildMode) -> &'static str {
     match mode {
-        DependencyMode::Test => LOCK_FILE_TEST_PATH,
-        DependencyMode::Build => LOCK_FILE_PATH,
+        BuildMode::Test => LOCK_FILE_TEST_PATH,
+        BuildMode::Build => LOCK_FILE_PATH,
     }
 }
 
@@ -56,10 +44,7 @@ impl DependecyLockFile {
     }
 
     // Create the lock file (on memory, not on file) to satisfy the dependencies of the given project file.
-    pub fn create(
-        proj_file: &ProjectFile,
-        mode: DependencyMode,
-    ) -> Result<DependecyLockFile, Errors> {
+    pub fn create(proj_file: &ProjectFile, mode: BuildMode) -> Result<DependecyLockFile, Errors> {
         // Resolve the dependency.
         let prjs_info = ProjectsInfo {
             projects: Arc::new(Mutex::new(vec![ProjectInfo::from_project_file(proj_file)])),
@@ -236,7 +221,7 @@ impl DependecyLockFile {
     }
 
     // Update the lock file and install the dependencies.
-    pub fn update_and_install(mode: DependencyMode) -> Result<(), Errors> {
+    pub fn update_and_install(mode: BuildMode) -> Result<(), Errors> {
         // Remove lock file.
         let lock_file_path = Path::new(get_lock_file_path(mode));
         if lock_file_path.exists() {
@@ -548,7 +533,7 @@ pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
     Ok((temp_dir, repo))
 }
 
-fn project_file_to_package(proj_file: &ProjectFile, mode: DependencyMode) -> Package {
+fn project_file_to_package(proj_file: &ProjectFile, mode: BuildMode) -> Package {
     let deps_list = proj_file.get_dependencies(mode);
     let mut deps = Vec::new();
     for dep in &deps_list {
@@ -565,7 +550,7 @@ fn project_file_to_package(proj_file: &ProjectFile, mode: DependencyMode) -> Pac
 // Create package retriever which will be passed to `package_resolver::resolve_dependency`.
 fn create_package_retriever(
     projs: ProjectsInfo,
-) -> Box<dyn Fn(&PackageName, &Version, DependencyMode) -> Result<Package, Errors>> {
+) -> Box<dyn Fn(&PackageName, &Version, BuildMode) -> Result<Package, Errors>> {
     Box::new(move |prj_name, ver, mode| {
         let mut projs = projs.projects.as_ref().lock().unwrap();
 
