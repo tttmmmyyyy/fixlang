@@ -62,6 +62,7 @@ mod integration_tests {
         // 1. Only fixdeps.lock is created
         // 2. fixdeps.test.lock is NOT created
         // 3. Only normal dependencies are included
+        // 4. Test dependencies of normal dependencies are NOT included
 
         install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
@@ -105,10 +106,11 @@ mod integration_tests {
             "Lock file should contain normal-dep"
         );
 
-        // Check that test-dep is NOT included
+        // Check that test-dep is NOT included (neither as main project's test dependency
+        // nor as normal-dep's test dependency)
         assert!(
             !lock_content.contains("test-dep"),
-            "Lock file should NOT contain test-dep in build mode"
+            "Lock file should NOT contain test-dep in build mode (test dependencies of dependencies should also be excluded)"
         );
     }
 
@@ -117,6 +119,8 @@ mod integration_tests {
         // This test verifies that `fix test` automatically handles test dependencies:
         // 1. fixdeps.test.lock is created if not present
         // 2. Test dependencies are properly available during test execution
+        // Note: test-dep appears in fixdeps.test.lock because main-project directly depends on it,
+        // not because normal-dep has it as a test dependency (dependency's test dependencies don't propagate)
 
         install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
@@ -252,7 +256,7 @@ mod integration_tests {
         );
         assert!(
             !lock_content.contains("test-dep"),
-            "Lock file should NOT contain test-dep"
+            "Lock file should NOT contain test-dep (neither as main project's test dependency nor as normal-dep's test dependency)"
         );
     }
 

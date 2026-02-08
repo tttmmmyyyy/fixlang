@@ -1,0 +1,10 @@
+module Test;
+
+import TestDep;
+
+test: IO ();
+test = (
+    eval *println("Testing normal-dep with test dependency");
+    eval *TestDep::assert_msg("Normal-dep test", true);
+    println("PASS: normal-dep test completed")
+);

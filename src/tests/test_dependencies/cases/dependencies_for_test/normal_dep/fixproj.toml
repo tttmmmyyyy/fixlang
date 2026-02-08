@@ -8,3 +8,10 @@ license = "MIT"
 
 [build]
 files = ["lib.fix"]
+
+[build.test]
+files = ["test.fix"]
+
+[[test_dependencies]]
+name = "test-dep"
+path = "../test_dep"
