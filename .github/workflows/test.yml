@@ -19,7 +19,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install LLVM & dependencies
+      - name: Install LLVM
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
@@ -32,6 +32,15 @@ jobs:
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             brew install llvm@17
             echo "LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)" >> $GITHUB_ENV
+          fi
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y libgmp-dev libmpfr-dev
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             brew install openssl
             echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
             brew install gmp
@@ -44,12 +53,6 @@ jobs:
         with:
           toolchain: stable
           override: true
-
-      - name: Install dependencies (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgmp-dev libmpfr-dev
 
       - name: Install valgrind (Ubuntu only)
         if: matrix.os == 'ubuntu-latest'
