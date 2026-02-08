@@ -126,6 +126,10 @@ impl DependecyLockFile {
             lock_file.dependencies.push(dep);
         }
 
+        // Sort dependencies by name to ensure consistent order in lock file.
+        // This prevents unnecessary changes in the lock file when dependency resolution order changes.
+        lock_file.dependencies.sort_by(|a, b| a.name.cmp(&b.name));
+
         println!("Dependencies resolved successfully.");
         Ok(lock_file)
     }
