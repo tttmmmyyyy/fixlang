@@ -87,6 +87,14 @@ pub fn test_external_project_gmp() {
 }
 
 #[test]
+pub fn test_external_project_mpfr() {
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-mpfr.git",
+        "fixlang-mpfr",
+    );
+}
+
+#[test]
 pub fn test_external_project_misc_algos() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-misc-algos.git",

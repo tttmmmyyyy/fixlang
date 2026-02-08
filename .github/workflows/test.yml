@@ -35,6 +35,7 @@ jobs:
             brew install openssl
             echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
             brew install gmp
+            brew install mpfr
             echo "LIBRARY_PATH=/opt/homebrew/lib:$LIBRARY_PATH" >> $GITHUB_ENV
           fi
 
