@@ -1,0 +1,10 @@
+// Main module for documentation test
+
+module Main;
+
+// A simple function in the main module
+hello : String;
+hello = "Hello from Main";
+
+main : IO ();
+main = println(hello);

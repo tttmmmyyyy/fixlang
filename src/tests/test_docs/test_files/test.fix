@@ -1,0 +1,13 @@
+// Test module for documentation test
+
+module Test;
+
+// A test helper function
+test_helper : String;
+test_helper = "Test helper";
+
+// Test case
+test_main : IO ();
+test_main = (
+    println("Running test: " + test_helper)
+);
