@@ -35,3 +35,8 @@ This project implements the Fix programming language compiler and related tools 
     - Use `tempfile::TempDir` to create temporary directories.
     - Use `copy_dir_recursive()` from `test_util.rs` to copy project files.
     - The temporary directory is automatically cleaned up when the test completes.
+
+## Reference Documentation
+
+- **Fix Language Sample Code**: Refer to `src/fix/std.fix` for extensive examples of Fix language code.
+- **Standard Library Documentation**: Refer to `std_doc/Std.md` for documentation of the Std standard library.
