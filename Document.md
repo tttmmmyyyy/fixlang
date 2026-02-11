@@ -81,6 +81,7 @@
     - [Substitute Pattern](#substitute-pattern)
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
 - [Compiler features](#compiler-features)
+    - [Passing Arguments to Programs](#passing-arguments-to-programs)
     - [Project file](#project-file)
         - [About Duplicated Build Settings](#about-duplicated-build-settings)
     - [Managing dependencies](#managing-dependencies)
@@ -2527,6 +2528,34 @@ The precedence and associativity of operators and some syntax in Fix are shown i
 
 
 # Compiler features
+
+## Passing Arguments to Programs
+
+You can pass command-line arguments to your Fix program by adding them after `--` in the `fix run` command:
+
+```bash
+fix run -- arg1 arg2 arg3
+```
+
+These arguments can be accessed from your program using the `get_args : IO (Array String)` function from the standard library. For example:
+
+```fix
+module Main;
+
+main : IO ();
+main = (
+    let args = *get_args;
+    args.to_string.println
+);
+```
+
+Running `fix run -- hello world` with the above program will output:
+
+```
+["path/to/executable", "hello", "world"]
+```
+
+Note that the first element of the array is the path to the executable itself, following the convention of C and many other programming languages.
 
 ## Project file
 

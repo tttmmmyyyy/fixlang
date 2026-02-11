@@ -44,6 +44,7 @@ mod graph;
 mod name_resolution;
 #[macro_use]
 mod log_file;
+mod check_program;
 mod misc;
 mod object;
 mod optimization;
@@ -51,7 +52,6 @@ mod parser;
 mod printer;
 mod project_file;
 mod registry_file;
-mod check_program;
 mod runtime;
 mod sourcefile;
 mod stdlib;
@@ -72,9 +72,11 @@ use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
 use builtin::*;
+use check_program::*;
 use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
+use commands::lsp::language_server::launch_language_server;
 use config_file::ConfigFile;
 use configuration::*;
 use constants::*;
@@ -85,13 +87,11 @@ use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
-use commands::lsp::language_server::launch_language_server;
 use object::*;
 use parser::*;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use project_file::ProjectFile;
-use check_program::*;
 use runtime::*;
 use sourcefile::*;
 use std::path::Path;
@@ -225,7 +225,12 @@ fn main() {
         .last(true)
         .takes_value(true)
         .allow_hyphen_values(true)
-        .help("Arguments passed to the Fix program.");
+        .help(
+            "Arguments passed to the Fix program.\n\
+            Use '--' to separate Fix compiler options from program arguments.\n\
+            Example: fix run -- arg1 arg2\n\
+            These arguments can be accessed using the `get_args` function in your Fix program.",
+        );
     let project_name = Arg::new("project-name")
         .index(1)
         .takes_value(true)
@@ -671,7 +676,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             process::exit(0);
         }
         Some(("build", args)) => {
-            panic_if_err(commands::build::build(&mut create_config(SubCommand::Build, args)));
+            panic_if_err(commands::build::build(&mut create_config(
+                SubCommand::Build,
+                args,
+            )));
         }
         Some(("run", args)) => {
             commands::run::run_command(&create_config(SubCommand::Run, args));
