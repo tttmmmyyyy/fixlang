@@ -203,4 +203,71 @@ mod integration_tests {
             "Test.md should contain 'test_helper' function"
         );
     }
+
+    #[test]
+    fn test_docs_comprehensive_output() {
+        // This test verifies that `fix docs` generates documentation
+        // that matches the expected output for a comprehensive test case
+        // containing various language features (structs, unions, traits, type aliases, etc.)
+
+        install_fix();
+
+        // Set up test environment with comprehensive test case
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
+        let test_case_dst = temp_dir.path().join("comprehensive_docs");
+
+        // Copy test case directory
+        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
+
+        // Clean up any existing generated documentation
+        cleanup_test_docs(&test_case_dst);
+
+        // Run `fix docs` in the test case directory
+        let output = Command::new("fix")
+            .arg("docs")
+            .current_dir(&test_case_dst)
+            .output()
+            .expect("Failed to execute fix docs");
+
+        // Check that the command succeeded
+        if !output.status.success() {
+            eprintln!("fix docs failed:");
+            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            panic!("fix docs command failed");
+        }
+
+        // Read expected and actual documentation
+        let expected_doc_path = test_case_dst.join("expected_docs/Main.md");
+        let actual_doc_path = test_case_dst.join("docs/Main.md");
+
+        assert!(
+            expected_doc_path.exists(),
+            "Expected documentation file should exist at {:?}",
+            expected_doc_path
+        );
+        assert!(
+            actual_doc_path.exists(),
+            "Generated documentation file should exist at {:?}",
+            actual_doc_path
+        );
+
+        let expected_content =
+            fs::read_to_string(&expected_doc_path).expect("Failed to read expected documentation");
+        let actual_content =
+            fs::read_to_string(&actual_doc_path).expect("Failed to read generated documentation");
+
+        // Compare the contents
+        assert_eq!(
+            actual_content, expected_content,
+            "Generated documentation does not match expected output.\n\
+            Expected file: {:?}\n\
+            Actual file: {:?}\n\
+            \n\
+            If the difference is intentional, update the expected documentation by running:\n\
+            cd src/tests/test_docs/cases/comprehensive_docs && fix docs && cp docs/Main.md expected_docs/Main.md",
+            expected_doc_path, actual_doc_path
+        );
+    }
 }

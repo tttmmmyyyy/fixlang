@@ -1,0 +1,75 @@
+// Comprehensive documentation test module
+
+module Main;
+
+// Main entry point
+main : IO ();
+main = println("Hello, documentation test!");
+
+// A private global value (starts with underscore, should not appear in docs)
+_private_value : String;
+_private_value = "This is private";
+
+// A struct with one field
+type MyStruct = struct {
+    field: I64
+};
+
+// A union with one variant
+type MyUnion = union {
+    variant: I64
+};
+
+// A type alias
+type MyTypeAlias = String;
+
+// A trait with one member
+trait a : MyTrait {
+    // Converts the value to a descriptive string
+    my_method : a -> String;
+}
+
+// Implementation of MyTrait for MyStruct
+impl MyStruct : MyTrait {
+    my_method = |s| "MyStruct with field: " + s.@field.to_string;
+}
+
+// A trait alias
+trait MyTraitAlias = ToString;
+
+namespace Inner {
+    // A value inside namespace
+    inner_value : String;
+    inner_value = "inner";
+
+    // A private value inside namespace (starts with underscore, should not appear in docs)
+    _private_inner_value : String;
+    _private_inner_value = "private inner";
+
+    // A struct inside namespace
+    type InnerStruct = struct {
+        inner_field: I64
+    };
+
+    // A union inside namespace
+    type InnerUnion = union {
+        inner_variant: I64
+    };
+
+    // A type alias inside namespace
+    type InnerTypeAlias = String;
+
+    // A trait inside namespace
+    trait a : InnerTrait {
+        // Private method (starts with underscore)
+        _inner_method : a -> String;
+    }
+
+    // Implementation of InnerTrait for InnerStruct
+    impl InnerStruct : InnerTrait {
+        _inner_method = |s| "InnerStruct with field: " + s.@inner_field.to_string;
+    }
+
+    // A trait alias inside namespace
+    trait InnerTraitAlias = ToString;
+}

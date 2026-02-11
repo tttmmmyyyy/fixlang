@@ -1,0 +1,6 @@
+[general]
+name = "comprehensive-docs"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
