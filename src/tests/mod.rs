@@ -6,6 +6,7 @@ mod test_docs;
 mod test_explicit_import;
 mod test_external_projects;
 mod test_file_io;
+mod test_get_args;
 mod test_import;
 mod test_index_syntax;
 mod test_memcheck;

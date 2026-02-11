@@ -1,0 +1,13 @@
+module Main;
+
+main : IO ();
+main = (
+    let args = *get_args;
+    // Verify that we have exactly 3 arguments (executable + arg0 + arg1)
+    assert_eq(|_|"Expected args size to be 3", args.@size, 3);;
+    // Verify that the second argument is "arg0"
+    assert_eq(|_|"Expected args.@(1) to be 'arg0'", args.@(1), "arg0");;
+    // Verify that the third argument is "arg1"
+    assert_eq(|_|"Expected args.@(2) to be 'arg1'", args.@(2), "arg1");;
+    println("Test passed: Arguments received correctly")
+);

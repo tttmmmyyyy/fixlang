@@ -4456,20 +4456,6 @@ pub fn test_tarai_fast() {
 }
 
 #[test]
-pub fn test_get_args() {
-    let source = r##"
-    module Main;
-
-    main : IO ();
-    main = (
-        let args = *get_args;
-        args.to_iter.join(", ").println
-    );
-    "##;
-    test_source(&source, Configuration::develop_mode());
-}
-
-#[test]
 pub fn test_float_inf_nan() {
     let source = r##"
     module Main;

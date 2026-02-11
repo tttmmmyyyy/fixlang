@@ -30,4 +30,8 @@ This project implements the Fix programming language compiler and related tools 
   - Place sample Fix projects in the `tests` folder (e.g., `src/tests/test_dependencies/cases/`).
   - In test code, call `install_fix()` to install Fix to the system.
   - Test the actual behavior by running `fix` command via `Command::new("fix")`.
-
+  - For tests that use Fix projects, always copy the project to a temporary directory using `setup_test_env()` pattern (see `test_dependencies.rs` for reference).
+    - This ensures tests can run in parallel without conflicts.
+    - Use `tempfile::TempDir` to create temporary directories.
+    - Use `copy_dir_recursive()` from `test_util.rs` to copy project files.
+    - The temporary directory is automatically cleaned up when the test completes.
