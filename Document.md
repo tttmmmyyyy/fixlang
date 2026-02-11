@@ -80,7 +80,7 @@
     - [`eval` syntax](#eval-syntax)
     - [Substitute Pattern](#substitute-pattern)
     - [Operator and Syntax Precedence](#operator-and-syntax-precedence)
-- [Compiler features](#compiler-features)
+- [Compiler and Tool Features](#compiler-and-tool-features)
     - [Passing Arguments to Programs](#passing-arguments-to-programs)
     - [Project file](#project-file)
         - [About Duplicated Build Settings](#about-duplicated-build-settings)
@@ -185,7 +185,7 @@ The first 30 numbers of Fibonacci sequence are:
 
 Alternatively, you can run `fix build` to have the compiler generate an executable binary (`"a.out"`), which you can then run with `./a.out`.
 
-This is the basic usage of the Fix compiler. For more details on the compiler's features, refer to the [Compiler Features](https://www.google.com/search?q=%23compiler-features) section.
+This is the basic usage of the Fix compiler. For more details, refer to the [Compiler and Tool Features](#compiler-and-tool-features) section.
 
 Below, we'll explain the syntax and meaning of the sample program above.
 
@@ -2527,7 +2527,9 @@ The precedence and associativity of operators and some syntax in Fix are shown i
 </table>
 
 
-# Compiler features
+# Compiler and Tool Features
+
+The Fix compiler and various tools are provided through the `fix` command. This section describes the features and specifications of the `fix` command.
 
 ## Passing Arguments to Programs
 
