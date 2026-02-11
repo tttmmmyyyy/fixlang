@@ -27,6 +27,7 @@ extern crate urlencoding;
 mod ast;
 mod build_object_files;
 mod builtin;
+mod commands;
 mod compile_unit;
 mod config_file;
 mod configuration;
@@ -35,7 +36,6 @@ mod cpu_features;
 mod dependency_lockfile;
 mod dependency_resolver;
 mod deps_list;
-mod docgen;
 mod edit;
 mod env_vars;
 mod error;
@@ -44,7 +44,6 @@ mod graph;
 mod name_resolution;
 #[macro_use]
 mod log_file;
-mod lsp;
 mod misc;
 mod object;
 mod optimization;
@@ -52,7 +51,7 @@ mod parser;
 mod printer;
 mod project_file;
 mod registry_file;
-mod runner;
+mod check_program;
 mod runtime;
 mod sourcefile;
 mod stdlib;
@@ -79,7 +78,6 @@ use clap::{App, AppSettings, Arg};
 use config_file::ConfigFile;
 use configuration::*;
 use constants::*;
-use dependency_lockfile::DependecyLockFile;
 use error::panic_if_err;
 use generator::*;
 use git_version::git_version;
@@ -87,13 +85,13 @@ use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
-use lsp::language_server::launch_language_server;
+use commands::lsp::language_server::launch_language_server;
 use object::*;
 use parser::*;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use project_file::ProjectFile;
-use runner::*;
+use check_program::*;
 use runtime::*;
 use sourcefile::*;
 use std::path::Path;
@@ -527,14 +525,6 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(features)
     }
 
-    fn read_projects_option(m: &ArgMatches) -> Vec<String> {
-        m.try_get_many::<String>("projects")
-            .unwrap_or_default()
-            .unwrap_or_default()
-            .cloned()
-            .collect::<Vec<_>>()
-    }
-
     fn get_build_mode(args: &ArgMatches) -> configuration::BuildMode {
         if args.contains_id("test") {
             configuration::BuildMode::Test
@@ -681,36 +671,26 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             process::exit(0);
         }
         Some(("build", args)) => {
-            panic_if_err(build(&mut create_config(SubCommand::Build, args)));
+            panic_if_err(commands::build::build(&mut create_config(SubCommand::Build, args)));
         }
         Some(("run", args)) => {
-            run_command(&create_config(SubCommand::Run, args));
+            commands::run::run_command(&create_config(SubCommand::Run, args));
         }
         Some(("test", args)) => {
-            run_command(&create_config(SubCommand::Test, args));
+            commands::run::run_command(&create_config(SubCommand::Test, args));
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", args)) => {
-                let mode = get_build_mode(args);
-                let proj_file = panic_if_err(ProjectFile::read_root_file());
-                panic_if_err(proj_file.open_lock_file(mode).and_then(|lf| lf.install()));
+                commands::deps::deps_install_command(args);
             }
             Some(("update", args)) => {
-                let mode = get_build_mode(args);
-                panic_if_err(DependecyLockFile::update_and_install(mode));
+                commands::deps::deps_update_command(args);
             }
             Some(("add", args)) => {
-                let mode = get_build_mode(args);
-                let projects = read_projects_option(args);
-                let proj_file = panic_if_err(ProjectFile::read_root_file());
-                panic_if_err(proj_file.add_dependencies(&projects, &fix_config, mode));
-
-                // After adding, update the appropriate lock file
-                panic_if_err(DependecyLockFile::update_and_install(mode));
+                commands::deps::deps_add_command(args, &fix_config);
             }
             Some(("list", args)) => {
-                let json = args.contains_id("json");
-                panic_if_err(deps_list::print_all_projects(&fix_config, json));
+                commands::deps::deps_list_command(args, &fix_config);
             }
             _ => deps_subc.print_help().unwrap(),
         },
@@ -718,13 +698,13 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             launch_language_server();
         }
         Some(("clean", _args)) => {
-            clean_command();
+            commands::clean::clean_command();
         }
         Some(("docs", args)) => {
             // Create the configuration.
             let mut config = panic_if_err(Configuration::docs_mode());
             panic_if_err(read_docs_options(args, &mut config));
-            panic_if_err(docgen::generate_docs_for_files(config));
+            panic_if_err(commands::docs::generate_docs_for_files(config));
         }
         Some(("init", args)) => {
             let prj_name = args

@@ -7,7 +7,7 @@ use crate::ast::program::Program;
 use crate::configuration::BuildMode;
 use crate::edit::edit_util::apply_text_edits;
 use crate::error::Errors;
-use crate::lsp::language_server::{
+use crate::commands::lsp::language_server::{
     create_text_edit_to_insert_imports, create_text_edits_to_erase_imports, run_diagnostics,
 };
 use crate::misc::to_absolute_path;

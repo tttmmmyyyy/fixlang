@@ -6,7 +6,7 @@ use std::{
     sync::Once,
 };
 use crate::{
-    configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, error::{Errors, panic_if_err, panic_with_msg}, misc::save_temporary_source, runner::run
+    commands::run::run, configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, error::{Errors, panic_if_err, panic_with_msg}, misc::save_temporary_source 
 };
 
 static INSTALL_FIX: Once = Once::new();

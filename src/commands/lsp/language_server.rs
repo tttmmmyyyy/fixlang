@@ -3,21 +3,25 @@ use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{GlobalValue, ModuleInfo, Program};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitId, TraitImpl};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
+use crate::commands::docs::MarkdownSection;
 use crate::configuration::BuildMode;
 use crate::constants::{
     chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
 };
-use crate::docgen::MarkdownSection;
+use crate::error::{any_to_string, Error, Errors};
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
+use crate::project_file::ProjectFile;
 use crate::runner::check_program_via_config;
 use crate::typecheckcache::{self, SharedTypeCheckCache};
-use crate::{
-    error::{any_to_string, Error, Errors},
-    project_file::ProjectFile,
-    Configuration, Span,
-};
-use crate::{DiagnosticsConfig, EndNode, SourceFile, SourcePos, Var};
+use crate::write_log;
+use crate::Configuration;
+use crate::DiagnosticsConfig;
+use crate::EndNode;
+use crate::SourceFile;
+use crate::SourcePos;
+use crate::Span;
+use crate::Var;
 use difference::diff;
 use lsp_types::{
     CodeAction, CodeActionKind, CodeActionParams, CompletionItem, CompletionItemKind,

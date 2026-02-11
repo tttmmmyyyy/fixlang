@@ -10,7 +10,7 @@ use crate::{
     kind_star,
     misc::to_absolute_path,
     project_file::ProjectFile,
-    runner::check_program_via_config,
+    check_program::check_program_via_config,
     Configuration, DocsConfig, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
 };
 
