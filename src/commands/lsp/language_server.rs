@@ -3,6 +3,7 @@ use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{GlobalValue, ModuleInfo, Program};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitId, TraitImpl};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
+use crate::check_program::check_program_via_config;
 use crate::commands::docs::MarkdownSection;
 use crate::configuration::BuildMode;
 use crate::constants::{
@@ -12,7 +13,6 @@ use crate::error::{any_to_string, Error, Errors};
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::project_file::ProjectFile;
-use crate::check_program::check_program_via_config;
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::write_log;
 use crate::Configuration;
