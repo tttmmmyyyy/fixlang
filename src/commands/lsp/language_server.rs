@@ -12,7 +12,7 @@ use crate::error::{any_to_string, Error, Errors};
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::project_file::ProjectFile;
-use crate::runner::check_program_via_config;
+use crate::check_program::check_program_via_config;
 use crate::typecheckcache::{self, SharedTypeCheckCache};
 use crate::write_log;
 use crate::Configuration;
