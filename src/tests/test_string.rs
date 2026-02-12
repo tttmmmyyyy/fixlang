@@ -272,3 +272,34 @@ main = (
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+#[test]
+pub fn test_string_contains() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    // Basic contains check
+    assert(|_|"1", "Hello World".contains("World"));;
+    assert(|_|"2", "Hello World".contains("Hello"));;
+    assert(|_|"3", "Hello World".contains("o W"));;
+    assert(|_|"4", !"Hello World".contains("Goodbye"));;
+    assert(|_|"5", !"Hello World".contains("world"));; // Case sensitive
+    
+    // Edge cases
+    assert(|_|"6", "Hello".contains(""));; // Empty string is contained
+    assert(|_|"7", !"".contains("Hello"));; // Empty string doesn't contain non-empty
+    assert(|_|"8", "".contains(""));; // Empty contains empty
+    assert(|_|"9", "abc".contains("abc"));; // Full match
+    assert(|_|"10", !"abc".contains("zabc"));; // Longer substring
+    
+    // Multiple occurrences
+    assert(|_|"11", "abcabc".contains("abc"));;
+    assert(|_|"12", "abcabc".contains("ca"));;
+    
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}

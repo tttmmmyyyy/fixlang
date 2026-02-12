@@ -2900,6 +2900,14 @@ namespace String {
         )
     );
 
+    // Checks if a string contains a given substring.
+    //
+    // # Parameters
+    // * `substr` - The substring to be checked.
+    // * `str` - The string to be searched.
+    contains : String -> String -> Bool;
+    contains = |substr, str| str.find(substr, 0).is_some;
+
     // Checks if a string starts with a given prefix.
     // 
     // # Parameters
