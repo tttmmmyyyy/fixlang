@@ -40,3 +40,9 @@ This project implements the Fix programming language compiler and related tools 
 
 - **Fix Language Sample Code**: Refer to `src/fix/std.fix` for extensive examples of Fix language code.
 - **Standard Library Documentation**: Refer to `std_doc/Std.md` for documentation of the Std standard library.
+
+## Fix Language Specifics
+
+- **Iterator `fold` function**: The closure passed to `fold` has the signature `(Item, Acc) -> Acc`, where the first argument is the current item and the second is the accumulator. This is the reverse of Haskell's `foldl`.
+  - Correct: `iterator.fold(initial, |item, acc| acc + item)`
+  - Incorrect: `iterator.fold(initial, |acc, item| acc + item)` (This will cause a type error)
