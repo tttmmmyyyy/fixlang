@@ -303,3 +303,46 @@ main = (
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+#[test]
+pub fn test_string_to_iter_bytes() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    // Basic iteration over bytes
+    let bytes = "Hello".to_iter_bytes.to_array;
+    assert_eq(|_|"1", bytes.@size, 5);;
+    assert_eq(|_|"2", bytes.@(0), 72_U8);; // 'H'
+    assert_eq(|_|"3", bytes.@(1), 101_U8);; // 'e'
+    assert_eq(|_|"4", bytes.@(2), 108_U8);; // 'l'
+    assert_eq(|_|"5", bytes.@(3), 108_U8);; // 'l'
+    assert_eq(|_|"6", bytes.@(4), 111_U8);; // 'o'
+
+    // Empty string
+    let empty_bytes = "".to_iter_bytes.to_array;
+    assert_eq(|_|"7", empty_bytes.@size, 0);;
+
+    // Single byte
+    let single = "A".to_iter_bytes.to_array;
+    assert_eq(|_|"8", single.@size, 1);;
+    assert_eq(|_|"9", single.@(0), 65_U8);; // 'A'
+
+    // UTF-8 multi-byte character (こんにちは contains multi-byte characters)
+    let utf8_str = "あ";  // U+3042, UTF-8: E3 81 82
+    let utf8_bytes = utf8_str.to_iter_bytes.to_array;
+    assert_eq(|_|"10", utf8_bytes.@size, 3);;
+    assert_eq(|_|"11", utf8_bytes.@(0), 227_U8);; // 0xE3
+    assert_eq(|_|"12", utf8_bytes.@(1), 129_U8);; // 0x81
+    assert_eq(|_|"13", utf8_bytes.@(2), 130_U8);; // 0x82
+
+    // Using iterator methods
+    let count = "test".to_iter_bytes.fold(0, |_, acc| acc + 1);
+    assert_eq(|_|"14", count, 4);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}

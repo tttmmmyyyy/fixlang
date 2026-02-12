@@ -11,6 +11,7 @@
 #### Std
 
 - Add `Std::String::contains` function to check if a string contains a given substring.
+- Add `Std::StringBytesIterator` type and `Std::String::to_iter_bytes` function to iterate over the bytes of a string.
 
 ## [1.2.0] - 2026-02-10
 

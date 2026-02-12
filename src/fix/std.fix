@@ -2948,6 +2948,28 @@ namespace String {
     get_bytes : String -> Array U8;
     get_bytes = @_data;
 
+    // The iterator over bytes of a string, excluding null-terminator.
+    type StringBytesIterator = struct { _s : String, _i : I64 };
+
+    impl StringBytesIterator : Iterator {
+        type Item StringBytesIterator = U8;
+        advance = |it| (
+            let i = it.@_i;
+            if i == it.@_s.@size { none() };
+            let c = it.@_s[i].iget;
+            let it = it[^_i].imod(add(1));
+            (it, c).some
+        );
+    }
+
+    // Creates an iterator over the bytes of a string, excluding null-terminator.
+    //
+    // # Parameters
+    //
+    // * `s` - The string to iterate over.
+    to_iter_bytes : String -> StringBytesIterator;
+    to_iter_bytes = |s| StringBytesIterator { _s: s, _i: 0 };
+
     // Gets the first byte of a string. Returns none if the string is empty.
     //
     // # Parameters
