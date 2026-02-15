@@ -530,11 +530,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(features)
     }
 
-    fn get_build_mode(args: &ArgMatches) -> configuration::BuildMode {
+    fn get_build_mode(args: &ArgMatches) -> configuration::LockFileType {
         if args.contains_id("test") {
-            configuration::BuildMode::Test
+            configuration::LockFileType::Test
         } else {
-            configuration::BuildMode::Build
+            configuration::LockFileType::Build
         }
     }
 

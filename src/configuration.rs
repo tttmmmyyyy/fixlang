@@ -85,14 +85,14 @@ pub enum SubCommand {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BuildMode {
+pub enum LockFileType {
     Build,
     Test,
 }
 
-impl Default for BuildMode {
+impl Default for LockFileType {
     fn default() -> Self {
-        BuildMode::Build
+        LockFileType::Build
     }
 }
 
@@ -120,11 +120,11 @@ impl SubCommand {
     }
 
     // Get the build mode based on the subcommand.
-    pub fn build_mode(&self) -> BuildMode {
+    pub fn build_mode(&self) -> LockFileType {
         match self {
-            SubCommand::Test | SubCommand::Diagnostics(_) => BuildMode::Test,
+            SubCommand::Test | SubCommand::Diagnostics(_) => LockFileType::Test,
             SubCommand::Docs(docs_config) => docs_config.mode,
-            _ => BuildMode::Build,
+            _ => LockFileType::Build,
         }
     }
 
@@ -169,7 +169,7 @@ pub struct DocsConfig {
     // Output directory.
     pub out_dir: PathBuf,
     // Dependency mode (Build or Test).
-    pub mode: BuildMode,
+    pub mode: LockFileType,
 }
 
 #[derive(Clone)]

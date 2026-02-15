@@ -5,7 +5,7 @@ use crate::{
         name::{FullName, Name, NameSpace},
         typedecl::Field,
     },
-    configuration::BuildMode,
+    configuration::LockFileType,
     error::Errors,
     kind_star,
     misc::to_absolute_path,
@@ -21,7 +21,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     let proj_file = ProjectFile::read_root_file()?;
     proj_file.set_config(&mut config, false)?;
 
-    let mode: BuildMode = match &config.subcommand {
+    let mode: LockFileType = match &config.subcommand {
         crate::SubCommand::Docs(docs_config) => docs_config.mode,
         _ => unreachable!(),
     };

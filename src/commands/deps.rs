@@ -1,16 +1,16 @@
 use crate::config_file::ConfigFile;
-use crate::configuration::BuildMode;
+use crate::configuration::LockFileType;
 use crate::dependency_lockfile::DependecyLockFile;
 use crate::deps_list;
 use crate::error::panic_if_err;
 use crate::project_file::ProjectFile;
 use clap::ArgMatches;
 
-fn get_build_mode(args: &ArgMatches) -> BuildMode {
+fn get_build_mode(args: &ArgMatches) -> LockFileType {
     if args.contains_id("test") {
-        BuildMode::Test
+        LockFileType::Test
     } else {
-        BuildMode::Build
+        LockFileType::Build
     }
 }
 
