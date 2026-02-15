@@ -3,23 +3,65 @@ use std::collections::VecDeque;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::mpsc;
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::misc::{to_absolute_path, Map};
 
 pub struct LspClient {
     process: Child,
     stdin: ChildStdin,
-    stdout: Arc<Mutex<BufReader<ChildStdout>>>,
     working_dir: PathBuf,
     document_versions: Map<PathBuf, i32>,
-    message_queue: VecDeque<Value>,
-    responses: Map<u32, Value>,
-    diagnostics: Map<PathBuf, Value>,
+    message_queue: Arc<Mutex<VecDeque<Value>>>,
+    responses: Arc<Mutex<Map<u32, Value>>>,
+    diagnostics: Arc<Mutex<Map<PathBuf, Value>>>,
     next_id: u32,
+    reader_thread_error: Arc<Mutex<Option<String>>>,
+}
+
+/// Process a received message and update internal state
+fn process_message(
+    message: Value,
+    responses: &Arc<Mutex<Map<u32, Value>>>,
+    diagnostics: &Arc<Mutex<Map<PathBuf, Value>>>,
+    message_queue: &Arc<Mutex<VecDeque<Value>>>,
+) {
+    // Check if it's a response (has an id field)
+    if let Some(id) = message.get("id") {
+        if let Some(id_num) = id.as_u64() {
+            responses
+                .lock()
+                .unwrap()
+                .insert(id_num as u32, message.clone());
+        }
+    }
+
+    // Check if it's a publishDiagnostics notification
+    if let Some(method) = message.get("method") {
+        if method.as_str() == Some("textDocument/publishDiagnostics") {
+            if let Some(params) = message.get("params") {
+                if let Some(uri) = params.get("uri") {
+                    if let Some(uri_str) = uri.as_str() {
+                        // Extract file path from URI (file:///path/to/file)
+                        if let Some(path_str) = uri_str.strip_prefix("file://") {
+                            let file_path = PathBuf::from(path_str);
+                            if let Some(diagnostics_value) = params.get("diagnostics") {
+                                diagnostics
+                                    .lock()
+                                    .unwrap()
+                                    .insert(file_path, diagnostics_value.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Add to message queue for test code to inspect
+    message_queue.lock().unwrap().push_back(message);
 }
 
 impl LspClient {
@@ -42,7 +84,88 @@ impl LspClient {
             .map_err(|e| format!("Failed to spawn fix language-server: {:?}", e))?;
 
         let stdin = process.stdin.take().unwrap();
-        let stdout = Arc::new(Mutex::new(BufReader::new(process.stdout.take().unwrap())));
+        let stdout = process.stdout.take().unwrap();
+
+        // Create shared data structures
+        let message_queue = Arc::new(Mutex::new(VecDeque::new()));
+        let responses = Arc::new(Mutex::new(Map::default()));
+        let diagnostics = Arc::new(Mutex::new(Map::default()));
+        let reader_thread_error = Arc::new(Mutex::new(None));
+
+        // Clone Arcs for the reader thread
+        let message_queue_clone = Arc::clone(&message_queue);
+        let responses_clone = Arc::clone(&responses);
+        let diagnostics_clone = Arc::clone(&diagnostics);
+        let reader_thread_error_clone = Arc::clone(&reader_thread_error);
+
+        // Start dedicated reader thread (detached - JoinHandle is not stored)
+        // The thread will exit when stdout is closed (process termination) or on protocol error
+        std::thread::spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            loop {
+                let result: Result<Value, String> = (|| {
+                    // Read Content-Length header
+                    let mut header_line = String::new();
+                    reader
+                        .read_line(&mut header_line)
+                        .map_err(|e| format!("Failed to read header: {:?}", e))?;
+
+                    if header_line.is_empty() {
+                        return Err("EOF reached while reading header".to_string());
+                    }
+
+                    let trimmed = header_line.trim();
+                    if !trimmed.starts_with("Content-Length: ") {
+                        return Err(format!(
+                            "Invalid header format. Expected 'Content-Length: ...', but got: {:?}",
+                            header_line
+                        ));
+                    }
+                    let content_length: usize = trimmed
+                        .strip_prefix("Content-Length: ")
+                        .unwrap()
+                        .parse()
+                        .map_err(|e| format!("Failed to parse content length: {:?}", e))?;
+
+                    // Skip empty line
+                    let mut empty_line = String::new();
+                    reader
+                        .read_line(&mut empty_line)
+                        .map_err(|e| format!("Failed to read empty line: {:?}", e))?;
+
+                    // Read content
+                    let mut content = vec![0u8; content_length];
+                    reader
+                        .read_exact(&mut content)
+                        .map_err(|e| format!("Failed to read content: {:?}", e))?;
+
+                    let message: Value = serde_json::from_slice(&content)
+                        .map_err(|e| format!("Failed to parse JSON: {:?}", e))?;
+
+                    Ok(message)
+                })();
+
+                match result {
+                    Ok(message) => {
+                        process_message(
+                            message,
+                            &responses_clone,
+                            &diagnostics_clone,
+                            &message_queue_clone,
+                        );
+                    }
+                    Err(e) => {
+                        // EOF or protocol error - exit the loop
+                        if e.contains("EOF") {
+                            break;
+                        }
+                        // Store error before panicking
+                        *reader_thread_error_clone.lock().unwrap() = Some(e.clone());
+                        panic!("LSP protocol error: {}", e);
+                    }
+                }
+            }
+        });
 
         // Give the server a moment to initialize
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -50,13 +173,13 @@ impl LspClient {
         Ok(LspClient {
             process,
             stdin,
-            stdout,
             working_dir: absolute_working_dir,
             document_versions: Map::default(),
-            message_queue: VecDeque::new(),
-            responses: Map::default(),
-            diagnostics: Map::default(),
+            message_queue,
+            responses,
+            diagnostics,
             next_id: 1,
+            reader_thread_error,
         })
     }
 
@@ -116,116 +239,22 @@ impl LspClient {
         Ok(())
     }
 
-    /// Try to receive one message from the server without blocking
-    fn try_receive_one_message(&mut self) -> Option<Value> {
-        let (tx, rx) = mpsc::channel();
-        let stdout_clone = Arc::clone(&self.stdout);
-
-        std::thread::spawn(move || {
-            let result: Result<Value, String> = (|| {
-                let mut stdout = stdout_clone.lock().unwrap();
-
-                // Read Content-Length header
-                let mut header_line = String::new();
-                stdout
-                    .read_line(&mut header_line)
-                    .map_err(|e| format!("Failed to read header: {:?}", e))?;
-
-                if header_line.is_empty() {
-                    return Err("EOF reached while reading header".to_string());
-                }
-
-                let content_length: usize = header_line
-                    .trim()
-                    .strip_prefix("Content-Length: ")
-                    .ok_or("Invalid header format")?
-                    .parse()
-                    .map_err(|e| format!("Failed to parse content length: {:?}", e))?;
-
-                // Skip empty line
-                let mut empty_line = String::new();
-                stdout
-                    .read_line(&mut empty_line)
-                    .map_err(|e| format!("Failed to read empty line: {:?}", e))?;
-
-                // Read content
-                let mut content = vec![0u8; content_length];
-                stdout
-                    .read_exact(&mut content)
-                    .map_err(|e| format!("Failed to read content: {:?}", e))?;
-
-                let message: Value = serde_json::from_slice(&content)
-                    .map_err(|e| format!("Failed to parse JSON: {:?}", e))?;
-
-                Ok(message)
-            })();
-
-            let _ = tx.send(result);
-        });
-
-        // Use a short timeout for non-blocking behavior
-        match rx.recv_timeout(Duration::from_secs(1)) {
-            Ok(Ok(message)) => Some(message),
-            Ok(Err(_)) => None,
-            Err(mpsc::RecvTimeoutError::Timeout) => None,
-            Err(_) => None,
-        }
-    }
-
-    /// Process a received message and update internal state
-    fn process_message(&mut self, message: Value) {
-        // Check if it's a response (has an id field)
-        if let Some(id) = message.get("id") {
-            if let Some(id_num) = id.as_u64() {
-                self.responses.insert(id_num as u32, message.clone());
-            }
-        }
-
-        // Check if it's a publishDiagnostics notification
-        if let Some(method) = message.get("method") {
-            if method.as_str() == Some("textDocument/publishDiagnostics") {
-                if let Some(params) = message.get("params") {
-                    if let Some(uri) = params.get("uri") {
-                        if let Some(uri_str) = uri.as_str() {
-                            // Extract file path from URI (file:///path/to/file)
-                            if let Some(path_str) = uri_str.strip_prefix("file://") {
-                                let file_path = PathBuf::from(path_str);
-                                if let Some(diagnostics) = params.get("diagnostics") {
-                                    self.diagnostics.insert(file_path, diagnostics.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add to message queue for test code to inspect
-        self.message_queue.push_back(message);
-    }
-
-    /// Wait for server messages for the specified duration and buffer them
+    /// Wait for server messages for the specified duration
     pub fn wait_for_server(&mut self, duration: Duration) {
-        let start_time = Instant::now();
-
-        while start_time.elapsed() < duration {
-            if let Some(message) = self.try_receive_one_message() {
-                self.process_message(message);
-            }
-        }
+        std::thread::sleep(duration);
     }
 
     /// Pop one message from the message queue
     #[allow(dead_code)]
     pub fn pop_message(&mut self) -> Option<Value> {
-        self.message_queue.pop_front()
+        self.message_queue.lock().unwrap().pop_front()
     }
 
     /// Get a response for a specific request ID
     /// Returns None if the response has not been received yet
     /// Removes the response from the internal map when retrieved
     pub fn get_response(&mut self, id: u32) -> Option<Value> {
-        self.responses.remove(&id)
+        self.responses.lock().unwrap().remove(&id)
     }
 
     /// Get diagnostics for a specific file
@@ -233,8 +262,9 @@ impl LspClient {
     #[allow(dead_code)]
     pub fn get_diagnostics(&self, file_path: &Path) -> Vec<Value> {
         let absolute_path = self.working_dir.join(file_path);
-        if let Some(diagnostics) = self.diagnostics.get(&absolute_path) {
-            if let Some(arr) = diagnostics.as_array() {
+        let diagnostics = self.diagnostics.lock().unwrap();
+        if let Some(diagnostics_value) = diagnostics.get(&absolute_path) {
+            if let Some(arr) = diagnostics_value.as_array() {
                 return arr.clone();
             }
         }
@@ -244,8 +274,9 @@ impl LspClient {
     /// Verify that there are no diagnostic errors for any file
     /// Returns an error if any diagnostics contain errors
     pub fn verify_no_diagnostic_errors(&self) -> Result<(), String> {
-        for (file_path, diagnostics) in &self.diagnostics {
-            if let Some(diag_array) = diagnostics.as_array() {
+        let diagnostics = self.diagnostics.lock().unwrap();
+        for (file_path, diagnostics_value) in diagnostics.iter() {
+            if let Some(diag_array) = diagnostics_value.as_array() {
                 if !diag_array.is_empty() {
                     return Err(format!(
                         "Expected no diagnostic errors but found errors in {:?}: {:?}",
@@ -394,11 +425,25 @@ impl LspClient {
 
         Ok(())
     }
+
+    /// Check for reader thread errors and panic if any occurred
+    ///
+    /// This should be called at the end of tests to ensure that
+    /// LSP protocol errors in the reader thread are properly reported.
+    pub fn finish(&self) -> Result<(), String> {
+        let error = self.reader_thread_error.lock().unwrap();
+        if let Some(err_msg) = error.as_ref() {
+            return Err(format!("LSP protocol error occurred: {}", err_msg));
+        }
+        Ok(())
+    }
 }
 
 impl Drop for LspClient {
     fn drop(&mut self) {
         // Kill process if still running
         let _ = self.process.kill();
+        // Note: We don't join the reader thread here as it may block.
+        // The thread will be detached and will exit when stdout is closed.
     }
 }

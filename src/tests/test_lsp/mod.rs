@@ -162,7 +162,10 @@ mod tests {
         eprintln!("✓ LSP auto-lockfile generation test completed successfully");
 
         // Shutdown
-        let _ = client.shutdown();
+        client.shutdown().expect("Failed to shutdown LSP");
+        
+        // Check for reader thread errors
+        client.finish().expect("Reader thread should not have errors");
 
         println!("✓ LSP auto-lock file generation test passed");
     }
