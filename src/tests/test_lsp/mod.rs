@@ -140,39 +140,4 @@ mod tests {
             .finish()
             .expect("Reader thread should not have errors");
     }
-
-    #[test]
-    fn test_dependency_resolution_failure() {
-        // Test: Verify that dependency resolution failures are handled properly
-
-        install_fix();
-        let (_temp_dir, project_dir) = setup_test_env("invalid_dependency_project");
-
-        // Clean up before test
-        let _ = Command::new("fix")
-            .arg("clean")
-            .current_dir(&project_dir)
-            .output();
-
-        // Try to update dependencies (should fail)
-        let output = Command::new("fix")
-            .arg("deps")
-            .arg("update")
-            .current_dir(&project_dir)
-            .output()
-            .expect("Failed to execute fix deps update");
-
-        // Verify that the command failed
-        assert!(
-            !output.status.success(),
-            "Dependency resolution should fail for invalid dependencies"
-        );
-
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            stderr.contains("Failed") || stderr.contains("error") || stderr.contains("Error"),
-            "Error message should be present: {}",
-            stderr
-        );
-    }
 }

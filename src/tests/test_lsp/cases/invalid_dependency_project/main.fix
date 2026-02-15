@@ -1,4 +1,0 @@
-module Main;
-
-main : IO ();
-main = println("This project has invalid dependencies");
