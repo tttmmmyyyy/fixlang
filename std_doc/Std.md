@@ -3930,6 +3930,17 @@ Concatenate an iterator of strings.
 
 * `iter_strs` - The iterator of strings.
 
+#### contains
+
+Type: `Std::String -> Std::String -> Std::Bool`
+
+Checks if a string contains a given substring.
+
+##### Parameters
+
+* `substr` - The substring to be checked.
+* `str` - The string to be searched.
+
 #### empty
 
 Type: `Std::I64 -> Std::String`
@@ -4181,6 +4192,16 @@ Strips leading and trailing whitespace characters.
 ##### Parameters
 
 * `str` - The string to be modified.
+
+#### to_iter_bytes
+
+Type: `Std::String -> Std::String::StringBytesIterator`
+
+Creates an iterator over the bytes of a string, excluding null-terminator.
+
+##### Parameters
+
+* `s` - The string to iterate over.
 
 #### unsafe_from_c_str_ptr
 
@@ -6153,6 +6174,20 @@ Type: `opt`
 
 ### namespace Std::String
 
+#### StringBytesIterator
+
+Defined as: `type StringBytesIterator = unbox struct { ...fields... }`
+
+The iterator over bytes of a string, excluding null-terminator.
+
+##### field `_s`
+
+Type: `Std::String`
+
+##### field `_i`
+
+Type: `Std::I64`
+
 #### StringSplitIterator
 
 Defined as: `type StringSplitIterator = unbox struct { ...fields... }`
@@ -7290,6 +7325,8 @@ The byte array ends with a null terminator (`'\0'`).
 ### impl `Std::String : Std::Zero`
 
 The empty string.
+
+### impl `Std::String::StringBytesIterator : Std::Iterator`
 
 ### impl `Std::String::StringSplitIterator : Std::Iterator`
 
