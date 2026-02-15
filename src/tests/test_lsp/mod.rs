@@ -53,9 +53,8 @@ mod tests {
         let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
 
         // Initialize LSP
-        let root_uri = format!("file://{}", project_dir.display());
         client
-            .initialize(&root_uri, Duration::from_secs(5))
+            .initialize(&project_dir, Duration::from_secs(5))
             .expect("Failed to initialize LSP");
 
         // Open main.fix (which imports Character only)

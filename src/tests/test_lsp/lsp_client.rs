@@ -289,7 +289,16 @@ impl LspClient {
     }
 
     /// Execute initialization sequence with custom timeout
-    pub fn initialize(&mut self, root_uri: &str, timeout: Duration) -> Result<(), String> {
+    /// 
+    /// # Arguments
+    /// * `root_path` - Project root directory path (can be relative or absolute)
+    /// * `timeout` - Maximum time to wait for initialize response
+    pub fn initialize(&mut self, root_path: &Path, timeout: Duration) -> Result<(), String> {
+        // Convert to absolute path
+        let absolute_root = to_absolute_path(root_path)
+            .map_err(|e| format!("Failed to convert root_path to absolute path: {}", e))?;
+        let root_uri = format!("file://{}", absolute_root.display());
+
         let params = json!({
             "processId": null,
             "rootUri": root_uri,
