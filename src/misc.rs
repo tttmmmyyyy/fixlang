@@ -234,11 +234,11 @@ pub fn disable_colored_no_tty() {
 }
 
 pub fn info_msg(msg: &str) {
-    println!("{}: {}", "info".bright_blue(), msg);
+    eprintln!("{}: {}", "info".bright_blue(), msg);
 }
 
 pub fn warn_msg(msg: &str) {
-    println!("{}: {}", "warning".yellow(), msg);
+    eprintln!("{}: {}", "warning".yellow(), msg);
 }
 
 // Splits a string by spaces, but keeps the words in quotes as a single word.

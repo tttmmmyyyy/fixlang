@@ -6,7 +6,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{ast::name::FullName, touch_directory, Scheme, TypedExpr, TYPE_CHECK_CACHE_PATH};
+use crate::{
+    ast::name::FullName, misc::warn_msg, touch_directory, Scheme, TypedExpr,
+    TYPE_CHECK_CACHE_PATH,
+};
 
 pub type SharedTypeCheckCache = Arc<dyn TypeCheckCache + Send + Sync>;
 
@@ -66,10 +69,10 @@ impl TypeCheckCache for FileCache {
         let cache_file_str = cache_file.to_string_lossy().to_string();
         let mut cache_file = match File::create(&cache_file) {
             Err(_) => {
-                eprintln!(
-                    "warning: Failed to create cache file \"{}\".",
+                warn_msg(&format!(
+                    "Failed to create cache file \"{}\".",
                     cache_file_str
-                );
+                ));
                 return;
             }
             Ok(file) => file,
@@ -78,10 +81,10 @@ impl TypeCheckCache for FileCache {
         match cache_file.write_all(&serialized) {
             Ok(_) => {}
             Err(_) => {
-                eprintln!(
-                    "warning: Failed to write cache file \"{}\".",
+                warn_msg(&format!(
+                    "Failed to write cache file \"{}\".",
                     cache_file_str
-                );
+                ));
             }
         }
     }
@@ -109,20 +112,20 @@ impl TypeCheckCache for FileCache {
         match cache_file.read_to_end(&mut cache_bytes) {
             Ok(_) => {}
             Err(why) => {
-                eprintln!(
-                    "warning: Failed to read cache file \"{}\": {}.",
+                warn_msg(&format!(
+                    "Failed to read cache file \"{}\": {}.",
                     cache_file_str, why
-                );
+                ));
                 return None;
             }
         }
         let expr: TypedExpr = match serde_pickle::from_slice(&cache_bytes, Default::default()) {
             Ok(res) => res,
             Err(why) => {
-                eprintln!(
-                    "warning: Failed to parse content of cache file \"{}\": {}.",
+                warn_msg(&format!(
+                    "Failed to parse content of cache file \"{}\": {}.",
                     cache_file_str, why
-                );
+                ));
                 return None;
             }
         };

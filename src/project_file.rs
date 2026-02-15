@@ -947,10 +947,10 @@ impl ProjectFile {
                     .find(|prj_info| &prj_info.name == proj_name)
                 {
                     // If the project is found in the registry, add it to the project file.
-                    println!(
+                    info_msg(&format!(
                         "The project \"{}\" was found in \"{}\".",
                         proj_name, reg_loc
-                    );
+                    ));
 
                     // When the version requirement is empty, try to use the latest tagged version.
                     let version = match version {

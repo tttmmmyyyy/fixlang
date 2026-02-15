@@ -8,14 +8,14 @@ use crate::{
     configuration::LockFileType,
     error::Errors,
     kind_star,
-    misc::to_absolute_path,
+    misc::{info_msg, to_absolute_path},
     project_file::ProjectFile,
     check_program::check_program_via_config,
     Configuration, DocsConfig, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
 };
 
 pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> {
-    println!("Loading source files...");
+    info_msg("Loading source files...");
 
     // Set up the configuration by the project file.
     let proj_file = ProjectFile::read_root_file()?;
@@ -31,7 +31,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
 
     // Build the file and get the errors.
     let program = check_program_via_config(&config)?;
-    println!("Generating documentation...");
+    info_msg("Generating documentation...");
 
     let docs_config = match &config.subcommand {
         crate::SubCommand::Docs(docs_config) => docs_config,
@@ -60,10 +60,10 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     };
 
     for mod_name in mod_names {
-        println!(
+        info_msg(&format!(
             "Generating documentation for module \"{}\".",
             mod_name.to_string()
-        );
+        ));
         docgen_for_module(&program, &mod_name, &proj_file, docs_config)?;
     }
     Ok(())
@@ -302,7 +302,7 @@ fn docgen_for_module(
         ))
     })?;
 
-    println!("Saved documentation to \"{}\".", doc_path.display());
+    info_msg(&format!("Saved documentation to \"{}\".", doc_path.display()));
     Ok(())
 }
 

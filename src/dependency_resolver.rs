@@ -1,6 +1,8 @@
 // This module implements an algorithm of dependency resolution.
 
-use crate::{configuration::LockFileType, error::Errors, project_file::ProjectFile};
+use crate::{
+    configuration::LockFileType, error::Errors, misc::info_msg, project_file::ProjectFile,
+};
 use semver::{Version, VersionReq};
 
 pub type PackageName = String;
@@ -94,12 +96,12 @@ fn try_use_package<'a, 'b, 'c>(
 
     // If all dependecies are resolved, use this version.
     if ok {
-        eprintln!(
+        info_msg(&format!(
             "{}Accept \"{}@{}\".",
             " ".repeat(indent),
             pkg_name,
             pkg_version
-        );
+        ));
         return Ok(Some(fixed));
     }
     return Ok(None);
@@ -116,12 +118,12 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     versions_retriever: VersionRetriever<'b>,
     indent: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
-    eprintln!(
+    info_msg(&format!(
         "{}Resolving version requirement: \"{}@{}\".",
         " ".repeat(indent),
         dependency.name,
         dependency.requirement
-    );
+    ));
     let indent = indent + 1;
 
     // In case the dependent package is already resolved,
@@ -129,22 +131,22 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     // Otherwise, raise an error.
     if let Some(package) = fixed.iter().find(|p| p.name == dependency.name) {
         if dependency.requirement.matches(&package.version) {
-            eprintln!(
+            info_msg(&format!(
                 "{}Already accepted \"{}@{}\" satisfies the requirement `{}`. OK.",
                 " ".repeat(indent),
                 dependency.name,
                 package.version,
                 dependency.requirement
-            );
+            ));
             return Ok(Some(fixed.to_vec()));
         } else {
-            eprintln!(
+            info_msg(&format!(
                 "{}Already accpeted \"{}@{}\" conflicts with the requirement `{}`. Backtrack the process.",
                 " ".repeat(indent),
                 dependency.name,
                 package.version,
                 dependency.requirement
-            );
+            ));
             return Ok(None);
         }
     }
@@ -159,7 +161,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
 
     // If no versions matches the requirement, raise an error here to show better error message.
     if vers_match.is_empty() {
-        eprintln!(
+        info_msg(&format!(
             "{}Found version(s) {}, but none satisfies the requirement \"{}\". Backtrack the process.",
             " ".repeat(indent),
             vers.iter()
@@ -167,17 +169,17 @@ fn try_resolve_dependency<'a, 'b, 'c>(
                 .collect::<Vec<_>>()
                 .join(", "),
             dependency.requirement
-        );
+        ));
         return Ok(None);
     }
 
     for version in vers_match.iter().rev() {
-        eprintln!(
+        info_msg(&format!(
             "{}Trying \"{}@{}\".",
             " ".repeat(indent),
             dependency.name,
             version
-        );
+        ));
         let indent = indent + 1;
 
         // Try to use this version.
@@ -194,18 +196,18 @@ fn try_resolve_dependency<'a, 'b, 'c>(
         }
 
         // Otherwise, try the next version.
-        eprintln!(
+        info_msg(&format!(
             "{}Reject version \"{}\" of \"{}\".",
             " ".repeat(indent),
             version,
             dependency.name
-        );
+        ));
     }
     // We have tried all versions, but none of them worked.
-    eprintln!(
+    info_msg(&format!(
         "{}No version of `{}` was available. Backtrack the process.",
         " ".repeat(indent),
         dependency.name
-    );
+    ));
     Ok(None)
 }

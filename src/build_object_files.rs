@@ -25,7 +25,7 @@ use crate::{
     cpu_features::CpuFeatures,
     error::{panic_with_msg, Errors},
     generator::GenerationContext,
-    misc::warn_msg,
+    misc::{info_msg, warn_msg},
     optimization,
     runtime::{self, BuildMode},
     stopwatch::StopWatch,
@@ -50,7 +50,7 @@ pub fn build_object_files<'c>(
     // This cache is especially effective when running "fix run" repeatedly without editing the source code.
     if let Some(cached) = load_build_object_files_cache(&program, config) {
         if config.verbose {
-            eprintln!("Using cached object files.");
+            info_msg("Using cached object files.");
         }
         return Ok(cached);
     }
@@ -102,15 +102,15 @@ pub fn build_object_files<'c>(
         // If the object file is cached, skip the generation.
         if unit.is_cached() {
             if config.verbose {
-                eprintln!(
+                info_msg(&format!(
                     "Skipping generation of object file for {}.",
                     unit.to_string()
-                );
+                ));
             }
             continue;
         }
         if config.verbose {
-            eprintln!("Generating object file for {}.", unit.to_string());
+            info_msg(&format!("Generating object file for {}.", unit.to_string()));
         }
 
         let all_symbols = all_symbols.clone();

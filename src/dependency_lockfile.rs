@@ -13,6 +13,7 @@ use crate::{
     configuration::{Configuration, LockFileType},
     dependency_resolver::{self, Dependency, Package, PackageName},
     error::Errors,
+    misc::info_msg,
     misc::{to_absolute_path, warn_msg},
     project_file::{ProjectFile, ProjectFileDependency, ProjectName},
     EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH,
@@ -56,7 +57,7 @@ impl DependecyLockFile {
         };
         let packages_retriever = create_package_retriever(prjs_info.clone());
         let versions_retriever = create_version_retriever(prjs_info.clone());
-        eprintln!("Resolving dependency for \"{}\"...", proj_file.general.name);
+        info_msg(&format!("Resolving dependency for \"{}\"...", proj_file.general.name));
         let res = dependency_resolver::resolve_dependency(
             proj_file,
             packages_retriever.as_ref(),
@@ -135,7 +136,7 @@ impl DependecyLockFile {
         // This prevents unnecessary changes in the lock file when dependency resolution order changes.
         lock_file.dependencies.sort_by(|a, b| a.name.cmp(&b.name));
 
-        eprintln!("Dependencies resolved successfully.");
+        info_msg("Dependencies resolved successfully.");
         Ok(lock_file)
     }
 
@@ -203,12 +204,12 @@ impl DependecyLockFile {
                 // Load the project file and validate whether it satisfies the dependency.
                 dep.check_name_version_match_proj_file()?;
 
-                eprintln!(
+                info_msg(&format!(
                     "Dependency \"{}@{}\" installed successfully at \"{}\".",
                     dep.name,
                     dep.version,
                     dep.path.to_string_lossy().to_string()
-                );
+                ));
             } else {
                 // In case the source is a project directory,
                 // Check the path exists.

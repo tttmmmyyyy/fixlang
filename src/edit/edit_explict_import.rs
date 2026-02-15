@@ -10,7 +10,7 @@ use crate::error::Errors;
 use crate::commands::lsp::language_server::{
     create_text_edit_to_insert_imports, create_text_edits_to_erase_imports, run_diagnostics,
 };
-use crate::misc::to_absolute_path;
+use crate::misc::{info_msg, to_absolute_path};
 use crate::project_file::ProjectFile;
 use crate::typecheckcache::MemoryCache;
 use std::fs;
@@ -25,7 +25,7 @@ use std::sync::Arc;
 //    - Removes all existing import statements
 //    - Writes explicit import statements for all collected names
 pub fn run_explicit_import_command() -> Result<(), Errors> {
-    println!("Running diagnostics on the program...");
+    info_msg("Running diagnostics on the program...");
 
     // Read the project file to get the list of source files.
     let proj_file = ProjectFile::read_root_file()?;
@@ -130,7 +130,7 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
         ))
     })?;
 
-    println!("Rewrote imports for: {}", file_path.display());
+    info_msg(&format!("Rewrote imports for: {}", file_path.display()));
 
     Ok(())
 }

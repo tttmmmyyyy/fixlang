@@ -845,13 +845,13 @@ int main() {
         }
         let file = std::fs::File::open(path);
         if file.is_err() {
-            eprintln!("Failed to open \"{}\".", C_TYPES_JSON_PATH);
+            warn_msg(&format!("Failed to open \"{}\".", C_TYPES_JSON_PATH));
             return None;
         }
         let file = file.unwrap();
         let sizes = serde_json::from_reader(file);
         if sizes.is_err() {
-            eprintln!("Failed to parse the content of \"{}\".", C_TYPES_JSON_PATH);
+            warn_msg(&format!("Failed to parse the content of \"{}\".", C_TYPES_JSON_PATH));
             return None;
         }
         Some(sizes.unwrap())
