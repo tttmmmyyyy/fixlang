@@ -94,7 +94,7 @@ fn try_use_package<'a, 'b, 'c>(
 
     // If all dependecies are resolved, use this version.
     if ok {
-        println!(
+        eprintln!(
             "{}Accept \"{}@{}\".",
             " ".repeat(indent),
             pkg_name,
@@ -116,7 +116,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     versions_retriever: VersionRetriever<'b>,
     indent: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
-    println!(
+    eprintln!(
         "{}Resolving version requirement: \"{}@{}\".",
         " ".repeat(indent),
         dependency.name,
@@ -129,7 +129,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     // Otherwise, raise an error.
     if let Some(package) = fixed.iter().find(|p| p.name == dependency.name) {
         if dependency.requirement.matches(&package.version) {
-            println!(
+            eprintln!(
                 "{}Already accepted \"{}@{}\" satisfies the requirement `{}`. OK.",
                 " ".repeat(indent),
                 dependency.name,
@@ -138,7 +138,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
             );
             return Ok(Some(fixed.to_vec()));
         } else {
-            println!(
+            eprintln!(
                 "{}Already accpeted \"{}@{}\" conflicts with the requirement `{}`. Backtrack the process.",
                 " ".repeat(indent),
                 dependency.name,
@@ -159,7 +159,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
 
     // If no versions matches the requirement, raise an error here to show better error message.
     if vers_match.is_empty() {
-        println!(
+        eprintln!(
             "{}Found version(s) {}, but none satisfies the requirement \"{}\". Backtrack the process.",
             " ".repeat(indent),
             vers.iter()
@@ -172,7 +172,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
     }
 
     for version in vers_match.iter().rev() {
-        println!(
+        eprintln!(
             "{}Trying \"{}@{}\".",
             " ".repeat(indent),
             dependency.name,
@@ -194,7 +194,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
         }
 
         // Otherwise, try the next version.
-        println!(
+        eprintln!(
             "{}Reject version \"{}\" of \"{}\".",
             " ".repeat(indent),
             version,
@@ -202,7 +202,7 @@ fn try_resolve_dependency<'a, 'b, 'c>(
         );
     }
     // We have tried all versions, but none of them worked.
-    println!(
+    eprintln!(
         "{}No version of `{}` was available. Backtrack the process.",
         " ".repeat(indent),
         dependency.name

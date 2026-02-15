@@ -56,7 +56,7 @@ impl DependecyLockFile {
         };
         let packages_retriever = create_package_retriever(prjs_info.clone());
         let versions_retriever = create_version_retriever(prjs_info.clone());
-        println!("Resolving dependency for \"{}\"...", proj_file.general.name);
+        eprintln!("Resolving dependency for \"{}\"...", proj_file.general.name);
         let res = dependency_resolver::resolve_dependency(
             proj_file,
             packages_retriever.as_ref(),
@@ -135,7 +135,7 @@ impl DependecyLockFile {
         // This prevents unnecessary changes in the lock file when dependency resolution order changes.
         lock_file.dependencies.sort_by(|a, b| a.name.cmp(&b.name));
 
-        println!("Dependencies resolved successfully.");
+        eprintln!("Dependencies resolved successfully.");
         Ok(lock_file)
     }
 
@@ -203,7 +203,7 @@ impl DependecyLockFile {
                 // Load the project file and validate whether it satisfies the dependency.
                 dep.check_name_version_match_proj_file()?;
 
-                println!(
+                eprintln!(
                     "Dependency \"{}@{}\" installed successfully at \"{}\".",
                     dep.name,
                     dep.version,
