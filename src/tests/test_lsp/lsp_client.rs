@@ -271,6 +271,19 @@ impl LspClient {
         Vec::new()
     }
 
+    /// Get all diagnostics for all files
+    /// Returns a map of file paths to their diagnostic messages
+    pub fn get_all_diagnostics(&self) -> Map<PathBuf, Vec<Value>> {
+        let diagnostics = self.diagnostics.lock().unwrap();
+        let mut result = Map::default();
+        for (file_path, diagnostics_value) in diagnostics.iter() {
+            if let Some(arr) = diagnostics_value.as_array() {
+                result.insert(file_path.clone(), arr.clone());
+            }
+        }
+        result
+    }
+
     /// Verify that there are no diagnostic errors for any file
     /// Returns an error if any diagnostics contain errors
     pub fn verify_no_diagnostic_errors(&self) -> Result<(), String> {

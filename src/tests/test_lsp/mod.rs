@@ -139,4 +139,97 @@ mod tests {
             .finish()
             .expect("Reader thread should not have errors");
     }
+
+    #[test]
+    fn test_lsp_dependency_resolution_failure() {
+        // Test: Verify that LSP shows diagnostic errors when dependency resolution fails
+
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("project_with_invalid_dep");
+
+        // Clean up before test
+        let _ = Command::new("fix")
+            .arg("clean")
+            .current_dir(&project_dir)
+            .output();
+
+        // Start LSP client
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+
+        // Initialize LSP
+        client
+            .initialize(&project_dir, Duration::from_secs(5))
+            .expect("Failed to initialize LSP");
+
+        // Open main.fix
+        client
+            .open_document(Path::new("main.fix"))
+            .expect("Failed to open main.fix");
+
+        // Send didSave to trigger diagnostics and dependency resolution
+        client
+            .save_document(Path::new("main.fix"))
+            .expect("Failed to save main.fix");
+
+        // Wait for LSP to process
+        client.wait_for_server(Duration::from_secs(10));
+
+        // Get all diagnostics (dependency resolution errors may not be tied to main.fix)
+        let all_diagnostics = client.get_all_diagnostics();
+        
+        // Verify that diagnostic errors are present somewhere
+        // When dependency resolution fails, the error should be visible to the user
+        let total_diagnostics: usize = all_diagnostics.values().map(|v| v.len()).sum();
+        assert!(
+            total_diagnostics > 0,
+            "Should have diagnostic errors when dependency resolution fails"
+        );
+
+        // Collect all diagnostic messages from all files
+        let all_messages: Vec<String> = all_diagnostics
+            .values()
+            .flat_map(|diagnostics| {
+                diagnostics.iter().filter_map(|diag| {
+                    diag.get("message").and_then(|m| m.as_str()).map(String::from)
+                })
+            })
+            .collect();
+
+        // Verify the error message contains "Failed to clone the repository"
+        let has_clone_error = all_messages.iter().any(|message| {
+            message.contains("Failed to clone the repository")
+        });
+
+        assert!(
+            has_clone_error,
+            "Should have 'Failed to clone the repository' error. Found messages: {:?}",
+            all_messages
+        );
+
+        // Verify that at least one error has Error severity (not just warning)
+        // This ensures the failure is not silent - user can see it as an error
+        let has_error_severity = all_diagnostics.values().flatten().any(|diag| {
+            if let Some(severity) = diag.get("severity").and_then(|s| s.as_u64()) {
+                severity == 1 // 1 = Error in LSP protocol
+            } else {
+                false
+            }
+        });
+
+        assert!(
+            has_error_severity,
+            "Dependency resolution failure should be shown as an error (not just warning). Diagnostics: {:?}",
+            all_diagnostics
+        );
+
+        // Shutdown
+        client
+            .shutdown(Duration::from_millis(500))
+            .expect("Failed to shutdown LSP");
+
+        // Check for reader thread errors
+        client
+            .finish()
+            .expect("Reader thread should not have errors");
+    }
 }

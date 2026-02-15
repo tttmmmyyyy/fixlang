@@ -1,0 +1,11 @@
+[general]
+name = "project-with-invalid-dep"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
+
+[[dependencies]]
+name = "nonexistent-package"
+version = "1.0.0"
+git = { url = "https://github.com/tttmmmyyyy/nonexistent-package-that-does-not-exist.git" }
