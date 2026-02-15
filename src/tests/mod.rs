@@ -9,6 +9,7 @@ mod test_file_io;
 mod test_get_args;
 mod test_import;
 mod test_index_syntax;
+mod test_lsp;
 mod test_memcheck;
 mod test_string;
 mod test_trait_implementable_type;

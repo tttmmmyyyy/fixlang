@@ -154,7 +154,7 @@ impl ProjectFile {
     // Get dependencies based on mode.
     pub fn get_dependencies(&self, mode: LockFileType) -> Vec<ProjectFileDependency> {
         match mode {
-            LockFileType::Test => {
+            LockFileType::Test | LockFileType::Lsp => {
                 // Merge dependencies and test_dependencies
                 // Note: Duplicate check is already performed in validate()
                 let mut all_deps = self.dependencies.clone();
@@ -228,7 +228,7 @@ impl ProjectFile {
     pub fn calculate_dependencies_hash(&self, mode: LockFileType) -> String {
         // Get dependencies based on mode.
         let mut deps = match mode {
-            LockFileType::Test => {
+            LockFileType::Test | LockFileType::Lsp => {
                 // Merge dependencies and test_dependencies
                 let mut all_deps = self.dependencies.clone();
                 all_deps.extend(self.test_dependencies.clone());
@@ -681,6 +681,7 @@ impl ProjectFile {
         let msg_try_fix_deps_update = match mode {
             LockFileType::Build => TRY_FIX_DEPS_UPDATE,
             LockFileType::Test => TRY_FIX_DEPS_UPDATE_TEST,
+            LockFileType::Lsp => TRY_FIX_DEPS_UPDATE_TEST, // LSP uses auto-update, so this message is rarely shown
         };
         let content = std::fs::read_to_string(lock_file_path).map_err(|e| {
             Errors::from_msg(format!(
@@ -703,22 +704,60 @@ impl ProjectFile {
         Ok(lock_file)
     }
 
+    // Helper method to save lock file to disk.
+    fn save_lock_file(lock_file: &DependecyLockFile, mode: LockFileType) -> Result<(), Errors> {
+        let content = toml::to_string(lock_file).map_err(|e| {
+            Errors::from_msg(format!("Failed to serialize lock file: {:?}", e))
+        })?;
+        let lock_file_path = get_lock_file_path(mode);
+        std::fs::write(lock_file_path, content).map_err(|e| {
+            Errors::from_msg(format!("Failed to write lock file: {:?}", e))
+        })?;
+        Ok(())
+    }
+
     // Open the lock file or create a new one if it does not exist.
     pub fn open_or_create_lock_file(&self, mode: LockFileType) -> Result<DependecyLockFile, Errors> {
         Ok(match self.open_lock_file(mode) {
             Ok(lock_file) => lock_file,
             Err(_) => {
                 let lock_file = DependecyLockFile::create(self, mode)?;
-                let content = toml::to_string(&lock_file).map_err(|e| {
-                    Errors::from_msg(format!("Failed to serialize the lock file: {:?}", e))
-                })?;
-                let lock_file_path = get_lock_file_path(mode);
-                std::fs::write(lock_file_path, content).map_err(|e| {
-                    Errors::from_msg(format!("Failed to write the lock file: {:?}", e))
-                })?;
+                Self::save_lock_file(&lock_file, mode)?;
                 lock_file
             }
         })
+    }
+
+    // Open the lock file, or automatically create/update it if it does not exist or is invalid, and install the dependencies.
+    // This method is designed for LSP to automatically manage lock files without user intervention.
+    // Returns error without panicking, allowing LSP to report diagnostics to the user.
+    pub fn open_or_auto_update_lock_file(&self, mode: LockFileType) -> Result<DependecyLockFile, Errors> {
+        // Try to open existing lock file.
+        match self.open_lock_file(mode) {
+            Ok(lock_file) => Ok(lock_file),
+            Err(_) => {
+                // If the lock file does not exist or is invalid, automatically create/update it.
+                
+                // Ensure the parent directory exists (e.g., .fixlang/ for LSP lock file).
+                let lock_file_path = get_lock_file_path(mode);
+                if let Some(parent) = Path::new(lock_file_path).parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        Errors::from_msg(format!("Failed to create directory: {:?}", e))
+                    })?;
+                }
+                
+                // Create the lock file.
+                let lock_file = DependecyLockFile::create(self, mode)?;
+                
+                // Save the lock file.
+                Self::save_lock_file(&lock_file, mode)?;
+                
+                // Install the dependencies.
+                lock_file.install()?;
+                
+                Ok(lock_file)
+            }
+        }
     }
 
     // Open the lock file, create a new one if it does not exist, and install the dependencies.
@@ -954,6 +993,7 @@ impl ProjectFile {
                     let section_name = match mode {
                         LockFileType::Build => "[[dependencies]]",
                         LockFileType::Test => "[[test_dependencies]]",
+                        LockFileType::Lsp => unreachable!("add_dependencies should not be called with LockFileType::Lsp"),
                     };
                     added += "\n\n";
                     added += section_name;

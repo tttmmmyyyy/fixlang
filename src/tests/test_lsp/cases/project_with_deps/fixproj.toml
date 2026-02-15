@@ -1,0 +1,6 @@
+[general]
+name = "project-with-deps"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

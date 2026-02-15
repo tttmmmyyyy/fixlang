@@ -261,9 +261,14 @@ pub fn launch_language_server() {
             continue;
         }
         let message = message.unwrap();
+        write_log!(
+            "Received message: {:?}",
+            serde_json::to_string(&message).unwrap()
+        );
 
         // Depending on the method, handle the message.
         if let Some(method) = message.method.as_ref() {
+            write_log!("Handling method: {}", method);
             if method == "initialize" {
                 let id = parse_id(&message, method);
                 if id.is_none() {
@@ -506,6 +511,7 @@ fn send_notification<T: Serialize>(method: String, params: Option<T>) {
 fn send_message(msg: &JSONRPCMessage) {
     let msg = serde_json::to_string(msg).unwrap();
     let content_length = msg.len();
+    write_log!("Sending message: {}", msg);
     print!("Content-Length: {}\r\n\r\n{}", content_length, msg);
     std::io::stdout()
         .flush()
@@ -2221,7 +2227,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     let proj_file = ProjectFile::read_root_file()?;
 
     // Determine the source files for which diagnostics are run.
-    let files = proj_file.get_files(LockFileType::Test);
+    let files = proj_file.get_files(LockFileType::Lsp);
 
     // Create the configuration.
     let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
@@ -2231,8 +2237,9 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     proj_file.set_config(&mut config, false)?;
 
     // Set up the configuration by the lock file.
+    // Automatically create/update the lock file if necessary.
     proj_file
-        .open_lock_file(LockFileType::Test)?
+        .open_or_auto_update_lock_file(LockFileType::Lsp)?
         .set_config(&mut config)?;
 
     // Build the file and get the errors.

@@ -88,6 +88,7 @@ pub enum SubCommand {
 pub enum LockFileType {
     Build,
     Test,
+    Lsp,
 }
 
 impl Default for LockFileType {

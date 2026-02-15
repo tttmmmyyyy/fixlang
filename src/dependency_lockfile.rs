@@ -15,7 +15,8 @@ use crate::{
     error::Errors,
     misc::{to_absolute_path, warn_msg},
     project_file::{ProjectFile, ProjectFileDependency, ProjectName},
-    EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH, PROJECT_FILE_PATH,
+    EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH,
+    PROJECT_FILE_PATH,
 };
 
 // Get the lock file path based on the dependency mode.
@@ -23,6 +24,7 @@ pub fn get_lock_file_path(mode: LockFileType) -> &'static str {
     match mode {
         LockFileType::Test => LOCK_FILE_TEST_PATH,
         LockFileType::Build => LOCK_FILE_PATH,
+        LockFileType::Lsp => LOCK_FILE_LSP_PATH,
     }
 }
 
