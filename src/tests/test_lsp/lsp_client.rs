@@ -410,7 +410,10 @@ impl LspClient {
     }
 
     /// Shutdown
-    pub fn shutdown(&mut self) -> Result<(), String> {
+    /// 
+    /// # Arguments
+    /// * `exit_timeout` - Maximum time to wait for the process to exit after sending exit notification
+    pub fn shutdown(&mut self, exit_timeout: Duration) -> Result<(), String> {
         let id = self.send_request("shutdown", json!(null))?;
 
         // Wait for response with 5 second timeout
@@ -420,8 +423,23 @@ impl LspClient {
 
         self.send_notification("exit", json!(null))?;
 
-        // Wait for process to exit
-        let _ = self.process.wait();
+        // Wait for process to exit with timeout to avoid freezing tests
+        // If the process doesn't exit within the timeout, return error (Drop will kill it)
+        std::thread::sleep(exit_timeout);
+        
+        match self.process.try_wait() {
+            Ok(Some(_status)) => {
+                // Process has already exited
+            }
+            Ok(None) => {
+                // Process is still running - return error
+                // Drop will kill the process when LspClient is dropped
+                return Err("LSP server did not exit gracefully within timeout".to_string());
+            }
+            Err(e) => {
+                return Err(format!("Failed to check process status: {:?}", e));
+            }
+        }
 
         Ok(())
     }

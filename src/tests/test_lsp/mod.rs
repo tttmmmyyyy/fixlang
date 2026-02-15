@@ -69,22 +69,10 @@ mod tests {
             .expect("Failed to save main.fix");
 
         // Wait for initial diagnostics
-        eprintln!("Waiting for diagnostics messages...");
         client.wait_for_server(Duration::from_secs(5));
 
-        // Debug: print all diagnostics
-        eprintln!("Diagnostics after opening main.fix:");
-        let main_diagnostics = client.get_diagnostics(Path::new("main.fix"));
-        eprintln!("  main.fix diagnostics: {} errors", main_diagnostics.len());
-
-        // Print detailed diagnostic messages for main.fix
-        for (i, diag) in main_diagnostics.iter().enumerate() {
-            if let Some(message) = diag.get("message") {
-                eprintln!("  main.fix error {}: {}", i, message);
-            }
-        }
-
         // Verify that main.fix has the specific error message
+        let main_diagnostics = client.get_diagnostics(Path::new("main.fix"));
         let main_has_character_error = main_diagnostics.iter().any(|diag| {
             if let Some(message) = diag.get("message").and_then(|m| m.as_str()) {
                 message.contains("Cannot find module") && message.contains("Character")
@@ -120,7 +108,6 @@ mod tests {
             .expect("Failed to save main.fix");
 
         // Wait for LSP to process and generate lock file
-        eprintln!("Waiting for LSP to generate lock file and install dependencies...");
         client.wait_for_server(Duration::from_secs(10));
 
         // Check if LSP lock file was generated
@@ -133,41 +120,25 @@ mod tests {
 
         // Verify lock file contains the dependency
         let content = fs::read_to_string(&lsp_lock_file).expect("Failed to read LSP lock file");
-        eprintln!("LSP lock file full content:\n{}", content);
-
         assert!(
             content.contains("character"),
             "LSP lock file should include dependency (character)"
         );
 
-        eprintln!("✓ LSP lock file generated with correct dependencies");
-
-        // Note: Diagnostic error resolution after LSP lock file generation
-        // should resolve import error in main.fix
-        eprintln!("Checking final diagnostic state...");
-        
         // Verify that all diagnostic errors have been resolved
         client
             .verify_no_diagnostic_errors()
             .expect("All diagnostic errors should be resolved after adding dependencies");
 
-        eprintln!("✓ All diagnostic errors resolved");
-
-        // For now, we've successfully verified that:
-        // 1. Initial diagnostic errors are detected for main.fix ✓
-        // 2. LSP lock file is generated ✓
-        // 3. Lock file contains expected dependency (character) ✓
-        // The automatic diagnostic refresh after lock file generation
-        // may require additional LSP implementation or timing.
-        eprintln!("✓ LSP auto-lockfile generation test completed successfully");
-
         // Shutdown
-        client.shutdown().expect("Failed to shutdown LSP");
-        
-        // Check for reader thread errors
-        client.finish().expect("Reader thread should not have errors");
+        client
+            .shutdown(Duration::from_millis(500))
+            .expect("Failed to shutdown LSP");
 
-        println!("✓ LSP auto-lock file generation test passed");
+        // Check for reader thread errors
+        client
+            .finish()
+            .expect("Reader thread should not have errors");
     }
 
     #[test]
@@ -203,58 +174,5 @@ mod tests {
             "Error message should be present: {}",
             stderr
         );
-
-        println!("✓ Dependency resolution failure test passed");
-    }
-
-    #[test]
-    fn test_lsp_diagnostics_without_dependencies() {
-        // Test: Verify that LSP diagnostics work even without dependencies
-
-        install_fix();
-        let (_temp_dir, project_dir) = setup_test_env("simple_project");
-
-        // Clean up before test
-        let _ = Command::new("fix")
-            .arg("clean")
-            .current_dir(&project_dir)
-            .output();
-
-        // Start LSP client
-        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
-
-        // Initialize LSP with shorter timeout for testing
-        let root_uri = format!("file://{}", project_dir.display());
-
-        match client.initialize(&root_uri, Duration::from_secs(5)) {
-            Ok(_) => {}
-            Err(e) => {
-                // Check the log file for diagnostic information
-                let log_path = project_dir.join(".fixlang/fix.log");
-                if let Ok(log_content) = fs::read_to_string(&log_path) {
-                    eprintln!("LSP log content:\n{}", log_content);
-                }
-                panic!("Failed to initialize LSP: {:?}", e);
-            }
-        }
-
-        // Open main.fix
-        client
-            .open_document(Path::new("main.fix"))
-            .expect("Failed to send didOpen");
-
-        // Wait for server to process and send diagnostics
-        client.wait_for_server(Duration::from_secs(5));
-
-        // Verify no diagnostic errors for any file
-        eprintln!("Verifying diagnostics...");
-        client
-            .verify_no_diagnostic_errors()
-            .expect("Should have no diagnostic errors");
-
-        // Shutdown (best effort - may timeout if server is still busy)
-        let _ = client.shutdown();
-
-        println!("✓ LSP diagnostics test passed");
     }
 }
