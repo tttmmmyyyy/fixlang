@@ -144,7 +144,7 @@ where
 }
 
 // Load all source files specified in the configuration, link them, and return the resulting `Program`.
-pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
+fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     // Create `Std` module.
     let mut program = make_std_mod(config)?;
 
