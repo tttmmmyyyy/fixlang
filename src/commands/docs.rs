@@ -5,12 +5,13 @@ use crate::{
         name::{FullName, Name, NameSpace},
         typedecl::Field,
     },
-    configuration::LockFileType,
+    check_program::check_program_via_config,
+    configuration::BuildConfigType,
+    dependency_lockfile::LockFileType,
     error::Errors,
     kind_star,
     misc::{info_msg, to_absolute_path},
     project_file::ProjectFile,
-    check_program::check_program_via_config,
     Configuration, DocsConfig, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
 };
 
@@ -21,13 +22,15 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     let proj_file = ProjectFile::read_root_file()?;
     proj_file.set_config(&mut config, false)?;
 
-    let mode: LockFileType = match &config.subcommand {
+    let mode: BuildConfigType = match &config.subcommand {
         crate::SubCommand::Docs(docs_config) => docs_config.mode,
         _ => unreachable!(),
     };
 
     // Set up the configuration by the lock file.
-    proj_file.open_lock_file(mode)?.set_config(&mut config)?;
+    proj_file
+        .open_lock_file(LockFileType::from_build_config_type(mode))?
+        .set_config(&mut config)?;
 
     // Build the file and get the errors.
     let program = check_program_via_config(&config)?;
@@ -302,7 +305,10 @@ fn docgen_for_module(
         ))
     })?;
 
-    info_msg(&format!("Saved documentation to \"{}\".", doc_path.display()));
+    info_msg(&format!(
+        "Saved documentation to \"{}\".",
+        doc_path.display()
+    ));
     Ok(())
 }
 

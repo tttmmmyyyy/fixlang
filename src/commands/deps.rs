@@ -1,16 +1,16 @@
 use crate::config_file::ConfigFile;
-use crate::configuration::LockFileType;
-use crate::dependency_lockfile::DependecyLockFile;
+use crate::configuration::BuildConfigType;
+use crate::dependency_lockfile::{DependecyLockFile, LockFileType};
 use crate::deps_list;
 use crate::error::panic_if_err;
 use crate::project_file::ProjectFile;
 use clap::ArgMatches;
 
-fn get_build_mode(args: &ArgMatches) -> LockFileType {
+fn get_build_mode(args: &ArgMatches) -> BuildConfigType {
     if args.contains_id("test") {
-        LockFileType::Test
+        BuildConfigType::Test
     } else {
-        LockFileType::Build
+        BuildConfigType::Build
     }
 }
 
@@ -25,7 +25,11 @@ fn read_projects_option(m: &ArgMatches) -> Vec<String> {
 pub fn deps_install_command(args: &ArgMatches) {
     let mode = get_build_mode(args);
     let proj_file = panic_if_err(ProjectFile::read_root_file());
-    panic_if_err(proj_file.open_lock_file(mode).and_then(|lf| lf.install()));
+    panic_if_err(
+        proj_file
+            .open_lock_file(LockFileType::from_build_config_type(mode))
+            .and_then(|lf| lf.install()),
+    );
 }
 
 pub fn deps_update_command(args: &ArgMatches) {

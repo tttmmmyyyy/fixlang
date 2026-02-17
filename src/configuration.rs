@@ -85,15 +85,15 @@ pub enum SubCommand {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LockFileType {
+pub enum BuildConfigType {
     Build,
     Test,
-    Lsp,
+    // Lsp,
 }
 
-impl Default for LockFileType {
+impl Default for BuildConfigType {
     fn default() -> Self {
-        LockFileType::Build
+        BuildConfigType::Build
     }
 }
 
@@ -121,11 +121,11 @@ impl SubCommand {
     }
 
     // Get the build mode based on the subcommand.
-    pub fn build_mode(&self) -> LockFileType {
+    pub fn build_mode(&self) -> BuildConfigType {
         match self {
-            SubCommand::Test | SubCommand::Diagnostics(_) => LockFileType::Test,
+            SubCommand::Test | SubCommand::Diagnostics(_) => BuildConfigType::Test,
             SubCommand::Docs(docs_config) => docs_config.mode,
-            _ => LockFileType::Build,
+            _ => BuildConfigType::Build,
         }
     }
 
@@ -170,7 +170,7 @@ pub struct DocsConfig {
     // Output directory.
     pub out_dir: PathBuf,
     // Dependency mode (Build or Test).
-    pub mode: LockFileType,
+    pub mode: BuildConfigType,
 }
 
 #[derive(Clone)]
@@ -851,7 +851,10 @@ int main() {
         let file = file.unwrap();
         let sizes = serde_json::from_reader(file);
         if sizes.is_err() {
-            warn_msg(&format!("Failed to parse the content of \"{}\".", C_TYPES_JSON_PATH));
+            warn_msg(&format!(
+                "Failed to parse the content of \"{}\".",
+                C_TYPES_JSON_PATH
+            ));
             return None;
         }
         Some(sizes.unwrap())

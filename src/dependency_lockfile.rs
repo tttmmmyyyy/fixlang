@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
 use crate::{
-    configuration::{Configuration, LockFileType},
+    configuration::{BuildConfigType, Configuration},
     dependency_resolver::{self, Dependency, Package, PackageName},
     error::Errors,
     misc::info_msg,
@@ -19,6 +19,30 @@ use crate::{
     EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH,
     PROJECT_FILE_PATH,
 };
+
+#[derive(Clone, Copy)]
+pub enum LockFileType {
+    Build,
+    Test,
+    Lsp,
+}
+
+impl LockFileType {
+    pub fn to_build_config_type(&self) -> BuildConfigType {
+        match self {
+            LockFileType::Build => BuildConfigType::Build,
+            LockFileType::Test => BuildConfigType::Test,
+            LockFileType::Lsp => BuildConfigType::Test, // For LSP, dependencies are resolved in the same way as Test mode.
+        }
+    }
+
+    pub fn from_build_config_type(config_type: BuildConfigType) -> Self {
+        match config_type {
+            BuildConfigType::Build => LockFileType::Build,
+            BuildConfigType::Test => LockFileType::Test,
+        }
+    }
+}
 
 // Get the lock file path based on the dependency mode.
 pub fn get_lock_file_path(mode: LockFileType) -> &'static str {
@@ -49,7 +73,7 @@ impl DependecyLockFile {
     // Create the lock file (on memory, not on file) to satisfy the dependencies of the given project file.
     pub fn create(
         proj_file: &ProjectFile,
-        mode: LockFileType,
+        mode: BuildConfigType,
     ) -> Result<DependecyLockFile, Errors> {
         // Resolve the dependency.
         let prjs_info = ProjectsInfo {
@@ -57,7 +81,10 @@ impl DependecyLockFile {
         };
         let packages_retriever = create_package_retriever(prjs_info.clone());
         let versions_retriever = create_version_retriever(prjs_info.clone());
-        info_msg(&format!("Resolving dependency for \"{}\"...", proj_file.general.name));
+        info_msg(&format!(
+            "Resolving dependency for \"{}\"...",
+            proj_file.general.name
+        ));
         let res = dependency_resolver::resolve_dependency(
             proj_file,
             packages_retriever.as_ref(),
@@ -231,13 +258,16 @@ impl DependecyLockFile {
     }
 
     // Update the lock file and install the dependencies.
-    pub fn update_and_install(mode: LockFileType) -> Result<(), Errors> {
+    pub fn update_and_install(mode: BuildConfigType) -> Result<(), Errors> {
         // Remove lock file.
-        let lock_file_path = Path::new(get_lock_file_path(mode));
+        let lock_file_path = Path::new(get_lock_file_path(LockFileType::from_build_config_type(
+            mode,
+        )));
         if lock_file_path.exists() {
             std::fs::remove_file(lock_file_path).expect("Failed to remove the lock file.");
         }
-        ProjectFile::read_root_file()?.open_or_create_lock_file_and_install(mode)
+        ProjectFile::read_root_file()?
+            .open_or_create_lock_file_and_install(LockFileType::from_build_config_type(mode))
     }
 }
 
@@ -543,7 +573,7 @@ pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
     Ok((temp_dir, repo))
 }
 
-fn project_file_to_package(proj_file: &ProjectFile, mode: LockFileType) -> Package {
+fn project_file_to_package(proj_file: &ProjectFile, mode: BuildConfigType) -> Package {
     let deps_list = proj_file.get_dependencies(mode);
     let mut deps = Vec::new();
     for dep in &deps_list {
@@ -560,7 +590,7 @@ fn project_file_to_package(proj_file: &ProjectFile, mode: LockFileType) -> Packa
 // Create package retriever which will be passed to `package_resolver::resolve_dependency`.
 fn create_package_retriever(
     projs: ProjectsInfo,
-) -> Box<dyn Fn(&PackageName, &Version, LockFileType) -> Result<Package, Errors>> {
+) -> Box<dyn Fn(&PackageName, &Version, BuildConfigType) -> Result<Package, Errors>> {
     Box::new(move |prj_name, ver, mode| {
         let mut projs = projs.projects.as_ref().lock().unwrap();
 

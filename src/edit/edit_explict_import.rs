@@ -4,12 +4,12 @@
 use crate::ast::import::ImportStatement;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::Program;
-use crate::configuration::LockFileType;
-use crate::edit::edit_util::apply_text_edits;
-use crate::error::Errors;
 use crate::commands::lsp::language_server::{
     create_text_edit_to_insert_imports, create_text_edits_to_erase_imports, run_diagnostics,
 };
+use crate::configuration::BuildConfigType;
+use crate::edit::edit_util::apply_text_edits;
+use crate::error::Errors;
 use crate::misc::{info_msg, to_absolute_path};
 use crate::project_file::ProjectFile;
 use crate::typecheckcache::MemoryCache;
@@ -53,7 +53,7 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
 fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors> {
     // Use get_files(BuildMode::Test) to get the root project's source files (excluding dependencies).
     // BuildMode::Test includes test files.
-    let files = proj_file.get_files(LockFileType::Test);
+    let files = proj_file.get_files(BuildConfigType::Test);
 
     // Convert to absolute paths
     let mut abs_files = Vec::new();

@@ -5,10 +5,11 @@ use crate::ast::traits::{TraitAlias, TraitDefn, TraitId, TraitImpl};
 use crate::ast::types::{TyAliasInfo, TyCon, TyConInfo, TyConVariant};
 use crate::check_program::check_program_via_config;
 use crate::commands::docs::MarkdownSection;
-use crate::configuration::LockFileType;
+use crate::configuration::BuildConfigType;
 use crate::constants::{
     chars_allowed_in_identifiers, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, STD_NAME,
 };
+use crate::dependency_lockfile::LockFileType;
 use crate::error::{any_to_string, Error, Errors};
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parser::{parse_str_import_statements, parse_str_module_defn};
@@ -2227,7 +2228,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     let proj_file = ProjectFile::read_root_file()?;
 
     // Determine the source files for which diagnostics are run.
-    let files = proj_file.get_files(LockFileType::Lsp);
+    let files = proj_file.get_files(BuildConfigType::Test);
 
     // Create the configuration.
     let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
