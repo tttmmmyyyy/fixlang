@@ -1,0 +1,9 @@
+[general]
+name = "project-with-test-deps"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
+
+[build.test]
+files = ["test.fix"]

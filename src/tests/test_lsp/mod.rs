@@ -141,6 +141,113 @@ mod tests {
     }
 
     #[test]
+    fn test_lsp_auto_lockfile_generation_for_test_deps() {
+        // Test: Verify that LSP automatically generates lock file with test-dependencies
+        // when test.fix imports an external library that is listed in test_dependencies
+        // but not yet in fixproj.toml.
+
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("project_with_test_deps");
+
+        // Clean up before test
+        let _ = Command::new("fix")
+            .arg("clean")
+            .current_dir(&project_dir)
+            .output();
+
+        // Start LSP client
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+
+        // Initialize LSP
+        client
+            .initialize(&project_dir, Duration::from_secs(5))
+            .expect("Failed to initialize LSP");
+
+        // Open test.fix (which imports Character but has no test_dependencies)
+        client
+            .open_document(Path::new("test.fix"))
+            .expect("Failed to open test.fix");
+
+        // Send didSave to trigger diagnostics
+        client
+            .save_document(Path::new("test.fix"))
+            .expect("Failed to save test.fix");
+
+        // Wait for initial diagnostics
+        client.wait_for_server(Duration::from_secs(5));
+
+        // Verify that test.fix has the specific error message about missing Character module
+        let test_diagnostics = client.get_diagnostics(Path::new("test.fix"));
+        let has_character_error = test_diagnostics.iter().any(|diag| {
+            if let Some(message) = diag.get("message").and_then(|m| m.as_str()) {
+                message.contains("Cannot find module") && message.contains("Character")
+            } else {
+                false
+            }
+        });
+
+        assert!(
+            has_character_error,
+            "test.fix should have 'Cannot find module Character' error, but found: {:?}",
+            test_diagnostics
+        );
+
+        // Add character as a test dependency
+        let output = Command::new("fix")
+            .arg("deps")
+            .arg("add")
+            .arg("--test")
+            .arg("character")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to add character test dependency");
+
+        assert!(
+            output.status.success(),
+            "Failed to add character test dependency: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Send didSave to trigger diagnostics and LSP lock file generation
+        client
+            .save_document(Path::new("test.fix"))
+            .expect("Failed to save test.fix");
+
+        // Wait for LSP to process and generate lock file
+        client.wait_for_server(Duration::from_secs(10));
+
+        // Check if LSP lock file was generated
+        let lsp_lock_file = project_dir.join(LOCK_FILE_LSP_PATH);
+        assert!(
+            lsp_lock_file.exists(),
+            "LSP lock file should be created at {:?}",
+            lsp_lock_file
+        );
+
+        // Verify lock file contains the test dependency
+        let content = fs::read_to_string(&lsp_lock_file).expect("Failed to read LSP lock file");
+        assert!(
+            content.contains("character"),
+            "LSP lock file should include test dependency (character)"
+        );
+
+        // Verify that all diagnostic errors have been resolved
+        client
+            .verify_no_diagnostic_errors()
+            .expect("All diagnostic errors should be resolved after adding test dependencies");
+
+        // Shutdown
+        client
+            .shutdown(Duration::from_millis(500))
+            .expect("Failed to shutdown LSP");
+
+        // Check for reader thread errors
+        client
+            .finish()
+            .expect("Reader thread should not have errors");
+    }
+
+    #[test]
     fn test_lsp_dependency_resolution_failure() {
         // Test: Verify that LSP shows diagnostic errors when dependency resolution fails
 

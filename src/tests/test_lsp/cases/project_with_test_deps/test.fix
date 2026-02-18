@@ -1,0 +1,10 @@
+module Test;
+
+import Character;
+
+test_character : IO ();
+test_character = (
+    assert_eq(|_|"A should be uppercase", Character::is_lower('A'), false);;
+    assert_eq(|_|"a should be lowercase", Character::is_lower('a'), true);;
+    pure()
+);
