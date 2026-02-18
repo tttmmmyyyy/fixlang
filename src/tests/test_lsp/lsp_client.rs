@@ -302,7 +302,7 @@ impl LspClient {
     }
 
     /// Execute initialization sequence with custom timeout
-    /// 
+    ///
     /// # Arguments
     /// * `root_path` - Project root directory path (can be relative or absolute)
     /// * `timeout` - Maximum time to wait for initialize response
@@ -432,7 +432,7 @@ impl LspClient {
     }
 
     /// Shutdown
-    /// 
+    ///
     /// # Arguments
     /// * `exit_timeout` - Maximum time to wait for the process to exit after sending exit notification
     pub fn shutdown(&mut self, exit_timeout: Duration) -> Result<(), String> {
@@ -448,7 +448,7 @@ impl LspClient {
         // Wait for process to exit with timeout to avoid freezing tests
         // If the process doesn't exit within the timeout, return error (Drop will kill it)
         std::thread::sleep(exit_timeout);
-        
+
         match self.process.try_wait() {
             Ok(Some(_status)) => {
                 // Process has already exited
