@@ -15,10 +15,13 @@
 
 ### Changed
 
-- Docs: In the "Values" section, values that are generated from trait members now have an additional description "Trait member of `<trait_name>`".
+#### Language
+
+- Changed the way the compiler checks whether the type signature given to a trait member implementation matches the one required by the trait definition. Previously, it checked for syntactic consistency, but now it allows more flexible verification of type equivalence. For example, previously when implementing `Iterator`, you had to write the type signature for `advance` using `Item`, like `MyType -> Option (MyType, Item MyType)`, but now you can write the resolved type directly instead of `Item MyType`.
 
 #### Tool
 
+- Docs: In the "Values" section, values that are generated from trait members now have an additional description "Trait member of `<trait_name>`".
 - LSP: Introduced automatic lock file management for language server. The language server now automatically generates and updates `.fixlang/fixdeps.lsp.lock` when the project file changes, without requiring manual `fix deps update` commands.
 
 ## [1.2.0] - 2026-02-10

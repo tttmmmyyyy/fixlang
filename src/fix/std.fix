@@ -1888,7 +1888,7 @@ namespace Iterator {
 
     impl ArrayIterator a : Iterator {
         type Item (ArrayIterator a) = a;
-        advance = |ArrayIterator { arr : arr, idx : idx }| (
+        advance : ArrayIterator a -> Option (ArrayIterator a, a) = |ArrayIterator { arr : arr, idx : idx }| (
             if idx == arr.@size { none() };
             let v = arr.@(idx);
             some((ArrayIterator { arr: arr, idx: idx + 1 }, v))
