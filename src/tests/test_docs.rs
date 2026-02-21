@@ -1,6 +1,25 @@
 // ==================== Integration Tests for `fix docs` Command ====================
 // These tests use actual Fix projects in src/tests/test_docs/
 
+use crate::tests::test_util::install_fix;
+use std::process::Command;
+
+#[test]
+pub fn test_generate_documents() {
+    install_fix();
+
+    // Run `fix doc -m Std` in `std_doc` directory.
+    let _ = Command::new("fix")
+        .arg("docs")
+        .arg("-m")
+        .arg("Std")
+        .arg("-o")
+        .arg(".")
+        .current_dir("std_doc")
+        .output()
+        .expect("Failed to run fix doc.");
+}
+
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, install_fix};
