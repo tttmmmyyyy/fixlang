@@ -1,3 +1,4 @@
+use crate::SymbolExpr::Method;
 use std::sync::Arc;
 
 use crate::{
@@ -795,6 +796,13 @@ fn value_entries(
             "Type: `{}`",
             gv.syn_scm.as_ref().unwrap().to_string()
         ));
+
+        // If `gv` is a trait member, also write which trait it belongs to.
+        if matches!(&gv.expr, Method(_)) {
+            let trait_name = name.namespace.clone().to_fullname();
+            doc.add_paragraph(format!("Trait member of `{}`", trait_name.to_string()));
+        }
+
         let docstring = gv.get_document().unwrap_or_default();
         let docstring = MarkdownSection::parse_many(docstring.lines().collect());
         doc.concatenate_many(docstring);

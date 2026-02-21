@@ -15,6 +15,8 @@
 
 ### Changed
 
+- Docs: In the "Values" section, values that are generated from trait members now have an additional description "Trait member of `<trait_name>`".
+
 #### Tool
 
 - LSP: Introduced automatic lock file management for language server. The language server now automatically generates and updates `.fixlang/fixdeps.lsp.lock` when the project file changes, without requiring manual `fix deps update` commands.

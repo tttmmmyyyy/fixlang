@@ -1,6 +1,6 @@
 # Std
 
-Defined in std-doc@1.2.0
+Defined in std-doc@1.3.0
 
 Module `Std` provides basic types, traits and values.
 
@@ -218,6 +218,8 @@ A typical use case of this function is the implementation of `Std::FFI::borrow_b
 #### add
 
 Type: `[a : Std::Add] a -> a -> a`
+
+Trait member of `Std::Add`
 
 Adds two values. An expression `x + y` is translated to `add(x, y)`.
 
@@ -746,6 +748,8 @@ NOTE: This function is not pure and should only be used for temporary debugging 
 
 Type: `[a : Std::Div] a -> a -> a`
 
+Trait member of `Std::Div`
+
 Divides a value by another value. An expression `x / y` is translated to `div(x, y)`.
 
 ##### Parameters
@@ -758,6 +762,8 @@ Divides a value by another value. An expression `x / y` is translated to `div(x,
 #### eq
 
 Type: `[a : Std::Eq] a -> a -> Std::Bool`
+
+Trait member of `Std::Eq`
 
 Checks equality of two values. An expression `x == y` is translated to `eq(x, y)`.
 
@@ -1500,6 +1506,8 @@ This is similar to `mutate_unique`, but the `ctor` and `action` is executed in t
 
 Type: `[a : Std::FromBytes] Std::Array Std::U8 -> Std::Result Std::ErrMsg a`
 
+Trait member of `Std::FromBytes`
+
 Converts a byte array into a value by parsing it.
 
 ##### Parameters
@@ -1511,6 +1519,8 @@ Converts a byte array into a value by parsing it.
 #### from_string
 
 Type: `[a : Std::FromString] Std::String -> Std::Result Std::ErrMsg a`
+
+Trait member of `Std::FromString`
 
 Converts a string into a value by parsing it.
 
@@ -1533,6 +1543,8 @@ Discards the value inside the functor and returns a functor containing `()`.
 #### map
 
 Type: `[f : Std::Functor] (a -> b) -> f a -> f b`
+
+Trait member of `Std::Functor`
 
 Applies a function to the value inside the functor.
 
@@ -3041,6 +3053,8 @@ If `IO::close` is called while using the `Ptr` obtained by this function, the `P
 
 Type: `[c : Std::Indexable, f : Std::Functor] Std::Indexable::Index c -> (Std::Indexable::Elem c -> f (Std::Indexable::Elem c)) -> c -> f c`
 
+Trait member of `Std::Indexable`
+
 Act on an index.
 
 ##### Parameters
@@ -3158,6 +3172,8 @@ assert_eq(|_|"", arr, [1, 42, 3])
 #### advance
 
 Type: `[iter : Std::Iterator] iter -> Std::Option (iter, Std::Iterator::Item iter)`
+
+Trait member of `Std::Iterator`
 
 #### append
 
@@ -3648,6 +3664,8 @@ Creates an empty dynamic iterator.
 
 Type: `[a : Std::LessThan] a -> a -> Std::Bool`
 
+Trait member of `Std::LessThan`
+
 Compares two values. An expression `x < y` is translated to `less_than(x, y)`.
 
 ##### Parameters
@@ -3683,6 +3701,8 @@ The minimum of two values.
 
 Type: `[a : Std::LessThanOrEq] a -> a -> Std::Bool`
 
+Trait member of `Std::LessThanOrEq`
+
 Compares two values. An expression `x <= y` is translated to `less_than_or_eq(x, y)`.
 
 ##### Parameters
@@ -3714,6 +3734,8 @@ This is used with `loop_m` function.
 
 Type: `[m : Std::Monad] (a -> m b) -> m a -> m b`
 
+Trait member of `Std::Monad`
+
 Evaluate a monadic action, and pass the result to the next action.
 
 ##### Parameters
@@ -3734,6 +3756,8 @@ Flattens a nested monadic action.
 #### pure
 
 Type: `[m : Std::Monad] a -> m a`
+
+Trait member of `Std::Monad`
 
 Creates a pure monadic action which just returns a specified value.
 
@@ -3769,6 +3793,8 @@ Type: `[m : Std::Monad] Std::Bool -> m () -> m ()`
 
 Type: `[a : Std::Mul] a -> a -> a`
 
+Trait member of `Std::Mul`
+
 Multiplies a value by another value. An expression `x * y` is translated to `mul(x, y)`.
 
 ##### Parameters
@@ -3782,6 +3808,8 @@ Multiplies a value by another value. An expression `x * y` is translated to `mul
 
 Type: `[a : Std::Neg] a -> a`
 
+Trait member of `Std::Neg`
+
 Negates a value. An expression `-x` is translated to `neg(x)`.
 
 ### namespace Std::Not
@@ -3789,6 +3817,8 @@ Negates a value. An expression `-x` is translated to `neg(x)`.
 #### not
 
 Type: `[a : Std::Not] a -> a`
+
+Trait member of `Std::Not`
 
 Logical NOT of a value. An expression `!x` is translated to `not(x)`.
 
@@ -3853,6 +3883,8 @@ Note that `x.subtract_ptr(y)` calculates `x - y`, so `subtract_ptr(x, y)` calcul
 #### rem
 
 Type: `[a : Std::Rem] a -> a -> a`
+
+Trait member of `Std::Rem`
 
 Calculate remainder of a value dividing another value. An expression `x % y` is translated to `rem(x, y)`.
 
@@ -4250,6 +4282,8 @@ If you have an `Array U8` containing a null-terminated C string, use `FromBytes:
 
 Type: `[a : Std::Sub] a -> a -> a`
 
+Trait member of `Std::Sub`
+
 Subtracts a value from another value. An expression `x - y` is translated to `sub(x, y)`.
 
 ##### Parameters
@@ -4263,11 +4297,15 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 Type: `[a : Std::ToBytes] a -> Std::Array Std::U8`
 
+Trait member of `Std::ToBytes`
+
 ### namespace Std::ToCChar
 
 #### c_char
 
 Type: `[a : Std::ToCChar] a -> Std::FFI::CChar`
+
+Trait member of `Std::ToCChar`
 
 Casts a value into `CChar` type.
 
@@ -4277,6 +4315,8 @@ Casts a value into `CChar` type.
 
 Type: `[a : Std::ToCDouble] a -> Std::FFI::CDouble`
 
+Trait member of `Std::ToCDouble`
+
 Casts a value into `CDouble` type.
 
 ### namespace Std::ToCFloat
@@ -4284,6 +4324,8 @@ Casts a value into `CDouble` type.
 #### c_float
 
 Type: `[a : Std::ToCFloat] a -> Std::FFI::CFloat`
+
+Trait member of `Std::ToCFloat`
 
 Casts a value into `CFloat` type.
 
@@ -4293,6 +4335,8 @@ Casts a value into `CFloat` type.
 
 Type: `[a : Std::ToCInt] a -> Std::FFI::CInt`
 
+Trait member of `Std::ToCInt`
+
 Casts a value into `CInt` type.
 
 ### namespace Std::ToCLong
@@ -4300,6 +4344,8 @@ Casts a value into `CInt` type.
 #### c_long
 
 Type: `[a : Std::ToCLong] a -> Std::FFI::CLong`
+
+Trait member of `Std::ToCLong`
 
 Casts a value into `CLong` type.
 
@@ -4309,6 +4355,8 @@ Casts a value into `CLong` type.
 
 Type: `[a : Std::ToCLongLong] a -> Std::FFI::CLongLong`
 
+Trait member of `Std::ToCLongLong`
+
 Casts a value into `CLongLong` type.
 
 ### namespace Std::ToCShort
@@ -4316,6 +4364,8 @@ Casts a value into `CLongLong` type.
 #### c_short
 
 Type: `[a : Std::ToCShort] a -> Std::FFI::CShort`
+
+Trait member of `Std::ToCShort`
 
 Casts a value into `CShort` type.
 
@@ -4325,6 +4375,8 @@ Casts a value into `CShort` type.
 
 Type: `[a : Std::ToCSizeT] a -> Std::FFI::CSizeT`
 
+Trait member of `Std::ToCSizeT`
+
 Casts a value into `CSizeT` type.
 
 ### namespace Std::ToCUnsignedChar
@@ -4332,6 +4384,8 @@ Casts a value into `CSizeT` type.
 #### c_unsigned_char
 
 Type: `[a : Std::ToCUnsignedChar] a -> Std::FFI::CUnsignedChar`
+
+Trait member of `Std::ToCUnsignedChar`
 
 Casts a value into `CUnsignedChar` type.
 
@@ -4341,6 +4395,8 @@ Casts a value into `CUnsignedChar` type.
 
 Type: `[a : Std::ToCUnsignedInt] a -> Std::FFI::CUnsignedInt`
 
+Trait member of `Std::ToCUnsignedInt`
+
 Casts a value into `CUnsignedInt` type.
 
 ### namespace Std::ToCUnsignedLong
@@ -4348,6 +4404,8 @@ Casts a value into `CUnsignedInt` type.
 #### c_unsigned_long
 
 Type: `[a : Std::ToCUnsignedLong] a -> Std::FFI::CUnsignedLong`
+
+Trait member of `Std::ToCUnsignedLong`
 
 Casts a value into `CUnsignedLong` type.
 
@@ -4357,6 +4415,8 @@ Casts a value into `CUnsignedLong` type.
 
 Type: `[a : Std::ToCUnsignedLongLong] a -> Std::FFI::CUnsignedLongLong`
 
+Trait member of `Std::ToCUnsignedLongLong`
+
 Casts a value into `CUnsignedLongLong` type.
 
 ### namespace Std::ToCUnsignedShort
@@ -4364,6 +4424,8 @@ Casts a value into `CUnsignedLongLong` type.
 #### c_unsigned_short
 
 Type: `[a : Std::ToCUnsignedShort] a -> Std::FFI::CUnsignedShort`
+
+Trait member of `Std::ToCUnsignedShort`
 
 Casts a value into `CUnsignedShort` type.
 
@@ -4373,6 +4435,8 @@ Casts a value into `CUnsignedShort` type.
 
 Type: `[a : Std::ToF32] a -> Std::F32`
 
+Trait member of `Std::ToF32`
+
 Casts a value into `F32` type.
 
 ### namespace Std::ToF64
@@ -4380,6 +4444,8 @@ Casts a value into `F32` type.
 #### f64
 
 Type: `[a : Std::ToF64] a -> Std::F64`
+
+Trait member of `Std::ToF64`
 
 Casts a value into `F64` type.
 
@@ -4389,6 +4455,8 @@ Casts a value into `F64` type.
 
 Type: `[a : Std::ToI16] a -> Std::I16`
 
+Trait member of `Std::ToI16`
+
 Casts a value into `I16` type.
 
 ### namespace Std::ToI32
@@ -4396,6 +4464,8 @@ Casts a value into `I16` type.
 #### i32
 
 Type: `[a : Std::ToI32] a -> Std::I32`
+
+Trait member of `Std::ToI32`
 
 Casts a value into `I32` type.
 
@@ -4405,6 +4475,8 @@ Casts a value into `I32` type.
 
 Type: `[a : Std::ToI64] a -> Std::I64`
 
+Trait member of `Std::ToI64`
+
 Casts a value into `I64` type.
 
 ### namespace Std::ToI8
@@ -4412,6 +4484,8 @@ Casts a value into `I64` type.
 #### i8
 
 Type: `[a : Std::ToI8] a -> Std::I8`
+
+Trait member of `Std::ToI8`
 
 Casts a value into `I8` type.
 
@@ -4421,11 +4495,15 @@ Casts a value into `I8` type.
 
 Type: `[a : Std::ToString] a -> Std::String`
 
+Trait member of `Std::ToString`
+
 ### namespace Std::ToU16
 
 #### u16
 
 Type: `[a : Std::ToU16] a -> Std::U16`
+
+Trait member of `Std::ToU16`
 
 Casts a value into `U16` type.
 
@@ -4435,6 +4513,8 @@ Casts a value into `U16` type.
 
 Type: `[a : Std::ToU32] a -> Std::U32`
 
+Trait member of `Std::ToU32`
+
 Casts a value into `U32` type.
 
 ### namespace Std::ToU64
@@ -4443,6 +4523,8 @@ Casts a value into `U32` type.
 
 Type: `[a : Std::ToU64] a -> Std::U64`
 
+Trait member of `Std::ToU64`
+
 Casts a value into `U64` type.
 
 ### namespace Std::ToU8
@@ -4450,6 +4532,8 @@ Casts a value into `U64` type.
 #### u8
 
 Type: `[a : Std::ToU8] a -> Std::U8`
+
+Trait member of `Std::ToU8`
 
 Casts a value into `U8` type.
 
@@ -5494,6 +5578,8 @@ Casts a value of `U8` into a value of `U8`.
 #### zero
 
 Type: `[a : Std::Zero] a`
+
+Trait member of `Std::Zero`
 
 ## Types and aliases
 
