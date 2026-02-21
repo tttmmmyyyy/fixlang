@@ -2873,7 +2873,7 @@ pub fn test103() {
 }
 
 #[test]
-pub fn test104() {
+pub fn test_bool_tostring() {
     // Test Bool : ToString
     let source = r#"
         module Main; 
@@ -9569,7 +9569,7 @@ pub fn test_type_sign_in_trait_impl_mismatch_type() {
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        "Type signature of member `my_to_string` is not equivalent to the one in the trait definition.",
+        "Type signature in implementation does not match trait definition.",
     );
 }
 

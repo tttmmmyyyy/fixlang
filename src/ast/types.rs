@@ -5,7 +5,7 @@ use crate::ast::name::Name;
 use crate::ast::name::NameSpace;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
-use crate::ast::traits::{KindSignature, TraitAliasEnv, TraitEnv, TraitId};
+use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::builtin::{
     get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
@@ -1737,25 +1737,6 @@ pub struct Scheme {
 }
 
 impl Scheme {
-    pub fn resolve_trait_aliases(&self, aliases: &TraitAliasEnv) -> Result<Scheme, Errors> {
-        let mut preds = vec![];
-        for pred in &self.predicates {
-            let mut pred = pred.resolve_trait_aliases(aliases)?;
-            preds.append(&mut pred);
-        }
-        Ok(Scheme {
-            gen_vars: self.gen_vars.clone(),
-            predicates: preds,
-            equalities: self.equalities.clone(),
-            ty: self.ty.clone(),
-        })
-    }
-
-    pub fn equivalent(lhs: &Scheme, rhs: &Scheme, aliases: &TraitAliasEnv) -> Result<bool, Errors> {
-        Ok(lhs.resolve_trait_aliases(aliases)?.to_string_normalize()
-            == rhs.resolve_trait_aliases(aliases)?.to_string_normalize())
-    }
-
     pub fn validate_constraints(&self, trait_env: &TraitEnv) -> Result<(), Errors> {
         // Validate constraints.
         // NOTE:

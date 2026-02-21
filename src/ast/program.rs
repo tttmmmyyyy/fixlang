@@ -230,8 +230,10 @@ impl GlobalValue {
             SymbolExpr::Simple(_) => {}
             SymbolExpr::Method(ms) => {
                 for m in ms {
-                    m.ty = m.ty.set_kinds(kind_env)?;
-                    m.ty.check_kinds(kind_env)?;
+                    m.scm = m.scm.set_kinds(kind_env)?;
+                    m.scm.check_kinds(kind_env)?;
+                    m.scm_via_defn = m.scm_via_defn.set_kinds(kind_env)?;
+                    m.scm_via_defn.check_kinds(kind_env)?;
                 }
             }
         }
@@ -364,9 +366,15 @@ impl TypedExpr {
 #[derive(Clone)]
 pub struct TraitMemberImpl {
     // Type of this member.
-    // For example, in case "impl [a: Show, b: Show] (a, b): Show {...}",
-    // the type of member "show" is "[a: Show, b: Show] (a, b) -> String",
-    pub ty: Arc<Scheme>,
+    //
+    // For example, in case "impl [a: ToString, b: ToString] (a, b): ToString {...}",
+    // the type of member "to_string" is "[a: ToString, b: ToString] (a, b) -> String",
+    //
+    // Users can give type signatures in each trait member implementation.
+    // In this case, the `scm` field contains the type signature given by users.
+    pub scm: Arc<Scheme>,
+    // This field holds the type scheme obtained from the trait member definition.
+    pub scm_via_defn: Arc<Scheme>,
     // Expression of this implementation
     pub expr: TypedExpr,
     // Module where this implmentation is given.
@@ -379,7 +387,8 @@ pub struct TraitMemberImpl {
 
 impl TraitMemberImpl {
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
-        self.ty = self.ty.resolve_type_aliases(type_env)?;
+        self.scm = self.scm.resolve_type_aliases(type_env)?;
+        self.scm_via_defn = self.scm_via_defn.resolve_type_aliases(type_env)?;
         Ok(())
     }
 
@@ -1045,26 +1054,46 @@ impl Program {
                     });
                 }
                 SymbolExpr::Method(impls) => {
-                    for (i, method) in impls.iter().enumerate() {
+                    for (i, member) in impls.iter().enumerate() {
                         // Select method implementation.
-                        if !method_impl_filter(method)? {
+                        if !method_impl_filter(member)? {
                             continue;
                         }
 
                         // Create a task for method implementation.
-                        let te = method.expr.clone();
-                        let method_ty = method.ty.clone();
+                        let te = member.expr.clone();
+                        let scm = member.scm.clone();
+                        let scm_via_defn = member.scm_via_defn.clone();
+                        let impl_src = member.expr.expr.source.clone();
+                        let def_src = gv.def_src.clone();
                         let val_name_clone = val_name.clone(); // For move into closure.
-                        let def_mod = self.find_mod(&method.define_module).unwrap().clone();
+                        let def_mod = self.find_mod(&member.define_module).unwrap().clone();
                         let mut nrctx =
                             NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
                         let ver_hash = self.module_dependency_hash(&def_mod.name)?;
                         let tc = tc.clone();
                         let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
+                            if tc.check_scheme_equivalent(&scm, &scm_via_defn).is_err() {
+                                return Err(Errors::from_msg_srcs(
+                                    format!(
+                                        "Type signature in implementation does not match trait definition. Expected: `{}`, Found: `{}`.",
+                                        scm_via_defn.to_string(),
+                                        scm.to_string(),
+                                    ),
+                                    &[
+                                        &impl_src
+                                            .as_ref()
+                                            .map(|s| s.to_head_character()),
+                                        &def_src
+                                            .as_ref()
+                                            .map(|s| s.to_head_character()),
+                                    ],
+                                ));
+                            }
                             // Perform type-checking.
                             let te = Program::resolve_namespace_and_check_type_sub(
                                 te,
-                                &method_ty,
+                                &scm,
                                 &val_name_clone,
                                 &def_mod,
                                 &mut nrctx,
@@ -1177,7 +1206,7 @@ impl Program {
             // we only need to check the unifiability here,
             // and we do not need to check whether predicates or equality constraints are satisfiable or not.
             let mut tc0 = tc.clone();
-            Ok(UnifOrOtherErr::extract_others(tc0.unify(&method.ty.ty, &sym.ty))?.is_ok())
+            Ok(UnifOrOtherErr::extract_others(tc0.unify(&method.scm.ty, &sym.ty))?.is_ok())
         };
         self.resolve_namespace_and_check_type(tc, &[sym.generic_name.clone()], method_selector)?;
 
@@ -1471,9 +1500,11 @@ impl Program {
                 if let Some(insntances) = instances {
                     for trait_impl in insntances {
                         let scm = trait_impl.member_scheme(&member.name, trait_);
+                        let scm_via_defn = trait_impl.member_scheme_by_defn(&member.name, trait_);
                         let expr = trait_impl.member_expr(&member.name);
                         member_impls.push(TraitMemberImpl {
-                            ty: scm,
+                            scm,
+                            scm_via_defn,
                             expr: TypedExpr::from_expr(expr),
                             define_module: trait_impl.define_module.clone(),
                         });
@@ -1506,7 +1537,8 @@ impl Program {
                 SymbolExpr::Simple(ref _e) => {}
                 SymbolExpr::Method(ref impls) => {
                     for impl_ in impls {
-                        errors.eat_err(impl_.ty.validate_constraints(&self.trait_env));
+                        errors.eat_err(impl_.scm.validate_constraints(&self.trait_env));
+                        errors.eat_err(impl_.scm_via_defn.validate_constraints(&self.trait_env));
                     }
                 }
             }

@@ -1225,6 +1225,41 @@ impl TypeCheckContext {
         assert!(self.import_required.is_empty());
     }
 
+    pub fn check_scheme_equivalent(
+        self: &TypeCheckContext,
+        lhs: &Arc<Scheme>,
+        rhs: &Arc<Scheme>,
+    ) -> Result<(), UnifOrOtherErr> {
+        self.assert_freshness();
+        {
+            let mut tc = self.clone();
+            tc.check_scheme_equivalent_one(lhs, rhs)?;
+        }
+        {
+            let mut tc = self.clone();
+            tc.check_scheme_equivalent_one(rhs, lhs)?;
+        }
+
+        Ok(())
+    }
+
+    fn check_scheme_equivalent_one(
+        self: &mut TypeCheckContext,
+        lhs: &Arc<Scheme>,
+        rhs: &Arc<Scheme>,
+    ) -> Result<(), UnifOrOtherErr> {
+        let lhs = self.instantiate_scheme(lhs, ConstraintInstantiationMode::Assume)?;
+        let rhs = self.instantiate_scheme(rhs, ConstraintInstantiationMode::Require)?;
+        self.unify(&lhs, &rhs)?;
+        self.reduce_predicates()?;
+        if self.predicates.len() > 0 {
+            let pred = &self.predicates[0];
+            let e = UnificationErr::Unsatisfiable(pred.clone());
+            return Err(UnifOrOtherErr::UnifErr(e));
+        }
+        Ok(())
+    }
+
     // Check if an expression matches the expected type scheme.
     // Returns the given expression with each subexpression annotated with inferred types.
     pub fn check_type(

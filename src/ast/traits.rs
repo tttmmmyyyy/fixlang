@@ -496,7 +496,7 @@ impl TraitImpl {
     //
     // Users can also write type annotations in trait implementations.
     // The `by_defn` means to ignore type annotations and construct the type from trait definition and impl declaration.
-    fn member_scheme_by_defn(&self, method_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
+    pub fn member_scheme_by_defn(&self, method_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         // First, see the trait definition.
         // Let's consider `trait a : ToString { to_string : a -> String }`.
         let tv = &trait_defn.type_var.name; // `a` in the above example.
@@ -841,7 +841,7 @@ impl TraitEnv {
                 }
                 // Now `trait_id` is not an alias, so get the trait definition.
                 let defn = self.traits.get(trait_id).unwrap();
-                errors.eat_err(Self::validate_trait_impl(impl_, defn, &self.aliases));
+                errors.eat_err(Self::validate_trait_impl(impl_, defn));
             }
             // Throw errors if any.
             errors.to_result()?;
@@ -879,11 +879,7 @@ impl TraitEnv {
         errors.to_result()
     }
 
-    fn validate_trait_impl(
-        impl_: &TraitImpl,
-        defn: &TraitDefn,
-        aliases: &TraitAliasEnv,
-    ) -> Result<(), Errors> {
+    fn validate_trait_impl(impl_: &TraitImpl, defn: &TraitDefn) -> Result<(), Errors> {
         let trait_id = &defn.trait_;
 
         // Check instance head.
@@ -1002,21 +998,21 @@ impl TraitEnv {
             }
 
             // Check the member type signature is equivalent to the one in the trait definition.
-            let trait_defn = &defn;
-            let type_by_defn = impl_.member_scheme_by_defn(member_name, trait_defn);
-            let type_by_sig = impl_.member_scheme(member_name, trait_defn);
-            if !Scheme::equivalent(&type_by_defn, &type_by_sig, &aliases)? {
-                return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Type signature of member `{}` is not equivalent to the one in the trait definition. \
-                                Expected: `{}`, found: `{}`.",
-                                member_name,
-                                type_by_defn.to_string(),
-                                type_by_sig.to_string(),
-                            ),
-                            &[&member_sig.ty.get_source()],
-                        ));
-            }
+            // let trait_defn = &defn;
+            // let type_by_defn = impl_.member_scheme_by_defn(member_name, trait_defn);
+            // let type_by_sig = impl_.member_scheme(member_name, trait_defn);
+            // if !Scheme::equivalent(&type_by_defn, &type_by_sig, &aliases)? {
+            //     return Err(Errors::from_msg_srcs(
+            //                 format!(
+            //                     "Type signature of member `{}` is not equivalent to the one in the trait definition. \
+            //                     Expected: `{}`, found: `{}`.",
+            //                     member_name,
+            //                     type_by_defn.to_string(),
+            //                     type_by_sig.to_string(),
+            //                 ),
+            //                 &[&member_sig.ty.get_source()],
+            //             ));
+            // }
         }
 
         // Check Orphan rules.
