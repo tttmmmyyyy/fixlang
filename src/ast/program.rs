@@ -1073,10 +1073,12 @@ impl Program {
                         let ver_hash = self.module_dependency_hash(&def_mod.name)?;
                         let tc = tc.clone();
                         let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
+                            // Check that the type signature given by implementor is equivalent to
+                            // the type scheme obtained from the trait member definition.
                             if tc.check_scheme_equivalent(&scm, &scm_via_defn).is_err() {
                                 return Err(Errors::from_msg_srcs(
                                     format!(
-                                        "Type signature in implementation does not match trait definition. Expected: `{}`, Found: `{}`.",
+                                        "Type signature in implementation does not match trait definition.\nExpected: `{}`\nFound: `{}`",
                                         scm_via_defn.to_string(),
                                         scm.to_string(),
                                     ),
@@ -1197,7 +1199,6 @@ impl Program {
         tc: &TypeCheckContext,
     ) -> Result<(), Errors> {
         assert!(sym.expr.is_none());
-
         // First, perform namespace resolution and type-checking.
         let method_selector = |method: &TraitMemberImpl| -> Result<bool, Errors> {
             // Select method implementation whose type unifies with the required type `sym.ty`.
@@ -1206,7 +1207,11 @@ impl Program {
             // we only need to check the unifiability here,
             // and we do not need to check whether predicates or equality constraints are satisfiable or not.
             let mut tc0 = tc.clone();
-            Ok(UnifOrOtherErr::extract_others(tc0.unify(&method.scm.ty, &sym.ty))?.is_ok())
+            // Here, use the type obtained from the trait definition.
+            // Do not use the type given by the implementor as the type signature.
+            // The latter has not been validated yet and may be incorrect; it will be validated in `resolve_namespace_and_check_type`.
+            let method_ty = method.scm_via_defn.ty.clone();
+            Ok(UnifOrOtherErr::extract_others(tc0.unify(&method_ty, &sym.ty))?.is_ok())
         };
         self.resolve_namespace_and_check_type(tc, &[sym.generic_name.clone()], method_selector)?;
 

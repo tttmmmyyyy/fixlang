@@ -9863,6 +9863,77 @@ main : IO () = (
 }
 
 #[test]
+pub fn test_type_sign_in_trait_impl_iterator_unuse_item() {
+    // Verify that in the type signature of `advance`, we can write `()` instead of `Item MyIterator`.
+    let source = r#"
+module Main; 
+
+type MyIterator = unbox struct {};
+
+impl MyIterator : Iterator {
+    type Item MyIterator = ();
+    advance : MyIterator -> Option (MyIterator, ()) = |_| none();
+}
+
+main : IO ();
+main = (
+    assert(|_|"", MyIterator{}.advance.is_none);;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_iterator_use_item() {
+    // Verify that in the type signature of `advance`, we can write `Item MyIterator` instead of `()`.
+    let source = r#"
+module Main; 
+
+type MyIterator = unbox struct {};
+
+impl MyIterator : Iterator {
+    type Item MyIterator = ();
+    advance : MyIterator -> Option (MyIterator, Item MyIterator) = |_| none();
+}
+
+main : IO ();
+main = (
+    assert(|_|"", MyIterator{}.advance.is_none);;
+    pure()
+);
+
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_iterator_wrong_item() {
+    let source = r#"
+module Main; 
+
+type MyIterator = unbox struct {};
+
+impl MyIterator : Iterator {
+    type Item MyIterator = ();
+    advance : MyIterator -> Option (MyIterator, I64) = |_| none();
+}
+
+main : IO ();
+main = (
+    assert(|_|"", MyIterator{}.advance.is_none);;
+    pure()
+);
+
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Type signature in implementation does not match trait definition.",
+    );
+}
+
+#[test]
 pub fn test_impl_undefined_trait() {
     let source = r#"
 module Main;

@@ -996,23 +996,6 @@ impl TraitEnv {
                     &[&member_sig.ty.get_source()],
                 ));
             }
-
-            // Check the member type signature is equivalent to the one in the trait definition.
-            // let trait_defn = &defn;
-            // let type_by_defn = impl_.member_scheme_by_defn(member_name, trait_defn);
-            // let type_by_sig = impl_.member_scheme(member_name, trait_defn);
-            // if !Scheme::equivalent(&type_by_defn, &type_by_sig, &aliases)? {
-            //     return Err(Errors::from_msg_srcs(
-            //                 format!(
-            //                     "Type signature of member `{}` is not equivalent to the one in the trait definition. \
-            //                     Expected: `{}`, found: `{}`.",
-            //                     member_name,
-            //                     type_by_defn.to_string(),
-            //                     type_by_sig.to_string(),
-            //                 ),
-            //                 &[&member_sig.ty.get_source()],
-            //             ));
-            // }
         }
 
         // Check Orphan rules.
