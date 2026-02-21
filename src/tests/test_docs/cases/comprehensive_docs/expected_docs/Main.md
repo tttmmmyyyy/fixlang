@@ -26,6 +26,8 @@ A value inside namespace
 
 Type: `[a : Main::MyTrait] a -> Std::String`
 
+Trait member of `Main::MyTrait`
+
 Converts the value to a descriptive string
 
 ## Types and aliases
