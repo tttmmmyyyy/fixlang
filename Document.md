@@ -85,6 +85,7 @@
     - [Project file](#project-file)
         - [About Duplicated Build Settings](#about-duplicated-build-settings)
     - [Managing dependencies](#managing-dependencies)
+        - [Pinning to a specific commit or tag](#pinning-to-a-specific-commit-or-tag)
         - [Test dependencies](#test-dependencies)
         - [Lock files](#lock-files)
     - [Configuration file](#configuration-file)
@@ -2748,6 +2749,37 @@ The "fix deps add" command searches the specified Fix project from "registry fil
 The default registry file is managed in [this repo](https://github.com/tttmmmyyyy/fixlang-registry).
 You can add other registry files by specifying them in the [configuration file](#configuration-file).
 To list all available projects registered in the registry files, use "fix deps list" command.
+
+### Pinning to a specific commit or tag
+
+For git dependencies, you can pin to a specific commit hash or tag by specifying `rev` or `tag` in the `git` field:
+
+```
+# Pin to a specific commit hash
+[[dependencies]]
+name = "math"
+git = { url = "https://github.com/tttmmmyyyy/fixlang-math.git", rev = "7602fba" }
+
+# Pin to a specific tag
+[[dependencies]]
+name = "math"
+git = { url = "https://github.com/tttmmmyyyy/fixlang-math.git", tag = "v1.0.0" }
+```
+
+When `rev` or `tag` is specified, the dependency resolver uses only the version at that commit instead of searching for the latest compatible version.
+You can also specify `version` together with `rev` or `tag` to verify that the pinned version satisfies the given version requirement:
+
+```
+[[dependencies]]
+name = "math"
+version = "1.1"
+git = { url = "https://github.com/tttmmmyyyy/fixlang-math.git", rev = "7602fba" }
+```
+
+Note:
+- `rev` and `tag` cannot be specified at the same time.
+- Pinning with `rev` or `tag` only applies to direct dependencies. If a transitive (indirect) dependency specifies `rev` or `tag`, it will be ignored with a warning.
+- Running `fix deps update` will not change the resolved version for pinned dependencies.
 
 ### Test dependencies
 

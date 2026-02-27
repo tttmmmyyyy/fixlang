@@ -219,7 +219,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
                 variant: TyConVariant::Primitive,
                 is_unbox: true,
                 tyvars: (0..arity)
-                    .map(|i| (make_tyvar(&format!("a{}", i), &kind_star())))
+                    .map(|i| make_tyvar(&format!("a{}", i), &kind_star()))
                     .collect(),
                 fields: vec![],
                 source: None,

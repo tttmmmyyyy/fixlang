@@ -1,0 +1,4 @@
+module Main;
+import Math;
+main: IO ();
+main = println(Math::pi64.to_string);

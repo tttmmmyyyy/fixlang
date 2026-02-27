@@ -129,6 +129,30 @@ impl ProjectFileDependency {
 pub struct ProjectFileDependencyGit {
     // The URL of the git repository.
     pub url: String,
+    // The commit hash to pin to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rev: Option<String>,
+    // The tag name to pin to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+}
+
+impl ProjectFileDependencyGit {
+    /// Returns true if `rev` or `tag` is specified.
+    pub fn has_ref(&self) -> bool {
+        self.rev.is_some() || self.tag.is_some()
+    }
+
+    /// Returns a human-readable description of the pinned ref.
+    pub fn ref_description(&self) -> String {
+        if let Some(rev) = &self.rev {
+            format!("rev \"{}\"" , rev)
+        } else if let Some(tag) = &self.tag {
+            format!("tag \"{}\"" , tag)
+        } else {
+            "no ref".to_string()
+        }
+    }
 }
 
 // The project file.
@@ -285,9 +309,20 @@ impl ProjectFile {
             VersionReq::parse(version).map_err(|e| {
                 Errors::from_msg_srcs(
                     format!("Failed to parse version: {}", e),
-                    &[&Some(span)],
+                    &[&Some(span.clone())],
                 )
             })?;
+        }
+
+        // Validate git ref: rev and tag are mutually exclusive.
+        if let Some(git) = &dep.git {
+            if git.rev.is_some() && git.tag.is_some() {
+                return Err(Errors::from_msg_srcs(
+                    "Only one of `rev` or `tag` can be specified in a git dependency."
+                        .to_string(),
+                    &[&Some(span)],
+                ));
+            }
         }
 
         Ok(())

@@ -1,0 +1,6 @@
+module Main;
+
+import LocalA;
+
+main : IO ();
+main = println(LocalA::local_a_value.to_string);

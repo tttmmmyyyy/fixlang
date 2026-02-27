@@ -1,0 +1,16 @@
+[general]
+name = "transitive-local-pins"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix"]
+
+[[dependencies]]
+name = "local-a"
+path = "local_a"
+
+[[dependencies]]
+name = "math"
+version = "1.0"
+git = { url = "https://github.com/tttmmmyyyy/fixlang-math.git" }

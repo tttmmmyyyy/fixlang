@@ -7,6 +7,7 @@
 #### Tool
 
 - Now you can write `[[test-dependencies]]` in `fixproj.toml`. You can specify dependencies which are only used for tests here. If your project is used as a library, dependencies written in `[[test-dependencies]]` will not be installed. `fix deps add --test <dependency>` adds a dependency to `[[test-dependencies]]`. `fix deps update --test` and `fix deps install --test` will also update lock file and install dependencies including test dependencies.
+- Added `rev` and `tag` fields for git dependencies in `fixproj.toml`. You can now pin a dependency to a specific commit hash (`rev`) or tag (`tag`). For example: `git = { url = "...", tag = "v1.0.0" }`. Pinning only applies to direct dependencies; transitive dependencies with `rev`/`tag` are ignored with a warning.
 
 #### Std
 

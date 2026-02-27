@@ -1843,7 +1843,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     }
 
     // Create debug info subprogram.
-    pub fn create_debug_subprogram(&self, fn_name: &str, span: Option<Span>) -> DISubprogram {
+    pub fn create_debug_subprogram<'a>(&'a self, fn_name: &str, span: Option<Span>) -> DISubprogram<'a> {
         let (di_builder, di_compile_unit) = self.debug_info.as_ref().unwrap();
         let line_no = if let Some(span) = span.as_ref() {
             span.start_line_no()

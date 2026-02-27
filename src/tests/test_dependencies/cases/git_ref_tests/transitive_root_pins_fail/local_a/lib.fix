@@ -1,0 +1,6 @@
+module LocalA;
+
+import Math;
+
+local_a_value : F64;
+local_a_value = Math::pi64;

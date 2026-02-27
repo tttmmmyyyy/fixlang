@@ -1,0 +1,11 @@
+[general]
+name = "local-a"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["lib.fix"]
+
+[[dependencies]]
+name = "math"
+git = { url = "https://github.com/tttmmmyyyy/fixlang-math.git", tag = "v0.1.3" }

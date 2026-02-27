@@ -15,7 +15,7 @@ use crate::{
     error::Errors,
     misc::info_msg,
     misc::{to_absolute_path, warn_msg},
-    project_file::{ProjectFile, ProjectFileDependency, ProjectName},
+    project_file::{ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName},
     EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH,
     PROJECT_FILE_PATH,
 };
@@ -79,6 +79,54 @@ impl DependecyLockFile {
         let prjs_info = ProjectsInfo {
             projects: Arc::new(Mutex::new(vec![ProjectInfo::from_project_file(proj_file)])),
         };
+
+        // Pre-register pinned dependencies (those with rev or tag) in ProjectsInfo.
+        // By pre-populating a ProjectInfo with `versions` set to a single pinned version
+        // before the resolver runs, we force the resolver to use exactly that version:
+        // `version_retriever` returns only the pinned version (since `retrieve_versions`
+        // early-returns when `versions` is already set).
+        let all_deps = proj_file.get_dependencies(mode);
+        for dep in all_deps
+            .iter()
+            .filter(|d| d.git.as_ref().map_or(false, |g| g.has_ref()))
+        {
+            let git = dep.git.as_ref().unwrap();
+
+            // Create a ProjectInfo and resolve the pinned ref.
+            let mut proj_info = ProjectInfo {
+                name: dep.name.clone(),
+                source: ProjectSource::Git(git.url.clone(), None),
+                versions: None,
+                proj_files: Vec::new(),
+            };
+            let (version, _oid) = proj_info.resolve_pinned_ref(git)?;
+
+            // Verify name matches.
+            if proj_info.proj_files[0].general.name != dep.name {
+                return Err(Errors::from_msg(format!(
+                    "Dependency \"{}\" pinned to {} resolves to project \"{}\", which has a different name.",
+                    dep.name,
+                    git.ref_description(),
+                    proj_info.proj_files[0].general.name
+                )));
+            }
+
+            // Verify version constraint (if version is specified).
+            let requirement = dep.version();
+            if !requirement.matches(&version) {
+                return Err(Errors::from_msg(format!(
+                    "Dependency \"{}\" is pinned to {} (version {}), but the version requirement \"{}\" is not satisfied.",
+                    dep.name,
+                    git.ref_description(),
+                    version,
+                    requirement
+                )));
+            }
+
+            // Register in ProjectsInfo.
+            prjs_info.projects.lock().unwrap().push(proj_info);
+        }
+
         let packages_retriever = create_package_retriever(prjs_info.clone());
         let versions_retriever = create_version_retriever(prjs_info.clone());
         info_msg(&format!(
@@ -430,6 +478,69 @@ impl ProjectInfo {
 
         Ok(proj_file)
     }
+
+    /// Resolve a pinned git ref (rev or tag) and pre-populate versions and proj_files.
+    fn resolve_pinned_ref(
+        &mut self,
+        git_ref: &ProjectFileDependencyGit,
+    ) -> Result<(Version, git2::Oid), Errors> {
+        // Clone the repository.
+        self.source.prepre_git_repository()?;
+        let repo = self.source.get_git_repository();
+
+        // Resolve rev/tag to OID.
+        let oid = resolve_git_ref(repo, git_ref)?;
+
+        // Checkout and read fixproj.toml (same pattern as get_project_file).
+        let commit = repo
+            .find_commit(oid)
+            .map_err(|e| Errors::from_msg_err("Failed to find commit", e))?;
+        let mut checkout_opts = CheckoutBuilder::default();
+        checkout_opts.force();
+        repo.checkout_tree(&commit.into_object(), Some(&mut checkout_opts))
+            .map_err(|e| Errors::from_msg_err("Failed to checkout commit", e))?;
+        let proj_file =
+            ProjectFile::read_file(&repo.workdir().unwrap().join(PROJECT_FILE_PATH))?;
+
+        let version = proj_file.general.version();
+
+        // Pre-populate versions (single entry) and proj_files cache.
+        self.versions = Some(vec![VersionInfo {
+            version: version.clone(),
+            rev: oid,
+            tagged: true,
+        }]);
+        self.proj_files.push(proj_file);
+
+        Ok((version, oid))
+    }
+}
+
+// Resolve a rev or tag specification to a git OID.
+fn resolve_git_ref(
+    repo: &Repository,
+    git: &ProjectFileDependencyGit,
+) -> Result<git2::Oid, Errors> {
+    if let Some(rev) = &git.rev {
+        let obj = repo
+            .revparse_single(rev)
+            .map_err(|e| Errors::from_msg(format!("Failed to find rev \"{}\": {}", rev, e)))?;
+        Ok(obj.id())
+    } else if let Some(tag) = &git.tag {
+        let refname = format!("refs/tags/{}", tag);
+        let reference = repo.find_reference(&refname).map_err(|e| {
+            Errors::from_msg(format!("Failed to find tag \"{}\": {}", tag, e))
+        })?;
+        let obj = reference.peel_to_commit().map_err(|e| {
+            Errors::from_msg(format!(
+                "Failed to peel tag \"{}\" to commit: {}",
+                tag, e
+            ))
+        })?;
+        Ok(obj.id())
+    } else {
+        unreachable!("resolve_git_ref called without rev or tag")
+    }
 }
 
 // Get versions from a git repository.
@@ -627,6 +738,18 @@ fn create_package_retriever(
         // Register new dependent projects to the packages cache.
         let deps_list = proj_file.get_dependencies(mode);
         for dep in &deps_list {
+            // Warn if a transitive dependency specifies rev/tag (it will be ignored).
+            if let Some(git) = &dep.git {
+                if git.has_ref() {
+                    warn_msg(&format!(
+                        "Dependency \"{}\" in \"{}\" specifies {}, but git ref pinning is only applied to direct dependencies. The specification will be ignored.",
+                        dep.name,
+                        prj_name,
+                        git.ref_description()
+                    ));
+                }
+            }
+
             let dep_src = proj_file.get_dependency_source(&dep.name);
             if let Some(prj) = projs.iter().find(|pkg| &pkg.name == &dep.name) {
                 // If the project is already in the cache, then check that the sources are the same between `pkg` and `dep`.
