@@ -166,19 +166,23 @@ impl Symbol {
     }
 }
 
-// Declaration (name and type signature) of global value.
-// `main : IO()`
+// Declaration (name and its type) of global value.
+// e.g., `main : IO()`
 pub struct GlobalValueDecl {
     pub name: FullName,
     pub ty: Arc<Scheme>,
+    // This is the left hand side of the declaration of this value, 
+    // e.g., `main` in `main : IO ()`.
     pub src: Option<Span>,
 }
 
-// Definition (name and expression)
-// `main = println("Hello World")`
+// Definition (name and its value) of global value.
+// e.g., `main = println("Hello World")`
 pub struct GlobalValueDefn {
     pub name: FullName,
     pub expr: Arc<ExprNode>,
+    // This is the left hand side of the definition of this value, 
+    // e.g., `main` in `main = println("Hello World")`.
     pub src: Option<Span>,
 }
 
@@ -191,11 +195,22 @@ pub struct GlobalValue {
     pub syn_scm: Option<Arc<Scheme>>,
     // The expression or implementation of this value.
     pub expr: SymbolExpr,
-    // Source code where this value is defined.
-    // For trait methods, this is the source code where the trait method is defined.
-    pub def_src: Option<Span>,
+    // Source code where this value is declared.
+    // 
+    // This is the left hand side of the declaration of this value, 
+    // e.g., `main` in `main : IO ()`.
+    //
+    // For trait methods, this is the source code for the trait method definition (declaration), 
+    // not the implementation.
+    pub decl_src: Option<Span>,
+    // The source code position of the left hand side of the definition of this value.
+    // For example, if there is a definition `main = println("Hello World")`, this is the position of `main`.
+    // If the definition is written together with the declaration, e.g., `main : IO () = println("Hello World")`, 
+    // this is the same as `decl_src`.
+    // For trait members, this is also the same as `decl_src`.
+    pub defn_src: Option<Span>,
     // The document of this value.
-    // If `def_src` is available, we can also get document from the source code.
+    // If `decl_src` is available, we can also get document from the source code.
     // We use this field only when document is not available in the source code.
     pub document: Option<String>,
     // Is this value compiler-defined method?
@@ -249,7 +264,7 @@ impl GlobalValue {
     pub fn get_document(&self) -> Option<String> {
         // Try to get document from the source code.
         let docs = self
-            .def_src
+            .decl_src
             .as_ref()
             .and_then(|src| src.get_document().ok());
 
@@ -273,12 +288,27 @@ impl GlobalValue {
     }
 
     // Find the minimum node which includes the specified source code position.
-    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        let node = self.expr.find_node_at(pos);
+    // - `name`: the name of this global value (i.e., the key in `Program::global_values`).
+    pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
+        let node = self.expr.find_node_at(name, pos);
         if node.is_some() {
             return node;
         }
-        self.scm.find_node_at(pos)
+        let node = self.scm.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        if let Some(ref span) = self.decl_src {
+            if span.includes_pos_lsp(pos) {
+                return Some(EndNode::ValueDecl(name.clone()));
+            }
+        }
+        if let Some(ref span) = self.defn_src {
+            if span.includes_pos_lsp(pos) {
+                return Some(EndNode::ValueDecl(name.clone()));
+            }
+        }
+        None
     }
 }
 
@@ -312,10 +342,12 @@ impl SymbolExpr {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+    // - `name`: the name of the global value (e.g., `Std::ToString::to_string`), used to return `EndNode::ValueDecl` when
+    //   the cursor is on the LHS of a trait member implementation.
+    pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         match self {
             SymbolExpr::Simple(e) => e.find_node_at(pos),
-            SymbolExpr::Method(ms) => ms.iter().filter_map(|m| m.find_node_at(pos)).next(),
+            SymbolExpr::Method(ms) => ms.iter().filter_map(|m| m.find_node_at(name, pos)).next(),
         }
     }
 }
@@ -383,6 +415,10 @@ pub struct TraitMemberImpl {
     // For example, if `Main` module implements `SomeType : Eq`, then implementation of `eq` for `SomeType` is defined in `Main` module,
     // but its name as a function is still `Std::Eq::eq`.
     pub define_module: Name,
+    // The source spans of the left-hand side names in the trait member implementation.
+    // For example, in `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`,
+    // this contains spans of both `to_string` occurrences (type signature and definition).
+    pub lhs_srcs: Vec<Span>,
 }
 
 impl TraitMemberImpl {
@@ -393,8 +429,19 @@ impl TraitMemberImpl {
     }
 
     // Find the minimum expression node which includes the specified source code position.
-    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        self.expr.find_node_at(pos)
+    // - `name`: the name of the global value (e.g., `Std::ToString::to_string`), used to return
+    //   `EndNode::ValueDecl` when the cursor is on the LHS of this trait member implementation.
+    pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
+        let node = self.expr.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        for span in &self.lhs_srcs {
+            if span.includes_pos_lsp(pos) {
+                return Some(EndNode::ValueDecl(name.clone()));
+            }
+        }
+        None
     }
 }
 
@@ -725,10 +772,11 @@ impl Program {
         &mut self,
         name: FullName,
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
-        def_src: Option<Span>,
+        decl_src: Option<Span>,
+        defn_src: Option<Span>,
         document: Option<String>,
     ) -> Result<(), Errors> {
-        self.add_global_value_common(name, (expr, scm), def_src, document, false)
+        self.add_global_value_common(name, (expr, scm), decl_src, defn_src, document, false)
     }
 
     // Add a compiler-defined method.
@@ -743,7 +791,7 @@ impl Program {
         // Therefore, convert all global names to absolute names before registering.
         let expr = expr.global_to_absolute();
         let scm = scm.global_to_absolute();
-        self.add_global_value_common(name, (expr, scm), None, document, true)
+        self.add_global_value_common(name, (expr, scm), None, None, document, true)
     }
 
     // Add a global value.
@@ -751,7 +799,8 @@ impl Program {
         &mut self,
         name: FullName,
         (expr, scm): (Arc<ExprNode>, Arc<Scheme>),
-        def_src: Option<Span>,
+        decl_src: Option<Span>,
+        defn_src: Option<Span>,
         document: Option<String>,
         compiler_defined_method: bool,
     ) -> Result<(), Errors> {
@@ -759,7 +808,8 @@ impl Program {
             scm: scm.clone(),
             syn_scm: None,
             expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
-            def_src,
+            decl_src,
+            defn_src,
             document,
             compiler_defined_method,
         };
@@ -770,12 +820,12 @@ impl Program {
     pub fn add_global_value_gv(&mut self, name: FullName, gv: GlobalValue) -> Result<(), Errors> {
         // Check duplicate definition.
         if self.global_values.contains_key(&name) {
-            let this = gv.def_src.map(|s| s.to_head_character());
+            let this = gv.decl_src.map(|s| s.to_head_character());
             let other = self
                 .global_values
                 .get(&name)
                 .unwrap()
-                .def_src
+                .decl_src
                 .as_ref()
                 .map(|s| s.to_head_character());
             return Err(Errors::from_msg_srcs(
@@ -793,8 +843,8 @@ impl Program {
     // Add global values.
     pub fn add_global_values(
         &mut self,
-        exprs: Vec<GlobalValueDefn>,
-        types: Vec<GlobalValueDecl>,
+        defns: Vec<GlobalValueDefn>,
+        decls: Vec<GlobalValueDecl>,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
@@ -805,7 +855,7 @@ impl Program {
         let mut global_values: Map<FullName, GlobalValue> = Default::default();
 
         // Register definitions checking duplication.
-        for defn in exprs {
+        for defn in defns {
             if !global_values.contains_key(&defn.name) {
                 global_values.insert(
                     defn.name.clone(),
@@ -838,8 +888,8 @@ impl Program {
             }
         }
 
-        // Register declarations checking duplication.
-        for decl in types {
+        // Register definitions checking duplication.
+        for decl in decls {
             if !global_values.contains_key(&decl.name) {
                 global_values.insert(
                     decl.name.clone(),
@@ -869,11 +919,11 @@ impl Program {
             }
         }
 
-        // Check that definitions and declarations are paired.
+        // Check that declarations and definitions are paired.
         for (name, gv) in global_values {
             if gv.defn.is_none() {
                 errors.append(Errors::from_msg_srcs(
-                    format!("Global value `{}` lacks its expression.", name.to_string()),
+                    format!("Global value `{}` lacks its definition.", name.to_string()),
                     &[&gv.decl.unwrap().src.as_ref().map(|s| s.to_head_character())],
                 ));
             } else if gv.decl.is_none() {
@@ -886,10 +936,12 @@ impl Program {
                 ));
             } else {
                 let decl_src = gv.decl.as_ref().unwrap().src.clone();
+                let defn_src = gv.defn.as_ref().unwrap().src.clone();
                 errors.eat_err(self.add_global_value(
                     name,
                     (gv.defn.unwrap().expr, gv.decl.unwrap().ty),
                     decl_src,
+                    defn_src,
                     None,
                 ));
             }
@@ -1065,7 +1117,7 @@ impl Program {
                         let scm = member.scm.clone();
                         let scm_via_defn = member.scm_via_defn.clone();
                         let impl_src = member.expr.expr.source.clone();
-                        let def_src = gv.def_src.clone();
+                        let def_src = gv.decl_src.clone();
                         let val_name_clone = val_name.clone(); // For move into closure.
                         let def_mod = self.find_mod(&member.define_module).unwrap().clone();
                         let mut nrctx =
@@ -1507,11 +1559,13 @@ impl Program {
                         let scm = trait_impl.member_scheme(&member.name, trait_);
                         let scm_via_defn = trait_impl.member_scheme_by_defn(&member.name, trait_);
                         let expr = trait_impl.member_expr(&member.name);
+                        let lhs_srcs = trait_impl.member_lhs_srcs.get(&member.name).cloned().unwrap_or_default();
                         member_impls.push(TraitMemberImpl {
                             scm,
                             scm_via_defn,
                             expr: TypedExpr::from_expr(expr),
                             define_module: trait_impl.define_module.clone(),
+                            lhs_srcs,
                         });
                     }
                 }
@@ -1522,7 +1576,8 @@ impl Program {
                         scm: member_scm,
                         syn_scm: Some(syntactic_member_scm),
                         expr: SymbolExpr::Method(member_impls),
-                        def_src: member.source.clone(),
+                        decl_src: member.decl_src.clone(),
+                        defn_src: member.decl_src.clone(),
                         document: member.document.clone(),
                         compiler_defined_method: false,
                     },
@@ -2213,8 +2268,8 @@ impl Program {
 
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        for (_name, gv) in &self.global_values {
-            let node = gv.find_node_at(pos);
+        for (name, gv) in &self.global_values {
+            let node = gv.find_node_at(name, pos);
             if node.is_some() {
                 return node;
             }
@@ -2244,6 +2299,7 @@ impl Program {
                 return node;
             }
         }
+
         None
     }
 
@@ -2337,4 +2393,6 @@ pub enum EndNode {
     Trait(TraitId),
     TypeOrTrait(FullName), // Unknown whether Type or Trait
     Module(Name),
+    // The definition name (left-hand side) of a global value declaration.
+    ValueDecl(FullName),
 }

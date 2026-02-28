@@ -596,6 +596,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
             is_unbox: TUPLE_UNBOX,
         }),
         source: None,
+        name_src: None,
     }
 }
 
@@ -5221,6 +5222,7 @@ pub fn unary_opeartor_instance(
                 None,
             ),
         )]),
+        member_lhs_srcs: Map::default(),
         assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,
@@ -5258,6 +5260,7 @@ pub fn binary_opeartor_instance(
                 None,
             ),
         )]),
+        member_lhs_srcs: Map::default(),
         assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,
@@ -6552,6 +6555,7 @@ pub fn boxed_trait_instance(ty: &Arc<TypeNode>) -> TraitImpl {
             predicate: Predicate::make(trait_id, ty.clone()),
         },
         members: Map::default(),
+        member_lhs_srcs: Map::default(),
         assoc_types: Map::default(),
         define_module: STD_NAME.to_string(),
         source: None,

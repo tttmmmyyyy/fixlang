@@ -76,7 +76,7 @@ use check_program::*;
 use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
-use commands::lsp::language_server::launch_language_server;
+use commands::lsp::server::launch_language_server;
 use config_file::ConfigFile;
 use configuration::*;
 use constants::*;

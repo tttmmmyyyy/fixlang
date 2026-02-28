@@ -9,59 +9,98 @@ use std::time::Duration;
 
 use crate::misc::{to_absolute_path, Map};
 
+/// Shared state between `LspClient` and the background reader thread.
+/// Each field is an `Arc<Mutex<T>>` so `SharedState` can be cheaply cloned
+/// to share the same data across threads.
+#[derive(Clone)]
+struct SharedState {
+    message_queue: Arc<Mutex<VecDeque<Value>>>,
+    responses: Arc<Mutex<Map<u32, Value>>>,
+    diagnostics: Arc<Mutex<Map<PathBuf, Value>>>,
+    /// Number of `$/progress` end notifications received so far.
+    progress_end_count: Arc<Mutex<usize>>,
+    reader_thread_error: Arc<Mutex<Option<String>>>,
+}
+
+impl SharedState {
+    fn new() -> Self {
+        SharedState {
+            message_queue: Arc::new(Mutex::new(VecDeque::new())),
+            responses: Arc::new(Mutex::new(Map::default())),
+            diagnostics: Arc::new(Mutex::new(Map::default())),
+            progress_end_count: Arc::new(Mutex::new(0)),
+            reader_thread_error: Arc::new(Mutex::new(None)),
+        }
+    }
+}
+
 pub struct LspClient {
     process: Child,
     stdin: ChildStdin,
     working_dir: PathBuf,
     document_versions: Map<PathBuf, i32>,
-    message_queue: Arc<Mutex<VecDeque<Value>>>,
-    responses: Arc<Mutex<Map<u32, Value>>>,
-    diagnostics: Arc<Mutex<Map<PathBuf, Value>>>,
+    shared: SharedState,
     next_id: u32,
-    reader_thread_error: Arc<Mutex<Option<String>>>,
 }
 
 /// Process a received message and update internal state
-fn process_message(
-    message: Value,
-    responses: &Arc<Mutex<Map<u32, Value>>>,
-    diagnostics: &Arc<Mutex<Map<PathBuf, Value>>>,
-    message_queue: &Arc<Mutex<VecDeque<Value>>>,
-) {
+fn process_message(message: Value, shared: &SharedState) {
+    /// Handle a `textDocument/publishDiagnostics` notification.
+    fn process_publish_diagnostics(message: &Value, shared: &SharedState) {
+        if message.get("method").and_then(|m| m.as_str())
+            != Some("textDocument/publishDiagnostics")
+        {
+            return;
+        }
+        let Some(params) = message.get("params") else {
+            return;
+        };
+        let Some(uri_str) = params.get("uri").and_then(|u| u.as_str()) else {
+            return;
+        };
+        // Extract file path from URI (file:///path/to/file)
+        let Some(path_str) = uri_str.strip_prefix("file://") else {
+            return;
+        };
+        let file_path = PathBuf::from(path_str);
+        let Some(diagnostics_value) = params.get("diagnostics") else {
+            return;
+        };
+        shared
+            .diagnostics
+            .lock()
+            .unwrap()
+            .insert(file_path, diagnostics_value.clone());
+    }
+
     // Check if it's a response (has an id field)
     if let Some(id) = message.get("id") {
         if let Some(id_num) = id.as_u64() {
-            responses
+            shared
+                .responses
                 .lock()
                 .unwrap()
                 .insert(id_num as u32, message.clone());
         }
     }
 
-    // Check if it's a publishDiagnostics notification
-    if let Some(method) = message.get("method") {
-        if method.as_str() == Some("textDocument/publishDiagnostics") {
-            if let Some(params) = message.get("params") {
-                if let Some(uri) = params.get("uri") {
-                    if let Some(uri_str) = uri.as_str() {
-                        // Extract file path from URI (file:///path/to/file)
-                        if let Some(path_str) = uri_str.strip_prefix("file://") {
-                            let file_path = PathBuf::from(path_str);
-                            if let Some(diagnostics_value) = params.get("diagnostics") {
-                                diagnostics
-                                    .lock()
-                                    .unwrap()
-                                    .insert(file_path, diagnostics_value.clone());
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // Check if it's a $/progress end notification
+    if message.get("method").and_then(|m| m.as_str()) == Some("$/progress")
+        && message
+            .get("params")
+            .and_then(|p| p.get("value"))
+            .and_then(|v| v.get("kind"))
+            .and_then(|k| k.as_str())
+            == Some("end")
+    {
+        *shared.progress_end_count.lock().unwrap() += 1;
     }
 
+    // Check if it's a publishDiagnostics notification
+    process_publish_diagnostics(&message, shared);
+
     // Add to message queue for test code to inspect
-    message_queue.lock().unwrap().push_back(message);
+    shared.message_queue.lock().unwrap().push_back(message);
 }
 
 impl LspClient {
@@ -87,16 +126,8 @@ impl LspClient {
         let stdout = process.stdout.take().unwrap();
 
         // Create shared data structures
-        let message_queue = Arc::new(Mutex::new(VecDeque::new()));
-        let responses = Arc::new(Mutex::new(Map::default()));
-        let diagnostics = Arc::new(Mutex::new(Map::default()));
-        let reader_thread_error = Arc::new(Mutex::new(None));
-
-        // Clone Arcs for the reader thread
-        let message_queue_clone = Arc::clone(&message_queue);
-        let responses_clone = Arc::clone(&responses);
-        let diagnostics_clone = Arc::clone(&diagnostics);
-        let reader_thread_error_clone = Arc::clone(&reader_thread_error);
+        let shared = SharedState::new();
+        let shared_clone = shared.clone();
 
         // Start dedicated reader thread (detached - JoinHandle is not stored)
         // The thread will exit when stdout is closed (process termination) or on protocol error
@@ -147,12 +178,7 @@ impl LspClient {
 
                 match result {
                     Ok(message) => {
-                        process_message(
-                            message,
-                            &responses_clone,
-                            &diagnostics_clone,
-                            &message_queue_clone,
-                        );
+                        process_message(message, &shared_clone);
                     }
                     Err(e) => {
                         // EOF or protocol error - exit the loop
@@ -160,7 +186,7 @@ impl LspClient {
                             break;
                         }
                         // Store error before panicking
-                        *reader_thread_error_clone.lock().unwrap() = Some(e.clone());
+                        *shared_clone.reader_thread_error.lock().unwrap() = Some(e.clone());
                         panic!("LSP protocol error: {}", e);
                     }
                 }
@@ -175,11 +201,8 @@ impl LspClient {
             stdin,
             working_dir: absolute_working_dir,
             document_versions: Map::default(),
-            message_queue,
-            responses,
-            diagnostics,
+            shared,
             next_id: 1,
-            reader_thread_error,
         })
     }
 
@@ -247,14 +270,79 @@ impl LspClient {
     /// Pop one message from the message queue
     #[allow(dead_code)]
     pub fn pop_message(&mut self) -> Option<Value> {
-        self.message_queue.lock().unwrap().pop_front()
+        self.shared.message_queue.lock().unwrap().pop_front()
     }
 
     /// Get a response for a specific request ID
     /// Returns None if the response has not been received yet
     /// Removes the response from the internal map when retrieved
     pub fn get_response(&mut self, id: u32) -> Option<Value> {
-        self.responses.lock().unwrap().remove(&id)
+        self.shared.responses.lock().unwrap().remove(&id)
+    }
+
+    /// Get all currently available response IDs (for debugging)
+    #[allow(dead_code)]
+    pub fn get_response_ids(&self) -> Vec<u32> {
+        self.shared.responses.lock().unwrap().keys().cloned().collect()
+    }
+
+    /// Return the number of `$/progress` end notifications received so far.
+    pub fn count_progress_end_messages(&self) -> usize {
+        *self.shared.progress_end_count.lock().unwrap()
+    }
+
+    /// Wait until the total number of `$/progress` end notifications
+    /// reaches at least `target_count`.
+    ///
+    /// This is used to detect when diagnostics have completed, since the
+    /// server sends `$/progress` with `kind: "end"` after each diagnostics run.
+    pub fn wait_for_progress_end_count(
+        &self,
+        target_count: usize,
+        timeout: Duration,
+    ) -> Result<(), String> {
+        let start = std::time::Instant::now();
+        loop {
+            if self.count_progress_end_messages() >= target_count {
+                return Ok(());
+            }
+            if start.elapsed() > timeout {
+                return Err(format!(
+                    "Timeout ({:?}) waiting for progress end count to reach {}. Current: {}",
+                    timeout,
+                    target_count,
+                    self.count_progress_end_messages()
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    /// Trigger diagnostics for `file` and wait until the server has processed the results.
+    ///
+    /// The server sends `$/progress` notifications with `kind: "end"` when
+    /// diagnostics complete. We watch for this to know when the result is
+    /// ready, rather than sleeping for an arbitrary duration.
+    ///
+    /// After diagnostics complete, the result is on the internal channel
+    /// but the server's main loop must call `try_recv` to pick it up.
+    /// Sending a `$/ping` notification (unknown to the server, safely ignored)
+    /// forces the main loop to iterate, executing `try_recv`.
+    pub fn trigger_and_wait_for_diagnostics(&mut self, file: &Path) {
+        let count_before = self.count_progress_end_messages();
+
+        // Save triggers diagnostics.
+        self.save_document(file).expect("Failed to save document");
+
+        // Wait for diagnostics to complete ($/progress end notification).
+        self.wait_for_progress_end_count(count_before + 1, Duration::from_secs(60))
+            .expect("Diagnostics did not complete in time");
+
+        // Force the server's main loop to iterate, ensuring it picks up
+        // the diagnostics result via try_recv.
+        self.send_notification("$/ping", json!(null))
+            .expect("Failed to send flush notification");
+        self.wait_for_server(Duration::from_secs(1));
     }
 
     /// Get diagnostics for a specific file
@@ -262,7 +350,7 @@ impl LspClient {
     #[allow(dead_code)]
     pub fn get_diagnostics(&self, file_path: &Path) -> Vec<Value> {
         let absolute_path = self.working_dir.join(file_path);
-        let diagnostics = self.diagnostics.lock().unwrap();
+        let diagnostics = self.shared.diagnostics.lock().unwrap();
         if let Some(diagnostics_value) = diagnostics.get(&absolute_path) {
             if let Some(arr) = diagnostics_value.as_array() {
                 return arr.clone();
@@ -274,7 +362,7 @@ impl LspClient {
     /// Get all diagnostics for all files
     /// Returns a map of file paths to their diagnostic messages
     pub fn get_all_diagnostics(&self) -> Map<PathBuf, Vec<Value>> {
-        let diagnostics = self.diagnostics.lock().unwrap();
+        let diagnostics = self.shared.diagnostics.lock().unwrap();
         let mut result = Map::default();
         for (file_path, diagnostics_value) in diagnostics.iter() {
             if let Some(arr) = diagnostics_value.as_array() {
@@ -287,7 +375,7 @@ impl LspClient {
     /// Verify that there are no diagnostic errors for any file
     /// Returns an error if any diagnostics contain errors
     pub fn verify_no_diagnostic_errors(&self) -> Result<(), String> {
-        let diagnostics = self.diagnostics.lock().unwrap();
+        let diagnostics = self.shared.diagnostics.lock().unwrap();
         for (file_path, diagnostics_value) in diagnostics.iter() {
             if let Some(diag_array) = diagnostics_value.as_array() {
                 if !diag_array.is_empty() {
@@ -471,7 +559,7 @@ impl LspClient {
     /// This should be called at the end of tests to ensure that
     /// LSP protocol errors in the reader thread are properly reported.
     pub fn finish(&self) -> Result<(), String> {
-        let error = self.reader_thread_error.lock().unwrap();
+        let error = self.shared.reader_thread_error.lock().unwrap();
         if let Some(err_msg) = error.as_ref() {
             return Err(format!("LSP protocol error occurred: {}", err_msg));
         }

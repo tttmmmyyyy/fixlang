@@ -64,6 +64,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             value: TypeDeclValue::Alias(TypeAlias { value: fix_type }),
             tyvars: vec![],
             source: None,
+            name_src: None,
         }]);
     }
 
@@ -209,6 +210,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_integral_function(from.clone(), to.clone(), None),
                 None,
+                None,
                 Some(format!(
                     "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
                     from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
@@ -241,6 +243,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&namespace, &format!("to_{}", to_name_c)),
                 cast_between_integral_function(from.clone(), to_type_fix, Some(to_type_c)),
                 None,
+                None,
                 Some(format!(
                     "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
                     from_name, to_name_c, to_name_c, upper_camel_to_lower_snake(&to_name_c),
@@ -258,6 +261,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to.clone(), None),
+                None,
                 None,
                 Some(format!(
                     "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
@@ -291,6 +295,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&namespace, &format!("to_{}", to_name)),
                 cast_between_float_function(from.clone(), to_type_fix.clone(), Some(to_type_c)),
                 None,
+                None,
                 Some(format!(
                     "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
                     from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
@@ -308,6 +313,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_int_to_float_function(from.clone(), to.clone()),
+                None,
                 None,
                 Some(format!(
                     "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
@@ -334,6 +340,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_int_to_float_function(from.clone(), to_type),
                 None,
+                None,
                 Some(format!(
                     "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
                     from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
@@ -351,6 +358,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             errors.eat_err(fix_module.add_global_value(
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to.clone()),
+                None,
                 None,
                 Some(format!(
                     "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
@@ -377,6 +385,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 FullName::new(&from_namespace, &format!("to_{}", to_name)),
                 cast_float_to_int_function(from.clone(), to_type),
                 None,
+                None,
                 Some(format!(
                     "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
                     from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
@@ -392,11 +401,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_not"),
             bit_not_function(int_ty.clone()),
             None,
+            None,
             Some(include_str!("./docs/std_bit_not.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_left"),
             shift_function(int_ty.clone(), true),
+            None,
             None,
             Some(include_str!("./docs/std_shift_left.md").to_string()),
         ));
@@ -404,11 +415,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             FullName::from_strs(&[STD_NAME, &ty_name], "shift_right"),
             shift_function(int_ty.clone(), false),
             None,
+            None,
             Some(include_str!("./docs/std_shift_right.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_xor"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Xor),
+            None,
             None,
             Some(include_str!("./docs/std_bit_xor.md").to_string()),
         ));
@@ -416,11 +429,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_and"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::And),
             None,
+            None,
             Some(include_str!("./docs/std_bit_and.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_or"),
             bitwise_operation_function(int_ty.clone(), BitOperationType::Or),
+            None,
             None,
             Some(include_str!("./docs/std_bit_or.md").to_string()),
         ));
@@ -431,17 +446,20 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME], FIX_NAME),
         fix(),
         None,
+        None,
         Some(include_str!("./docs/std_fix.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "unsafe_is_unique"),
         is_unique_function(),
         None,
+        None,
         Some(include_str!("./docs/std_unsafe_is_unique.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "mark_threaded"),
         mark_threaded_function(),
+        None,
         None,
         Some(include_str!("./docs/std_mark_threaded.md").to_string()),
     ));
@@ -450,6 +468,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_set_size"),
         unsafe_set_size_array(),
+        None,
         None,
         Some(include_str!("./docs/std_array_unsafe_set_size.md").to_string()),
     ));
@@ -460,6 +479,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED,
             ),
             array_unsafe_set_bounds_uniqueness_unchecked_unreleased(),
+            None,
             None,
             Some(
                 include_str!(
@@ -473,6 +493,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED),
         array_unsafe_get_bounds_unchecked(),
         None,
+        None,
         Some(include_str!("./docs/std_array_unsafe_get_bounds_unchecked.md").to_string()),
     ));
     errors.eat_err(
@@ -482,6 +503,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
             ),
             array_unsafe_get_linear_bounds_unchecked_unretained(false),
+            None,
             None,
             Some(
                 include_str!("./docs/std_array_unsafe_get_linear_bounds_unchecked_unretained.md")
@@ -500,6 +522,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             ),
             array_unsafe_get_linear_bounds_unchecked_unretained(true),
             None,
+            None,
             Some(
                 include_str!(
                     "./docs/std_array_unsafe_get_linear_bounds_unchecked_unretained_fu.md"
@@ -512,11 +535,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_unsafe_force_unique"),
         force_unique_array(),
         None,
+        None,
         Some(include_str!("./docs/std_array_force_unique.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_CHECK_RANGE),
         array_check_range(),
+        None,
         None,
         Some(include_str!("./docs/std_array_check_range.md").to_string()),
     ));
@@ -524,11 +549,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_CHECK_SIZE),
         array_check_size(),
         None,
+        None,
         Some(include_str!("./docs/std_array_check_size.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "set"),
         set_array(),
+        None,
         None,
         Some(include_str!("./docs/std_array_set.md").to_string()),
     ));
@@ -536,11 +563,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_capacity"),
         array_get_capacity(),
         None,
+        None,
         Some(include_str!("./docs/std_array_get_capacity.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_GET_SIZE_NAME),
         array_get_size(),
+        None,
         None,
         Some(include_str!("./docs/std_array_get_size.md").to_string()),
     ));
@@ -548,11 +577,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
         get_ptr_array(),
         None,
+        None,
         Some(include_str!("./docs/std_array_get_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_EMPTY_NAME),
         array_unsafe_empty(),
+        None,
         None,
         Some(include_str!("./docs/std_array_unsafe_empty.md").to_string()),
     ));
@@ -560,17 +591,20 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_FILL_NAME),
         array_unsafe_fill(),
         None,
+        None,
         Some(include_str!("./docs/std_array_unsafe_fill.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME], "_undefined_internal"),
         undefined_internal_function(),
         None,
+        None,
         Some(include_str!("./docs/std_undefined_internal.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         make_with_retained_name(),
         with_retained_function(),
+        None,
         None,
         Some(include_str!("./docs/std_with_retained.md").to_string()),
     ));
@@ -581,11 +615,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             FullName::from_strs(&[STD_NAME, type_name], "infinity"),
             infinity_value(type_name),
             None,
+            None,
             Some(include_str!("./docs/std_float_infinity.md").to_string()),
         ));
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, type_name], "quiet_nan"),
             quiet_nan_value(type_name),
+            None,
             None,
             Some(include_str!("./docs/std_float_quiet_nan.md").to_string()),
         ));
@@ -596,11 +632,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_boxed_to_retained_ptr_ios"),
         boxed_to_retained_ptr_ios(),
         None,
+        None,
         Some(include_str!("./docs/std_ffi_boxed_to_retained_ptr_ios.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_boxed_from_retained_ptr_ios"),
         boxed_from_retained_ptr_ios(),
+        None,
         None,
         Some(include_str!("./docs/std_ffi_boxed_from_retained_ptr_ios.md").to_string()),
     ));
@@ -608,11 +646,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, FFI_NAME], "get_funptr_release"),
         get_release_function_of_boxed_value(),
         None,
+        None,
         Some(include_str!("./docs/std_ffi_get_funptr_release.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "get_funptr_retain"),
         get_retain_function_of_boxed_value(),
+        None,
         None,
         Some(include_str!("./docs/std_ffi_get_funptr_retain.md").to_string()),
     ));
@@ -620,11 +660,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_get_boxed_ptr"),
         get_get_boxed_ptr(),
         None,
+        None,
         Some(include_str!("./docs/std_ffi_get_boxed_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_mutate_boxed_internal"),
         get_mutate_boxed_internal(),
+        None,
         None,
         Some(include_str!("./docs/std_ffi_mutate_boxed_internal.md").to_string()),
     ));
@@ -632,17 +674,20 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_mutate_boxed_ios_internal"),
         get_mutate_boxed_ios_internal(),
         None,
+        None,
         Some(include_str!("./docs/std_ffi_mutate_boxed_ios_internal.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, IO_NAME, IOSTATE_NAME], "_unsafe_create"),
         make_iostate_unsafe_create(),
         None,
+        None,
         Some(include_str!("./docs/std_iostate_unsafe_create.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME, DESTRUCTOR_NAME], "_make"),
         destructor_make(),
+        None,
         None,
         Some(include_str!("./docs/std_ffi_destructor_make.md").to_string()),
     ));

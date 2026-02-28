@@ -357,9 +357,11 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
+    let name_pair = pairs.next().unwrap();
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
     let id = TraitId::from_fullname(FullName::new(
         &ctx.namespace,
-        &pairs.next().unwrap().as_str().to_string(),
+        &name_pair.as_str().to_string(),
     ));
     let mut values = vec![];
     for pair in pairs {
@@ -373,6 +375,7 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
         id,
         value: values,
         source: Some(span),
+        name_src: Some(name_span),
         kind: kind_star(), // Will be set to a correct value in TraitEnv::set_kinds.
     }
 }
@@ -402,7 +405,9 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitDef
     let trait_tyvar = pairs.next().unwrap().as_str().to_string();
     let impl_type = type_tyvar_star(&trait_tyvar);
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::trait_name);
-    let trait_name = pairs.next().unwrap().as_str().to_string();
+    let trait_name_pair = pairs.next().unwrap();
+    let trait_name_span = Span::from_pair(&ctx.source, &trait_name_pair);
+    let trait_name = trait_name_pair.as_str().to_string();
     let mut methods: Vec<TraitMember> = vec![];
     let mut type_syns: Map<Name, AssocTypeDefn> = Map::default();
     for pair in pairs {
@@ -437,6 +442,7 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitDef
         assoc_types: type_syns,
         kind_signs: kinds,
         source: Some(span),
+        name_src: Some(trait_name_span),
         document: None,
     })
 }
@@ -462,15 +468,17 @@ fn parse_trait_member_value_defn(
     ctx: &mut ParseContext,
 ) -> Result<TraitMember, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_member_value_defn);
-    let span = Span::from_pair(&ctx.source, &pair);
+    let _span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let method_name = pairs.next().unwrap().as_str().to_string();
+    let method_name_pair = pairs.next().unwrap();
+    let method_name_span = Span::from_pair(&ctx.source, &method_name_pair);
+    let method_name = method_name_pair.as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx)?;
     Ok(TraitMember {
         name: method_name,
         qual_ty: qual_type,
         syn_qual_ty: None,
-        source: Some(span),
+        decl_src: Some(method_name_span),
         document: None, // Document can be obtained from `source`
     })
 }
@@ -530,26 +538,29 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitImp
     let qual_pred = parse_predicate_qualified(pairs.next().unwrap(), ctx)?;
     let impl_type = qual_pred.predicate.ty.clone();
     let mut value_impls: Map<Name, Arc<ExprNode>> = Map::default();
+    let mut value_lhs_srcs: Map<Name, Vec<Span>> = Map::default();
     let mut value_type_sigs: Map<Name, QualType> = Map::default();
     let mut assoc_types: Map<Name, AssocTypeImpl> = Map::default();
     for pair in pairs {
         match parse_trait_member_impl(pair, &impl_type, ctx)? {
-            TraitMemberImpl::Value((name, expr)) => {
+            TraitMemberImpl::Value { name, expr, name_span } => {
                 if value_impls.contains_key(&name) {
                     return Err(Errors::from_msg_srcs(
                         format!("Duplicate implementation of member `{}`.", name),
                         &[&Some(span)],
                     ));
                 }
+                value_lhs_srcs.entry(name.clone()).or_default().push(name_span);
                 value_impls.insert(name, expr);
             }
-            TraitMemberImpl::TypeSig((name, type_sign, opt_expr)) => {
+            TraitMemberImpl::TypeSig { name, type_sign, opt_expr, name_span } => {
                 if value_type_sigs.contains_key(&name) {
                     return Err(Errors::from_msg_srcs(
                         format!("Duplicate the type signature of member `{}`.", name),
                         &[&Some(span)],
                     ));
                 }
+                value_lhs_srcs.entry(name.clone()).or_default().push(name_span);
                 value_type_sigs.insert(name.clone(), type_sign);
                 if let Some(expr) = opt_expr {
                     if value_impls.contains_key(&name) {
@@ -576,6 +587,7 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitImp
     Ok(TraitImpl {
         qual_pred,
         members: value_impls,
+        member_lhs_srcs: value_lhs_srcs,
         member_sigs: value_type_sigs,
         assoc_types,
         define_module: ctx.module_name.clone(),
@@ -585,8 +597,17 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitImp
 }
 
 enum TraitMemberImpl {
-    Value((Name, Arc<ExprNode>)),
-    TypeSig((Name, QualType, Option<Arc<ExprNode>>)), // Name, TypeSign, and implementation expr if given.
+    Value {
+        name: Name,
+        expr: Arc<ExprNode>,
+        name_span: Span,
+    },
+    TypeSig {
+        name: Name,
+        type_sign: QualType,
+        opt_expr: Option<Arc<ExprNode>>,
+        name_span: Span,
+    },
     Type(AssocTypeImpl),
 }
 
@@ -599,12 +620,12 @@ fn parse_trait_member_impl(
     let pair = pair.into_inner().next().unwrap();
     Ok(match pair.as_rule() {
         Rule::trait_member_value_impl => {
-            let (name, expr) = parse_trait_member_value_impl(pair, ctx)?;
-            TraitMemberImpl::Value((name, expr))
+            let (name, expr, name_span) = parse_trait_member_value_impl(pair, ctx)?;
+            TraitMemberImpl::Value { name, expr, name_span }
         }
         Rule::trait_member_value_type_sign => {
-            let (name, type_sign, opt_expr) = parse_trait_member_value_type_sign(pair, ctx)?;
-            TraitMemberImpl::TypeSig((name, type_sign, opt_expr))
+            let (name, type_sign, opt_expr, name_span) = parse_trait_member_value_type_sign(pair, ctx)?;
+            TraitMemberImpl::TypeSig { name, type_sign, opt_expr, name_span }
         }
         Rule::trait_member_type_impl => {
             TraitMemberImpl::Type(parse_trait_member_type_impl(pair, impl_type, ctx)?)
@@ -616,21 +637,25 @@ fn parse_trait_member_impl(
 fn parse_trait_member_value_impl(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-) -> Result<(Name, Arc<ExprNode>), Errors> {
+) -> Result<(Name, Arc<ExprNode>, Span), Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_member_value_impl);
     let mut pairs = pair.into_inner();
-    let method_name = pairs.next().unwrap().as_str().to_string();
+    let name_pair = pairs.next().unwrap();
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
+    let method_name = name_pair.as_str().to_string();
     let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
-    Ok((method_name, expr))
+    Ok((method_name, expr, name_span))
 }
 
 fn parse_trait_member_value_type_sign(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-) -> Result<(Name, QualType, Option<Arc<ExprNode>>), Errors> {
+) -> Result<(Name, QualType, Option<Arc<ExprNode>>, Span), Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_member_value_type_sign);
     let mut pairs = pair.into_inner();
-    let method_name = pairs.next().unwrap().as_str().to_string();
+    let name_pair = pairs.next().unwrap();
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
+    let method_name = name_pair.as_str().to_string();
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx)?;
     let mut opt_expr = None;
     if let Some(pair) = pairs.peek() {
@@ -638,7 +663,7 @@ fn parse_trait_member_value_type_sign(
             opt_expr = Some(parse_expr_with_new_do(pairs.next().unwrap(), ctx)?);
         }
     }
-    Ok((method_name, qual_type, opt_expr))
+    Ok((method_name, qual_type, opt_expr, name_span))
 }
 
 fn parse_trait_member_type_impl(
@@ -702,11 +727,13 @@ fn parse_global_value_decl(
     ctx: &mut ParseContext,
 ) -> Result<(GlobalValueDecl, Option<GlobalValueDefn>), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_name_type_sign);
-    let span = Span::from_pair(&ctx.source, &pair);
+    let _span = Span::from_pair(&ctx.source, &pair);
 
     // Parse name.
     let mut pairs = pair.into_inner();
-    let name = pairs.next().unwrap().as_str().to_string();
+    let name_pair = pairs.next().unwrap();
+    let name_src = Span::from_pair(&ctx.source, &name_pair);
+    let name = name_pair.as_str().to_string();
     let name = FullName::new(&ctx.namespace, &name);
 
     // Parse type.
@@ -725,7 +752,7 @@ fn parse_global_value_decl(
             gvd = Some(GlobalValueDefn {
                 name: name.clone(),
                 expr,
-                src: Some(span.clone()),
+                src: Some(name_src.clone()),
             });
         }
     }
@@ -734,7 +761,7 @@ fn parse_global_value_decl(
         GlobalValueDecl {
             name: name,
             ty,
-            src: Some(span),
+            src: Some(name_src),
         },
         gvd,
     ))
@@ -745,14 +772,16 @@ fn parse_global_name_defn(
     ctx: &mut ParseContext,
 ) -> Result<GlobalValueDefn, Errors> {
     assert_eq!(pair.as_rule(), Rule::global_name_defn);
-    let span = Span::from_pair(&ctx.source, &pair);
+    let _span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let name = pairs.next().unwrap().as_str().to_string();
+    let name_pair = pairs.next().unwrap();
+    let name_src = Span::from_pair(&ctx.source, &name_pair);
+    let name = name_pair.as_str().to_string();
     let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
     Ok(GlobalValueDefn {
         name: FullName::new(&ctx.namespace, &name),
         expr: expr,
-        src: Some(span),
+        src: Some(name_src),
     })
 }
 
@@ -936,7 +965,9 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn,
         }
     }
     assert_eq!(pairs.peek().unwrap().as_rule(), Rule::type_name);
-    let name = pairs.next().unwrap().as_str();
+    let name_pair = pairs.next().unwrap();
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
+    let name = name_pair.as_str();
     let mut tyvars: Vec<Arc<TyVar>> = vec![];
     while pairs.peek().unwrap().as_rule() == Rule::type_var {
         let tyvar_name_pair = pairs.next().unwrap();
@@ -960,6 +991,7 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn,
         value: type_value,
         tyvars,
         source: Some(span),
+        name_src: Some(name_span),
     })
 }
 

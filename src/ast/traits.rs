@@ -177,22 +177,17 @@ pub struct TraitMember {
     pub qual_ty: QualType,
     // The type of the member, but with aliases retained.
     pub syn_qual_ty: Option<QualType>,
-    pub source: Option<Span>,
+    // Source location of this member declaration.
+    // The left hand side of the member declaration: e.g., `to_string` for "to_string : a -> String".
+    pub decl_src: Option<Span>,
     // Document of this member.
-    // This field is used only If document from `source` is not available.
+    // This field is used only If document from `decl_src` is not available.
     pub document: Option<String>,
 }
 
 impl TraitMember {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        if self.source.is_none() {
-            return None;
-        }
-        let src = self.source.as_ref().unwrap();
-        if !src.includes_pos_lsp(pos) {
-            return None;
-        }
         self.qual_ty.find_node_at(pos)
     }
 
@@ -219,8 +214,12 @@ pub struct TraitDefn {
     pub assoc_types: Map<Name, AssocTypeDefn>,
     // Kind signatures at the trait declaration, e.g., "f: *->*" in "trait [f:*->*] f: Functor {}".
     pub kind_signs: Vec<KindSignature>,
-    // Source location of trait definition.
+    // The source span of the entire trait definition, from the `trait` keyword to the closing `}`.
+    // Used for error messages, documentation extraction (`get_document()`), and go-to-definition.
     pub source: Option<Span>,
+    // The source span of the trait name only (e.g., `Functor` in `trait a : Functor { ... }`).
+    // Used for "Find All References" to highlight just the name, not the whole definition.
+    pub name_src: Option<Span>,
     // Document of this trait.
     // This field is used only If document from `source` is not available.
     pub document: Option<String>,
@@ -349,6 +348,10 @@ pub struct TraitImpl {
     pub qual_pred: QualPred,
     // Member implementation.
     pub members: Map<Name, Arc<ExprNode>>,
+    // Source spans of the left-hand side names in member implementations.
+    // For example, in `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`,
+    // this stores the spans of both occurrences of `to_string`.
+    pub member_lhs_srcs: Map<Name, Vec<Span>>,
     // Type signatures of members, if provided by user.
     pub member_sigs: Map<Name, QualType>,
     // Associated type synonym implementation.
@@ -584,8 +587,12 @@ pub struct TraitAlias {
     pub id: TraitId,
     // Aliased traits and its source span.
     pub value: Vec<(TraitId, Span)>,
-    // Source location of alias definition.
+    // The source span of the entire trait alias definition, from the `trait` keyword to the final semicolon.
+    // Used for error messages, documentation extraction (`get_document()`), and go-to-definition.
     pub source: Option<Span>,
+    // The source span of the trait alias name only (e.g., `MyAlias` in `trait MyAlias = Foo + Bar;`).
+    // Used for "Find All References" to highlight just the name, not the whole definition.
+    pub name_src: Option<Span>,
     // Kind of this trait alias.
     pub kind: Arc<Kind>,
 }

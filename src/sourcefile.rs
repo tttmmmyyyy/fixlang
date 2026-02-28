@@ -21,6 +21,15 @@ pub struct SourceFile {
     hash: Arc<Mutex<Option<String>>>,
 }
 
+// Equality is based solely on file_path; the string and hash fields are caches.
+impl PartialEq for SourceFile {
+    fn eq(&self, other: &Self) -> bool {
+        self.file_path == other.file_path
+    }
+}
+
+impl Eq for SourceFile {}
+
 impl SourceFile {
     pub fn string(&self) -> Result<String, Errors> {
         if self.string.lock().unwrap().is_none() {
@@ -91,7 +100,7 @@ pub struct SourcePos {
 }
 
 // lifetime-free version of pest::Span
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Span {
     pub input: SourceFile,
     // Start byte index (inclusive).
@@ -241,7 +250,8 @@ impl Span {
     }
 
     // Get the document of the entity defined at this span.
-    // More specifically, this function returns the content of the consecutive comment lines just before the start of the span.
+    // More specifically, this function returns the content of the consecutive comment lines 
+    // just before the start of the span.
     pub fn get_document(&self) -> Result<String, Errors> {
         // Get a line from the reversed iterator.
         // Returns the line and whether the end of the iterator is reached.

@@ -14,7 +14,12 @@ pub struct TypeDefn {
     pub name: FullName,
     pub value: TypeDeclValue,
     pub tyvars: Vec<Arc<TyVar>>,
+    // The source span of the entire type definition, from the `type` keyword to the final semicolon.
+    // Used for error messages, documentation extraction (`get_document()`), and go-to-definition.
     pub source: Option<Span>,
+    // The source span of the type name only (e.g., `MyData` in `type MyData = ...;`).
+    // Used for "Find All References" to highlight just the name, not the whole definition.
+    pub name_src: Option<Span>,
 }
 
 impl TypeDefn {
