@@ -19,7 +19,6 @@ use lsp_types::{
     CallHierarchyOutgoingCall, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
     ReferenceParams, SymbolKind,
 };
-use std::path::PathBuf;
 use std::sync::Arc;
 
 // Handle "textDocument/references" method.
