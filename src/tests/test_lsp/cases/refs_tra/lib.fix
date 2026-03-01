@@ -1,0 +1,16 @@
+module Lib;
+
+trait a : Describable {
+    describe : a -> String;
+}
+
+impl I64 : Describable {
+    describe = |n| n.to_string;
+}
+
+// TrA-1: cursor on trait alias definition LHS (line 6, col 6)
+trait Printable = ToString + Describable;
+
+// TrA-2: cursor on trait alias in GV type sig constraint (line 9, col 16)
+show : [a : Printable] a -> String;
+show = |x| x.describe;

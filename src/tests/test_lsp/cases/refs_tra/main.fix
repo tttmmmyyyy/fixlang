@@ -1,0 +1,13 @@
+module Main;
+
+import Lib;
+
+// Cross-file usage of Printable (line 4, col 16)
+display : [a : Printable] a -> String;
+display = |x| x.to_string;
+
+main : IO ();
+main = (
+    let _ = display(42);
+    pure()
+);

@@ -1,0 +1,62 @@
+module Lib;
+
+// Ty-1: cursor on type definition LHS (line 2, col 5)
+type Vec2 = unbox struct { x: F64, y: F64 };
+
+// Ty-2: cursor on type in GV type sig (line 5, col 10)
+origin : Vec2;
+origin = Vec2 { x: 0.0, y: 0.0 };
+
+// Ty-3: cursor on type in MakeStruct (line 7, col 9)
+// (line 7 = `origin = Vec2 { ... }`, col 9)
+
+// Ty-4: cursor on type in struct pattern (line 11, col 10)
+get_x : Vec2 -> F64;
+get_x = |Vec2 { x: x, y: _ }| x;
+
+// Ty-5: cursor on type in expr annotation (line 15, col 21)
+annotated : Vec2 -> Vec2;
+annotated = |v| v : Vec2;
+
+// Ty-6: cursor on type in pattern annotation (line 20, col 12)
+get_x2 : Vec2 -> F64;
+get_x2 = |v| (
+    let p : Vec2 = v;
+    p.@x
+);
+
+// Ty-7: cursor on type in type definition RHS (line 25, col 30)
+type Line = unbox struct { start: Vec2, end_: Vec2 };
+
+// Ty-8: cursor on type in type alias RHS (line 28, col 14)
+type Point = Vec2;
+
+// Ty-9: cursor on type in impl declaration (line 32, col 5)
+trait a : Describable {
+    // Ty-10: cursor on type in TM definition type sig (line 33, col 19)
+    describe : a -> Vec2;
+}
+
+impl Vec2 : Describable {
+    // Ty-11: cursor on type in TM impl type sig (line 38, col 16)
+    describe : Vec2 -> Vec2;
+    describe = |v| v;
+}
+
+// Ty-12: cursor on type in Equality constraint RHS
+trait c : Container {
+    type Elem c;
+    get_first : c -> Option (Container::Elem c);
+}
+
+// (line 47, col 44)
+first_vec : [c : Container, Container::Elem c = Vec2] c -> Option Vec2;
+first_vec = |c| c.get_first;
+
+// Ty-13: cursor on type in assoc type impl RHS (line 53, col 30)
+type VecArray = unbox struct { data: Array Vec2 };
+
+impl VecArray : Container {
+    type Elem VecArray = Vec2;
+    get_first = |va| va.@data.get(0);
+}

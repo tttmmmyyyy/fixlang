@@ -1,0 +1,14 @@
+module Main;
+
+import Lib;
+
+// Cross-file usage of describe (line 4, col 16)
+show_i64 : I64 -> String;
+show_i64 = |n| n.describe;
+
+main : IO ();
+main = (
+    let _ = show_i64(42);
+    let _ = Lib::show(100);
+    pure()
+);

@@ -1,0 +1,18 @@
+module Main;
+
+import Lib;
+
+// Cross-file usage of helper (line 4, col 16)
+use_helper : I64 -> I64;
+use_helper = |x| Lib::helper(x);
+
+// Cross-file usage of truth (line 8, col 15)
+use_truth : I64;
+use_truth = Lib::truth + 1;
+
+main : IO ();
+main = (
+    let _ = use_helper(0);
+    let _ = use_truth;
+    pure()
+);

@@ -1,0 +1,36 @@
+module Lib;
+
+// Tr-1: cursor on trait definition name (line 2, col 10)
+trait a : Describable {
+    describe : a -> String;
+}
+
+impl I64 : Describable {
+    describe = |n| n.to_string;
+}
+
+// Tr-2: cursor on trait in GV type sig constraint (line 11, col 16)
+show : [a : Describable] a -> String;
+show = |x| x.describe;
+
+// Tr-3: cursor on trait in impl declaration (line 7, col 11)
+// (see impl I64 : Describable above)
+
+// Tr-4: cursor on trait in impl constraint (line 19, col 11)
+trait a : MyEq {
+    my_eq : a -> a -> Bool;
+}
+
+type Pair a b = unbox struct { fst: a, snd: b };
+
+impl [a : MyEq, b : MyEq] Pair a b : MyEq {
+    my_eq = |lhs, rhs| lhs.@fst.my_eq(rhs.@fst) && lhs.@snd.my_eq(rhs.@snd);
+}
+
+// Tr-5: cursor on trait in TM definition type sig constraint (line 31, col 20)
+trait a : Processor {
+    process : [b : MyEq] a -> b -> Bool;
+}
+
+// Tr-6: cursor on trait in trait alias RHS (line 36, col 30)
+trait Printable = ToString + Describable;

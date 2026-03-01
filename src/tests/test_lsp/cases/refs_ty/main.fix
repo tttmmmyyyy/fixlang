@@ -1,0 +1,14 @@
+module Main;
+
+import Lib;
+
+// Cross-file usage of Vec2 in type sig (line 4, col 12)
+make_vec : F64 -> F64 -> Lib::Vec2;
+make_vec = |x, y| Lib::Vec2 { x: x, y: y };
+
+main : IO ();
+main = (
+    let v = make_vec(1.0, 2.0);
+    let _ = Lib::get_x(v);
+    pure()
+);

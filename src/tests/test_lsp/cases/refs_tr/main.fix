@@ -1,0 +1,13 @@
+module Main;
+
+import Lib;
+
+// Cross-file usage of Describable in constraint (line 4, col 16)
+display : [a : Describable] a -> String;
+display = |x| x.describe;
+
+main : IO ();
+main = (
+    let _ = display(42);
+    pure()
+);

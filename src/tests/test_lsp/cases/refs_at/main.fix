@@ -1,0 +1,21 @@
+module Main;
+
+import Lib;
+
+// Cross-file usage of Item in Equality constraint (line 4, col 32)
+collect_iter : [iter : MyIterator, MyIterator::Item iter = I64] iter -> Array I64;
+collect_iter = |it| (
+    loop(([], it), |(acc, it)| (
+        match it.advance {
+            none() => break $ acc,
+            some((next_it, val)) => continue $ (acc.push_back(val), next_it)
+        }
+    ))
+);
+
+main : IO ();
+main = (
+    let it = MyIter { idx: 0 };
+    let _ = sum_iter(it);
+    pure()
+);

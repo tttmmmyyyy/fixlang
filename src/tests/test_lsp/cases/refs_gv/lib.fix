@@ -1,0 +1,22 @@
+module Lib;
+
+// GV-1: cursor on declaration LHS (line 3, col 0)
+// GV-2: cursor on definition LHS (line 4, col 0)
+helper : I64 -> I64;
+helper = |x| x + 1;
+
+// GV-4: cursor on usage in GV RHS (line 8, col 21 on first `helper`)
+double : I64 -> I64;
+double = |x| helper(helper(x));
+
+// GV-3: combined decl+def (line 11, col 0)
+truth : I64 = 42;
+
+// GV-5: trait impl using helper (line 18, col 19)
+trait a : Process {
+    process : a -> I64;
+}
+
+impl I64 : Process {
+    process = |n| helper(n);
+}

@@ -1,0 +1,23 @@
+module Lib;
+
+// TM-1: cursor on trait member declaration (line 3, col 4)
+trait a : Describable {
+    describe : a -> String;
+}
+
+// TM-2: cursor on impl member definition LHS (line 8, col 4)
+impl I64 : Describable {
+    describe = |n| n.to_string;
+}
+
+// TM-3: cursor on trait member usage in GV RHS (line 13, col 16)
+show : [a : Describable] a -> String;
+show = |x| x.describe;
+
+// TM-4: struct type for impl
+type Vec2 = unbox struct { x: F64, y: F64 };
+
+// TM-4: cursor on trait member usage in impl RHS (line 20, col 26 on `to_string`)
+impl Vec2 : Describable {
+    describe = |v| v.@x.to_string + ", " + v.@y.to_string;
+}
