@@ -1706,7 +1706,13 @@ impl IOFail : Monad {
 // Iterator is a concept of a sequence of elements that can be iterated.
 // More precisely, an iterator is a type whose data is "the current state" and has a method `advance` which returns the next element and the next state.
 trait iter : Iterator {
+    // The type of the element of the iterator.
     type Item iter;
+    // Advances the iterator and returns the next element and the next state.
+    // If the iterator has no more elements, it returns `none()`.
+    // 
+    // # Parameters
+    // * `iter` - The iterator to be advanced.
     advance : iter -> Option (iter, Item iter);
 }
 

@@ -3175,6 +3175,13 @@ Type: `[iter : Std::Iterator] iter -> Std::Option (iter, Std::Iterator::Item ite
 
 Trait member of `Std::Iterator`
 
+Advances the iterator and returns the next element and the next state.
+If the iterator has no more elements, it returns `none()`.
+
+##### Parameters
+
+* `iter` - The iterator to be advanced.
+
 #### append
 
 Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = a] i2 -> i1 -> Std::Iterator::AppendIterator i1 i2`
@@ -6444,9 +6451,18 @@ More precisely, an iterator is a type whose data is "the current state" and has 
 
 Defined as: `Item iter`
 
+The type of the element of the iterator.
+
 ##### method `advance`
 
 Type: `iter -> Std::Option (iter, Std::Iterator::Item iter)`
+
+Advances the iterator and returns the next element and the next state.
+If the iterator has no more elements, it returns `none()`.
+
+###### Parameters
+
+* `iter` - The iterator to be advanced.
 
 #### trait `a : LessThan`
 
