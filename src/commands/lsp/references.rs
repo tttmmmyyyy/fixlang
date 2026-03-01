@@ -167,7 +167,7 @@ fn find_type_references(
         for impl_ in impls {
             collect_qualpred_type_refs(&impl_.qual_pred, target, &mut refs);
             for (_member_name, member_sig) in &impl_.member_sigs {
-                collect_typenode_type_refs(&member_sig.ty, target, &mut refs);
+                collect_qualtype_type_refs(member_sig, target, &mut refs);
             }
         }
     }
@@ -206,6 +206,10 @@ fn find_trait_references(
     for (_trait_id, impls) in &program.trait_env.impls {
         for impl_ in impls {
             collect_qualpred_trait_refs(&impl_.qual_pred, target, &mut refs);
+            // Walk member type signatures in the impl for trait constraints.
+            for (_member_name, member_sig) in &impl_.member_sigs {
+                collect_qualtype_trait_refs(member_sig, target, &mut refs);
+            }
         }
     }
 
