@@ -511,7 +511,7 @@ fn parse_trait_member_type_defn(
     };
     let assoc_type_defn = parse_type(pairs.next().unwrap(), ctx);
     // Validate form of `assoc_type_defn`
-    let (assoc_type_name, assoc_type_params) =
+    let (assoc_type_name, assoc_type_name_src, assoc_type_params) =
         assoc_type_defn.validate_as_associated_type_defn(impl_type, &Some(span.clone()), false)?;
     let kind_applied = if let Some(pair) = pairs.next() {
         if pair.as_rule() == Rule::kind {
@@ -526,6 +526,7 @@ fn parse_trait_member_type_defn(
         name: assoc_type_name,
         kind_applied,
         src: Some(span),
+        name_src: assoc_type_name_src,
         params: assoc_type_params,
         kind_signs,
     })
@@ -675,7 +676,7 @@ fn parse_trait_member_type_impl(
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let assoc_type_application = parse_type(pairs.next().unwrap(), ctx);
-    let (assoc_type_name, params) = assoc_type_application.validate_as_associated_type_defn(
+    let (assoc_type_name, name_src, params) = assoc_type_application.validate_as_associated_type_defn(
         impl_type,
         &Some(span.clone()),
         true,
@@ -686,6 +687,7 @@ fn parse_trait_member_type_impl(
         params,
         value: type_value,
         source: Some(span),
+        name_src,
     })
 }
 
@@ -856,6 +858,7 @@ fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Equality, 
     Ok(Equality {
         assoc_type: TyAssoc {
             name: lhs_seq[0].as_tycon().name.clone(),
+            source: lhs_seq[0].get_source().clone(),
         },
         args: lhs_seq[1..].iter().cloned().collect(),
         value: rhs,

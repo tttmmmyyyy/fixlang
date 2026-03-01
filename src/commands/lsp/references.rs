@@ -10,7 +10,9 @@ use crate::ast::qual_pred::QualPred;
 use crate::ast::qual_type::QualType;
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::{TypeDeclValue, TypeDefn};
-use crate::ast::types::{Scheme, Type, TyCon, TypeNode};
+use crate::ast::equality::Equality;
+use crate::ast::traits::AssocTypeImpl;
+use crate::ast::types::{Scheme, TyAssoc, Type, TyCon, TypeNode};
 use crate::misc::Map;
 use crate::EndNode;
 use crate::Span;
@@ -82,6 +84,9 @@ fn find_all_references(program: &Program, node: &EndNode, include_declaration: b
                 let trait_id = TraitId::from_fullname(name.clone());
                 find_trait_references(program, &trait_id, include_declaration)
             }
+        }
+        EndNode::AssocType(assoc_type) => {
+            find_assoc_type_references(program, assoc_type, include_declaration)
         }
         EndNode::Module(_) => {
             // Module references are not supported yet.
@@ -221,6 +226,161 @@ fn find_trait_references(
     }
 
     refs
+}
+
+// Find all references to an associated type.
+fn find_assoc_type_references(
+    program: &Program,
+    target: &TyAssoc,
+    include_declaration: bool,
+) -> Vec<Span> {
+    let mut refs = vec![];
+
+    // Include the associated type definition location if requested.
+    if include_declaration {
+        let trait_id = target.trait_id();
+        if let Some(ti) = program.trait_env.traits.get(&trait_id) {
+            if let Some(atd) = ti.assoc_types.get(&target.name.name) {
+                if let Some(span) = &atd.name_src {
+                    refs.push(span.clone());
+                }
+            }
+        }
+    }
+
+    // Walk all global values' type signatures for associated type refs.
+    for (_name, gv) in &program.global_values {
+        collect_scheme_assoc_type_refs(&gv.scm, target, &mut refs);
+    }
+
+    // Walk trait definitions for associated type refs in member signatures.
+    for (_trait_id, trait_defn) in &program.trait_env.traits {
+        for member in &trait_defn.members {
+            collect_qualtype_assoc_type_refs(&member.qual_ty, target, &mut refs);
+        }
+    }
+
+    // Walk trait implementations.
+    for (_trait_id, impls) in &program.trait_env.impls {
+        for impl_ in impls {
+            // Walk impl declaration constraints.
+            collect_qualpred_assoc_type_refs(&impl_.qual_pred, target, &mut refs);
+            // Walk member type signatures.
+            for (_member_name, member_sig) in &impl_.member_sigs {
+                collect_qualtype_assoc_type_refs(member_sig, target, &mut refs);
+            }
+            // Walk associated type implementations.
+            for (_name, assoc_impl) in &impl_.assoc_types {
+                collect_assoc_type_impl_refs(assoc_impl, target, &mut refs);
+            }
+        }
+    }
+
+    refs
+}
+
+// Collect associated type references in a TypeNode tree.
+fn collect_typenode_assoc_type_refs(
+    ty: &Arc<TypeNode>,
+    target: &TyAssoc,
+    refs: &mut Vec<Span>,
+) {
+    match &ty.ty {
+        Type::TyCon(_) | Type::TyVar(_) => {}
+        Type::TyApp(f, a) => {
+            collect_typenode_assoc_type_refs(f, target, refs);
+            collect_typenode_assoc_type_refs(a, target, refs);
+        }
+        Type::AssocTy(assoc_ty, args) => {
+            if assoc_ty == target {
+                if let Some(span) = &assoc_ty.source {
+                    refs.push(span.clone());
+                }
+            }
+            for arg in args {
+                collect_typenode_assoc_type_refs(arg, target, refs);
+            }
+        }
+    }
+}
+
+// Collect associated type references in an Equality.
+fn collect_equality_assoc_type_refs(
+    eq: &Equality,
+    target: &TyAssoc,
+    refs: &mut Vec<Span>,
+) {
+    if &eq.assoc_type == target {
+        if let Some(span) = &eq.assoc_type.source {
+            refs.push(span.clone());
+        }
+    }
+    for arg in &eq.args {
+        collect_typenode_assoc_type_refs(arg, target, refs);
+    }
+    collect_typenode_assoc_type_refs(&eq.value, target, refs);
+}
+
+// Collect associated type references in a Scheme.
+fn collect_scheme_assoc_type_refs(
+    scheme: &Arc<Scheme>,
+    target: &TyAssoc,
+    refs: &mut Vec<Span>,
+) {
+    collect_typenode_assoc_type_refs(&scheme.ty, target, refs);
+    for pred in &scheme.predicates {
+        collect_typenode_assoc_type_refs(&pred.ty, target, refs);
+    }
+    for eq in &scheme.equalities {
+        collect_equality_assoc_type_refs(eq, target, refs);
+    }
+}
+
+// Collect associated type references in a QualType.
+fn collect_qualtype_assoc_type_refs(
+    qt: &QualType,
+    target: &TyAssoc,
+    refs: &mut Vec<Span>,
+) {
+    collect_typenode_assoc_type_refs(&qt.ty, target, refs);
+    for pred in &qt.preds {
+        collect_typenode_assoc_type_refs(&pred.ty, target, refs);
+    }
+    for eq in &qt.eqs {
+        collect_equality_assoc_type_refs(eq, target, refs);
+    }
+}
+
+// Collect associated type references in a QualPred.
+fn collect_qualpred_assoc_type_refs(
+    qp: &QualPred,
+    target: &TyAssoc,
+    refs: &mut Vec<Span>,
+) {
+    collect_typenode_assoc_type_refs(&qp.predicate.ty, target, refs);
+    for pred in &qp.pred_constraints {
+        collect_typenode_assoc_type_refs(&pred.ty, target, refs);
+    }
+    for eq in &qp.eq_constraints {
+        collect_equality_assoc_type_refs(eq, target, refs);
+    }
+}
+
+// Collect associated type references in an AssocTypeImpl.
+fn collect_assoc_type_impl_refs(
+    assoc_impl: &AssocTypeImpl,
+    target: &TyAssoc,
+    refs: &mut Vec<Span>,
+) {
+    // Check if this impl is for the target associated type.
+    // AssocTypeImpl.name is just the local name, so compare with the local part of target.
+    if assoc_impl.name == target.name.name {
+        if let Some(span) = &assoc_impl.source {
+            refs.push(span.clone());
+        }
+    }
+    // Also walk the value type for nested associated type references.
+    collect_typenode_assoc_type_refs(&assoc_impl.value, target, refs);
 }
 
 // Collect variable references in a SymbolExpr.

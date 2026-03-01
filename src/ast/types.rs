@@ -62,9 +62,26 @@ impl TyVar {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Serialize, Deserialize, Hash)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TyAssoc {
     pub name: FullName,
+    // Source span of the associated type name (e.g., `Item` in `Item iter`).
+    // Ignored in PartialEq, Eq, and Hash.
+    pub source: Option<Span>,
+}
+
+impl PartialEq for TyAssoc {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for TyAssoc {}
+
+impl std::hash::Hash for TyAssoc {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
 }
 
 impl TyAssoc {
@@ -89,7 +106,7 @@ impl TyAssoc {
     pub fn global_to_absolute(&self) -> TyAssoc {
         let mut name = self.name.clone();
         name.global_to_absolute();
-        TyAssoc { name }
+        TyAssoc { name, source: self.source.clone() }
     }
 }
 
@@ -397,11 +414,17 @@ impl TypeNode {
                 }
                 arc1.find_node_at(pos)
             }
-            Type::AssocTy(_ty_assoc, vec) => {
+            Type::AssocTy(ty_assoc, vec) => {
                 for ty in vec {
                     let node = ty.find_node_at(pos);
                     if node.is_some() {
                         return node;
+                    }
+                }
+                // If cursor is on the associated type name itself, return AssocType.
+                if let Some(src) = &ty_assoc.source {
+                    if src.includes_pos_lsp(pos) {
+                        return Some(EndNode::AssocType(ty_assoc.clone()));
                     }
                 }
                 None
@@ -693,10 +716,12 @@ impl TypeNode {
                                 ), &[&app_seq[0].info.source]));
                             }
                             let (assoc_ty_args, following_args) = args.split_at(arity);
+                            let assoc_ty_name_src = app_seq[0].get_source().clone();
                             let assoc_ty_span = args[0].get_source().clone();
                             let mut assoc_ty = type_assocty(
                                 TyAssoc {
                                     name: assoc_ty_name,
+                                    source: assoc_ty_name_src,
                                 },
                                 assoc_ty_args.iter().cloned().collect(),
                             )
@@ -1189,7 +1214,7 @@ impl TypeNode {
         impl_type: &Arc<TypeNode>,
         src_for_err: &Option<Span>,
         err_msg_for_impl: bool,
-    ) -> Result<(Name, Vec<Arc<TyVar>>), Errors> {
+    ) -> Result<(Name, Option<Span>, Vec<Arc<TyVar>>), Errors> {
         fn general_err(
             for_implememtation: bool,
             imple_type: &Arc<TypeNode>,
@@ -1280,7 +1305,8 @@ impl TypeNode {
                 }
             }
         }
-        Ok((assoc_type_name, tyvars))
+        let assoc_type_src = app_seq[0].get_source().clone();
+        Ok((assoc_type_name, assoc_type_src, tyvars))
     }
 }
 

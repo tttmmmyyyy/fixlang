@@ -30,7 +30,17 @@ impl Equality {
         if node.is_some() {
             return node;
         }
-        self.value.find_node_at(pos)
+        let node = self.value.find_node_at(pos);
+        if node.is_some() {
+            return node;
+        }
+        // If cursor is on the associated type name itself, return AssocType.
+        if let Some(src) = &self.assoc_type.source {
+            if src.includes_pos_lsp(pos) {
+                return Some(EndNode::AssocType(self.assoc_type.clone()));
+            }
+        }
+        None
     }
 
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {

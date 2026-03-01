@@ -66,9 +66,11 @@ pub struct AssocTypeDefn {
     pub params: Vec<Arc<TyVar>>,
     // The kind of the application of the associated type.
     pub kind_applied: Arc<Kind>,
-    // Source location of associated type definition.
-    #[allow(dead_code)]
+    // Source location of the entire associated type definition (e.g., `type Item a` in `type Item a;`).
+    // This span is needed for `get_document()` to find doc comments placed above the definition.
     pub src: Option<Span>,
+    // Source location of the associated type name only (e.g., `Item` in `type Item a;`).
+    pub name_src: Option<Span>,
 }
 
 impl AssocTypeDefn {
@@ -99,7 +101,11 @@ pub struct AssocTypeImpl {
     // Includes `impl_type`.
     pub params: Vec<Arc<TyVar>>,
     pub value: Arc<TypeNode>,
+    // Source location of the entire associated type implementation (e.g., `type Item MyIter = I64` in `type Item MyIter = I64;`).
+    // This span is needed for `get_document()` to find doc comments placed above the implementation.
     pub source: Option<Span>,
+    // Source span of the associated type name only (e.g., `Item` in `type Item MyIter = I64;`).
+    pub name_src: Option<Span>,
 }
 
 impl AssocTypeImpl {
@@ -128,6 +134,7 @@ impl AssocTypeImpl {
     pub fn set_kinds(&mut self, trait_inst: &TraitImpl, kind_env: &KindEnv) -> Result<(), Errors> {
         let assoc_ty_name = TyAssoc {
             name: FullName::new(&trait_inst.trait_id().name.to_namespace(), &self.name),
+            source: None,
         };
         let param_kinds = &kind_env.assoc_tys.get(&assoc_ty_name).unwrap().param_kinds;
         if self.params.len() != param_kinds.len() {
@@ -1216,6 +1223,7 @@ impl TraitEnv {
                     let equality = Equality {
                         assoc_type: TyAssoc {
                             name: assoc_type_fullname,
+                            source: assoc_type_impl.name_src.clone(),
                         },
                         args,
                         value: assoc_type_impl.value.clone(),
@@ -1248,6 +1256,7 @@ impl TraitEnv {
                 let assoc_type_namespace = trait_id.name.to_namespace();
                 let assoc_type = TyAssoc {
                     name: FullName::new(&assoc_type_namespace, &assoc_ty_name),
+                    source: None,
                 };
                 assoc_ty_kind_info.insert(
                     assoc_type.clone(),

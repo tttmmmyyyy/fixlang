@@ -479,6 +479,24 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
                 document_trait_or_alias(program, &mut docs, &trait_);
             }
         }
+        EndNode::AssocType(assoc_type) => {
+            let trait_id = assoc_type.trait_id();
+            docs += &format!(
+                "```\nassociated type {} (trait {})\n```",
+                assoc_type.name.to_string(),
+                trait_id.to_string()
+            );
+            // Try to show the documentation comment of the associated type definition.
+            if let Some(ti) = program.trait_env.traits.get(&trait_id) {
+                if let Some(atd) = ti.assoc_types.get(&assoc_type.name.name) {
+                    if let Some(doc) = atd.src.as_ref().and_then(|src| src.get_document().ok()) {
+                        if !doc.is_empty() {
+                            docs += &format!("\n\n{}", doc);
+                        }
+                    }
+                }
+            }
+        }
         EndNode::ValueDecl(name) => {
             // Show the type signature and documentation of the declared global value.
             if let Some(gv) = program.global_values.get(name) {

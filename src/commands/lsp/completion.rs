@@ -272,6 +272,7 @@ pub(super) fn handle_completion_resolve_document(
         EndNode::Trait(trait_) => Some(trait_.name.clone()),
         EndNode::Module(_) => None,
         EndNode::TypeOrTrait(name) => Some(name),
+        EndNode::AssocType(assoc_type) => Some(assoc_type.name.clone()),
         EndNode::ValueDecl(name) => Some(name), // Should not be used for completion, but just in case.
     };
     if let Some(import_item_name) = import_item_name {

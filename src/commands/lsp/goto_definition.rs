@@ -39,6 +39,7 @@ pub(super) fn handle_goto_definition(
         EndNode::Trait(_) => None,
         EndNode::Module(_) => None,
         EndNode::TypeOrTrait(_) => None,
+        EndNode::AssocType(_) => None,
         // The cursor is on the declaration name itself; there is no other definition to jump to.
         EndNode::ValueDecl(_) => None,
     };
@@ -80,6 +81,16 @@ pub(super) fn handle_goto_definition(
                 } else {
                     def_src = None;
                 }
+            }
+            EndNode::AssocType(assoc_type) => {
+                // Find the associated type definition in the trait.
+                let trait_id = assoc_type.trait_id();
+                def_src = program
+                    .trait_env
+                    .traits
+                    .get(&trait_id)
+                    .and_then(|ti| ti.assoc_types.get(&assoc_type.name.name))
+                    .and_then(|atd| atd.name_src.clone());
             }
             EndNode::ValueDecl(_) => {
                 unreachable!()
