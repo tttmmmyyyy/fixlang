@@ -17,7 +17,7 @@ LSPの「Find All References (refs)」と「Call Hierarchy (calls)」機能の�
 4. ~~型エイリアス（Type Alias）~~ — プログラムチェック処理の早期段階で解決されるため、refs非サポート
 5. トレイト（Trait）
 6. トレイトエイリアス（Trait Alias）— 型チェック時に内部的に解決されるがASTは編集されないため、refsサポート可能
-7. 関連型（Associated Type）— 言語機能としては存在するが、refs / calls での検索は未対応
+7. 関連型（Associated Type）
 
 **参照が見つかる場所:**
 
@@ -58,12 +58,12 @@ LSPの「Find All References (refs)」と「Call Hierarchy (calls)」機能の�
 | **トレイトメンバー** | ✓ | - | - | - | - | - | - | - | - | - | - | - | - |
 | **型**             | - | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | - |
 | ~~**型エイリアス**~~ | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| **トレイト**        | - | - | - | - | - | ✓ | ✓ | ✓※3 | ✓ | - | - | - | ✓ |
-| **トレイトエイリアス** | - | - | - | - | - | ✓ | ✓ | ✓※3 | ✓ | - | - | - | - |
+| **トレイト**        | - | - | - | - | - | ✓ | ✓ | ✓ | ✓ | - | - | - | ✓ |
+| **トレイトエイリアス** | - | - | - | - | - | ✓ | ✓ | ✓ | ✓ | - | - | - | - |
 | **関連型**          | - | - | - | - | - | ✓※2 | ✓※2 | ✓※2 | - | ✓ | - | - | - |
 
-- ※2: 関連型はEquality制約 (`[Item iter = a]`) として出現。refs未対応。
-- ※3: TM実装型sigにトレイト制約を書ける（例: `hoge : [b : ToString] I64 -> b -> String;`）。ただし現在の `find_trait_references` 実装では `impl_.member_sigs` のトレイト制約を検索していない（実装の漏れ）。
+- ※2: 関連型はEquality制約 (`[Item iter = a]`) として出現する。
+- ※3: ~~TM実装型sigにトレイト制約を書ける（例: `hoge : [b : ToString] I64 -> b -> String;`）。ただし現在の `find_trait_references` 実装では `impl_.member_sigs` のトレイト制約を検索していない（実装の漏れ）。~~ → **修正済み**: `find_trait_references` / `find_type_references` が `impl_.member_sigs` を正しく検索するよう修正。
 
 備考:
 - 「変数参照」にはユニオンパターンのコンストラクタ名（`some(v)` の `some` 等）も含む（グローバル値として扱われる）。
@@ -146,14 +146,14 @@ LSPの「Find All References (refs)」と「Call Hierarchy (calls)」機能の�
 | TrA-cur-1 | トレイトエイリアス定義の左辺名 (`trait Printable = ...;` の `Printable`) | Trait |
 | TrA-cur-2 | GV型sigのトレイト制約中 (`[a : Printable]` の `Printable`) | Trait / TypeOrTrait |
 
-### 3g. 関連型のカーソル位置（未実装）
+### 3g. 関連型のカーソル位置
 
 | ID | カーソル位置 | EndNode種類 |
 |---|---|---|
-| AT-cur-1 | トレイト定義内の関連型宣言 (`type Item iter;` の `Item`) | ？ |
-| AT-cur-2 | impl内の関連型実装の左辺 (`type Item (Array a) = a;` の `Item`) | ？ |
-| AT-cur-3 | Equality制約中 (`[Item iter = a]` の `Item`) | ？ |
-| AT-cur-4 | 型中での使用 (`Option (iter, Item iter)` の `Item`) | ？ |
+| AT-cur-1 | トレイト定義内の関連型宣言 (`type Item iter;` の `Item`) | （find_node_atの経路外 — AssocTypeDefn.srcのSpanで定義を返す） |
+| AT-cur-2 | impl内の関連型実装の左辺 (`type Item (Array a) = a;` の `Item`) | （find_node_atの経路外 — AssocTypeImpl.sourceのSpanで定義を返す） |
+| AT-cur-3 | Equality制約中 (`[Item iter = a]` の `Item`) | AssocType |
+| AT-cur-4 | 型中での使用 (`Option (iter, Item iter)` の `Item`) | AssocType |
 
 ---
 
@@ -632,7 +632,7 @@ show = |x| x.to_string;
 
 ---
 
-### 4.7 関連型（未実装）
+### 4.7 関連型
 
 #### AT-1: トレイト定義内の関連型宣言からのrefs
 
@@ -645,7 +645,6 @@ trait iter : Iterator {
 ```
 - カーソル: `type Item iter;` の `Item`
 - 期待refs: 宣言, 各impl内の`Item`実装, `advance`型sig中の`Item iter`, GV型sig中のEquality制約`Item iter = a`
-- 状態: **未実装**
 
 #### AT-2: impl内の関連型実装の左辺からのrefs
 
@@ -665,7 +664,6 @@ impl MyIter : Iterator {
 ```
 - カーソル: `type Item MyIter = I64;` の `Item`
 - 期待refs: AT-1と同じ
-- 状態: **未実装**
 
 #### AT-3: Equality制約中の関連型名からのrefs
 
@@ -681,7 +679,6 @@ sum_iter = |it| ...;
 ```
 - カーソル: `Item iter = I64` の `Item`
 - 期待refs: AT-1と同じ
-- 状態: **未実装**
 
 #### AT-4: 型中での関連型の使用からのrefs
 
@@ -694,7 +691,6 @@ trait iter : Iterator {
 ```
 - カーソル: `Item iter` の `Item`（型シグネチャ中の使用）
 - 期待refs: AT-1と同じ
-- 状態: **未実装**
 
 #### AT-5: 高アリティ関連型（arity 2以上）
 
@@ -718,7 +714,6 @@ impl [n : Nat] Succ n : Nat {
 ```
 - カーソル: `type Add n m;` の `Add`
 - 期待refs: trait定義内宣言, impl内宣言, 式/型中での使用
-- 状態: **未実装**
 
 ---
 
@@ -791,13 +786,15 @@ Fix では `Lib::helper(x)` のように名前空間を明示する参照が可�
 | トレイト | trait alias右辺中 | Tr-6 |
 | トレイトエイリアス | 定義の左辺名 | TrA-1 |
 | トレイトエイリアス | GV型sig制約中 | TrA-2 |
-| 関連型 | trait定義内の宣言 | AT-1 🚧 |
-| 関連型 | impl内の実装左辺 | AT-2 🚧 |
-| 関連型 | Equality制約中 | AT-3 🚧 |
-| 関連型 | 型中での使用 | AT-4 🚧 |
-| 関連型 | 高アリティ関連型 | AT-5 🚧 |
+| 関連型 | trait定義内の宣言 | AT-1 |
+| 関連型 | impl内の実装左辺 | AT-2 |
+| 関連型 | Equality制約中 | AT-3 |
+| 関連型 | 型中での使用 | AT-4 |
+| 関連型 | 高アリティ関連型 | AT-5 |
 
 🚧 = 未実装
+
+→ **全件実装済み**（🚧マーカーなし）
 
 ### 参照場所の網羅性（マトリックスの各セルが最低1つのテストケースでカバーされているか）
 
@@ -805,13 +802,13 @@ Fix では `Lib::helper(x)` のように名前空間を明示する参照が可�
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | グローバル値     | GV-4,5 | - | - | - | - | - | - | - | - | - | - | - | - |
 | トレイトメンバー | TM-3,4 | - | - | - | - | - | - | - | - | - | - | - | - |
-| 型             | - | Ty-3 | Ty-4 | Ty-5 | Ty-6 | Ty-2 | Ty-10 | Ty-11 | Ty-9 | Ty-13🚧 | Ty-7 | Ty-8 | - |
-| ~~型エイリアス~~ | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| 型             | - | Ty-3 | Ty-4 | Ty-5 | Ty-6 | Ty-2 | Ty-10 | Ty-11 | Ty-9 | Ty-13 | Ty-7 | Ty-8 | - |
+| ~~**型エイリアス**~~ | - | - | - | - | - | - | - | - | - | - | - | - | - |
 | トレイト        | - | - | - | - | - | Tr-2 | Tr-5 | ※J | Tr-3,4 | - | - | - | Tr-6 |
 | トレイトエイリアス | - | - | - | - | - | TrA-2 | ※H | ※J | ※I | - | - | - | - |
-| 関連型          | - | - | - | - | - | AT-3🚧 | AT-4🚧 | ※L🚧 | - | AT-2🚧 | - | - | - |
+| 関連型          | - | - | - | - | - | AT-3 | AT-4 | ※L | - | AT-2 | - | - | - |
 
 ※H, ※I: トレイトエイリアスのテストケースで、上記テスト一覧に明示していない組み合わせ。
 テスト実装時に、トレイトで確認済みのパターンと同等のテストをトレイトエイリアスでも実施すること。
-※J: TM実装型sigにトレイト / トレイトエイリアスの制約が書ける場合のテスト。現在の実装では検索漏れあり（要修正）。
-※L: TM実装型sigに関連型が出現する場合のテスト（例: `advance : MyIter -> Option (MyIter, Item MyIter);`）。※3と同様、`impl_.member_sigs`の検索漏れの影響を受ける。
+※J: TM実装型sigにトレイト / トレイトエイリアスの制約が書ける場合のテスト。~~現在の実装では検索漏れあり（要修正）。~~ → **修正済み**。
+※L: TM実装型sigに関連型が出現する場合のテスト（例: `advance : MyIter -> Option (MyIter, Item MyIter);`）。~~※3と同様、`impl_.member_sigs`の検索漏れの影響を受ける。~~ → **修正済み**。
