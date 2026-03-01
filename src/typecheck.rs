@@ -389,7 +389,7 @@ pub struct TypeCheckContext {
     // Names that should be imported in the current module.
     pub import_required: Vec<FullName>,
     // Equalities assumed.
-    pub assumed_eqs: Map<TyAssoc, Vec<EqualityScheme>>,
+    pub assumed_eqs: Map<AssocType, Vec<EqualityScheme>>,
     // Predicates assumed.
     pub assumed_preds: Map<TraitId, Vec<QualPredScheme>>,
     // Fixed type variables.

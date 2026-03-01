@@ -4,14 +4,14 @@ use crate::ast::equality::Equality;
 use crate::ast::name::Name;
 use crate::ast::predicate::Predicate;
 use crate::ast::traits::{AssocTypeKindInfo, KindSignature, TraitId};
-use crate::ast::types::{Kind, TyAssoc, TyCon, Type, TypeNode};
+use crate::ast::types::{Kind, AssocType, TyCon, Type, TypeNode};
 use crate::misc::Map;
 
 // Kind environment.
 #[derive(Default, Clone)]
 pub struct KindEnv {
     pub tycons: Map<TyCon, Arc<Kind>>,
-    pub assoc_tys: Map<TyAssoc, AssocTypeKindInfo>,
+    pub assoc_tys: Map<AssocType, AssocTypeKindInfo>,
     pub traits_and_aliases: Map<TraitId, Arc<Kind>>,
 }
 

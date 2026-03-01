@@ -10,7 +10,7 @@ use super::*;
 // Equality predicate `AssociateType args = value`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Equality {
-    pub assoc_type: TyAssoc,
+    pub assoc_type: AssocType,
     pub args: Vec<Arc<TypeNode>>,
     pub value: Arc<TypeNode>,
     pub source: Option<Span>,

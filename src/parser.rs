@@ -856,7 +856,7 @@ fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Equality, 
         ));
     }
     Ok(Equality {
-        assoc_type: TyAssoc {
+        assoc_type: AssocType {
             name: lhs_seq[0].as_tycon().name.clone(),
             source: lhs_seq[0].get_source().clone(),
         },

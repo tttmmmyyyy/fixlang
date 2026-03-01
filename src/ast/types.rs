@@ -63,28 +63,28 @@ impl TyVar {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct TyAssoc {
+pub struct AssocType {
     pub name: FullName,
     // Source span of the associated type name (e.g., `Item` in `Item iter`).
     // Ignored in PartialEq, Eq, and Hash.
     pub source: Option<Span>,
 }
 
-impl PartialEq for TyAssoc {
+impl PartialEq for AssocType {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
 }
 
-impl Eq for TyAssoc {}
+impl Eq for AssocType {}
 
-impl std::hash::Hash for TyAssoc {
+impl std::hash::Hash for AssocType {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name.hash(state);
     }
 }
 
-impl TyAssoc {
+impl AssocType {
     pub fn resolve_namespace(
         &mut self,
         ctx: &mut NameResolutionContext,
@@ -103,10 +103,10 @@ impl TyAssoc {
     }
 
     // Convert global FullName to absolute path.
-    pub fn global_to_absolute(&self) -> TyAssoc {
+    pub fn global_to_absolute(&self) -> AssocType {
         let mut name = self.name.clone();
         name.global_to_absolute();
-        TyAssoc { name, source: self.source.clone() }
+        AssocType { name, source: self.source.clone() }
     }
 }
 
@@ -621,7 +621,7 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    pub fn set_assocty_name(&self, name: TyAssoc) -> Arc<TypeNode> {
+    pub fn set_assocty_name(&self, name: AssocType) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
             Type::AssocTy(_, args) => ret.ty = Type::AssocTy(name, args.clone()),
@@ -719,7 +719,7 @@ impl TypeNode {
                             let assoc_ty_name_src = app_seq[0].get_source().clone();
                             let assoc_ty_span = args[0].get_source().clone();
                             let mut assoc_ty = type_assocty(
-                                TyAssoc {
+                                AssocType {
                                     name: assoc_ty_name,
                                     source: assoc_ty_name_src,
                                 },
@@ -1325,7 +1325,7 @@ pub enum Type {
     TyVar(Arc<TyVar>),
     TyCon(Arc<TyCon>),
     TyApp(Arc<TypeNode>, Arc<TypeNode>),
-    AssocTy(TyAssoc, Vec<Arc<TypeNode>>),
+    AssocTy(AssocType, Vec<Arc<TypeNode>>),
 }
 
 impl TypeNode {
@@ -1592,7 +1592,7 @@ pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyApp(tyfun, param))
 }
 
-pub fn type_assocty(assoc_ty: TyAssoc, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
+pub fn type_assocty(assoc_ty: AssocType, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::AssocTy(assoc_ty, args))
 }
 

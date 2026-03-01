@@ -12,7 +12,7 @@ use crate::ast::traits::TraitId;
 use crate::ast::typedecl::{TypeDeclValue, TypeDefn};
 use crate::ast::equality::Equality;
 use crate::ast::traits::AssocTypeImpl;
-use crate::ast::types::{Scheme, TyAssoc, Type, TyCon, TypeNode};
+use crate::ast::types::{Scheme, AssocType, Type, TyCon, TypeNode};
 use crate::misc::Map;
 use crate::EndNode;
 use crate::Span;
@@ -231,7 +231,7 @@ fn find_trait_references(
 // Find all references to an associated type.
 fn find_assoc_type_references(
     program: &Program,
-    target: &TyAssoc,
+    target: &AssocType,
     include_declaration: bool,
 ) -> Vec<Span> {
     let mut refs = vec![];
@@ -282,7 +282,7 @@ fn find_assoc_type_references(
 // Collect associated type references in a TypeNode tree.
 fn collect_typenode_assoc_type_refs(
     ty: &Arc<TypeNode>,
-    target: &TyAssoc,
+    target: &AssocType,
     refs: &mut Vec<Span>,
 ) {
     match &ty.ty {
@@ -307,7 +307,7 @@ fn collect_typenode_assoc_type_refs(
 // Collect associated type references in an Equality.
 fn collect_equality_assoc_type_refs(
     eq: &Equality,
-    target: &TyAssoc,
+    target: &AssocType,
     refs: &mut Vec<Span>,
 ) {
     if &eq.assoc_type == target {
@@ -324,7 +324,7 @@ fn collect_equality_assoc_type_refs(
 // Collect associated type references in a Scheme.
 fn collect_scheme_assoc_type_refs(
     scheme: &Arc<Scheme>,
-    target: &TyAssoc,
+    target: &AssocType,
     refs: &mut Vec<Span>,
 ) {
     collect_typenode_assoc_type_refs(&scheme.ty, target, refs);
@@ -339,7 +339,7 @@ fn collect_scheme_assoc_type_refs(
 // Collect associated type references in a QualType.
 fn collect_qualtype_assoc_type_refs(
     qt: &QualType,
-    target: &TyAssoc,
+    target: &AssocType,
     refs: &mut Vec<Span>,
 ) {
     collect_typenode_assoc_type_refs(&qt.ty, target, refs);
@@ -354,7 +354,7 @@ fn collect_qualtype_assoc_type_refs(
 // Collect associated type references in a QualPred.
 fn collect_qualpred_assoc_type_refs(
     qp: &QualPred,
-    target: &TyAssoc,
+    target: &AssocType,
     refs: &mut Vec<Span>,
 ) {
     collect_typenode_assoc_type_refs(&qp.predicate.ty, target, refs);
@@ -369,7 +369,7 @@ fn collect_qualpred_assoc_type_refs(
 // Collect associated type references in an AssocTypeImpl.
 fn collect_assoc_type_impl_refs(
     assoc_impl: &AssocTypeImpl,
-    target: &TyAssoc,
+    target: &AssocType,
     refs: &mut Vec<Span>,
 ) {
     // Check if this impl is for the target associated type.

@@ -6,7 +6,7 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
-use crate::ast::types::{type_from_tyvar, type_tyvar, Kind, Scheme, TyAssoc, TyVar, TypeNode};
+use crate::ast::types::{type_from_tyvar, type_tyvar, Kind, Scheme, AssocType, TyVar, TypeNode};
 use crate::builtin::make_boxed_trait;
 use crate::misc::{insert_to_map_vec, number_to_varname, Map, Set};
 use crate::name_resolution::{NameResolutionContext, NameResolutionType};
@@ -132,7 +132,7 @@ impl AssocTypeImpl {
     }
 
     pub fn set_kinds(&mut self, trait_inst: &TraitImpl, kind_env: &KindEnv) -> Result<(), Errors> {
-        let assoc_ty_name = TyAssoc {
+        let assoc_ty_name = AssocType {
             name: FullName::new(&trait_inst.trait_id().name.to_namespace(), &self.name),
             source: None,
         };
@@ -168,7 +168,7 @@ impl AssocTypeImpl {
 #[derive(Clone)]
 pub struct AssocTypeKindInfo {
     #[allow(dead_code)]
-    pub name: TyAssoc,
+    pub name: AssocType,
     pub param_kinds: Vec<Arc<Kind>>, // Includes `self`.
     pub value_kind: Arc<Kind>,
 }
@@ -1208,7 +1208,7 @@ impl TraitEnv {
     }
 
     // From implementation of associated types, get generalized type equalities.
-    pub fn type_equalities(&self) -> Map<TyAssoc, Vec<EqualityScheme>> {
+    pub fn type_equalities(&self) -> Map<AssocType, Vec<EqualityScheme>> {
         let mut eq_scms = Map::default();
         for (trait_id, insts) in &self.impls {
             for inst in insts {
@@ -1221,7 +1221,7 @@ impl TraitEnv {
                         args.push(type_from_tyvar(tv.clone()));
                     }
                     let equality = Equality {
-                        assoc_type: TyAssoc {
+                        assoc_type: AssocType {
                             name: assoc_type_fullname,
                             source: assoc_type_impl.name_src.clone(),
                         },
@@ -1249,12 +1249,12 @@ impl TraitEnv {
         assoc_ty_arity
     }
 
-    pub fn assoc_ty_kind_info(&self) -> Map<TyAssoc, AssocTypeKindInfo> {
+    pub fn assoc_ty_kind_info(&self) -> Map<AssocType, AssocTypeKindInfo> {
         let mut assoc_ty_kind_info = Map::default();
         for (trait_id, trait_info) in &self.traits {
             for (assoc_ty_name, assoc_ty_info) in &trait_info.assoc_types {
                 let assoc_type_namespace = trait_id.name.to_namespace();
-                let assoc_type = TyAssoc {
+                let assoc_type = AssocType {
                     name: FullName::new(&assoc_type_namespace, &assoc_ty_name),
                     source: None,
                 };
