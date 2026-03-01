@@ -110,13 +110,24 @@ pub struct AssocTypeImpl {
 
 impl AssocTypeImpl {
     // Find the minimum node which includes the specified source code position.
-    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+    // `trait_id` is the trait that this associated type implementation belongs to.
+    pub fn find_node_at(&self, pos: &SourcePos, trait_id: &TraitId) -> Option<EndNode> {
         if self.source.is_none() {
             return None;
         }
         let src = self.source.as_ref().unwrap();
         if !src.includes_pos_lsp(pos) {
             return None;
+        }
+        // Check if cursor is on the associated type name itself (LHS of the impl).
+        if let Some(ns) = &self.name_src {
+            if ns.includes_pos_lsp(pos) {
+                let full_name = FullName::new(&trait_id.name.to_namespace(), &self.name);
+                return Some(EndNode::AssocType(AssocType {
+                    name: full_name,
+                    source: Some(ns.clone()),
+                }));
+            }
         }
         self.value.find_node_at(pos)
     }
@@ -235,6 +246,24 @@ pub struct TraitDefn {
 impl TraitDefn {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        // Check if cursor is on the trait name itself (LHS of the trait definition).
+        if let Some(ns) = &self.name_src {
+            if ns.includes_pos_lsp(pos) {
+                return Some(EndNode::Trait(self.trait_.clone()));
+            }
+        }
+        // Check associated type definitions.
+        for (assoc_name, assoc_defn) in &self.assoc_types {
+            if let Some(ns) = &assoc_defn.name_src {
+                if ns.includes_pos_lsp(pos) {
+                    let full_name = FullName::new(&self.trait_.name.to_namespace(), assoc_name);
+                    return Some(EndNode::AssocType(AssocType {
+                        name: full_name,
+                        source: Some(ns.clone()),
+                    }));
+                }
+            }
+        }
         for mi in &self.members {
             let node = mi.find_node_at(pos);
             if node.is_some() {
@@ -374,12 +403,13 @@ pub struct TraitImpl {
 impl TraitImpl {
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        let trait_id = self.trait_id();
         let node = self.qual_pred.find_node_at(pos);
         if node.is_some() {
             return node;
         }
         for (_assoc_ty_name, assoc_ty_impl) in &self.assoc_types {
-            let node = assoc_ty_impl.find_node_at(pos);
+            let node = assoc_ty_impl.find_node_at(pos, &trait_id);
             if node.is_some() {
                 return node;
             }
@@ -612,6 +642,12 @@ impl TraitAlias {
 
     // Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        // Check if cursor is on the trait alias name itself (LHS of the alias definition).
+        if let Some(ns) = &self.name_src {
+            if ns.includes_pos_lsp(pos) {
+                return Some(EndNode::Trait(self.id.clone()));
+            }
+        }
         for (t, s) in &self.value {
             if s.includes_pos_lsp(pos) {
                 return Some(EndNode::Trait(t.clone()));

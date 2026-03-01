@@ -404,7 +404,6 @@ mod tests {
 
     /// Ty-1: refs from type definition LHS
     #[test]
-    #[ignore] // find_node_at does not yet support cursor on type definition LHS name
     fn test_refs_ty1_type_definition() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 3, 5, true);
@@ -509,10 +508,9 @@ mod tests {
 
     /// Ty-12: refs from type in Equality constraint RHS
     #[test]
-    #[ignore] // find_node_at does not yet support cursor on type in Equality constraint RHS
     fn test_refs_ty12_equality_constraint_rhs() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
-        let locs = ctx.find_refs("lib.fix", 52, 47, true);
+        let locs = ctx.find_refs("lib.fix", 52, 48, true);
         assert_refs_at_least(&locs, 5, "Vec2");
         ctx.shutdown();
     }
@@ -542,7 +540,6 @@ mod tests {
 
     /// Tr-1: refs from trait definition name
     #[test]
-    #[ignore] // find_node_at does not yet support cursor on trait definition name
     fn test_refs_tr1_trait_definition() {
         let mut ctx = LspTestCtx::setup("refs_tr", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 3, 10, true);
@@ -606,7 +603,6 @@ mod tests {
 
     /// TrA-1: refs from trait alias definition LHS
     #[test]
-    #[ignore] // find_node_at does not yet support cursor on trait alias definition name
     fn test_refs_tra1_trait_alias_definition() {
         let mut ctx = LspTestCtx::setup("refs_tra", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 11, 6, true);
@@ -637,7 +633,6 @@ mod tests {
 
     /// AT-1: refs from assoc type declaration
     #[test]
-    #[ignore] // find_node_at does not yet support cursor on assoc type declaration name
     fn test_refs_at1_assoc_type_declaration() {
         let mut ctx = LspTestCtx::setup("refs_at", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 5, 9, true);
@@ -648,7 +643,6 @@ mod tests {
 
     /// AT-2: refs from assoc type impl LHS
     #[test]
-    #[ignore] // find_node_at does not yet support cursor on assoc type impl LHS name
     fn test_refs_at2_assoc_type_impl() {
         let mut ctx = LspTestCtx::setup("refs_at", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 13, 9, true);
@@ -684,7 +678,6 @@ mod tests {
 
     /// AT-5: refs for higher arity associated type
     #[test]
-    #[ignore] // find_node_at does not yet support cursor on assoc type declaration name
     fn test_refs_at5_higher_arity() {
         let mut ctx = LspTestCtx::setup("refs_at", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 33, 9, true);

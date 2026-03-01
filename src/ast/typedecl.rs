@@ -32,6 +32,12 @@ impl TypeDefn {
         if !span.includes_pos_lsp(pos) {
             return None;
         }
+        // Check if cursor is on the type name itself (LHS of the type definition).
+        if let Some(ns) = &self.name_src {
+            if ns.includes_pos_lsp(pos) {
+                return Some(EndNode::Type(self.tycon()));
+            }
+        }
         self.value.find_node_at(pos)
     }
 
