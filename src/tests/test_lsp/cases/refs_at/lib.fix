@@ -1,25 +1,25 @@
 module Lib;
 
 // AT-1: cursor on assoc type declaration (line 3, col 9)
-// AT-4: cursor on assoc type usage in type (line 4, col 35)
+// AT-4: cursor on assoc type usage in type (line 4, col 48)
 trait iter : MyIterator {
-    type Item iter;
-    advance : iter -> Option (iter, MyIterator::Item iter);
+    type Yielded iter;
+    advance : iter -> Option (iter, MyIterator::Yielded iter);
 }
 
 type MyIter = unbox struct { idx: I64 };
 
 // AT-2: cursor on assoc type impl LHS (line 11, col 9)
 impl MyIter : MyIterator {
-    type Item MyIter = I64;
+    type Yielded MyIter = I64;
     advance = |it| (
         if it.@idx >= 10 { none() };
         some $ (MyIter { idx: it.@idx + 1 }, it.@idx)
     );
 }
 
-// AT-3: cursor on assoc type in Equality constraint (line 20, col 30)
-sum_iter : [iter : MyIterator, MyIterator::Item iter = I64] iter -> I64;
+// AT-3: cursor on assoc type in Equality constraint (line 20, col 43)
+sum_iter : [iter : MyIterator, MyIterator::Yielded iter = I64] iter -> I64;
 sum_iter = |it| (
     loop((0, it), |(acc, it)| (
         match it.advance {
@@ -31,12 +31,12 @@ sum_iter = |it| (
 
 // AT-5: higher arity associated type
 trait n : Nat {
-    type Add n m;
+    type Sum n m;
 }
 
 type Zero = unbox struct {};
 type Succ n = unbox struct { pred: n };
 
 impl Zero : Nat {
-    type Add Zero m = m;
+    type Sum Zero m = m;
 }

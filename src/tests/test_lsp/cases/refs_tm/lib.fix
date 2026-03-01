@@ -14,10 +14,18 @@ impl I64 : Describable {
 show : [a : Describable] a -> String;
 show = |x| x.describe;
 
-// TM-4: struct type for impl
+// For TM-4: project-specific trait member
+trait a : Formatter {
+    my_format : a -> String;
+}
+
+impl F64 : Formatter {
+    my_format = |x| x.to_string;
+}
+
 type Vec2 = unbox struct { x: F64, y: F64 };
 
-// TM-4: cursor on trait member usage in impl RHS (line 20, col 26 on `to_string`)
+// TM-4: cursor on my_format usage in impl RHS (line 29, col 24)
 impl Vec2 : Describable {
-    describe = |v| v.@x.to_string + ", " + v.@y.to_string;
+    describe = |v| v.@x.my_format + ", " + v.@y.my_format;
 }

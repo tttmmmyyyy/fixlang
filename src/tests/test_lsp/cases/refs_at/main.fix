@@ -2,8 +2,8 @@ module Main;
 
 import Lib;
 
-// Cross-file usage of Item in Equality constraint (line 4, col 32)
-collect_iter : [iter : MyIterator, MyIterator::Item iter = I64] iter -> Array I64;
+// Cross-file usage of Yielded in Equality constraint
+collect_iter : [iter : MyIterator, MyIterator::Yielded iter = I64] iter -> Array I64;
 collect_iter = |it| (
     loop(([], it), |(acc, it)| (
         match it.advance {

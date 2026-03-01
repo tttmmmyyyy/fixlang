@@ -407,12 +407,16 @@ impl TypeNode {
         match &self.ty {
             Type::TyVar(_arc) => None,
             Type::TyCon(arc) => Some(EndNode::Type(arc.as_ref().clone())),
-            Type::TyApp(arc, arc1) => {
-                let node = arc.find_node_at(pos);
+            Type::TyApp(func, arg) => {
+                // Check the argument first, then the function.
+                // This prioritizes inner/more specific nodes over outer/wider nodes,
+                // which matters for synthetic TyCon nodes (like Tuple2) whose span
+                // covers the entire expression including all arguments.
+                let node = arg.find_node_at(pos);
                 if node.is_some() {
                     return node;
                 }
-                arc1.find_node_at(pos)
+                func.find_node_at(pos)
             }
             Type::AssocTy(ty_assoc, vec) => {
                 for ty in vec {
@@ -717,7 +721,8 @@ impl TypeNode {
                             }
                             let (assoc_ty_args, following_args) = args.split_at(arity);
                             let assoc_ty_name_src = app_seq[0].get_source().clone();
-                            let assoc_ty_span = args[0].get_source().clone();
+                            let last_assoc_arg_src = assoc_ty_args.last().unwrap().get_source().clone();
+                            let assoc_ty_span = Span::unite_opt(&assoc_ty_name_src, &last_assoc_arg_src);
                             let mut assoc_ty = type_assocty(
                                 AssocType {
                                     name: assoc_ty_name,

@@ -201,12 +201,13 @@ mod tests {
         }
     }
 
-    fn assert_refs_at_least(locations: &[Value], min: usize, symbol: &str) {
+    fn assert_refs_exactly(locations: &[Value], expected: usize, symbol: &str) {
         assert_no_duplicate_refs(locations, symbol);
-        assert!(
-            locations.len() >= min,
-            "Expected at least {} references to `{}`, got {}. Locations: {:?}",
-            min,
+        assert_eq!(
+            locations.len(),
+            expected,
+            "Expected exactly {} references to `{}`, got {}. Locations: {:?}",
+            expected,
             symbol,
             locations.len(),
             locations
@@ -280,7 +281,7 @@ mod tests {
     fn test_refs_gv1_declaration() {
         let mut ctx = LspTestCtx::setup("refs_gv", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 4, 0, true);
-        assert_refs_at_least(&locs, 3, "helper");
+        assert_refs_exactly(&locs, 6, "helper");
         assert_has_ref_in_file(&locs, "lib.fix");
         assert_has_ref_in_file(&locs, "main.fix");
 
@@ -297,7 +298,7 @@ mod tests {
     fn test_refs_gv2_definition() {
         let mut ctx = LspTestCtx::setup("refs_gv", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 5, 0, true);
-        assert_refs_at_least(&locs, 3, "helper");
+        assert_refs_exactly(&locs, 6, "helper");
         assert_has_ref_in_file(&locs, "main.fix");
 
         let items = ctx.prepare_call_hierarchy("lib.fix", 5, 0);
@@ -312,7 +313,7 @@ mod tests {
     fn test_refs_gv3_combined_decl_def() {
         let mut ctx = LspTestCtx::setup("refs_gv", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 12, 0, true);
-        assert_refs_at_least(&locs, 2, "truth");
+        assert_refs_exactly(&locs, 2, "truth");
         assert_has_ref_in_file(&locs, "main.fix");
         ctx.shutdown();
     }
@@ -322,7 +323,7 @@ mod tests {
     fn test_refs_gv4_usage_in_gv_rhs() {
         let mut ctx = LspTestCtx::setup("refs_gv", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 9, 13, true);
-        assert_refs_at_least(&locs, 3, "helper");
+        assert_refs_exactly(&locs, 6, "helper");
         assert_has_ref_in_file(&locs, "main.fix");
 
         let items = ctx.prepare_call_hierarchy("lib.fix", 9, 13);
@@ -337,7 +338,7 @@ mod tests {
     fn test_refs_gv5_usage_in_impl_rhs() {
         let mut ctx = LspTestCtx::setup("refs_gv", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 20, 18, true);
-        assert_refs_at_least(&locs, 3, "helper");
+        assert_refs_exactly(&locs, 6, "helper");
 
         let items = ctx.prepare_call_hierarchy("lib.fix", 20, 18);
         assert_eq!(items.len(), 1);
@@ -354,7 +355,7 @@ mod tests {
     //   4: describe : a -> String;          (trait member declaration)
     //   9: describe = |n| n.to_string;      (impl member definition)
     //  14: show = |x| x.describe;           (usage in GV RHS)
-    //  21: describe = |v| v.@x.to_string..  (usage of to_string in impl RHS)
+    //  29: describe = |v| v.@x.my_format..  (my_format usage in impl RHS)
     //
     // main.fix lines (0-indexed):
     //   6: show_i64 = |n| n.describe;       (cross-file usage)
@@ -364,7 +365,7 @@ mod tests {
     fn test_refs_tm1_trait_member_declaration() {
         let mut ctx = LspTestCtx::setup("refs_tm", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 4, 4, true);
-        assert_refs_at_least(&locs, 3, "describe");
+        assert_refs_exactly(&locs, 3, "describe");
         assert_has_ref_in_file(&locs, "main.fix");
 
         let items = ctx.prepare_call_hierarchy("lib.fix", 4, 4);
@@ -379,7 +380,7 @@ mod tests {
     fn test_refs_tm2_impl_member_definition() {
         let mut ctx = LspTestCtx::setup("refs_tm", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 9, 4, true);
-        assert_refs_at_least(&locs, 3, "describe");
+        assert_refs_exactly(&locs, 3, "describe");
         assert_has_ref_in_file(&locs, "main.fix");
         ctx.shutdown();
     }
@@ -389,7 +390,7 @@ mod tests {
     fn test_refs_tm3_usage_in_gv_rhs() {
         let mut ctx = LspTestCtx::setup("refs_tm", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 14, 14, true);
-        assert_refs_at_least(&locs, 3, "describe");
+        assert_refs_exactly(&locs, 3, "describe");
 
         let items = ctx.prepare_call_hierarchy("lib.fix", 14, 14);
         assert_eq!(items.len(), 1);
@@ -398,14 +399,14 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// TM-4: refs from trait member usage in impl RHS (to_string)
+    /// TM-4: refs from trait member usage in impl RHS (my_format)
     #[test]
     fn test_refs_tm4_usage_in_impl_rhs() {
         let mut ctx = LspTestCtx::setup("refs_tm", &["lib.fix", "main.fix"]);
-        // `    describe = |v| v.@x.to_string + ", " + v.@y.to_string;`
-        //  col:                        ^--- col 24 = start of `to_string`
-        let locs = ctx.find_refs("lib.fix", 21, 25, true);
-        assert_refs_at_least(&locs, 1, "to_string");
+        // `    describe = |v| v.@x.my_format + ", " + v.@y.my_format;`
+        //  col:                        ^--- col 24 = start of `my_format`
+        let locs = ctx.find_refs("lib.fix", 29, 24, true);
+        assert_refs_exactly(&locs, 3, "my_format");
         ctx.shutdown();
     }
 
@@ -433,7 +434,7 @@ mod tests {
     fn test_refs_ty1_type_definition() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 3, 5, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         assert_has_ref_in_file(&locs, "main.fix");
         ctx.shutdown();
     }
@@ -443,7 +444,7 @@ mod tests {
     fn test_refs_ty2_gv_type_sig() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 6, 9, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -452,7 +453,7 @@ mod tests {
     fn test_refs_ty3_make_struct() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 7, 9, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -461,7 +462,7 @@ mod tests {
     fn test_refs_ty4_struct_pattern() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 14, 9, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -470,7 +471,7 @@ mod tests {
     fn test_refs_ty5_expr_annotation() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 18, 20, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -479,7 +480,7 @@ mod tests {
     fn test_refs_ty6_pattern_annotation() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 23, 12, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -488,7 +489,7 @@ mod tests {
     fn test_refs_ty7_type_def_rhs() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 28, 34, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -497,7 +498,7 @@ mod tests {
     fn test_refs_ty8_type_alias_rhs() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 31, 13, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -506,7 +507,7 @@ mod tests {
     fn test_refs_ty9_impl_declaration() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 39, 5, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -519,7 +520,7 @@ mod tests {
         //       0123456789012345678901234
         //  Vec2 starts at col 20
         let locs = ctx.find_refs("lib.fix", 36, 20, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -528,7 +529,7 @@ mod tests {
     fn test_refs_ty11_tm_impl_type_sig() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 41, 15, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -537,7 +538,7 @@ mod tests {
     fn test_refs_ty12_equality_constraint_rhs() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 52, 48, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -546,7 +547,7 @@ mod tests {
     fn test_refs_ty13_assoc_type_impl_rhs() {
         let mut ctx = LspTestCtx::setup("refs_ty", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 59, 25, true);
-        assert_refs_at_least(&locs, 5, "Vec2");
+        assert_refs_exactly(&locs, 22, "Vec2");
         ctx.shutdown();
     }
 
@@ -569,7 +570,7 @@ mod tests {
     fn test_refs_tr1_trait_definition() {
         let mut ctx = LspTestCtx::setup("refs_tr", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 3, 10, true);
-        assert_refs_at_least(&locs, 3, "Describable");
+        assert_refs_exactly(&locs, 4, "Describable");
         assert_has_ref_in_file(&locs, "main.fix");
         ctx.shutdown();
     }
@@ -579,7 +580,7 @@ mod tests {
     fn test_refs_tr2_gv_type_sig_constraint() {
         let mut ctx = LspTestCtx::setup("refs_tr", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 12, 12, true);
-        assert_refs_at_least(&locs, 3, "Describable");
+        assert_refs_exactly(&locs, 4, "Describable");
         ctx.shutdown();
     }
 
@@ -588,7 +589,7 @@ mod tests {
     fn test_refs_tr3_impl_declaration() {
         let mut ctx = LspTestCtx::setup("refs_tr", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 7, 11, true);
-        assert_refs_at_least(&locs, 3, "Describable");
+        assert_refs_exactly(&locs, 4, "Describable");
         ctx.shutdown();
     }
 
@@ -597,7 +598,7 @@ mod tests {
     fn test_refs_tr4_impl_constraint() {
         let mut ctx = LspTestCtx::setup("refs_tr", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 25, 10, true);
-        assert_refs_at_least(&locs, 3, "MyEq");
+        assert_refs_exactly(&locs, 5, "MyEq");
         ctx.shutdown();
     }
 
@@ -606,7 +607,7 @@ mod tests {
     fn test_refs_tr5_tm_def_type_sig_constraint() {
         let mut ctx = LspTestCtx::setup("refs_tr", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 31, 19, true);
-        assert_refs_at_least(&locs, 3, "MyEq");
+        assert_refs_exactly(&locs, 5, "MyEq");
         ctx.shutdown();
     }
 
@@ -615,7 +616,7 @@ mod tests {
     fn test_refs_tr6_trait_alias_rhs() {
         let mut ctx = LspTestCtx::setup("refs_tr", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 35, 29, true);
-        assert_refs_at_least(&locs, 3, "Describable");
+        assert_refs_exactly(&locs, 4, "Describable");
         ctx.shutdown();
     }
 
@@ -632,7 +633,7 @@ mod tests {
     fn test_refs_tra1_trait_alias_definition() {
         let mut ctx = LspTestCtx::setup("refs_tra", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 11, 6, true);
-        assert_refs_at_least(&locs, 2, "Printable");
+        assert_refs_exactly(&locs, 3, "Printable");
         assert_has_ref_in_file(&locs, "main.fix");
         ctx.shutdown();
     }
@@ -642,7 +643,7 @@ mod tests {
     fn test_refs_tra2_gv_type_sig_constraint() {
         let mut ctx = LspTestCtx::setup("refs_tra", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 14, 12, true);
-        assert_refs_at_least(&locs, 2, "Printable");
+        assert_refs_exactly(&locs, 3, "Printable");
         ctx.shutdown();
     }
 
@@ -651,18 +652,18 @@ mod tests {
     // =======================================================================
     //
     // lib.fix lines (0-indexed):
-    //   5: type Item iter;                                           (AT-1)
-    //   6: advance : iter -> Option (iter, MyIterator::Item iter);   (AT-4)
-    //  13: type Item MyIter = I64;                                   (AT-2)
-    //  21: ... MyIterator::Item iter = I64 ...                       (AT-3)
-    //  33: type Add n m;                                             (AT-5)
+    //   5: type Yielded iter;                                              (AT-1)
+    //   6: advance : iter -> Option (iter, MyIterator::Yielded iter);      (AT-4)
+    //  13: type Yielded MyIter = I64;                                      (AT-2)
+    //  21: ... MyIterator::Yielded iter = I64 ...                          (AT-3)
+    //  33: type Sum n m;                                                   (AT-5)
 
     /// AT-1: refs from assoc type declaration
     #[test]
     fn test_refs_at1_assoc_type_declaration() {
         let mut ctx = LspTestCtx::setup("refs_at", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 5, 9, true);
-        assert_refs_at_least(&locs, 3, "Item");
+        assert_refs_exactly(&locs, 5, "Yielded");
         assert_has_ref_in_file(&locs, "main.fix");
         ctx.shutdown();
     }
@@ -672,7 +673,7 @@ mod tests {
     fn test_refs_at2_assoc_type_impl() {
         let mut ctx = LspTestCtx::setup("refs_at", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 13, 9, true);
-        assert_refs_at_least(&locs, 3, "Item");
+        assert_refs_exactly(&locs, 5, "Yielded");
         ctx.shutdown();
     }
 
@@ -680,12 +681,12 @@ mod tests {
     #[test]
     fn test_refs_at3_equality_constraint() {
         let mut ctx = LspTestCtx::setup("refs_at", &["lib.fix", "main.fix"]);
-        // `sum_iter : [iter : MyIterator, MyIterator::Item iter = I64] ...`
+        // `sum_iter : [iter : MyIterator, MyIterator::Yielded iter = I64] ...`
         //  col:       0         1         2         3         4
-        //             0123456789012345678901234567890123456789012345
-        // `MyIterator::Item` starts at col 30, `Item` at col 42
-        let locs = ctx.find_refs("lib.fix", 21, 42, true);
-        assert_refs_at_least(&locs, 3, "Item");
+        //             01234567890123456789012345678901234567890123456789
+        // `MyIterator::Yielded` starts at col 31, `Yielded` at col 43
+        let locs = ctx.find_refs("lib.fix", 21, 43, true);
+        assert_refs_exactly(&locs, 5, "Yielded");
         ctx.shutdown();
     }
 
@@ -693,12 +694,12 @@ mod tests {
     #[test]
     fn test_refs_at4_usage_in_type() {
         let mut ctx = LspTestCtx::setup("refs_at", &["lib.fix", "main.fix"]);
-        // `    advance : iter -> Option (iter, MyIterator::Item iter);`
+        // `    advance : iter -> Option (iter, MyIterator::Yielded iter);`
         //  col: 0         1         2         3         4         5
-        //       01234567890123456789012345678901234567890123456789012345
-        // `MyIterator::Item` starts at col 35, `Item` at col 47
-        let locs = ctx.find_refs("lib.fix", 6, 47, true);
-        assert_refs_at_least(&locs, 3, "Item");
+        //       0123456789012345678901234567890123456789012345678901234567
+        // `MyIterator::Yielded` starts at col 36, `Yielded` at col 48
+        let locs = ctx.find_refs("lib.fix", 6, 48, true);
+        assert_refs_exactly(&locs, 5, "Yielded");
         ctx.shutdown();
     }
 
@@ -707,7 +708,7 @@ mod tests {
     fn test_refs_at5_higher_arity() {
         let mut ctx = LspTestCtx::setup("refs_at", &["lib.fix", "main.fix"]);
         let locs = ctx.find_refs("lib.fix", 33, 9, true);
-        assert_refs_at_least(&locs, 2, "Add");
+        assert_refs_exactly(&locs, 2, "Sum");
         ctx.shutdown();
     }
 }
