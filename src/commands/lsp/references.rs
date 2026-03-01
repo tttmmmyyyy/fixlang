@@ -60,7 +60,7 @@ pub(super) fn handle_references(
 
 // Find all references to the entity represented by `node` in the program.
 fn find_all_references(program: &Program, node: &EndNode, include_declaration: bool) -> Vec<Span> {
-    match node {
+    let mut refs = match node {
         EndNode::Expr(var, _) | EndNode::Pattern(var, _) => {
             let name = &var.name;
             if name.is_local() {
@@ -92,7 +92,13 @@ fn find_all_references(program: &Program, node: &EndNode, include_declaration: b
             // Module references are not supported yet.
             vec![]
         }
-    }
+    };
+
+    // Deduplicate spans.
+    refs.sort();
+    refs.dedup();
+
+    refs
 }
 
 // Find all references to a global value (function/constant).

@@ -30,6 +30,18 @@ impl PartialEq for SourceFile {
 
 impl Eq for SourceFile {}
 
+impl PartialOrd for SourceFile {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SourceFile {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.file_path.cmp(&other.file_path)
+    }
+}
+
 impl SourceFile {
     pub fn string(&self) -> Result<String, Errors> {
         if self.string.lock().unwrap().is_none() {
@@ -100,7 +112,7 @@ pub struct SourcePos {
 }
 
 // lifetime-free version of pest::Span
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
     pub input: SourceFile,
     // Start byte index (inclusive).

@@ -176,7 +176,33 @@ mod tests {
 
     // ---- Assertion helpers ----
 
+    /// Assert that every location in the result set is unique (no duplicates).
+    fn assert_no_duplicate_refs(locations: &[Value], symbol: &str) {
+        let keys: Vec<String> = locations
+            .iter()
+            .filter_map(|loc| {
+                let uri = loc.get("uri")?.as_str()?;
+                let range = loc.get("range")?;
+                let start = range.get("start")?;
+                let line = start.get("line")?.as_u64()?;
+                let ch = start.get("character")?.as_u64()?;
+                Some(format!("{}:{}:{}", uri, line, ch))
+            })
+            .collect();
+        let mut seen = std::collections::HashSet::new();
+        for key in &keys {
+            assert!(
+                seen.insert(key),
+                "Duplicate reference to `{}` at {}. All locations: {:?}",
+                symbol,
+                key,
+                keys
+            );
+        }
+    }
+
     fn assert_refs_at_least(locations: &[Value], min: usize, symbol: &str) {
+        assert_no_duplicate_refs(locations, symbol);
         assert!(
             locations.len() >= min,
             "Expected at least {} references to `{}`, got {}. Locations: {:?}",
