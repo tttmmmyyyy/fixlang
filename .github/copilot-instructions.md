@@ -35,6 +35,7 @@ This project implements the Fix programming language compiler and related tools 
     - Use `tempfile::TempDir` to create temporary directories.
     - Use `copy_dir_recursive()` from `test_util.rs` to copy project files.
     - The temporary directory is automatically cleaned up when the test completes.
+  - **Debugging integration tests**: Since integration tests run the `fix` command as a separate process, its stdout/stderr output is hard to capture directly. In such cases, use `WRITE_LOG` from `src/log_file.rs` to write debug output to a log file from within the `fix` process.
 
 ## Reference Documentation
 
