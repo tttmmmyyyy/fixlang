@@ -30,6 +30,11 @@ mod tests {
         let test_case_src = get_test_cases_dir().join(project_name);
         let test_case_dst = temp_dir.path().join(project_name);
         copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
+        // Canonicalize to resolve symlinks (e.g., /tmp -> /private/tmp on macOS).
+        // This ensures the path matches the canonicalized rootUri sent to the LSP server.
+        let test_case_dst = test_case_dst
+            .canonicalize()
+            .expect("Failed to canonicalize test case path");
         (temp_dir, test_case_dst)
     }
 
