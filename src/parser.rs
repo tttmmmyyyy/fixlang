@@ -1977,14 +1977,18 @@ fn parse_expr_make_struct(
     assert_eq!(pair.as_rule(), Rule::expr_make_struct);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let tycon = parse_tycon(pairs.next().unwrap());
+    let tycon_pair = pairs.next().unwrap();
+    let tycon_span = Span::from_pair(&ctx.source, &tycon_pair);
+    let tycon = parse_tycon(tycon_pair);
     let mut fields = vec![];
     while pairs.peek().is_some() {
         let field_name = pairs.next().unwrap().as_str().to_string();
         let field_expr = parse_expr(pairs.next().unwrap(), ctx)?;
         fields.push((field_name, field_expr));
     }
-    Ok(expr_make_struct(tycon, fields).set_source(Some(span)))
+    Ok(expr_make_struct(tycon, fields)
+        .set_source(Some(span))
+        .set_aux_src(Some(tycon_span)))
 }
 
 fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {

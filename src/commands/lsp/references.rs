@@ -536,7 +536,10 @@ fn collect_exprnode_type_refs(expr: &Arc<ExprNode>, target: &TyCon, refs: &mut V
         }
         Expr::MakeStruct(tc, fields) => {
             if tc.as_ref() == target {
-                if let Some(span) = &expr.source {
+                // Use aux_src (the TyCon name span) if available,
+                // otherwise fall back to the whole expression span.
+                let span = expr.aux_src.as_ref().or(expr.source.as_ref());
+                if let Some(span) = span {
                     refs.push(span.clone());
                 }
             }

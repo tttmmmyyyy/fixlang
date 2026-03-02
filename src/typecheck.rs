@@ -826,7 +826,7 @@ impl TypeCheckContext {
                 let arg = args[0].clone();
 
                 let arg_tv = self.new_tyvar_star();
-                self.add_tyvar_source(arg_tv.name.clone(), ei.param_src.clone());
+                self.add_tyvar_source(arg_tv.name.clone(), ei.aux_src.clone());
                 let arg_ty = type_from_tyvar(arg_tv);
 
                 let body_tv = self.new_tyvar_star();

@@ -24,8 +24,9 @@ pub struct ExprNode {
     #[serde(skip)]
     free_vars: Arc<Mutex<Option<Set<FullName>>>>,
     pub source: Option<Span>,
-    // The source of the parameter of a lambda expression.
-    pub param_src: Option<Span>,
+    // For lambda expressions: the source of the parameter.
+    // For MakeStruct expressions: the source of the type constructor name.
+    pub aux_src: Option<Span>,
     // In an application expression, indicates the order of function and argument in the source code.
     // In the case of `f(x)` or `f $ x`, it is `FX`, and in the case of `x.f`, it is `XDotF`.
     pub app_order: AppSourceCodeOrderType,
@@ -42,7 +43,7 @@ impl ExprNode {
             expr: self.expr.clone(),
             free_vars: Arc::new(Mutex::new(None)),
             source: self.source.clone(),
-            param_src: self.param_src.clone(),
+            aux_src: self.aux_src.clone(),
             app_order: self.app_order.clone(),
             struct_act_func_in_index_syntax: self.struct_act_func_in_index_syntax,
             type_: self.type_.clone(),
@@ -55,7 +56,7 @@ impl ExprNode {
             expr: self.expr.clone(),
             free_vars: self.free_vars.clone(),
             source: self.source.clone(),
-            param_src: self.param_src.clone(),
+            aux_src: self.aux_src.clone(),
             app_order: self.app_order.clone(),
             struct_act_func_in_index_syntax: self.struct_act_func_in_index_syntax,
             type_: self.type_.clone(),
@@ -69,11 +70,11 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    // Set source for the parameter of a lambda expression.
+    // Set source for the auxiliary purpose (e.g., parameter of a lambda expression or type constructor name of a MakeStruct expression).
     #[allow(dead_code)]
-    pub fn set_param_src(&self, src: Option<Span>) -> Arc<Self> {
+    pub fn set_aux_src(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone_all();
-        ret.param_src = src;
+        ret.aux_src = src;
         Arc::new(ret)
     }
 
@@ -1280,19 +1281,19 @@ pub enum Expr {
 
 impl Expr {
     pub fn into_expr_node(self: &Arc<Self>, src: Option<Span>) -> Arc<ExprNode> {
-        self.into_expr_node_with_param_src(src, None)
+        self.into_expr_node_with_aux_src(src, None)
     }
 
-    pub fn into_expr_node_with_param_src(
+    pub fn into_expr_node_with_aux_src(
         self: &Arc<Self>,
         src: Option<Span>,
-        param_src: Option<Span>,
+        aux_src: Option<Span>,
     ) -> Arc<ExprNode> {
         Arc::new(ExprNode {
             expr: self.clone(),
             free_vars: Default::default(),
             source: src,
-            param_src,
+            aux_src,
             app_order: AppSourceCodeOrderType::FX,
             struct_act_func_in_index_syntax: false,
             type_: None,
@@ -1493,7 +1494,7 @@ pub fn expr_abs_param_src(
     src: Option<Span>,
     param_src: Option<Span>,
 ) -> Arc<ExprNode> {
-    Arc::new(Expr::Lam(vars, val)).into_expr_node_with_param_src(src, param_src)
+    Arc::new(Expr::Lam(vars, val)).into_expr_node_with_aux_src(src, param_src)
 }
 
 pub fn expr_abs_many(mut vars: Vec<Arc<Var>>, mut val: Arc<ExprNode>) -> Arc<ExprNode> {
