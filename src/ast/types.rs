@@ -67,7 +67,7 @@ pub struct AssocType {
     pub name: FullName,
     // Source span of the associated type name (e.g., `Item` in `Item iter`).
     // Ignored in PartialEq, Eq, and Hash.
-    pub source: Option<Span>,
+    pub src: Option<Span>,
 }
 
 impl PartialEq for AssocType {
@@ -106,7 +106,7 @@ impl AssocType {
     pub fn global_to_absolute(&self) -> AssocType {
         let mut name = self.name.clone();
         name.global_to_absolute();
-        AssocType { name, source: self.source.clone() }
+        AssocType { name, src: self.src.clone() }
     }
 }
 
@@ -426,7 +426,7 @@ impl TypeNode {
                     }
                 }
                 // If cursor is on the associated type name itself, return AssocType.
-                if let Some(src) = &ty_assoc.source {
+                if let Some(src) = &ty_assoc.src {
                     if src.includes_pos_lsp(pos) {
                         return Some(EndNode::AssocType(ty_assoc.clone()));
                     }
@@ -726,7 +726,7 @@ impl TypeNode {
                             let mut assoc_ty = type_assocty(
                                 AssocType {
                                     name: assoc_ty_name,
-                                    source: assoc_ty_name_src,
+                                    src: assoc_ty_name_src,
                                 },
                                 assoc_ty_args.iter().cloned().collect(),
                             )
@@ -1523,7 +1523,8 @@ impl TypeNode {
                     let pred = Predicate {
                         trait_id: assoc_ty.trait_id(),
                         ty: args[0].clone(),
-                        source: ty.get_source().clone(),
+                        src: ty.get_source().clone(),
+                        trait_src: None,
                     };
                     buf.push(pred);
                     for arg in args {
@@ -1783,7 +1784,7 @@ impl Scheme {
                     "Trait constraint should be in the form of `{type_var} : {Trait}`. \
                      NOTE: If you want to put a constraint on an associated type application, e.g., `Elem c : ToString`, you should write `Elem c = e, e : ToString` instead. \
                      We will support more general constraints by implementing such conversion in a future.".to_string(),
-                    &[&pred.source],
+                    &[&pred.src],
                 ));
             }
         }
@@ -1800,7 +1801,7 @@ impl Scheme {
                     "Right side of an equality constraint cannot contain an associated type. \
                      NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`. \
                      We will support more general constraints by implementing such conversion in a future.".to_string(),
-                    &[&eq.source],
+                    &[&eq.src],
                 ));
             }
             // The first argument of the left side of an equality constraint should be a type variable.
@@ -1809,7 +1810,7 @@ impl Scheme {
             if !eq.args[0].is_tyvar() {
                 return Err(Errors::from_msg_srcs(
                     "The first argument of the left side of an equality constraint should be a type variable.".to_string(),
-                    &[&eq.source],
+                    &[&eq.src],
                 ));
             }
             // The left side of an equality constraint should be free from associated type.
@@ -1820,7 +1821,7 @@ impl Scheme {
                         "In left side of an equality constraint, arguments of an associated type cannot contain an associated type. \
                          NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`. \
                          We will support more general constraints by implementing such conversion in a future.".to_string(),
-                        &[&eq.source],
+                        &[&eq.src],
                     ));
                 }
             }
@@ -1840,7 +1841,8 @@ impl Scheme {
                 let pred = Predicate {
                     trait_id: eq.assoc_type.trait_id(),
                     ty: eq.args[0].clone(),
-                    source: None,
+                    src: None,
+                    trait_src: None,
                 };
                 return Err(Errors::from_msg_srcs(
                     format!(
@@ -1848,7 +1850,7 @@ impl Scheme {
                         eq.to_string(),
                         pred.to_string()
                     ),
-                    &[&eq.source],
+                    &[&eq.src],
                 ));
             }
         }
@@ -1865,7 +1867,7 @@ impl Scheme {
                     return Err(Errors::from_msg_srcs(
                         "Multiple equality constraints with the same left side are not allowed."
                             .to_string(),
-                        &[&self.equalities[i].source, &self.equalities[j].source],
+                        &[&self.equalities[i].src, &self.equalities[j].src],
                     ));
                 }
             }
@@ -1968,9 +1970,9 @@ impl Scheme {
         }
         let res = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
         if let Err(msg) = res {
-            let mut span = ret.predicates[0].source.clone();
+            let mut span = ret.predicates[0].src.clone();
             for i in 1..ret.predicates.len() {
-                span = Span::unite_opt(&span, &ret.predicates[i].source);
+                span = Span::unite_opt(&span, &ret.predicates[i].src);
             }
             return Err(Errors::from_msg_srcs(msg, &[&span]));
         }

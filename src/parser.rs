@@ -389,9 +389,9 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitDef
         let (preds, eqs, kinds) = parse_constraints(pair, ctx)?;
         if !preds.is_empty() || !eqs.is_empty() {
             let one_src = if !preds.is_empty() {
-                &preds.first().unwrap().source
+                &preds.first().unwrap().src
             } else {
-                &eqs.first().unwrap().source
+                &eqs.first().unwrap().src
             };
             return Err(Errors::from_msg_srcs(
                 "In the constraint of trait definition, only kind signature is allowed. Fix does not support \"super-traits\".".to_string(),
@@ -495,9 +495,9 @@ fn parse_trait_member_type_defn(
         let (preds, eqs, kind_signs) = parse_constraints(pairs.next().unwrap(), ctx)?;
         if !preds.is_empty() || !eqs.is_empty() {
             let one_src = if !preds.is_empty() {
-                &preds.first().unwrap().source
+                &preds.first().unwrap().src
             } else {
-                &eqs.first().unwrap().source
+                &eqs.first().unwrap().src
             };
             return Err(Errors::from_msg_srcs(
                 "In the constraint of associated type definition, only kind signature is allowed."
@@ -858,11 +858,11 @@ fn parse_equality(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Equality, 
     Ok(Equality {
         assoc_type: AssocType {
             name: lhs_seq[0].as_tycon().name.clone(),
-            source: lhs_seq[0].get_source().clone(),
+            src: lhs_seq[0].get_source().clone(),
         },
         args: lhs_seq[1..].iter().cloned().collect(),
         value: rhs,
-        source: Some(span),
+        src: Some(span),
     })
 }
 
@@ -871,9 +871,12 @@ fn parse_predicate(pair: Pair<Rule>, ctx: &mut ParseContext) -> Predicate {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let ty = parse_type(pairs.next().unwrap(), ctx);
-    let trait_id = parse_trait_fullname(pairs.next().unwrap(), ctx);
+    let trait_pair = pairs.next().unwrap();
+    let trait_span = Span::from_pair(&ctx.source, &trait_pair);
+    let trait_id = parse_trait_fullname(trait_pair, ctx);
     let mut pred = Predicate::make(trait_id, ty);
     pred.set_source(span);
+    pred.trait_src = Some(trait_span);
     pred
 }
 
@@ -945,9 +948,9 @@ fn parse_type_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TypeDefn,
         let (preds, eqs, kind_signs) = parse_constraints(pair, ctx)?;
         if preds.len() > 0 || eqs.len() > 0 {
             let one_src = if !preds.is_empty() {
-                &preds.first().unwrap().source
+                &preds.first().unwrap().src
             } else {
-                &eqs.first().unwrap().source
+                &eqs.first().unwrap().src
             };
             return Err(Errors::from_msg_srcs(
                 "In the constraint of type definition, only kind signature is allowed.".to_string(),
@@ -2548,14 +2551,18 @@ fn parse_pattern_struct(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Pattern
     assert_eq!(pair.as_rule(), Rule::pattern_struct);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.clone().into_inner();
-    let tycon = parse_tycon(pairs.next().unwrap());
+    let tycon_pair = pairs.next().unwrap();
+    let tycon_span = Span::from_pair(&ctx.source, &tycon_pair);
+    let tycon = parse_tycon(tycon_pair);
     let mut field_to_pats = Vec::default();
     while pairs.peek().is_some() {
         let field_name = pairs.next().unwrap().as_str().to_string();
         let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
         field_to_pats.push((field_name, pat));
     }
-    PatternNode::make_struct(tycon, field_to_pats).set_source(span)
+    PatternNode::make_struct(tycon, field_to_pats)
+        .set_source(span)
+        .set_aux_src(tycon_span)
 }
 
 fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNode> {

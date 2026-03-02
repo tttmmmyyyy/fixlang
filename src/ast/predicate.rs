@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 pub struct Predicate {
     pub trait_id: TraitId,
     pub ty: Arc<TypeNode>,
-    pub source: Option<Span>,
+    pub src: Option<Span>,
+    // Source span of the trait name only (e.g., `Describable` in `I64 : Describable`).
+    pub trait_src: Option<Span>,
 }
 
 impl Predicate {
@@ -27,24 +29,26 @@ impl Predicate {
         Predicate {
             trait_id: self.trait_id.global_to_absolute(),
             ty: self.ty.global_to_absolute(),
-            source: self.source.clone(),
+            src: self.src.clone(),
+            trait_src: self.trait_src.clone(),
         }
     }
 
     pub fn set_source(&mut self, source: Span) {
-        self.source = Some(source);
+        self.src = Some(source);
     }
 
     pub fn make(trait_id: TraitId, ty: Arc<TypeNode>) -> Self {
         Predicate {
             trait_id,
             ty,
-            source: None,
+            src: None,
+            trait_src: None,
         }
     }
 
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
-        self.trait_id.resolve_namespace(ctx, &self.source)?;
+        self.trait_id.resolve_namespace(ctx, &self.src)?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())
     }
@@ -81,7 +85,7 @@ impl Predicate {
                     expected.to_string(),
                     found.to_string()
                 ),
-                &[&self.source],
+                &[&self.src],
             ));
         }
         Ok(())
@@ -104,10 +108,10 @@ impl Predicate {
 
     // Find the minimum expression node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        if self.source.is_none() {
+        if self.src.is_none() {
             return None;
         }
-        let src = self.source.as_ref().unwrap();
+        let src = self.src.as_ref().unwrap();
         if !src.includes_pos_lsp(pos) {
             return None;
         }

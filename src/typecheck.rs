@@ -1392,7 +1392,8 @@ impl TypeCheckContext {
                 let pred = Predicate {
                     trait_id: assoc_ty.trait_id(),
                     ty: args[0].clone(),
-                    source: None,
+                    src: None,
+                    trait_src: None,
                 };
                 self.predicates.push(pred);
 
@@ -1468,7 +1469,7 @@ impl TypeCheckContext {
                     assoc_type: assoc_ty.clone(),
                     args: args.clone(),
                     value: ty2.clone(),
-                    source: None,
+                    src: None,
                 };
                 self.add_equality(eq)?;
                 return Ok(());

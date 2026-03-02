@@ -416,6 +416,12 @@ impl PatternNode {
         Arc::new(node)
     }
 
+    pub fn set_aux_src(self: &PatternNode, src: Span) -> Arc<PatternNode> {
+        let mut node = self.clone();
+        node.info.aux_src = Some(src);
+        Arc::new(node)
+    }
+
     pub fn set_type(self: &PatternNode, ty: Arc<TypeNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
         node.info.type_ = Some(ty);
@@ -533,6 +539,9 @@ impl PatternNode {
 pub struct PatternInfo {
     pub type_: Option<Arc<TypeNode>>,
     pub source: Option<Span>,
+    // Auxiliary source span that depends on the pattern variant.
+    // For Struct patterns: the source span of the type constructor name only.
+    pub aux_src: Option<Span>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -13,16 +13,16 @@ pub struct Equality {
     pub assoc_type: AssocType,
     pub args: Vec<Arc<TypeNode>>,
     pub value: Arc<TypeNode>,
-    pub source: Option<Span>,
+    pub src: Option<Span>,
 }
 
 impl Equality {
     // Find the minimum expression node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        if self.source.is_none() {
+        if self.src.is_none() {
             return None;
         }
-        let src = self.source.as_ref().unwrap();
+        let src = self.src.as_ref().unwrap();
         if !src.includes_pos_lsp(pos) {
             return None;
         }
@@ -35,7 +35,7 @@ impl Equality {
             return node;
         }
         // If cursor is on the associated type name itself, return AssocType.
-        if let Some(src) = &self.assoc_type.source {
+        if let Some(src) = &self.assoc_type.src {
             if src.includes_pos_lsp(pos) {
                 return Some(EndNode::AssocType(self.assoc_type.clone()));
             }
@@ -60,7 +60,7 @@ impl Equality {
                 .map(|arg| arg.global_to_absolute())
                 .collect(),
             value: self.value.global_to_absolute(),
-            source: self.source.clone(),
+            src: self.src.clone(),
         }
     }
 
@@ -74,7 +74,7 @@ impl Equality {
                     kind_info.param_kinds.len(),
                     self.args.len()
                 ),
-                &[&self.source],
+                &[&self.src],
             ));
         }
         for (arg, expect_kind) in self.args.iter().zip(kind_info.param_kinds.iter()) {
@@ -87,7 +87,7 @@ impl Equality {
                         expect_kind.to_string(),
                         found_kind.to_string()
                     ),
-                    &[&self.source],
+                    &[&self.src],
                 ));
             }
         }
@@ -100,7 +100,7 @@ impl Equality {
                     kind_info.value_kind.to_string(),
                     found_kind.to_string()
                 ),
-                &[&self.source],
+                &[&self.src],
             ));
         }
         Ok(())
@@ -122,7 +122,7 @@ impl Equality {
     }
 
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
-        self.assoc_type.resolve_namespace(ctx, &self.source)?;
+        self.assoc_type.resolve_namespace(ctx, &self.src)?;
         for arg in &mut self.args {
             *arg = arg.resolve_namespace(ctx)?;
         }

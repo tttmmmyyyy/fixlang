@@ -103,14 +103,14 @@ impl QualType {
             let mut buf = vec![];
             pred.ty.free_vars_to_vec(&mut buf);
             if buf.iter().any(|tv| &tv.name == var_name) {
-                return pred.source.clone();
+                return pred.src.clone();
             }
         }
         for eq in &self.eqs {
             let mut buf = vec![];
             eq.free_vars_to_vec(&mut buf);
             if buf.iter().any(|tv| &tv.name == var_name) {
-                return eq.source.clone();
+                return eq.src.clone();
             }
         }
         None

@@ -125,7 +125,7 @@ impl AssocTypeImpl {
                 let full_name = FullName::new(&trait_id.name.to_namespace(), &self.name);
                 return Some(EndNode::AssocType(AssocType {
                     name: full_name,
-                    source: Some(ns.clone()),
+                    src: Some(ns.clone()),
                 }));
             }
         }
@@ -145,7 +145,7 @@ impl AssocTypeImpl {
     pub fn set_kinds(&mut self, trait_inst: &TraitImpl, kind_env: &KindEnv) -> Result<(), Errors> {
         let assoc_ty_name = AssocType {
             name: FullName::new(&trait_inst.trait_id().name.to_namespace(), &self.name),
-            source: None,
+            src: None,
         };
         let param_kinds = &kind_env.assoc_tys.get(&assoc_ty_name).unwrap().param_kinds;
         if self.params.len() != param_kinds.len() {
@@ -259,7 +259,7 @@ impl TraitDefn {
                     let full_name = FullName::new(&self.trait_.name.to_namespace(), assoc_name);
                     return Some(EndNode::AssocType(AssocType {
                         name: full_name,
-                        source: Some(ns.clone()),
+                        src: Some(ns.clone()),
                     }));
                 }
             }
@@ -886,7 +886,7 @@ impl TraitEnv {
                 if self.aliases.is_alias(&trait_id) {
                     return Err(Errors::from_msg_srcs(
                         "A trait alias cannot be implemented directly. Implement each aliased trait instead.".to_string(),
-                        &[&impl_.qual_pred.predicate.source],
+                        &[&impl_.qual_pred.predicate.src],
                     ));
                 }
                 // Now `trait_id` is not an alias, so get the trait definition.
@@ -1112,7 +1112,7 @@ impl TraitEnv {
                 // Resolve trait_id's namespace.
                 let mut trait_id = trait_id.clone();
                 errors.eat_err(
-                    trait_id.resolve_namespace(ctx, &impl_.qual_pred.predicate.source.clone()),
+                    trait_id.resolve_namespace(ctx, &impl_.qual_pred.predicate.src.clone()),
                 );
 
                 // Resolve names in TrantImpl
@@ -1259,11 +1259,11 @@ impl TraitEnv {
                     let equality = Equality {
                         assoc_type: AssocType {
                             name: assoc_type_fullname,
-                            source: assoc_type_impl.name_src.clone(),
+                            src: assoc_type_impl.name_src.clone(),
                         },
                         args,
                         value: assoc_type_impl.value.clone(),
-                        source: assoc_type_impl.source.clone(),
+                        src: assoc_type_impl.source.clone(),
                     };
                     insert_to_map_vec(&mut eq_scms, &equality.assoc_type, equality.generalize());
                 }
@@ -1292,7 +1292,7 @@ impl TraitEnv {
                 let assoc_type_namespace = trait_id.name.to_namespace();
                 let assoc_type = AssocType {
                     name: FullName::new(&assoc_type_namespace, &assoc_ty_name),
-                    source: None,
+                    src: None,
                 };
                 assoc_ty_kind_info.insert(
                     assoc_type.clone(),

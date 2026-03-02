@@ -299,7 +299,7 @@ fn collect_typenode_assoc_type_refs(
         }
         Type::AssocTy(assoc_ty, args) => {
             if assoc_ty == target {
-                if let Some(span) = &assoc_ty.source {
+                if let Some(span) = &assoc_ty.src {
                     refs.push(span.clone());
                 }
             }
@@ -317,7 +317,7 @@ fn collect_equality_assoc_type_refs(
     refs: &mut Vec<Span>,
 ) {
     if &eq.assoc_type == target {
-        if let Some(span) = &eq.assoc_type.source {
+        if let Some(span) = &eq.assoc_type.src {
             refs.push(span.clone());
         }
     }
@@ -381,7 +381,7 @@ fn collect_assoc_type_impl_refs(
     // Check if this impl is for the target associated type.
     // AssocTypeImpl.name is just the local name, so compare with the local part of target.
     if assoc_impl.name == target.name.name {
-        if let Some(span) = &assoc_impl.source {
+        if let Some(span) = &assoc_impl.name_src {
             refs.push(span.clone());
         }
     }
@@ -536,10 +536,7 @@ fn collect_exprnode_type_refs(expr: &Arc<ExprNode>, target: &TyCon, refs: &mut V
         }
         Expr::MakeStruct(tc, fields) => {
             if tc.as_ref() == target {
-                // Use aux_src (the TyCon name span) if available,
-                // otherwise fall back to the whole expression span.
-                let span = expr.aux_src.as_ref().or(expr.source.as_ref());
-                if let Some(span) = span {
+                if let Some(span) = &expr.aux_src {
                     refs.push(span.clone());
                 }
             }
@@ -574,7 +571,7 @@ fn collect_pattern_type_refs(pat: &Arc<PatternNode>, target: &TyCon, refs: &mut 
         }
         Pattern::Struct(tc, field_pats) => {
             if tc.as_ref() == target {
-                if let Some(span) = &pat.info.source {
+                if let Some(span) = &pat.info.aux_src {
                     refs.push(span.clone());
                 }
             }
@@ -676,7 +673,7 @@ fn collect_qualtype_type_refs(qt: &QualType, target: &TyCon, refs: &mut Vec<Span
 fn collect_scheme_trait_refs(scheme: &Arc<Scheme>, target: &TraitId, refs: &mut Vec<Span>) {
     for pred in &scheme.predicates {
         if &pred.trait_id == target {
-            if let Some(span) = &pred.source {
+            if let Some(span) = &pred.trait_src {
                 refs.push(span.clone());
             }
         }
@@ -686,13 +683,13 @@ fn collect_scheme_trait_refs(scheme: &Arc<Scheme>, target: &TraitId, refs: &mut 
 // Collect trait references in a QualPred.
 fn collect_qualpred_trait_refs(qp: &QualPred, target: &TraitId, refs: &mut Vec<Span>) {
     if &qp.predicate.trait_id == target {
-        if let Some(span) = &qp.predicate.source {
+        if let Some(span) = &qp.predicate.trait_src {
             refs.push(span.clone());
         }
     }
     for pred in &qp.pred_constraints {
         if &pred.trait_id == target {
-            if let Some(span) = &pred.source {
+            if let Some(span) = &pred.trait_src {
                 refs.push(span.clone());
             }
         }
@@ -703,7 +700,7 @@ fn collect_qualpred_trait_refs(qp: &QualPred, target: &TraitId, refs: &mut Vec<S
 fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<Span>) {
     for pred in &qt.preds {
         if &pred.trait_id == target {
-            if let Some(span) = &pred.source {
+            if let Some(span) = &pred.trait_src {
                 refs.push(span.clone());
             }
         }
