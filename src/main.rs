@@ -100,6 +100,10 @@ use std::process;
 use std::vec::Vec;
 use stdlib::*;
 use typecheck::*;
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 const GIT_VERSION: &str = git_version!(args = ["--abbrev=7", "--always", "--dirty", "--broken"]);
 
