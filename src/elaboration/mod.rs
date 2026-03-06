@@ -18,7 +18,7 @@ use std::{fs::create_dir_all, path::PathBuf};
 
 // Perform validations and type checking on the program, and return the updated program.
 // Changes made to the program include instantiation of symbols and setting of entry points.
-fn check_program(mut program: Program, config: &Configuration) -> Result<Program, Errors> {
+fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Errors> {
     let _sw = StopWatch::new("check_program", config.show_build_times);
 
     // Add tuple definitions.
@@ -193,8 +193,8 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
 }
 
 // Load the program specified by the Configuration, perform validations and type checking.
-pub fn check_program_via_config(config: &Configuration) -> Result<Program, Errors> {
+pub fn elaborate_via_config(config: &Configuration) -> Result<Program, Errors> {
     let program = load_source_files(&config)?;
-    let program = check_program(program, config)?;
+    let program = elaborate(program, config)?;
     Ok(program)
 }

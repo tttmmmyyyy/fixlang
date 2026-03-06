@@ -6,7 +6,7 @@ use crate::{
         name::{FullName, Name, NameSpace},
         typedecl::Field,
     },
-    elaboration::check_program_via_config,
+    elaboration::elaborate_via_config,
     configuration::BuildConfigType,
     dependency::lockfile::LockFileType,
     error::Errors,
@@ -34,7 +34,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
         .set_config(&mut config)?;
 
     // Build the file and get the errors.
-    let program = check_program_via_config(&config)?;
+    let program = elaborate_via_config(&config)?;
     info_msg("Generating documentation...");
 
     let docs_config = match &config.subcommand {

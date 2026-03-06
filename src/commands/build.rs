@@ -1,5 +1,5 @@
 use crate::build_object_files::build_object_files;
-use crate::elaboration::check_program_via_config;
+use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
 use crate::misc::info_msg;
 use crate::Configuration;
@@ -25,7 +25,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         config.run_extra_commands()?;
     }
 
-    let program = check_program_via_config(&config)?;
+    let program = elaborate_via_config(&config)?;
     let obj_files = build_object_files(program, &config)?;
 
     let mut library_search_path_opts: Vec<String> = vec![];

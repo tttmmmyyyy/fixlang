@@ -7,7 +7,7 @@ use super::references;
 use super::util::{get_current_dir, path_to_uri, span_to_location, span_to_range, uri_to_path};
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
-use crate::elaboration::check_program_via_config;
+use crate::elaboration::elaborate_via_config;
 use crate::configuration::BuildConfigType;
 use crate::dependency::lockfile::LockFileType;
 use crate::error::{any_to_string, Error, Errors};
@@ -1021,7 +1021,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
         .set_config(&mut config)?;
 
     // Build the file and get the errors.
-    let program = check_program_via_config(&config)?;
+    let program = elaborate_via_config(&config)?;
 
     Ok(DiagnosticsResult { program })
 }
