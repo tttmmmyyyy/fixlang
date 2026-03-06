@@ -1,5 +1,5 @@
 use crate::{
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{self, DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, registry_file::RegistryFile
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, registry_file::RegistryFile
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
