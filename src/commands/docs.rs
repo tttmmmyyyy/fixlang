@@ -8,7 +8,7 @@ use crate::{
     },
     check_program::check_program_via_config,
     configuration::BuildConfigType,
-    dependency_lockfile::LockFileType,
+    dependency::lockfile::LockFileType,
     error::Errors,
     kind_star,
     misc::{info_msg, to_absolute_path},

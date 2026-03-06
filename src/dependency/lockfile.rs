@@ -11,7 +11,7 @@ use tempfile::TempDir;
 
 use crate::{
     configuration::{BuildConfigType, Configuration},
-    dependency_resolver::{self, Dependency, Package, PackageName},
+    dependency::resolver::{self, Dependency, Package, PackageName},
     error::Errors,
     misc::info_msg,
     misc::{to_absolute_path, warn_msg},
@@ -133,7 +133,7 @@ impl DependecyLockFile {
             "Resolving dependency for \"{}\"...",
             proj_file.general.name
         ));
-        let res = dependency_resolver::resolve_dependency(
+        let res = resolver::resolve_dependency(
             proj_file,
             packages_retriever.as_ref(),
             versions_retriever.as_ref(),

@@ -1,5 +1,5 @@
 use crate::{
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency_lockfile::{self, DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, registry_file::RegistryFile
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{self, DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, registry_file::RegistryFile
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -992,8 +992,8 @@ impl ProjectFile {
                         Some(v) => v.clone(),
                         None => {
                             let (_tmp_dir, repo) =
-                                dependency_lockfile::clone_git_repo(&proj_info.git)?;
-                            let vers = dependency_lockfile::get_versions_from_repo(&repo)?;
+                                crate::dependency::lockfile::clone_git_repo(&proj_info.git)?;
+                            let vers = crate::dependency::lockfile::get_versions_from_repo(&repo)?;
                             let mut tagged_vers = vers
                                 .iter()
                                 .filter_map(|vi| {
