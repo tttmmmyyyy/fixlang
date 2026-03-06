@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::Mutex;
 
-pub const WRITE_LOG: bool = true;
+pub const WRITE_LOG: bool = false;
 
 static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 
