@@ -25,7 +25,7 @@ use crate::misc::Map;
 use crate::misc::Set;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::object::{ty_to_object_ty, ObjectType};
-use crate::sourcefile::{SourcePos, Span};
+use crate::parse::sourcefile::{SourcePos, Span};
 use crate::typecheck::{Substitution, TypeCheckContext};
 use core::panic;
 use inkwell::context::Context;

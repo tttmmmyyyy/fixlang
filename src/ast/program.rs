@@ -26,7 +26,7 @@ use crate::graph::Graph;
 use crate::misc::{collect_results, to_absolute_path, Map, Set};
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::printer::Text;
-use crate::sourcefile::{SourcePos, Span};
+use crate::parse::sourcefile::{SourcePos, Span};
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use serde::{Deserialize, Serialize};
 use std::fs::File;

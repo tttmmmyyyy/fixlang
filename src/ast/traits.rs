@@ -10,7 +10,7 @@ use crate::ast::types::{type_from_tyvar, type_tyvar, Kind, Scheme, AssocType, Ty
 use crate::builtin::make_boxed_trait;
 use crate::misc::{insert_to_map_vec, number_to_varname, Map, Set};
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
-use crate::sourcefile::{SourcePos, Span};
+use crate::parse::sourcefile::{SourcePos, Span};
 use crate::typecheck::{Substitution, TypeCheckContext};
 use crate::typecheckcache;
 use crate::UnifOrOtherErr;

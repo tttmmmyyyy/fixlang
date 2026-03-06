@@ -12,7 +12,7 @@ use crate::configuration::BuildConfigType;
 use crate::dependency::lockfile::LockFileType;
 use crate::error::{any_to_string, Error, Errors};
 use crate::misc::{to_absolute_path, Map, Set};
-use crate::parser::{parse_str_import_statements, parse_str_module_defn};
+use crate::parse::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::project_file::ProjectFile;
 use crate::elaboration::typecheckcache::{self, SharedTypeCheckCache};
 use crate::write_log;

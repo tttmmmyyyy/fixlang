@@ -1,12 +1,12 @@
 #[derive(Parser)]
-#[grammar = "grammer.pest"]
+#[grammar = "parse/grammer.pest"]
 struct FixParser;
 
 use crate::ast::{
     equality::Equality, predicate::Predicate, qual_pred::QualPred, qual_type::QualType,
 };
 
-use super::*;
+use crate::*;
 use ast::{
     export_statement::ExportStatement,
     import::{ImportStatement, ImportTreeNode},

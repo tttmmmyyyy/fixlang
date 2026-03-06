@@ -7,7 +7,7 @@ use crate::ast::traits::KindSignature;
 use crate::ast::types::TyVar;
 use crate::error::Errors;
 use crate::elaboration::name_resolution::NameResolutionContext;
-use crate::sourcefile::SourcePos;
+use crate::parse::sourcefile::SourcePos;
 
 // Qualified predicate. Statement such as "[a : Eq] Array a : Eq".
 // Constraints in `[...]` can be trait bound and equality.

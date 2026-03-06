@@ -16,7 +16,7 @@ use crate::generator::GenerationContext;
 use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
-use crate::sourcefile::Span;
+use crate::parse::sourcefile::Span;
 
 use super::error::Errors;
 

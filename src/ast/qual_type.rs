@@ -8,7 +8,7 @@ use crate::ast::traits::KindSignature;
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
 use crate::elaboration::name_resolution::NameResolutionContext;
-use crate::sourcefile::{SourcePos, Span};
+use crate::parse::sourcefile::{SourcePos, Span};
 
 #[derive(Clone)]
 pub struct QualType {

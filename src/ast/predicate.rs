@@ -6,7 +6,7 @@ use crate::ast::traits::{TraitAliasEnv, TraitId};
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
 use crate::elaboration::name_resolution::NameResolutionContext;
-use crate::sourcefile::{SourcePos, Span};
+use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 
 // Statement such as "String : Show" or "a : Eq".

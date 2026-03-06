@@ -1,4 +1,4 @@
-use crate::{constants::TEMPORARY_SRC_PATH, error::Errors, sourcefile::SourceFile};
+use crate::{constants::TEMPORARY_SRC_PATH, error::Errors, parse::sourcefile::SourceFile};
 use atty::Stream;
 use colored::Colorize;
 use std::{
