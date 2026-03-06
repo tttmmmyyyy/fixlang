@@ -616,7 +616,7 @@ impl InlineLLVMIntLit {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let obj = create_obj(
@@ -661,7 +661,7 @@ impl InlineLLVMFloatLit {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let obj = create_obj(
@@ -703,7 +703,7 @@ impl InlineLLVMNullPtrLit {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("nullptr"));
@@ -737,7 +737,7 @@ impl InlineLLVMBoolLit {
     }
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let obj = create_obj(
@@ -763,7 +763,7 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
 
 // Create a byte array by copying from given pointer.
 pub fn make_byte_array_copy<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     buf: PointerValue<'c>,
     len: IntValue<'c>,
 ) -> Object<'c> {
@@ -807,7 +807,7 @@ impl InlineLLVMStringBuf {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let string_ptr = gc.add_global_string(&self.string).as_pointer_value();
@@ -862,7 +862,7 @@ impl InlineLLVMFixBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
 
         tail: bool,
@@ -947,7 +947,7 @@ impl InlineLLVMCastIntegralBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         to_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get value
@@ -1034,7 +1034,7 @@ impl InlineLLVMCastFloatBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         to_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get value
@@ -1117,7 +1117,7 @@ impl InlineLLVMCastIntToFloatBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         to_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get value
@@ -1208,7 +1208,7 @@ impl InlineLLVMCastFloatToIntBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         to_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get value
@@ -1306,7 +1306,7 @@ impl InlineLLVMShiftBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get value
@@ -1406,7 +1406,7 @@ impl InlineLLVMBitwiseOperationBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get value
@@ -1490,7 +1490,7 @@ impl InlineLLVMBitNotBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get value
@@ -1554,7 +1554,7 @@ impl InlineLLVMArrayUnsafeFill {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
@@ -1635,7 +1635,7 @@ impl InlineLLVMArrayUnsafeEmpty {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         arr_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get capacity
@@ -1708,7 +1708,7 @@ impl InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argments
@@ -1793,7 +1793,7 @@ impl InlineLLVMArrayUnsafeGetBoundsUnchecked {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
@@ -1894,7 +1894,7 @@ impl InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argments
@@ -1990,7 +1990,7 @@ impl InlineLLVMArrayUnsafeSetSizeBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argments
@@ -2042,7 +2042,7 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // Force array object to be unique.
 // If it is unique, do nothing.
 // If it is shared, clone the object.
-fn make_array_unique<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, array: Object<'c>) -> Object<'c> {
+fn make_array_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: Object<'c>) -> Object<'c> {
     assert!(array.ty.is_array());
 
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
@@ -2127,7 +2127,7 @@ impl InlineLLVMArraySetBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argments
@@ -2215,7 +2215,7 @@ impl InlineLLVMArrayForceUniqueBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argments
@@ -2272,7 +2272,7 @@ impl InlineLLVMArrayCheckRange {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         if gc.config.runtime_check() {
@@ -2329,7 +2329,7 @@ impl InlineLLVMArrayCheckSize {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         if gc.config.runtime_check() {
@@ -2374,7 +2374,7 @@ impl InlineLLVMArrayGetPtrBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argment
@@ -2448,7 +2448,7 @@ impl InlineLLVMArrayGetSizeBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
@@ -2499,7 +2499,7 @@ impl InlineLLVMArrayGetCapacityBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
@@ -2552,7 +2552,7 @@ impl InlineLLVMStructGetBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get struct object.
@@ -2614,7 +2614,7 @@ impl InlineLLVMStructPunchBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get the argument object (the struct value).
@@ -2707,7 +2707,7 @@ impl InlineLLVMStructPlugInBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         struct_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get the first argument, a punched struct value, and the second argument, a field value.
@@ -3451,7 +3451,7 @@ pub fn struct_act_const(
 // Make struct object unique.
 // If it is (unboxed or) unique, do nothing.
 // If it is shared, clone the object.
-fn make_struct_unique<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, str: Object<'c>) -> Object<'c> {
+fn make_struct_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, str: Object<'c>) -> Object<'c> {
     make_struct_union_unique(gc, str)
 }
 
@@ -3459,7 +3459,7 @@ fn make_struct_unique<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, str: Object<'c
 // If it is (unboxed or) unique, do nothing.
 // If it is shared, clone the object.
 fn make_struct_union_unique<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     mut obj: Object<'c>,
 ) -> Object<'c> {
     assert!(obj.ty.is_union(gc.type_env()) || obj.ty.is_struct(gc.type_env()));
@@ -3541,7 +3541,7 @@ impl InlineLLVMStructSetBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _str_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get arguments
@@ -3617,7 +3617,7 @@ impl InlineLLVMMakeUnionBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get field values.
@@ -3731,7 +3731,7 @@ impl InlineLLVMUnionAsBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get union object.
@@ -3808,7 +3808,7 @@ impl InlineLLVMUnionIsBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get union object.
@@ -3884,7 +3884,7 @@ impl InlineLLVMUnionModBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get arguments
@@ -4015,7 +4015,7 @@ impl InlineLLVMUndefinedInternalBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         if gc.config.runtime_check() {
@@ -4108,7 +4108,7 @@ impl InlineLLVMWithRetainedFunctionBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get the argument "f".
@@ -4187,7 +4187,7 @@ impl InlineLLVMIsUniqueFunctionBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let bool_ty = ObjectFieldType::I8
@@ -4293,7 +4293,7 @@ impl InlineLLVMBoxedToRetainedPtrIOS {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argument
@@ -4381,7 +4381,7 @@ impl InlineLLVMBoxedFromRetainedPtrIOS {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argument.
@@ -4453,7 +4453,7 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argument
@@ -4555,7 +4555,7 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argument
@@ -4656,7 +4656,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get argument.
@@ -4684,7 +4684,7 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
 }
 
 fn get_data_pointer_from_boxed_value<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     val: &Object<'c>,
 ) -> PointerValue<'c> {
     // Get the pointer to the data field.
@@ -4748,7 +4748,7 @@ impl InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get arguments.
@@ -4850,7 +4850,7 @@ impl InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get arguments.
@@ -4952,7 +4952,7 @@ impl InlineLLVMIOStateUnsafeCreate {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
@@ -4989,7 +4989,7 @@ impl InlineLLVMDestructorMake {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Get arguments.
@@ -5075,7 +5075,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Run either an IO or an IOState runner based on the type of the given value.
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     io: &Object<'c>,
 ) -> Object<'c> {
     if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
@@ -5086,7 +5086,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(
 }
 
 // Run an IO runner in the IO monad and return the result.
-pub fn run_io<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<'c>) -> Object<'c> {
+pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_argments().into_iter().next().unwrap();
     let runner = io.extract_field(gc, 0);
     let runner_ty = type_fun(
@@ -5099,7 +5099,7 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut GenerationContext<'c, 'm>, io: &Object<'c>) -
 
 // Given an value of type `IOState -> (IOState, a)`, run it with an initial IO state and return the result `IOState` and `a`.
 pub fn run_ios_runner<'b, 'm, 'c>(
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     runner: &Object<'c>,
     ios: Option<&Object<'c>>,
 ) -> (Object<'c>, Object<'c>) {
@@ -5131,7 +5131,7 @@ impl InlineLLVMMarkThreadedFunctionBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ret_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         // Check if the `threaded` compiler flag is true.
@@ -5299,7 +5299,7 @@ impl InlineLLVMIntEqBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
@@ -5365,7 +5365,7 @@ impl InlineLLVMPtrEqBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
@@ -5444,7 +5444,7 @@ impl InlineLLVMFloatEqBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
@@ -5524,7 +5524,7 @@ impl InlineLLVMIntLessThanBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
@@ -5602,7 +5602,7 @@ impl InlineLLVMFloatLessThanBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -5682,7 +5682,7 @@ impl InlineLLVMIntLessThanOrEqBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -5758,7 +5758,7 @@ impl InlineLLVMFloatLessThanOrEqBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -5838,7 +5838,7 @@ impl InlineLLVMIntAddBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -5894,7 +5894,7 @@ impl InlineLLVMFloatAddBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -5959,7 +5959,7 @@ impl InlineLLVMIntSubBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -6015,7 +6015,7 @@ impl InlineLLVMFloatSubBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -6080,7 +6080,7 @@ impl InlineLLVMIntMulBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -6136,7 +6136,7 @@ impl InlineLLVMFloatMulBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -6201,7 +6201,7 @@ impl InlineLLVMIntDivBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -6265,7 +6265,7 @@ impl InlineLLVMFloatDivBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -6330,7 +6330,7 @@ impl InlineLLVMIntRemBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
@@ -6398,7 +6398,7 @@ impl InlineLLVMIntNegBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -6446,7 +6446,7 @@ impl InlineLLVMFloatNegBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -6504,7 +6504,7 @@ impl InlineLLVMBoolNegBody {
 
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);

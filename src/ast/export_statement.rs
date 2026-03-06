@@ -12,7 +12,7 @@ use crate::ast::types::Scheme;
 use crate::ast::types::TypeNode;
 use crate::ast::Type;
 use crate::fixstd::builtin::*;
-use crate::generator::GenerationContext;
+use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
@@ -83,7 +83,7 @@ impl ExportStatement {
 
     // Implement the exported c function.
     // This function requires `self.exported_function_type` and `self.instantiated_value_expr` to already be set.
-    pub fn implement<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) {
+    pub fn implement<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) {
         let ExportedFunctionType {
             doms,
             codom,

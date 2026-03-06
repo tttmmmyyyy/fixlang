@@ -103,7 +103,7 @@ pub enum ValueAccessor<'c> {
 
 impl<'c> ValueAccessor<'c> {
     // Get the object.
-    pub fn get<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> Object<'c> {
+    pub fn get<'m>(&self, gc: &mut Generator<'c, 'm>) -> Object<'c> {
         match self {
             ValueAccessor::Local(ptr) => ptr.clone(),
             ValueAccessor::Global(fun, ty) => {
@@ -119,7 +119,7 @@ impl<'c> ValueAccessor<'c> {
                         Left(val) => val,
                         Right(_) => {
                             let ty = ty.get_embedded_type(gc, &vec![]);
-                            GenerationContext::get_undef(&ty)
+                            Generator::get_undef(&ty)
                         }
                     }
                 };
@@ -151,7 +151,7 @@ impl<'c> Object<'c> {
     pub fn new<'m>(
         value: BasicValueEnum<'c>,
         ty: Arc<TypeNode>,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
     ) -> Self {
         assert!(ty.free_vars().is_empty());
         let value = if ty.is_box(gc.type_env()) {
@@ -167,7 +167,7 @@ impl<'c> Object<'c> {
         Object { value, ty }
     }
 
-    pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut GenerationContext<'c, 'm>) -> Self {
+    pub fn undef<'m>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> Self {
         let val = if ty.is_unbox(gc.type_env()) {
             ty.get_struct_type(gc, &vec![])
                 .get_undef()
@@ -224,11 +224,11 @@ impl<'c> Object<'c> {
     //     self.value.into_struct_value()
     // }
 
-    pub fn debug_embedded_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
+    pub fn debug_embedded_ty<'m>(&self, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
         ty_to_debug_embedded_ty(self.ty.clone(), gc)
     }
 
-    pub fn struct_ty<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> StructType<'c> {
+    pub fn struct_ty<'m>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
         assert!(!self.is_funptr());
         ty_to_object_ty(&self.ty, &vec![], gc.type_env()).to_struct_type(gc, vec![])
     }
@@ -236,7 +236,7 @@ impl<'c> Object<'c> {
     // Get the pointer to the field of an boxed object.
     pub fn gep_boxed<'m>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         field_idx: u32,
     ) -> PointerValue<'c> {
         assert!(self.ty.is_box(gc.type_env()));
@@ -252,7 +252,7 @@ impl<'c> Object<'c> {
     // This function does not support funptr type since in that case the `value` is not a struct.
     pub fn extract_field<'m>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         field_idx: u32,
     ) -> BasicValueEnum<'c> {
         assert!(!self.is_funptr());
@@ -277,7 +277,7 @@ impl<'c> Object<'c> {
     // Can be used only for boxed objects, because currently there is no use case of this function for unboxed objects.
     pub fn extract_field_as<'m>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: StructType<'c>,
         field_idx: u32,
     ) -> BasicValueEnum<'c> {
@@ -294,7 +294,7 @@ impl<'c> Object<'c> {
     // This function does not support funptr type since in that case the `value` is not a struct.
     pub fn insert_field<'m, V>(
         mut self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         field_idx: u32,
         val: V,
     ) -> Object<'c>
@@ -324,7 +324,7 @@ impl<'c> Object<'c> {
     // Can be used only for boxed objects, because currently there is no use case of this function for unboxed objects.
     pub fn insert_field_as<'m, V>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: StructType<'c>,
         field_idx: u32,
         value: V,
@@ -339,7 +339,7 @@ impl<'c> Object<'c> {
     // Get the pointer to traverser function from a dynamic object.
     pub fn extract_trav_from_dynamic<'m>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
     ) -> PointerValue<'c> {
         assert!(self.ty.is_dynamic());
         self.extract_field(gc, DYNAMIC_OBJ_TRAVARSER_IDX)
@@ -348,7 +348,7 @@ impl<'c> Object<'c> {
 
     // Check if the pointer is null.
     // Can be used for boxed objects.
-    pub fn is_null<'m>(&self, gc: &mut GenerationContext<'c, 'm>) -> IntValue<'c> {
+    pub fn is_null<'m>(&self, gc: &mut Generator<'c, 'm>) -> IntValue<'c> {
         assert!(self.is_box(gc.type_env()));
         gc.builder()
             .build_is_null(self.value.into_pointer_value(), "is_null")
@@ -359,7 +359,7 @@ impl<'c> Object<'c> {
     // Can be used only for boxed objects.
     pub fn ptr_to_field<'m>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         field_idx: u32,
     ) -> PointerValue<'c> {
         assert!(self.is_box(&gc.type_env));
@@ -372,7 +372,7 @@ impl<'c> Object<'c> {
     // Can be used only for boxed objects.
     pub fn ptr_to_field_as<'m>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: StructType<'c>,
         field_idx: u32,
     ) -> PointerValue<'c> {
@@ -447,7 +447,7 @@ fn add_i32_to_u32(u: u32, i: i32) -> u32 {
     }
 }
 
-pub struct GenerationContext<'c, 'm> {
+pub struct Generator<'c, 'm> {
     pub context: &'c Context,
     pub module: &'m Module<'c>,
     builders: Arc<RefCell<Vec<Arc<Builder<'c>>>>>,
@@ -492,7 +492,7 @@ impl<'c> Drop for PopDebugScopeGuard<'c> {
     }
 }
 
-impl<'c, 'm> GenerationContext<'c, 'm> {
+impl<'c, 'm> Generator<'c, 'm> {
     // Add a global string.
     pub fn add_global_string(&mut self, s: &str) -> GlobalValue<'c> {
         if let Some(val) = self.global_strings.get(s) {
@@ -793,7 +793,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Build branch by whether or not the reference counter is one.
     // Returns (unique_bb, shared_bb).
     pub fn build_branch_by_is_unique(
-        self: &mut GenerationContext<'c, 'm>,
+        self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
     ) -> (BasicBlock<'c>, BasicBlock<'c>) {
         let current_bb = self.builder().get_insert_block().unwrap();
@@ -882,7 +882,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
     // Load refcnt state and branch by the value.
     // Returns three building blocks (local_bb, threaded_bb, global_bb).
     pub fn build_branch_by_refcnt_state(
-        self: &mut GenerationContext<'c, 'm>,
+        self: &mut Generator<'c, 'm>,
         obj_ptr: PointerValue<'c>,
     ) -> (BasicBlock<'c>, Option<BasicBlock<'c>>, BasicBlock<'c>) {
         // Load refcnt_state.
@@ -1023,7 +1023,7 @@ impl<'c, 'm> GenerationContext<'c, 'm> {
             Left(ret) => ret,
             Right(_) => {
                 let ty = ret_ty.get_embedded_type(self, &vec![]);
-                GenerationContext::get_undef(&ty)
+                Generator::get_undef(&ty)
             }
         };
         let obj = Object::new(ret, ret_ty, self);

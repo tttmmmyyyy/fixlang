@@ -18,7 +18,7 @@ use crate::constants::{
     TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::error::Errors;
-use crate::generator::GenerationContext;
+use crate::generator::Generator;
 use crate::misc::collect_results;
 use crate::misc::number_to_varname;
 use crate::misc::Map;
@@ -1192,7 +1192,7 @@ impl TypeNode {
 
     pub fn get_struct_type<'c, 'm>(
         self: &Arc<TypeNode>,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         capture: &Vec<Arc<TypeNode>>,
     ) -> StructType<'c> {
         self.get_object_type(capture, gc.type_env())
@@ -1201,7 +1201,7 @@ impl TypeNode {
 
     pub fn get_embedded_type<'c, 'm>(
         self: &Arc<TypeNode>,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         capture: &Vec<Arc<TypeNode>>,
     ) -> BasicTypeEnum<'c> {
         self.get_object_type(capture, gc.type_env())

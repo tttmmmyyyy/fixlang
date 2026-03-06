@@ -84,7 +84,7 @@ pub enum LLVMGenerator {
 impl LLVMGenerator {
     pub fn generate<'c, 'm, 'b>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
         tail: bool,
     ) -> Option<Object<'c>> {

@@ -37,7 +37,7 @@ impl ObjectFieldType {
     // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
     pub fn to_basic_type<'c, 'm>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         unboxed_path: Vec<String>,
     ) -> BasicTypeEnum<'c> {
         match self {
@@ -91,7 +91,7 @@ impl ObjectFieldType {
         }
     }
 
-    pub fn to_debug_type<'c, 'm>(&self, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
+    pub fn to_debug_type<'c, 'm>(&self, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
         match self {
             ObjectFieldType::ControlBlock => control_block_di_type(gc),
             ObjectFieldType::TraverseFunction => ptr_di_type("<ptr to traverser func>", gc),
@@ -299,20 +299,20 @@ impl ObjectFieldType {
 
     // Take array and generate code iterating its elements.
     fn loop_over_array_buf<'c, 'm, F, G>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
         loop_body: F,
         after_loop: G,
     ) where
         for<'c2, 'm2> F: Fn(
-            &mut GenerationContext<'c, 'm>,
+            &mut Generator<'c, 'm>,
             IntValue<'c>,     /* idx */
             IntValue<'c>,     /* size */
             PointerValue<'c>, /* buffer */
         ),
         for<'c2, 'm2> G: Fn(
-            &mut GenerationContext<'c, 'm>,
+            &mut Generator<'c, 'm>,
             IntValue<'c>,     /* size */
             PointerValue<'c>, /* buffer */
         ),
@@ -388,7 +388,7 @@ impl ObjectFieldType {
     }
 
     pub fn release_or_mark_array_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
@@ -397,7 +397,7 @@ impl ObjectFieldType {
         let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
 
         // In loop body, release object of idx = counter_val.
-        let loop_body = |gc: &mut GenerationContext<'c, 'm>,
+        let loop_body = |gc: &mut Generator<'c, 'm>,
                          idx: IntValue<'c>,
                          _size: IntValue<'c>,
                          ptr_to_buffer: PointerValue<'c>| {
@@ -417,7 +417,7 @@ impl ObjectFieldType {
 
         // After loop, do nothing.
         fn after_loop<'c, 'm>(
-            _gc: &mut GenerationContext<'c, 'm>,
+            _gc: &mut Generator<'c, 'm>,
             _size: IntValue<'c>,
             _ptr_to_buffer: PointerValue<'c>,
         ) {
@@ -429,7 +429,7 @@ impl ObjectFieldType {
 
     // Initialize an array by value.
     pub fn initialize_array_buf_by_value<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         size: IntValue<'c>,
         buffer: PointerValue<'c>,
         value: Object<'c>,
@@ -437,7 +437,7 @@ impl ObjectFieldType {
         // Initialize elements
         {
             // In loop body, retain value and store it at idx.
-            let loop_body = |gc: &mut GenerationContext<'c, 'm>,
+            let loop_body = |gc: &mut Generator<'c, 'm>,
                              idx: IntValue<'c>,
                              _size: IntValue<'c>,
                              buf_ptr: PointerValue<'c>| {
@@ -452,7 +452,7 @@ impl ObjectFieldType {
             };
 
             // After loop, release value.
-            let after_loop = |gc: &mut GenerationContext<'c, 'm>,
+            let after_loop = |gc: &mut Generator<'c, 'm>,
                               _size: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {
                 gc.release(value.clone());
@@ -466,7 +466,7 @@ impl ObjectFieldType {
 
     // Panic if idx is out_of_range for the array.
     pub fn panic_if_out_of_range<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
         idx: IntValue<'c>,
     ) {
@@ -490,7 +490,7 @@ impl ObjectFieldType {
     }
 
     // Panic if size is negative
-    pub fn panic_if_size_negative<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, len: IntValue<'c>) {
+    pub fn panic_if_size_negative<'c, 'm>(gc: &mut Generator<'c, 'm>, len: IntValue<'c>) {
         let curr_bb = gc.builder().get_insert_block().unwrap();
         let curr_func = curr_bb.get_parent().unwrap();
         let is_neg_size = gc
@@ -518,7 +518,7 @@ impl ObjectFieldType {
     // Read an element of array.
     // Returned object is not retained.
     pub fn read_from_array_buf_noretain<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
@@ -547,7 +547,7 @@ impl ObjectFieldType {
     // Read an element of array.
     // Returned object is retained.
     pub fn read_from_array_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>, // If none, bounds checking is omitted.
         buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
@@ -560,7 +560,7 @@ impl ObjectFieldType {
 
     // Write an element into array.
     pub fn write_to_array_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         len: Option<IntValue<'c>>,
         buffer: PointerValue<'c>,
         idx: IntValue<'c>,
@@ -596,7 +596,7 @@ impl ObjectFieldType {
     // Clone an array.
     // `dst` should be already allocated but not initialized.
     pub fn clone_array_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
         src_buffer: PointerValue<'c>,
         dst_buffer: PointerValue<'c>,
@@ -606,7 +606,7 @@ impl ObjectFieldType {
         {
             let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
             // In loop body, retain value and store it at idx.
-            let loop_body = |gc: &mut GenerationContext<'c, 'm>,
+            let loop_body = |gc: &mut Generator<'c, 'm>,
                              idx: IntValue<'c>,
                              _len: IntValue<'c>,
                              _ptr_to_buffer: PointerValue<'c>| {
@@ -638,7 +638,7 @@ impl ObjectFieldType {
             };
 
             // After loop, do nothing.
-            let after_loop = |_gc: &mut GenerationContext<'c, 'm>,
+            let after_loop = |_gc: &mut Generator<'c, 'm>,
                               _len: IntValue<'c>,
                               _ptr_to_buffer: PointerValue<'c>| {};
 
@@ -650,7 +650,7 @@ impl ObjectFieldType {
     // `dst` should be already allocated but not initialized.
     // `src` will not be released.
     pub fn clone_struct<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
         mut dst: Object<'c>,
     ) -> Object<'c> {
@@ -674,7 +674,7 @@ impl ObjectFieldType {
     // `dst` should be already allocated but not initialized.
     // `src` will not be released.
     pub fn clone_union<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         src: &Object<'c>,
         dst: Object<'c>,
     ) -> Object<'c> {
@@ -699,7 +699,7 @@ impl ObjectFieldType {
 
     // Perform retain or release or mark global or mark threaded on an object included in a union buffer.
     fn retain_release_mark_union<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         work_type: Option<TraverserWorkType>, // None for retain, and Some for release or mark global threaded.
     ) {
@@ -763,12 +763,12 @@ impl ObjectFieldType {
         gc.builder().position_at_end(end_bb);
     }
 
-    pub fn retain_union<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, union: Object<'c>) {
+    pub fn retain_union<'c, 'm>(gc: &mut Generator<'c, 'm>, union: Object<'c>) {
         ObjectFieldType::retain_release_mark_union(gc, union, None);
     }
 
     pub fn get_union_tag<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: &Object<'c>,
     ) -> IntValue<'c> {
         let is_unbox = union.is_unbox(gc.type_env());
@@ -777,7 +777,7 @@ impl ObjectFieldType {
     }
 
     pub fn set_union_tag<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         tag: IntValue<'c>,
     ) -> Object<'c> {
@@ -787,7 +787,7 @@ impl ObjectFieldType {
     }
 
     pub fn get_union_buf_idx<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: &Object<'c>,
     ) -> u32 {
         let is_unbox = union.is_unbox(gc.type_env());
@@ -796,7 +796,7 @@ impl ObjectFieldType {
     }
 
     pub fn get_union_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: &Object<'c>,
     ) -> BasicValueEnum<'c> {
         let union_buf_idx = ObjectFieldType::get_union_buf_idx(gc, union);
@@ -806,7 +806,7 @@ impl ObjectFieldType {
     // Get the value of union.
     // The return value is retained and the union is released.
     pub fn get_union_value<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
@@ -827,7 +827,7 @@ impl ObjectFieldType {
     // Get the value of union.
     // None of the return value and the union is retained/released.
     pub fn get_union_value_noretain_norelease<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> Object<'c> {
@@ -837,7 +837,7 @@ impl ObjectFieldType {
     }
 
     pub fn get_value_from_union_buf<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         buf: BasicValueEnum<'c>,
         elem_ty: &Arc<TypeNode>,
     ) -> BasicValueEnum<'c> {
@@ -846,7 +846,7 @@ impl ObjectFieldType {
     }
 
     pub fn set_union_value<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         value: Object<'c>,
     ) -> Object<'c> {
@@ -860,7 +860,7 @@ impl ObjectFieldType {
     }
 
     pub fn panic_if_union_tag_mismatch<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         union: Object<'c>,
         expected_tag: IntValue<'c>,
     ) {
@@ -896,7 +896,7 @@ impl ObjectFieldType {
     // Get field `Object` of a struct `Object`.
     // This "moves out" the field; in other words, the returned object is not retained.
     pub fn move_out_struct_field<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         str: &Object<'c>,
         field_idx: u32,
     ) -> Object<'c> {
@@ -909,7 +909,7 @@ impl ObjectFieldType {
     // Set an `Object` into the field of a struct `Object`.
     // This "moves into" the field; in other words, the old value isn't released.
     pub fn move_into_struct_field<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         str: Object<'c>,
         field_idx: u32,
         field: &Object<'c>,
@@ -921,7 +921,7 @@ impl ObjectFieldType {
 
     // Get field of struct as Objects (with refcnt managed).
     pub fn get_struct_fields<'c, 'm>(
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         str: &Object<'c>,
         field_indices: &[u32],
     ) -> Vec<Object<'c>> {
@@ -972,7 +972,7 @@ impl ObjectType {
     // * `unboxed_path` - When unboxed types are used recursively in each definition, this function can fall into infinite recursion. `unboxed_path` is an argument to detect this infinite loop and to generate a good error message. When you call to_struct_type from outside, specify an empty Vec. When to_struct_type calls itself (possibly via another function), unboxed_path contains the sequence of unboxed types that to_struct_type has been called on so far.
     pub fn to_struct_type<'c, 'm>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         mut unboxed_path: Vec<String>,
     ) -> StructType<'c> {
         if self.is_unbox {
@@ -1012,7 +1012,7 @@ impl ObjectType {
 
     pub fn size_of<'c, 'm>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         array_size: Option<IntValue<'c>>,
     ) -> IntValue<'c> {
         if array_size.is_some() {
@@ -1066,7 +1066,7 @@ impl ObjectType {
     // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
     pub fn to_embedded_type<'c, 'm>(
         &self,
-        gc: &mut GenerationContext<'c, 'm>,
+        gc: &mut Generator<'c, 'm>,
         unboxed_path: Vec<String>,
     ) -> BasicTypeEnum<'c> {
         if self.is_unbox {
@@ -1098,7 +1098,7 @@ pub fn refcnt_state_type<'c>(context: &'c Context) -> IntType<'c> {
 // Type of traverser function.
 // - is_dynamic: If true, the traverser is dynamic and takes the work type as the second argument.
 pub fn traverser_type<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     ty: &Arc<TypeNode>,
     is_dynamic: bool,
 ) -> FunctionType<'c> {
@@ -1116,7 +1116,7 @@ pub fn traverser_work_type<'c>(context: &'c Context) -> IntType<'c> {
     context.i8_type()
 }
 
-pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<'c> {
+pub fn control_block_type<'c, 'm>(gc: &Generator<'c, 'm>) -> StructType<'c> {
     let mut fields = vec![];
     assert_eq!(fields.len(), CTRL_BLK_REFCNT_IDX as usize);
     fields.push(refcnt_type(gc.context).into());
@@ -1125,7 +1125,7 @@ pub fn control_block_type<'c, 'm>(gc: &GenerationContext<'c, 'm>) -> StructType<
     gc.context.struct_type(&fields, false)
 }
 
-pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
+pub fn control_block_di_type<'c, 'm>(gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let str_type = control_block_type(gc);
 
     let refcnt_ty = refcnt_type(gc.context);
@@ -1169,7 +1169,7 @@ pub fn control_block_di_type<'c, 'm>(gc: &mut GenerationContext<'c, 'm>) -> DITy
         .as_type()
 }
 
-pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut GenerationContext<'c, 'm>) -> DIType<'c> {
+pub fn ptr_di_type<'c, 'm>(name: &str, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let size_in_bits = gc.target_data.get_bit_size(&ptr_ty);
     gc.get_di_builder()
@@ -1184,7 +1184,7 @@ pub fn union_tag_type<'c>(context: &'c Context) -> IntType<'c> {
 
 pub fn lambda_function_type<'c, 'm>(
     ty: &Arc<TypeNode>,
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
 ) -> FunctionType<'c> {
     // Any lamba takes argments.
     // In addition, if the lambda is closure (in other words, not a function pointer), it takes CAP, which is dynamic object consists of captured objects.
@@ -1353,7 +1353,7 @@ pub fn create_obj<'c, 'm>(
     capture: &Vec<Arc<TypeNode>>,
     // Capacity of array. Used only for creating array object.
     array_capacity: Option<IntValue<'c>>,
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     _name: Option<&str>,
 ) -> Object<'c> {
     // Validate arguments.
@@ -1463,7 +1463,7 @@ pub fn create_obj<'c, 'm>(
 pub fn get_traverser_ptr<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     work: Option<TraverserWorkType>,
 ) -> PointerValue<'c> {
     match create_traverser(ty, capture, gc, work) {
@@ -1507,7 +1507,7 @@ pub fn get_traverser_ptr<'c, 'm>(
 pub fn create_traverser<'c, 'm>(
     ty: &Arc<TypeNode>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     work: Option<TraverserWorkType>,
 ) -> Option<FunctionValue<'c>> {
     assert!(ty.free_vars().is_empty());
@@ -1598,7 +1598,7 @@ fn build_traverse<'c, 'm>(
     obj: Object<'c>,
     capture: &Vec<Arc<TypeNode>>, // used in destructor of dynamic object.
     work: TraverserWorkType,
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
 ) {
     // In this function, we need to access captured fields, which is not possible by `obj` only.
     let object_type = ty_to_object_ty(&obj.ty, capture, gc.type_env());
@@ -1648,7 +1648,7 @@ fn build_traverse<'c, 'm>(
 
 pub fn ty_to_debug_embedded_ty<'c, 'm>(
     ty: Arc<TypeNode>,
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
 ) -> DIType<'c> {
     let debug_str_ty = ty_to_debug_struct_ty(ty.clone(), gc);
     if ty.is_box(&gc.type_env()) {
@@ -1671,7 +1671,7 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
 
 pub fn ty_to_debug_struct_ty<'c, 'm>(
     ty: Arc<TypeNode>,
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
 ) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());

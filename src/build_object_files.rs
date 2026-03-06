@@ -24,7 +24,7 @@ use crate::{
     constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
     cpu_features::CpuFeatures,
     error::{panic_with_msg, Errors},
-    generator::GenerationContext,
+    generator::Generator,
     misc::{info_msg, warn_msg},
     optimization,
     runtime::{self, BuildMode},
@@ -129,12 +129,12 @@ pub fn build_object_files<'c>(
             // Create GenerationContext.
             let context = Context::create();
             let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
-            let module = GenerationContext::create_module(
+            let module = Generator::create_module(
                 &format!("Module-{}", unit.unit_hash()),
                 &context,
                 &target_machine,
             );
-            let mut gc = GenerationContext::new(
+            let mut gc = Generator::new(
                 &context,
                 &module,
                 target_machine.get_target_data(),
@@ -447,7 +447,7 @@ fn optimize_and_verify<'c>(
 
 // Build exported c functions.
 fn build_exported_c_functions<'c, 'm>(
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     export_stmts: &[ExportStatement],
 ) {
     for export_stmt in export_stmts {
@@ -455,7 +455,7 @@ fn build_exported_c_functions<'c, 'm>(
     }
 }
 
-fn build_main_function<'c, 'm>(gc: &mut GenerationContext<'c, 'm>, main_expr: Arc<ExprNode>) {
+fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNode>) {
     let main_fn_type = gc.context.i32_type().fn_type(
         &[
             gc.context.i32_type().into(),                      // argc

@@ -14,7 +14,7 @@ pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
 pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
 
-pub fn build_runtime<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
+pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_abort_function(gc, mode);
     build_index_out_of_range_function(gc, mode);
     build_negative_array_size_function(gc, mode);
@@ -36,7 +36,7 @@ pub enum BuildMode {
     Implement,
 }
 
-fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_abort_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }
@@ -49,7 +49,7 @@ fn build_abort_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildM
     return;
 }
 
-fn build_index_out_of_range_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_index_out_of_range_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }
@@ -66,7 +66,7 @@ fn build_index_out_of_range_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>,
     return;
 }
 
-fn build_negative_array_size_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_negative_array_size_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }
@@ -106,7 +106,7 @@ fn build_negative_array_size_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>
 //     return;
 // }
 
-fn build_eprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_eprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }
@@ -125,7 +125,7 @@ fn build_eprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: Buil
     return;
 }
 
-fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_sprintf_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     if mode != BuildMode::Declare {
         return;
     }
@@ -151,7 +151,7 @@ fn build_sprintf_function<'c, 'm, 'b>(gc: &GenerationContext<'c, 'm>, mode: Buil
     return;
 }
 
-fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let func = match mode {
         BuildMode::Declare => {
             if let Some(_func) = gc.module.get_function(RUNTIME_SUBTRACT_PTR) {
@@ -194,7 +194,7 @@ fn build_subtract_ptr_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, m
     return;
 }
 
-fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
 
@@ -243,7 +243,7 @@ fn build_ptr_add_offset_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>,
 }
 
 pub fn build_pthread_once_function<'c, 'm, 'b>(
-    gc: &mut GenerationContext<'c, 'm>,
+    gc: &mut Generator<'c, 'm>,
     mode: BuildMode,
 ) {
     if mode != BuildMode::Declare {
@@ -263,7 +263,7 @@ pub fn build_pthread_once_function<'c, 'm, 'b>(
     return;
 }
 
-fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_get_argc_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let argc_gv_ty = gc.context.i32_type();
     let func = match mode {
         BuildMode::Declare => {
@@ -308,7 +308,7 @@ fn build_get_argc_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode:
     return;
 }
 
-fn build_get_argv_function<'c, 'm, 'b>(gc: &mut GenerationContext<'c, 'm>, mode: BuildMode) {
+fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let func = match mode {
         BuildMode::Declare => {
             if let Some(_func) = gc.module.get_function(RUNTIME_GET_ARGV) {
