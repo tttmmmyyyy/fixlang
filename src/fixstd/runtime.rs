@@ -1,6 +1,6 @@
 use inkwell::module::Linkage;
 
-use super::*;
+use crate::*;
 
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";

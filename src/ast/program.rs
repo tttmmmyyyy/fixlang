@@ -7,7 +7,7 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
 use crate::ast::types::{Kind, Scheme, TyAliasInfo, AssocType, TyCon, TyConInfo, TyConVariant, TypeNode};
-use crate::builtin::{
+use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
     struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
     struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,

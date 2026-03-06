@@ -7,7 +7,7 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
-use crate::builtin::{
+use crate::fixstd::builtin::{
     get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
     is_funptr_tycon, make_array_tycon, make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon,
     make_iostate_name, make_tuple_name_abs,
@@ -26,7 +26,7 @@ use crate::misc::Set;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
-use crate::typecheck::{Substitution, TypeCheckContext};
+use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use core::panic;
 use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};

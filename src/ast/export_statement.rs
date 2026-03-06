@@ -11,7 +11,7 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::TypeNode;
 use crate::ast::Type;
-use crate::builtin::*;
+use crate::fixstd::builtin::*;
 use crate::generator::GenerationContext;
 use crate::generator::Object;
 use crate::object::create_obj;

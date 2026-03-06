@@ -73,7 +73,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         let runtime_c_path =
             PathBuf::from(INTERMEDIATE_PATH).join(format!("fixruntime.{}.c", rand_num.to_string()));
         fs::create_dir_all(INTERMEDIATE_PATH).expect("Failed to create intermediate directory.");
-        fs::write(&runtime_c_path, include_str!("../runtime.c")).expect(&format!(
+        fs::write(&runtime_c_path, include_str!("../fixstd/runtime.c")).expect(&format!(
             "Failed to generate \"{}\"",
             runtime_c_path.to_string_lossy().to_string()
         ));

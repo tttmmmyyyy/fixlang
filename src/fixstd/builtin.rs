@@ -12,7 +12,7 @@ use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 
 // Implement built-in functions, types, etc.
-use super::*;
+use crate::*;
 
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
@@ -26,7 +26,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             tyvars: vec![],
             fields: vec![],
             source: None,
-            document: Some(include_str!("./docs/std_iostate.md").to_string()),
+            document: Some(include_str!("../docs/std_iostate.md").to_string()),
         },
     );
 
