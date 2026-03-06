@@ -5,7 +5,7 @@ use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{TraitAliasEnv, TraitId};
 use crate::ast::types::{TyVar, TypeNode};
 use crate::error::Errors;
-use crate::name_resolution::NameResolutionContext;
+use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 

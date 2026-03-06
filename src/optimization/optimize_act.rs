@@ -34,7 +34,7 @@ use crate::{
     },
     error::Errors,
     misc::info_msg,
-    typecheck::TypeCheckContext,
+    elaboration::typecheck::TypeCheckContext,
 };
 
 pub fn run(prg: &mut Program, config: &Configuration) {

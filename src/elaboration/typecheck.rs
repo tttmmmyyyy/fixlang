@@ -9,7 +9,7 @@ use crate::{
         qual_type::QualType,
     },
     error::Errors,
-    name_resolution::NameResolutionContext,
+    elaboration::name_resolution::NameResolutionContext,
 };
 use ast::{
     import::ImportStatement,
@@ -18,11 +18,11 @@ use ast::{
 use error::Error;
 use misc::{collect_results, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
-use typecheckcache::TypeCheckCache;
+use super::typecheckcache::TypeCheckCache;
 
 use self::ast::import;
 
-use super::*;
+use crate::*;
 
 #[derive(Clone)]
 pub struct Scope<T> {

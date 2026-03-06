@@ -7,7 +7,7 @@ use colored::Colorize;
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Errors, misc::to_absolute_path, parser::Rule, check_program::read_file};
+use crate::{error::Errors, misc::to_absolute_path, parser::Rule, elaboration::read_file};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {

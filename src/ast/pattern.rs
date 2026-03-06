@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{error::Errors, name_resolution::NameResolutionContext};
+use crate::{error::Errors, elaboration::name_resolution::NameResolutionContext};
 use misc::{make_set, Map, Set};
 use name::{FullName, Name};
 use serde::{Deserialize, Serialize};

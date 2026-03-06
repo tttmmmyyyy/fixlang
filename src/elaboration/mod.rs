@@ -1,3 +1,7 @@
+pub mod name_resolution;
+pub mod typecheck;
+pub mod typecheckcache;
+
 use crate::error::Errors;
 use crate::make_std_mod;
 use crate::make_tuple_traits_mod;

@@ -39,10 +39,9 @@ mod env_vars;
 mod error;
 mod generator;
 mod graph;
-mod name_resolution;
 #[macro_use]
 mod log_file;
-mod check_program;
+mod elaboration;
 mod misc;
 mod object;
 mod optimization;
@@ -56,8 +55,6 @@ mod stdlib;
 mod stopwatch;
 #[cfg(test)]
 mod tests;
-mod typecheck;
-mod typecheckcache;
 
 use crate::error::Errors;
 use crate::misc::disable_colored_no_tty;
@@ -70,7 +67,7 @@ use ast::traits::*;
 use ast::typedecl::*;
 use ast::types::*;
 use builtin::*;
-use check_program::*;
+use elaboration::*;
 use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
@@ -97,7 +94,7 @@ use std::path::PathBuf;
 use std::process;
 use std::vec::Vec;
 use stdlib::*;
-use typecheck::*;
+use elaboration::typecheck::*;
 use mimalloc::MiMalloc;
 
 #[global_allocator]

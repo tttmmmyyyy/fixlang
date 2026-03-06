@@ -6,7 +6,7 @@ use crate::{
         name::{FullName, Name, NameSpace},
         typedecl::Field,
     },
-    check_program::check_program_via_config,
+    elaboration::check_program_via_config,
     configuration::BuildConfigType,
     dependency::lockfile::LockFileType,
     error::Errors,

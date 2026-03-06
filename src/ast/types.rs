@@ -23,7 +23,7 @@ use crate::misc::collect_results;
 use crate::misc::number_to_varname;
 use crate::misc::Map;
 use crate::misc::Set;
-use crate::name_resolution::{NameResolutionContext, NameResolutionType};
+use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::sourcefile::{SourcePos, Span};
 use crate::typecheck::{Substitution, TypeCheckContext};

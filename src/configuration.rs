@@ -6,7 +6,7 @@ use crate::misc::{
     platform_valgrind_supported, split_string_by_space_not_quated, to_absolute_path, warn_msg,
     Finally,
 };
-use crate::typecheckcache::{self, TypeCheckCache};
+use crate::elaboration::typecheckcache::{self, TypeCheckCache};
 use crate::{error::panic_with_msg, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
 use crate::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,

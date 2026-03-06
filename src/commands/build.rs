@@ -1,5 +1,5 @@
 use crate::build_object_files::build_object_files;
-use crate::check_program::check_program_via_config;
+use crate::elaboration::check_program_via_config;
 use crate::error::Errors;
 use crate::misc::info_msg;
 use crate::Configuration;

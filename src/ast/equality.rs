@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::error::Errors;
-use crate::name_resolution::NameResolutionContext;
+use crate::elaboration::name_resolution::NameResolutionContext;
 use serde::{Deserialize, Serialize};
 
 use super::*;
