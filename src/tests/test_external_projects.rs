@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf, process::Command};
 
-use crate::{env_vars, tests::test_util::install_fix, COMPILER_TEST_WORKING_PATH};
+use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::install_fix};
 
 #[test]
 pub fn test_external_project_math() {

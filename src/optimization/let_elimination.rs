@@ -52,11 +52,11 @@ use crate::{
     ast::{
         expr::ExprNode,
         name::FullName,
+        program::Program,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
     },
     misc::{Map, Set},
     optimization::rename::{rename_free_name, substitute_free_name},
-    Program,
 };
 
 pub fn create_global_lambda_to_arity_map(prg: &Program) -> Map<FullName, usize> {
@@ -96,7 +96,7 @@ struct LetEliminator<'a> {
 impl<'a> ExprVisitor for LetEliminator<'a> {
     fn start_visit_var(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -104,7 +104,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_var(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -112,7 +112,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_llvm(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -120,7 +120,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_llvm(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -128,7 +128,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_app(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -136,7 +136,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_app(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -144,7 +144,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_lam(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -152,7 +152,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_lam(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -160,7 +160,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_let(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -168,7 +168,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_let(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         // Check if the expression is of the form `let x = {e0} in {e1}`.
@@ -237,7 +237,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_if(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -245,7 +245,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_if(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -253,7 +253,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_match(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -261,7 +261,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_match(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         // Check if the expression is of the form `match x { y -> {expr} }`.
@@ -287,7 +287,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_tyanno(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -295,7 +295,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_tyanno(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -303,7 +303,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_make_struct(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -311,7 +311,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_make_struct(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -319,7 +319,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_array_lit(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -327,7 +327,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_array_lit(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -335,7 +335,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn start_visit_ffi_call(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -343,7 +343,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
 
     fn end_visit_ffi_call(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -411,7 +411,7 @@ impl FreeOccurrenceProbe {
 impl ExprVisitor for FreeOccurrenceProbe {
     fn start_visit_var(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -419,7 +419,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_var(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         let var = expr.get_var();
@@ -439,7 +439,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_llvm(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -447,7 +447,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_llvm(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         let llvm = expr.get_llvm();
@@ -477,7 +477,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_app(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // Function application expression {f}({x}).
@@ -500,7 +500,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_app(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         // Check if the applied function is the target name
@@ -518,7 +518,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_lam(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // Set is_captured_by_lambda if the target name is free in this lambda.
@@ -551,7 +551,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_lam(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -559,7 +559,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_let(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // Let expression `let {pat} = {bound} in {value}`.
@@ -602,7 +602,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_let(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -610,7 +610,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_if(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // If expression `if {cond} { {then} } else { {else} }`.
@@ -632,7 +632,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_if(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -640,7 +640,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_match(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // Match expression `match {cond} { pat1 => {val1}; pat2 => {val2}; ... }`.
@@ -690,7 +690,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_match(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -698,7 +698,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_tyanno(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -706,7 +706,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_tyanno(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -714,7 +714,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_make_struct(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // If any field contains the target name, and any other field contains local name, then set `used_before_any_other_local_names` to false.
@@ -741,7 +741,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_make_struct(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -749,7 +749,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_array_lit(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // If any element contains the target name, and any other element contains local name, then set `used_before_any_other_local_names` to false.
@@ -775,7 +775,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_array_lit(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -783,7 +783,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn start_visit_ffi_call(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // If any argument contains the target name, and any other argument contains local name, then set `used_before_any_other_local_names` to false.
@@ -809,7 +809,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
 
     fn end_visit_ffi_call(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)

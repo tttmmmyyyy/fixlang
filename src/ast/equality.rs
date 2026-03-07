@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
+use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::types::{AssocType, TyVar, TypeNode, type_assocty};
 use crate::error::Errors;
 use crate::elaboration::name_resolution::NameResolutionContext;
+use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
-
-use super::*;
 
 // Equality predicate `AssociateType args = value`.
 #[derive(Clone, Serialize, Deserialize)]

@@ -1,18 +1,50 @@
 use std::sync::Arc;
 
-use crate::{
-    ast::{predicate::Predicate, qual_pred::QualPred},
-    error::panic_with_msg,
-    misc::Set,
+use crate::ast::{
+    expr::{
+        expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
+        expr_var, var_local, AppSourceCodeOrderType, ExprNode,
+    },
+    inline_llvm::LLVMGenerator,
+    name::{FullName, Name, NameSpace},
+    pattern::PatternNode,
+    predicate::Predicate,
+    qual_pred::QualPred,
+    traits::{TraitId, TraitImpl},
+    typedecl::{Field, Struct, TypeDeclValue, TypeDefn},
+    types::{
+        kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, type_fun, type_tyapp,
+        type_tycon, type_tyvar, type_tyvar_star, Kind, Scheme, TyCon, TyConInfo, TyConVariant,
+        TypeNode,
+    },
 };
-use ast::name::{FullName, Name, NameSpace};
+use crate::constants::{
+    ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_GET_SIZE_NAME,
+    ARRAY_LEN_IDX, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARRAY_UNSAFE_FILL_NAME,
+    ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
+    ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, ARROW_NAME, BOOL_NAME,
+    BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
+    CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
+    DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
+    FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
+    IDENTITY_NAME, IO_NAME, IOSTATE_NAME, LAZY_NAME, PTR_NAME, STD_NAME, STRING_NAME,
+    STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
+    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
+    TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
+};
+use crate::error::panic_with_msg;
+use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN};
+use crate::generator::{Generator, Object};
+use crate::misc::{make_map, Map, Set};
+use crate::object::{create_obj, ObjectFieldType};
+use crate::parse::sourcefile::Span;
 use inkwell::module::Linkage;
-use misc::{make_map, Map};
+use inkwell::values::{BasicValue, IntValue, PointerValue};
+use inkwell::{AddressSpace, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 
 // Implement built-in functions, types, etc.
-use crate::*;
 
 pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();

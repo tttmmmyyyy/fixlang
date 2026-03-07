@@ -7,7 +7,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
         types::TyVar,
     },
-    sourcefile::Span,
+    parse::sourcefile::Span,
 };
 
 // Collect type variables used in type annotations within the expr.

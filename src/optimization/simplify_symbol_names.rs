@@ -10,11 +10,13 @@ use std::{mem, sync::Arc};
 
 use crate::{
     ast::{
+        expr::ExprNode,
         name::FullName,
+        program::Program,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
+    constants::INSTANCIATED_NAME_SEPARATOR,
     misc::{insert_to_map_vec, Map},
-    ExprNode, Program, INSTANCIATED_NAME_SEPARATOR,
 };
 
 pub fn run(prg: &mut Program) {

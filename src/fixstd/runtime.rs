@@ -1,6 +1,9 @@
 use inkwell::module::Linkage;
+use inkwell::values::BasicValue;
+use inkwell::AddressSpace;
 
-use crate::*;
+use crate::constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
+use crate::generator::Generator;
 
 pub const RUNTIME_ABORT: &str = "fixruntime_abort";
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";

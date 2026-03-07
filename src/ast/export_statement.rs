@@ -9,8 +9,7 @@ use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
-use crate::ast::types::TypeNode;
-use crate::ast::Type;
+use crate::ast::types::{Type, TypeNode};
 use crate::fixstd::builtin::*;
 use crate::generator::Generator;
 use crate::generator::Object;
@@ -18,7 +17,7 @@ use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
 
-use super::error::Errors;
+use crate::error::Errors;
 
 // The export statement.
 #[derive(Clone)]

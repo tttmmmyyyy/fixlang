@@ -3,26 +3,31 @@ use std::sync::Arc;
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
+        expr::{AppSourceCodeOrderType, Expr, ExprNode},
+        import::ImportStatement,
         kind_scope::KindEnv,
+        name::{FullName, Name, NameSpace},
+        pattern::{Pattern, PatternNode},
         predicate::Predicate,
+        program::{ModuleInfo, TypeEnv},
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
+        traits::{TraitEnv, TraitId},
+        types::{
+            kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp, type_tycon, AssocType,
+            Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
+        },
     },
-    error::Errors,
+    constants::{ERR_AMBIGUOUS_NAME, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME},
+    error::{Error, Errors},
     elaboration::name_resolution::NameResolutionContext,
+    fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
+    parse::sourcefile::Span,
 };
-use ast::{
-    import::ImportStatement,
-    name::{FullName, NameSpace},
-};
-use error::Error;
-use misc::{collect_results, make_map, Map, Set};
+use crate::ast::import;
+use crate::misc::{collect_results, insert_to_map_vec, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
 use super::typecheckcache::TypeCheckCache;
-
-use self::ast::import;
-
-use crate::*;
 
 #[derive(Clone)]
 pub struct Scope<T> {
@@ -48,7 +53,7 @@ where
 {
     // Push a local value.
     pub fn push(&mut self, name: &Name, v: T) {
-        misc::insert_to_map_vec(&mut self.local, name, v);
+        insert_to_map_vec(&mut self.local, name, v);
     }
 
     // Pop a local value.
@@ -578,7 +583,7 @@ impl TypeCheckContext {
                             predicate: pred,
                         },
                     };
-                    misc::insert_to_map_vec(&mut self.assumed_preds, &trait_id, qual_pred_scm);
+                    insert_to_map_vec(&mut self.assumed_preds, &trait_id, qual_pred_scm);
                 }
                 for eq in eqs {
                     let assoc_ty = eq.assoc_type.clone();
@@ -586,7 +591,7 @@ impl TypeCheckContext {
                         gen_vars: vec![],
                         equality: eq.clone(),
                     };
-                    misc::insert_to_map_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
+                    insert_to_map_vec(&mut self.assumed_eqs, &assoc_ty, eq_scm);
                     self.local_assumed_eqs.push(eq);
                 }
                 return Ok(scheme.ty.clone());

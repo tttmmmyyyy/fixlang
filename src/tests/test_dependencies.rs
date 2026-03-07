@@ -3,8 +3,8 @@
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::constants::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
     use crate::tests::test_util::{copy_dir_recursive, install_fix};
-    use crate::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
     use std::{fs, path::PathBuf, process::Command};
     use tempfile::TempDir;
 

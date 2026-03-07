@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use crate::{
     ast::{
-        expr::{expr_let_typed, expr_var, var_var},
+        expr::{expr_let_typed, expr_var, var_var, ExprNode},
         name::FullName,
+        pattern::PatternNode,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
-    ExprNode, PatternNode,
 };
 
 // Replace free variables of an expression to other names.

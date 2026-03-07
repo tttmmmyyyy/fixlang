@@ -724,7 +724,7 @@ impl DecapturedLambdaInfo {
 impl ExprVisitor for DecapturingVisitor {
     fn start_visit_var(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // If `expr` refers to a decaptured lambda, and
@@ -766,7 +766,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_var(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -774,7 +774,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_llvm(
         &mut self,
-        llvm_expr: &std::sync::Arc<crate::ExprNode>,
+        llvm_expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // If any free variable in the LLVM expression refers to a decaptured lambda,
@@ -835,7 +835,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_llvm(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -843,7 +843,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_app(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // Perform closure specialization if this application expression meets the following conditions:
@@ -913,7 +913,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_app(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -921,7 +921,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_lam(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         // Before visiting children, if the argument refers to a decaptured lambda, fix the domain part of the lambda type since it is incorrect.
@@ -950,7 +950,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_lam(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         // After visiting children, the codomain type of this expression may have changed, so fix the type if necessary.
@@ -970,7 +970,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_let(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         let pat = expr.get_let_pat();
@@ -1022,7 +1022,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_let(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -1030,7 +1030,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_if(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -1038,7 +1038,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_if(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -1046,7 +1046,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_match(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -1054,7 +1054,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_match(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -1062,7 +1062,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_tyanno(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -1070,7 +1070,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_tyanno(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -1078,7 +1078,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_make_struct(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -1086,7 +1086,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_make_struct(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -1094,7 +1094,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_array_lit(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -1102,7 +1102,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_array_lit(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -1110,7 +1110,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn start_visit_ffi_call(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -1118,7 +1118,7 @@ impl ExprVisitor for DecapturingVisitor {
 
     fn end_visit_ffi_call(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)

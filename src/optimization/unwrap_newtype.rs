@@ -18,7 +18,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
         types::{tycon, TyCon, TyConInfo, TyConVariant, Type, TypeNode},
     },
-    builtin::{make_tuple_name_abs, make_unit_ty},
+    fixstd::builtin::{make_tuple_name_abs, make_unit_ty},
     misc::{Map, Set},
 };
 use std::sync::Arc;

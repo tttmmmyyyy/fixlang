@@ -49,35 +49,22 @@ mod tests;
 
 use crate::error::Errors;
 use crate::misc::disable_colored_no_tty;
-use ast::expr::*;
-use ast::inline_llvm::*;
-use ast::name::Name;
-use ast::pattern::*;
-use ast::program::*;
-use ast::traits::*;
-use ast::typedecl::*;
-use ast::types::*;
 use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
 use commands::lsp::server::launch_language_server;
 use metafiles::config_file::ConfigFile;
-use configuration::*;
-use constants::*;
-use elaboration::*;
-use elaboration::typecheck::*;
+use configuration::{
+    Configuration, FixOptimizationLevel, LinkType, OutputFileType,
+    SubCommand,
+};
+use constants::{
+    DEFAULT_COMPILATION_UNIT_MAX_SIZE, DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY,
+    OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
+    OPTIMIZATION_LEVEL_NONE, PROJECT_FILE_PATH,
+};
 use error::panic_if_err;
-use fixstd::*;
-use generator::*;
 use git_version::git_version;
-use inkwell::context::Context;
-use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
-use inkwell::{AddressSpace, IntPredicate};
-use object::*;
-use parse::*;
-use pest::iterators::{Pair, Pairs};
-use pest::Parser;
 use metafiles::project_file::ProjectFile;
 use std::path::Path;
 use std::path::PathBuf;

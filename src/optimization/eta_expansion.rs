@@ -64,10 +64,9 @@ use std::sync::Arc;
 
 use crate::{
     ast::{
-        expr::{var_var, ExprNode},
+        expr::{expr_abs_typed, expr_app_typed, expr_var, var_var, ExprNode},
         name::FullName,
     },
-    expr_abs_typed, expr_app_typed, expr_var,
     misc::Map,
     optimization::{application_inlining, let_elimination},
 };

@@ -14,8 +14,8 @@ use crate::ast::equality::Equality;
 use crate::ast::traits::AssocTypeImpl;
 use crate::ast::types::{Scheme, AssocType, Type, TyCon, TypeNode};
 use crate::misc::Map;
-use crate::EndNode;
-use crate::Span;
+use crate::ast::program::EndNode;
+use crate::parse::sourcefile::Span;
 use lsp_types::{
     CallHierarchyIncomingCall, CallHierarchyIncomingCallsParams, CallHierarchyItem,
     CallHierarchyOutgoingCall, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,

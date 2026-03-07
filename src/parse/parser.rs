@@ -3,20 +3,54 @@
 struct FixParser;
 
 use crate::ast::{
-    equality::Equality, predicate::Predicate, qual_pred::QualPred, qual_type::QualType,
-};
-
-use crate::*;
-use ast::{
+    equality::Equality,
     export_statement::ExportStatement,
+    expr::{
+        expr_abs, expr_abs_param_src, expr_app, expr_array_lit, expr_eval,
+        expr_ffi_call, expr_if, expr_let, expr_make_struct,
+        expr_match, expr_tyanno, expr_var, AppSourceCodeOrderType, ExprNode, Var,
+        var_local, var_var,
+    },
     import::{ImportStatement, ImportTreeNode},
-    name::{FullName, NameSpace},
+    name::{FullName, Name, NameSpace},
+    pattern::PatternNode,
+    predicate::Predicate,
+    program::{GlobalValueDecl, GlobalValueDefn, ModuleInfo, Program},
+    qual_pred::QualPred,
+    qual_type::QualType,
+    traits::{AssocTypeDefn, AssocTypeImpl, KindSignature, TraitAlias, TraitDefn, TraitId, TraitImpl, TraitMember},
+    typedecl::{Field, Struct, TypeAlias, TypeDeclValue, TypeDefn, Union},
+    types::{
+        kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, AssocType,
+        type_fun_with_arrow_src, type_tyapp, type_tycon, type_tyvar_star, Kind, Scheme, TyCon,
+        TyVar, TypeNode,
+    },
 };
+use crate::configuration::{Configuration, DiagnosticsConfig};
+use crate::constants::{
+    COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
+    IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME, STD_NAME,
+    STRUCT_ACT_SYMBOL,
+};
+use crate::error::Errors;
+use crate::fixstd::builtin::{
+    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, integral_ty_range, make_f64_ty,
+    make_i64_ty, make_io_tycon, make_numeric_ty, make_string_lit, make_tuple_name_abs, make_u8_ty,
+    ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME,
+    EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_NAME,
+    LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME, LESS_THAN_TRAIT_NAME,
+    MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME, NEGATE_TRAIT_NEGATE_NAME,
+    NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME,
+    SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
+};
+use crate::misc::{make_map, save_temporary_source, Map};
+use crate::parse::sourcefile::{SourceFile, Span};
 use either::Either;
-use error::Errors;
-use misc::{make_map, save_temporary_source, Map};
 use num_bigint::BigInt;
 use pest::error::Error;
+use pest::iterators::{Pair, Pairs};
+use pest::Parser;
+use std::path::PathBuf;
 use std::{cmp::min, mem::swap, sync::Arc};
 
 struct ParseContext {

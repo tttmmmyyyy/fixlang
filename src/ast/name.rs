@@ -1,4 +1,4 @@
-use super::*;
+use crate::constants::{MODULE_SEPARATOR, NAMESPACE_SEPARATOR};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
 

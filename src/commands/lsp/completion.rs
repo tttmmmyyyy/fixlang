@@ -4,12 +4,11 @@ use super::edit_import::create_text_edit_to_import;
 use super::server::{send_response, LatestContent};
 use super::util::{document_from_endnode, get_line_string_from_position, parameters_of_global_value};
 use crate::ast::name::{FullName, NameSpace};
-use crate::ast::program::Program;
+use crate::ast::program::{EndNode, Program};
+use crate::ast::expr::Var;
 use crate::constants::chars_allowed_in_identifiers;
 use crate::misc::Map;
 use crate::write_log;
-use crate::EndNode;
-use crate::Var;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, Documentation,
     TextDocumentPositionParams, Uri,

@@ -1,19 +1,21 @@
-use crate::SymbolExpr::Method;
+use crate::ast::program::SymbolExpr::Method;
 use std::sync::Arc;
 
 use crate::{
     ast::{
         name::{FullName, Name, NameSpace},
+        program::Program,
+        traits::KindSignature,
         typedecl::Field,
+        types::{kind_star, Kind, TyConVariant, TyVar},
     },
     elaboration::elaborate_via_config,
-    configuration::BuildConfigType,
+    configuration::{BuildConfigType, Configuration, DocsConfig},
     dependency::lockfile::LockFileType,
     error::Errors,
-    kind_star,
     misc::{info_msg, to_absolute_path},
     metafiles::project_file::ProjectFile,
-    Configuration, DocsConfig, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
+    parse::sourcefile::Span,
 };
 
 pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> {

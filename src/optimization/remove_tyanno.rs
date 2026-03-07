@@ -7,8 +7,11 @@ This simplifies the AST and makes it easier to implement optimizations.
 use std::sync::Arc;
 
 use crate::{
-    ast::traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-    ExprNode, Program, Symbol,
+    ast::{
+        expr::ExprNode,
+        program::{Program, Symbol},
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+    },
 };
 
 pub fn run(prg: &mut Program) {

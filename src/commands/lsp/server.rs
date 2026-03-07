@@ -16,8 +16,7 @@ use crate::parse::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::metafiles::project_file::ProjectFile;
 use crate::elaboration::typecheckcache::{self, SharedTypeCheckCache};
 use crate::write_log;
-use crate::Configuration;
-use crate::DiagnosticsConfig;
+use crate::configuration::{Configuration, DiagnosticsConfig};
 use lsp_types::{
     CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
     CallHierarchyServerCapability, CompletionItem,

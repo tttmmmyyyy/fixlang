@@ -1,4 +1,4 @@
-use crate::DOT_FIXLANG;
+use crate::constants::DOT_FIXLANG;
 use std::fs::remove_dir_all;
 
 // A function implementing `fix clean` command.

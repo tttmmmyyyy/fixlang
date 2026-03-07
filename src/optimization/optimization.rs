@@ -1,7 +1,8 @@
 use crate::{
+    ast::program::Program,
+    configuration::Configuration,
     optimization::{inline_local, optimize_act, remove_hktvs},
     tool::stopwatch::StopWatch,
-    Configuration, Program,
 };
 
 use super::{

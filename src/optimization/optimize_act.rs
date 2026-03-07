@@ -27,7 +27,7 @@ use crate::{
         program::{Program, Symbol},
         types::{tycon, type_tyapp, type_tycon, TyCon, Type::TyApp, TypeNode},
     },
-    builtin::make_tuple_name_abs,
+    fixstd::builtin::make_tuple_name_abs,
     configuration::Configuration,
     constants::{
         ARRAY_NAME, BUILTIN_ACT_NAME, CONST_NAME, IDENTITY_NAME, STD_NAME, STRUCT_ACT_SYMBOL,

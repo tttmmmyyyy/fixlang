@@ -4,7 +4,7 @@ use colored::Colorize;
 use serde_json::Value;
 
 use crate::misc::{Map, Set};
-use crate::{misc, sourcefile::Span};
+use crate::{misc, parse::sourcefile::Span};
 
 pub struct Errors {
     errs: Vec<Error>,

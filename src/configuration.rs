@@ -1,19 +1,18 @@
-use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
 use crate::build::cpu_features::CpuFeatures;
-use crate::env_vars;
-use crate::error::{panic_if_err, Errors};
-use crate::misc::{
-    platform_valgrind_supported, split_string_by_space_not_quated, to_absolute_path, warn_msg,
-    Finally,
-};
-use crate::elaboration::typecheckcache::{self, TypeCheckCache};
-use crate::{error::panic_with_msg, DEFAULT_COMPILATION_UNIT_MAX_SIZE};
-use crate::{
+use crate::constants::{
+    CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH, DEFAULT_COMPILATION_UNIT_MAX_SIZE,
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
     OPTIMIZATION_LEVEL_NONE, PRELIMINARY_BUILD_LD_FLAGS,
+};
+use crate::elaboration::typecheckcache::{self, TypeCheckCache};
+use crate::env_vars;
+use crate::error::{panic_if_err, panic_with_msg, Errors};
+use crate::misc::{
+    platform_valgrind_supported, split_string_by_space_not_quated, to_absolute_path, warn_msg,
+    Finally,
 };
 use build_time::build_time_utc;
 use inkwell::module::Linkage;

@@ -11,7 +11,7 @@ use rand::Rng;
 use crate::ast::name::Name;
 use crate::configuration::Configuration;
 use crate::constants::COMPILATION_UNITS_PATH;
-use crate::Symbol;
+use crate::ast::program::Symbol;
 
 pub struct CompileUnit {
     // Name of symbols in the module

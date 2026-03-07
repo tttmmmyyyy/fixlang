@@ -1,8 +1,9 @@
-use name::{FullName, Name, NameSpace};
-
+use crate::ast::expr::Var;
+use crate::ast::name::{FullName, Name, NameSpace};
+use crate::ast::program::EndNode;
+use crate::constants::{FORMAT_LINE_LIMIT, STD_NAME};
+use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
-
-use super::*;
 
 pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {
     stmts.iter().any(|stmt| stmt.is_accessible(name))

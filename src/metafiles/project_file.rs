@@ -1,5 +1,8 @@
 use crate::{
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, metafiles::config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, metafiles::registry_file::RegistryFile
+    configuration::{Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType},
+    constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
+    parse::sourcefile::{SourceFile, Span},
+    metafiles::config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, metafiles::registry_file::RegistryFile
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -604,7 +607,7 @@ impl ProjectFile {
         if mode == BuildConfigType::Test {
             if let Some(memcheck) = self.build.test.as_ref().and_then(|test| test.memcheck) {
                 if memcheck {
-                    config.set_valgrind(crate::ValgrindTool::MemCheck);
+                    config.set_valgrind(crate::configuration::ValgrindTool::MemCheck);
                 }
             }
         }

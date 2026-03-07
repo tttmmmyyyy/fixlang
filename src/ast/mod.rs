@@ -15,5 +15,3 @@ pub mod traits;
 pub mod traverse;
 pub mod typedecl;
 pub mod types;
-
-use super::*;

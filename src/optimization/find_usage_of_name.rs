@@ -41,7 +41,7 @@ impl UsageFinder<'_> {
 impl ExprVisitor for UsageFinder<'_> {
     fn start_visit_var(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -49,7 +49,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_var(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -57,7 +57,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_llvm(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -65,7 +65,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_llvm(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -73,7 +73,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_app(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         if self.name.is_local() && state.scope.has_value(&self.name.name) {
@@ -96,7 +96,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_app(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -104,7 +104,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_lam(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -112,7 +112,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_lam(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -120,7 +120,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_let(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -128,7 +128,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_let(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -136,7 +136,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_if(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -144,7 +144,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_if(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -152,7 +152,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_match(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -160,7 +160,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_match(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -168,7 +168,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_tyanno(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -176,7 +176,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_tyanno(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -184,7 +184,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_make_struct(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -192,7 +192,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_make_struct(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -200,7 +200,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_array_lit(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -208,7 +208,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_array_lit(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)
@@ -216,7 +216,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn start_visit_ffi_call(
         &mut self,
-        _expr: &std::sync::Arc<crate::ExprNode>,
+        _expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         StartVisitResult::VisitChildren
@@ -224,7 +224,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
     fn end_visit_ffi_call(
         &mut self,
-        expr: &std::sync::Arc<crate::ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::EndVisitResult {
         EndVisitResult::unchanged(expr)

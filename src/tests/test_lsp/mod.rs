@@ -8,8 +8,8 @@ pub mod test_references;
 #[cfg(test)]
 mod tests {
     use super::lsp_client::LspClient;
+    use crate::constants::LOCK_FILE_LSP_PATH;
     use crate::tests::test_util::{copy_dir_recursive, install_fix};
-    use crate::LOCK_FILE_LSP_PATH;
     use std::{
         fs,
         path::{Path, PathBuf},

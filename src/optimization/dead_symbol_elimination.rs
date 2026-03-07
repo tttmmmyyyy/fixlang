@@ -1,6 +1,6 @@
 use std::mem::take;
 
-use crate::{misc::Set, Program};
+use crate::{ast::program::Program, misc::Set};
 
 pub fn run(prg: &mut Program) {
     // Collect names of entry point values.

@@ -11,7 +11,7 @@ use crate::edit::edit_util::apply_text_edits;
 use crate::error::Errors;
 use crate::misc::{info_msg, to_absolute_path};
 use crate::metafiles::project_file::ProjectFile;
-use crate::typecheckcache::MemoryCache;
+use crate::elaboration::typecheckcache::MemoryCache;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;

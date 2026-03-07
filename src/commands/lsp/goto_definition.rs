@@ -2,11 +2,10 @@
 
 use super::server::{send_response, LatestContent};
 use super::util::{find_trait_or_alias_def_src, find_tycon_def_src, get_current_dir, get_node_at, span_to_location};
-use crate::ast::program::Program;
+use crate::ast::program::{EndNode, Program};
 use crate::ast::traits::TraitId;
 use crate::ast::types::TyCon;
 use crate::misc::Map;
-use crate::EndNode;
 use lsp_types::GotoDefinitionParams;
 
 // Handle "textDocument/definition" method.

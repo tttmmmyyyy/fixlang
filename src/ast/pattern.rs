@@ -1,11 +1,17 @@
 use std::sync::Arc;
 
-use crate::{error::Errors, elaboration::name_resolution::NameResolutionContext};
-use misc::{make_set, Map, Set};
-use name::{FullName, Name};
+use crate::ast::expr::Var;
+use crate::ast::name::{FullName, Name};
+use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::typedecl::Field;
+use crate::ast::types::{TyCon, TyConInfo, TypeNode, type_from_tyvar};
+use crate::elaboration::name_resolution::NameResolutionContext;
+use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
+use crate::error::Errors;
+use crate::fixstd::builtin::get_tuple_n;
+use crate::misc::{make_set, Map, Set};
+use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
-
-use super::*;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PatternNode {

@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 
-use super::{typecheck::Scope, types::TypeNode, Expr, ExprNode};
+use super::{types::TypeNode, expr::{Expr, ExprNode}};
+use crate::elaboration::typecheck::Scope;
 
 pub enum StartVisitResult {
     VisitChildren,

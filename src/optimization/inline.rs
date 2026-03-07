@@ -6,12 +6,13 @@ use std::{mem, sync::Arc};
 
 use crate::{
     ast::{
+        expr::ExprNode,
         name::FullName,
+        program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
     optimization::uncurry::is_std_fix,
-    ExprNode, Program, Symbol,
 };
 
 use super::application_inlining;

@@ -11,13 +11,12 @@ use tempfile::TempDir;
 
 use crate::{
     configuration::{BuildConfigType, Configuration},
+    constants::{EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH, PROJECT_FILE_PATH},
     dependency::resolver::{self, Dependency, Package, PackageName},
     error::Errors,
     misc::info_msg,
     misc::{to_absolute_path, warn_msg},
     metafiles::project_file::{ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName},
-    EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH,
-    PROJECT_FILE_PATH,
 };
 
 #[derive(Clone, Copy)]

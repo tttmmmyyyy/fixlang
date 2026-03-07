@@ -9,7 +9,7 @@ use crate::{
     constants::ERR_UNKNOWN_NAME,
     error::{Error, Errors},
     misc::{self, Map, Set},
-    sourcefile::Span,
+    parse::sourcefile::Span,
 };
 
 // Environment for name resolution.

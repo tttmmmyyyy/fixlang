@@ -1,14 +1,34 @@
 use std::sync::Arc;
 
+use crate::ast::name::Name;
+use crate::ast::program::TypeEnv;
+use crate::ast::types::{TyConVariant, TypeNode};
+use crate::constants::{
+    ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
+    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DYNAMIC_OBJ_CAP_IDX,
+    DYNAMIC_OBJ_TRAVARSER_IDX, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
+    DW_ATE_UNSIGNED, REFCNT_STATE_LOCAL, STD_NAME,
+    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
+    TraverserWorkType, UNION_DATA_IDX, UNION_TAG_IDX,
+};
 use crate::error::panic_with_msg;
+use crate::fixstd::builtin::{
+    make_bool_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty, make_i32_ty,
+    make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty,
+    make_u8_ty,
+};
+use crate::fixstd::runtime::{RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_NEGATIVE_ARRAY_SIZE};
+use crate::generator::{Generator, Object};
+use inkwell::context::Context;
+use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
+use inkwell::{AddressSpace, IntPredicate};
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
     module::Linkage,
     types::{BasicMetadataTypeEnum, BasicType},
 };
-
-use super::*;
 
 #[derive(Eq, PartialEq, Clone)]
 pub enum ObjectFieldType {

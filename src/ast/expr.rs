@@ -1,10 +1,15 @@
-use crate::{error::Errors, elaboration::name_resolution::NameResolutionContext};
-use misc::{collect_results, Set};
-use name::{FullName, Name, NameSpace};
-use printer::Text;
+use crate::ast::inline_llvm::{InlineLLVM, LLVMGenerator};
+use crate::ast::name::{FullName, Name, NameSpace};
+use crate::ast::pattern::PatternNode;
+use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::types::{TyCon, TypeNode, type_fun};
+use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT};
+use crate::elaboration::name_resolution::NameResolutionContext;
+use crate::error::Errors;
+use crate::misc::{collect_results, Set};
+use crate::parse::sourcefile::{SourcePos, Span};
+use crate::printer::Text;
 use serde::{Deserialize, Serialize};
-
-use super::*;
 use core::panic;
 use std::{
     sync::{Arc, Mutex},

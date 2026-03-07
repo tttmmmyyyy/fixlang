@@ -36,11 +36,11 @@ use std::sync::Arc;
 
 use crate::{
     ast::{
-        expr::expr_eval_typed,
+        expr::{expr_app_typed, expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var, Expr, ExprNode},
+        pattern::PatternNode,
+        program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
-    expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var, Expr,
-    ExprNode, PatternNode, Program, Symbol,
 };
 
 use super::rename::generate_new_names;

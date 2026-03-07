@@ -1,12 +1,16 @@
 use std::sync::Arc;
 
 use crate::ast::kind_scope::KindScope;
-use crate::error::Errors;
+use crate::ast::name::{FullName, Name};
+use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::types::{
+    Kind, TyAliasInfo, TyCon, TyConInfo, TyConVariant, TyVar, TypeNode,
+    kind_arrow, kind_star, type_from_tyvar, type_tyapp, type_tycon,
+};
 use crate::elaboration::name_resolution::NameResolutionContext;
-use misc::Set;
-use name::{FullName, Name};
-
-use super::*;
+use crate::error::Errors;
+use crate::misc::Set;
+use crate::parse::sourcefile::{SourcePos, Span};
 
 // Declaration of user-defind types.
 #[derive(Clone)]

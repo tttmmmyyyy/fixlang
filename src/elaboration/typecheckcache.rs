@@ -7,8 +7,8 @@ use std::{
 };
 
 use crate::{
-    ast::name::FullName, misc::warn_msg, touch_directory, Scheme, TypedExpr,
-    TYPE_CHECK_CACHE_PATH,
+    ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
+    constants::TYPE_CHECK_CACHE_PATH, elaboration::touch_directory, misc::warn_msg,
 };
 
 pub type SharedTypeCheckCache = Arc<dyn TypeCheckCache + Send + Sync>;

@@ -13,12 +13,16 @@ NOTE: I hope to implement higher-order uncurrying optimization (https://xavierle
 use std::{sync::Arc, usize};
 
 use crate::{
-    ast::name::{FullName, Name},
-    collect_app, expr_abs, expr_app, expr_let_typed, expr_var,
+    ast::{
+        expr::{collect_app, expr_abs, expr_app, expr_let_typed, expr_var, Expr, ExprNode, Var},
+        name::{FullName, Name},
+        program::{Program, Symbol},
+        types::type_funptr,
+    },
+    constants::{FUNPTR_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, STD_NAME},
+    fixstd::stdlib::FIX_NAME,
     misc::Set,
     optimization::eta_expansion,
-    type_funptr, Expr, ExprNode, Program, Symbol, Var, FIX_NAME, FUNPTR_ARGS_MAX,
-    INSTANCIATED_NAME_SEPARATOR, STD_NAME,
 };
 
 use super::rename::rename_lam_param_avoiding;
