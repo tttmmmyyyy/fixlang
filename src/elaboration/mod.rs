@@ -6,7 +6,7 @@ use crate::error::Errors;
 use crate::make_std_mod;
 use crate::make_tuple_traits_mod;
 use crate::parse::parse_file_path;
-use crate::stopwatch::StopWatch;
+use crate::tool::stopwatch::StopWatch;
 use crate::Configuration;
 use crate::OutputFileType;
 use crate::Program;

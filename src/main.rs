@@ -38,8 +38,6 @@ mod error;
 mod fixstd;
 mod generator;
 mod graph;
-#[macro_use]
-mod log_file;
 mod misc;
 mod object;
 mod optimization;
@@ -47,7 +45,7 @@ mod parse;
 mod printer;
 mod project_file;
 mod registry_file;
-mod stopwatch;
+mod tool;
 #[cfg(test)]
 mod tests;
 

@@ -44,6 +44,6 @@ pub fn write_log_file_impl(message: &str) {
 #[macro_export]
 macro_rules! write_log {
     ($($arg:tt)*) => {
-        $crate::log_file::write_log_file_impl(&format!($($arg)*))
+        $crate::tool::log_file::write_log_file_impl(&format!($($arg)*))
     };
 }

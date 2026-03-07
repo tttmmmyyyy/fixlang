@@ -1,6 +1,6 @@
 use crate::{
     optimization::{inline_local, optimize_act, remove_hktvs},
-    stopwatch::StopWatch,
+    tool::stopwatch::StopWatch,
     Configuration, Program,
 };
 

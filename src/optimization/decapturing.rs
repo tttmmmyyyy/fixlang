@@ -16,7 +16,7 @@ use crate::{
     constants::{CAP_NAME, DECAP_NAME, STD_NAME},
     misc::{Map, Set},
     optimization::{pull_let, rename::rename_free_names},
-    stopwatch::StopWatch,
+    tool::stopwatch::StopWatch,
 };
 
 use super::{

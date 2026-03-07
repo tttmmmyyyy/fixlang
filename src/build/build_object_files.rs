@@ -26,7 +26,7 @@ use crate::{
     generator::Generator,
     misc::{info_msg, warn_msg},
     optimization,
-    stopwatch::StopWatch,
+    tool::stopwatch::StopWatch,
 };
 
 // The result of `build_object_files` function.
