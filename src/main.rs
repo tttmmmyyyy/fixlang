@@ -25,13 +25,11 @@ extern crate toml;
 extern crate urlencoding;
 
 mod ast;
-mod build_object_files;
+mod build;
 mod commands;
-mod compile_unit;
 mod config_file;
 mod configuration;
 mod constants;
-mod cpu_features;
 mod dependency;
 mod edit;
 mod elaboration;

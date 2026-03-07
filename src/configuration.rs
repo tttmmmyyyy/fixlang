@@ -1,5 +1,5 @@
 use crate::constants::{CHECK_C_TYPES_PATH, C_TYPES_JSON_PATH};
-use crate::cpu_features::CpuFeatures;
+use crate::build::cpu_features::CpuFeatures;
 use crate::env_vars;
 use crate::error::{panic_if_err, Errors};
 use crate::misc::{
