@@ -27,7 +27,7 @@ extern crate urlencoding;
 mod ast;
 mod build;
 mod commands;
-mod config_file;
+mod metafiles;
 mod configuration;
 mod constants;
 mod dependency;
@@ -43,8 +43,6 @@ mod object;
 mod optimization;
 mod parse;
 mod printer;
-mod project_file;
-mod registry_file;
 mod tool;
 #[cfg(test)]
 mod tests;
@@ -63,7 +61,7 @@ use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
 use commands::lsp::server::launch_language_server;
-use config_file::ConfigFile;
+use metafiles::config_file::ConfigFile;
 use configuration::*;
 use constants::*;
 use elaboration::*;
@@ -80,7 +78,7 @@ use object::*;
 use parse::*;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
-use project_file::ProjectFile;
+use metafiles::project_file::ProjectFile;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process;
@@ -515,7 +513,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             .unwrap_or_default()
             .cloned()
             .collect::<Vec<_>>();
-        project_file::ProjectFile::validate_disable_cpu_features(&features)?;
+        metafiles::project_file::ProjectFile::validate_disable_cpu_features(&features)?;
         Ok(features)
     }
 

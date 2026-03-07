@@ -10,7 +10,7 @@ use crate::configuration::BuildConfigType;
 use crate::edit::edit_util::apply_text_edits;
 use crate::error::Errors;
 use crate::misc::{info_msg, to_absolute_path};
-use crate::project_file::ProjectFile;
+use crate::metafiles::project_file::ProjectFile;
 use crate::typecheckcache::MemoryCache;
 use std::fs;
 use std::path::PathBuf;

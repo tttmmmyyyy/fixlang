@@ -1,5 +1,5 @@
 use crate::{
-    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, registry_file::RegistryFile
+    Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType, PROJECT_FILE_PATH, SourceFile, Span, TRY_FIX_DEPS_UPDATE, metafiles::config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, metafiles::registry_file::RegistryFile
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -863,7 +863,7 @@ impl ProjectFile {
             )));
         }
 
-        let content = include_str!("docs/project_template.toml");
+        let content = include_str!("../docs/project_template.toml");
 
         // Replace `{PLACEHOLDER_PROJECT_NAME}` to `proj_name`.
         let content = content.replace("{PLACEHOLDER_PROJECT_NAME}", &proj_name);
@@ -884,7 +884,7 @@ impl ProjectFile {
                 "The file \"main.fix\" already exists."
             )));
         }
-        let main_fix_content = include_str!("docs/main_template.fix");
+        let main_fix_content = include_str!("../docs/main_template.fix");
         std::fs::write(SAMPLE_MAIN_FILE_PATH, main_fix_content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to create file \"main.fix\": {:?}.",
@@ -898,7 +898,7 @@ impl ProjectFile {
                 "The file \"test.fix\" already exists."
             )));
         }
-        let test_fix_content = include_str!("docs/test_template.fix");
+        let test_fix_content = include_str!("../docs/test_template.fix");
         std::fs::write(SAMPLE_TEST_FILE_PATH, test_fix_content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to create file \"test.fix\": {:?}.",

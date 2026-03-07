@@ -12,7 +12,7 @@ use crate::{
     error::Errors,
     kind_star,
     misc::{info_msg, to_absolute_path},
-    project_file::ProjectFile,
+    metafiles::project_file::ProjectFile,
     Configuration, DocsConfig, Kind, KindSignature, Program, Span, TyConVariant, TyVar,
 };
 

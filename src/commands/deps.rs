@@ -1,8 +1,8 @@
-use crate::config_file::ConfigFile;
+use crate::metafiles::config_file::ConfigFile;
 use crate::configuration::BuildConfigType;
 use crate::dependency::lockfile::{DependecyLockFile, LockFileType};
 use crate::error::{panic_if_err, Errors};
-use crate::project_file::ProjectFile;
+use crate::metafiles::project_file::ProjectFile;
 use clap::ArgMatches;
 
 fn get_build_mode(args: &ArgMatches) -> BuildConfigType {

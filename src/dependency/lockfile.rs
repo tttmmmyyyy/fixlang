@@ -15,7 +15,7 @@ use crate::{
     error::Errors,
     misc::info_msg,
     misc::{to_absolute_path, warn_msg},
-    project_file::{ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName},
+    metafiles::project_file::{ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName},
     EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH,
     PROJECT_FILE_PATH,
 };
