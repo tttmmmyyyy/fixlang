@@ -1,0 +1,7 @@
+module Main;
+
+main : IO ();
+main = (
+    let x : I64 = "hello";
+    pure()
+);

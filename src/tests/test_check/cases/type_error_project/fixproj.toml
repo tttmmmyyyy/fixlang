@@ -1,0 +1,6 @@
+[general]
+name = "type-error-project"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

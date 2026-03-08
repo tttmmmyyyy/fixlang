@@ -374,6 +374,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .about("Edit source code.")
         .subcommand(edit_explicit_import);
 
+    // "fix check" subcommand
+    let check_subc = App::new("check")
+        .about("Checks whether a Fix project compiles without errors. Type-checks all entities including test code.");
+
     let app = App::new("Fix-lang")
         .bin_name("fix")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -386,7 +390,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         .subcommand(deps_subc.clone())
         .subcommand(docs_subc)
         .subcommand(init_subc)
-        .subcommand(edit_subc.clone());
+        .subcommand(edit_subc.clone())
+        .subcommand(check_subc);
 
     fn read_source_files_options(m: &ArgMatches) -> Result<Vec<PathBuf>, Errors> {
         let files = m.get_many::<String>("source-files");
@@ -695,6 +700,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
                 .to_string();
             panic_if_err(ProjectFile::validate_project_name(&prj_name, None));
             panic_if_err(ProjectFile::create_example_file(prj_name));
+        }
+        Some(("check", _args)) => {
+            let config = panic_if_err(Configuration::check_mode());
+            panic_if_err(commands::check::check(config));
         }
         Some(("edit", args)) => match args.subcommand() {
             Some(("explicit-import", _args)) => {
