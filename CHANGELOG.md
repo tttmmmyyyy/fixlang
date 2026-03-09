@@ -15,6 +15,7 @@
 
 - Add `Std::String::contains` function to check if a string contains a given substring.
 - Add `Std::StringBytesIterator` type and `Std::String::to_iter_bytes` function to iterate over the bytes of a string.
+- Add `Std::Iterator::get_last` function to get the last element of an iterator.
 
 ### Changed
 

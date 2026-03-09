@@ -2059,7 +2059,7 @@ namespace Iterator {
 
     // Get the first element of an iterator.
     // 
-    // If the iterator is empty, this function returns `none`.
+    // If the iterator is empty, this function returns `none()`.
     //
     // # Parameters
     //
@@ -2067,9 +2067,19 @@ namespace Iterator {
     get_first : [iter : Iterator] iter -> Option (Item iter);
     get_first = |iter| iter.advance.map(|(_, a)| a);
 
+    // Get the last element of an iterator.
+    // 
+    // If the iterator is empty, this function returns `none()`.
+    //
+    // # Parameters
+    //
+    // * `iter` - The iterator.
+    get_last : [iter : Iterator] iter -> Option (Item iter);
+    get_last = |iter| iter.fold(none(), |a, _| some(a));
+
     // Get the tail of an iterator.
     // 
-    // If the iterator is empty, this function returns `none`.
+    // If the iterator is empty, this function returns `none()`.
     // 
     // # Parameters
     //

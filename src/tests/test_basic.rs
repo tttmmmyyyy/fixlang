@@ -2800,6 +2800,28 @@ pub fn test_iterator_get_first_get_tail() {
 }
 
 #[test]
+pub fn test_iterator_get_last() {
+    let source = r#"
+        module Main; 
+        main : IO ();
+
+        main = (
+            let iter = [1,2,3,4].to_iter;
+            assert_eq(|_|"case 1", iter.get_last, some(4));;
+
+            let iter = [42].to_iter;
+            assert_eq(|_|"case 2", iter.get_last, some(42));;
+
+            let iter = ([] : Array I64).to_iter;
+            assert_eq(|_|"case 3", iter.get_last, none());;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_iterator_take_while() {
     // take_while : (a -> Bool) -> Iterator a -> Iterator a;
     let source = r#"
