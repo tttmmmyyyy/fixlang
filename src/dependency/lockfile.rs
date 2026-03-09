@@ -279,7 +279,7 @@ impl DependecyLockFile {
                 dep.check_name_version_match_proj_file()?;
 
                 info_msg(&format!(
-                    "Dependency \"{}@{}\" installed successfully at \"{}\".",
+                    "Dependency \"{}@{}\" installed at \"{}\".",
                     dep.name,
                     dep.version,
                     dep.path.to_string_lossy().to_string()
