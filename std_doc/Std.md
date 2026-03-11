@@ -3378,7 +3378,19 @@ Type: `[iter : Std::Iterator] iter -> Std::Option (Std::Iterator::Item iter)`
 
 Get the first element of an iterator.
 
-If the iterator is empty, this function returns `none`.
+If the iterator is empty, this function returns `none()`.
+
+##### Parameters
+
+* `iter` - The iterator.
+
+#### get_last
+
+Type: `[iter : Std::Iterator] iter -> Std::Option (Std::Iterator::Item iter)`
+
+Get the last element of an iterator.
+
+If the iterator is empty, this function returns `none()`.
 
 ##### Parameters
 
@@ -3400,7 +3412,7 @@ Type: `[iter : Std::Iterator] iter -> Std::Option iter`
 
 Get the tail of an iterator.
 
-If the iterator is empty, this function returns `none`.
+If the iterator is empty, this function returns `none()`.
 
 ##### Parameters
 
