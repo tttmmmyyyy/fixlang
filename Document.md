@@ -2829,6 +2829,31 @@ registries = [
 ]
 ```
 
+## Registry file
+
+A registry file is a TOML file that manages the list of projects referenced when adding dependencies with the `fix deps add` command.
+
+The format of a registry file is as follows:
+
+```
+# Project entries (multiple entries allowed)
+[[projects]]
+# Project name (required). This is the name specified in "fix deps add {proj-name}@{ver-req}".
+name = "fixlang-myproject"
+# Git repository URL of the project (required).
+git = "https://github.com/example/fixlang-myproject"
+# Description of the project (optional). Shown in the output of "fix deps list".
+description = "An example Fix project."
+
+[[projects]]
+name = "fixlang-anotherproject"
+git = "https://github.com/example/fixlang-anotherproject"
+```
+
+To use a registry file you created, add its URL or file path to the `registries` field in the [configuration file](#configuration-file).
+
+The default registry file is `https://raw.githubusercontent.com/tttmmmyyyy/fixlang-registry/refs/heads/main/registry.toml`, managed in [this repository](https://github.com/tttmmmyyyy/fixlang-registry). This default registry is implicitly added to the end of the `registries` list in the configuration file.
+
 ## Tests
 
 The test feature built into the Fix command is very simple:

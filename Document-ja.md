@@ -2946,6 +2946,31 @@ registries = [
 ]
 ```
 
+## レジストリファイル
+
+レジストリファイルは、`fix deps add`コマンドで依存関係を追加する際に参照されるプロジェクト一覧を管理するTOMLファイルです。
+
+レジストリファイルのフォーマットは以下の通りです：
+
+```
+# プロジェクトのエントリ（複数記述可）
+[[projects]]
+# プロジェクト名（必須）。"fix deps add {proj-name}@{ver-req}"で指定する名前です。
+name = "fixlang-myproject"
+# プロジェクトのGitリポジトリURL（必須）。
+git = "https://github.com/example/fixlang-myproject"
+# プロジェクトの説明（省略可）。"fix deps list"コマンドの出力に表示されます。
+description = "An example Fix project."
+
+[[projects]]
+name = "fixlang-anotherproject"
+git = "https://github.com/example/fixlang-anotherproject"
+```
+
+作成したレジストリファイルを使用するには、その URL またはファイルパスを[設定ファイル](#configuration-file)の `registries` フィールドに追加します。
+
+デフォルトのレジストリファイルは `https://raw.githubusercontent.com/tttmmmyyyy/fixlang-registry/refs/heads/main/registry.toml` であり、[このリポジトリ](https://github.com/tttmmmyyyy/fixlang-registry)で管理されています。このデフォルトのレジストリは、設定ファイルの `registries` リストの末尾に暗黙的に追加されます。
+
 ## テスト
 
 Fixコマンドに組み込まれているテスト機能は極めて単純です：
