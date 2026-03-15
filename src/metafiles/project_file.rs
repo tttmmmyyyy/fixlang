@@ -268,9 +268,22 @@ impl ProjectFile {
         deps.sort_by(|a, b| a.name.cmp(&b.name));
 
         let mut data = String::new();
-        for dep in deps {
+        for dep in &deps {
             data += serde_json::to_string(&dep).unwrap().as_str();
         }
+
+        // Also include the content of path-based dependencies' project files in the hash.
+        // This ensures that when a local path dependency changes its own dependencies,
+        // the lock file is invalidated and re-created.
+        for dep in &deps {
+            if let Some(path) = &dep.path {
+                let proj_file_path = self.join_to_project_dir(path).join(PROJECT_FILE_PATH);
+                if let Ok(content) = std::fs::read_to_string(&proj_file_path) {
+                    data += &content;
+                }
+            }
+        }
+
         // Calculate the hash value.
         format!("{:x}", md5::compute(data))
     }
