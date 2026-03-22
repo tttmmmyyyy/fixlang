@@ -1,5 +1,6 @@
 mod test_array_bounds_check;
 mod test_assert;
+mod test_associated_type;
 mod test_basic;
 mod test_check;
 mod test_dependencies;

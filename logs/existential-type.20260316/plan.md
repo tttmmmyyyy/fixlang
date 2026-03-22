@@ -187,7 +187,8 @@ pi : ?f = 3.14;
 
 **TODO 8**：他に追加するべきテストがないか検討せよ。
 
-**TODO 9**：tests/test_asscociated_typeを作り、ここに関連型についてのテストコードを移動。
+tests/test_associated_typeを作り、ここに関連型についてのテストコードを移動。
+→ 実行済み。`src/tests/test_associated_type.rs`を作成し、`test_basic.rs`から以下の10テストを移動：`test_associated_type_collects`, `test_associated_type_type_level_arithmetic`, `test_associated_type_equality_in_impl_context`, `test_associated_type_equality_in_impl_context_unsatisfied`, `test_regression_f28ea22`, `test_regression_on_associated_type_bug`, `test_associated_type_in_type_sign_lacking_assumption`, `test_associated_type_use_unknown_type_variable_in_associated_type_implementation`, `test_regression_issue_70`, `test_higher_kinded_associated_type`。全10テストパス確認済み。
 
 **TODO 10**：あらゆる箇所でのassociated typeのusageはsaturatedでなければならない。この条件を満たさないコード例をテストコードに追加し、エラーが出ることを確認せよ。特にimplでのassociated typeの実装の左辺。
 
