@@ -8,10 +8,17 @@ REPO="tttmmmyyyy/fixlang"
 INSTALL_DIR="${HOME}/.fix/bin"
 BINARY_NAME="fix"
 
-# If stdin is not a terminal (e.g. piped via curl | sh), redirect from /dev/tty
-# so that interactive prompts still work.
+# If stdin is not a terminal (e.g. piped via curl | sh), try to redirect from
+# /dev/tty so that interactive prompts still work. If /dev/tty is not available
+# (e.g. in a Docker container without a TTY), fall back to non-interactive mode
+# and use default values for all prompts.
+NON_INTERACTIVE=0
 if [ ! -t 0 ]; then
-    exec </dev/tty
+    if [ -r /dev/tty ]; then
+        exec </dev/tty
+    else
+        NON_INTERACTIVE=1
+    fi
 fi
 
 say() {
@@ -100,9 +107,14 @@ if [ "$TOTAL" -gt 10 ]; then
 fi
 
 say ""
-printf "Version to install [%s]: " "$LATEST"
-read -r VERSION_INPUT
-VERSION="${VERSION_INPUT:-$LATEST}"
+if [ "$NON_INTERACTIVE" = "1" ]; then
+    VERSION="$LATEST"
+    say "Version to install [${LATEST}]: ${VERSION} (non-interactive, using default)"
+else
+    printf "Version to install [%s]: " "$LATEST"
+    read -r VERSION_INPUT
+    VERSION="${VERSION_INPUT:-$LATEST}"
+fi
 
 # Basic sanity check: version tag should start with 'v'.
 case "$VERSION" in
@@ -122,6 +134,10 @@ if [ -f "$INSTALL_PATH" ] || [ -n "$EXISTING_IN_PATH" ]; then
     fi
     if [ -n "$EXISTING_IN_PATH" ] && [ "$EXISTING_IN_PATH" != "$INSTALL_PATH" ]; then
         say "fix is also found in PATH at: ${EXISTING_IN_PATH}"
+    fi
+    if [ "$NON_INTERACTIVE" = "1" ]; then
+        say "Overwrite? [y/N]: N (non-interactive, skipping installation)"
+        say "Installation cancelled."; exit 0
     fi
     printf "Overwrite? [y/N]: "
     read -r OVERWRITE_INPUT
