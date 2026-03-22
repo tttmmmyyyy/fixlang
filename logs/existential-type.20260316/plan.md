@@ -119,13 +119,14 @@ opaque typesを含むequalitiesやpredicatesは、assumeされる（型推論の
 Requireされるschemeにとっては、opaque typeは「型変数」ではなく「決定した型」である。
 （型チェック中一時的にopaque typesをtype constructorに追加する、ということも考えたが、）おそらく、Assumeでやっているように、opaque typesはfixed_tyvarsに突っ込めば良いのではないか。
 * ここでfixed_tyvarsに突っ込むときに、opaque typeを可読性のある良い名前に変更しておく必要があると思う。例えば`Std::Iterator::repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it` の「`?it`」は「`Std::Iterator::repeat::?it`」という名前にするのが良さそう。これは、fixed_tyvars内での名前の衝突を防ぎ、コンパイラのデバッグやエラーメッセージの可読性に効く。
- * この際opaque typesのリネームが発生するので、opaque typesを含むequalitiesやpredicatesをsubstituteする必要がある。
+	* ただし、repeatが複数回使われる場合（複数回requireされる場合）、 **この設計だと大問題があるな**
+* この際opaque typesのリネームが発生するので、opaque typesを含むequalitiesやpredicatesをsubstituteする必要がある。
 また、opaque typeを含むpredicateやequalityは、型推論の前提として使用可能になる。よって、self.assumed_preds, self.assumed_eqsに追加する。
 
- **TODO 3** local_assumed_eqsにも追加するべきだろうか？
+**TODO 3** local_assumed_eqsにも追加するべきだろうか？
 → 不要。local_assumed_eqsはinstantiate_symbolで使われるが、下のfix_typesについてのセクションでも述べているように、instantiate_symbolの時点でopaque typeは完全に解消されるため。
 
- **TODO 4**：check_typeではself.eqalitiesがゼロになったことを調べているが、check_scheme_equivalent_oneでやっていないのはなぜ？ミスか？
+**TODO 4**：check_typeではself.eqalitiesがゼロになったことを調べているが、check_scheme_equivalent_oneでやっていないのはなぜ？ミスか？
 → 調査済み。おそらくバグ（チェック漏れ）。詳細は [todo4_equalities_check.md](todo4_equalities_check.md) を参照。
 → 実行済み。`check_scheme_equivalent_one`にequalitiesチェックを追加した。
 
