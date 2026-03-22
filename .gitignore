@@ -1,5 +1,6 @@
 /target
 /sanitizer/target
+.vscode/
 /sanitizer/libfixsanitizer.so
 /main.ll
 /examples/*.o
