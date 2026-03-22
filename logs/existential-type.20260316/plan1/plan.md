@@ -119,7 +119,27 @@ opaque typesを含むequalitiesやpredicatesは、assumeされる（型推論の
 Requireされるschemeにとっては、opaque typeは「型変数」ではなく「決定した型」である。
 （型チェック中一時的にopaque typesをtype constructorに追加する、ということも考えたが、）おそらく、Assumeでやっているように、opaque typesはfixed_tyvarsに突っ込めば良いのではないか。
 * ここでfixed_tyvarsに突っ込むときに、opaque typeを可読性のある良い名前に変更しておく必要があると思う。例えば`Std::Iterator::repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it` の「`?it`」は「`Std::Iterator::repeat::?it`」という名前にするのが良さそう。これは、fixed_tyvars内での名前の衝突を防ぎ、コンパイラのデバッグやエラーメッセージの可読性に効く。
-	* ただし、repeatが複数回使われる場合（複数回requireされる場合）、 **この設計だと大問題があるな**
+	* ただし、repeatが複数回使われる場合（複数回requireされる場合）、 **この設計だと大問題がある（下記参照）**
+
+---
+**⚠ Require における opaque type の扱いに根本的な設計問題がある**
+
+opaque type を fixed_tyvars に入れる方式では、以下の2つのケースを正しく処理できない：
+
+1. **異なる型引数での複数回 Require**
+   `repeat("hello", 3)` と `repeat(42, 3)` で同じ fixed tyvar `repeat::?it` を使うと、
+   `Item repeat::?it = String` と `Item repeat::?it = I64` が矛盾する。
+   → 各 Require で fresh な tyvar を発行する必要がある。
+
+2. **同じ型引数での複数回 Require**
+   `add(repeat("a", 3), repeat("b", 3))` では、`add` が2つの引数を同じ型に要求するので
+   `?it_fresh_1 = ?it_fresh_2` の unify が必要。しかし fixed_tyvars 同士は unify 不可（即エラー）。
+   → fixed_tyvars に入れるだけでは不十分。
+
+**TODO: この設計問題を解決してから実装に進む必要がある。**
+
+---
+
 * この際opaque typesのリネームが発生するので、opaque typesを含むequalitiesやpredicatesをsubstituteする必要がある。
 また、opaque typeを含むpredicateやequalityは、型推論の前提として使用可能になる。よって、self.assumed_preds, self.assumed_eqsに追加する。
 
