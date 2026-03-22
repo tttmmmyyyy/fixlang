@@ -1647,7 +1647,7 @@ impl TypeCheckContext {
         return Ok(());
     }
 
-    pub fn finalize_types_for_pattern(
+    pub fn fix_types_for_pattern(
         &mut self,
         pat: Arc<PatternNode>,
     ) -> Result<Arc<PatternNode>, Errors> {
@@ -1665,13 +1665,13 @@ impl TypeCheckContext {
                 pat
             }
             Pattern::Union(_, subpat) => {
-                let subpat = self.finalize_types_for_pattern(subpat.clone())?;
+                let subpat = self.fix_types_for_pattern(subpat.clone())?;
                 pat.set_union_pat(subpat)
             }
             Pattern::Struct(_, fied_to_pat) => {
                 let mut field_to_pat = fied_to_pat.clone();
                 for (_field_name, subpat) in field_to_pat.iter_mut() {
-                    let new_subpat = self.finalize_types_for_pattern(subpat.clone())?;
+                    let new_subpat = self.fix_types_for_pattern(subpat.clone())?;
                     *subpat = new_subpat;
                 }
                 pat.set_struct_field_to_pat(field_to_pat)
@@ -1733,7 +1733,7 @@ impl TypeCheckContext {
                 expr.set_lam_body(body)
             }
             Expr::Let(pat, val, body) => {
-                let pat = self.finalize_types_for_pattern(pat.clone())?;
+                let pat = self.fix_types_for_pattern(pat.clone())?;
                 let val = self.fix_types(val.clone())?;
                 let body = self.fix_types(body.clone())?;
                 expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
@@ -1750,7 +1750,7 @@ impl TypeCheckContext {
                 let cond = self.fix_types(cond.clone())?;
                 let mut new_pat_vals = vec![];
                 for (pat, val) in pat_vals {
-                    let pat = self.finalize_types_for_pattern(pat.clone())?;
+                    let pat = self.fix_types_for_pattern(pat.clone())?;
                     let val = self.fix_types(val.clone())?;
                     new_pat_vals.push((pat, val));
                 }
