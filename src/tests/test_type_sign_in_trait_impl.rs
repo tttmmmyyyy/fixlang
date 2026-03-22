@@ -115,15 +115,16 @@ pub fn test_type_sign_in_trait_impl_redundant_kind_sign() {
 
     impl MyType : MyTrait {
         my_member : [f:*] (f, MyType);
-        my_member = undefined("");
+        my_member = undefined("compiled!");
     }
     
     main : IO ();
     main = (
+        eval my_member : (I64, MyType);
         pure()
     );
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), "compiled!");
 }
 
 #[test]
@@ -454,6 +455,36 @@ main = (
     pure()
 );
 
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Type signature in implementation does not match trait definition.",
+    );
+}
+
+#[test]
+pub fn test_type_sign_in_trait_impl_equality_mismatch() {
+    // Bug reproduction: check_scheme_equivalent_one does not check remaining equalities.
+    // The trait method has no equality constraint, but the impl adds [Item iter = String].
+    // The types match (a -> iter -> I64 / MyType -> iter -> I64), unification succeeds,
+    // predicates match, but the impl is more restrictive than the trait.
+    // This SHOULD fail with "Type signature in implementation does not match trait definition."
+    let source = r#"
+module Main;
+
+trait a : Processor {
+    process : [iter : Iterator] a -> iter -> I64;
+}
+
+type MyType = struct {};
+
+impl MyType : Processor {
+    process : [iter : Iterator, Item iter = String] MyType -> iter -> I64 = |_, _| 42;
+}
+
+main : IO ();
+main = eval Processor::process(MyType {}, ["x"].to_iter); pure();
     "#;
     test_source_fail(
         source,

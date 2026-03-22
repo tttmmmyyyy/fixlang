@@ -1262,6 +1262,11 @@ impl TypeCheckContext {
             let e = UnificationErr::Unsatisfiable(pred.clone());
             return Err(UnifOrOtherErr::UnifErr(e));
         }
+        if self.equalities.len() > 0 {
+            let eq = &self.equalities[0];
+            let e = UnificationErr::Disjoint(eq.lhs(), eq.value.clone());
+            return Err(UnifOrOtherErr::UnifErr(e));
+        }
         Ok(())
     }
 
