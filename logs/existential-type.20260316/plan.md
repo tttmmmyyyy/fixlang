@@ -95,9 +95,12 @@ impl Array a : ToIter {
 構文上は不透明型は型変数であるという扱いで良いと思われる。
 ハテナマークから始まる型変数は不透明型となる。
 
-## Schemeにopaque_predicatesやopaque_equalitiesやopaque_tysを追加
-不透明型はgen_varsに入れるべきではないため。
+## Schemeにopaque_tysを追加（predicates/equalitiesは統一保持）
+不透明型はgen_varsに入れるべきではないため、`opaque_tys`フィールドを追加する。
+一方、predicates/equalitiesはopaque/non-opaqueを混在して同じフィールドに保持する。これにより、resolve_namespace, set_kinds, LSP等の大半の使用箇所（30箇所）が変更不要となる。
+opaque/non-opaqueの分離が必要な箇所（instantiate_scheme, validate_constraints）ではフィルタヘルパー（`opaque_predicates()`, `non_opaque_predicates()`, `opaque_equalities()`, `non_opaque_equalities()`）を使用する。
 既存のgen_varsやpredicatesやequalitiesの使用箇所をすべて精査して、opaqueを含まないものだけを返すべきか、opaqueを含むものをまとめて返すべきか、を事前に確認し、計画しておくべきである（**TODO 1**）。
+→ 実行済み。詳細は [todo1_scheme_field_analysis.md](todo1_scheme_field_analysis.md) を参照。要点：predicates/equalities統一方式により30箇所が変更不要、gen_varsの使用箇所は `all_tyvars()` ヘルパーで対応（5箇所）、dual（Assume/Requireで逆処理）は instantiate_scheme に集中（4箇所）、validate_constraints は special（3箇所）。
 
 ## instantiate_schemeの変更
 以下のように変更すると良いと思う。
