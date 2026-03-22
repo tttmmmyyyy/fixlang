@@ -189,7 +189,7 @@ pi : ?f = 3.14;
 
 **TODO 9**：tests/test_asscociated_typeを作り、ここに関連型についてのテストコードを移動。
 
-**TODO 10**：あらゆる箇所でのassociated typeのusageはsaturatedでなければならない。この条件を満たさないコード例をテストコードに追加し、エラーが出ることを確認せよ。
+**TODO 10**：あらゆる箇所でのassociated typeのusageはsaturatedでなければならない。この条件を満たさないコード例をテストコードに追加し、エラーが出ることを確認せよ。特にimplでのassociated typeの実装の左辺。
 
 **TODO 100**：この計画に穴・抜け・漏れがないか検討せよ。
 
