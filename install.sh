@@ -128,13 +128,17 @@ say ""
 INSTALL_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 EXISTING_IN_PATH="$(command -v "${BINARY_NAME}" 2>/dev/null || true)"
 
-if [ -f "$INSTALL_PATH" ] || [ -n "$EXISTING_IN_PATH" ]; then
-    if [ -f "$INSTALL_PATH" ]; then
-        say "fix is already installed at: ${INSTALL_PATH}"
-    fi
-    if [ -n "$EXISTING_IN_PATH" ] && [ "$EXISTING_IN_PATH" != "$INSTALL_PATH" ]; then
-        say "fix is also found in PATH at: ${EXISTING_IN_PATH}"
-    fi
+# Warn if another fix binary is found in PATH at a different location.
+if [ -n "$EXISTING_IN_PATH" ] && [ "$EXISTING_IN_PATH" != "$INSTALL_PATH" ]; then
+    say "Note: fix is already found in PATH at: ${EXISTING_IN_PATH}"
+    say "      The new binary will be installed to: ${INSTALL_PATH}"
+    say "      That existing binary will NOT be modified."
+    say ""
+fi
+
+# If the install target already exists, ask before overwriting.
+if [ -f "$INSTALL_PATH" ]; then
+    say "fix is already installed at: ${INSTALL_PATH}"
     if [ "$NON_INTERACTIVE" = "1" ]; then
         say "Overwrite? [y/N]: N (non-interactive, skipping installation)"
         say "Installation cancelled."; exit 0
