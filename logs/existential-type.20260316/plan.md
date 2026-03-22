@@ -160,6 +160,7 @@ predicates・equalityについて：
 以上の条件は、この型スキームを持つグローバル値（あるいはトレイトメソッド）を式として使用し、Requireされた状況で（→するとopaque typeに関する条件は証明の仮定として使われる、つまり実質的にAssumeされるわけだが）、Associated Typeを解消する処理reduce_type_by_equalityで適用する仮定が一意になり、合流性が保証されるようにするためのもの。
 
 **TODO 6**：Associated typeのコード中の出現は基本的にsaturatedである必要があったはずなのだが、validate_constraintsにはそれが書かれていないな。どこに書いてあるんだろう？探す。それを満たしていないときのエラー出力コードはあるか？
+
 ## LSP
 
 opaque typeにホバーしたとき、それを解決した型が表示される必要がある。
