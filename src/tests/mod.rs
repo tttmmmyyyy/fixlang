@@ -16,5 +16,6 @@ mod test_lsp;
 mod test_memcheck;
 mod test_string;
 mod test_trait_implementable_type;
+mod test_type_sign_in_trait_impl;
 mod test_undefined;
 mod test_util;
