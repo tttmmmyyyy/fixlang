@@ -8,15 +8,15 @@ REPO="tttmmmyyyy/fixlang"
 INSTALL_DIR="${HOME}/.fix/bin"
 BINARY_NAME="fix"
 
-# If stdin is not a terminal (e.g. piped via curl | sh), try to redirect from
-# /dev/tty so that interactive prompts still work. If /dev/tty is not available
-# (e.g. in a Docker container without a TTY), fall back to non-interactive mode
-# and use default values for all prompts.
+# If stdin is not a terminal (e.g. piped via curl | sh), check whether
+# /dev/tty is available for interactive prompts. If not (e.g. Docker without
+# a TTY), fall back to non-interactive mode and use default values.
+# Note: we intentionally do NOT do `exec </dev/tty` here because that would
+# redirect the shell's own script-reading fd and break the piped execution.
+# Instead, each `read` call below explicitly uses `</dev/tty`.
 NON_INTERACTIVE=0
 if [ ! -t 0 ]; then
-    if (exec </dev/tty) 2>/dev/null; then
-        exec </dev/tty
-    else
+    if ! (exec </dev/tty) 2>/dev/null; then
         NON_INTERACTIVE=1
     fi
 fi
@@ -112,7 +112,7 @@ if [ "$NON_INTERACTIVE" = "1" ]; then
     say "Version to install [${LATEST}]: ${VERSION} (non-interactive, using default)"
 else
     printf "Version to install [%s]: " "$LATEST"
-    read -r VERSION_INPUT
+    read -r VERSION_INPUT </dev/tty
     VERSION="${VERSION_INPUT:-$LATEST}"
 fi
 
@@ -140,7 +140,7 @@ if [ -f "$INSTALL_PATH" ] || [ -n "$EXISTING_IN_PATH" ]; then
         say "Installation cancelled."; exit 0
     fi
     printf "Overwrite? [y/N]: "
-    read -r OVERWRITE_INPUT
+    read -r OVERWRITE_INPUT </dev/tty
     case "$OVERWRITE_INPUT" in
         [yY][eE][sS]|[yY]) say "" ;;
         *) say "Installation cancelled."; exit 0 ;;
