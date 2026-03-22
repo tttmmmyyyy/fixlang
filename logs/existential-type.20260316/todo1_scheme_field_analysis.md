@@ -39,8 +39,8 @@ impl Scheme {
 
 ### 利点
 
-- **predicates / equalities の使用箇所（32箇所の both）が変更不要になる**。resolve_namespace, resolve_type_aliases, set_kinds, find_node_at, global_to_absolute, LSP 関連等すべてそのまま動く。
-- opaque / non-opaque の分離が必要な箇所（instantiate_scheme の dual 4箇所、validate_constraints の non-opaque 4箇所）でのみフィルタヘルパーを使う。
+- **predicates / equalities の使用箇所（32箇所）が変更不要になる**。resolve_namespace, resolve_type_aliases, set_kinds, find_node_at, global_to_absolute, LSP 関連、validate_constraints 等すべてそのまま動く。
+- opaque / non-opaque の分離が必要な箇所（instantiate_scheme の dual 4箇所）でのみフィルタヘルパーを使う。validate_constraints には opaque 固有バリデーションを新規コードとして追加する。
 - `opaque_tys` はフィールドとして持つ（instantiate_scheme で固定/発行が必要、predicates/equalities から毎回計算するのは冗長）。
 
 ## 分類凡例
@@ -78,7 +78,7 @@ for tv in &free_vars {
 }
 ```
 - **呼び出し箇所**: typecheck.rs L720, L754 — エラーメッセージ生成時、`create_tyvar_location_messages` に渡す型変数の位置情報を収集するために使用。`create_tyvar_location_messages` は `tyvar_expr` を引くが、opaque 型は `tyvar_expr` に登録しない想定のため、opaque 関連を収集しても参照されない。
-- **分類**: **変更不要** — ただし opaque_tys もフィルタ除外する必要がある（`all_tyvars()` で判定）。
+- **分類**: **all_tyvars** — opaque_tys も束縛された型変数であり、free vars として返すべきではない。`gen_vars` → `all_tyvars()` に変更してフィルタ除外する。
 
 ### 4. types.rs L1964 — `set_kinds`（kind scope 初期化）
 ```rust
@@ -168,12 +168,12 @@ for pred in &self.predicates {
     if !pred.ty.is_tyvar() { return Err(...) }
 }
 ```
-- **分類**: **special** — `non_opaque_predicates()` に対してのみ既存バリデーションを適用。`opaque_predicates()` には plan.md で規定された別ルールを適用する。
+- **分類**: **変更不要** — opaque predicates も `?t : Trait` の形であり、`pred.ty.is_tyvar()` は true になる。既存チェックはそのまま通る。opaque 固有バリデーション（plan.md 記載の `a1...an` 制約等）は validate_constraints への新規追加コードとして実装する。
 
 ### 3. types.rs L1792 — `validate_constraints`（trait alias 解決）
 - **分類**: **変更不要** — 全 predicates に trait alias 解決を適用。
 
-### 4. types.rs L1881 — `generalize` 内の predicates イテレーション
+### 4. types.rs L2025 — `generalize` 内の predicates イテレーション
 - **分類**: **変更不要** — generalize は predicates をそのまま受け取る（gen_vars #12 参照）。
 
 ### 5. types.rs L1944 — `free_vars_to_vec`
@@ -234,13 +234,20 @@ for pred in &scheme.predicates {
 
 equalities も opaque/non-opaque を混在して保持するため、大半は **変更不要**。
 
-### 1. types.rs L1796 — `validate_constraints`（RHS が assoc-ty-free）
-```rust
-for eq in &self.equalities {
-    if !eq.value.is_assoc_ty_free() { return Err(...) }
-}
-```
-- **分類**: **special** — `non_opaque_equalities()` に対してのみ既存バリデーションを適用。`opaque_equalities()` には plan.md で規定された別ルールを適用する。
+### 1. types.rs L1796 — `validate_constraints`（既存 equality バリデーション群）
+validate_constraints 内の4つの既存 equality チェック：
+1. `eq.value.is_assoc_ty_free()` — RHS が assoc-ty-free であること
+2. `eq.args[0].is_tyvar()` — LHS 第一引数が tyvar であること
+3. LHS の args が assoc-ty-free であること
+4. 対応する predicate が存在すること
+
+opaque equality（例：`Item ?it = a`）はこれらすべてを満たす：
+- RHS `a` は assoc-ty-free ✓
+- LHS 第一引数 `?it` は tyvar ✓
+- `a1...an` は単純 tyvar で assoc-ty-free ✓
+- `?it : Iterator` は同じ predicates リストにある ✓
+
+- **分類**: **変更不要** — 既存チェックはそのまま opaque equalities にも適用可能。opaque 固有バリデーション（plan.md 記載の制約）は validate_constraints への新規追加コードとして実装する。
 
 ### 2. types.rs L1864-1870 — `validate_constraints`（重複 LHS チェック）
 - **分類**: **変更不要** — 全 equalities に対する重複チェック。opaque / non-opaque 混在でも LHS が同じなら重複なのでそのまま適用可能。
@@ -295,25 +302,25 @@ let mut eqs = scheme.equalities.clone();
 
 | 分類 | gen_vars | predicates | equalities | 合計 |
 |------|----------|------------|------------|------|
-| 変更不要 | 1 | 16 | 13 | **30** |
-| all_tyvars | 5 | — | — | **5** |
+| 変更不要 | 0 | 18 | 14 | **32** |
+| all_tyvars | 6 | — | — | **6** |
 | dual | 2 | 1 | 1 | **4** |
-| special | 4 | 2 | 1 | **7** |
+| special | 3 | 0 | 0 | **3** |
 | N/A (定義) | 1 | — | — | **1** |
 
 ## 主な所見
 
 ### 1. predicates / equalities の使用箇所は大半が変更不要
-統一方式の最大の利点。resolve_namespace, resolve_type_aliases, set_kinds, find_node_at, global_to_absolute, LSP系, substitute_scheme, free_vars_to_vec 等すべてそのまま動く。
+統一方式の最大の利点。resolve_namespace, resolve_type_aliases, set_kinds, find_node_at, global_to_absolute, LSP系, substitute_scheme, free_vars_to_vec, validate_constraints 等すべてそのまま動く。validate_constraints の既存チェック（tyvar チェック、assoc-ty-free チェック、重複 LHS チェック等）は opaque predicates/equalities にもそのまま適用可能。
 
-### 2. gen_vars の使用箇所は `all_tyvars()` ヘルパーで対応
-set_kinds, substitute_scheme の assert, to_string_normalize 等で gen_vars + opaque_tys の両方を見る必要があるが、`all_tyvars()` / `all_tyvars_mut()` で対応。
+### 2. gen_vars の使用箇所は `all_tyvars()` ヘルパーで対応（6箇所）
+set_kinds, substitute_scheme の assert, to_string_normalize, free_vars_to_vec 等で gen_vars + opaque_tys の両方を見る必要があるが、`all_tyvars()` / `all_tyvars_mut()` で対応。
 
 ### 3. "dual" は instantiate_scheme に集中（4箇所）
 `instantiate_scheme` で `opaque_predicates()` / `opaque_equalities()` フィルタヘルパーを使い、opaque と non-opaque で逆の振り分けを行う。
 
-### 4. validate_constraints は special（3箇所）
-`non_opaque_predicates()` / `non_opaque_equalities()` に既存バリデーション、opaque 用に新バリデーションを追加。重複 LHS チェックは変更不要。
+### 4. validate_constraints には opaque 固有バリデーションを新規追加
+既存コードの修正は不要。opaque 用の追加ルール（plan.md 記載の `a1...an` 制約等）を新規コードとして追加する。
 
 ### 5. generalize 関数は special
 free vars から `?` 付きを opaque_tys に、それ以外を gen_vars に分離する処理を追加。

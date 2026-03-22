@@ -100,7 +100,7 @@ impl Array a : ToIter {
 一方、predicates/equalitiesはopaque/non-opaqueを混在して同じフィールドに保持する。これにより、resolve_namespace, set_kinds, LSP等の大半の使用箇所（30箇所）が変更不要となる。
 opaque/non-opaqueの分離が必要な箇所（instantiate_scheme, validate_constraints）ではフィルタヘルパー（`opaque_predicates()`, `non_opaque_predicates()`, `opaque_equalities()`, `non_opaque_equalities()`）を使用する。
 既存のgen_varsやpredicatesやequalitiesの使用箇所をすべて精査して、opaqueを含まないものだけを返すべきか、opaqueを含むものをまとめて返すべきか、を事前に確認し、計画しておくべきである（**TODO 1**）。
-→ 実行済み。詳細は [todo1_scheme_field_analysis.md](todo1_scheme_field_analysis.md) を参照。要点：predicates/equalities統一方式により30箇所が変更不要、gen_varsの使用箇所は `all_tyvars()` ヘルパーで対応（5箇所）、dual（Assume/Requireで逆処理）は instantiate_scheme に集中（4箇所）、validate_constraints は special（3箇所）。
+→ 実行済み。詳細は [todo1_scheme_field_analysis.md](todo1_scheme_field_analysis.md) を参照。要点：predicates/equalities統一方式により32箇所が変更不要（validate_constraintsの既存チェックもopaque predicates/equalitiesにそのまま適用可能）、gen_varsの使用箇所は `all_tyvars()` ヘルパーで対応（6箇所）、dual（Assume/Requireで逆処理）は instantiate_scheme に集中（4箇所）、validate_constraintsにはopaque固有バリデーションを新規コードとして追加（既存コード修正なし）。
 
 ## instantiate_schemeの変更
 以下のように変更すると良いと思う。
@@ -111,7 +111,7 @@ opaque/non-opaqueの分離が必要な箇所（instantiate_scheme, validate_cons
 主な利用箇所：「x : Scheme」の実装式の型推論を始めるときに、SchemeをAssumeする。
 fixed_tyvarsにはopaque typesを入れてはいけない。
 opaque typesは、Requireでやっているように、型変数を発行する（new_tyvar_by）。
-opaque typesを含むequalitiesやpredicatesは、assumeされる（型推論の証明において仮定として使える）のではなく、証明される必要がある。よって、Requireでやっているように、self.predicatesに追加、add_equalityに追加、する。
+opaque typesを含むequalitiesやpredicatesは、assumeされる（型推論の証明において仮定として使える）のではなく、証明される必要がある。よって、Requireでやっているように、self.predicatesに追加、add_equalityで追加、する。
 これにより、check_type関数で、opaque typeを含むpredicateやequalityが証明されたことのチェックが行われる。
 
 ### Require のとき
@@ -155,18 +155,22 @@ predicates・equalityについて：
 * `?monad : * -> *` のような kind signature
 	* Fixでは型変数に対するカインド推論は未実装。明示的にユーザがkind signature（e.g., `f : * -> *`）を書く必要がある。一旦はopaque typesでも同様でよいかと思う（便利ではないが）。
 * `?t : MyTrait` のようなpredicate
-* `MyAssocTy ?t a1 ... an = <type>` のような`?it` に対する関連型の指定。
-	* 以下でgen_varsとは、この不透明型が出現する型シグネチャにおけるgeneralized variable、およびトレイトメンバーの型シグネチャの場合は実装型（`trait c : MyTrait`における`c`のこと）も含まれるものとする。
-	* `a1`...`an`は`MyAssocTy`のarityの個数だけ用意された型変数である。
-		* これらはgen_varsとdisjointでなければならない。
-		* これらはopaque typeであってはならない（ハテナから始まってはいけない）
-	* `<type>`に出現する（opaqueでない）型変数は、gen_varsあるいは`a1`,...,`an`である。
-		* → そもそも、ここで新しい型変数をつかった場合、ユーザはその型変数をgen_varsとして扱うことを期待しているか。なので、この制約は実装しなくても良いかも。
-		* Schemeのgen_varsを計算するとき「`a1`...`an`をgen_varsに追加しない」というのが大事か。
-	* 同じAssociated Typeとopaque typeに対するこの類の制約を2回以上書いてはいけない。
+* `MyAssocTy ?t <t1> ... <tn> = <type>` のような`?it` に対する関連型の指定。
+	* `<t1>`...`<tn>`は`MyAssocTy`のarityの個数だけ用意された型である（Associated typeは必ずsaturatedでなければならないため）。
 以上の条件は、この型スキームを持つグローバル値（あるいはトレイトメソッド）を式として使用し、Requireされた状況で（→するとopaque typeに関する条件は証明の仮定として使われる、つまり実質的にAssumeされるわけだが）、Associated Typeを解消する処理reduce_type_by_equalityで適用する仮定が一意になり、合流性が保証されるようにするためのもの。
 
- **TODO 6** Associated typeのコード中の出現は基本的にsaturatedである必要があったはずなのだが、validate_constraintsにはそれが書かれていないな。どこに書いてあるんだろう？探す。それを満たしていないときのエラー出力コードはあるか？
+注意：
+* Schemeのgen_varsの計算について：
+	* Schemeにopaque typeに関するequality `MyAssocTy ?t <t1> ... <tn> = <type>` があるとする。この`<t1>...<tn>`の中のみに出現する（opaqueでない）型変数は、Schemeのgen_varsに入れない。
+		* このような型変数は、この等式制約における「ローカルな型変数」であるとみなす。
+* Schemeの中のopaque typeに関するequalityをEqualitySchemeとして取り出すヘルパー関数が必要である。
+	* このEquality Schemeでは、上記のような「ローカルな型変数」をgeneralizeする。
+* instantiate_schemeのAssumeにおいて、opaque typeに関するequalityをadd_equalityする際、このEqualitySchemeのgen_varsをfixed_tyvarsに追加する必要がある。
+	* これによって、このEqualityが「opaque typeを決定したあと、成立されるべき仮定」として正常に機能する。EqualitySchemeは「一般的に」成立することを証明しなければならない。ローカル型変数に特殊な型を入れたときに成立することを証明するだけでは駄目である。よってローカル型変数をfixed_tyvarsに入れておくことで、substituteされないようにする。
+* instantiate_schemeのRequireにおいて、opaque typeに関するequalityをassumed_eqsに追加する際は、このEqualitySchemeそのまま追加する必要がある。
+	* これによって「ローカルな型変数」を自由に動かして型推論の仮定として利用できるようになる。
+
+**TODO 6** Associated typeのコード中の出現は基本的にsaturatedである必要があったはずなのだが、validate_constraintsにはそれが書かれていないな。どこに書いてあるんだろう？探す。それを満たしていないときのエラー出力コードはあるか？
 → 調査済み。saturationチェックは`validate_constraints`ではなく、名前解決フェーズ（`TypeNode::resolve_namespace`、[src/ast/types.rs](src/ast/types.rs) L691-699, L712-724）で行われている。未飽和の場合は「Associated type `...` has arity N, but supplied M types. All appearance of associated type has to be saturated.」というエラーが出る。arity情報は`TraitEnv::assoc_ty_to_arity()`（[src/ast/traits.rs](src/ast/traits.rs) L1274-1284）から`NameResolutionEnv`に渡される。`validate_constraints`はこのチェック済みを前提としている。
 
 ## LSP
@@ -184,7 +188,7 @@ pi : ?f = 3.14;
 
 ## テスト計画
 * 基本、test_opaque_typeというモジュールを作ってそこに実装
-* 本文中に出てきているサンプルが動くこと
+* use_cases.md 中に出てきているサンプルが動くこと
 * トレイトメソッドの定義ではなく、実装において書けるアノテーションでもopaque typeを使う例
 * higher kinded opaque typeを使う例
 * 追加するvalidation一つ一つに対して、それにfailするコード例
