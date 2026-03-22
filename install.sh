@@ -14,7 +14,7 @@ BINARY_NAME="fix"
 # and use default values for all prompts.
 NON_INTERACTIVE=0
 if [ ! -t 0 ]; then
-    if [ -r /dev/tty ]; then
+    if (exec </dev/tty) 2>/dev/null; then
         exec </dev/tty
     else
         NON_INTERACTIVE=1
