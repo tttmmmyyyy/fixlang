@@ -138,7 +138,7 @@ fix_typesに対する修正：
 そのグローバル値の型スキームをAssumeするときに追加されたopaque typeが解消された（他のfixedな型にsubstituteされた）ことを検証し、そうでないときはエラーメッセージを出すべき。
 注意：実際には使わない不透明型（例：`pi : [?t : ToString] F64` があるとき、`?t` が決定できない、というエラーが出るべき。
 
-**TODO 5**：以前finalize_typesをfix_typesにリネームしたが、fix_typesから呼ばれるサブルーチンの中にfinalizeという単語が残っているようである。リネームするべき。
+以前finalize_typesをfix_typesにリネームしたが、fix_typesから呼ばれるサブルーチンの中にfinalizeという単語が残っているようである。リネームするべき。
 → 実行済み。`finalize_types_for_pattern` を `fix_types_for_pattern` にリネームした（typecheck.rs内、定義1箇所＋呼び出し4箇所）。
 
 ## validate_constraints
@@ -161,7 +161,8 @@ predicates・equalityについて：
 	* 同じAssociated Typeとopaque typeに対するこの類の制約を2回以上書いてはいけない。
 以上の条件は、この型スキームを持つグローバル値（あるいはトレイトメソッド）を式として使用し、Requireされた状況で（→するとopaque typeに関する条件は証明の仮定として使われる、つまり実質的にAssumeされるわけだが）、Associated Typeを解消する処理reduce_type_by_equalityで適用する仮定が一意になり、合流性が保証されるようにするためのもの。
 
-**TODO 6**：Associated typeのコード中の出現は基本的にsaturatedである必要があったはずなのだが、validate_constraintsにはそれが書かれていないな。どこに書いてあるんだろう？探す。それを満たしていないときのエラー出力コードはあるか？
+Associated typeのコード中の出現は基本的にsaturatedである必要があったはずなのだが、validate_constraintsにはそれが書かれていないな。どこに書いてあるんだろう？探す。それを満たしていないときのエラー出力コードはあるか？
+→ 調査済み。saturationチェックは`validate_constraints`ではなく、名前解決フェーズ（`TypeNode::resolve_namespace`、[src/ast/types.rs](src/ast/types.rs) L691-699, L712-724）で行われている。未飽和の場合は「Associated type `...` has arity N, but supplied M types. All appearance of associated type has to be saturated.」というエラーが出る。arity情報は`TraitEnv::assoc_ty_to_arity()`（[src/ast/traits.rs](src/ast/traits.rs) L1274-1284）から`NameResolutionEnv`に渡される。`validate_constraints`はこのチェック済みを前提としている。
 
 ## LSP
 
@@ -185,6 +186,8 @@ pi : ?f = 3.14;
 	* opaque typeにホバーすると「解消された型」が表示されること
 
 **TODO 8**：他に追加するべきテストがないか検討せよ。
+
+**TODO 9**：tests/test_asscociated_typeを作り、ここに関連型についてのテストコードを移動。
 
 **TODO 100**：この計画に穴・抜け・漏れがないか検討せよ。
 
