@@ -108,7 +108,7 @@ Currently, Fix compiler is supported on macOS / Linux / Windows (via WSL). You c
 
 #### Use pre-built binary
 
-Run the following command to install `fix` to `~/.fix/bin`:
+Run the following command to install `fix` to `~/.local/bin`:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/tttmmmyyyy/fixlang/main/install.sh | sh

@@ -109,7 +109,7 @@
 
 #### ビルド済みバイナリを使用
 
-以下のコマンドを実行すると、`fix`を`~/.fix/bin`にインストールできます。
+以下のコマンドを実行すると、`fix`を`~/.local/bin`にインストールできます。
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/tttmmmyyyy/fixlang/main/install.sh | sh

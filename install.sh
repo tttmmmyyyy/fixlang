@@ -5,7 +5,7 @@
 set -e
 
 REPO="tttmmmyyyy/fixlang"
-INSTALL_DIR="${HOME}/.fix/bin"
+INSTALL_DIR="${HOME}/.local/bin"
 BINARY_NAME="fix"
 
 # If stdin is not a terminal (e.g. piped via curl | sh), check whether
@@ -176,19 +176,32 @@ case ":${PATH}:" in
         ;;
     *)
         case "$(basename "${SHELL:-sh}")" in
-            zsh)  PROFILE="~/.zshrc" ;;
-            bash) PROFILE="~/.bashrc" ;;
-            fish) PROFILE="~/.config/fish/config.fish" ;;
-            *)    PROFILE="your shell's profile file" ;;
+            fish)
+                say ""
+                say "Add the following line to ~/.config/fish/config.fish to make fix available in new shells:"
+                say ""
+                say "  fish_add_path \"\$HOME/.local/bin\""
+                say ""
+                say "Or run it now to use fix in the current session:"
+                say ""
+                say "  set -x PATH \"\$HOME/.local/bin\" \$PATH"
+                ;;
+            *)
+                case "$(basename "${SHELL:-sh}")" in
+                    zsh)  PROFILE="~/.zshrc" ;;
+                    bash) PROFILE="~/.bashrc" ;;
+                    *)    PROFILE="your shell's profile file" ;;
+                esac
+                say ""
+                say "Add the following line to ${PROFILE} to make fix available in new shells:"
+                say ""
+                say "  export PATH=\"\${HOME}/.local/bin:\${PATH}\""
+                say ""
+                say "Or run it now to use fix in the current session:"
+                say ""
+                say "  export PATH=\"\${HOME}/.local/bin:\${PATH}\""
+                ;;
         esac
-        say ""
-        say "Add the following line to ${PROFILE} to make fix available in new shells:"
-        say ""
-        say "  export PATH=\"\${HOME}/.fix/bin:\${PATH}\""
-        say ""
-        say "Or run it now to use fix in the current session:"
-        say ""
-        say "  export PATH=\"\${HOME}/.fix/bin:\${PATH}\""
         ;;
 esac
 
