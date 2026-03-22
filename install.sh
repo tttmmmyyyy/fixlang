@@ -172,7 +172,8 @@ say "Installed: ${INSTALL_PATH}"
 case ":${PATH}:" in
     *":${INSTALL_DIR}:"*)
         say ""
-        say "Done! Run 'fix --version' to verify the installation."
+        say "${INSTALL_DIR} is already in your PATH."
+        say "Done! Run 'fix version' to verify the installation."
         ;;
     *)
         case "$(basename "${SHELL:-sh}")" in
@@ -200,6 +201,8 @@ case ":${PATH}:" in
                 say "Or run it now to use fix in the current session:"
                 say ""
                 say "  export PATH=\"\${HOME}/.local/bin:\${PATH}\""
+                say ""
+                say "Then run 'fix version' to verify the installation."
                 ;;
         esac
         ;;
