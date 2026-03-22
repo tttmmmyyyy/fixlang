@@ -84,7 +84,7 @@ trait c : ToIter {
     type Elem c;
     to_iter : [?it : Iterator, Iterator::Item ?it = ToIter::Elem c] c -> ?it;
 }
-[]
+
 impl Array a : ToIter {
     type Item (Array) a = a;
     to_iter = |arr| ArrayIterator { _idx : 0, _arr : arr };
@@ -180,3 +180,5 @@ pi : ?f = 3.14;
 * 追加するvalidation一つ一つに対して、それにfailするコード例
 * LSPに対するテスト（これはtest_opaque_typeではなく適切なフォルダ（lsp用のフォルダ）に配置）
 	* opaque typeにホバーすると「解消された型」が表示されること
+
+**TODO 8**：この計画に穴・抜け・漏れがないか検討せよ。
