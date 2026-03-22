@@ -374,3 +374,163 @@ main: IO () = do {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+#[test]
+pub fn test_unsaturated_associated_type_in_global_function_signature() {
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type MyAssoc a;
+}
+
+func : [a : MyTrait] a -> MyAssoc;
+func = |x| undefined("");
+
+main: IO ();
+main = (
+    eval func(0);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "All appearance of associated type has to be saturated.",
+    );
+}
+
+#[test]
+pub fn test_unsaturated_associated_type_in_equality_constraint() {
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type MyAssoc a b;
+}
+
+func : [a : MyTrait, MyAssoc a = I64] a -> I64;
+func = |x| undefined("");
+
+main: IO ();
+main = (
+    eval func(0);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Invalid number of arguments for associated type",
+    );
+}
+
+#[test]
+pub fn test_unsaturated_associated_type_in_impl_rhs() {
+    let source = r#"
+module Main;
+
+trait a : MyTraitA {
+    type Assoc1 a;
+}
+
+trait a : MyTraitB {
+    type Assoc2 a;
+}
+
+impl I64 : MyTraitA {
+    type Assoc1 I64 = Assoc2;
+}
+
+impl I64 : MyTraitB {
+    type Assoc2 I64 = String;
+}
+
+main: IO ();
+main = pure();
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "All appearance of associated type has to be saturated.",
+    );
+}
+
+#[test]
+pub fn test_unsaturated_associated_type_in_type_annotation() {
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type MyAssoc a;
+}
+
+impl I64 : MyTrait {
+    type MyAssoc I64 = String;
+}
+
+main: IO () = (
+    let x : MyAssoc = "hello";
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "All appearance of associated type has to be saturated.",
+    );
+}
+
+#[test]
+pub fn test_unsaturated_multi_param_associated_type() {
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type MyAssoc a b;
+}
+
+impl I64 : MyTrait {
+    type MyAssoc I64 b = b;
+}
+
+func : [a : MyTrait] a -> MyAssoc a;
+func = |x| undefined("");
+
+main: IO ();
+main = (
+    eval func(0);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "All appearance of associated type has to be saturated.",
+    );
+}
+
+#[test]
+pub fn test_unsaturated_associated_type_in_impl_lhs() {
+    // Associated type `MyAssoc` is defined with 1 extra parameter (arity 2 including impl type),
+    // but the implementation provides 0 extra parameters on the LHS.
+    let source = r#"
+    module Main;
+    
+    trait [a : *->*] a : MyTrait {
+        type MyAssoc a b;
+    }
+
+    impl Array : MyTrait {
+        type MyAssoc Array = I64;
+    }
+
+    main : IO ();
+    main = pure();
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Invalid number of parameters for associated type",
+    );
+}
