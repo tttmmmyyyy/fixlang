@@ -108,21 +108,50 @@ Currently, Fix compiler is supported on macOS / Linux / Windows (via WSL). You c
 
 #### Use pre-built binary
 
-You can download pre-built compiler binary from [Releases](https://github.com/tttmmmyyyy/fixlang/releases/).
-Download it, rename it to "fix", and place it to "/usr/local/bin" or somewhere else.
+Run the following command to install `fix` to `~/.fix/bin`:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/tttmmmyyyy/fixlang/main/install.sh | sh
+```
+
+Alternatively, you can download a binary directly from [Releases](https://github.com/tttmmmyyyy/fixlang/releases/), rename it to `fix`, and place it somewhere on your `PATH`.
 
 #### Build from source
 
-Fix compiler is written in Rust. Thanks to Cargo, it is easy to build the compiler from source.
+Fix compiler is written in Rust and requires LLVM 17.0.x. The `fix` command will be installed to `~/.cargo/bin`.
 
-1. Install [Rust](https://www.rust-lang.org/tools/install).
-2. Install LLVM 17.0.x.
-- In Linux / WSL, you can download prebuilt binary of LLVM from [LLVM Download Page](https://releases.llvm.org/download.html).
-- In macOS, you can get LLVM by `brew install llvm@17`.
-3. Set `LLVM_SYS_170_PREFIX` variable to the directory to which LLVM is installed.
-- If you installed LLVM by `brew`, you can set it by `export LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)`. 
-4. `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`.
-5. `cargo install --locked --path .`. Then the command `fix` will be installed to `~/.cargo/bin`.
+##### Linux (Ubuntu)
+
+**Prerequisites**: Install [Rust/Cargo](https://www.rust-lang.org/tools/install).
+
+**Install**:
+
+```sh
+LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+mkdir -p llvm
+wget -q "$LLVM_URL" -O llvm.tar.xz
+tar -xf llvm.tar.xz -C llvm --strip-components=1
+export LLVM_SYS_170_PREFIX="$PWD/llvm"
+git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang
+cargo install --locked --path .
+```
+
+##### macOS
+
+**Prerequisites**:
+
+- Install [Homebrew](https://brew.sh).
+- Install [Rust/Cargo](https://www.rust-lang.org/tools/install).
+
+**Install**:
+
+```sh
+brew install llvm@17 openssl
+export LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)
+export OPENSSL_DIR=$(brew --prefix openssl)
+git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang
+cargo install --locked --path .
+```
 
 #### Use Docker image
 

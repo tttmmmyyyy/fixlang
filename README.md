@@ -86,7 +86,13 @@ main = (
 
 ## Installation
 
-- See [the tutorial](./Document.md#tutorial) for instructions on how to install and use Fix compiler.
+Run the following command to install `fix` to `~/.fix/bin`:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/tttmmmyyyy/fixlang/main/install.sh | sh
+```
+
+For other installation options (building from source, Docker, etc.), see [Document.md](./Document.md).
 
 ## Documents
 

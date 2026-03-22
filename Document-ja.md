@@ -109,21 +109,50 @@
 
 #### ビルド済みバイナリを使用
 
-[Releases](https://github.com/tttmmmyyyy/fixlang/releases/)からビルド済みのコンパイラバイナリをダウンロードできます。
-これをダウンロードし、`fix`という名前にして、"/usr/local/bin" などに配置します。
+以下のコマンドを実行すると、`fix`を`~/.fix/bin`にインストールできます。
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/tttmmmyyyy/fixlang/main/install.sh | sh
+```
+
+また、[Releases](https://github.com/tttmmmyyyy/fixlang/releases/)からバイナリを直接ダウンロードし、`fix`という名前にしてPATHの通った場所に配置することもできます。
 
 #### ソースからビルド
 
-FixコンパイラはRustで書かれています。Cargoを使うことでソースからコンパイラをビルドすることができます。
+FixコンパイラはRustで書かれており、LLVM 17.0.xが必要です。`fix`コマンドは`~/.cargo/bin`にインストールされます。
 
-1. [Rust](https://www.rust-lang.org/tools/install)をインストールします。
-2. LLVM 17.0.xをインストールします。
-   - Linux / WSLでは、[LLVM Download Page](https://releases.llvm.org/download.html)からLLVMのビルド済みバイナリをダウンロードできます。
-   - macOSでは、`brew install llvm@17`でLLVMを入手できます。
-3. LLVMがインストールされているディレクトリを`LLVM_SYS_170_PREFIX`変数に設定します。
-   - `brew`でLLVMをインストールした場合、`export LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)`で設定できます。
-4. `git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang`。
-5. `cargo install --locked --path .`。これにより`fix`コマンドが`~/.cargo/bin`にインストールされます。
+##### Linux (Ubuntu)
+
+**事前準備**: [Rust/Cargo](https://www.rust-lang.org/tools/install)をインストールします。
+
+**インストール**:
+
+```sh
+LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+mkdir -p llvm
+wget -q "$LLVM_URL" -O llvm.tar.xz
+tar -xf llvm.tar.xz -C llvm --strip-components=1
+export LLVM_SYS_170_PREFIX="$PWD/llvm"
+git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang
+cargo install --locked --path .
+```
+
+##### macOS
+
+**事前準備**:
+
+- [Homebrew](https://brew.sh)をインストールします。
+- [Rust/Cargo](https://www.rust-lang.org/tools/install)をインストールします。
+
+**インストール**:
+
+```sh
+brew install llvm@17 openssl
+export LLVM_SYS_170_PREFIX=$(brew --prefix llvm@17)
+export OPENSSL_DIR=$(brew --prefix openssl)
+git clone https://github.com/tttmmmyyyy/fixlang.git && cd fixlang
+cargo install --locked --path .
+```
 
 #### Dockerイメージを使用
 
