@@ -504,9 +504,19 @@ QualPredScheme / EqualityScheme は使用側で仮定として追加されるの
 
 ### Phase 5：opaque type の具体型の決定と保存
 
-型チェック後、`#wrap` の domain 内の型変数が何に推論されたかを調べることで、opaque type の具体型が判明する。
+型チェック後、`#wrap` の domain 内の型変数が何に推論されたかを調べることで、opaque type の具体型テンプレートが判明する。
 
-具体的には：`check_type` 内で `#wrap` の Scheme が `instantiate_scheme`（Require モード）により instantiate されると、`#wrap` の型変数 `x` が新しい型変数に置き換えられる。型チェック（unify）の結果、substitution を通じてその型変数の具体型が決まる。
+#### 前提：fix_types の2段階呼び出し
+
+`fix_types` はコンパイル中に2回呼ばれる：
+1. **1回目：`check_type` 内**（本フェーズ）：各 ExprNode の `type_` は、gen_vars と associated types を含みうるが、fixed でない（gen_vars でない）型変数は含まない状態に「fix」される。
+2. **2回目：`instantiate_symbol` 内**（Phase 6）：各 ExprNode の `type_` は、一切の型変数を含まず、associated types も opaque type constructor も残らない、完全に具体的な型に「fix」される。
+
+本フェーズでは1回目の `fix_types` 後の状態から、opaque type の具体型テンプレートを抽出する。テンプレートは gen_vars や associated types を含みうる（2回目の `fix_types` でそれらも解消される）。
+
+#### 具体型テンプレートの抽出
+
+`check_type` 内で `#wrap` の Scheme が `instantiate_scheme`（Require モード）により instantiate されると、`#wrap` の型変数 `x` が新しい型変数に置き換えられる。型チェック（unify）の結果、substitution を通じてその型変数の具体型が決まる。
 
 **グローバル値の場合**（`repeat`）：
 
@@ -514,36 +524,36 @@ QualPredScheme / EqualityScheme は使用側で仮定として追加されるの
 ```
 ?it a = MapIterator (RangeIterator I64) a
 ```
-右辺は gen_vars（`a`）と型コンストラクタ・associated type の組み合わせで構成される。
+右辺は gen_vars（`a`）と型コンストラクタ・associated types の組み合わせで構成される具体型テンプレート。この段階では gen_vars や associated types が残りうるが、Phase 6 の2回目の `fix_types` で完全に解消される。
 
 **trait member の場合**（`to_iter`）：
 
-trait member では impl ごとに別の `#wrap` が生成されるため、具体型も impl ごとに異なる（type family 的な構造）：
+trait member では impl ごとに別の `#wrap` が生成されるため、具体型テンプレートも impl ごとに異なる（type family 的な構造）：
 ```
 ?it (Array a) = ArrayIterator a           ← impl Array a : ToIter から
 ?it (HashMap k v) = HashMapIterator k v   ← impl HashMap k v : ToIter から
 ```
 グローバル値のように `?it c = ...` と一つの式で書くことはできず、impl ごとに個別の等式が得られる。
 
-#### 具体型の保存
+#### 具体型テンプレートの保存
 
-opaque type の具体型情報（「opaque type の型コンストラクタが具体的に何か」）の保持方法は要検討。候補：
+opaque type の具体型テンプレート（「opaque type constructor がどの具体型に対応するか」）の保持方法は要検討。候補：
 - `TypeCheckContext` のメンバとして保持し、`check_type` の呼び出しで更新する（`assert_freshness` で空を検証可能）。
 - `check_type` の戻り値として返す。
 
-いずれにせよ、型チェック結果は `save_cache`（`typecheckcache.rs`）によりキャッシュファイルに保存されるので、opaque type の具体型情報もこのキャッシュに含めるべきである。
+いずれにせよ、型チェック結果は `save_cache`（`typecheckcache.rs`）によりキャッシュファイルに保存されるので、opaque type の具体型テンプレートもこのキャッシュに含めるべきである。
 
 ### Phase 6：インスタンス化処理における opaque type constructor の解消
 
-`instantiate_symbol` の中で `fix_types` が呼ばれる際に、Phase 5 で求めた具体型情報に基づき、opaque type constructor を具体的な型に置き換える。
+`instantiate_symbol` の中で2回目の `fix_types` が呼ばれる際に、Phase 5 で求めた具体型テンプレートに基づき、opaque type constructor を具体的な型に置き換える。
 
 具体的には、`instantiate_symbol` では：
 1. `sym.ty`（要求された型）と型チェック済みの式の型を `unify` する
 2. equality 制約も `unify` で解消する
 3. `fix_types` で substitution を適用し、すべての型変数を解決する
 
-この `fix_types` の中（またはその前後）で：
-- **opaque type constructor の置換**：`?it a` → `MapIterator (RangeIterator I64) a` のように、Phase 5 の情報に基づき opaque type constructor を具体型に置き換える。置換後の型は型変数を含みうるが、opaque type constructor や associated type は含まない。
+この2回目の `fix_types` の中（またはその前後）で：
+- **opaque type constructor の置換**：`?it a` → `MapIterator (RangeIterator I64) a` のように、Phase 5 の具体型テンプレートに基づき opaque type constructor を具体型に置き換える。この段階では gen_vars も associated types も substitution により解消済みであるため、置換結果も含めて**完全に具体的な型**（型変数も associated types も opaque type constructor も残らない）になる。
 - **`#wrap` の除去**：`#wrap` は型チェック専用の構成要素であり、実装を持たない。インスタンス化時に `#wrap(expr)` → `expr` のように除去する。`#wrap` は恒等関数として振る舞う（domain と codomain が同じ型に解決されるため）。
 
 ---
