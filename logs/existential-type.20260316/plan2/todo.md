@@ -69,6 +69,36 @@ desugarの大まかな流れは決まった。
 現在のFixの実装を見て、具体的にどのコードをどう変更すれば良いのか、計画を立てつつ、実行可能性を検証しよう。
 新しいplanファイル（impl_plan.md）などを作成して、そこに詳細な実装計画を書く。
 
+## opaque type constructorの置換についての記述が正しいかチェック
+
+plan2.md
+```
+- **opaque type constructor の置換**：`?it a` → `MapIterator (RangeIterator I64) a` のように、Phase 5 の情報に基づき opaque type constructor を具体型に置き換える。置換後の型は型変数を含みうるが、opaque type constructor や associated type は含まない。
+```
+ここについて。
+
+＜前提知識：opaque type導入前のコードについての解説＞
+fix_typesは2回呼ばれる：check_typeの中（先）と、instantiate_symbolの中（後）。
+・check_typeから呼ばれた場合、各ExprNodeのtype_は、gen_vars、associated typesを含む。しかし（fixedでない、つまり、gen_varsでない）型変数は含まない、という状態に「fix」される。
+・instantiate_symbolから呼ばれた場合、各ExprNodeのtype_は、一切の型変数を含まず、完全に具体的な型になる（associated typeもtype variableも残らない）、という状態に「fix」される。
+
+＜opaque type実装でやるべきこと＞
+opaque typeを解消する、という処理をするのは2回目のfix_typesの段階である。
+で、その結果、完全に具体的な型（opaque type constructorもassociated typeもtype variableも残らない）という状態に「fix」される、というのが正しい状態である。
+よって上の説明における「置換後の型は型変数を含みうるが、」は不適切。
+
+以上の情報を用いてplan2の当該セクションおよび実装計画を修正・詳細化せよ。
+
+## 作成中
+
+## 作成中
+
+## 作成中
+
+## 作成中
+
+## 作成中
+
 ## 作成中
 
 ## 作成中
