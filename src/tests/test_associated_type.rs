@@ -534,3 +534,52 @@ pub fn test_unsaturated_associated_type_in_impl_lhs() {
         "Invalid number of parameters for associated type",
     );
 }
+
+#[test]
+pub fn test_higher_kinded_second_param_of_associated_type() {
+    // Test that constraint syntax [f : *->*] works for 2nd+ params of associated types.
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type [f : *->*] MyAssoc a f;
+}
+
+impl I64 : MyTrait {
+    type MyAssoc I64 f = f I64;
+}
+
+main: IO ();
+main = (
+    let x : MyAssoc I64 Array = Array::empty(0);
+    let x = x.push_back(42);
+    eval x.@(0);
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_higher_kinded_second_param_kind_mismatch() {
+    // Test that passing a *-kinded type where *->* is expected gives an error.
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type [f : *->*] MyAssoc a f;
+}
+
+impl I64 : MyTrait {
+    type MyAssoc I64 f = f I64;
+}
+
+// String has kind *, but MyAssoc expects *->* for the 2nd param.
+func : [a : MyTrait] MyAssoc a String -> I64;
+func = |x| 0;
+
+main: IO ();
+main = pure();
+    "#;
+    test_source_fail(source, Configuration::develop_mode(), "Kind mismatch");
+}
