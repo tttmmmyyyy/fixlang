@@ -233,6 +233,14 @@ pi : ?f = 3.14;
 
 
 **TODO 11**：opaque typeを追加したことで、Associated Typeのuse caseが増えるので、TODO10の視点でテストを更に増やすべきである。実行せよ。
+→ 実行済み。`test_associated_type.rs`に以下の6テストを追加し、全パス確認済み：
+  - `test_unsaturated_associated_type_in_equality_constraint_lhs`：equality制約LHSでの未飽和（higher-arity assoc type）
+  - `test_unsaturated_associated_type_in_equality_constraint_rhs`：equality制約RHSでの未飽和
+  - `test_saturated_associated_type_in_equality_constraint`：equality制約での正常なsaturation（Container::Elemパターン）
+  - `test_multiple_associated_types_in_equality_constraints`：複数associated typeの同時使用（Elem + Size）
+  - `test_higher_arity_associated_type_in_equality_constraint`：higher-arity associated type（Rebuild c b = Array b）のsaturation確認
+  - `test_unsaturated_higher_arity_associated_type_in_equality`：higher-arity associated typeの未飽和
+  これらはopaque type導入後に `[?c : Rebuildable, Rebuild ?c b = Array b]` のようなパターンで使われるassociated typeのsaturationを、通常の型変数で先行テストするもの。
 
 **TODO 100**：この計画に穴・抜け・漏れがないか検討せよ。
 

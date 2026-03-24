@@ -583,3 +583,187 @@ main = pure();
     "#;
     test_source_fail(source, Configuration::develop_mode(), "Kind mismatch");
 }
+
+// Tests below use opaque type syntax (`?`-prefixed type variables) and are expected
+// to fail until opaque types are implemented. They verify associated type saturation
+// in opaque type contexts (TODO 11 from plan1.md).
+
+#[test]
+pub fn test_opaque_unsaturated_associated_type_in_equality_lhs() {
+    // `Item` requires 1 arg but is given 0 in the equality constraint.
+    let source = r#"
+module Main;
+
+repeat : [?it : Iterator, Item = a] a -> I64 -> ?it;
+repeat = |x, n| Iterator::range(0, n).map(|_| x);
+
+main: IO ();
+main = (
+    eval repeat("hello", 3);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "associated type has to be saturated",
+    );
+}
+
+#[test]
+pub fn test_opaque_unsaturated_associated_type_in_equality_rhs() {
+    // Unsaturated associated type on RHS of equality constraint with opaque type.
+    let source = r#"
+module Main;
+
+trait a : MyTraitA {
+    type AssocA a;
+}
+
+trait a : MyTraitB {
+    type AssocB a b;
+}
+
+impl I64 : MyTraitA {
+    type AssocA I64 = String;
+}
+
+impl I64 : MyTraitB {
+    type AssocB I64 b = b;
+}
+
+// AssocB takes 2 args but only 1 is provided on the RHS.
+func : [?t : MyTraitA, ?t : MyTraitB, AssocA ?t = AssocB ?t] ?t -> I64;
+func = |x| 0;
+
+main: IO ();
+main = (
+    eval func(42);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "associated type has to be saturated",
+    );
+}
+
+#[test]
+pub fn test_opaque_saturated_associated_type_in_equality() {
+    // Properly saturated associated type with opaque type — should compile and run.
+    let source = r#"
+module Main;
+
+repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it;
+repeat = |x, n| Iterator::range(0, n).map(|_| x);
+
+main: IO ();
+main = (
+    let iter = repeat("hello", 3);
+    let result = iter.fold("", |s, acc| acc + s);
+    assert_eq(|_|"", result, "hellohellohello");;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_opaque_multiple_associated_types_in_equality() {
+    // Multiple associated types used in equality constraints with opaque type.
+    let source = r##"
+module Main;
+
+import Std::* hiding Indexable::Elem;
+
+trait a : Container {
+    type Elem a;
+    type Size a;
+    get_elem : a -> Elem a;
+    container_size : a -> Size a;
+}
+
+impl Array a : Container {
+    type Elem (Array a) = a;
+    type Size (Array a) = I64;
+    get_elem = |arr| arr.@(0);
+    container_size = |arr| arr.get_size;
+}
+
+opaque_first : [?c : Container, Elem ?c = e, Size ?c = I64, e : ToString] ?c -> String;
+opaque_first = |c| c.get_elem.to_string + ":" + c.container_size.to_string;
+
+main: IO ();
+main = (
+    let result = opaque_first([42]);
+    assert_eq(|_|"", result, "42:1");;
+    pure()
+);
+    "##;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_opaque_higher_arity_associated_type_in_equality() {
+    // Higher-arity associated type (Rebuild c b = Array b) with opaque type.
+    let source = r#"
+module Main;
+
+import Std::* hiding Indexable::Elem;
+
+trait c : Rebuildable {
+    type Elem c;
+    type Rebuild c a;
+    to_array : c -> Array (Elem c);
+}
+
+impl Array a : Rebuildable {
+    type Elem (Array a) = a;
+    type Rebuild (Array a) b = Array b;
+    to_array = |arr| arr;
+}
+
+from_rebuildable : [?c : Rebuildable, Elem ?c = a, Rebuild ?c b = Array b] ?c -> Array (Elem ?c);
+from_rebuildable = |c| c.to_array;
+
+main: IO ();
+main = (
+    let result = from_rebuildable([1, 2, 3]);
+    assert_eq(|_|"", result, [1, 2, 3]);;
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_opaque_unsaturated_higher_arity_associated_type_in_equality() {
+    // Higher-arity associated type with missing argument in opaque context.
+    let source = r#"
+module Main;
+
+trait c : Rebuildable {
+    type Rebuild c a;
+}
+
+impl Array a : Rebuildable {
+    type Rebuild (Array a) b = Array b;
+}
+
+// Rebuild takes 2 args (c + a) but only 1 is provided — unsaturated.
+func : [?c : Rebuildable, Rebuild ?c = Array] ?c -> I64;
+func = |x| 0;
+
+main: IO ();
+main = (
+    eval func([1, 2, 3]);
+    pure()
+);
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "associated type has to be saturated",
+    );
+}

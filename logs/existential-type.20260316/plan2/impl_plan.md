@@ -603,7 +603,72 @@ opaque type にホバーしたとき、Phase 5 で求めた具体型を表示す
 
 例：`pi : ?f = 3.14;` の `?f` にホバー → `F64` と表示。
 
-実装箇所：`src/commands/lsp/` 内のホバー処理
+#### 対象ファイル
+
+- `src/commands/lsp/hover.rs`
+- `src/commands/lsp/util.rs`
+
+#### 方針
+
+既存の `EndNode::Type(TyCon)` で opaque TyCon を表し、`document_from_endnode` 内で `TyConVariant::Opaque` を検出して具体型を表示する。Phase 5 で `OpaqueConcreteType` を `Program` に保存する設計（5-2 参照）と組み合わせれば、TyCon から具体型テンプレートを引ける。`EndNode` の追加は不要。
+
+#### find_node_at の対応
+
+`program.find_node_at()` が型シグネチャ中の opaque type（脱糖後は TyCon）をヒットできるようにする。脱糖後は `?it` が TyCon として型中に出現するため、型を走査する既存のロジックで `EndNode::Type(TyCon)` として検出される可能性が高い。パース段階のソース位置情報が TyCon ノードに引き継がれていることを確認する必要がある。
+
+#### document_from_endnode の対応
+
+**ファイル**: `src/commands/lsp/util.rs`
+
+`EndNode::Type(tycon)` のケースで、`TyConVariant::Opaque` を検出した場合の表示を追加する：
+
+```rust
+EndNode::Type(tycon) => {
+    if let Some(ti) = program.type_env.tycons.get(&tycon) {
+        if ti.variant == TyConVariant::Opaque {
+            // Program に保存された OpaqueConcreteType から具体型を取得
+            if let Some(oct) = program.find_opaque_concrete_type(&tycon) {
+                docs += &format!("```\n{}\n```", oct.concrete_ty.to_string_normalize());
+                docs += &format!("\n\n(opaque type `{}` resolved)", tycon.name.name());
+            } else {
+                docs += &format!("```\nopaque type {}\n```", tycon.to_string());
+            }
+        } else {
+            document_tycon_or_alias(program, &mut docs, &tycon);
+        }
+    } else {
+        document_tycon_or_alias(program, &mut docs, &tycon);
+    }
+}
+```
+
+#### OpaqueConcreteType の検索ヘルパー
+
+**ファイル**: `src/ast/program.rs`
+
+Phase 5 で保存された `OpaqueConcreteType` を TyCon から検索するヘルパーが必要：
+
+```rust
+impl Program {
+    pub fn find_opaque_concrete_type(&self, tycon: &TyCon) -> Option<&OpaqueConcreteType> {
+        // TypedExpr に保存された opaque_types から該当する TyCon を検索
+        for gv in self.global_values.values() {
+            for oct in &gv.expr.typed_expr().opaque_types {
+                if oct.opaque_tycon.as_ref() == tycon {
+                    return Some(oct);
+                }
+            }
+        }
+        None
+    }
+}
+```
+
+なお、表示する具体型テンプレートは gen_vars を含む場合がある（例：`MapIterator (RangeIterator I64) a`）。これはユーザにとって十分な情報であり、具体的な instantiation の表示は不要。
+
+#### ソース位置の考慮
+
+脱糖で TyVar → TyCon に置換する際、元の TyVar のソース位置情報（Span）を TyCon ノードに引き継ぐことが重要。これにより、ユーザが `?it` にカーソルを合わせたとき、`find_node_at` が正しくマッチする。Phase 3（型シグネチャの書き換え）で TypeNode の source フィールドを保持するよう実装すること。
 
 ---
 
