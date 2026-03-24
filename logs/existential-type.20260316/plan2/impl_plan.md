@@ -498,17 +498,21 @@ typed_expr.opaque_types = opaque_types;
 
 ### 前提：2回目の fix_types
 
-`instantiate_symbol` 内の `fix_types`（2回目）は、1回目で残っていた gen_vars や associated types をすべて解消し、完全に具体的な型にする。opaque type constructor の解消もこの段階で行う。
+`instantiate_symbol` 内の `fix_types`（2回目）は、1回目で残っていた gen_vars や associated types をすべて解消し、完全に具体的な型にする。fix_types 自体は opaque type constructor を通常の TyCon として扱い、変更不要。
 
-2回目の `fix_types` 後には、すべての ExprNode の `type_` が**完全に具体的な型**（型変数も associated types も opaque type constructor も残らない）になる。
+2回目の `fix_types` 後には、すべての ExprNode の `type_` から型変数と associated types は除去されるが、opaque type constructor はまだ残っている。opaque type constructor の解消は fix_types の後に独立した処理として行う。
 
 ### 6-1. opaque TyCon の置換
 
-`instantiate_symbol` 内で2回目の `fix_types` の中（またはその前後）で、opaque TyCon を具体型に置換する：
+`instantiate_symbol` 内で、2回目の `fix_types` の**後**に、独立した処理として opaque TyCon を具体型に置換する：
 
 ```rust
-// fix_types の中またはその前後で
+// instantiate_symbol 内
+fix_types(...);  // 2回目の fix_types（既存のまま変更なし）
+
+// ★ NEW: fix_types の後に独立した処理として実行
 let expr = resolve_opaque_types(expr, &typed_expr.opaque_types);
+let expr = remove_wraps(expr);
 ```
 
 `resolve_opaque_types` のロジック：
@@ -519,11 +523,13 @@ let expr = resolve_opaque_types(expr, &typed_expr.opaque_types);
 5. 置換後の型で TyApp を置き換え
 6. 式のすべてのノードの `type_` フィールドに再帰的に適用
 
-この時点では2回目の `fix_types` により gen_vars も associated types も解消済みなので、OpaqueConcreteType の concrete_ty 内の gen_vars は具体型に置換されており、結果は完全に具体的な型になる。
+この時点では fix_types により gen_vars も associated types も解消済みなので、opaque TyCon の型引数は完全に具体的。OpaqueConcreteType の concrete_ty に gen_vars → 型引数 の substitution を適用すると、結果も完全に具体的な型になる。
+
+resolve_opaque_types と remove_wraps の完了後、すべての ExprNode の `type_` が**完全に具体的な型**（型変数も associated types も opaque type constructor も残らない）になる。
 
 ### 6-2. #wrap の除去
 
-`instantiate_symbol` 内（または `resolve_opaque_types` 内）で、#wrap の App を除去する：
+`resolve_opaque_types` の直後に、#wrap の App を除去する（上記コード例の `remove_wraps`）：
 
 1. 式が `App(Var(name), [inner])` で `name` が `#wrap` の名前パターンに合致する場合
 2. `inner` に置換する（#wrap は恒等関数）
