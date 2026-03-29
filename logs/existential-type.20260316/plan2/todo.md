@@ -108,6 +108,28 @@ impl_plan.md の 1-3 の Kind 計算を修正：
 - trait member（to_iter）の例と higher-kinded gen_var の例を追加。
 - グローバル値と trait member で処理が統一できることを明記。
 
+## (DONE) Schemeの型変数の収集処理をヘルパーメソッドに切り出す
+
+Scheme::generalizeに以下のような処理がある：
+```
+let mut vars = vec![];
+for pred in &preds {
+    pred.free_vars_to_vec(&mut vars);
+}
+for eq in &eqs {
+    eq.free_vars_to_vec(&mut vars);
+}
+ty.free_vars_to_vec(&mut vars);
+```
+これをヘルパーメソッドに切り出せ。
+またプロジェクト中の似たような処理がもしあれば、このヘルパーメソッドに置き換えよ。
+
+## (DONE) wrap関数の型変数の命名規則を決める
+
+wrap関数では、不透明型に対して一つ一つgen_varを発行している。plan2.mdではxとかyとか書いている型変数である。この型変数の名前は実際にはどう決まっているか？
+ユーザが定義する型や型変数と決して衝突しない名前にするべき。また不透明型との対応がわかりやすいよう、不透明型の名前を含むあるいは編集してつくるべき。
+その命名方法は、instantiate_schemeの中でwrapをrequireするときに「不透明型に対応していた型変数」を発見する処理で利用するべき。
+
 ## テストを実装
 
 テスト計画（test_plan.md）をもとに不透明型のテストを実装。

@@ -6,7 +6,7 @@ use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{FullName, Name};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
-use crate::ast::types::{Kind, Scheme, TyAliasInfo, AssocType, TyCon, TyConInfo, TyConVariant, TypeNode};
+use crate::ast::types::{is_opaque_tyvar, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, AssocType, TyCon, TyConInfo, TyConVariant, TypeNode};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
     struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
@@ -24,6 +24,7 @@ use crate::constants::{
 use crate::error::{panic_if_err, Errors};
 use crate::graph::Graph;
 use crate::misc::{collect_results, to_absolute_path, Map, Set};
+use crate::elaboration::desugar_opaque::{remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type};
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::printer::Text;
 use crate::parse::sourcefile::{SourcePos, Span};
@@ -373,6 +374,9 @@ pub struct TypedExpr {
     // When instantiating this typed expression to a concrete type, e.g., `extend : Array I64 -> Array I64 -> Array I64`,
     // we need to use the equality `Elem c1 = e` to prove that `x` has type `I64`.
     pub equalities: Vec<Equality>,
+    // Concrete types for opaque type constructors in this expression.
+    #[serde(default)]
+    pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
 }
 
 impl TypedExpr {
@@ -380,6 +384,7 @@ impl TypedExpr {
         TypedExpr {
             expr,
             equalities: vec![],
+            opaque_types: Map::default(),
         }
     }
 
@@ -482,6 +487,8 @@ pub struct Program {
     pub mod_to_import_stmts: Map<Name, Vec<ImportStatement>>,
 
     /* Instantiated symbols */
+    // Opaque types instantiated in this program, keyed by opaque TyCon name.
+    pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
     // Instantiated symbols.
     pub symbols: Map<FullName, Symbol>,
     // Deferred instantiations.
@@ -573,6 +580,7 @@ impl Program {
             deferred_errors: Errors::empty(),
             import_required: Default::default(),
             optimization_step: 0,
+            opaque_types: Map::default(),
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
             mod_info.name.clone(),
@@ -988,6 +996,16 @@ impl Program {
         // Perform type-checking.
         tc.current_module = Some(def_mod.clone());
         te.expr = tc.check_type(te.expr.clone(), req_scm.clone())?;
+        // Fill in rhs for opaque type resolutions that were set up during desugaring.
+        let opaque_rhs = tc.extract_opaque_concrete_types();
+        for (tycon_name, rhs) in opaque_rhs {
+            if let Some(resolutions) = te.opaque_types.get_mut(&tycon_name) {
+                for resolution in resolutions {
+                    assert!(resolution.rhs.is_none(), "opaque type rhs already filled");
+                    resolution.rhs = Some(rhs.clone());
+                }
+            }
+        }
         te.equalities = tc.local_assumed_eqs;
 
         // Save the result to cache file.
@@ -1227,7 +1245,10 @@ impl Program {
                 errors.append(result.output.err().unwrap());
                 continue;
             }
-            let output = result.output.ok().unwrap();
+            let mut output = result.output.ok().unwrap();
+            for (k, mut v) in output.te.opaque_types.drain() {
+                self.opaque_types.entry(k).or_default().append(&mut v);
+            }
             self.merge_import_required(output.import_required);
             let gv = self.global_values.get_mut(&result.val_name).unwrap();
             match &mut gv.expr {
@@ -1280,7 +1301,11 @@ impl Program {
                 for eq in &e.equalities {
                     tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                 }
-                tc.fix_types(e.expr.clone())?
+                let mut expr = tc.fix_types(e.expr.clone())?;
+                // Resolve opaque types and remove #wrap applications.
+                expr = remove_opaque_wrapper_func(expr);
+                expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+                expr
             }
             SymbolExpr::Method(impls) => {
                 let mut opt_e: Option<Arc<ExprNode>> = None;
@@ -1300,12 +1325,17 @@ impl Program {
                     for eq in &e.equalities {
                         tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                     }
-                    opt_e = Some(tc.fix_types(e.expr)?);
+                    let mut expr = tc.fix_types(e.expr)?;
+                    // Resolve opaque types and remove #wrap applications.
+                    expr = remove_opaque_wrapper_func(expr);
+                    expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+                    opt_e = Some(expr);
                     break;
                 }
                 opt_e.unwrap()
             }
         };
+        sym.ty = resolve_opaque_type_in_type(&sym.ty, &self.opaque_types);
         sym.expr = Some(self.instantiate_expr(&expr)?);
         Ok(())
     }
@@ -1735,6 +1765,18 @@ impl Program {
     pub fn validate_type_defns(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for type_defn in &self.type_defns {
+            // Check for opaque type variables in type definitions.
+            for tv in &type_defn.tyvars {
+                if is_opaque_tyvar(&tv.name) {
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
+                            "Opaque type variable `{}` is not allowed in a type definition.",
+                            tv.name,
+                        ),
+                        &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                    ));
+                }
+            }
             errors.eat_err(type_defn.validate_tyvars());
             if errors.has_error() {
                 continue;

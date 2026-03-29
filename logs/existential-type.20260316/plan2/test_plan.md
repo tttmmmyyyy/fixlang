@@ -14,21 +14,21 @@
 
 ## 1. 基本機能テスト（test_opaque_type.rs）
 
-### 1-1. use_cases.md のサンプルコード
+### 1-1. ユースケースのサンプルコード
 
-use_cases.md に記載されている各ユースケースが正しくコンパイル・実行できることを確認する。
+use_cases.md および plan2.md に記載されている各ユースケースが正しくコンパイル・実行できることを確認する。
 
-| テスト名 | 内容 | 対応する use_cases.md |
-|---------|------|---------------------|
-| `test_opaque_repeat` | `repeat` 関数：イテレータ戻り値型の簡略化 | ユースケース1 |
-| `test_opaque_doubled_evens` | 複数コンビネータの連鎖（型の爆発回避） | ユースケース2 |
-| `test_opaque_to_iter` | `ToIter` trait member での使用 | ユースケース3 |
-| `test_opaque_to_iter_multiple_impls` | `ToIter` を複数の型（例：`Array a` と自作の `MyList a`）で実装し、main 内で両方の `to_iter` を呼び出して結果を使用する。異なる impl ごとに opaque type が異なる具体型に解決されることを確認 | ユースケース3 の拡張 |
-| `test_opaque_higher_kinded` | higher-kinded opaque type（`?m : * -> *`） | ユースケース4 |
-| `test_opaque_zip_with_index` | 複数の opaque type を持つシグネチャ | ユースケース5 |
-| `test_opaque_partition` | 複数 opaque type（partition） | ユースケース6 |
-| `test_opaque_predicate_only` | equality なし（predicate のみ） | ユースケース7 |
-| `test_opaque_higher_arity_associated_type` | higher-arity associated type（Rebuildable パターン） | ユースケース8 |
+| テスト名 | 内容 | 対応するユースケース |
+|---------|------|--------------------|
+| `test_opaque_repeat` | `repeat` 関数：イテレータ戻り値型の簡略化 | use_cases.md ユースケース1、plan2.md ユースケース1 |
+| `test_opaque_doubled_evens` | 複数コンビネータの連鎖（型の爆発回避） | use_cases.md ユースケース2 |
+| `test_opaque_to_iter` | `ToIter` trait member での使用 | use_cases.md ユースケース3、plan2.md ユースケース2 |
+| `test_opaque_to_iter_multiple_impls` | `ToIter` を複数の型（例：`Array a` と自作の `MyList a`）で実装し、main 内で両方の `to_iter` を呼び出して結果を使用する。異なる impl ごとに opaque type が異なる具体型に解決されることを確認 | use_cases.md ユースケース3 の拡張 |
+| `test_opaque_higher_kinded` | higher-kinded opaque type（`?m : * -> *`） | use_cases.md ユースケース4、plan2.md ユースケース3 |
+| `test_opaque_zip_with_index` | opaque type と通常の型変数が混在するシグネチャ。入力側イテレータ（`it_in`）は通常の型変数、出力側イテレータ（`?it_out`）のみが opaque type になる | use_cases.md ユースケース5 |
+| `test_opaque_partition` | 複数 opaque type（partition）。2つの opaque type が同じ制約を持つケース | plan2.md ユースケース6 |
+| `test_opaque_predicate_only` | equality なし（predicate のみ） | plan2.md ユースケース7 |
+| `test_opaque_higher_arity_associated_type` | higher-arity associated type（Rebuildable パターン） | plan2.md ユースケース8 |
 
 ### 1-2. trait impl のアノテーションにおける opaque type
 
@@ -89,6 +89,7 @@ opaque type の導入により associated type の利用パターンが増える
 | テスト名 | 内容 | 期待するエラーメッセージ（部分一致） |
 |---------|------|-------------------------------|
 | `test_opaque_unused_cannot_determine` | 使用されない opaque type（例：`pi : [?t : ToString] F64`）で `?t` が決定できない | 型が決定できないことに関するエラー |
+| `test_opaque_not_in_return_type` | opaque type が制約ブロックに定義されているが戻り値型に出現しないケース（例：`foo : [?it : Iterator, Item ?it = a] a -> I64`）。`?it` の具体型が決定不能なためエラーになることを確認 | 型が決定できないことに関するエラー |
 | `test_opaque_branch_type_mismatch` | `if` 分岐で異なる具体型を返そうとするケース（ユースケース6の非対応ケース） | 型の不一致エラー |
 
 ### 2-4. opaque type に関する trait 制約の不満足
@@ -128,9 +129,46 @@ main = (
 
 テスト内容：
 - `?it` にホバーしたとき、解決された具体型（例：`MapIterator (RangeIterator I64) String` 等）が表示されることを確認
-- trait member の opaque type にホバーしたときも同様に具体型が表示されることを確認
 
 テスト実装は `src/tests/test_lsp/test_hover.rs`（新規）に配置する。既存の `test_references.rs` の `LspTestCtx` パターンを参考にし、`textDocument/hover` リクエストを送信して応答を検証する。
+
+### 3-2. trait member の opaque type のホバー表示
+
+**テストプロジェクト**: `src/tests/test_lsp/cases/opaque_hover_trait_member/`
+
+プロジェクト構成：
+```
+opaque_hover_trait_member/
+  fixproj.toml
+  main.fix
+```
+
+`main.fix` の内容例：
+```fix
+module Main;
+
+trait c : ToIter {
+    type Elem c;
+    to_iter : [?it : Iterator, Item ?it = ToIter::Elem c] c -> ?it;
+}
+
+type MyList a = box struct { _arr : Array a };
+
+impl Array a : ToIter {
+    type Elem (Array a) = a;
+    to_iter = |arr| arr.@_iter;
+}
+
+main : IO ();
+main = (
+    let iter = [1, 2, 3].to_iter;
+    pure()
+);
+```
+
+テスト内容：
+- trait member `to_iter` のシグネチャ中の `?it` にホバーしたとき、impl に応じた解決済み具体型（例：`ArrayIterator I64`）が表示されることを確認
+- 使用側の式（`[1, 2, 3].to_iter`）の結果型にホバーしたときも同様に表示されることを確認
 
 ---
 

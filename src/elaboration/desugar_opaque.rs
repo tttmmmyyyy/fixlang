@@ -1,0 +1,635 @@
+use std::sync::Arc;
+
+use crate::ast::equality::Equality;
+use crate::ast::expr::{expr_app, expr_var, Expr, ExprNode};
+use crate::ast::name::{FullName, Name, NameSpace};
+use crate::ast::predicate::Predicate;
+use crate::ast::program::{GlobalValue, Program, SymbolExpr, TypedExpr};
+use crate::ast::qual_pred::{QualPred, QualPredScheme};
+use crate::ast::types::{
+    collect_free_vars, is_opaque_tyvar, kind_arrow, make_tyvar, type_from_tyvar,
+    type_fun, type_tyapp, type_tycon, tycon, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo,
+    TyConVariant, TyVar, Type, TypeNode,
+};
+use crate::constants::{OPAQUE_WRAP_FUNC_NAME, WRAP_FUNC_OPAQUE_TYVAR_PREFIX};
+use crate::elaboration::typecheck::Substitution;
+use crate::misc::{insert_to_map_vec, Map, Set};
+
+// Information about an opaque type variable found in a scheme.
+struct OpaqueInfo {
+    // The opaque type variable (e.g., "?it" with its kind).
+    tyvar: Arc<TyVar>,
+    // The generated type constructor for this opaque type variable.
+    tycon: Arc<TyCon>,
+    // The type variables applied to the opaque type constructor. 
+    // Thease are equal to the gen_vars of the original scheme, 
+    // i.e., the non-opaque type variables in the original scheme.
+    tycon_vars: Vec<Arc<TyVar>>,
+    // The kind of the generated type constructor.
+    tycon_kind: Arc<Kind>,
+}
+
+impl Program {
+    // Desugar opaque type variables in type signatures.
+    // This function performs Phases 1-3 of the opaque type implementation:
+    // - Phase 1: Generate type constructors for opaque type variables.
+    // - Phase 2: Convert constraints to QualPredScheme / EqualityScheme and add to TraitEnv.
+    // - Phase 3: Rewrite type signatures and generate #wrap GlobalValues.
+    pub fn desugar_opaque_types(&mut self) {
+        let gv_names: Vec<FullName> = self.global_values.keys().cloned().collect();
+
+        // Collect opaque infos for global values that have opaque type variables.
+        let mut targets: Vec<(FullName, Vec<OpaqueInfo>)> = vec![];
+        for gv_name in &gv_names {
+            let gv = self.global_values.get(gv_name).unwrap();
+            let opaque_infos = collect_opaque_infos(&gv.scm, gv_name);
+            if !opaque_infos.is_empty() {
+                targets.push((gv_name.clone(), opaque_infos));
+            }
+        }
+
+        // Phase 1 & 2: Register opaque TyCons and add constraints to TraitEnv.
+        for (gv_name, opaque_infos) in &targets {
+            let scm = self.global_values.get(gv_name).unwrap().scm.clone();
+            for info in opaque_infos {
+                self.register_opaque_tycon(info);
+            }
+            self.add_opaque_constraints(&scm, opaque_infos);
+        }
+
+        // Phase 3: Rewrite type signatures and generate #wrap GlobalValues.
+        for (gv_name, opaque_infos) in &targets {
+            let scm = self.global_values.get(gv_name).unwrap().scm.clone();
+            let new_scm = rewrite_scheme(&scm, opaque_infos);
+
+            // Generate one #wrap per function/method.
+            let wrap_name = FullName::new(&gv_name.to_namespace(), OPAQUE_WRAP_FUNC_NAME);
+            let wrap_scm = build_wrap_scheme(&scm, &new_scm, opaque_infos);
+            self.global_values.insert(
+                wrap_name.clone(),
+                GlobalValue {
+                    scm: wrap_scm,
+                    syn_scm: None,
+                    expr: SymbolExpr::Simple(TypedExpr::from_expr(build_undefined_expr())),
+                    decl_src: None,
+                    defn_src: None,
+                    document: None,
+                    compiler_defined_method: false,
+                },
+            );
+
+            // Rewrite the original global value's scheme and insert #wrap applications.
+            let gv = self.global_values.get_mut(gv_name).unwrap();
+            gv.scm = new_scm;
+            match &mut gv.expr {
+                SymbolExpr::Simple(te) => {
+                    let original_expr = te.expr.clone();
+                    te.expr = expr_app(
+                        expr_var(wrap_name.clone(), None),
+                        vec![original_expr],
+                        None,
+                    );
+                    te.opaque_types = build_opaque_resolutions(
+                        opaque_infos,
+                        &Substitution::default(),
+                    );
+                }
+                SymbolExpr::Method(impls) => {
+                    for impl_ in impls.iter_mut() {
+                        // Compute defn_to_impl mapping before rewriting schemes.
+                        let defn_to_impl = Substitution::matching_no_kind_check(
+                            &impl_.scm_via_defn.ty,
+                            &impl_.scm.ty,
+                            &[],
+                        )
+                        .expect("impl scm_via_defn type should match impl scm type");
+
+                        impl_.scm = rewrite_impl_scheme(
+                            &impl_.scm,
+                            &impl_.scm_via_defn,
+                            opaque_infos,
+                        );
+                        impl_.scm_via_defn =
+                            rewrite_scheme(&impl_.scm_via_defn, opaque_infos);
+                        let original_expr = impl_.expr.expr.clone();
+                        impl_.expr.expr = expr_app(
+                            expr_var(wrap_name.clone(), None),
+                            vec![original_expr],
+                            None,
+                        );
+                        impl_.expr.opaque_types = build_opaque_resolutions(
+                            opaque_infos,
+                            &defn_to_impl,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn register_opaque_tycon(&mut self, info: &OpaqueInfo) {
+        let ti = TyConInfo {
+            kind: info.tycon_kind.clone(),
+            variant: TyConVariant::Opaque,
+            is_unbox: false,
+            tyvars: info.tycon_vars.clone(),
+            fields: vec![],
+            source: None,
+            document: None,
+        };
+        let mut new_tycons = Map::default();
+        new_tycons.insert(info.tycon.as_ref().clone(), ti);
+        self.type_env.add_tycons(new_tycons);
+    }
+
+    fn add_opaque_constraints(
+        &mut self,
+        scm: &Arc<Scheme>,
+        opaque_infos: &[OpaqueInfo],
+    ) {
+        for info in opaque_infos {
+            let sub = info.tyvar_to_tycon_substitution();
+
+            // Extract opaque-related predicates.
+            for pred in &scm.predicates {
+                if !pred.on_tyvar(&info.tyvar.name) {
+                    continue;
+                }
+                let mut new_pred = pred.clone();
+                sub.substitute_predicate(&mut new_pred);
+                let qps = QualPredScheme {
+                    gen_vars: info.tycon_vars.clone(),
+                    qual_pred: QualPred {
+                        pred_constraints: vec![],
+                        eq_constraints: vec![],
+                        kind_constraints: vec![],
+                        predicate: new_pred,
+                    },
+                };
+                let trait_id = qps.qual_pred.predicate.trait_id.clone();
+                insert_to_map_vec(
+                    &mut self.trait_env.opaque_preds,
+                    &trait_id,
+                    qps,
+                );
+            }
+
+            // Extract opaque-related equalities.
+            for eq in &scm.equalities {
+                if !eq.on_tyvar(&info.tyvar.name) {
+                    continue;
+                }
+                let mut new_eq = eq.clone();
+                sub.substitute_equality(&mut new_eq);
+                let eq_scm = new_eq.generalize();
+                insert_to_map_vec(
+                    &mut self.trait_env.opaque_eqs,
+                    &new_eq.assoc_type,
+                    eq_scm,
+                );
+            }
+        }
+    }
+}
+
+// Collect opaque type variable information from a scheme.
+//
+// - `scm`: the type scheme of the global value (e.g., `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`).
+// - `gv_name`: the name of the global value, used to derive the TyCon name for each opaque tyvar
+//   (e.g., `Std::repeat` yields TyCon `Std::repeat::?it`).
+fn collect_opaque_infos(
+    scm: &Arc<Scheme>,
+    gv_name: &FullName,
+) -> Vec<OpaqueInfo> {
+    // Find all opaque type variables in the scheme.
+    let all_vars = collect_free_vars(&scm.predicates, &scm.equalities, &scm.ty);
+
+    let mut seen = Set::<Name>::default();
+    let mut opaque_vars = vec![];
+    for tv in &all_vars {
+        if is_opaque_tyvar(&tv.name) && !seen.contains(&tv.name) {
+            seen.insert(tv.name.clone());
+            opaque_vars.push(tv.clone());
+        }
+    }
+
+    // Non-opaque gen_vars. These become the type parameters of the generated TyCon.
+    // Scheme::generalize already excludes opaque tyvars from gen_vars.
+    let gen_vars = scm.gen_vars.clone();
+
+    opaque_vars
+        .into_iter()
+        .map(|opq_var| {
+            // Compute kind: (k1 -> k2 -> ... -> kn -> opq_var.kind).
+            // The opaque TyCon takes the gen_vars as arguments and returns the opaque tyvar's kind.
+            let mut tc_kind: Arc<Kind> = opq_var.kind.clone();
+            for gv in gen_vars.iter().rev() {
+                tc_kind = kind_arrow(gv.kind.clone(), tc_kind);
+            }
+            let tycon_name = FullName::new(&gv_name.to_namespace(), &opq_var.name);
+            OpaqueInfo {
+                tyvar: opq_var.clone(),
+                tycon: tycon(tycon_name),
+                tycon_vars: gen_vars.clone(),
+                tycon_kind: tc_kind,
+            }
+        })
+        .collect()
+}
+
+impl OpaqueInfo {
+    // Build the type node that replaces the opaque TyVar: TyApp(TyCon(...), gen_var1, gen_var2, ...).
+    fn opaque_tycon_applied(&self) -> Arc<TypeNode> {
+        let mut ty = type_tycon(&self.tycon);
+        for gv in &self.tycon_vars {
+            ty = type_tyapp(ty, type_from_tyvar(gv.clone()));
+        }
+        ty
+    }
+
+    // Build a substitution that maps the opaque TyVar to the TyCon application.
+    fn tyvar_to_tycon_substitution(&self) -> Substitution {
+        Substitution::single(&self.tyvar.name, self.opaque_tycon_applied())
+    }
+}
+
+// Build OpaqueTyConResolution entries with correct lhs but no rhs yet.
+// `defn_to_impl` maps definition-side type variables to impl-side expressions.
+// For simple (non-method) values, pass `Substitution::default()`.
+fn build_opaque_resolutions(
+    opaque_infos: &[OpaqueInfo],
+    defn_to_impl: &Substitution,
+) -> Map<FullName, Vec<OpaqueTyConResolution>> {
+    let mut result: Map<FullName, Vec<OpaqueTyConResolution>> = Map::default();
+    for info in opaque_infos {
+        let lhs = defn_to_impl.substitute_type(&info.opaque_tycon_applied());
+        result
+            .entry(info.tycon.name.clone())
+            .or_default()
+            .push(OpaqueTyConResolution { lhs, rhs: None });
+    }
+    result
+}
+
+// Apply a substitution to a scheme's type and remove opaque predicates/equalities.
+fn apply_opaque_substitution(scm: &Arc<Scheme>, sub: &Substitution) -> Arc<Scheme> {
+    let new_ty = sub.substitute_type(&scm.ty);
+
+    let new_preds: Vec<Predicate> = scm
+        .predicates
+        .iter()
+        .filter(|p| !p.on_opaque_tyvar())
+        .cloned()
+        .collect();
+
+    let new_eqs: Vec<Equality> = scm
+        .equalities
+        .iter()
+        .filter(|eq| !eq.on_opaque_tyvar())
+        .cloned()
+        .collect();
+
+    Scheme::new_arc(scm.gen_vars.clone(), scm.kind_signs.clone(), new_preds, new_eqs, new_ty)
+}
+
+// Rewrite a scheme: replace opaque TyVars with TyCon applications and remove opaque constraints.
+fn rewrite_scheme(scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) -> Arc<Scheme> {
+    // Build combined substitution for all opaque tyvars.
+    let mut sub = Substitution::default();
+    for info in opaque_infos {
+        assert!(sub.merge(&info.tyvar_to_tycon_substitution()));
+    }
+    apply_opaque_substitution(scm, &sub)
+}
+
+// Rewrite a trait impl's scheme, handling the case where the impl may use different names
+// for opaque type variables than the trait definition.
+//
+// `opaque_infos` is derived from the trait definition's scheme, so opaque tyvar names
+// (e.g., `?it`) match the definition. `impl_scm` may use different names (e.g., `?iter`).
+// `impl_scm_via_defn` uses the definition's opaque names but the impl's gen_var names.
+// We compute the name correspondence via matching and build the correct substitution.
+fn rewrite_impl_scheme(
+    impl_scm: &Arc<Scheme>,
+    impl_scm_via_defn: &Arc<Scheme>,
+    opaque_infos: &[OpaqueInfo],
+) -> Arc<Scheme> {
+    // Match impl_scm_via_defn.ty against impl_scm.ty to find name correspondences.
+    // This maps defn names → impl expressions (e.g., ?it → ?iter, a → a).
+    let defn_to_impl = Substitution::matching_no_kind_check(
+        &impl_scm_via_defn.ty,
+        &impl_scm.ty,
+        &[],
+    ).expect("impl_scm_via_defn type should match impl_scm type");
+
+    // Build substitution: impl's opaque tyvar → TyCon applied to impl's gen_vars.
+    let mut sub = Substitution::default();
+    for info in opaque_infos {
+        // Find the impl's name for this opaque tyvar.
+        let impl_opaque_ty = defn_to_impl.substitute_type(&type_from_tyvar(info.tyvar.clone()));
+        let impl_opaque_name = match &impl_opaque_ty.ty {
+            Type::TyVar(tv) => &tv.name,
+            _ => panic!("Expected opaque tyvar `{}` to map to a tyvar in impl scheme", info.tyvar.name),
+        };
+
+        // Build TyCon application using the impl's type expressions for each gen_var.
+        let mut ty = type_tycon(&info.tycon);
+        for defn_gv in &info.tycon_vars {
+            let impl_gv_ty = defn_to_impl.substitute_type(&type_from_tyvar(defn_gv.clone()));
+            ty = type_tyapp(ty, impl_gv_ty);
+        }
+
+        assert!(sub.merge(&Substitution::single(impl_opaque_name, ty)));
+    }
+
+    apply_opaque_substitution(impl_scm, &sub)
+}
+
+// Build the #wrap scheme.
+// The wrap function has type: (original_fn_type) -> (rewritten_fn_type_with_opaque_tycon).
+fn build_wrap_scheme(
+    orig_scm: &Arc<Scheme>,
+    new_scm: &Arc<Scheme>,
+    opaque_infos: &[OpaqueInfo],
+) -> Arc<Scheme> {
+    // For each opaque type variable, introduce a fresh type variable (e.g., "#Std::repeat::?it")
+    // in the domain side.
+    let mut opaque_to_fresh = Substitution::default();
+    let mut wrap_gen_vars = orig_scm.gen_vars.clone(); // Non-opaque gen_vars.
+
+    for info in opaque_infos.iter() {
+        let fresh_name = format!("{}{}", WRAP_FUNC_OPAQUE_TYVAR_PREFIX, info.tycon.name.to_string());
+        let fresh_tv = make_tyvar(&fresh_name, &info.tyvar.kind);
+        wrap_gen_vars.push(fresh_tv.clone());
+        assert!(opaque_to_fresh.merge(&Substitution::single(
+            &info.tyvar.name,
+            type_from_tyvar(fresh_tv),
+        )));
+    }
+
+    // Copy all predicates, substituting opaque tyvars with fresh vars.
+    // Non-opaque predicates (e.g., `c : ToIter`) are kept as-is since domain_sub doesn't affect them.
+    let wrap_preds: Vec<Predicate> = orig_scm.predicates.iter().map(|pred| {
+        let mut new_pred = pred.clone();
+        opaque_to_fresh.substitute_predicate(&mut new_pred);
+        new_pred
+    }).collect();
+
+    // Copy all equalities, substituting opaque tyvars with fresh vars.
+    let wrap_eqs: Vec<Equality> = orig_scm.equalities.iter().map(|eq| {
+        let mut new_eq = eq.clone();
+        opaque_to_fresh.substitute_equality(&mut new_eq);
+        new_eq
+    }).collect();
+
+    // Domain type: original function type with opaque tyvars replaced by fresh vars.
+    let domain_ty = opaque_to_fresh.substitute_type(&orig_scm.ty);
+
+    // Codomain type: the rewritten function type (with opaque TyCon applications).
+    let codomain_ty = new_scm.ty.clone();
+
+    // Wrap type: domain -> codomain.
+    let wrap_ty = type_fun(domain_ty, codomain_ty);
+
+    Scheme::new_arc(wrap_gen_vars, vec![], wrap_preds, wrap_eqs, wrap_ty)
+}
+
+// Build an undefined("") expression for #wrap body.
+fn build_undefined_expr() -> Arc<ExprNode> {
+    // We use a simple variable expression that will be typed as `undefined("")`.
+    // The body doesn't matter since #wrap is removed before code generation.
+    // Use a lambda `|x| x` as a placeholder. Actually, we need something that
+    // typechecks for any type. The simplest approach is just an identity-like expression.
+    // But per the plan, we use `undefined("")`.
+    // Since we don't have a string literal constructor easily available, we'll use
+    // a Var referencing Std::undefined with a fresh application.
+    // Actually, let's keep it simpler: an untyped expression that the typechecker will handle.
+    // The #wrap function has type D -> C. We'll give it body `|x| x` conceptually,
+    // but since D and C may differ structurally, the typechecker would reject that.
+    // Per the plan: body is `undefined("")`. Let's construct it properly.
+
+    // For now, create a variable expression `Std::_undefined_internal`.
+    // This gets typed as `String -> a` during type checking.
+    // We need to apply it to a string, but we don't have easy string literal construction.
+    // Let's just use a Var to undefined. The typechecker will infer the return type.
+
+    // Actually, looking at the code, `undefined` in Fix source is a user-level function.
+    // At the AST level, we need to express it differently.
+    // For the #wrap, since it's removed before codegen, we can use any expression
+    // that typechecks. Let's create a simple variable that will be given
+    // the polymorphic type by the typechecker through its scheme declaration.
+
+    // The simplest: just use a plain variable expression. The expression isn't actually
+    // evaluated; #wrap is an identity function that gets removed in Phase 6.
+    // The typechecker sees the scheme and checks the expression body against it.
+    // We need the body to typecheck under the wrap scheme.
+
+    // Use a lambda `|_x| _x` - identity function. This won't typecheck generally for D -> C.
+    // Let's use a Var for now and rely on the fact that the expression of #wrap
+    // is never actually type-checked normally - it's marked as compiler_defined_method.
+
+    // Actually, looking at how compiler_defined_method works: it's still type-checked.
+    // But check_type is only called for values that are referenced/instantiated.
+    // #wrap values are only referenced in wrapped expressions, and during instantiate_symbol
+    // they are removed (Phase 6). So the body of #wrap is never actually type-checked.
+
+    // Use a simple placeholder var expression.
+    let placeholder_name = FullName::new(
+        &NameSpace::new(vec!["Std".to_string()]),
+        "_undefined_internal",
+    );
+    expr_var(placeholder_name, None)
+}
+
+// Replace opaque TyCon in a type with a concrete type using OpaqueTyConResolution information.
+pub fn resolve_opaque_type_in_type(
+    ty: &Arc<TypeNode>,
+    opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
+) -> Arc<TypeNode> {
+    let mut ty = ty.clone();
+
+    // Loop: resolution may produce another opaque tycon at top level.
+    loop {
+        let tc = match ty.toplevel_tycon() {
+            Some(tc) => tc,
+            None => break,
+        };
+
+        let resolutions = match opaque_resolutions.get(&tc.name) {
+            Some(r) => r,
+            None => break, // not an opaque tycon
+        };
+
+        // Compute arity from the lhs of the first resolution.
+        let arity = resolutions[0].lhs.collect_type_argments().len();
+
+        // Split the type args into prefix (arity args) and rest.
+        let all_args = ty.collect_type_argments();
+        assert!(
+            all_args.len() >= arity,
+            "Opaque tycon `{}` expects arity {} but only {} args applied",
+            tc.name.to_string(), arity, all_args.len()
+        );
+        let prefix_args = &all_args[..arity];
+        let rest_args = &all_args[arity..];
+
+        // Rebuild the prefix: TyCon applied to prefix_args.
+        let mut prefix = type_tycon(&tc);
+        for arg in prefix_args {
+            prefix = type_tyapp(prefix, arg.clone());
+        }
+
+        // Try matching each resolution's lhs against the prefix.
+        let mut matched = false;
+        for oct in resolutions {
+            let matching = Substitution::matching_no_kind_check(
+                &oct.lhs,
+                &prefix,
+                &[], // no fixed tyvars
+            );
+
+            if let Some(sub) = matching {
+                // Apply the matching to rhs, then apply rest args.
+                let rhs = oct.rhs.as_ref().expect(
+                    "opaque type resolution rhs should be filled in by type-checking",
+                );
+                let mut resolved = sub.substitute_type(rhs);
+                for arg in rest_args {
+                    resolved = type_tyapp(resolved, arg.clone());
+                }
+                ty = resolved;
+                matched = true;
+                break;
+            }
+        }
+
+        if !matched {
+            panic!(
+                "No matching OpaqueTyConResolution found for opaque tycon `{}`",
+                tc.name.to_string()
+            );
+        }
+    }
+
+    // Recurse into sub-nodes.
+    match &ty.ty {
+        Type::TyVar(_) | Type::TyCon(_) => ty,
+        Type::TyApp(fun, arg) => {
+            let new_fun = resolve_opaque_type_in_type(fun, opaque_resolutions);
+            let new_arg = resolve_opaque_type_in_type(arg, opaque_resolutions);
+            if Arc::ptr_eq(&new_fun, fun) && Arc::ptr_eq(&new_arg, arg) {
+                ty
+            } else {
+                ty.set_tyapp_fun(new_fun).set_tyapp_arg(new_arg)
+            }
+        }
+        Type::AssocTy(_assoc_ty, args) => {
+            let new_args: Vec<Arc<TypeNode>> = args
+                .iter()
+                .map(|a| resolve_opaque_type_in_type(a, opaque_resolutions))
+                .collect();
+            ty.set_assocty_args(new_args)
+        }
+    }
+}
+
+// Remove #wrap application from the top level of an expression.
+// #wrap is only inserted at the outermost level, so no recursion into sub-expressions is needed.
+pub fn remove_opaque_wrapper_func(expr: Arc<ExprNode>) -> Arc<ExprNode> {
+    if let Expr::App(func, args) = expr.expr.as_ref() {
+        if args.len() == 1 {
+            if let Expr::Var(var) = func.expr.as_ref() {
+                if var.name.name.starts_with(OPAQUE_WRAP_FUNC_NAME) {
+                    return args[0].clone();
+                }
+            }
+        }
+    }
+    expr
+}
+
+// Resolve opaque types in all type annotations of an expression tree.
+pub fn resolve_opaque_tycon_in_expr(
+    expr: &Arc<ExprNode>,
+    opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
+) -> Arc<ExprNode> {
+    // Map over all sub-expressions and their types.
+    let type_ = expr.type_.as_ref().unwrap();
+    let type_ = resolve_opaque_type_in_type(type_, opaque_resolutions);
+    let expr = expr.set_type(type_.clone());
+    match expr.expr.as_ref() {
+        Expr::App(func, args) => {
+            let new_func = resolve_opaque_tycon_in_expr(func, opaque_resolutions);
+            let new_args: Vec<_> = args
+                .iter()
+                .map(|a| resolve_opaque_tycon_in_expr(a, opaque_resolutions))
+                .collect();
+            expr.set_app_func(new_func).set_app_args(new_args)
+        }
+        Expr::Lam(_vars, body) => {
+            let new_body = resolve_opaque_tycon_in_expr(body, opaque_resolutions);
+            expr.set_lam_body(new_body)
+        }
+        Expr::Let(_pat, val, body) => {
+            let new_val = resolve_opaque_tycon_in_expr(val, opaque_resolutions);
+            let new_body = resolve_opaque_tycon_in_expr(body, opaque_resolutions);
+            expr.set_let_bound(new_val).set_let_value(new_body)
+        }
+        Expr::If(cond, then_e, else_e) => {
+            let new_cond = resolve_opaque_tycon_in_expr(cond, opaque_resolutions);
+            let new_then = resolve_opaque_tycon_in_expr(then_e, opaque_resolutions);
+            let new_else = resolve_opaque_tycon_in_expr(else_e, opaque_resolutions);
+            expr.set_if_cond(new_cond).set_if_then(new_then).set_if_else(new_else)
+        }
+        Expr::Match(scrut, branches) => {
+            let new_scrut = resolve_opaque_tycon_in_expr(scrut, opaque_resolutions);
+            let new_branches: Vec<_> = branches
+                .iter()
+                .map(|(pat, body)| {
+                    (
+                        pat.clone(),
+                        resolve_opaque_tycon_in_expr(body, opaque_resolutions),
+                    )
+                })
+                .collect();
+            expr.set_match_cond(new_scrut).set_match_pat_vals(new_branches)
+        }
+        Expr::TyAnno(inner, ty) => {
+            let new_inner = resolve_opaque_tycon_in_expr(inner, opaque_resolutions);
+            let new_ty = resolve_opaque_type_in_type(ty, opaque_resolutions);
+            expr.set_tyanno_expr(new_inner).set_tyanno_ty(new_ty)
+        }
+        Expr::ArrayLit(elems) => {
+            let new_elems: Vec<_> = elems
+                .iter()
+                .map(|e| resolve_opaque_tycon_in_expr(e, opaque_resolutions))
+                .collect();
+            expr.set_array_lit_elems(new_elems)
+        }
+        Expr::Eval(side, main) => {
+            let new_side = resolve_opaque_tycon_in_expr(side, opaque_resolutions);
+            let new_main = resolve_opaque_tycon_in_expr(main, opaque_resolutions);
+            expr.set_eval_side(new_side).set_eval_main(new_main)
+        }
+        Expr::MakeStruct(_tc, fields) => {
+            let new_fields: Vec<_> = fields
+                .iter()
+                .map(|(name, e)| {
+                    (
+                        name.clone(),
+                        resolve_opaque_tycon_in_expr(e, opaque_resolutions),
+                    )
+                })
+                .collect();
+            expr.set_make_struct_fields(new_fields)
+        }
+        Expr::FFICall(_name, _ret_ty, _param_tys, _va_args, args, _is_ios) => {
+            let new_args: Vec<_> = args
+                .iter()
+                .map(|a| resolve_opaque_tycon_in_expr(a, opaque_resolutions))
+                .collect();
+            expr.set_ffi_call_args(new_args)
+        }
+        _ => expr,
+    }
+}

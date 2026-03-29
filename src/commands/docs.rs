@@ -507,6 +507,9 @@ fn type_entries(
             TyConVariant::DynamicObject => {
                 unreachable!()
             }
+            TyConVariant::Opaque => {
+                unreachable!()
+            }
         };
 
         let mut doc = MarkdownSection::new(name.name.clone());

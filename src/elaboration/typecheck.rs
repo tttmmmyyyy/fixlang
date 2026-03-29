@@ -15,10 +15,11 @@ use crate::{
         traits::{TraitEnv, TraitId},
         types::{
             kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp, type_tycon, AssocType,
-            Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
+            Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
+            TypeNode,
         },
     },
-    constants::{ERR_AMBIGUOUS_NAME, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME},
+    constants::{ERR_AMBIGUOUS_NAME, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, WRAP_FUNC_OPAQUE_TYVAR_PREFIX},
     error::{Error, Errors},
     elaboration::name_resolution::NameResolutionContext,
     fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
@@ -230,6 +231,7 @@ impl Substitution {
         }
         Scheme::new_arc(
             scm.gen_vars.clone(),
+            scm.kind_signs.clone(),
             preds,
             eqs,
             self.substitute_type(&scm.ty),
@@ -274,6 +276,27 @@ impl Substitution {
         fixed_tyvars: &[Arc<TyVar>],
         kind_env: &KindEnv,
     ) -> Result<Option<Self>, Errors> {
+        Self::matching_internal(ty1, ty2, fixed_tyvars, Some(kind_env))
+    }
+
+    pub fn matching_no_kind_check(
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
+        fixed_tyvars: &[Arc<TyVar>],
+    ) -> Option<Self> {
+        // With kind_env=None, matching_internal never returns Err.
+        match Self::matching_internal(ty1, ty2, fixed_tyvars, None) {
+            Ok(result) => result,
+            Err(_) => unreachable!("matching_internal without kind_env should not fail"),
+        }
+    }
+
+    fn matching_internal(
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
+        fixed_tyvars: &[Arc<TyVar>],
+        kind_env: Option<&KindEnv>,
+    ) -> Result<Option<Self>, Errors> {
         match &ty1.ty {
             Type::TyVar(v1) => {
                 // We do not use `unify_tyvar` here:
@@ -285,8 +308,10 @@ impl Substitution {
                 // - `unify_tyvar` returns `{}` (empty substitution) when trying to unify the codomains of `ty1` and `ty2`.
                 // - `{t0 -> t1}` and `{}` can be merged to `{t0 -> t1}`.
                 // And this implementation of mathcing is the same as one in "Typing Haskell in Haskell".
-                if ty1.kind(kind_env)? != ty2.kind(kind_env)? {
-                    return Ok(None);
+                if let Some(kind_env) = kind_env {
+                    if ty1.kind(kind_env)? != ty2.kind(kind_env)? {
+                        return Ok(None);
+                    }
                 }
                 if fixed_tyvars.iter().any(|tv| tv.name == v1.name) {
                     if ty1.to_string() == ty2.to_string() {
@@ -310,7 +335,7 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::matching(fun1, fun2, fixed_tyvars, kind_env)? {
+                    match Self::matching_internal(fun1, fun2, fixed_tyvars, kind_env)? {
                         Some(s) => {
                             if !ret.merge(&s) {
                                 return Ok(None);
@@ -318,7 +343,7 @@ impl Substitution {
                         }
                         None => return Ok(None),
                     }
-                    match Self::matching(arg1, arg2, fixed_tyvars, kind_env)? {
+                    match Self::matching_internal(arg1, arg2, fixed_tyvars, kind_env)? {
                         Some(s) => {
                             if !ret.merge(&s) {
                                 return Ok(None);
@@ -337,7 +362,7 @@ impl Substitution {
                     }
                     let mut ret = Self::default();
                     for i in 0..args1.len() {
-                        match Self::matching(&args1[i], &args2[i], fixed_tyvars, kind_env)? {
+                        match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)? {
                             Some(s) => {
                                 if !ret.merge(&s) {
                                     return Ok(None);
@@ -408,6 +433,9 @@ pub struct TypeCheckContext {
     pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
     // Number of worker threads.
     pub num_worker_threads: usize,
+    // Opaque type: A field for recording the instantiations of type variables 
+    // corresponding to opaque types among gen_vars of #wrap function schemes.
+    pub opaque_instantiations: Map<Name, Arc<TyVar>>,
 }
 
 impl TypeCheckContext {
@@ -454,6 +482,7 @@ impl TypeCheckContext {
             import_required: vec![],
             cache,
             num_worker_threads,
+            opaque_instantiations: Map::default(),
         }
     }
 
@@ -522,6 +551,20 @@ impl TypeCheckContext {
         self.substitution.substitute_equality(eq)
     }
 
+    // Extract the resolved rhs types for opaque type constructors.
+    // Returns a map from opaque TyCon name to its concrete type.
+    // Should be called after type-checking a function that has opaque type variables.
+    pub fn extract_opaque_concrete_types(&self) -> Map<FullName, Arc<TypeNode>> {
+        let mut result = Map::default();
+        for (k, v) in &self.opaque_instantiations {
+            let fullname_str = k.strip_prefix(WRAP_FUNC_OPAQUE_TYVAR_PREFIX).unwrap();
+            let opaque_tycon_name = FullName::parse(fullname_str).unwrap();
+            let rhs = self.substitution.substitute_type(&type_from_tyvar(v.clone()));
+            result.insert(opaque_tycon_name, rhs);
+        }
+        result
+    }
+
     pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         let mut sub = Substitution::default();
         for tv in ty.free_vars_vec() {
@@ -550,10 +593,19 @@ impl TypeCheckContext {
                 for tv in &scheme.gen_vars {
                     let new_tv = self.new_tyvar_by(tv);
                     let merge_ok =
-                        sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+                        sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv.clone())));
                     assert!(merge_ok);
+                    // Record the instantiations of type variables corresponding to 
+                    // opaque types among gen_vars of #wrap function schemes.
+                    if tv.name.starts_with(WRAP_FUNC_OPAQUE_TYVAR_PREFIX) {
+                        assert!(
+                            !self.opaque_instantiations.contains_key(&tv.name),
+                            "Duplicate opaque type variable name: {}",
+                            tv.name
+                        );
+                        self.opaque_instantiations.insert(tv.name.clone(), new_tv.clone());
+                    }
                 }
-                // Apply substitution to type, predicates and equalities.
                 let ty = sub.substitute_type(&scheme.ty);
                 for eq in &mut eqs {
                     sub.substitute_equality(eq);

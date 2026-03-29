@@ -214,7 +214,7 @@ type_tycon = { capital_fullname }
 
 tyvar_head = _{ ASCII_ALPHA_LOWER }
 tyvar_char = _{ ASCII_ALPHA | ASCII_DIGIT }
-type_var = { !keywords ~ tyvar_head ~ tyvar_char* }
+type_var = { !keywords ~ "?"? ~ tyvar_head ~ tyvar_char* }
 
 type_qualified = { constraints? ~ sep* ~ type_expr }
 

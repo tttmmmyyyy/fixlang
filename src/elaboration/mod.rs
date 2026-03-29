@@ -1,3 +1,4 @@
+pub mod desugar_opaque;
 pub mod name_resolution;
 pub mod typecheck;
 pub mod typecheckcache;
@@ -73,6 +74,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         assert!(!config.subcommand.build_binary());
         return Ok(program);
     }
+
+    // Desugar opaque type variables (Phase 1-3).
+    program.desugar_opaque_types();
 
     let typechecker = program.create_typechecker(config);
 

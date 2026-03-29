@@ -170,6 +170,7 @@ fn create_symbol_from_tycon(tycon: &TyCon, tycon_info: &TyConInfo) -> DocumentSy
         TyConVariant::Arrow => (SymbolKind::CLASS, Some("function type".to_string())),
         TyConVariant::Array => (SymbolKind::CLASS, Some("array type".to_string())),
         TyConVariant::DynamicObject => (SymbolKind::CLASS, Some("dynamic object type".to_string())),
+        TyConVariant::Opaque => (SymbolKind::CLASS, Some("opaque type".to_string())),
     };
 
     DocumentSymbol {
