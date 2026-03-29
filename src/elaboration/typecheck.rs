@@ -10,6 +10,7 @@ use crate::{
         pattern::{Pattern, PatternNode},
         predicate::Predicate,
         program::{ModuleInfo, TypeEnv},
+        types::OpaqueTyConResolution,
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
@@ -19,7 +20,7 @@ use crate::{
             TypeNode,
         },
     },
-    constants::{ERR_AMBIGUOUS_NAME, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, WRAP_FUNC_OPAQUE_TYVAR_PREFIX},
+    constants::{ERR_AMBIGUOUS_NAME, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, WRAP_OPAQUE_TYVAR_PREFIX},
     error::{Error, Errors},
     elaboration::name_resolution::NameResolutionContext,
     fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
@@ -433,8 +434,9 @@ pub struct TypeCheckContext {
     pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
     // Number of worker threads.
     pub num_worker_threads: usize,
-    // Opaque type: A field for recording the instantiations of type variables 
-    // corresponding to opaque types among gen_vars of #wrap function schemes.
+    // Records which fresh type variables were assigned to opaque-type gen_vars when instantiating #wrap_opaque functions.
+    // Key: the gen_var name (e.g., "#Std::repeat::?it"), Value: the fresh TyVar generated for it.
+    // After type-checking, these are resolved via substitution to find the concrete types.
     pub opaque_instantiations: Map<Name, Arc<TyVar>>,
 }
 
@@ -551,18 +553,26 @@ impl TypeCheckContext {
         self.substitution.substitute_equality(eq)
     }
 
-    // Extract the resolved rhs types for opaque type constructors.
-    // Returns a map from opaque TyCon name to its concrete type.
-    // Should be called after type-checking a function that has opaque type variables.
-    pub fn extract_opaque_concrete_types(&self) -> Map<FullName, Arc<TypeNode>> {
-        let mut result = Map::default();
+    // Fill in the concrete rhs for opaque type resolutions from the current substitution.
+    //
+    // Example: if `#Std::repeat::?it` was instantiated to a fresh TyVar that unified to
+    // `MapIterator (RangeIterator I64) a`, fills `rhs = Some(MapIterator (RangeIterator I64) a)`
+    // into the corresponding `OpaqueTyConResolution` entries.
+    pub fn fill_opaque_concrete_types(
+        &self,
+        opaque_types: &mut Map<FullName, Vec<OpaqueTyConResolution>>,
+    ) {
         for (k, v) in &self.opaque_instantiations {
-            let fullname_str = k.strip_prefix(WRAP_FUNC_OPAQUE_TYVAR_PREFIX).unwrap();
+            let fullname_str = k.strip_prefix(WRAP_OPAQUE_TYVAR_PREFIX).unwrap();
             let opaque_tycon_name = FullName::parse(fullname_str).unwrap();
             let rhs = self.substitution.substitute_type(&type_from_tyvar(v.clone()));
-            result.insert(opaque_tycon_name, rhs);
+            if let Some(resolutions) = opaque_types.get_mut(&opaque_tycon_name) {
+                for resolution in resolutions {
+                    assert!(resolution.rhs.is_none(), "opaque type rhs already filled");
+                    resolution.rhs = Some(rhs.clone());
+                }
+            }
         }
-        result
     }
 
     pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
@@ -595,9 +605,9 @@ impl TypeCheckContext {
                     let merge_ok =
                         sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv.clone())));
                     assert!(merge_ok);
-                    // Record the instantiations of type variables corresponding to 
-                    // opaque types among gen_vars of #wrap function schemes.
-                    if tv.name.starts_with(WRAP_FUNC_OPAQUE_TYVAR_PREFIX) {
+                    // Record opaque-type gen_vars (prefixed with WRAP_OPAQUE_TYVAR_PREFIX)
+                    // so their concrete types can be extracted after type-checking.
+                    if tv.name.starts_with(WRAP_OPAQUE_TYVAR_PREFIX) {
                         assert!(
                             !self.opaque_instantiations.contains_key(&tv.name),
                             "Duplicate opaque type variable name: {}",

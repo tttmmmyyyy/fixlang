@@ -75,7 +75,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         return Ok(program);
     }
 
-    // Desugar opaque type variables (Phase 1-3).
+    // Desugar opaque type variables before type-checking.
     program.desugar_opaque_types();
 
     let typechecker = program.create_typechecker(config);

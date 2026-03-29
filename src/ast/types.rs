@@ -2213,22 +2213,22 @@ pub fn collect_free_vars(
     vars
 }
 
-// Mapping from an opaque TyCon to the concrete type inferred at a use site.
+// Mapping from an opaque TyCon application to the concrete type inferred by type-checking.
 //
-// Example: `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it` is desugared to
-// `repeat : a -> I64 -> ?it a` with a #wrap of type
-// `[x : Iterator, Item x = a] (a -> I64 -> x) -> (a -> I64 -> ?it a)`.
-// After type-checking, `x` is inferred to `MapIterator (RangeIterator I64) a`, so:
-//   - `opaque_tycon` = `Std::repeat::?it`
-//   - `lhs` = `?it a` (opaque_tycon applied to gen_vars)
-//   - `rhs` = `MapIterator (RangeIterator I64) a`
+// Example: for `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it`,
+// after desugaring and type-checking:
+//   lhs = `?it a`
+//   rhs = `MapIterator (RangeIterator I64) a`
+//
+// For a trait impl like `impl Array a : ToIter`:
+//   lhs = `?it (Array a)`
+//   rhs = `ArrayIterator a`
 #[derive(Clone, Serialize, Deserialize)]
 pub struct OpaqueTyConResolution {
-    // The left-hand side: opaque TyCon applied to type arguments of the function scheme.
-    // E.g., `?it a` for a global value, or `?it (Array a)` for a trait impl.
+    // Opaque TyCon applied to type arguments.
+    // E.g., `?it a` for a simple value, `?it (Array a)` for a trait impl.
     pub lhs: Arc<TypeNode>,
-    // The concrete type that the opaque TyCon resolves to, inferred from the domain side of #wrap.
-    // E.g., `MapIterator (RangeIterator I64) a`.
+    // The concrete type. E.g., `MapIterator (RangeIterator I64) a`.
     // None until type-checking resolves it.
     pub rhs: Option<Arc<TypeNode>>,
 }

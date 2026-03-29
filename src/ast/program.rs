@@ -996,16 +996,8 @@ impl Program {
         // Perform type-checking.
         tc.current_module = Some(def_mod.clone());
         te.expr = tc.check_type(te.expr.clone(), req_scm.clone())?;
-        // Fill in rhs for opaque type resolutions that were set up during desugaring.
-        let opaque_rhs = tc.extract_opaque_concrete_types();
-        for (tycon_name, rhs) in opaque_rhs {
-            if let Some(resolutions) = te.opaque_types.get_mut(&tycon_name) {
-                for resolution in resolutions {
-                    assert!(resolution.rhs.is_none(), "opaque type rhs already filled");
-                    resolution.rhs = Some(rhs.clone());
-                }
-            }
-        }
+        // Fill in the concrete rhs for opaque type resolutions set up during desugaring.
+        tc.fill_opaque_concrete_types(&mut te.opaque_types);
         te.equalities = tc.local_assumed_eqs;
 
         // Save the result to cache file.
