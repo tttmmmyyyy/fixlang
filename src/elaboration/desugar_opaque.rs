@@ -99,6 +99,7 @@ impl Program {
         // Step 1 & 2: Register opaque TyCons and add constraints to TraitEnv.
         for (gv_name, opaque_infos) in &targets {
             let scm = self.global_values.get(gv_name).unwrap().scm.clone();
+
             for info in opaque_infos {
                 self.register_opaque_tycon(info);
             }
@@ -109,6 +110,7 @@ impl Program {
         for (gv_name, opaque_infos) in &targets {
             let scm = self.global_values.get(gv_name).unwrap().scm.clone();
             let new_scm = rewrite_scheme(&scm, opaque_infos);
+
 
             // Generate one #wrap_opaque per function/method.
             let wrap_name = FullName::new(&gv_name.to_namespace(), WRAP_OPAQUE_FUNC_NAME);
@@ -144,21 +146,27 @@ impl Program {
                 }
                 SymbolExpr::Method(impls) => {
                     for impl_ in impls.iter_mut() {
-                        // Compute defn_to_impl mapping before rewriting schemes.
+                        // Compute defn_to_impl by matching the trait defn scheme type
+                        // (e.g., `c -> ?it`) against the impl scheme type (e.g., `Array a -> ?it`).
+                        // We must use impl_.scm (not scm_via_defn) because the lhs of OpaqueTyConResolution
+                        // must use the same variable names as the rhs, which is filled during type-checking
+                        // against impl_.scm. When a user provides a type annotation on the impl method,
+                        // impl_.scm.ty may use different variable names than scm_via_defn.ty; the lhs must
+                        // match the type-checking context to ensure resolve_opaque_type_in_type works correctly.
                         let defn_to_impl = Substitution::matching_no_kind_check(
-                            &impl_.scm_via_defn.ty,
+                            &scm.ty,
                             &impl_.scm.ty,
                             &[],
                         )
-                        .expect("impl scm_via_defn type should match impl scm type");
+                        .expect("defn scheme type should match impl scm type");
 
                         impl_.scm = rewrite_impl_scheme(
                             &impl_.scm,
-                            &impl_.scm_via_defn,
+                            &scm,
                             opaque_infos,
                         );
                         impl_.scm_via_defn =
-                            rewrite_scheme(&impl_.scm_via_defn, opaque_infos);
+                            rewrite_impl_scheme(&impl_.scm_via_defn, &scm, opaque_infos);
                         let original_expr = impl_.expr.expr.clone();
                         impl_.expr.expr = expr_app(
                             expr_var(wrap_name.clone(), None),
@@ -361,19 +369,20 @@ fn rewrite_scheme(scm: &Arc<Scheme>, opaque_infos: &[OpaqueInfo]) -> Arc<Scheme>
 
 // Rewrite a trait impl's scheme. The impl may use different names for opaque type variables
 // than the trait definition (e.g., `?iter` vs `?it`), so we compute the name correspondence
-// by matching `impl_scm_via_defn.ty` (which uses defn names) against `impl_scm.ty` (which uses impl names).
+// by matching the trait defn scheme type (which uses defn names like `c -> ?it`) against
+// `impl_scm.ty` (which uses impl names like `Array a -> ?iter`).
 fn rewrite_impl_scheme(
     impl_scm: &Arc<Scheme>,
-    impl_scm_via_defn: &Arc<Scheme>,
+    defn_scm: &Arc<Scheme>,
     opaque_infos: &[OpaqueInfo],
 ) -> Arc<Scheme> {
-    // Match impl_scm_via_defn.ty against impl_scm.ty to find the defn→impl name mapping.
-    // E.g., maps defn's `?it` to impl's `?iter`, defn's `c` to impl's `Array a`.
+    // Match trait defn scheme type against impl scheme type to find the defn→impl name mapping.
+    // E.g., defn `c -> ?it` against impl `Array a -> ?iter` gives {c → Array a, ?it → ?iter}.
     let defn_to_impl = Substitution::matching_no_kind_check(
-        &impl_scm_via_defn.ty,
+        &defn_scm.ty,
         &impl_scm.ty,
         &[],
-    ).expect("impl_scm_via_defn type should match impl_scm type");
+    ).expect("defn scheme type should match impl scheme type");
 
     // Build substitution: impl's opaque tyvar → TyCon applied to impl's type arguments.
     let mut sub = Substitution::default();

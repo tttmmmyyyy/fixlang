@@ -1270,9 +1270,11 @@ impl Program {
         // so that trait method implementations can be matched against concrete types.
         sym.ty = resolve_opaque_type_in_type(&sym.ty, &self.opaque_types);
         // Select method implementation whose type unifies with the required type `sym.ty`.
+        // Also resolve opaque types in method_ty so both sides use concrete types.
+        let opaque_types = &self.opaque_types;
         let method_selector = |method: &TraitMemberImpl| -> Result<bool, Errors> {
             let mut tc0 = tc.clone();
-            let method_ty = method.scm_via_defn.ty.clone();
+            let method_ty = resolve_opaque_type_in_type(&method.scm_via_defn.ty, opaque_types);
             Ok(UnifOrOtherErr::extract_others(tc0.unify(&method_ty, &sym.ty))?.is_ok())
         };
 
