@@ -1,112 +1,69 @@
-# Opaque Type Test Failure Report (2026-03-29)
+# Opaque Type: Remaining Test Failures (2026-03-30)
 
-Test result: **565 passed, 28 failed** (`test_external_projects_cp_library` is unrelated; 27 failures analyzed below)
-
-## Problem 1: `resolve_opaque_tycon_in_expr` does not update types in patterns / lambda variables
-
-**Affected tests** (5): `test_opaque_repeat`, `test_opaque_doubled_evens`, `test_opaque_with_associated_type_basic`, `test_opaque_multiple_calls_different_type_args`, `test_opaque_saturated_associated_type_in_equality` (partial)
-
-**Symptom**: Assertion failure in `optimization::remove_hktvs` via `expr_let_typed` — left side shows opaque TyCon name (e.g. `Main::repeat::?it Std::I64`), right side shows the concrete type (`MapIterator RangeIterator I64 I64`).
-
-**Root cause**: `resolve_opaque_tycon_in_expr` in `src/elaboration/desugar_opaque.rs` (around line 602) recurses into `val` and `body` of `Expr::Let`, but does **not** resolve types in the `_pat` (pattern node). Same issue for `Expr::Lam` variables and `Expr::Match` branch patterns. Later, `expr_let_typed` asserts that the pattern type matches the bound expression type and panics.
-
-**Fix direction**: Add opaque type resolution for pattern types and lambda variable types in `resolve_opaque_tycon_in_expr`.
+Test result: **26 passed, 9 failed** (out of 35 `test_opaque` tests)
 
 ---
 
-## Problem 2: Opaque TyCon remains unresolved when reaching trait method selection during instantiation
+## 1. Error message mismatches (3 tests)
 
-**Affected tests** (8): `test_opaque_predicate_only`, `test_opaque_higher_kinded`, `test_opaque_higher_kinded_functor`, `test_opaque_associated_type_reduction`, `test_opaque_multi_opaque_with_shared_assoc_type`, `test_opaque_multiple_calls_same_type_args`, `test_opaque_partition`, `test_opaque_saturated_associated_type_in_equality`
+| Test | Actual error | Expected error |
+|---|---|---|
+| `test_opaque_in_impl_type_param` | "Implementing trait for type `?x` is not allowed" (`src/ast/types.rs:536`) | "Opaque type variable" |
+| `test_opaque_unsaturated_associated_type_in_equality_lhs` | "The left side of an equality constraint should be the application of an associated type" | "associated type has to be saturated" |
+| `test_opaque_unsaturated_higher_arity_associated_type_in_equality` | "Invalid number of arguments for associated type `Main::Rebuildable::Rebuild`. Expect: 2, found: 1." | "associated type has to be saturated" |
 
-**Symptom**: `called Option::unwrap() on a None value` at `src/ast/program.rs:1327` (`opt_e.unwrap()` in `instantiate_symbol`).
-
-**Root cause**: When instantiating a symbol, `sym.ty` still contains the opaque TyCon (e.g. `Main::to_string_opaque::?s -> Std::String`). The method selector tries to find a trait implementation matching this type — but no concrete implementation matches the opaque TyCon, so all implementations are skipped. `opt_e` remains `None`.
-
-Confirmed via logging: `Std::ToString::to_string` is instantiated with `sym.ty = Main::to_string_opaque::?s -> Std::String`, and none of the 20 `ToString` implementations match.
-
-The opaque type resolution (`resolve_opaque_type_in_type`) is applied to a symbol's own `sym.ty` **after** instantiation, but sub-expressions that reference other symbols create new `Symbol` entries with opaque TyCons in their types **before** resolution can occur.
-
-**Fix direction**: Resolve opaque types in `sym.ty` **before** method selection, or propagate opaque type resolutions into deferred instantiation entries.
+**Fix direction**: Add opaque-specific check in `is_implementable` for the first. Update test expectations or error messages for the other two.
 
 ---
 
-## Problem 3: Trait definition validation rejects opaque-related equality constraints
+## 2. Opaque type variable not recognized in impl annotation (1 test)
 
-**Affected tests** (3): `test_opaque_to_iter`, `test_opaque_to_iter_multiple_impls`, `test_opaque_in_impl_annotation`
+**Test**: `test_opaque_in_impl_annotation`
 
-**Symptom**: `error: Type variable 'c' used in trait definition cannot be constrained in the type of a member.`
+**Symptom**: `Unknown type variable '?it'` — the opaque type variable in the impl annotation (`x.Array::to_iter : ?it`) is not in scope.
 
-**Root cause**: `validate_trait_defn` in `src/ast/traits.rs` (line 875) checks whether the trait's type variable `c` appears in any constraint of a member's qualified type. For `to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it`, the equality constraint `Item ?it = Elem c` contains `c`. This validation runs **before** opaque desugaring, which would remove these opaque-related constraints.
-
-`find_var_in_constraint` in `src/ast/qual_type.rs` (line 101) does not distinguish opaque-related constraints from regular ones.
-
-**Fix direction**: Either run opaque desugaring before this validation, or make `find_var_in_constraint` skip constraints that are "on" an opaque type variable (i.e. the constraint's predicate/equality primarily involves an opaque tyvar).
+**Fix direction**: Opaque type variables need to be brought into scope within impl bodies / annotations.
 
 ---
 
-## Problem 4: Type variable grammar does not allow underscores
+## 3. Kind inference failure with higher-kinded associated type (1 test)
 
-**Affected tests** (1): `test_opaque_zip_with_index`
+**Test**: `test_opaque_with_higher_kinded_assoc_type`
 
-**Symptom**: `error: Expected type_arrow.` at position 4:29
+**Symptom**: `Kind mismatch in 'f'. Expect: *->*, found: *` — equality constraint `Container ?c = f` doesn't propagate kind `*->*` to `f`.
 
-**Root cause**: In `src/parse/grammer.pest` line 216, `tyvar_char = _{ ASCII_ALPHA | ASCII_DIGIT }` — underscores are not included. The test uses `it_in` as a type variable name, but the parser only recognizes `it` as the type variable, leaving `_in` unparsed.
-
-Normal identifiers (`name_char`, line 23) do include underscores: `name_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }`.
-
-**Fix direction**: Either change the test to avoid underscores in type variable names (e.g. `itIn`), or add `"_"` to `tyvar_char` in the grammar.
+**Fix direction**: Kind inference for equality constraints needs to propagate the kind of the associated type's result to the RHS type variable.
 
 ---
 
-## Problem 5: Missing validations — code that should fail compiles successfully
+## 4. Name ambiguity with `from_array` / `to_array` (3 tests)
 
-**Affected tests** (3): `test_opaque_branch_type_mismatch`, `test_opaque_not_in_return_type`, `test_opaque_unused_cannot_determine`
+| Test | Ambiguous name | Collision |
+|---|---|---|
+| `test_opaque_with_higher_arity_assoc_type` | `from_array` | `Main::from_array` vs `Std::Iterator::from_array` |
+| `test_opaque_higher_arity_associated_type` | `from_array` | same |
+| `test_opaque_higher_arity_associated_type_in_equality` | `to_array` | `Main::Rebuildable::to_array` vs `Std::Iterator::to_array` |
 
-**Symptom**: `error: The source code was expected to fail, but succeeded.`
+The third test also has a cascading error: `Std::Array = Main::from_rebuildable::?c cannot be deduced`.
 
-**Root cause**: These tests expect compile-time errors that are not yet implemented:
-- **`test_opaque_branch_type_mismatch`**: if-then-else branches return different concrete types under the same opaque type — should be caught as a type mismatch but isn't.
-- **`test_opaque_not_in_return_type`**: opaque type appears in constraints but not in the return type — should be reported as an undetermined type.
-- **`test_opaque_unused_cannot_determine`**: opaque type is unconstrained in the function body — should be reported as ambiguous.
-
-**Fix direction**: Add validation passes for these cases, likely during or after opaque desugaring.
-
----
-
-## Problem 6: Other individual issues (7 tests)
-
-| Test | Issue |
-|---|---|
-| `test_opaque_in_impl_type_param` | Error message mismatch. `impl ?x : Foo` produces generic "Implementing trait for type `?x` is not allowed" (`src/ast/types.rs:536`), but the test expects "Opaque type variable". Need to add an opaque-specific check/message in `is_implementable`. |
-| `test_opaque_with_higher_kinded_assoc_type` | `Kind mismatch in 'f'. Expect: *->*, found: *` — kind inference for equality constraint `Container ?c = f` doesn't correctly propagate higher-kinded information. |
-| `test_opaque_with_higher_arity_assoc_type` | `Name 'from_array' is ambiguous` — name collision between the test's `from_array` and `Std::Iterator::from_array`. Test naming issue or missing opaque-aware name resolution. |
-| `test_opaque_higher_arity_associated_type` | Same `from_array` name ambiguity as above. |
-| `test_opaque_unsaturated_associated_type_in_equality_lhs` | Error message mismatch. Expects "associated type has to be saturated" but gets "The left side of an equality constraint should be the application of an associated type". |
-| `test_opaque_unsaturated_higher_arity_associated_type_in_equality` | Equality constraint deduction failure with opaque types and higher-arity associated types. |
-| `test_opaque_multiple_associated_types_in_equality` | Equality constraint deduction failure — `Std::Array = Main::opaque_first::?c` cannot be deduced. |
+**Fix direction**: Rename test functions to avoid collision, or add `hiding` in test code.
 
 ---
 
-## Problem 7: Regression — `test_opaque_higher_arity_associated_type_in_equality`
+## 5. Equality constraint deduction failure with multiple associated types (1 test)
 
-**Affected tests** (1): `test_opaque_higher_arity_associated_type_in_equality`
+**Test**: `test_opaque_multiple_associated_types_in_equality`
 
-**Symptom**: Two errors:
-1. `Name 'to_array' is ambiguous: there are 'Main::Rebuildable::to_array', 'Std::Iterator::to_array'` — name collision in method call `c.to_array`.
-2. `Std::Array = Main::from_rebuildable::?c cannot be deduced` — equality constraint deduction fails for opaque type combined with higher-arity associated type (`Rebuild ?c b = Array b`).
+**Symptom**: `Std::Array = Main::opaque_first::?c` cannot be deduced. Also triggers indeterminate type variable `#a145`.
 
-**Root cause**: This test was not in the original 28 failures. Appeared after the Problem 2 fix (upfront type-check of all modules before instantiation). Likely the upfront type-check changes the timing/order of name resolution or equality constraint handling, exposing a latent issue with opaque types + higher-arity associated types + name ambiguity.
-
-**Fix direction**: Investigate whether the name ambiguity is the primary cause (the equality constraint error may be a cascade). May need opaque-aware name resolution, or the test may need `hiding`/qualification to avoid the `to_array` clash.
+**Fix direction**: Equality constraint solver needs to handle opaque type constructors in deduction.
 
 ---
 
 ## Priority
 
-1. ~~**Problem 1** (pattern type resolution)~~ — **FIXED**.
-2. ~~**Problem 2** (method selection with unresolved opaque types)~~ — **FIXED** (also resolved Problem 5 as side effect).
-3. **Problem 3** (trait validation vs opaque constraints) — blocks all trait-method-with-opaque use cases.
-4. **Problem 5** — **FIXED** (resolved by Problem 2 fix; upfront type-check now correctly detects these errors).
-5. **Problem 4** (grammar underscore) — small localized fix.
-6. **Problem 6** (individual issues) — various smaller fixes.
-7. **Problem 7** (regression) — investigate whether genuine regression or latent issue.
+1. **Issue 1** (error message mismatches) — easy, update tests or messages.
+2. **Issue 4** (name ambiguity) — easy, rename test functions or add `hiding`.
+3. **Issue 2** (opaque tyvar in impl annotation) — need scoping fix.
+4. **Issue 3** (kind inference) — kind propagation for equality constraints.
+5. **Issue 5** (equality constraint deduction) — solver change for opaque TyCons.
