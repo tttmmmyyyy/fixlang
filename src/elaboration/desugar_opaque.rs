@@ -49,6 +49,7 @@ use std::sync::Arc;
 
 use crate::ast::equality::Equality;
 use crate::ast::expr::{expr_app, expr_var, Expr, ExprNode};
+use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{GlobalValue, Program, SymbolExpr, TypedExpr};
@@ -577,6 +578,43 @@ pub fn remove_opaque_wrapper_func(expr: Arc<ExprNode>) -> Arc<ExprNode> {
     expr
 }
 
+// Recursively replace opaque TyCons in all type annotations of a pattern tree.
+fn resolve_opaque_tycon_in_pattern(
+    pat: &Arc<PatternNode>,
+    opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
+) -> Arc<PatternNode> {
+    let mut info = pat.info.clone();
+    if let Some(ty) = &info.type_ {
+        info.type_ = Some(resolve_opaque_type_in_type(ty, opaque_resolutions));
+    }
+    match &pat.pattern {
+        Pattern::Var(v, anno_ty) => {
+            Arc::new(PatternNode {
+                pattern: Pattern::Var(v.clone(), anno_ty.clone()),
+                info,
+            })
+        }
+        Pattern::Struct(tc, field_to_pat) => {
+            let new_field_to_pat: Vec<_> = field_to_pat
+                .iter()
+                .map(|(name, subpat)| {
+                    (name.clone(), resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions))
+                })
+                .collect();
+            Arc::new(PatternNode {
+                pattern: Pattern::Struct(tc.clone(), new_field_to_pat),
+                info,
+            })
+        }
+        Pattern::Union(variant, subpat) => {
+            Arc::new(PatternNode {
+                pattern: Pattern::Union(variant.clone(), resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions)),
+                info,
+            })
+        }
+    }
+}
+
 // Recursively replace opaque TyCons in all type annotations of an expression tree.
 pub fn resolve_opaque_tycon_in_expr(
     expr: &Arc<ExprNode>,
@@ -599,10 +637,11 @@ pub fn resolve_opaque_tycon_in_expr(
             let new_body = resolve_opaque_tycon_in_expr(body, opaque_resolutions);
             expr.set_lam_body(new_body)
         }
-        Expr::Let(_pat, val, body) => {
+        Expr::Let(pat, val, body) => {
+            let new_pat = resolve_opaque_tycon_in_pattern(pat, opaque_resolutions);
             let new_val = resolve_opaque_tycon_in_expr(val, opaque_resolutions);
             let new_body = resolve_opaque_tycon_in_expr(body, opaque_resolutions);
-            expr.set_let_bound(new_val).set_let_value(new_body)
+            expr.set_let_pat(new_pat).set_let_bound(new_val).set_let_value(new_body)
         }
         Expr::If(cond, then_e, else_e) => {
             let new_cond = resolve_opaque_tycon_in_expr(cond, opaque_resolutions);
@@ -616,7 +655,7 @@ pub fn resolve_opaque_tycon_in_expr(
                 .iter()
                 .map(|(pat, body)| {
                     (
-                        pat.clone(),
+                        resolve_opaque_tycon_in_pattern(pat, opaque_resolutions),
                         resolve_opaque_tycon_in_expr(body, opaque_resolutions),
                     )
                 })
