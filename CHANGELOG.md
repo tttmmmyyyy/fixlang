@@ -21,6 +21,8 @@
 
 #### Language
 
+- Added opaque types. Type variables starting with `?` (e.g. `?it`) in type signatures are treated as opaque types — their concrete types are inferred from the implementation and hidden from callers. See `Document.md` for details.
+- Type variable names now allow underscores (e.g. `my_var`).
 - Changed the way the compiler checks whether the type signature given to a trait member implementation matches the one required by the trait definition. Previously, it checked for syntactic consistency, but now it allows more flexible verification of type equivalence. For example, previously when implementing `Iterator`, you had to write the type signature for `advance` using `Item`, like `MyType -> Option (MyType, Item MyType)`, but now you can write the resolved type directly instead of `Item MyType`.
 
 #### Tool
