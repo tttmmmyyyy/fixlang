@@ -87,10 +87,26 @@ Normal identifiers (`name_char`, line 23) do include underscores: `name_char = _
 
 ---
 
+## Problem 7: Regression — `test_opaque_higher_arity_associated_type_in_equality`
+
+**Affected tests** (1): `test_opaque_higher_arity_associated_type_in_equality`
+
+**Symptom**: Two errors:
+1. `Name 'to_array' is ambiguous: there are 'Main::Rebuildable::to_array', 'Std::Iterator::to_array'` — name collision in method call `c.to_array`.
+2. `Std::Array = Main::from_rebuildable::?c cannot be deduced` — equality constraint deduction fails for opaque type combined with higher-arity associated type (`Rebuild ?c b = Array b`).
+
+**Root cause**: This test was not in the original 28 failures. Appeared after the Problem 2 fix (upfront type-check of all modules before instantiation). Likely the upfront type-check changes the timing/order of name resolution or equality constraint handling, exposing a latent issue with opaque types + higher-arity associated types + name ambiguity.
+
+**Fix direction**: Investigate whether the name ambiguity is the primary cause (the equality constraint error may be a cascade). May need opaque-aware name resolution, or the test may need `hiding`/qualification to avoid the `to_array` clash.
+
+---
+
 ## Priority
 
-1. **Problem 1** (pattern type resolution) — affects the most tests, clear and localized fix.
-2. **Problem 3** (trait validation vs opaque constraints) — blocks all trait-method-with-opaque use cases.
-3. **Problem 2** (method selection with unresolved opaque types) — may partially resolve after Problem 1, but likely needs independent fix for instantiation ordering.
-4. **Problem 5** (missing validations) — needed for correctness but lower urgency.
-5. **Problems 4 & 6** — smaller individual fixes.
+1. ~~**Problem 1** (pattern type resolution)~~ — **FIXED**.
+2. ~~**Problem 2** (method selection with unresolved opaque types)~~ — **FIXED** (also resolved Problem 5 as side effect).
+3. **Problem 3** (trait validation vs opaque constraints) — blocks all trait-method-with-opaque use cases.
+4. **Problem 5** — **FIXED** (resolved by Problem 2 fix; upfront type-check now correctly detects these errors).
+5. **Problem 4** (grammar underscore) — small localized fix.
+6. **Problem 6** (individual issues) — various smaller fixes.
+7. **Problem 7** (regression) — investigate whether genuine regression or latent issue.
