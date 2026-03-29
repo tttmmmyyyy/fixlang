@@ -259,6 +259,69 @@ pub fn test_opaque_in_impl_annotation() {
 }
 
 // ============================================================
+// 1-2b. Opaque type with user type signature on impl method
+// ============================================================
+
+#[test]
+pub fn test_opaque_impl_method_type_sig() {
+    // User provides a type signature on the impl method with different variable names
+    // than the trait definition. This tests that defn_to_impl substitution correctly
+    // uses the impl scheme's variable names (not scm_via_defn's).
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : ToIter {
+            type Elem c;
+            to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it;
+        }
+
+        impl Array a : ToIter {
+            type Elem (Array a) = a;
+            to_iter : [?iter : Iterator, Item ?iter = a] Array a -> ?iter;
+            to_iter = Array::to_iter;
+        }
+
+        main : IO ();
+        main = (
+            let arr = [1, 2, 3].ToIter::to_iter.to_array;
+            assert_eq(|_|"impl method sig", arr, [1, 2, 3]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_opaque_impl_method_type_sig_renamed_vars() {
+    // The trait method `my_map` has an extra free type variable `b` beyond the trait's
+    // type variable `c`. The user impl renames `b` to `d` in the type signature.
+    // This detects whether defn_to_impl maps via impl_.scm.ty (correct: lhs uses `d`)
+    // vs impl_.scm_via_defn.ty (wrong: lhs uses `b`, mismatching rhs which uses `d`).
+    let source = r##"
+        module Main;
+
+        trait c : MyTrait {
+            my_map : [?it : Iterator, Item ?it = b] (c -> b) -> Array c -> ?it;
+        }
+
+        impl I64 : MyTrait {
+            my_map : [?out : Iterator, Item ?out = d] (I64 -> d) -> Array I64 -> ?out;
+            my_map = |f, arr| arr.Array::to_iter.map(f);
+        }
+
+        main : IO ();
+        main = (
+            let arr = [1, 2, 3].my_map(|x| x.to_string).to_array;
+            assert_eq(|_|"renamed vars", arr, ["1", "2", "3"]);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+// ============================================================
 // 1-3. Higher-kinded opaque type additional cases
 // ============================================================
 
