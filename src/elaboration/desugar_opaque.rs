@@ -416,6 +416,8 @@ fn build_wrap_scheme(
     let mut wrap_gen_vars = orig_scm.gen_vars.clone();
 
     for info in opaque_infos.iter() {
+        // This name is parsed back via `strip_prefix(WRAP_OPAQUE_TYVAR_PREFIX)` in
+        // `fill_opaque_concrete_types` (typecheck.rs). Keep the two in sync.
         let fresh_name = format!("{}{}", WRAP_OPAQUE_TYVAR_PREFIX, info.tycon.name.to_string());
         let fresh_tv = make_tyvar(&fresh_name, &info.tyvar.kind);
         wrap_gen_vars.push(fresh_tv.clone());
