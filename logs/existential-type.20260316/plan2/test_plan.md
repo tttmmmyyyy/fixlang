@@ -102,6 +102,8 @@ opaque type の導入により associated type の利用パターンが増える
 
 ## 3. LSP テスト
 
+**注意：LSP テストはいったんやらない。LSP 対応の実装が完了した段階で改めて検討する。**
+
 ### 3-1. ホバーで opaque type の解決型が表示されること
 
 **テストプロジェクト**: `src/tests/test_lsp/cases/opaque_hover/`
