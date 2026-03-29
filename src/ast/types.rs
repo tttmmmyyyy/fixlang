@@ -1799,35 +1799,37 @@ impl Scheme {
             preds.append(&mut pred);
         }
         for eq in &self.equalities {
-            // Right hand side of an equality should be free from associated type.
-            // This ensures that the reduction of a type terminates in a finite number of steps.
-            if !eq.value.is_assoc_ty_free() {
-                return Err(Errors::from_msg_srcs(
-                    "Right side of an equality constraint cannot contain an associated type. \
-                     NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`. \
-                     We will support more general constraints by implementing such conversion in a future.".to_string(),
-                    &[&eq.src],
-                ));
-            }
-            // The first argument of the left side of an equality constraint should be a type variable.
-            // If this condition is not satisified, then a type can be reduced in two ways, by this equality and by an instance of the associated type,
-            // which implies that there is no "normal form" of the type.
-            if !eq.args[0].is_tyvar() {
-                return Err(Errors::from_msg_srcs(
-                    "The first argument of the left side of an equality constraint should be a type variable.".to_string(),
-                    &[&eq.src],
-                ));
-            }
-            // The left side of an equality constraint should be free from associated type.
-            // This ensures that this equality constraint can be applied without reducing the left side of the equality.
-            for arg in &eq.args[1..] {
-                if !arg.is_assoc_ty_free() {
+            if !eq.on_opaque_tyvar() {
+                // Right hand side of an equality should be free from associated type.
+                // This ensures that the reduction of a type terminates in a finite number of steps.
+                if !eq.value.is_assoc_ty_free() {
                     return Err(Errors::from_msg_srcs(
-                        "In left side of an equality constraint, arguments of an associated type cannot contain an associated type. \
-                         NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`. \
+                        "Right side of an equality constraint cannot contain an associated type. \
+                         NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`. \
                          We will support more general constraints by implementing such conversion in a future.".to_string(),
                         &[&eq.src],
                     ));
+                }
+                // The first argument of the left side of an equality constraint should be a type variable.
+                // If this condition is not satisified, then a type can be reduced in two ways, by this equality and by an instance of the associated type,
+                // which implies that there is no "normal form" of the type.
+                if !eq.args[0].is_tyvar() {
+                    return Err(Errors::from_msg_srcs(
+                        "The first argument of the left side of an equality constraint should be a type variable.".to_string(),
+                        &[&eq.src],
+                    ));
+                }
+                // The left side of an equality constraint should be free from associated type.
+                // This ensures that this equality constraint can be applied without reducing the left side of the equality.
+                for arg in &eq.args[1..] {
+                    if !arg.is_assoc_ty_free() {
+                        return Err(Errors::from_msg_srcs(
+                            "In left side of an equality constraint, arguments of an associated type cannot contain an associated type. \
+                             NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`. \
+                             We will support more general constraints by implementing such conversion in a future.".to_string(),
+                            &[&eq.src],
+                        ));
+                    }
                 }
             }
             // For each associated type usage, e.g., `Elem c = I64`, we check that `c : Collects` is in the constraint.
