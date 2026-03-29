@@ -90,6 +90,14 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         return Ok(program);
     }
 
+    // Perform namespace resolution and type-checking for all modules upfront.
+    // This ensures opaque type resolutions are available before instantiation.
+    {
+        let _sw = StopWatch::new("typecheck", config.show_build_times);
+        let all_modules: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
+        program.resolve_namespace_and_check_type_in_modules(&typechecker, &all_modules)?;
+    }
+
     // Instantiate Main::main (or Test::test).
     match config.output_file_type {
         OutputFileType::Executable => program.instantiate_entry_io_value(

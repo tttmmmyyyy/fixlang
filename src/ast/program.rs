@@ -1258,46 +1258,41 @@ impl Program {
     }
 
     // Instantiate symbol.
+    // Assumes that namespace resolution and type-checking have already been performed
+    // for all global values (via `resolve_namespace_and_check_type_in_modules`).
     fn instantiate_symbol(
         &mut self,
         sym: &mut Symbol,
         tc: &TypeCheckContext,
     ) -> Result<(), Errors> {
         assert!(sym.expr.is_none());
-        // First, perform namespace resolution and type-checking.
+        // Resolve opaque types in sym.ty before method selection,
+        // so that trait method implementations can be matched against concrete types.
+        sym.ty = resolve_opaque_type_in_type(&sym.ty, &self.opaque_types);
+        // Select method implementation whose type unifies with the required type `sym.ty`.
         let method_selector = |method: &TraitMemberImpl| -> Result<bool, Errors> {
-            // Select method implementation whose type unifies with the required type `sym.ty`.
-            //
-            // NOTE: Since overlapping implementations and unrelated methods are forbidden,
-            // we only need to check the unifiability here,
-            // and we do not need to check whether predicates or equality constraints are satisfiable or not.
             let mut tc0 = tc.clone();
-            // Here, use the type obtained from the trait definition.
-            // Do not use the type given by the implementor as the type signature.
-            // The latter has not been validated yet and may be incorrect; it will be validated in `resolve_namespace_and_check_type`.
             let method_ty = method.scm_via_defn.ty.clone();
             Ok(UnifOrOtherErr::extract_others(tc0.unify(&method_ty, &sym.ty))?.is_ok())
         };
-        self.resolve_namespace_and_check_type(tc, &[sym.generic_name.clone()], method_selector)?;
 
         // Then perform instantiation.
         let global_sym = self.global_values.get(&sym.generic_name).unwrap();
         let expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
-                // Specialize e's type to the required type `sym.ty`.
+                // Resolve opaque types and remove #wrap applications before unification.
+                let expr = remove_opaque_wrapper_func(e.expr.clone());
+                let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+                // Specialize the resolved type to the required type `sym.ty`.
                 let mut tc = tc.clone();
                 tc.assert_freshness();
-                tc.unify(e.expr.type_.as_ref().unwrap(), &sym.ty)
+                tc.unify(expr.type_.as_ref().unwrap(), &sym.ty)
                     .ok()
                     .unwrap();
                 for eq in &e.equalities {
                     tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                 }
-                let mut expr = tc.fix_types(e.expr.clone())?;
-                // Resolve opaque types and remove #wrap applications.
-                expr = remove_opaque_wrapper_func(expr);
-                expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
-                expr
+                tc.fix_types(expr)?
             }
             SymbolExpr::Method(impls) => {
                 let mut opt_e: Option<Arc<ExprNode>> = None;
@@ -1308,26 +1303,24 @@ impl Program {
                     }
                     let e = method.expr.clone();
 
-                    // Specialize e's type to the required type `sym.ty`.
+                    // Resolve opaque types and remove #wrap applications before unification.
+                    let expr = remove_opaque_wrapper_func(e.expr.clone());
+                    let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+                    // Specialize the resolved type to the required type `sym.ty`.
                     let mut tc = tc.clone();
                     tc.assert_freshness();
-                    tc.unify(e.expr.type_.as_ref().unwrap(), &sym.ty)
+                    tc.unify(expr.type_.as_ref().unwrap(), &sym.ty)
                         .ok()
                         .unwrap();
                     for eq in &e.equalities {
                         tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                     }
-                    let mut expr = tc.fix_types(e.expr)?;
-                    // Resolve opaque types and remove #wrap applications.
-                    expr = remove_opaque_wrapper_func(expr);
-                    expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
-                    opt_e = Some(expr);
+                    opt_e = Some(tc.fix_types(expr)?);
                     break;
                 }
                 opt_e.unwrap()
             }
         };
-        sym.ty = resolve_opaque_type_in_type(&sym.ty, &self.opaque_types);
         sym.expr = Some(self.instantiate_expr(&expr)?);
         Ok(())
     }

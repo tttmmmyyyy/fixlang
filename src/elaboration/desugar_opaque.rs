@@ -48,7 +48,7 @@
 use std::sync::Arc;
 
 use crate::ast::equality::Equality;
-use crate::ast::expr::{expr_app, expr_var, Expr, ExprNode};
+use crate::ast::expr::{expr_app, expr_array_lit, expr_var, Expr, ExprNode};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::predicate::Predicate;
@@ -455,13 +455,15 @@ fn build_wrap_scheme(
 }
 
 // Build a placeholder expression for the #wrap_opaque body.
-// The body is never type-checked or executed; #wrap_opaque is removed during instantiation.
+// Produces `_undefined_internal([])` which type-checks as `a` (any type).
+// #wrap_opaque is removed during instantiation so this is never executed.
 fn build_undefined_expr() -> Arc<ExprNode> {
     let placeholder_name = FullName::new(
         &NameSpace::new(vec!["Std".to_string()]),
         "_undefined_internal",
     );
-    expr_var(placeholder_name, None)
+    let empty_array = expr_array_lit(vec![], None);
+    expr_app(expr_var(placeholder_name, None), vec![empty_array], None)
 }
 
 // Replace opaque TyCons in a type with their concrete types.
