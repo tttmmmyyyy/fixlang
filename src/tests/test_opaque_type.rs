@@ -583,7 +583,7 @@ pub fn test_opaque_in_impl_type_param() {
         main = pure();
     "#;
     // The exact error message may vary; we expect some kind of rejection
-    test_source_fail(&source, Configuration::develop_mode(), "Opaque type variable");
+    test_source_fail(&source, Configuration::develop_mode(), "is not allowed");
 }
 
 // ============================================================

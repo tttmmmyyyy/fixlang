@@ -606,7 +606,7 @@ main = (
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        "associated type has to be saturated",
+        "The left side of an equality constraint should be the application of an associated type",
     );
 }
 
@@ -764,6 +764,6 @@ main = (
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        "associated type has to be saturated",
+        "Invalid number of arguments for associated type",
     );
 }
