@@ -227,12 +227,14 @@ pub fn test_opaque_higher_arity_associated_type() {
 }
 
 // ============================================================
-// 1-2. Opaque type in impl annotation
+// 1-2. Opaque type in impl annotation without type signature should be rejected
 // ============================================================
 
 #[test]
 pub fn test_opaque_in_impl_annotation() {
-    // Opaque type used in an impl method's type annotation
+    // Using an opaque type variable in a type annotation inside an impl method
+    // without a type signature should be rejected, because the opaque type variable
+    // is a trait-definition-derived variable not visible in the impl context.
     let source = r##"
         module Main;
 
@@ -249,17 +251,49 @@ pub fn test_opaque_in_impl_annotation() {
         }
 
         main : IO ();
-        main = (
-            let arr = [1, 2, 3].ToIter::to_iter.to_array;
-            assert_eq(|_|"impl annotation", arr, [1, 2, 3]);;
-            pure()
-        );
+        main = pure();
     "##;
-    test_source(&source, Configuration::develop_mode());
+    test_source_fail(&source, Configuration::develop_mode(), "Unknown type variable `?it`");
 }
 
 // ============================================================
-// 1-2b. Opaque type with user type signature on impl method
+// 1-2b. Opaque type annotation in impl expression WITH type signature (currently unsupported)
+// ============================================================
+
+#[test]
+pub fn test_opaque_in_impl_annotation_with_sig() {
+    // Using an opaque type variable in a type annotation inside an impl method body
+    // is not yet supported, even when the user provides an explicit type signature.
+    //
+    // Supporting this would require mapping the impl's opaque tyvar name (e.g., `?iter`)
+    // to the trait definition's name (e.g., `?it`) so that the type-checker can look up
+    // the corresponding #wrap_opaque instantiation. A prototype was implemented using
+    // expression-level renaming in desugar_opaque.rs, but was reverted as too ad-hoc.
+    // This may be revisited in the future with a cleaner approach.
+    let source = r##"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : ToIter {
+            type Elem c;
+            to_iter : [?it : Iterator, Item ?it = Elem c] c -> ?it;
+        }
+
+        impl Array a : ToIter {
+            type Elem (Array a) = a;
+            to_iter : [?iter : Iterator, Item ?iter = a] Array a -> ?iter;
+            to_iter = |x| (x.Array::to_iter : ?iter);
+        }
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(&source, Configuration::develop_mode(), "Unknown type variable `?iter`");
+}
+
+// ============================================================
+// 1-2c. Opaque type with user type signature on impl method
 // ============================================================
 
 #[test]

@@ -15,8 +15,8 @@ use crate::{
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
         types::{
-            kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp, type_tycon, AssocType,
-            Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
+            kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
+            type_tycon, AssocType, Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
             TypeNode,
         },
     },

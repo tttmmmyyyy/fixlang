@@ -1024,6 +1024,10 @@ impl TraitEnv {
 
         // For members without type signature, type variables used in type annotations in the member
         // must appear in the type being implemented.
+        // This prevents users from referencing trait-definition-derived type variables
+        // (including opaque type variables like `?it`) that are not visible to the user
+        // in the impl context. If the user wants to use such variables, they should
+        // provide an explicit type signature on the impl method.
         for (method_name, method_expr) in impl_members {
             if !member_sigs.contains_key(method_name) {
                 let mut allowed_tyvars = vec![];
