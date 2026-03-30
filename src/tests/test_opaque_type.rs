@@ -430,30 +430,35 @@ pub fn test_opaque_with_higher_arity_assoc_type() {
 
 #[test]
 pub fn test_opaque_with_higher_kinded_assoc_type() {
-    // Higher-kinded associated type (kind * -> *)
+    // Higher-kinded associated type (kind * -> *).
+    // The same Repr is applied to different element types (I64 and String),
+    // and both reduce to Array via the opaque equality Repr ?fmt = Array.
     let source = r##"
         module Main;
 
-        import Std::* hiding Indexable::Elem;
-
-        trait c : HasContainer {
-            type Container c : * -> *;
-            wrap : a -> Container c a;
+        trait fmt : Format {
+            type Repr fmt : * -> *;
+            format_value : a -> fmt -> Repr fmt a;
         }
 
-        impl I64 : HasContainer {
-            type Container I64 = Array;
-            wrap = |x| [x];
+        impl () : Format {
+            type Repr () = Array;
+            format_value = |x, _| [x];
         }
 
-        opaque_wrap : [?c : HasContainer, Container ?c = f, f : * -> *] a -> ?c -> f a;
-        opaque_wrap = |x, _c| HasContainer::wrap(x);
+        default_format : [?fmt : Format, Repr ?fmt = Array] () -> ?fmt;
+        default_format = |_| ();
+
+        wrap_pair : [fmt : Format] fmt -> a -> b -> (Repr fmt a, Repr fmt b);
+        wrap_pair = |fmt, x, y| (format_value(x, fmt), format_value(y, fmt));
 
         main : IO ();
         main = (
-            let result = opaque_wrap(42, 0);
-            // Container (?c) should reduce to Array, so result : Array I64
-            assert_eq(|_|"hk assoc", result, [42]);;
+            let fmt = default_format();
+            let (xs, ys) = wrap_pair(fmt, 42, "hello");
+            // Repr ?fmt I64 = Array I64, Repr ?fmt String = Array String
+            assert_eq(|_|"hk int", xs, [42]);;
+            assert_eq(|_|"hk str", ys, ["hello"]);;
             pure()
         );
     "##;

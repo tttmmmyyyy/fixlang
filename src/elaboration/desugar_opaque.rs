@@ -111,10 +111,10 @@ impl Program {
             let scm = self.global_values.get(gv_name).unwrap().scm.clone();
             let new_scm = rewrite_scheme(&scm, opaque_infos);
 
-
             // Generate one #wrap_opaque per function/method.
             let wrap_name = FullName::new(&gv_name.to_namespace(), WRAP_OPAQUE_FUNC_NAME);
             let wrap_scm = build_wrap_scheme(&scm, &new_scm, opaque_infos);
+
             self.global_values.insert(
                 wrap_name.clone(),
                 GlobalValue {
