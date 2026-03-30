@@ -217,7 +217,7 @@ pub fn test_opaque_higher_arity_associated_type() {
 
         main : IO ();
         main = (
-            let c = from_array([1, 2, 3]);
+            let c = Main::from_array([1, 2, 3]);
             let result = c.rebuild(|x| x.to_string);
             assert_eq(|_|"higher arity assoc", result, ["1", "2", "3"]);;
             pure()
@@ -418,7 +418,7 @@ pub fn test_opaque_with_higher_arity_assoc_type() {
 
         main : IO ();
         main = (
-            let c = from_array([1, 2, 3]);
+            let c = Main::from_array([1, 2, 3]);
             // Rebuild (?c I64) String should reduce to Array String
             let result = c.rebuild(|x| x.to_string);
             assert_eq(|_|"higher arity", result, ["1", "2", "3"]);;
@@ -446,7 +446,7 @@ pub fn test_opaque_with_higher_kinded_assoc_type() {
             wrap = |x| [x];
         }
 
-        opaque_wrap : [?c : HasContainer, Container ?c = f] a -> ?c -> f a;
+        opaque_wrap : [?c : HasContainer, Container ?c = f, f : * -> *] a -> ?c -> f a;
         opaque_wrap = |x, _c| HasContainer::wrap(x);
 
         main : IO ();

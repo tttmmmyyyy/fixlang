@@ -725,7 +725,7 @@ impl Array a : Rebuildable {
 }
 
 from_rebuildable : [?c : Rebuildable, Elem ?c = a, Rebuild ?c b = Array b] ?c -> Array (Elem ?c);
-from_rebuildable = |c| c.to_array;
+from_rebuildable = |c| c.Rebuildable::to_array;
 
 main: IO ();
 main = (
