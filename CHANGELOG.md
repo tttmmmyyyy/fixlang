@@ -27,6 +27,7 @@
 
 #### Tool
 
+- `fix build` and `fix run` now type-check all symbols, not just those reachable from the entry point. Previously, only required symbols were type-checked.
 - Docs: In the "Values" section, values that are generated from trait members now have an additional description "Trait member of `<trait_name>`".
 - LSP: Introduced automatic lock file management for language server. The language server now automatically generates and updates `.fixlang/fixdeps.lsp.lock` when the project file changes, without requiring manual `fix deps update` commands.
 
