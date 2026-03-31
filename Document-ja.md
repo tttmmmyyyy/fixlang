@@ -1666,17 +1666,21 @@ Fixにおける`Iterator`はトレイトであり、多数の型が`Iterator`を
 したがって「イテレータ」という特定の型は存在せず、イテレータを生成する各関数は異なる型のイテレータを生成します。
 
 たとえば、`Array a`から`to_iter`により作成されたイテレータの型は`ArrayIterator a`ですが、`range`により作成されるイテレータの型は`CountUpIterator`です。
-また、すでにあるイテレータに`map`を適用すると、より複雑な型のイテレータが作成されます。
-例えば、チュートリアルのコード例における`fib.to_iter.map(to_string)`の型は`MapIterator (ArrayIterator I64) I64 String`です。
 
 このイテレータの設計は、パフォーマンスの向上に大いに貢献しています。
 これは、イテレータの型から`advance`関数（`Iterator`トレイトのメソッド）の実装が一意に決定されるため、コンパイラは`advance`関数をインライン化するなどの最適化を行うことができるためです。
 
-一方で、複雑なイテレータ型はプログラミングの障害となる場合があります。
-例えば、「イテレータを作成して返す関数」を定義する場合、関数の戻り値の型に非常に複雑なイテレータ型を書く必要があります。
-特に、その関数が状況（引数）により異なる方法で作成したイテレータを返すような場合は、関数の戻り値の型を書くことができなくなります。
+一方で、関数が条件分岐により異なる種類のイテレータを返す場合は、戻り値の型を書くことができません。
 
-イテレータ型の複雑さの問題を回避するために、次の型が用意されています。
+```
+// if の分岐で異なる型のイテレータを返しているため、戻り値の型を書けない
+make_iter = |flag| (
+    if flag { Iterator::range(0, 10) }       // CountUpIterator I64
+    else { Iterator::count_up(0).take(10) }  // TakeIterator (CountUpIterator I64)
+);
+```
+
+このような場合のために、次の型が用意されています。
 
 ```
 type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
@@ -1691,76 +1695,102 @@ type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
 to_dyn : [iter : Iterator, Item iter = a] iter -> DynIterator a;
 ```
 
-「イテレータを作成して返す関数」を定義する場合、作成した複雑なイテレータを`to_dyn`で`DynIterator`に変換してから返すことで、関数の戻り値の型を単純な`DynIterator a`にすることができます。
+`DynIterator`を使えば、条件分岐で異なるイテレータを返す関数を書くことができます。
+
+```
+make_iter : Bool -> DynIterator I64;
+make_iter = |flag| (
+    if flag { Iterator::range(0, 10).to_dyn }
+    else { Iterator::count_up(0).take(10).to_dyn }
+);
+```
 
 `DynIterator`は、Haskellの遅延評価リストに似ています。
 Haskellのリストを使う美しいコードをFixに移植する場合は、`to_dyn`が活躍するかもしれません。
 
-ただし、パフォーマンスが必要な場合は`DynIterator`を避けることをお勧めします。
-「イテレータを作成して返す関数」を実装する際に、`DynIterator`を避けるための対処法を一つ紹介します。
+ただし、`DynIterator`はイテレータの実装が動的ディスパッチとなるため、他のイテレータに比べてパフォーマンスが劣ります。
 
-例として、以下のような関数を考えます。
+## 不透明型（Opaque Type）
+
+不透明型は、関数の戻り値の具体的な型を隠蔽し、その型が満たすトレイトだけを公開する機能です。
+これは特にイテレータコンビネータの戻り値型が複雑になる問題を解決するために有用です。
+
+### 基本的な構文
+
+不透明型は`?`で始まる名前を持つ型です。
+不透明型は関数の**戻り値**の型にのみ現れることができ、コンパイラが具体的な型を自動的に推論します。
+
+以下は簡単な例です。
 
 ```
-pythagorean_triples : I64 -> DynIterator (I64, I64, I64);
-pythagorean_triples = |limit| (
-    Iterator::range(1, limit+1).flat_map(|a| (
-        Iterator::range(a, limit+1).flat_map(|b| (
-            Iterator::range(b, limit+1).filter(|c| (
-                a*a + b*b == c*c
-            )).map(|c| (a, b, c))
-        ))
-    )).to_dyn
+repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it;
+repeat = |x, n| Iterator::range(0, n).map(|_| x);
+```
+
+この例では、`repeat`関数が返すイテレータの具体的な型（`MapIterator (CountUpIterator I64) I64 a`のような複雑な型）を書く代わりに、`?it`という不透明型を使用しています。
+型制約`[?it : Iterator, Item ?it = a]`は、`?it`が`Iterator`トレイトを実装し、その要素の型が`a`であることを宣言しています。
+
+呼び出し側は、`?it`の具体的な型を知る必要はありません。トレイトのメソッドを通じて操作できます。
+
+```
+main : IO ();
+main = (
+    let arr = repeat("hello", 3).to_array;
+    // arr == ["hello", "hello", "hello"]
+    pure()
 );
 ```
 
-コードの詳細を理解する必要はありません。`range`、`flat_map`、`filter`、`map`を組み合わせて複雑なイテレータを作成し、`to_dyn`で`DynIterator`に変換して返しているという点に注目してください。
+### トレイトメソッドでの使用
 
-このコードから`DynIterator`を取り除くには、上記のコードを`fix`のLanguage Server Protocolが動作しているテキストエディタにコピーします（参考：[（オプション）VScode拡張機能](#オプションvscode拡張機能)）
-次に、`to_dyn`の上でマウスをホバーし、その型を表示させます。以下のように表示されるはずです。
-
-```
-Std::Iterator::to_dyn : [a : Std::Iterator, Std::Iterator::Item a = b] a -> Std::Iterator::DynIterator b
-Instantiated as:
-
-(非常に複雑なイテレータの型) -> Std::Iterator::DynIterator (Std::I64, Std::I64, Std::I64)
-```
-
-この`to_dyn`がどのイテレータを`DynIterator`に変換しているかが表示されるので、この型を型エイリアスとして定義します。
-そして、`pythagorean_triples`の戻り値の型をその型エイリアスに変更し、`to_dyn`を削除します。
+不透明型はトレイトメソッドの戻り値にも使用できます。
+各`impl`で異なる具体的な型に解決されます。
 
 ```
-pythagorean_triples : I64 -> PythagorasIterator;
-pythagorean_triples = |limit| (
-    Iterator::range(1, limit+1).flat_map(|a| (
-        Iterator::range(a, limit+1).flat_map(|b| (
-            Iterator::range(b, limit+1).filter(|c| (
-                a*a + b*b == c*c
-            )).map(|c| (a, b, c))
-        ))
-    ))
+trait c : ToIter {
+    type Item c;
+    to_iter : [?it : Iterator, Iterator::Item ?it = ToIter::Item c] c -> ?it;
+}
+
+impl Array a : ToIter {
+    type Item (Array a) = a;
+    to_iter = Array::to_iter;
+}
+```
+
+ここでは`ToIter`トレイトと`Iterator`トレイトの両方が`Item`という関連型を持つため、`Iterator::Item`と`ToIter::Item`のように名前空間で区別しています。
+
+この例では、`to_iter`が返すイテレータの型は実装ごとに異なります。
+`Array a`に対しては`ArrayIterator a`に解決されますが、別のコレクション型に対しては別のイテレータ型に解決されます。
+
+### 高階カインドの不透明型
+
+不透明型はカインド`*`（通常の型）だけでなく、`* -> *`のような高階カインドを持つこともできます。
+不透明型のカインドはトレイト制約から推論されるため、明示的にカインドを書く必要はありません。
+
+```
+safe_div : [?m : Monad] I64 -> I64 -> ?m I64;
+safe_div = |x, y| if y == 0 { none() } else { some(x / y) };
+```
+
+ここで`?m`はカインド`* -> *`の不透明型であり（`Monad`のカインドから推論）、コンパイラは`Option`に解決します。
+呼び出し側は`?m`が`Monad`であることだけを知り、`Monad`のメソッドを通じて操作できます。
+
+### 制限事項
+
+不透明型はコンパイル時に**1つの**具体的な型に解決される必要があります。
+そのため、実行時の条件分岐で異なる型を返すことはできません。
+
+```
+// これはコンパイルエラーになります
+choose_iter : [?it : Iterator, Item ?it = I64] Bool -> ?it;
+choose_iter = |flag| (
+    if flag { Iterator::range(0, 10) }       // CountUpIterator I64
+    else { count_up(0).take(10) }            // TakeIterator (CountUpIterator I64)
 );
-
-type PythagorasIterator = (非常に複雑なイテレータの型);
 ```
 
-これで`DynIterator`を避けることができました。
-
-これはあまりエレガントな方法ではありませんが、現状では`DynIterator`を避けるための実用的な方法です。
-将来のFixでは、以下のように書けるようにしたいと考えています。
-
-```
-pythagorean_triples : I64 -> impl Iterator<Item = (I64, I64, I64)>;
-pythagorean_triples = |limit| (
-    Iterator::range(1, limit+1).flat_map(|a| (
-        Iterator::range(a, limit+1).flat_map(|b| (
-            Iterator::range(b, limit+1).filter(|c| (
-                a*a + b*b == c*c
-            )).map(|c| (a, b, c))
-        ))
-    ))
-);
-```
+このような場合は、`DynIterator`（動的イテレータ）を使用して動的ディスパッチを行う必要があります。
 
 ## モナド
 
@@ -2113,10 +2143,10 @@ pythagorean_triples = |limit| (
 既に述べたように、シーケンス系モナドにおける`bind`は"flat map"として知られる操作です。
 Fixの標準ライブラリはイテレータに対する`flat_map`を提供しています。
 そこで、演算子`*`の定義を思い出し、上記のコードを`bind`を明示的に用いる形に書き換えたあと、`bind`を`flat_map`に置き換えることで、`DynIterator`を使用しないコードを得ることができます。
-結果は以下のようになります。結果として得られるイテレータは非常に複雑な型を持つため、最後に`to_array`メソッドを使用して配列に変換しています。
+不透明型を使えば、結果のイテレータの具体的な型を書く必要もありません。
 
 ```
-pythagorean_triples : I64 -> Array (I64, I64, I64);
+pythagorean_triples : [?it : Iterator, Item ?it = (I64, I64, I64)] I64 -> ?it;
 pythagorean_triples = |limit| (
     Iterator::range(1, limit+1).flat_map(|a| (
         Iterator::range(a, limit+1).flat_map(|b| (
@@ -2124,7 +2154,7 @@ pythagorean_triples = |limit| (
                 a*a + b*b == c*c
             )).map(|c| (a, b, c))
         ))
-    )).to_array
+    ))
 );
 ```
 

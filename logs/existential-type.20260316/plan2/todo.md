@@ -138,7 +138,7 @@ wrap関数では、不透明型に対して一つ一つgen_varを発行してい
 
 テスト計画（test_plan.md）にかかれているテストが本当にすべて実装されているか確認。
 
-## ドキュメント(ja)を更新
+## (DONE) ドキュメント(ja)を更新
 
 Document-ja.mdに、opaque typeの説明を追加する。
 また、Iteratorについてのセクションに、iteratorの型が複雑化するので「Iteratorを返す処理」が書きづらい話と、

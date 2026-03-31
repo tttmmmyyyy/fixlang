@@ -203,6 +203,15 @@ impl Program {
         scm: &Arc<Scheme>,
         opaque_infos: &[OpaqueInfo],
     ) {
+        // Build a combined substitution mapping ALL opaque tyvars to their TyCons.
+        // This is needed for equalities that reference multiple opaque types,
+        // e.g., `Item ?it = ?e` where both `?it` and `?e` are opaque.
+        let mut all_opaque_sub = Substitution::default();
+        for info in opaque_infos {
+            let sub = info.tyvar_to_tycon_substitution();
+            assert!(all_opaque_sub.merge(&sub));
+        }
+
         for info in opaque_infos {
             let sub = info.tyvar_to_tycon_substitution();
 
@@ -231,12 +240,14 @@ impl Program {
             }
 
             // Extract opaque-related equalities.
+            // Use the combined substitution so that all opaque tyvars (including
+            // those on the RHS) are replaced with their TyCons.
             for eq in &scm.equalities {
                 if !eq.on_tyvar(&info.tyvar.name) {
                     continue;
                 }
                 let mut new_eq = eq.clone();
-                sub.substitute_equality(&mut new_eq);
+                all_opaque_sub.substitute_equality(&mut new_eq);
                 let eq_scm = new_eq.generalize();
                 insert_to_map_vec(
                     &mut self.trait_env.opaque_eqs,

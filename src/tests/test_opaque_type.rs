@@ -755,3 +755,82 @@ pub fn test_opaque_trait_not_satisfied_at_use_site() {
     "#;
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
+
+
+
+// ============================================================
+// 2-5. Opaque type on equality RHS
+// ============================================================
+
+#[test]
+pub fn test_opaque_in_equality_rhs() {
+    // An opaque type appears on the RHS of an equality constraint:
+    //   Item ?it = ?e, where ?e is itself opaque with ToString constraint.
+    // This tests that the desugaring correctly handles opaque-to-opaque equality.
+    let source = r#"
+        module Main;
+
+        opaque_elem_iter : [?it : Iterator, ?e : ToString, Item ?it = ?e] Array I64 -> ?it;
+        opaque_elem_iter = |arr| arr.to_iter.map(|x| x.to_string);
+
+        main : IO ();
+        main = (
+            let iter = opaque_elem_iter([10, 20, 30]);
+            // Use fold: item has type Item ?it = ?e, and ?e : ToString
+            let result = iter.fold("", |item, acc| acc + item.to_string + ",");
+            assert_eq(|_|"opaque rhs fold", result, "10,20,30,");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_opaque_in_equality_rhs_map() {
+    // Same setup but using .map() which requires the element type to be inferred
+    // through the equality chain: Item ?it -> ?e (via EqualityScheme)
+    let source = r#"
+        module Main;
+
+        opaque_elem_iter : [?it : Iterator, ?e : ToString, Item ?it = ?e] Array I64 -> ?it;
+        opaque_elem_iter = |arr| arr.to_iter.map(|x| x.to_string);
+
+        main : IO ();
+        main = (
+            let iter = opaque_elem_iter([10, 20, 30]);
+            let strs = iter.map(|e| e.to_string).to_array;
+            assert_eq(|_|"opaque rhs map", strs, ["10", "20", "30"]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_opaque_in_equality_rhs_both_in_return() {
+    // Both opaque types appear in the return type, with an equality linking them.
+    let source = r#"
+        module Main;
+
+        iter_and_first : [?it : Iterator, ?e : ToString, Item ?it = ?e] Array I64 -> (?it, ?e);
+        iter_and_first = |arr| (
+            arr.to_iter.map(|x| x.to_string),
+            arr.get_size.to_string
+        );
+
+        main : IO ();
+        main = (
+            let (iter, first) = iter_and_first([10, 20, 30]);
+            // iter : ?it, Item ?it = ?e where ?e : ToString
+            // Convert elements to String via to_string to avoid needing Eq on ?e
+            let strs = iter.map(|e| e.to_string).to_array;
+            assert_eq(|_|"iter part", strs, ["10", "20", "30"]);;
+            // first : ?e where ?e : ToString
+            let s = first.to_string;
+            assert_eq(|_|"first part", s, "3");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
