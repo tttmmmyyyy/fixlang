@@ -144,7 +144,7 @@ Document-ja.mdに、opaque typeの説明を追加する。
 また、Iteratorについてのセクションに、iteratorの型が複雑化するので「Iteratorを返す処理」が書きづらい話と、
 「将来opaque typeができたら改善する」という話が書かれているので、そこを修正する。
 
-## ドキュメントを更新
+## (DONE) ドキュメントを更新
 
 Document.mdにDocument-ja.mdの更新内容を反映する。
 
