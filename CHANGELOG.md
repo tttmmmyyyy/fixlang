@@ -21,10 +21,13 @@
 
 #### Language
 
+- Added opaque types. You can use type variables starting with `?` (e.g. `?it`) in type signatures to hide concrete return types behind trait constraints. See `Document.md` for details.
+- Type variable names now allow underscores (e.g. `my_var`).
 - Changed the way the compiler checks whether the type signature given to a trait member implementation matches the one required by the trait definition. Previously, it checked for syntactic consistency, but now it allows more flexible verification of type equivalence. For example, previously when implementing `Iterator`, you had to write the type signature for `advance` using `Item`, like `MyType -> Option (MyType, Item MyType)`, but now you can write the resolved type directly instead of `Item MyType`.
 
 #### Tool
 
+- `fix build` and `fix run` now type-check all symbols, not just those reachable from the entry point. Previously, only required symbols were type-checked.
 - Docs: In the "Values" section, values that are generated from trait members now have an additional description "Trait member of `<trait_name>`".
 - LSP: Introduced automatic lock file management for language server. The language server now automatically generates and updates `.fixlang/fixdeps.lsp.lock` when the project file changes, without requiring manual `fix deps update` commands.
 

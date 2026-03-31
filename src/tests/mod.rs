@@ -1,5 +1,6 @@
 mod test_array_bounds_check;
 mod test_assert;
+mod test_associated_type;
 mod test_basic;
 mod test_check;
 mod test_dependencies;
@@ -13,7 +14,9 @@ mod test_import;
 mod test_index_syntax;
 mod test_lsp;
 mod test_memcheck;
+mod test_opaque_type;
 mod test_string;
 mod test_trait_implementable_type;
+mod test_type_sign_in_trait_impl;
 mod test_undefined;
 mod test_util;

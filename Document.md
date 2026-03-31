@@ -1620,13 +1620,21 @@ which defines a type alias `Lazy` of kind `* -> *`.
 
 In Fix, `Iterator` is a trait, and many types implement it. Therefore, there's no single "iterator" type; instead, each function that generates an iterator produces an iterator of a different type.
 
-For example, the type of an iterator created from `Array a` by `to_iter` is `ArrayIterator a`, while the type of an iterator created by `range` is `CountUpIterator`. Additionally, applying `map` to an existing iterator creates an iterator of a more complex type. For instance, the type of `fib.to_iter.map(to_string)` in the tutorial's code example is `MapIterator (ArrayIterator I64) I64 String`.
+For example, the type of an iterator created from `Array a` by `to_iter` is `ArrayIterator a`, while the type of an iterator created by `range` is `CountUpIterator`.
 
 This iterator design contributes significantly to improved performance. This is because the implementation of the `advance` function (a method of the `Iterator` trait) is uniquely determined by the iterator's type, allowing the compiler to perform optimizations such as inlining the `advance` function.
 
-On the other hand, complex iterator types can be a hindrance to programming. For example, when defining a function that creates and returns an iterator, you would need to write a very complex iterator type for the function's return type. This becomes impossible, especially if the function returns an iterator created in a different way depending on the situation (its arguments).
+On the other hand, when a function returns different kinds of iterators depending on a condition, the return type cannot be written.
 
-To avoid the problem of complex iterator types, the following type is provided:
+```
+// Cannot write the return type: if-branches return different iterator types
+make_iter = |flag| (
+    if flag { Iterator::range(0, 10) }       // CountUpIterator I64
+    else { Iterator::count_up(0).take(10) }  // TakeIterator (CountUpIterator I64)
+);
+```
+
+For such cases, the following type is provided:
 
 ```
 type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
@@ -1641,71 +1649,101 @@ You can use the `to_dyn` function to convert any iterator into a `DynIterator`.
 to_dyn : [iter : Iterator, Item iter = a] iter -> DynIterator a;
 ```
 
-When defining a function that creates and returns an iterator, you can convert the complex iterator you've created into a `DynIterator` using `to_dyn` and then return it, simplifying the function's return type to a straightforward `DynIterator a`.
+With `DynIterator`, you can write a function that returns different iterators depending on a condition.
+
+```
+make_iter : Bool -> DynIterator I64;
+make_iter = |flag| (
+    if flag { Iterator::range(0, 10).to_dyn }
+    else { Iterator::count_up(0).take(10).to_dyn }
+);
+```
 
 `DynIterator` is similar to Haskell's lazy lists. If you're porting beautiful Haskell code that uses lists to Fix, `to_dyn` might come in handy.
 
-However, we recommend avoiding `DynIterator` if performance is critical. Here's one workaround for implementing a function that creates and returns an iterator while avoiding `DynIterator`.
+However, `DynIterator` uses dynamic dispatch for iterator operations, so it has inferior performance compared to other iterators.
 
-As an example, consider the following function:
+## Opaque Types
+
+Opaque types are a feature that hides the concrete return type of a function, exposing only the traits that the type satisfies.
+This is particularly useful for solving the problem of complex iterator combinator return types.
+
+### Basic Syntax
+
+An opaque type is a type whose name starts with `?`.
+Opaque types can only appear in the **return type** of a function, and the compiler automatically infers the concrete type.
+
+Here is a simple example.
 
 ```
-pythagorean_triples : I64 -> DynIterator (I64, I64, I64);
-pythagorean_triples = |limit| (
-    Iterator::range(1, limit+1).flat_map(|a| (
-        Iterator::range(a, limit+1).flat_map(|b| (
-            Iterator::range(b, limit+1).filter(|c| (
-                a*a + b*b == c*c
-            )).map(|c| (a, b, c))
-        ))
-    )).to_dyn
+repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it;
+repeat = |x, n| Iterator::range(0, n).map(|_| x);
+```
+
+In this example, instead of writing the concrete type of the iterator returned by `repeat` (a complex type like `MapIterator (CountUpIterator I64) I64 a`), the opaque type `?it` is used.
+The type constraint `[?it : Iterator, Item ?it = a]` declares that `?it` implements the `Iterator` trait and its element type is `a`.
+
+The caller does not need to know the concrete type of `?it`. It can be manipulated through trait methods.
+
+```
+main : IO ();
+main = (
+    let arr = repeat("hello", 3).to_array;
+    // arr == ["hello", "hello", "hello"]
+    pure()
 );
 ```
 
-You don't need to understand the details of the code. Just note that it combines `range`, `flat_map`, `filter`, and `map` to create a complex iterator, which is then converted to a `DynIterator` using `to_dyn` before being returned.
+### Usage in Trait Methods
 
-To remove the `DynIterator` from this code, copy the code above into a text editor with the `fix` Language Server Protocol running. Next, hover your mouse over `to_dyn` to display its type. It should show something like this:
-
-```
-Std::Iterator::to_dyn : [a : Std::Iterator, Std::Iterator::Item a = b] a -> Std::Iterator::DynIterator b
-Instantiated as:
-
-(A very complex iterator type) -> Std::Iterator::DynIterator (Std::I64, Std::I64, Std::I64)
-```
-
-Since the display shows which iterator `to_dyn` is converting to a `DynIterator`, define that type as a type alias. Then, change the return type of `pythagorean_triples` to that type alias and remove `to_dyn`.
+Opaque types can also be used in the return types of trait methods.
+They are resolved to different concrete types in each `impl`.
 
 ```
-pythagorean_triples : I64 -> PythagorasIterator;
-pythagorean_triples = |limit| (
-    Iterator::range(1, limit+1).flat_map(|a| (
-        Iterator::range(a, limit+1).flat_map(|b| (
-            Iterator::range(b, limit+1).filter(|c| (
-                a*a + b*b == c*c
-            )).map(|c| (a, b, c))
-        ))
-    ))
+trait c : ToIter {
+    type Item c;
+    to_iter : [?it : Iterator, Iterator::Item ?it = ToIter::Item c] c -> ?it;
+}
+
+impl Array a : ToIter {
+    type Item (Array a) = a;
+    to_iter = Array::to_iter;
+}
+```
+
+Here, both the `ToIter` trait and the `Iterator` trait have an associated type named `Item`, so they are distinguished using namespaces: `Iterator::Item` and `ToIter::Item`.
+
+In this example, the type of the iterator returned by `to_iter` differs for each implementation.
+For `Array a`, it resolves to `ArrayIterator a`, while for other collection types, it resolves to different iterator types.
+
+### Higher-Kinded Opaque Types
+
+Opaque types can have not only kind `*` (ordinary types) but also higher kinds such as `* -> *`.
+The kind of an opaque type is inferred from trait constraints, so there is no need to write the kind explicitly.
+
+```
+safe_div : [?m : Monad] I64 -> I64 -> ?m I64;
+safe_div = |x, y| if y == 0 { none() } else { some(x / y) };
+```
+
+Here, `?m` is an opaque type of kind `* -> *` (inferred from the kind of `Monad`), and the compiler resolves it to `Option`.
+The caller only knows that `?m` is a `Monad` and can manipulate it through `Monad` methods.
+
+### Restrictions
+
+An opaque type must be resolved to **one** concrete type at compile time.
+Therefore, you cannot return different types from different branches of a runtime conditional.
+
+```
+// This causes a compile error
+choose_iter : [?it : Iterator, Item ?it = I64] Bool -> ?it;
+choose_iter = |flag| (
+    if flag { Iterator::range(0, 10) }       // CountUpIterator I64
+    else { count_up(0).take(10) }            // TakeIterator (CountUpIterator I64)
 );
-
-type PythagorasIterator = (A very complex iterator type);
 ```
 
-With this, you have successfully avoided `DynIterator`.
-
-While this isn't the most elegant method, it's a practical way to avoid `DynIterator` for now. In a future version of Fix, we would like to enable writing code like this:
-
-```
-pythagorean_triples : I64 -> impl Iterator<Item = (I64, I64, I64)>;
-pythagorean_triples = |limit| (
-    Iterator::range(1, limit+1).flat_map(|a| (
-        Iterator::range(a, limit+1).flat_map(|b| (
-            Iterator::range(b, limit+1).filter(|c| (
-                a*a + b*b == c*c
-            )).map(|c| (a, b, c))
-        ))
-    ))
-);
-```
+In such cases, you need to use `DynIterator` (dynamic iterators) for dynamic dispatch.
 
 ## Monads
 
@@ -2030,11 +2068,10 @@ pythagorean_triples = |limit| (
 As stated in [Dynamic Iterators](#dynamic-iterators), `DynIterator` has inferior performance compared to other iterators. Therefore, here's how to rewrite the code above without using `DynIterator`.
 
 As previously mentioned, `bind` in a sequence monad is known as the "flat map" operation. Fix's standard library provides `flat_map` for iterators. By recalling the definition of the `*` operator, rewriting the code above using explicit `bind`, and then replacing `bind` with `flat_map`, we can get a version of the code that doesn't use `DynIterator`.
-
-The result is as follows. Since the result of an iterator computation can have a very complex type, we use the `to_array` method at the end to convert it into an array.
+Using opaque types, there is no need to write the concrete type of the resulting iterator.
 
 ```
-pythagorean_triples : I64 -> Array (I64, I64, I64);
+pythagorean_triples : [?it : Iterator, Item ?it = (I64, I64, I64)] I64 -> ?it;
 pythagorean_triples = |limit| (
     Iterator::range(1, limit+1).flat_map(|a| (
         Iterator::range(a, limit+1).flat_map(|b| (
@@ -2042,7 +2079,7 @@ pythagorean_triples = |limit| (
                 a*a + b*b == c*c
             )).map(|c| (a, b, c))
         ))
-    )).to_array
+    ))
 );
 ```
 

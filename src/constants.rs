@@ -91,6 +91,8 @@ pub const STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL: &str = "#plug_in_fu_";
 pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 pub const CAP_NAME: &str = "#CAP";
 pub const DECAP_NAME: &str = "#decap";
+pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
+pub const WRAP_OPAQUE_FUNC_NAME: &str = "#wrap_opaque";
 
 // pub const LOOP_RESULT_CONTINUE_IDX: usize = 0;
 

@@ -104,6 +104,14 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    // Replace expression, resetting free_vars.
+    #[allow(dead_code)]
+    pub fn set_expr(&self, expr: Arc<Expr>) -> Arc<Self> {
+        let mut ret = self.clone_except_fvs();
+        ret.expr = expr;
+        Arc::new(ret)
+    }
+
     // Check if the expression is a function application.
     #[allow(dead_code)]
     pub fn is_app(&self) -> bool {

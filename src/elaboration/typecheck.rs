@@ -10,15 +10,17 @@ use crate::{
         pattern::{Pattern, PatternNode},
         predicate::Predicate,
         program::{ModuleInfo, TypeEnv},
+        types::OpaqueTyConResolution,
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
         types::{
-            kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp, type_tycon, AssocType,
-            Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
+            kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
+            type_tycon, AssocType, Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
+            TypeNode,
         },
     },
-    constants::{ERR_AMBIGUOUS_NAME, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME},
+    constants::{ERR_AMBIGUOUS_NAME, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, WRAP_OPAQUE_TYVAR_PREFIX},
     error::{Error, Errors},
     elaboration::name_resolution::NameResolutionContext,
     fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
@@ -230,6 +232,7 @@ impl Substitution {
         }
         Scheme::new_arc(
             scm.gen_vars.clone(),
+            scm.kind_signs.clone(),
             preds,
             eqs,
             self.substitute_type(&scm.ty),
@@ -274,6 +277,27 @@ impl Substitution {
         fixed_tyvars: &[Arc<TyVar>],
         kind_env: &KindEnv,
     ) -> Result<Option<Self>, Errors> {
+        Self::matching_internal(ty1, ty2, fixed_tyvars, Some(kind_env))
+    }
+
+    pub fn matching_no_kind_check(
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
+        fixed_tyvars: &[Arc<TyVar>],
+    ) -> Option<Self> {
+        // With kind_env=None, matching_internal never returns Err.
+        match Self::matching_internal(ty1, ty2, fixed_tyvars, None) {
+            Ok(result) => result,
+            Err(_) => unreachable!("matching_internal without kind_env should not fail"),
+        }
+    }
+
+    fn matching_internal(
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
+        fixed_tyvars: &[Arc<TyVar>],
+        kind_env: Option<&KindEnv>,
+    ) -> Result<Option<Self>, Errors> {
         match &ty1.ty {
             Type::TyVar(v1) => {
                 // We do not use `unify_tyvar` here:
@@ -285,8 +309,10 @@ impl Substitution {
                 // - `unify_tyvar` returns `{}` (empty substitution) when trying to unify the codomains of `ty1` and `ty2`.
                 // - `{t0 -> t1}` and `{}` can be merged to `{t0 -> t1}`.
                 // And this implementation of mathcing is the same as one in "Typing Haskell in Haskell".
-                if ty1.kind(kind_env)? != ty2.kind(kind_env)? {
-                    return Ok(None);
+                if let Some(kind_env) = kind_env {
+                    if ty1.kind(kind_env)? != ty2.kind(kind_env)? {
+                        return Ok(None);
+                    }
                 }
                 if fixed_tyvars.iter().any(|tv| tv.name == v1.name) {
                     if ty1.to_string() == ty2.to_string() {
@@ -310,7 +336,7 @@ impl Substitution {
             Type::TyApp(fun1, arg1) => match &ty2.ty {
                 Type::TyApp(fun2, arg2) => {
                     let mut ret = Self::default();
-                    match Self::matching(fun1, fun2, fixed_tyvars, kind_env)? {
+                    match Self::matching_internal(fun1, fun2, fixed_tyvars, kind_env)? {
                         Some(s) => {
                             if !ret.merge(&s) {
                                 return Ok(None);
@@ -318,7 +344,7 @@ impl Substitution {
                         }
                         None => return Ok(None),
                     }
-                    match Self::matching(arg1, arg2, fixed_tyvars, kind_env)? {
+                    match Self::matching_internal(arg1, arg2, fixed_tyvars, kind_env)? {
                         Some(s) => {
                             if !ret.merge(&s) {
                                 return Ok(None);
@@ -337,7 +363,7 @@ impl Substitution {
                     }
                     let mut ret = Self::default();
                     for i in 0..args1.len() {
-                        match Self::matching(&args1[i], &args2[i], fixed_tyvars, kind_env)? {
+                        match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)? {
                             Some(s) => {
                                 if !ret.merge(&s) {
                                     return Ok(None);
@@ -408,6 +434,10 @@ pub struct TypeCheckContext {
     pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
     // Number of worker threads.
     pub num_worker_threads: usize,
+    // Records which fresh type variables were assigned to opaque-type gen_vars when instantiating #wrap_opaque functions.
+    // Key: the gen_var name (e.g., "#Std::repeat::?it"), Value: the fresh TyVar generated for it.
+    // After type-checking, these are resolved via substitution to find the concrete types.
+    pub opaque_instantiations: Map<Name, Arc<TyVar>>,
 }
 
 impl TypeCheckContext {
@@ -454,6 +484,7 @@ impl TypeCheckContext {
             import_required: vec![],
             cache,
             num_worker_threads,
+            opaque_instantiations: Map::default(),
         }
     }
 
@@ -522,6 +553,28 @@ impl TypeCheckContext {
         self.substitution.substitute_equality(eq)
     }
 
+    // Fill in the concrete rhs for opaque type resolutions from the current substitution.
+    //
+    // Example: if `#Std::repeat::?it` was instantiated to a fresh TyVar that unified to
+    // `MapIterator (RangeIterator I64) a`, fills `rhs = Some(MapIterator (RangeIterator I64) a)`
+    // into the corresponding `OpaqueTyConResolution` entries.
+    pub fn fill_opaque_concrete_types(
+        &self,
+        opaque_types: &mut Map<FullName, Vec<OpaqueTyConResolution>>,
+    ) {
+        for (k, v) in &self.opaque_instantiations {
+            let fullname_str = k.strip_prefix(WRAP_OPAQUE_TYVAR_PREFIX).unwrap();
+            let opaque_tycon_name = FullName::parse(fullname_str).unwrap();
+            let rhs = self.substitution.substitute_type(&type_from_tyvar(v.clone()));
+            if let Some(resolutions) = opaque_types.get_mut(&opaque_tycon_name) {
+                for resolution in resolutions {
+                    assert!(resolution.rhs.is_none(), "opaque type rhs already filled");
+                    resolution.rhs = Some(rhs.clone());
+                }
+            }
+        }
+    }
+
     pub fn instantiate_type(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         let mut sub = Substitution::default();
         for tv in ty.free_vars_vec() {
@@ -550,10 +603,19 @@ impl TypeCheckContext {
                 for tv in &scheme.gen_vars {
                     let new_tv = self.new_tyvar_by(tv);
                     let merge_ok =
-                        sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv)));
+                        sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv.clone())));
                     assert!(merge_ok);
+                    // Record opaque-type gen_vars (prefixed with WRAP_OPAQUE_TYVAR_PREFIX)
+                    // so their concrete types can be extracted after type-checking.
+                    if tv.name.starts_with(WRAP_OPAQUE_TYVAR_PREFIX) {
+                        assert!(
+                            !self.opaque_instantiations.contains_key(&tv.name),
+                            "Duplicate opaque type variable name: {}",
+                            tv.name
+                        );
+                        self.opaque_instantiations.insert(tv.name.clone(), new_tv.clone());
+                    }
                 }
-                // Apply substitution to type, predicates and equalities.
                 let ty = sub.substitute_type(&scheme.ty);
                 for eq in &mut eqs {
                     sub.substitute_equality(eq);
@@ -1262,6 +1324,11 @@ impl TypeCheckContext {
             let e = UnificationErr::Unsatisfiable(pred.clone());
             return Err(UnifOrOtherErr::UnifErr(e));
         }
+        if self.equalities.len() > 0 {
+            let eq = &self.equalities[0];
+            let e = UnificationErr::Disjoint(eq.lhs(), eq.value.clone());
+            return Err(UnifOrOtherErr::UnifErr(e));
+        }
         Ok(())
     }
 
@@ -1647,7 +1714,7 @@ impl TypeCheckContext {
         return Ok(());
     }
 
-    pub fn finalize_types_for_pattern(
+    pub fn fix_types_for_pattern(
         &mut self,
         pat: Arc<PatternNode>,
     ) -> Result<Arc<PatternNode>, Errors> {
@@ -1665,13 +1732,13 @@ impl TypeCheckContext {
                 pat
             }
             Pattern::Union(_, subpat) => {
-                let subpat = self.finalize_types_for_pattern(subpat.clone())?;
+                let subpat = self.fix_types_for_pattern(subpat.clone())?;
                 pat.set_union_pat(subpat)
             }
             Pattern::Struct(_, fied_to_pat) => {
                 let mut field_to_pat = fied_to_pat.clone();
                 for (_field_name, subpat) in field_to_pat.iter_mut() {
-                    let new_subpat = self.finalize_types_for_pattern(subpat.clone())?;
+                    let new_subpat = self.fix_types_for_pattern(subpat.clone())?;
                     *subpat = new_subpat;
                 }
                 pat.set_struct_field_to_pat(field_to_pat)
@@ -1733,7 +1800,7 @@ impl TypeCheckContext {
                 expr.set_lam_body(body)
             }
             Expr::Let(pat, val, body) => {
-                let pat = self.finalize_types_for_pattern(pat.clone())?;
+                let pat = self.fix_types_for_pattern(pat.clone())?;
                 let val = self.fix_types(val.clone())?;
                 let body = self.fix_types(body.clone())?;
                 expr.set_let_pat(pat).set_let_bound(val).set_let_value(body)
@@ -1750,7 +1817,7 @@ impl TypeCheckContext {
                 let cond = self.fix_types(cond.clone())?;
                 let mut new_pat_vals = vec![];
                 for (pat, val) in pat_vals {
-                    let pat = self.finalize_types_for_pattern(pat.clone())?;
+                    let pat = self.fix_types_for_pattern(pat.clone())?;
                     let val = self.fix_types(val.clone())?;
                     new_pat_vals.push((pat, val));
                 }

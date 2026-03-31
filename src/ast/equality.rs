@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::program::{EndNode, TypeEnv};
-use crate::ast::types::{AssocType, TyVar, TypeNode, type_assocty};
+use crate::ast::types::{is_opaque_tyvar, AssocType, TyVar, Type, TypeNode, type_assocty};
 use crate::error::Errors;
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::parse::sourcefile::{SourcePos, Span};
@@ -49,6 +49,24 @@ impl Equality {
             arg.free_vars_to_vec(buf);
         }
         self.value.free_vars_to_vec(buf);
+    }
+
+    // Is this an equality on the associated type on an opaque type variable (name starts with '?')?
+    pub fn on_opaque_tyvar(&self) -> bool {
+        if let Type::TyVar(tv) = &self.args[0].ty {
+            is_opaque_tyvar(&tv.name)
+        } else {
+            false
+        }
+    }
+
+    // Check if this equality is on a specific type variable.
+    pub fn on_tyvar(&self, tyvar_name: &str) -> bool {
+        if let Type::TyVar(tv) = &self.args[0].ty {
+            tv.name == tyvar_name
+        } else {
+            false
+        }
     }
 
     // Convert all global FullNames to absolute paths.

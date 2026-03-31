@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{TraitAliasEnv, TraitId};
-use crate::ast::types::{TyVar, TypeNode};
+use crate::ast::types::{is_opaque_tyvar, Type, TyVar, TypeNode};
 use crate::error::Errors;
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::parse::sourcefile::{SourcePos, Span};
@@ -22,6 +22,24 @@ pub struct Predicate {
 impl Predicate {
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         self.ty.free_vars_to_vec(buf);
+    }
+
+    // Check if this predicate is on an opaque type variable (name starts with '?').
+    pub fn on_opaque_tyvar(&self) -> bool {
+        if let Type::TyVar(tv) = &self.ty.ty {
+            is_opaque_tyvar(&tv.name)
+        } else {
+            false
+        }
+    }
+
+    // Check if this predicate is on a specific type variable.
+    pub fn on_tyvar(&self, tyvar_name: &str) -> bool {
+        if let Type::TyVar(tv) = &self.ty.ty {
+            tv.name == tyvar_name
+        } else {
+            false
+        }
     }
 
     // Convert all global FullNames to absolute paths.
