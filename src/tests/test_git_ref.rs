@@ -84,12 +84,12 @@ mod integration_tests {
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("6b1c381"),
-            "Lock file should contain the rev for tag v1.0.0"
+            lock_content.contains("7602fba"),
+            "Lock file should contain the rev for tag 1.1.0"
         );
         assert!(
-            lock_content.contains("version = \"1.0.0\""),
-            "Lock file should show version 1.0.0"
+            lock_content.contains("version = \"1.1.0\""),
+            "Lock file should show version 1.1.0"
         );
     }
 
@@ -181,8 +181,8 @@ mod integration_tests {
 
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
-        assert!(lock_content.contains("6b1c381"));
-        assert!(lock_content.contains("version = \"1.0.0\""));
+        assert!(lock_content.contains("7602fba"));
+        assert!(lock_content.contains("version = \"1.1.0\""));
 
         // Run fix deps update.
         let output = Command::new("fix")
@@ -196,16 +196,16 @@ mod integration_tests {
             String::from_utf8_lossy(&output.stderr)
         );
 
-        // Verify lock file is unchanged (still pinned to v1.0.0, not updated to 1.2.1).
+        // Verify lock file is unchanged (still pinned to 1.1.0, not updated to 1.2.1).
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("6b1c381"),
-            "Lock file should still contain the rev for tag v1.0.0 after deps update"
+            lock_content.contains("7602fba"),
+            "Lock file should still contain the rev for tag 1.1.0 after deps update"
         );
         assert!(
-            lock_content.contains("version = \"1.0.0\""),
-            "Lock file should still show version 1.0.0 after deps update"
+            lock_content.contains("version = \"1.1.0\""),
+            "Lock file should still show version 1.1.0 after deps update"
         );
     }
 
@@ -230,12 +230,12 @@ mod integration_tests {
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("6b1c381"),
-            "Lock file should contain rev for tag v1.0.0"
+            lock_content.contains("7602fba"),
+            "Lock file should contain rev for tag 1.1.0"
         );
         assert!(
-            lock_content.contains("version = \"1.0.0\""),
-            "Lock file should show version 1.0.0"
+            lock_content.contains("version = \"1.1.0\""),
+            "Lock file should show version 1.1.0"
         );
     }
 
@@ -316,12 +316,12 @@ mod integration_tests {
         let lock_content =
             fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
-            lock_content.contains("6b1c381"),
-            "Lock file should contain rev for Root's tag v1.0.0"
+            lock_content.contains("7602fba"),
+            "Lock file should contain rev for Root's tag 1.1.0"
         );
         assert!(
-            lock_content.contains("version = \"1.0.0\""),
-            "Lock file should show version 1.0.0 (Root's pin)"
+            lock_content.contains("version = \"1.1.0\""),
+            "Lock file should show version 1.1.0 (Root's pin)"
         );
     }
 }

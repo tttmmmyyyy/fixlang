@@ -1,3 +1,4 @@
+pub mod desugar_opaque;
 pub mod name_resolution;
 pub mod typecheck;
 pub mod typecheckcache;
@@ -74,6 +75,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         return Ok(program);
     }
 
+    // Desugar opaque type variables before type-checking.
+    program.desugar_opaque_types();
+
     let typechecker = program.create_typechecker(config);
 
     // When running diagnostics, perform type checking of target modules and return here.
@@ -84,6 +88,14 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         errors.eat_err(program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules));
         program.deferred_errors.append(errors);
         return Ok(program);
+    }
+
+    // Perform namespace resolution and type-checking for all modules upfront.
+    // This ensures opaque type resolutions are available before instantiation.
+    {
+        let _sw = StopWatch::new("typecheck", config.show_build_times);
+        let all_modules: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
+        program.resolve_namespace_and_check_type_in_modules(&typechecker, &all_modules)?;
     }
 
     // Instantiate Main::main (or Test::test).

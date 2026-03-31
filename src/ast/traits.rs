@@ -6,7 +6,7 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
-use crate::ast::types::{type_from_tyvar, type_tyvar, Kind, Scheme, AssocType, TyVar, TypeNode};
+use crate::ast::types::{is_opaque_tyvar, type_from_tyvar, type_tyvar, Kind, Scheme, AssocType, TyVar, TypeNode};
 use crate::fixstd::builtin::make_boxed_trait;
 use crate::misc::{insert_to_map_vec, number_to_varname, Map, Set};
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
@@ -665,7 +665,7 @@ impl TraitAlias {
 }
 
 // Statement such as "f: * -> *".
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct KindSignature {
     pub tyvar: Name,
     pub kind: Arc<Kind>,
@@ -731,6 +731,10 @@ pub struct TraitEnv {
     pub traits: Map<TraitId, TraitDefn>,
     pub impls: Map<TraitId, Vec<TraitImpl>>,
     pub aliases: TraitAliasEnv,
+    // Opaque type assumptions: predicates derived from opaque type variables.
+    pub opaque_preds: Map<TraitId, Vec<QualPredScheme>>,
+    // Opaque type assumptions: equalities derived from opaque type variables.
+    pub opaque_eqs: Map<AssocType, Vec<EqualityScheme>>,
 }
 
 impl TraitEnv {
@@ -820,6 +824,16 @@ impl TraitEnv {
         // Circular aliasing will be detected in `TraitEnv::resolve_aliases`, so we don't need to check it here.
 
         for (_trait_id, trait_defn) in &self.traits {
+            // Forbid opaque type variables in trait definitions.
+            if is_opaque_tyvar(&trait_defn.type_var.name) {
+                errors.append(Errors::from_msg_srcs(
+                    format!(
+                        "Opaque type variable `{}` is not allowed in a trait definition.",
+                        trait_defn.type_var.name,
+                    ),
+                    &[&trait_defn.source.as_ref().map(|s| s.to_head_character())],
+                ));
+            }
             for member in &trait_defn.members {
                 // Validate trait member definition.
 
@@ -1010,6 +1024,10 @@ impl TraitEnv {
 
         // For members without type signature, type variables used in type annotations in the member
         // must appear in the type being implemented.
+        // This prevents users from referencing trait-definition-derived type variables
+        // (including opaque type variables like `?it`) that are not visible to the user
+        // in the impl context. If the user wants to use such variables, they should
+        // provide an explicit type signature on the impl method.
         for (method_name, method_expr) in impl_members {
             if !member_sigs.contains_key(method_name) {
                 let mut allowed_tyvars = vec![];
@@ -1239,6 +1257,12 @@ impl TraitEnv {
                 );
             }
         }
+        // Merge opaque predicates.
+        for (trait_id, opaque_qps) in &self.opaque_preds {
+            for qps_entry in opaque_qps {
+                insert_to_map_vec(&mut qps, trait_id, qps_entry.clone());
+            }
+        }
         qps
     }
 
@@ -1266,6 +1290,12 @@ impl TraitEnv {
                     };
                     insert_to_map_vec(&mut eq_scms, &equality.assoc_type, equality.generalize());
                 }
+            }
+        }
+        // Merge opaque equalities.
+        for (assoc_type, opaque_eq_scms) in &self.opaque_eqs {
+            for eq_scm in opaque_eq_scms {
+                insert_to_map_vec(&mut eq_scms, assoc_type, eq_scm.clone());
             }
         }
         eq_scms

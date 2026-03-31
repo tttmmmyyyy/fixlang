@@ -144,6 +144,8 @@ pub enum TyConVariant {
     Union,
     // Dynamic object is nullble and has the destructor as the first field.
     DynamicObject,
+    // Opaque type generated from opaque type variable `?it`.
+    Opaque,
 }
 
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
@@ -1760,6 +1762,9 @@ impl TypeNode {
 pub struct Scheme {
     // Generalized variables.
     pub gen_vars: Vec<Arc<TyVar>>,
+    // Kind signatures (user-specified kind annotations).
+    #[serde(default)]
+    pub kind_signs: Vec<KindSignature>,
     // Predicates
     pub predicates: Vec<Predicate>,
     // Equalities
@@ -1794,35 +1799,37 @@ impl Scheme {
             preds.append(&mut pred);
         }
         for eq in &self.equalities {
-            // Right hand side of an equality should be free from associated type.
-            // This ensures that the reduction of a type terminates in a finite number of steps.
-            if !eq.value.is_assoc_ty_free() {
-                return Err(Errors::from_msg_srcs(
-                    "Right side of an equality constraint cannot contain an associated type. \
-                     NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`. \
-                     We will support more general constraints by implementing such conversion in a future.".to_string(),
-                    &[&eq.src],
-                ));
-            }
-            // The first argument of the left side of an equality constraint should be a type variable.
-            // If this condition is not satisified, then a type can be reduced in two ways, by this equality and by an instance of the associated type,
-            // which implies that there is no "normal form" of the type.
-            if !eq.args[0].is_tyvar() {
-                return Err(Errors::from_msg_srcs(
-                    "The first argument of the left side of an equality constraint should be a type variable.".to_string(),
-                    &[&eq.src],
-                ));
-            }
-            // The left side of an equality constraint should be free from associated type.
-            // This ensures that this equality constraint can be applied without reducing the left side of the equality.
-            for arg in &eq.args[1..] {
-                if !arg.is_assoc_ty_free() {
+            if !eq.on_opaque_tyvar() {
+                // Right hand side of an equality should be free from associated type.
+                // This ensures that the reduction of a type terminates in a finite number of steps.
+                if !eq.value.is_assoc_ty_free() {
                     return Err(Errors::from_msg_srcs(
-                        "In left side of an equality constraint, arguments of an associated type cannot contain an associated type. \
-                         NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`. \
+                        "Right side of an equality constraint cannot contain an associated type. \
+                         NOTE: Instead of using associated type in the right side, e.g., `Elem c1 = Elem c2`, you can write `Elem c1 = e, Elem c2 = e`. \
                          We will support more general constraints by implementing such conversion in a future.".to_string(),
                         &[&eq.src],
                     ));
+                }
+                // The first argument of the left side of an equality constraint should be a type variable.
+                // If this condition is not satisified, then a type can be reduced in two ways, by this equality and by an instance of the associated type,
+                // which implies that there is no "normal form" of the type.
+                if !eq.args[0].is_tyvar() {
+                    return Err(Errors::from_msg_srcs(
+                        "The first argument of the left side of an equality constraint should be a type variable.".to_string(),
+                        &[&eq.src],
+                    ));
+                }
+                // The left side of an equality constraint should be free from associated type.
+                // This ensures that this equality constraint can be applied without reducing the left side of the equality.
+                for arg in &eq.args[1..] {
+                    if !arg.is_assoc_ty_free() {
+                        return Err(Errors::from_msg_srcs(
+                            "In left side of an equality constraint, arguments of an associated type cannot contain an associated type. \
+                             NOTE: Instead of using associated type in the argument, e.g., `Elem (Elem c) = I64`, you can write `Elem c = e, Elem e = I64`. \
+                             We will support more general constraints by implementing such conversion in a future.".to_string(),
+                            &[&eq.src],
+                        ));
+                    }
                 }
             }
             // For each associated type usage, e.g., `Elem c = I64`, we check that `c : Collects` is in the constraint.
@@ -1853,6 +1860,81 @@ impl Scheme {
                     &[&eq.src],
                 ));
             }
+        }
+        // If the right side of an equality contains an opaque type variable,
+        // then the equality must be on an opaque type variable (i.e., args[0] is an opaque tyvar).
+        for eq in &self.equalities {
+            let rhs_has_opaque = eq.value.free_vars_vec().iter().any(|tv| is_opaque_tyvar(&tv.name));
+            if rhs_has_opaque && !eq.on_opaque_tyvar() {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "The left side of an equality constraint involving an opaque type must be \
+                         an associated type applied to an opaque type variable.",
+                    ),
+                    &[&eq.src],
+                ));
+            }
+        }
+        // For an equality on an opaque type variable, the extra arguments (args[1..]) must be
+        // mutually distinct type variables, and they must not appear elsewhere in the scheme
+        // (other equalities, predicates, or the main type).
+        // First, collect free variables appearing in everything except opaque equality.
+        let mut outside_vars = Set::<Name>::default();
+        for v in self.ty.free_vars_vec() {
+            outside_vars.insert(v.name.clone());
+        }
+        for p in &self.predicates {
+            let mut vars = vec![];
+            p.free_vars_to_vec(&mut vars);
+            for v in vars {
+                outside_vars.insert(v.name.clone());
+            }
+        }
+        for eq in &self.equalities {
+            if eq.on_opaque_tyvar() {
+                continue;
+            }
+            let mut vars = vec![];
+            eq.free_vars_to_vec(&mut vars);
+            for v in vars {
+                outside_vars.insert(v.name.clone());
+            }
+        }
+        // Validate args[1..] of each opaque equality.
+        for eq in &self.equalities {
+            if !eq.on_opaque_tyvar() {
+                continue;
+            }
+            let mut param_set = Set::<Name>::default();
+            for arg in &eq.args[1..] {
+                let is_non_opaque_tyvar = match &arg.ty {
+                    Type::TyVar(tv) => !is_opaque_tyvar(&tv.name),
+                    _ => false,
+                };
+                if !is_non_opaque_tyvar {
+                    return Err(Errors::from_msg_srcs(
+                        "Extra arguments on the left side of an equality constraint involving an opaque type must be type variables.".to_string(),
+                        &[&eq.src],
+                    ));
+                }
+                let Type::TyVar(tv) = &arg.ty else { unreachable!() };
+                param_set.insert(tv.name.clone());
+            }
+            if param_set.len() != eq.args[1..].len() {
+                return Err(Errors::from_msg_srcs(
+                    "Extra arguments on the left side of an equality constraint involving an opaque type must be mutually distinct type variables.".to_string(),
+                    &[&eq.src],
+                ));
+            }
+            for name in &param_set {
+                if outside_vars.contains(name) {
+                    return Err(Errors::from_msg_srcs(
+                        "Extra arguments on the left side of an equality constraint involving an opaque type must not appear elsewhere in the type signature.".to_string(),
+                        &[&eq.src],
+                    ));
+                }
+            }
+            outside_vars.extend(param_set);
         }
         // We do not allow there are two equality constraints with the same left side.
         //
@@ -1959,14 +2041,12 @@ impl Scheme {
 
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {
         let mut ret = self.clone();
-        // If a kind in `self.vars` is not `*`, then the kind is explicitly specified by user, so we insert it into `scope`.
         let mut kind_scope = KindScope::new();
-        for tv in &self.gen_vars {
-            if tv.kind != kind_star() {
-                kind_scope
-                    .insert(tv.name.clone(), tv.kind.clone())
-                    .map_err(|msg| Errors::from_msg_srcs(msg, &[&ret.ty.get_source()]))?;
-            }
+        // Insert user-specified kind annotations from kind_signs.
+        for ks in &self.kind_signs {
+            kind_scope
+                .insert(ks.tyvar.clone(), ks.kind.clone())
+                .map_err(|msg| Errors::from_msg_srcs(msg, &[&ret.ty.get_source()]))?;
         }
         let res = kind_scope.extend(&ret.predicates, &ret.equalities, &vec![], kind_env);
         if let Err(msg) = res {
@@ -2003,12 +2083,14 @@ impl Scheme {
     // Create new instance.
     pub fn new_arc(
         vars: Vec<Arc<TyVar>>,
+        kind_signs: Vec<KindSignature>,
         preds: Vec<Predicate>,
         eqs: Vec<Equality>,
         ty: Arc<TypeNode>,
     ) -> Arc<Scheme> {
         Arc::new(Scheme {
             gen_vars: vars,
+            kind_signs,
             predicates: preds,
             equalities: eqs,
             ty,
@@ -2022,27 +2104,29 @@ impl Scheme {
         eqs: Vec<Equality>,
         ty: Arc<TypeNode>,
     ) -> Arc<Scheme> {
-        let mut vars = vec![];
-        for pred in &preds {
-            pred.free_vars_to_vec(&mut vars);
-        }
+        let mut vars = collect_free_vars(&preds, &eqs, &ty);
+        // Exclude opaque type variables and equality formal parameters from gen_vars.
+        // Collect names of type variables that appear as formal parameters (args[1..]) of
+        // opaque-related equality constraints.
+        let mut opaque_eq_params = Set::<Name>::default();
         for eq in &eqs {
-            eq.free_vars_to_vec(&mut vars);
-        }
-        ty.free_vars_to_vec(&mut vars);
-        for tv in &mut vars {
-            for kind_sign in kind_signs {
-                if tv.name == kind_sign.tyvar {
-                    *tv = tv.set_kind(kind_sign.kind.clone());
+            // Check if this equality involves an opaque type variable.
+            if eq.on_opaque_tyvar() {
+                // Collect free type variables from args[1..].
+                for arg in &eq.args[1..] {
+                    for tv in arg.free_vars_vec() {
+                        opaque_eq_params.insert(tv.name.clone());
+                    }
                 }
             }
         }
-        Scheme::new_arc(vars, preds, eqs, ty)
+        vars.retain(|tv| !is_opaque_tyvar(&tv.name) && !opaque_eq_params.contains(&tv.name));
+        Scheme::new_arc(vars, kind_signs.to_vec(), preds, eqs, ty)
     }
 
     // Create the type scheme from a type with no generalization.
     pub fn from_type(ty: Arc<TypeNode>) -> Arc<Scheme> {
-        Scheme::new_arc(vec![], vec![], vec![], ty)
+        Scheme::new_arc(vec![], vec![], vec![], vec![], ty)
     }
 
     pub fn resolve_namespace(
@@ -2093,6 +2177,7 @@ impl Scheme {
     pub fn global_to_absolute(&self) -> Arc<Scheme> {
         Arc::new(Scheme {
             gen_vars: self.gen_vars.clone(),
+            kind_signs: self.kind_signs.clone(),
             predicates: self
                 .predicates
                 .iter()
@@ -2107,3 +2192,47 @@ impl Scheme {
         })
     }
 }
+
+// Check if a type variable name represents an opaque type variable (starts with '?').
+pub fn is_opaque_tyvar(name: &str) -> bool {
+    name.starts_with('?')
+}
+
+// Collect all free type variables from predicates, equalities, and a type into a Vec.
+pub fn collect_free_vars(
+    preds: &[Predicate],
+    eqs: &[Equality],
+    ty: &Arc<TypeNode>,
+) -> Vec<Arc<TyVar>> {
+    let mut vars = vec![];
+    for pred in preds {
+        pred.free_vars_to_vec(&mut vars);
+    }
+    for eq in eqs {
+        eq.free_vars_to_vec(&mut vars);
+    }
+    ty.free_vars_to_vec(&mut vars);
+    vars
+}
+
+// Mapping from an opaque TyCon application to the concrete type inferred by type-checking.
+//
+// Example: for `repeat : [?it : Iterator, Item ?it = a] a -> I64 -> ?it`,
+// after desugaring and type-checking:
+//   lhs = `?it a`
+//   rhs = `MapIterator (RangeIterator I64) a`
+//
+// For a trait impl like `impl Array a : ToIter`:
+//   lhs = `?it (Array a)`
+//   rhs = `ArrayIterator a`
+#[derive(Clone, Serialize, Deserialize)]
+pub struct OpaqueTyConResolution {
+    // Opaque TyCon applied to type arguments.
+    // E.g., `?it a` for a simple value, `?it (Array a)` for a trait impl.
+    pub lhs: Arc<TypeNode>,
+    // The concrete type. E.g., `MapIterator (RangeIterator I64) a`.
+    // None until type-checking resolves it.
+    pub rhs: Option<Arc<TypeNode>>,
+}
+
+

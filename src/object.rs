@@ -1361,6 +1361,9 @@ pub fn ty_to_object_ty(
             TyConVariant::Arrow => {
                 unreachable!() // Covered by `if ty.is_closure()` above.
             }
+            TyConVariant::Opaque => {
+                unreachable!() // Opaque types are resolved before code generation.
+            }
         }
     }
     ret

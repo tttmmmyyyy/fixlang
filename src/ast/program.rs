@@ -6,7 +6,7 @@ use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{FullName, Name};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
-use crate::ast::types::{Kind, Scheme, TyAliasInfo, AssocType, TyCon, TyConInfo, TyConVariant, TypeNode};
+use crate::ast::types::{is_opaque_tyvar, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, AssocType, TyCon, TyConInfo, TyConVariant, TypeNode};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
     struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
@@ -24,6 +24,7 @@ use crate::constants::{
 use crate::error::{panic_if_err, Errors};
 use crate::graph::Graph;
 use crate::misc::{collect_results, to_absolute_path, Map, Set};
+use crate::elaboration::desugar_opaque::{remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type};
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::printer::Text;
 use crate::parse::sourcefile::{SourcePos, Span};
@@ -373,6 +374,9 @@ pub struct TypedExpr {
     // When instantiating this typed expression to a concrete type, e.g., `extend : Array I64 -> Array I64 -> Array I64`,
     // we need to use the equality `Elem c1 = e` to prove that `x` has type `I64`.
     pub equalities: Vec<Equality>,
+    // Concrete types for opaque type constructors in this expression.
+    #[serde(default)]
+    pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
 }
 
 impl TypedExpr {
@@ -380,6 +384,7 @@ impl TypedExpr {
         TypedExpr {
             expr,
             equalities: vec![],
+            opaque_types: Map::default(),
         }
     }
 
@@ -482,6 +487,8 @@ pub struct Program {
     pub mod_to_import_stmts: Map<Name, Vec<ImportStatement>>,
 
     /* Instantiated symbols */
+    // Opaque types instantiated in this program, keyed by opaque TyCon name.
+    pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
     // Instantiated symbols.
     pub symbols: Map<FullName, Symbol>,
     // Deferred instantiations.
@@ -573,6 +580,7 @@ impl Program {
             deferred_errors: Errors::empty(),
             import_required: Default::default(),
             optimization_step: 0,
+            opaque_types: Map::default(),
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
             mod_info.name.clone(),
@@ -988,6 +996,8 @@ impl Program {
         // Perform type-checking.
         tc.current_module = Some(def_mod.clone());
         te.expr = tc.check_type(te.expr.clone(), req_scm.clone())?;
+        // Fill in the concrete rhs for opaque type resolutions set up during desugaring.
+        tc.fill_opaque_concrete_types(&mut te.opaque_types);
         te.equalities = tc.local_assumed_eqs;
 
         // Save the result to cache file.
@@ -1227,7 +1237,10 @@ impl Program {
                 errors.append(result.output.err().unwrap());
                 continue;
             }
-            let output = result.output.ok().unwrap();
+            let mut output = result.output.ok().unwrap();
+            for (k, mut v) in output.te.opaque_types.drain() {
+                self.opaque_types.entry(k).or_default().append(&mut v);
+            }
             self.merge_import_required(output.import_required);
             let gv = self.global_values.get_mut(&result.val_name).unwrap();
             match &mut gv.expr {
@@ -1245,42 +1258,43 @@ impl Program {
     }
 
     // Instantiate symbol.
+    // Assumes that namespace resolution and type-checking have already been performed
+    // for all global values (via `resolve_namespace_and_check_type_in_modules`).
     fn instantiate_symbol(
         &mut self,
         sym: &mut Symbol,
         tc: &TypeCheckContext,
     ) -> Result<(), Errors> {
         assert!(sym.expr.is_none());
-        // First, perform namespace resolution and type-checking.
+        // Resolve opaque types in sym.ty before method selection,
+        // so that trait method implementations can be matched against concrete types.
+        sym.ty = resolve_opaque_type_in_type(&sym.ty, &self.opaque_types);
+        // Select method implementation whose type unifies with the required type `sym.ty`.
+        // Also resolve opaque types in method_ty so both sides use concrete types.
+        let opaque_types = &self.opaque_types;
         let method_selector = |method: &TraitMemberImpl| -> Result<bool, Errors> {
-            // Select method implementation whose type unifies with the required type `sym.ty`.
-            //
-            // NOTE: Since overlapping implementations and unrelated methods are forbidden,
-            // we only need to check the unifiability here,
-            // and we do not need to check whether predicates or equality constraints are satisfiable or not.
             let mut tc0 = tc.clone();
-            // Here, use the type obtained from the trait definition.
-            // Do not use the type given by the implementor as the type signature.
-            // The latter has not been validated yet and may be incorrect; it will be validated in `resolve_namespace_and_check_type`.
-            let method_ty = method.scm_via_defn.ty.clone();
+            let method_ty = resolve_opaque_type_in_type(&method.scm_via_defn.ty, opaque_types);
             Ok(UnifOrOtherErr::extract_others(tc0.unify(&method_ty, &sym.ty))?.is_ok())
         };
-        self.resolve_namespace_and_check_type(tc, &[sym.generic_name.clone()], method_selector)?;
 
         // Then perform instantiation.
         let global_sym = self.global_values.get(&sym.generic_name).unwrap();
         let expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
-                // Specialize e's type to the required type `sym.ty`.
+                // Resolve opaque types and remove #wrap applications before unification.
+                let expr = remove_opaque_wrapper_func(e.expr.clone());
+                let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+                // Specialize the resolved type to the required type `sym.ty`.
                 let mut tc = tc.clone();
                 tc.assert_freshness();
-                tc.unify(e.expr.type_.as_ref().unwrap(), &sym.ty)
+                tc.unify(expr.type_.as_ref().unwrap(), &sym.ty)
                     .ok()
                     .unwrap();
                 for eq in &e.equalities {
                     tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                 }
-                tc.fix_types(e.expr.clone())?
+                tc.fix_types(expr)?
             }
             SymbolExpr::Method(impls) => {
                 let mut opt_e: Option<Arc<ExprNode>> = None;
@@ -1291,16 +1305,19 @@ impl Program {
                     }
                     let e = method.expr.clone();
 
-                    // Specialize e's type to the required type `sym.ty`.
+                    // Resolve opaque types and remove #wrap applications before unification.
+                    let expr = remove_opaque_wrapper_func(e.expr.clone());
+                    let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+                    // Specialize the resolved type to the required type `sym.ty`.
                     let mut tc = tc.clone();
                     tc.assert_freshness();
-                    tc.unify(e.expr.type_.as_ref().unwrap(), &sym.ty)
+                    tc.unify(expr.type_.as_ref().unwrap(), &sym.ty)
                         .ok()
                         .unwrap();
                     for eq in &e.equalities {
                         tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                     }
-                    opt_e = Some(tc.fix_types(e.expr)?);
+                    opt_e = Some(tc.fix_types(expr)?);
                     break;
                 }
                 opt_e.unwrap()
@@ -1735,6 +1752,18 @@ impl Program {
     pub fn validate_type_defns(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for type_defn in &self.type_defns {
+            // Check for opaque type variables in type definitions.
+            for tv in &type_defn.tyvars {
+                if is_opaque_tyvar(&tv.name) {
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
+                            "Opaque type variable `{}` is not allowed in a type definition.",
+                            tv.name,
+                        ),
+                        &[&type_defn.source.as_ref().map(|s| s.to_head_character())],
+                    ));
+                }
+            }
             errors.eat_err(type_defn.validate_tyvars());
             if errors.has_error() {
                 continue;

@@ -100,6 +100,10 @@ impl QualType {
 
     pub fn find_var_in_constraint(&self, var_name: &Name) -> Option<Span> {
         for pred in &self.preds {
+            // Skip constraints on opaque type variables.
+            if pred.on_opaque_tyvar() {
+                continue;
+            }
             let mut buf = vec![];
             pred.ty.free_vars_to_vec(&mut buf);
             if buf.iter().any(|tv| &tv.name == var_name) {
@@ -107,6 +111,9 @@ impl QualType {
             }
         }
         for eq in &self.eqs {
+            if eq.on_opaque_tyvar() {
+                continue;
+            }
             let mut buf = vec![];
             eq.free_vars_to_vec(&mut buf);
             if buf.iter().any(|tv| &tv.name == var_name) {
