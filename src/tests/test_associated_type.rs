@@ -672,6 +672,8 @@ main = (
 #[test]
 pub fn test_opaque_multiple_associated_types_in_equality() {
     // Multiple associated types used in equality constraints with opaque type.
+    // The opaque type variable ?c appears in return position (natural for opaque types),
+    // and the caller uses get_elem / container_size through the trait interface.
     let source = r##"
 module Main;
 
@@ -691,13 +693,16 @@ impl Array a : Container {
     container_size = |arr| arr.get_size;
 }
 
-opaque_first : [?c : Container, Elem ?c = e, Size ?c = I64, e : ToString] ?c -> String;
-opaque_first = |c| c.get_elem.to_string + ":" + c.container_size.to_string;
+make_container : [?c : Container, Elem ?c = I64, Size ?c = I64] () -> ?c;
+make_container = |_| [42];
 
 main: IO ();
 main = (
-    let result = opaque_first([42]);
-    assert_eq(|_|"", result, "42:1");;
+    let c = make_container();
+    let elem : I64 = c.get_elem;
+    let size : I64 = c.container_size;
+    assert_eq(|_|"elem", elem, 42);;
+    assert_eq(|_|"size", size, 1);;
     pure()
 );
     "##;
@@ -707,6 +712,8 @@ main = (
 #[test]
 pub fn test_opaque_higher_arity_associated_type_in_equality() {
     // Higher-arity associated type (Rebuild c b = Array b) with opaque type.
+    // The opaque type variable ?c appears in return position, and the caller
+    // uses to_array through the trait interface to verify the Rebuild constraint.
     let source = r#"
 module Main;
 
@@ -724,12 +731,13 @@ impl Array a : Rebuildable {
     to_array = |arr| arr;
 }
 
-from_rebuildable : [?c : Rebuildable, Elem ?c = a, Rebuild ?c b = Array b] ?c -> Array (Elem ?c);
-from_rebuildable = |c| c.Rebuildable::to_array;
+make_rebuildable : [?c : Rebuildable, Elem ?c = I64, Rebuild ?c b = Array b] () -> ?c;
+make_rebuildable = |_| [1, 2, 3];
 
 main: IO ();
 main = (
-    let result = from_rebuildable([1, 2, 3]);
+    let c = make_rebuildable();
+    let result : Array I64 = c.Rebuildable::to_array;
     assert_eq(|_|"", result, [1, 2, 3]);;
     pure()
 );
