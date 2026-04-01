@@ -8,6 +8,9 @@ use std::io;
 use std::path::PathBuf;
 use std::process::{self, Command, Output, Stdio};
 
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+
 pub fn run(
     mut config: Configuration,
     inherit_streams: bool,
@@ -79,6 +82,12 @@ pub fn run_command(config: &Configuration) {
     let output = output.unwrap();
 
     if output.status.code().is_none() {
+        #[cfg(unix)]
+        {
+            if let Some(signal) = output.status.signal() {
+                panic_with_msg(&format!("Program terminated by signal {}", signal));
+            }
+        }
         panic_with_msg("Program terminated by signal");
     }
     let code = output.status.code().unwrap();

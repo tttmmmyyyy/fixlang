@@ -15,6 +15,7 @@ mod test_index_syntax;
 mod test_lsp;
 mod test_memcheck;
 mod test_opaque_type;
+mod test_signal;
 mod test_string;
 mod test_trait_implementable_type;
 mod test_type_sign_in_trait_impl;
