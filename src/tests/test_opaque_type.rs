@@ -834,3 +834,36 @@ pub fn test_opaque_in_equality_rhs_both_in_return() {
     test_source(&source, Configuration::develop_mode());
 }
 
+#[test]
+pub fn test_opaque_nested_trait_chain() {
+    // Regression test: chaining trait methods with opaque return types.
+    // `c.baz.bar.foo` requires resolving nested opaque tycons in type arguments
+    // before matching resolutions.
+    let source = r#"
+        module Main;
+
+        trait a: FooTrait { foo: a -> I64; }
+        type Foo = unbox struct { val: I64 };
+        impl Foo: FooTrait { foo = |a| a.@val; }
+
+        trait b: BarTrait { bar: [?a: FooTrait] b -> ?a; }
+        type Bar = unbox struct { foo: Foo };
+        impl Bar: BarTrait { bar = |b| b.@foo; }
+
+        trait c: BazTrait { baz: [?b: BarTrait] c -> ?b; }
+        type Baz = unbox struct { bar: Bar };
+        impl Baz: BazTrait { baz = |c| c.@bar; }
+
+        main : IO ();
+        main = (
+            let a = Foo { val: 42 };
+            let b = Bar { foo: a };
+            let c = Baz { bar: b };
+            let val = c.baz.bar.foo;
+            assert_eq(|_|"nested opaque chain", val, 42);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+

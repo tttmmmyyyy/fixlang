@@ -522,12 +522,15 @@ pub fn resolve_opaque_type_in_type(
             "Opaque tycon `{}` expects arity {} but only {} args applied",
             tc.name.to_string(), arity, all_args.len()
         );
-        let prefix_args = &all_args[..arity];
+        let prefix_args: Vec<_> = all_args[..arity]
+            .iter()
+            .map(|arg| resolve_opaque_type_in_type(arg, opaque_resolutions))
+            .collect();
         let rest_args = &all_args[arity..];
 
         // Rebuild the prefix: TyCon applied to prefix_args.
         let mut prefix = type_tycon(&tc);
-        for arg in prefix_args {
+        for arg in &prefix_args {
             prefix = type_tyapp(prefix, arg.clone());
         }
 
