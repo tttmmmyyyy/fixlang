@@ -27,9 +27,11 @@ Edit `Cargo.toml` at the project root. Update the `version` field under `[packag
 version = "X.Y.Z"
 ```
 
+**Important: For pre-release versions (alpha/beta), do NOT put the pre-release suffix in `Cargo.toml`.** The semver crate's `VersionReq::STAR` (`*`) does not match pre-release versions, which would cause all projects with `fix-version = "*"` to fail. For example, for a `v1.3.0-beta.2` release, keep `version = "1.3.0"` in `Cargo.toml`. The pre-release designation is only in the git tag.
+
 ### Step 2: Sync std-doc Version
 
-The std-doc version must match the compiler version. Update these two files:
+The std-doc version must match the compiler version in `Cargo.toml` (i.e., without any pre-release suffix). Update these two files:
 
 1. **`std_doc/fixproj.toml`** — Update the `version` field:
    ```toml
