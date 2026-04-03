@@ -216,27 +216,33 @@ impl Program {
             let sub = info.tyvar_to_tycon_substitution();
 
             // Extract opaque-related predicates.
+            // Resolve trait aliases (e.g., `Additive` -> `Add` + `Zero`) so that
+            // each constituent trait is stored separately in `opaque_preds`.
             for pred in &scm.predicates {
                 if !pred.on_tyvar(&info.tyvar.name) {
                     continue;
                 }
-                let mut new_pred = pred.clone();
-                sub.substitute_predicate(&mut new_pred);
-                let qps = QualPredScheme {
-                    gen_vars: info.tycon_vars.clone(),
-                    qual_pred: QualPred {
-                        pred_constraints: vec![],
-                        eq_constraints: vec![],
-                        kind_constraints: vec![],
-                        predicate: new_pred,
-                    },
-                };
-                let trait_id = qps.qual_pred.predicate.trait_id.clone();
-                insert_to_map_vec(
-                    &mut self.trait_env.opaque_preds,
-                    &trait_id,
-                    qps,
-                );
+                let resolved = pred.resolve_trait_aliases(&self.trait_env.aliases)
+                    .unwrap_or_else(|_| vec![pred.clone()]);
+                for resolved_pred in resolved {
+                    let mut new_pred = resolved_pred;
+                    sub.substitute_predicate(&mut new_pred);
+                    let qps = QualPredScheme {
+                        gen_vars: info.tycon_vars.clone(),
+                        qual_pred: QualPred {
+                            pred_constraints: vec![],
+                            eq_constraints: vec![],
+                            kind_constraints: vec![],
+                            predicate: new_pred,
+                        },
+                    };
+                    let trait_id = qps.qual_pred.predicate.trait_id.clone();
+                    insert_to_map_vec(
+                        &mut self.trait_env.opaque_preds,
+                        &trait_id,
+                        qps,
+                    );
+                }
             }
 
             // Extract opaque-related equalities.

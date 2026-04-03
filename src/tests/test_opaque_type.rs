@@ -867,3 +867,63 @@ pub fn test_opaque_nested_trait_chain() {
     test_source(&source, Configuration::develop_mode());
 }
 
+#[test]
+pub fn test_opaque_trait_alias_in_constraint() {
+    // Regression test: using a trait alias (e.g., `Additive`) in an opaque type constraint
+    // should behave the same as writing its expansion (`Add + Zero`).
+    let source = r#"
+        module Main;
+
+        trait [f: *->*] f: Extract {
+            extract: f a -> a;
+        }
+
+        impl Array: Extract {
+            extract = |arr| arr.@(0);
+        }
+
+        impl Option: Extract {
+            extract = |opt| opt.as_some;
+        }
+
+        trait a: FooTrait {
+            foo: [?v: ToString, ?v: Additive] a -> ?v;
+        }
+
+        type Foo = unbox struct {
+            val: I64
+        };
+
+        impl Foo: FooTrait {
+            foo = |a| a.@val;
+        }
+
+        trait b: BarTrait {
+            bar: [?a1: FooTrait, ?a2: FooTrait, ?f1: Extract, ?f2: Extract] b -> (?f1 ?a1, ?f2 ?a2);
+        }
+
+        type Bar = unbox struct {
+            foo1: Foo,
+            foo2: Foo,
+        };
+
+        impl Bar: BarTrait {
+            bar = |b| ([b.@foo1], some $ b.@foo2);
+        }
+
+        main: IO ();
+        main = (
+            let a1 = Foo { val: 42 };
+            let a2 = Foo { val: 123 };
+            let b = Bar { foo1: a1, foo2: a2 };
+            let (fa1, fa2) = b.bar;
+            let v1 = fa1.extract.foo;
+            let v2 = fa2.extract.foo;
+            let result = (zero + v1 + v1, zero + v2 + v2).to_string;
+            assert_eq(|_|"trait alias in opaque constraint", result, "(84, 246)");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
