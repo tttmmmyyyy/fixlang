@@ -121,6 +121,23 @@ pub(super) fn handle_completion(
         );
         items.push(item);
     }
+    for (assoc_type, _kind_info) in program.trait_env.assoc_ty_kind_info() {
+        if assoc_type.name.to_string().contains('#') {
+            continue;
+        }
+        if !is_in_namespace(&assoc_type.name) {
+            continue;
+        }
+        let item = create_item(
+            &assoc_type.name,
+            CompletionItemKind::CLASS,
+            None,
+            &EndNode::AssocType(assoc_type.clone()),
+            &typing_text,
+            &text_document_position,
+        );
+        items.push(item);
+    }
     send_response(id, Ok::<_, ()>(items));
 }
 

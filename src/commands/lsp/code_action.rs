@@ -53,6 +53,9 @@ pub(super) fn handle_code_action(
             for trait_alias in program.trait_env.aliases.data.keys() {
                 available_names.push(trait_alias.name.clone());
             }
+            for (assoc_type, _) in program.trait_env.assoc_ty_kind_info() {
+                available_names.push(assoc_type.name.clone());
+            }
             available_names.sort();
             available_names.dedup();
             // Search for the symbol in the program's global values.

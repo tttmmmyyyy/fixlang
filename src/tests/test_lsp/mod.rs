@@ -1,5 +1,7 @@
 // LSP integration tests module
 pub mod lsp_client;
+pub mod test_code_action;
+pub mod test_completion;
 pub mod test_references;
 
 // LSP Integration Tests

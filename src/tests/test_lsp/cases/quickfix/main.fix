@@ -1,0 +1,12 @@
+module Main;
+
+import Lib;
+
+// This project compiles cleanly. The quick fix tests use fabricated diagnostics
+// to verify that the code action handler can suggest imports for various entities.
+
+f : [a : MyTrait, MyElem a = I64] a -> I64;
+f = |x| x.get_elem;
+
+main : IO ();
+main = pure();
