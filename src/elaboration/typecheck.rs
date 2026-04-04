@@ -543,6 +543,15 @@ impl TypeCheckContext {
         self.substitution.substitute_type(ty)
     }
 
+    // Apply substitution and then reduce associated types by equalities.
+    pub fn substitute_and_reduce_type(
+        &mut self,
+        ty: &Arc<TypeNode>,
+    ) -> Result<Arc<TypeNode>, Errors> {
+        let ty = self.substitute_type(ty);
+        self.reduce_type_by_equality(ty)
+    }
+
     // Apply substitution to a predicate.
     pub fn substitute_predicate(&self, p: &mut Predicate) {
         self.substitution.substitute_predicate(p)
@@ -559,13 +568,15 @@ impl TypeCheckContext {
     // `MapIterator (RangeIterator I64) a`, fills `rhs = Some(MapIterator (RangeIterator I64) a)`
     // into the corresponding `OpaqueTyConResolution` entries.
     pub fn fill_opaque_concrete_types(
-        &self,
+        &mut self,
         opaque_types: &mut Map<FullName, Vec<OpaqueTyConResolution>>,
     ) {
-        for (k, v) in &self.opaque_instantiations {
+        let instantiations = self.opaque_instantiations.clone();
+        for (k, v) in instantiations {
             let fullname_str = k.strip_prefix(WRAP_OPAQUE_TYVAR_PREFIX).unwrap();
             let opaque_tycon_name = FullName::parse(fullname_str).unwrap();
-            let rhs = self.substitution.substitute_type(&type_from_tyvar(v.clone()));
+            let rhs = self.substitute_and_reduce_type(&type_from_tyvar(v))
+                .unwrap_or_else(|_| panic!("failed to reduce opaque type rhs"));
             if let Some(resolutions) = opaque_types.get_mut(&opaque_tycon_name) {
                 for resolution in resolutions {
                     assert!(resolution.rhs.is_none(), "opaque type rhs already filled");
@@ -955,8 +966,7 @@ impl TypeCheckContext {
 
                         // Find the type constructor of the union variant.
                         if cond_tc_info.is_none() {
-                            let cond_ty = self.substitute_type(&cond_ty);
-                            let cond_ty = self.reduce_type_by_equality(cond_ty)?;
+                            let cond_ty = self.substitute_and_reduce_type(&cond_ty)?;
                             let cond_tycon = cond_ty.toplevel_tycon();
                             if cond_tycon.is_none() {
                                 return Err(Errors::from_msg_srcs(
@@ -1508,10 +1518,8 @@ impl TypeCheckContext {
         ty1: &Arc<TypeNode>,
         ty2: &Arc<TypeNode>,
     ) -> Result<(), UnifOrOtherErr> {
-        let ty1 = self.substitute_type(ty1);
-        let mut ty1 = self.reduce_type_by_equality(ty1)?;
-        let ty2 = self.substitute_type(ty2);
-        let mut ty2 = self.reduce_type_by_equality(ty2)?;
+        let mut ty1 = self.substitute_and_reduce_type(ty1)?;
+        let mut ty2 = self.substitute_and_reduce_type(ty2)?;
 
         if ty1.to_string() == ty2.to_string() {
             return Ok(());
@@ -1661,7 +1669,7 @@ impl TypeCheckContext {
             return Ok(());
         }
         skip.insert(pred_str);
-        pred.ty = self.reduce_type_by_equality(pred.ty)?;
+        pred.ty = self.substitute_and_reduce_type(&pred.ty)?;
         let mut unifiable = false;
         for qual_pred_scm in &self
             .assumed_preds
@@ -1718,8 +1726,7 @@ impl TypeCheckContext {
         &mut self,
         pat: Arc<PatternNode>,
     ) -> Result<Arc<PatternNode>, Errors> {
-        let ty = self.substitute_type(pat.info.type_.as_ref().unwrap());
-        let ty = self.reduce_type_by_equality(ty)?;
+        let ty = self.substitute_and_reduce_type(pat.info.type_.as_ref().unwrap())?;
 
         let errs = self.check_is_type_fixed("pattern", &pat.info.source, &ty);
         // To raise an error of this kind in the deepest node of the AST, we do not return here.
@@ -1780,8 +1787,7 @@ impl TypeCheckContext {
     }
 
     pub fn fix_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
-        let ty = self.substitute_type(expr.type_.as_ref().unwrap());
-        let ty = self.reduce_type_by_equality(ty)?;
+        let ty = self.substitute_and_reduce_type(expr.type_.as_ref().unwrap())?;
 
         let errs = self.check_is_type_fixed("expression", &expr.source, &ty);
         // To raise an error of this kind in the deepest node of the AST, we do not return here if some error found.

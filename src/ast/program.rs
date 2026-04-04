@@ -1282,19 +1282,21 @@ impl Program {
         let global_sym = self.global_values.get(&sym.generic_name).unwrap();
         let expr = match &global_sym.expr {
             SymbolExpr::Simple(e) => {
-                // Resolve opaque types and remove #wrap applications before unification.
-                let expr = remove_opaque_wrapper_func(e.expr.clone());
-                let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
                 // Specialize the resolved type to the required type `sym.ty`.
                 let mut tc = tc.clone();
                 tc.assert_freshness();
-                tc.unify(expr.type_.as_ref().unwrap(), &sym.ty)
+                let expr_ty = resolve_opaque_type_in_type(e.expr.type_.as_ref().unwrap(), &self.opaque_types);
+                tc.unify(&expr_ty, &sym.ty)
                     .ok()
                     .unwrap();
                 for eq in &e.equalities {
                     tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                 }
-                tc.fix_types(expr)?
+                let expr = tc.fix_types(e.expr.clone())?;
+                // Resolve opaque types and remove #wrap applications.
+                let expr = remove_opaque_wrapper_func(expr);
+                let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+                expr
             }
             SymbolExpr::Method(impls) => {
                 let mut opt_e: Option<Arc<ExprNode>> = None;
@@ -1305,19 +1307,21 @@ impl Program {
                     }
                     let e = method.expr.clone();
 
-                    // Resolve opaque types and remove #wrap applications before unification.
-                    let expr = remove_opaque_wrapper_func(e.expr.clone());
-                    let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
                     // Specialize the resolved type to the required type `sym.ty`.
                     let mut tc = tc.clone();
                     tc.assert_freshness();
-                    tc.unify(expr.type_.as_ref().unwrap(), &sym.ty)
+                    let expr_ty = resolve_opaque_type_in_type(e.expr.type_.as_ref().unwrap(), &self.opaque_types);
+                    tc.unify(&expr_ty, &sym.ty)
                         .ok()
                         .unwrap();
                     for eq in &e.equalities {
                         tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
                     }
-                    opt_e = Some(tc.fix_types(expr)?);
+                    let expr = tc.fix_types(e.expr.clone())?;
+                    // Resolve opaque types and remove #wrap applications before unification.
+                    let expr = remove_opaque_wrapper_func(expr);
+                    let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+                    opt_e = Some(expr);
                     break;
                 }
                 opt_e.unwrap()
