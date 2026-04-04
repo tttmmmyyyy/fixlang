@@ -867,3 +867,37 @@ pub fn test_opaque_nested_trait_chain() {
     test_source(&source, Configuration::develop_mode());
 }
 
+#[test]
+pub fn test_opaque_trait_method_returning_opaque() {
+    // Regression test: compiler crashed when a trait method returns an opaque type
+    // and the trait is implemented for multiple concrete types (e.g., I64, U64).
+    let source = r#"
+        module Main;
+
+        trait a: FooTrait {
+            foo: [?s: ToString] a -> ?s;
+        }
+
+        impl I64: FooTrait {
+            foo = |a| "I64";
+        }
+
+        impl U64: FooTrait {
+            foo = |a| "U64";
+        }
+
+        print_foo: [a: FooTrait] a -> IO ();
+        print_foo = |a| (
+            a.foo.to_string.println
+        );
+
+        main: IO ();
+        main = (
+            print_foo(1);;
+            print_foo(2_U64);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
