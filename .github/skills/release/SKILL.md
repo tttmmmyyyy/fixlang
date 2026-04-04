@@ -139,10 +139,10 @@ Present the diff to the user and wait for approval before proceeding to commit, 
    git tag vX.Y.Z
    ```
 
-3. Push the commit and tag to main:
+3. Push the commit and tag:
    ```bash
-   git push origin main
-   git push origin --tags
+   git push
+   git push --tags
    ```
 
 ## Checklist Summary
