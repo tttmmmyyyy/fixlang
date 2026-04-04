@@ -1,0 +1,7 @@
+module Lib2;
+
+import Lib;
+
+// Use associated type from Lib.
+use_elem : [a : MyTrait, MyTrait::MyElem a = I64] a -> I64;
+use_elem = |x| x.get_elem;

@@ -1,0 +1,13 @@
+module Lib;
+
+trait a : MyTrait {
+    type MyElem a;
+    get_elem : a -> MyTrait::MyElem a;
+}
+
+type MyData = unbox struct { value: I64 };
+
+impl MyData : MyTrait {
+    type MyElem MyData = I64;
+    get_elem = |d| d.@value;
+}
