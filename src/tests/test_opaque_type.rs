@@ -961,3 +961,81 @@ pub fn test_opaque_trait_method_returning_opaque() {
     test_source(&source, Configuration::develop_mode());
 }
 
+// ============================================================
+// 3. Implementation does not satisfy declared opaque constraints
+// ============================================================
+
+#[test]
+pub fn test_opaque_impl_trait_constraint_not_satisfied_global() {
+    // The declared signature requires `?it : Iterator`, but the implementation
+    // returns `String`, which does not implement `Iterator`.
+    let source = r#"
+        module Main;
+
+        wrong_iter : [?it : Iterator] I64 -> ?it;
+        wrong_iter = |n| n.to_string;
+
+        main : IO ();
+        main = pure();
+    "#;
+    test_source_fail(&source, Configuration::develop_mode(), "String : Std::Iterator");
+}
+
+#[test]
+pub fn test_opaque_impl_assoc_type_mismatch_global() {
+    // The declared signature requires `Item ?it = I64`, but the implementation
+    // returns an iterator whose item type is `String`.
+    let source = r#"
+        module Main;
+
+        wrong_item : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        wrong_item = |n| Iterator::range(0, n).map(|x| x.to_string);
+
+        main : IO ();
+        main = pure();
+    "#;
+    test_source_fail(&source, Configuration::develop_mode(), "String = Std::I64");
+}
+
+#[test]
+pub fn test_opaque_impl_trait_constraint_not_satisfied_method() {
+    // The trait declares `?it : Iterator`, but the impl for `I64` returns
+    // `String`, which does not implement `Iterator`.
+    let source = r#"
+        module Main;
+
+        trait a : MakeIter {
+            make_iter : [?it : Iterator] a -> ?it;
+        }
+
+        impl I64 : MakeIter {
+            make_iter = |n| n.to_string;
+        }
+
+        main : IO ();
+        main = pure();
+    "#;
+    test_source_fail(&source, Configuration::develop_mode(), "String : Std::Iterator");
+}
+
+#[test]
+pub fn test_opaque_impl_assoc_type_mismatch_method() {
+    // The trait declares `Item ?it = I64`, but the impl for `I64` returns
+    // an iterator whose item type is `String`.
+    let source = r#"
+        module Main;
+
+        trait a : MakeIntIter {
+            make_ints : [?it : Iterator, Item ?it = I64] a -> ?it;
+        }
+
+        impl I64 : MakeIntIter {
+            make_ints = |n| Iterator::range(0, n).map(|x| x.to_string);
+        }
+
+        main : IO ();
+        main = pure();
+    "#;
+    test_source_fail(&source, Configuration::develop_mode(), "String = Std::I64");
+}
+
