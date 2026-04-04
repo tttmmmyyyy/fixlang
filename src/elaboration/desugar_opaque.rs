@@ -484,10 +484,11 @@ fn build_wrap_scheme(
 // Produces `_undefined_internal([])` which type-checks as `a` (any type).
 // #wrap_opaque is removed during instantiation so this is never executed.
 fn build_undefined_expr() -> Arc<ExprNode> {
-    let placeholder_name = FullName::new(
+    let mut placeholder_name = FullName::new(
         &NameSpace::new(vec!["Std".to_string()]),
         "_undefined_internal",
     );
+    placeholder_name.global_to_absolute();
     let empty_array = expr_array_lit(vec![], None);
     expr_app(expr_var(placeholder_name, None), vec![empty_array], None)
 }
