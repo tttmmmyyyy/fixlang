@@ -1039,3 +1039,23 @@ pub fn test_opaque_impl_assoc_type_mismatch_method() {
     test_source_fail(&source, Configuration::develop_mode(), "String = Std::I64");
 }
 
+#[test]
+pub fn test_opaque_regression_unknown_name_undefined_internal() {
+    // Regression: with an explicit `import Std::{...}` that excludes
+    // `_undefined_internal`, the generated #wrap_opaque placeholder
+    // caused "unknown name `Std::_undefined_internal`".
+    let source = r#"
+        module Main;
+
+        import Std::{IO, Monad::pure, I64, Iterator, Iterator::range};
+        import Std::Iterator::Item;
+
+        f : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+        f = |n| Iterator::range(0, n);
+
+        main : IO ();
+        main = pure();
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
