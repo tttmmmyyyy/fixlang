@@ -1278,55 +1278,30 @@ impl Program {
             Ok(UnifOrOtherErr::extract_others(tc0.unify(&method_ty, &sym.ty))?.is_ok())
         };
 
-        // Then perform instantiation.
+        // Select the typed expression to specialize.
         let global_sym = self.global_values.get(&sym.generic_name).unwrap();
-        let expr = match &global_sym.expr {
-            SymbolExpr::Simple(e) => {
-                // Specialize the resolved type to the required type `sym.ty`.
-                let mut tc = tc.clone();
-                tc.assert_freshness();
-                let expr_ty = resolve_opaque_type_in_type(e.expr.type_.as_ref().unwrap(), &self.opaque_types);
-                tc.unify(&expr_ty, &sym.ty)
-                    .ok()
-                    .unwrap();
-                for eq in &e.equalities {
-                    tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
-                }
-                let expr = tc.fix_types(e.expr.clone())?;
-                // Resolve opaque types and remove #wrap applications.
-                let expr = remove_opaque_wrapper_func(expr);
-                let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
-                expr
-            }
+        let te = match &global_sym.expr {
+            SymbolExpr::Simple(e) => e,
             SymbolExpr::Method(impls) => {
-                let mut opt_e: Option<Arc<ExprNode>> = None;
-                for method in impls {
-                    // Select method implementation.
-                    if !method_selector(method)? {
-                        continue;
-                    }
-                    let e = method.expr.clone();
-
-                    // Specialize the resolved type to the required type `sym.ty`.
-                    let mut tc = tc.clone();
-                    tc.assert_freshness();
-                    let expr_ty = resolve_opaque_type_in_type(e.expr.type_.as_ref().unwrap(), &self.opaque_types);
-                    tc.unify(&expr_ty, &sym.ty)
-                        .ok()
-                        .unwrap();
-                    for eq in &e.equalities {
-                        tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
-                    }
-                    let expr = tc.fix_types(e.expr.clone())?;
-                    // Resolve opaque types and remove #wrap applications before unification.
-                    let expr = remove_opaque_wrapper_func(expr);
-                    let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
-                    opt_e = Some(expr);
-                    break;
-                }
-                opt_e.unwrap()
+                let method = impls
+                    .iter()
+                    .find(|method| method_selector(method).unwrap_or(false))
+                    .unwrap();
+                &method.expr
             }
         };
+
+        // Specialize the typed expression to `sym.ty` and resolve opaque types.
+        let mut tc = tc.clone();
+        tc.assert_freshness();
+        let expr_ty = resolve_opaque_type_in_type(te.expr.type_.as_ref().unwrap(), &self.opaque_types);
+        tc.unify(&expr_ty, &sym.ty).ok().unwrap();
+        for eq in &te.equalities {
+            tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
+        }
+        let expr = tc.fix_types(te.expr.clone())?;
+        let expr = remove_opaque_wrapper_func(expr);
+        let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
         sym.expr = Some(self.instantiate_expr(&expr)?);
         Ok(())
     }
