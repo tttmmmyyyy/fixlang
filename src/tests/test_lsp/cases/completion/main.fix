@@ -1,0 +1,10 @@
+module Main;
+
+import Lib;
+
+main : IO ();
+main = (
+    let d = MyData { value: 42 };
+    eval my_func(d);
+    pure()
+);

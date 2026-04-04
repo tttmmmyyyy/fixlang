@@ -6,6 +6,7 @@ use super::util::{document_from_endnode, get_line_string_from_position, paramete
 use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::expr::Var;
+use crate::ast::types::AssocType;
 use crate::constants::chars_allowed_in_identifiers;
 use crate::misc::Map;
 use crate::write_log;
@@ -116,6 +117,23 @@ pub(super) fn handle_completion(
             CompletionItemKind::INTERFACE,
             None,
             &EndNode::Trait(trait_.clone()),
+            &typing_text,
+            &text_document_position,
+        );
+        items.push(item);
+    }
+    for (assoc_type, _kind_info) in program.trait_env.assoc_ty_kind_info() {
+        if assoc_type.name.to_string().contains('#') {
+            continue;
+        }
+        if !is_in_namespace(&assoc_type.name) {
+            continue;
+        }
+        let item = create_item(
+            &assoc_type.name,
+            CompletionItemKind::CLASS,
+            None,
+            &EndNode::AssocType(assoc_type.clone()),
             &typing_text,
             &text_document_position,
         );

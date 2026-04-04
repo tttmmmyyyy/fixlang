@@ -1,0 +1,28 @@
+module Lib;
+
+// Trait
+trait a : MyTrait {
+    // Associated type
+    type Elem a;
+    // Trait member (value)
+    get_elem : a -> MyTrait::Elem a;
+}
+
+// Trait alias
+trait MyTraitAlias = Std::ToString + Std::Eq;
+
+// Type (struct)
+type MyData = unbox struct { value: I64 };
+
+// Type alias
+type MyInt = I64;
+
+// Trait implementation
+impl MyData : MyTrait {
+    type Elem MyData = I64;
+    get_elem = |d| d.@value;
+}
+
+// Global value (function)
+my_func : MyData -> I64;
+my_func = |d| d.get_elem;
