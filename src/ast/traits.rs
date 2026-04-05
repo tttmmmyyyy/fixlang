@@ -156,6 +156,9 @@ pub struct AssocTypeImpl {
     // Includes `impl_type`.
     pub params: Vec<Arc<TyVar>>,
     pub value: Arc<TypeNode>,
+    // The impl_type as written by the user in the associated type line (e.g., `Main::MyType` in `type Item Main::MyType = ...;`).
+    // This is used for post-name-resolution validation against the trait impl's impl_type.
+    pub impl_type_as_written: Arc<TypeNode>,
     // Source location of the entire associated type implementation (e.g., `type Item MyIter = I64` in `type Item MyIter = I64;`).
     // This span is needed for `get_document()` to find doc comments placed above the implementation.
     pub source: Option<Span>,
@@ -194,6 +197,7 @@ impl AssocTypeImpl {
 
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.value = self.value.resolve_namespace(ctx)?;
+        self.impl_type_as_written = self.impl_type_as_written.resolve_namespace(ctx)?;
         Ok(())
     }
 
@@ -1068,6 +1072,16 @@ impl TraitEnv {
                         "`{}` is not an associated type of trait `{}`.",
                         impl_assoc_type,
                         trait_id.to_string(),
+                    ),
+                    &[&impl_info.source],
+                ));
+            }
+            // Validate that the impl_type written in the associated type line matches the trait impl's impl_type.
+            if impl_info.impl_type_as_written != impl_.impl_type() {
+                return Err(Errors::from_msg_srcs(
+                    format!(
+                        "The implementation of an associated type should be in the form `type {{AssocTyName}} {{impl_type}} {{type_var1}} ... {{type_varN}} = {{value_type}};`, where {{impl_type}} is `{}` here.",
+                        impl_.impl_type().to_string()
                     ),
                     &[&impl_info.source],
                 ));

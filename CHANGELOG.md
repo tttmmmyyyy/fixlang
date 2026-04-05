@@ -34,6 +34,10 @@
 
 ### Fixed
 
+#### Language
+
+- Fixed a compiler error that occurred when writing a namespace-qualified impl type (e.g., `Main::MyType`) in an associated type implementation line, such as `type MyElem Main::MyType = ...;`.
+
 #### Tool
 
 - LSP: Fixed an issue where associated types were missing from completion items.

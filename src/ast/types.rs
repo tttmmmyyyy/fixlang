@@ -1215,19 +1215,19 @@ impl TypeNode {
     // - where `{AssocTypeName}` is a local name,
     // - `ty1` is equal to the implemented type.
     // - type variables appears in the arguments are distinct.
-    // If ok, return the name and the array `[tv1, tv2, ..., tvN]`, where tv1 is a special type variable `#impl_type`.
-    pub fn validate_as_associated_type_defn(
+    // If ok, return an `AssocTypeDefnHead` with the parsed information.
+    pub fn validate_as_associated_type_impl_defn(
         &self,
         impl_type: &Arc<TypeNode>,
         src_for_err: &Option<Span>,
-        err_msg_for_impl: bool,
-    ) -> Result<(Name, Option<Span>, Vec<Arc<TyVar>>), Errors> {
+        is_impl: bool,
+    ) -> Result<AssocTypeDefnHead, Errors> {
         fn general_err(
-            for_implememtation: bool,
+            is_impl: bool,
             imple_type: &Arc<TypeNode>,
             src_for_err: &Option<Span>,
         ) -> Errors {
-            if for_implememtation {
+            if is_impl {
                 Errors::from_msg_srcs(
                     format!("The implementation of an associated type should be in the form `type {{AssocTyName}} {{impl_type}} {{type_var1}} ... {{type_varN}} = {{value_type}};`, where {{impl_type}} is `{}` here.", imple_type.to_string()),
                     &[src_for_err],
@@ -1242,7 +1242,7 @@ impl TypeNode {
         // Validate the type application sequence.
         let app_seq = self.flatten_type_application();
         if app_seq.len() < 2 {
-            return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
+            return Err(general_err(is_impl, impl_type, src_for_err));
         }
         let assoc_type_name: Name;
         match &app_seq[0].ty {
@@ -1256,12 +1256,19 @@ impl TypeNode {
                 assoc_type_name = tc.name.to_string();
             }
             _ => {
-                return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
+                return Err(general_err(is_impl, impl_type, src_for_err));
             }
         }
-        if app_seq[1].to_string() != impl_type.to_string() {
-            return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
+        // For trait definitions (`is_impl=false`), verify the impl_type token matches
+        // the expected impl_type at parse time.
+        // For trait implementations (`is_impl=true`), skip this check here: the user
+        // may write a namespace-qualified type (e.g., `Main::MyType`) which would not
+        // match the unresolved local name in `impl_type` at this stage.  The equivalent
+        // check is performed after name resolution in `validate_trait_impl`.
+        if !is_impl && app_seq[1].to_string() != impl_type.to_string() {
+            return Err(general_err(is_impl, impl_type, src_for_err));
         }
+        let impl_type_as_written = app_seq[1].clone();
         let mut tyvars = vec![make_tyvar("#impl_type", &kind_star())];
         let impl_ty_tyvar_set: Set<Name> = impl_type
             .free_vars_vec()
@@ -1273,7 +1280,7 @@ impl TypeNode {
             match &app_seq[i].ty {
                 Type::TyVar(tv) => {
                     if impl_ty_tyvar_set.contains(&tv.name) {
-                        if err_msg_for_impl {
+                        if is_impl {
                             return Err(Errors::from_msg_srcs(
                                 format!(
                                     "In associated type implementation, each type variable should be free from the implemented type (`{}` here).",
@@ -1292,7 +1299,7 @@ impl TypeNode {
                         }
                     }
                     if tyvars_set.contains(&tv.name) {
-                        if err_msg_for_impl {
+                        if is_impl {
                             return Err(Errors::from_msg_srcs(
                                 "In associated type implementation, each type variable should be different.".to_string(),
                                 &[src_for_err],
@@ -1308,13 +1315,37 @@ impl TypeNode {
                     tyvars_set.insert(tv.name.clone());
                 }
                 _ => {
-                    return Err(general_err(err_msg_for_impl, impl_type, src_for_err));
+                    return Err(general_err(is_impl, impl_type, src_for_err));
                 }
             }
         }
         let assoc_type_src = app_seq[0].get_source().clone();
-        Ok((assoc_type_name, assoc_type_src, tyvars))
+        Ok(AssocTypeDefnHead {
+            name: assoc_type_name,
+            name_src: assoc_type_src,
+            params: tyvars,
+            impl_type_as_written,
+        })
     }
+}
+
+/// Parsed and validated result of the head of an associated type definition or implementation.
+/// Represents the `AssocTypeName ImplType tv1 tv2 ... tvN` part of
+/// `type AssocTypeName ImplType tv1 tv2 ... tvN [= ValueType]`.
+pub struct AssocTypeDefnHead {
+    /// Local name of the associated type (e.g., `MyElem`).
+    pub name: Name,
+    /// Source span of the associated type name.
+    pub name_src: Option<Span>,
+    /// Type parameters of the associated type equation.
+    /// The first element is always the special `#impl_type` type variable;
+    /// the remaining elements are the user-supplied extra type variables.
+    pub params: Vec<Arc<TyVar>>,
+    /// The impl_type token exactly as written in the source
+    /// (e.g., `Main::MyType` in `type Item Main::MyType = ...`).
+    /// Retained so that it can be compared against the resolved impl_type
+    /// after name resolution, catching mismatched impl_types in trait impls.
+    pub impl_type_as_written: Arc<TypeNode>,
 }
 
 impl Clone for TypeNode {

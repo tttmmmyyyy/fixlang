@@ -775,3 +775,111 @@ main = (
         "Invalid number of arguments for associated type",
     );
 }
+
+#[test]
+pub fn test_associated_type_namespace_qualified_impl_type() {
+    let source = r#"
+module Main;
+
+type MyType = struct { data: I64 };
+
+trait a : MyTrait {
+    type MyElem a;
+    get_elem : a -> MyElem a;
+}
+
+impl MyType : MyTrait {
+    type MyElem Main::MyType = I64;
+    get_elem = |mt| mt.@data;
+}
+
+main : IO ();
+main = (
+    let mt = MyType { data: 42 };
+    let item: I64 = mt.get_elem;
+    eval assert_eq(|_| "", item, 42);
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_associated_type_wrong_namespace_impl_type() {
+    let source = r#"
+module Main;
+
+type MyType = struct { data: I64 };
+
+trait a : MyTrait {
+    type MyElem a;
+}
+
+impl MyType : MyTrait {
+    type MyElem Wrong::MyType = I64;
+}
+
+main : IO ();
+main = pure();
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Unknown type or associated type name `Wrong::MyType`",
+    );
+}
+
+#[test]
+pub fn test_associated_type_namespace_qualified_wrong_impl_type() {
+    // `Main::MyType2` is a real type, but the impl is for `MyType1`.
+    // The namespace-qualified name resolves successfully, but the post-name-resolution
+    // check in `validate_trait_impl` should catch the mismatch.
+    let source = r#"
+module Main;
+
+type MyType1 = struct { data: I64 };
+type MyType2 = struct { data: I64 };
+
+trait a : MyTrait {
+    type MyElem a;
+}
+
+impl MyType1 : MyTrait {
+    type MyElem Main::MyType2 = I64;
+}
+
+main : IO ();
+main = pure();
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "{impl_type} is `Main::MyType1`",
+    );
+}
+
+#[test]
+pub fn test_associated_type_mismatched_impl_type() {
+    let source = r#"
+module Main;
+
+type MyType1 = struct { data: I64 };
+type MyType2 = struct { data: I64 };
+
+trait a : MyTrait {
+    type MyElem a;
+}
+
+impl MyType1 : MyTrait {
+    type MyElem MyType2 = I64;
+}
+
+main : IO ();
+main = pure();
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "{impl_type} is `Main::MyType1`",
+    );
+}

@@ -545,8 +545,10 @@ fn parse_trait_member_type_defn(
     };
     let assoc_type_defn = parse_type(pairs.next().unwrap(), ctx);
     // Validate form of `assoc_type_defn`
+    let head =
+        assoc_type_defn.validate_as_associated_type_impl_defn(impl_type, &Some(span.clone()), false)?;
     let (assoc_type_name, assoc_type_name_src, assoc_type_params) =
-        assoc_type_defn.validate_as_associated_type_defn(impl_type, &Some(span.clone()), false)?;
+        (head.name, head.name_src, head.params);
     let kind_applied = if let Some(pair) = pairs.next() {
         if pair.as_rule() == Rule::kind {
             parse_kind(pair, ctx)
@@ -710,18 +712,19 @@ fn parse_trait_member_type_impl(
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     let assoc_type_application = parse_type(pairs.next().unwrap(), ctx);
-    let (assoc_type_name, name_src, params) = assoc_type_application.validate_as_associated_type_defn(
+    let head = assoc_type_application.validate_as_associated_type_impl_defn(
         impl_type,
         &Some(span.clone()),
         true,
     )?;
     let type_value = parse_type(pairs.next().unwrap(), ctx);
     Ok(AssocTypeImpl {
-        name: assoc_type_name,
-        params,
+        name: head.name,
+        params: head.params,
         value: type_value,
+        impl_type_as_written: head.impl_type_as_written,
         source: Some(span),
-        name_src,
+        name_src: head.name_src,
     })
 }
 
