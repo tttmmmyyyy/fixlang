@@ -238,5 +238,5 @@ fn quickfix_stub_text(info: &MissingTraitImplInfo, impl_indent: usize) -> String
         return String::new();
     }
 
-    "\n".to_string() + &stub_lines.join("\n") + "\n"
+    stub_lines.join("\n") + "\n"
 }
