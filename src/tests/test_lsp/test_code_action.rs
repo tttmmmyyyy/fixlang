@@ -179,4 +179,128 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// Test that quick fix suggests inserting stub implementations for missing trait members
+    /// and associated types.
+    #[test]
+    fn test_quickfix_lacking_trait_impl() {
+        let mut ctx = LspQuickFixCtx::setup("quickfix_trait_impl", &["main.fix"]);
+
+        // The project has an incomplete impl, so we should get diagnostics.
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        assert!(
+            !diagnostics.is_empty(),
+            "Project should have diagnostics for incomplete trait impl."
+        );
+
+        // Find the "lacking-trait-impl" diagnostic.
+        let lacking_diag = diagnostics
+            .iter()
+            .find(|d| {
+                d.get("code")
+                    .and_then(|c| c.as_str())
+                    .map(|c| c == "lacking-trait-impl")
+                    .unwrap_or(false)
+            })
+            .expect("Should have a 'lacking-trait-impl' diagnostic");
+
+        // Get the range of the diagnostic.
+        let range = lacking_diag.get("range").unwrap().clone();
+        let start = range.get("start").unwrap();
+        let end = range.get("end").unwrap();
+        let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
+        let start_col = start.get("character").unwrap().as_u64().unwrap() as u32;
+        let end_line = end.get("line").unwrap().as_u64().unwrap() as u32;
+        let end_col = end.get("character").unwrap().as_u64().unwrap() as u32;
+
+        // Request code actions with the real diagnostic.
+        let actions = ctx.code_actions(
+            "main.fix",
+            vec![lacking_diag.clone()],
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        );
+
+        // Verify that we get a quick fix action.
+        assert!(
+            !actions.is_empty(),
+            "Should have at least one quick fix action."
+        );
+
+        let titles: Vec<String> = actions
+            .iter()
+            .filter_map(|a| a.get("title").and_then(|t| t.as_str()).map(String::from))
+            .collect();
+        assert!(
+            titles.iter().any(|t| t.contains("stub")),
+            "Quick fix should suggest inserting stub implementations. Got: {:?}",
+            titles
+        );
+
+        // Verify the text edit content.
+        let action = actions
+            .iter()
+            .find(|a| {
+                a.get("title")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t.contains("stub"))
+                    .unwrap_or(false)
+            })
+            .expect("Should find the stub action");
+
+        let edit = action.get("edit").expect("Action should have edit");
+        let changes = edit.get("changes").expect("Edit should have changes");
+
+        // Get the text edit for main.fix.
+        let uri = ctx.file_uri("main.fix");
+        let file_edits = changes.get(&uri).expect("Should have edits for main.fix");
+        let file_edits = file_edits.as_array().expect("Edits should be an array");
+        assert_eq!(file_edits.len(), 1, "Should have exactly one text edit");
+
+        let new_text = file_edits[0]
+            .get("newText")
+            .and_then(|t| t.as_str())
+            .expect("Edit should have newText");
+
+        // The stub should contain associated type and member stubs.
+        assert!(
+            new_text.contains("type Elem"),
+            "Stub should contain associated type Elem. Got: {:?}",
+            new_text
+        );
+        assert!(
+            new_text.contains("get_elem"),
+            "Stub should contain member get_elem. Got: {:?}",
+            new_text
+        );
+        assert!(
+            new_text.contains("show_it"),
+            "Stub should contain member show_it. Got: {:?}",
+            new_text
+        );
+        assert!(
+            new_text.contains("::Std::undefined(\"unimplemented\")"),
+            "Member stubs should use ::Std::undefined. Got: {:?}",
+            new_text
+        );
+        assert!(
+            new_text.contains("type Elem Main::MyData = ?;"),
+            "Associated type stub should have the form 'type Elem Main::MyData = ?;'. Got: {:?}",
+            new_text
+        );
+        assert!(
+            new_text.contains("get_elem : Main::MyData -> Main::MyTrait::Elem Main::MyData"),
+            "Member get_elem should have the correct type. Got: {:?}",
+            new_text
+        );
+        assert!(
+            new_text.contains("show_it : Main::MyData -> Std::String"),
+            "Member show_it should have the correct type. Got: {:?}",
+            new_text
+        );
+
+        ctx.shutdown();
+    }
 }

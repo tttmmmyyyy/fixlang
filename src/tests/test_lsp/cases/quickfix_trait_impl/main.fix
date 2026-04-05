@@ -1,0 +1,15 @@
+module Main;
+
+trait a : MyTrait {
+    type Elem a;
+    get_elem : a -> MyTrait::Elem a;
+    show_it : a -> String;
+}
+
+type MyData = unbox struct { value: I64 };
+
+impl MyData : MyTrait {
+}
+
+main : IO ();
+main = pure();

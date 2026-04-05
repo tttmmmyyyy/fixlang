@@ -417,10 +417,6 @@ pub fn launch_language_server() {
                 let program = &last_diag.as_ref().unwrap().program;
                 document_symbol::handle_document_symbol(id.unwrap(), &params.unwrap(), program);
             } else if method == "textDocument/codeAction" {
-                if last_diag.is_none() {
-                    continue;
-                }
-                let program = &last_diag.as_ref().unwrap().program;
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -430,6 +426,7 @@ pub fn launch_language_server() {
                 if params.is_none() {
                     continue;
                 }
+                let program = last_diag.as_ref().map(|d| &d.program);
                 code_action::handle_code_action(
                     id.unwrap(),
                     &params.unwrap(),

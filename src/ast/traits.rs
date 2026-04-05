@@ -1,3 +1,4 @@
+use crate::constants::ERR_LACKING_TRAIT_IMPL;
 use crate::ast::equality::{Equality, EqualityScheme};
 use crate::ast::expr::ExprNode;
 use crate::ast::kind_scope::{KindEnv, KindScope};
@@ -8,14 +9,69 @@ use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
 use crate::ast::types::{is_opaque_tyvar, type_from_tyvar, type_tyvar, Kind, Scheme, AssocType, TyVar, TypeNode};
 use crate::fixstd::builtin::make_boxed_trait;
-use crate::misc::{insert_to_map_vec, number_to_varname, Map, Set};
+use crate::misc::{generate_fresh_varnames, insert_to_map_vec, Map, Set};
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext, UnifOrOtherErr};
 use crate::elaboration::typecheckcache;
-use crate::{ast::collect_annotation_tyvars::collect_annotation_tyvars, error::Errors};
+use crate::{ast::collect_annotation_tyvars::collect_annotation_tyvars, error::{Error, Errors}};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+// Information about missing items in a trait implementation, used for error messages and quick fixes.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MissingTraitImplInfo {
+    pub items: Vec<MissingTraitImplItem>,
+    // The impl type (e.g. `Main::MyData`).
+    pub impl_type: Arc<TypeNode>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum MissingTraitImplItem {
+    Member(MissingMember),
+    AssocType(MissingAssocType),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MissingMember {
+    pub name: FullName,
+    // The type of the member with the trait type variable substituted by the impl type.
+    pub ty: Arc<TypeNode>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MissingAssocType {
+    pub name: FullName,
+    // Number of type parameters beyond the impl type parameter.
+    pub num_extra_params: usize,
+}
+
+impl MissingTraitImplInfo {
+    // Build the error message for missing items.
+    pub fn error_message(&self) -> String {
+        let names: Vec<String> = self
+            .items
+            .iter()
+            .map(|item| match item {
+                MissingTraitImplItem::Member(m) => format!("member `{}`", m.name.name),
+                MissingTraitImplItem::AssocType(a) => {
+                    format!("associated type `{}`", a.name.name)
+                }
+            })
+            .collect();
+        format!("Lacking implementation of {}.", names.join(", "))
+    }
+
+    // Serialize to a serde_json::Value for use as diagnostic data.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap()
+    }
+
+    // Deserialize from a serde_json::Value.
+    pub fn from_json(value: &serde_json::Value) -> Option<Self> {
+        serde_json::from_value(value.clone()).ok()
+    }
+}
 
 // The identifier of a trait.
 #[derive(Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -552,30 +608,25 @@ impl TraitImpl {
         // In this case, if we naively substitute `f` in `map : (a -> b) -> f a -> f b` with `Arrow a`,
         // then we get `map : (a -> b) -> Arrow a a -> Arrow a b`, which is wrong.
         // So we first rename `(a -> b) -> f a -> f b` to `(c -> b) -> f c -> f b`.
-        let mut fv_method_quality = vec![];
-        method_qualty.free_vars_vec(&mut fv_method_quality);
+        let mut fv_method_qualty = vec![];
+        method_qualty.free_vars_vec(&mut fv_method_qualty);
         let fv_impl_type = impl_type.free_vars();
+        // Collect type variables that need renaming (those that collide with fv_impl_type).
+        let vars_to_rename: Vec<_> = fv_method_qualty
+            .iter()
+            .filter(|fv| &fv.name != tv && fv_impl_type.contains_key(&fv.name))
+            .collect();
+        let used_names: Set<String> = fv_impl_type
+            .keys()
+            .chain(fv_method_qualty.iter().map(|fv| &fv.name))
+            .cloned()
+            .collect();
+        let new_names = generate_fresh_varnames(vars_to_rename.len(), &used_names);
         let mut s = Substitution::default();
-        let mut name_no = -1;
-        for fv in &fv_method_quality {
-            if &fv.name == tv {
-                continue;
-            }
-            if fv_impl_type.contains_key(&fv.name) {
-                // Search for a new name that is not in `fv_impl_type`.
-                loop {
-                    name_no += 1;
-                    let new_name = number_to_varname(name_no as usize);
-                    if !fv_impl_type.contains_key(&new_name)
-                        && fv_method_quality.iter().all(|x| x.name != new_name)
-                    {
-                        let new_fv = type_tyvar(&new_name, &fv.kind);
-                        let merge_succ = s.merge(&Substitution::single(&fv.name, new_fv));
-                        assert!(merge_succ);
-                        break;
-                    }
-                }
-            }
+        for (fv, new_name) in vars_to_rename.iter().zip(new_names.iter()) {
+            let new_fv = type_tyvar(new_name, &fv.kind);
+            let merge_succ = s.merge(&Substitution::single(&fv.name, new_fv));
+            assert!(merge_succ);
         }
         // Rename type variables in `method_qualty`.
         s.substitute_qualtype(&mut method_qualty);
@@ -594,13 +645,14 @@ impl TraitImpl {
         let mut eqs = self.qual_pred.eq_constraints.clone();
         eqs.append(&mut method_qualty.eqs);
 
-        // Set source location of the type to the location where the method is implemented.
-        let source = self
-            .member_expr(method_name)
-            .source
-            .as_ref()
-            .map(|src| src.to_head_character());
-        let ty = ty.set_source(source);
+        // Commented out: likely unnecessary and inappropriate, as the source location set here
+        // is never actually used by callers. Kept as a comment for easier debugging if a bug is found.
+        // let source = self
+        //     .member_expr(method_name)
+        //     .source
+        //     .as_ref()
+        //     .map(|src| src.to_head_character());
+        // let ty = ty.set_source(source);
 
         Scheme::generalize(&kind_signs, preds, eqs, ty)
     }
@@ -953,14 +1005,20 @@ impl TraitEnv {
         let trait_members = &defn.members;
         let impl_members = &impl_.members;
         let member_sigs = &impl_.member_sigs;
+
+        // Collect missing members and associated types for the quick fix.
+        let trait_ns = trait_id.name.to_namespace();
+        let mut missing_items: Vec<MissingTraitImplItem> = vec![];
         for trait_member in trait_members {
             if !impl_members.contains_key(&trait_member.name) {
-                return Err(Errors::from_msg_srcs(
-                    format!("Lacking implementation of member `{}`.", trait_member.name),
-                    &[&impl_.source],
-                ));
+                let scheme = impl_.member_scheme_by_defn(&trait_member.name, defn);
+                missing_items.push(MissingTraitImplItem::Member(MissingMember {
+                    name: FullName::new(&trait_ns, &trait_member.name),
+                    ty: scheme.ty.clone(),
+                }));
             }
         }
+
         for (impl_member, impl_expr) in impl_members {
             if trait_members
                 .iter()
@@ -981,17 +1039,28 @@ impl TraitEnv {
         // Validate the set of associated types.
         let trait_assoc_types = &defn.assoc_types;
         let impl_assoc_types = &impl_.assoc_types;
-        for (trait_assoc_type, _) in trait_assoc_types {
+        for (trait_assoc_type, assoc_defn) in trait_assoc_types {
             if !impl_assoc_types.contains_key(trait_assoc_type) {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "Lacking implementation of associated type `{}`.",
-                        trait_assoc_type,
-                    ),
-                    &[&impl_.source],
-                ));
+                let num_extra_params = assoc_defn.params.len() - 1; // skip impl_type param
+                missing_items.push(MissingTraitImplItem::AssocType(MissingAssocType {
+                    name: FullName::new(&trait_ns, trait_assoc_type),
+                    num_extra_params,
+                }));
             }
         }
+
+        // If there are missing items, report them with quick fix data.
+        if !missing_items.is_empty() {
+            let info = MissingTraitImplInfo {
+                items: missing_items,
+                impl_type: impl_.impl_type(),
+            };
+            let mut err = Error::from_msg_srcs(info.error_message(), &[&impl_.source]);
+            err.code = Some(ERR_LACKING_TRAIT_IMPL);
+            err.data = Some(info.to_json());
+            return Err(Errors::from_err(err));
+        }
+
         for (impl_assoc_type, impl_info) in impl_assoc_types {
             if !trait_assoc_types.contains_key(impl_assoc_type) {
                 return Err(Errors::from_msg_srcs(

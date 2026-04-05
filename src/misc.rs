@@ -1,4 +1,4 @@
-use crate::{constants::TEMPORARY_SRC_PATH, error::Errors, parse::sourcefile::SourceFile};
+use crate::{ast::name::Name, constants::TEMPORARY_SRC_PATH, error::Errors, parse::sourcefile::SourceFile};
 use atty::Stream;
 use colored::Colorize;
 use std::{
@@ -177,6 +177,23 @@ pub fn number_to_varname(n: usize) -> String {
     }
     ret += &n.to_string();
     ret
+}
+
+// Generate `count` fresh variable names that do not conflict with `used_names`.
+pub fn generate_fresh_varnames(count: usize, used_names: &Set<Name>) -> Vec<Name> {
+    let mut result = Vec::with_capacity(count);
+    let mut name_no = 0usize;
+    for _ in 0..count {
+        loop {
+            let candidate = number_to_varname(name_no);
+            name_no += 1;
+            if !used_names.contains(&candidate) {
+                result.push(candidate);
+                break;
+            }
+        }
+    }
+    result
 }
 
 // Converts a path to an absolute path.
