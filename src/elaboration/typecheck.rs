@@ -711,6 +711,16 @@ impl TypeCheckContext {
         ei: &Arc<ExprNode>,
         ty: Arc<TypeNode>,
     ) -> Result<Arc<ExprNode>, Errors> {
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+            self.unify_type_of_expr_inner(ei, ty)
+        })
+    }
+
+    fn unify_type_of_expr_inner(
+        &mut self,
+        ei: &Arc<ExprNode>,
+        ty: Arc<TypeNode>,
+    ) -> Result<Arc<ExprNode>, Errors> {
         let ei = ei.set_type(ty.clone());
         match &*ei.expr {
             Expr::Var(var) => {

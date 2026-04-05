@@ -37,6 +37,7 @@ colored = "2.1.0"
 git-version = "0.3.9"
 atty = "0.2.14"
 mimalloc = "0.1.48"
+stacker = "0.1"
 
 [[bin]]
 name = "fix"
