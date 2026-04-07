@@ -3,6 +3,7 @@ use super::server::{send_response, LatestContent};
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::Program;
 use crate::ast::traits::{MissingTraitImplInfo, MissingTraitImplItem};
+use crate::ast::types::{type_assocty, type_tyvar_star, AssocType};
 use crate::constants::{ERR_LACKING_TRAIT_IMPL, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME};
 use crate::misc::{generate_fresh_varnames, Map, Set};
 use lsp_types::{
@@ -198,8 +199,6 @@ fn handle_lacking_trait_impl(
 // Generate the stub text to insert into the impl block.
 // `impl_indent` is the number of spaces of the `impl` line.
 fn quickfix_stub_text(info: &MissingTraitImplInfo, impl_indent: usize) -> String {
-    let impl_type_str = info.impl_type.to_string();
-
     // Collect free variable names from impl_type to avoid conflicts when generating param names.
     let used_names: Set<Name> = info.impl_type.free_vars().into_keys().collect();
 
@@ -210,14 +209,21 @@ fn quickfix_stub_text(info: &MissingTraitImplInfo, impl_indent: usize) -> String
     for item in &info.items {
         match item {
             MissingTraitImplItem::AssocType(a) => {
-                let mut line =
-                    format!("{}type {} {}", member_indent, a.name.name, impl_type_str);
                 let fresh_names = generate_fresh_varnames(a.num_extra_params, &used_names);
+                let mut args = vec![info.impl_type.clone()];
                 for name in &fresh_names {
-                    line += &format!(" {}", name);
+                    args.push(type_tyvar_star(name));
                 }
-                line += " = ?;";
-                stub_lines.push(line);
+                let assoc_ty = AssocType {
+                    name: FullName::local(&a.name.name),
+                    src: None,
+                };
+                let assoc_type_node = type_assocty(assoc_ty, args);
+                stub_lines.push(format!(
+                    "{}type {} = ?;",
+                    member_indent,
+                    assoc_type_node.to_string()
+                ));
             }
             MissingTraitImplItem::Member(_) => {}
         }

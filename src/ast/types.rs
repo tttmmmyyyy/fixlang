@@ -1417,9 +1417,6 @@ impl TypeNode {
                     let tycon = fun.toplevel_tycon();
                     if let Some(tycon) = tycon {
                         if let Some(tuple_n) = get_tuple_n(&tycon.name) {
-                            // Tuple case.
-                            // If the tuple is fully applied, then it is denoted as `(T1, T2, ..., TN)`, so no need to brace.
-                            // Otherwise, it is denoted as `Tuple{n} T1 T2 ... TN`, so need to brace.
                             return tuple_n as usize != arg.collect_type_argments().len();
                         }
                     }
