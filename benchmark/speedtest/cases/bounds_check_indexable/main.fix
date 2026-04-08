@@ -1,0 +1,54 @@
+module Main;
+
+// Benchmark for bounds-checked Indexable with iget + iset on a 2D array.
+//
+// Previously, this case suffered a massive performance degradation (~30000x slower)
+// because the let-elimination optimization moved an iget computation into a lambda body,
+// causing the lambda to capture the array. This increased the array's reference count,
+// defeating uniqueness-based in-place mutation and triggering a full array copy on every
+// iset operation in the inner loop.
+// Fixed in commit 25464ce4.
+
+// 2D array with bounds checking in act_at_index.
+type Array2 a = unbox struct {
+    data : Array a,
+    size : (I64, I64)
+};
+
+namespace Array2 {
+    fill : (I64, I64) -> a -> Array2 a = |size, val| (
+        Array2 {
+            size : size,
+            data : Array::fill(size.@0 * size.@1, val)
+        }
+    );
+}
+
+impl Array2 a : Indexable {
+    type Index (Main::Array2 a) = (I64, I64);
+    type Elem (Main::Array2 a) = a;
+    act_at_index = |(i, j), f, self| (
+        let size = self.@size;
+        if i < 0 || i >= size.@0 || j < 0 || j >= size.@1 {
+            undefined("Array2 index out of range")
+        };
+        let idx = i * size.@1 + j;
+        self[^data][idx].iact(f)
+    );
+}
+
+main : IO () = (
+    let s_size = 500;
+    let p_sum = 500;
+    let dp = Array2::fill((s_size+1, p_sum+1), 0_I64);
+    let dp = dp[(0, 0)].iset(1);
+    let dp = range(1, s_size+1).fold(dp, |i, dp|
+        range(0, p_sum+1).fold(dp, |n, dp|
+            let x = dp[(i-1, n)].iget;
+            dp[(i, n)].iset(x)
+        )
+    );
+    let result = dp[(s_size, 0)].iget;
+    assert_eq(|_|"", result, 1);;
+    pure()
+);

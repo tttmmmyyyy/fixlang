@@ -9,7 +9,7 @@ This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one 
 2-a. {e0} is a lambda expression and the occurrence of `x` is in an application
 2-b. {e0} is strictly partial application (i.e. # of args < n) of names to a global lambda expression with n-arguments `f = |a1,...,an| ...`,
      and the occurrence of `x` is in an application
-2-c. {e1} evaluates `x` "before any other local names"
+2-c. {e1} evaluates `x` "before any other local names", and `x` is not captured by a lambda expression in {e1}
 3. `x`  does not appear in {e1}
 
 ## Why conditions 2-* are necessary
@@ -215,7 +215,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
                 any_sub_condition_holds = true;
             }
 
-            if probe.used_before_any_other_local_names {
+            if probe.used_before_any_other_local_names && !probe.is_captured_by_lambda {
                 // Case 2-c of the documentation at the top.
                 any_sub_condition_holds = true;
             }
