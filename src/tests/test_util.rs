@@ -73,21 +73,21 @@ pub fn test_source(source: &str, config: Configuration) {
     let res = run_source(source, config);
     let res = panic_if_err(res);
     let output = res.unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.is_empty() {
+        eprintln!("{}", stdout);
+    }
+    if !stderr.is_empty() {
+        eprintln!("{}", stderr);
+    }
     let code = match output.status.code() {
         Some(code) => code,
         None => {
-            eprintln!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
             panic_with_msg("The process was terminated by signal.")
         },
     };
     if code != 0 {
-        eprintln!(
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
         panic_with_msg(&format!("The program exited with non-zero code: {}", code));
     }
 }
