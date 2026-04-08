@@ -883,3 +883,33 @@ main = pure();
         "{impl_type} is `Main::MyType1`",
     );
 }
+
+#[test]
+pub fn test_associated_type_type_alias_in_impl_type() {
+    // Type alias used in the impl type of an associated type implementation.
+    let source = r#"
+module Main;
+
+type MyType = struct { data: I64 };
+type MyAlias = MyType;
+
+trait a : MyTrait {
+    type MyElem a;
+    get_elem : a -> MyElem a;
+}
+
+impl MyAlias : MyTrait {
+    type MyElem MyAlias = I64;
+    get_elem = |mt| mt.@data;
+}
+
+main : IO ();
+main = (
+    let mt: MyAlias = MyType { data: 42 };
+    let item: I64 = mt.get_elem;
+    eval assert_eq(|_| "", item, 42);
+    pure()
+);
+    "#;
+    test_source(source, Configuration::develop_mode());
+}

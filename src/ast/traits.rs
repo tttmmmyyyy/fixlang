@@ -192,6 +192,7 @@ impl AssocTypeImpl {
 
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.value = self.value.resolve_type_aliases(type_env)?;
+        self.impl_type_as_written = self.impl_type_as_written.resolve_type_aliases(type_env)?;
         Ok(())
     }
 
