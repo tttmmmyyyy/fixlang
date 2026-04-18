@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
+use crate::ast::name::Name;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::types::{is_opaque_tyvar, AssocType, TyVar, Type, TypeNode, type_assocty};
 use crate::error::Errors;
+use crate::misc::Set;
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
@@ -49,6 +51,14 @@ impl Equality {
             arg.free_vars_to_vec(buf);
         }
         self.value.free_vars_to_vec(buf);
+    }
+
+    // Collect type variables that are "fixed" by this equality constraint.
+    // Per the `Fixv` rule `Fixv ((η = τ) ⇒ ρ) = Fixv τ ∪ Fixv ρ`, only the
+    // right-hand side contributes; the arguments of the associated type
+    // application on the left-hand side do not.
+    pub fn fixed_vars_to_set(&self, out: &mut Set<Name>) {
+        self.value.fixed_vars_to_set(out);
     }
 
     // Is this an equality on the associated type on an opaque type variable (name starts with '?')?

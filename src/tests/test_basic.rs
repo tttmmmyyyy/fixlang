@@ -5220,14 +5220,14 @@ pub fn test_unrelated_trait_method() {
     trait a : MyTrait {
         value : I64;
     }
-    
+
     main : IO ();
     main = pure();
     "##;
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Type variable `a` used in trait definition has to appear in the type of a member `value`.",
+        "Type variable `a` is not fixed by this type signature, which makes it ambiguous.",
     );
 }
 
@@ -5241,14 +5241,14 @@ pub fn test_unrelated_trait_method_via_type_alias() {
     trait a : MyTrait {
         value : Alias a;
     }
-    
+
     main : IO ();
     main = pure();
     "##;
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Type variable `a` used in trait definition has to appear in the type of a member `value`.",
+        "Type variable `a` is not fixed by this type signature, which makes it ambiguous.",
     );
 }
 

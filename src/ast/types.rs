@@ -455,24 +455,6 @@ impl TypeNode {
         }
     }
 
-    // Check if the given type variable appears in `self`.
-    pub fn contains_tyvar(&self, tv: &TyVar) -> bool {
-        match &self.ty {
-            Type::TyVar(tv2) => tv.name == tv2.name, // Ignore kind.
-            Type::TyCon(_) => false,
-            Type::TyApp(fun, arg) => fun.contains_tyvar(tv) || arg.contains_tyvar(tv),
-            Type::AssocTy(_, args) => {
-                // NOTE: The special `self` type variable should be resolved in parser.
-                for arg in args {
-                    if arg.contains_tyvar(tv) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-        }
-    }
-
     // Get source.
     pub fn get_source(&self) -> &Option<Span> {
         &self.info.source
@@ -1720,6 +1702,27 @@ impl TypeNode {
         buf
     }
 
+    // Collect type variables that are "fixed" in this type, in the sense of
+    // `Fixv` from section 5.1 of "Associated Type Synonyms"
+    // (Chakravarty, Keller, Peyton Jones, ICFP '05).
+    //
+    // A type variable is fixed if unifying the type with a ground type would
+    // determine it. Associated type applications are not injective, so their
+    // arguments are not fixed; this function stops recursing into them.
+    pub fn fixed_vars_to_set(self: &Arc<TypeNode>, out: &mut Set<Name>) {
+        match &self.ty {
+            Type::TyVar(tv) => {
+                out.insert(tv.name.clone());
+            }
+            Type::TyApp(tyfun, arg) => {
+                tyfun.fixed_vars_to_set(out);
+                arg.fixed_vars_to_set(out);
+            }
+            Type::TyCon(_) => {}
+            Type::AssocTy(_, _) => {}
+        };
+    }
+
     // Collect all TyCons that appear in this type.
     pub fn collect_tycons(&self, tycons: &mut Set<TyCon>) {
         match &self.ty {
@@ -1982,6 +1985,40 @@ impl Scheme {
                 }
             }
         }
+
+        // Each generalized type variable that appears in the scheme body must
+        // be "fixed" in the sense of `Fixv` from section 5.1 of "Associated
+        // Type Synonyms". A variable is fixed iff it appears outside of any
+        // associated type application, either in the main type or on the
+        // right-hand side of an equality constraint. A variable that only
+        // appears under an associated type application (or only in a class
+        // predicate) would not be determined by unification at a use site,
+        // which would make the scheme ambiguous.
+        let fixed = self.fixed_vars();
+        // First occurrence wins, which gives a useful span pointing at the
+        // offending position.
+        let occurrences = self.all_tyvar_occurrences_with_span();
+        for gv in &self.gen_vars {
+            if fixed.contains(&gv.name) {
+                continue;
+            }
+            let Some((_, span)) = occurrences.iter().find(|(tv, _)| tv.name == gv.name) else {
+                // Variable does not appear anywhere in the body; it cannot be
+                // used and would be ambiguous, but this situation should not
+                // arise because `Scheme::generalize` only collects free vars
+                // into `gen_vars`. Skip defensively.
+                continue;
+            };
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "Type variable `{}` is not fixed by this type signature, which makes it ambiguous. \
+                     NOTE: `{}` must appear outside of any associated type application.",
+                    gv.name, gv.name,
+                ),
+                &[span],
+            ));
+        }
+
         Ok(())
     }
 
@@ -2065,6 +2102,42 @@ impl Scheme {
                 buf.push(tv.clone());
             }
         }
+    }
+
+    // Collect type variables that are "fixed" by this scheme's body, in the
+    // sense of `Fixv` from section 5.1 of "Associated Type Synonyms".
+    //
+    // Contributions:
+    // - the main type `self.ty`
+    // - the right-hand side of each equality constraint
+    // Class predicates do not contribute (per `Fixv (D τ ⇒ ρ) = Fixv ρ`).
+    pub fn fixed_vars(&self) -> Set<Name> {
+        let mut out = Set::default();
+        self.ty.fixed_vars_to_set(&mut out);
+        for eq in &self.equalities {
+            eq.fixed_vars_to_set(&mut out);
+        }
+        out
+    }
+
+    // Collect every type variable occurrence in the scheme body together
+    // with a source span, walking predicates, equalities, and the main
+    // type. Unlike `free_vars_to_vec`, this does NOT exclude generalized
+    // variables - it is intended for diagnostics that need to locate a
+    // specific variable (including gen_vars) in the source.
+    pub fn all_tyvar_occurrences_with_span(&self) -> Vec<(Arc<TyVar>, Option<Span>)> {
+        let mut out = vec![];
+        for pred in &self.predicates {
+            pred.ty.free_vars_to_vec_with_span(&mut out);
+        }
+        for eq in &self.equalities {
+            for arg in &eq.args {
+                arg.free_vars_to_vec_with_span(&mut out);
+            }
+            eq.value.free_vars_to_vec_with_span(&mut out);
+        }
+        self.ty.free_vars_to_vec_with_span(&mut out);
+        out
     }
 
     pub fn set_kinds(&self, kind_env: &KindEnv) -> Result<Arc<Scheme>, Errors> {

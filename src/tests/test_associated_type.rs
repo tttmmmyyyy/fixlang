@@ -575,7 +575,8 @@ impl I64 : MyTrait {
 }
 
 // String has kind *, but MyAssoc expects *->* for the 2nd param.
-func : [a : MyTrait] MyAssoc a String -> I64;
+// `a` appears standalone so the signature is well-formed w.r.t. Fixv.
+func : [a : MyTrait] (a, MyAssoc a String) -> I64;
 func = |x| 0;
 
 main: IO ();

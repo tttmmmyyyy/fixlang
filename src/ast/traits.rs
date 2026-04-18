@@ -894,29 +894,12 @@ impl TraitEnv {
             for member in &trait_defn.members {
                 // Validate trait member definition.
 
-                // Forbid unrelated trait member:
-                //
-                // Check that the type variable (the "impl type") in trait definition appears each of the members' type.
-                //
-                // The selection of trait member implementations is determined by which type the impl_type is instantiated to.
-                // If there exists an unrelated trait member, i.e., a trait member that does not involve impl_type,
-                // we cannot select the implementation of that member.
-                //
-                // This assumption is also used in `Symbol::dependent_modules`.
-                //
-                // This constraint is weaker than the condition mentioned in section 5.1 (Well-formed programs) of the paper "Associated Type Synonyms"
-                // to prevent unconditionally ambiguous signatures.
-                // Strengthening this constraint is also an option. However, as mentioned in the paper, it is not a mandatory constraint.
-                if !member.qual_ty.ty.contains_tyvar(&trait_defn.type_var) {
-                    errors.append(Errors::from_msg_srcs(
-                        format!(
-                            "Type variable `{}` used in trait definition has to appear in the type of a member `{}`.",
-                            trait_defn.type_var.name,
-                            member.name,
-                        ),
-                        &[&member.qual_ty.ty.get_source()],
-                    ));
-                }
+                // Note: the previous "unrelated member" check (that the trait
+                // type variable appears syntactically in each member's type)
+                // has been superseded by the Fixv well-formedness check in
+                // `Scheme::validate_constraints`, which rejects both "does
+                // not appear" and "appears only as an argument of an
+                // associated type application" with a single condition.
 
                 // The "impl type" cannot be constrained.
                 //

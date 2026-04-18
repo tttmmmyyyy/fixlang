@@ -37,6 +37,8 @@ This project implements the Fix programming language compiler and related tools 
     - The temporary directory is automatically cleaned up when the test completes.
   - **Debugging integration tests**: Since integration tests run the `fix` command as a separate process, its stdout/stderr output is hard to capture directly. In such cases, use `WRITE_LOG` from `src/log_file.rs` to write debug output to a log file from within the `fix` process.
 
+- **Running many tests at once**: When running a large number of tests with `cargo test` (e.g. the full suite or many integration tests), use `--release` (i.e. `cargo test --release`). Debug builds of the `fix` compiler are slow to run, so release mode significantly reduces total test time.
+
 ## Reference Documentation
 
 - **Fix Language Sample Code**: Refer to `src/fix/std.fix` for extensive examples of Fix language code.
