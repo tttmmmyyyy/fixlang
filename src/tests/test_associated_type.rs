@@ -914,3 +914,102 @@ main = (
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+// Fixv well-formedness: a trait member whose type variable only appears as
+// an argument of an associated type application is ambiguous and must be
+// rejected (section 5.1 of "Associated Type Synonyms").
+#[test]
+pub fn test_fixv_trait_method_under_assoc_ty_only() {
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type S a;
+    op : S a -> I64;
+}
+
+main : IO ();
+main = pure();
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Type variable `a` is not fixed by this type signature, which makes it ambiguous.",
+    );
+}
+
+// Fixv well-formedness: the same ambiguity can arise for an ordinary global
+// value binding whose generalized variable only appears under an associated
+// type application.
+#[test]
+pub fn test_fixv_global_value_under_assoc_ty_only() {
+    let source = r#"
+module Main;
+
+import Std::* hiding Indexable::Elem;
+
+trait c : Collects {
+    type Elem c;
+}
+
+foo : [c : Collects] Elem c -> I64;
+foo = |_| 0;
+
+main : IO ();
+main = pure();
+    "#;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Type variable `c` is not fixed by this type signature, which makes it ambiguous.",
+    );
+}
+
+// Fixv well-formedness (positive): if the trait type variable also appears
+// outside the associated type application (here in the tuple), the signature
+// is well-formed.
+#[test]
+pub fn test_fixv_trait_method_with_standalone_occurrence() {
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type S a;
+    op : (a, S a) -> I64;
+}
+
+impl I64 : MyTrait {
+    type S I64 = I64;
+    op = |_| 0;
+}
+
+main : IO ();
+main = pure();
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+// Fixv well-formedness (positive): an equality constraint `S a = b` makes
+// `b` fixed because the right-hand side of the equality contributes to
+// Fixv. Both `a` (via the tuple) and `b` (via the equality RHS) are fixed.
+#[test]
+pub fn test_fixv_global_value_fixed_via_equality_rhs() {
+    let source = r#"
+module Main;
+
+trait a : MyTrait {
+    type S a;
+}
+
+impl I64 : MyTrait {
+    type S I64 = I64;
+}
+
+foo : [a : MyTrait, S a = b] (a, b) -> I64;
+foo = |_| 0;
+
+main : IO ();
+main = pure();
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
