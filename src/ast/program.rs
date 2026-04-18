@@ -19,7 +19,7 @@ use crate::constants::{
     STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL,
     STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
     STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
-    TUPLE_SIZE_BASE,
+    TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
 };
 use crate::error::{panic_if_err, Errors};
 use crate::graph::Graph;
@@ -1990,7 +1990,10 @@ impl Program {
                             )),
                         ));
                         errors.eat_err(self.add_compiler_defined_method(
-                            FullName::new(&defn.name.to_namespace(), &format!("as_{}", field.name)),
+                            FullName::new(
+                                &defn.name.to_namespace(),
+                                &format!("{}{}", UNION_AS_SYMBOL, field.name),
+                            ),
                             union_as(&field.name, defn),
                             Some(format!(
                                 "Unwraps a union value of `{}` as the variant `{}`.\nIf the value is not the variant `{}`, this function aborts the program.",
@@ -1998,7 +2001,10 @@ impl Program {
                             )),
                         ));
                         errors.eat_err(self.add_compiler_defined_method(
-                            FullName::new(&defn.name.to_namespace(), &format!("is_{}", field.name)),
+                            FullName::new(
+                                &defn.name.to_namespace(),
+                                &format!("{}{}", UNION_IS_SYMBOL, field.name),
+                            ),
                             union_is(&field.name, defn),
                             Some(format!(
                                 "Checks if a union value of `{}` is the variant `{}`.",
@@ -2008,7 +2014,7 @@ impl Program {
                         errors.eat_err(self.add_compiler_defined_method(
                             FullName::new(
                                 &defn.name.to_namespace(),
-                                &format!("mod_{}", field.name),
+                                &format!("{}{}", UNION_MOD_SYMBOL, field.name),
                             ),
                             union_mod_function(&union_name, &field.name, defn),
                             Some(format!(

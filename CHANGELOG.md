@@ -43,6 +43,9 @@
 
 - LSP: Fixed an issue where associated types were missing from completion items.
 - LSP: Fixed an issue where "unknown associated type" errors did not offer an "add import" quick fix.
+- Docs: Fixed an issue where accessor functions (`@`, `set_`, `mod_`, `act_` for struct fields; `as_`, `is_`, `mod_` for union variants) for private (underscore-prefixed) fields or variants were included in the documentation when `--with-compiler-defined-methods` was given. They are now hidden unless `--with-private` is also given.
+- Docs: Fixed an issue where private (underscore-prefixed) fields and variants of structs/unions were listed as subsections of their containing type. They are now hidden unless `--with-private` is given.
+- Docs: Fixed a panic that occurred when generating documentation with `--with-compiler-defined-methods`.
 
 ## [1.2.0] - 2026-02-10
 

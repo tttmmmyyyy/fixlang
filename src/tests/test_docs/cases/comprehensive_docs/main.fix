@@ -12,12 +12,14 @@ _private_value = "This is private";
 
 // A struct with one field
 type MyStruct = struct {
-    field: I64
+    field: I64,
+    _secret: I64
 };
 
 // A union with one variant
 type MyUnion = union {
-    variant: I64
+    variant: I64,
+    _hidden: I64
 };
 
 // A type alias

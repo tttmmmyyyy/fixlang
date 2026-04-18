@@ -5762,14 +5762,6 @@ The type of punched arrays.
 A punched array is an array from which a certain element has been removed.
 This is used in the implementation of `Array::act`.
 
-##### field `_arr`
-
-Type: `Std::Array a`
-
-##### field `_idx`
-
-Type: `Std::I64`
-
 #### Result
 
 Defined as: `type Result e o = unbox union { ...variants... }`
@@ -5791,10 +5783,6 @@ Defined as: `type String = unbox struct { ...fields... }`
 The string type.
 
 A string is represented as a null-terminated byte array.
-
-##### field `_data`
-
-Type: `Std::Array Std::U8`
 
 #### Tuple0
 
@@ -5946,14 +5934,6 @@ The following are some examples of such precautions, but not all:
 - Creating multiple `Destructor`s from a handle to a single resource will cause double-free.
 - Copying a handle to a single resource, putting one in a `Destructor` and continuing to use the other directly, may result in accessing a released resource.
 
-##### field `_value`
-
-Type: `a`
-
-##### field `_dtor`
-
-Type: `a -> Std::IO::IOState -> (Std::IO::IOState, a)`
-
 ### namespace Std::IO
 
 #### IOFail
@@ -5961,10 +5941,6 @@ Type: `a -> Std::IO::IOState -> (Std::IO::IOState, a)`
 Defined as: `type IOFail a = unbox struct { ...fields... }`
 
 The type for I/O actions which may fail.
-
-##### field `_data`
-
-Type: `Std::IO (Std::Result Std::ErrMsg a)`
 
 #### IOHandle
 
@@ -5982,10 +5958,6 @@ NOTE:
 `IOHandle` is implemented by `Destructor`, but the destructor function does not close the file pointer.
 (The destructor function only frees the management memory area.)
 You should explicitly close the file pointer by `IO::close_file`.
-
-##### field `_data`
-
-Type: `Std::FFI::Destructor Std::Ptr`
 
 #### IOState
 
@@ -6284,14 +6256,6 @@ Type: `opt`
 Defined as: `type StringBytesIterator = unbox struct { ...fields... }`
 
 The iterator over bytes of a string, excluding null-terminator.
-
-##### field `_s`
-
-Type: `Std::String`
-
-##### field `_i`
-
-Type: `Std::I64`
 
 #### StringSplitIterator
 

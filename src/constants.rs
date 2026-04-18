@@ -79,6 +79,11 @@ pub const STRUCT_SETTER_SYMBOL: &str = "set_";
 pub const STRUCT_MODIFIER_SYMBOL: &str = "mod_";
 pub const STRUCT_ACT_SYMBOL: &str = "act_";
 
+// Union methods.
+pub const UNION_AS_SYMBOL: &str = "as_";
+pub const UNION_IS_SYMBOL: &str = "is_";
+pub const UNION_MOD_SYMBOL: &str = "mod_";
+
 // Names used by compiler.
 pub const FUNPTR_NAME: &str = "#FunPtr";
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";

@@ -7,7 +7,11 @@ use crate::{
         program::Program,
         traits::KindSignature,
         typedecl::Field,
-        types::{kind_star, Kind, TyConVariant, TyVar},
+        types::{kind_star, Kind, TyCon, TyConVariant, TyVar},
+    },
+    constants::{
+        STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_SETTER_SYMBOL,
+        UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
     },
     elaboration::elaborate_via_config,
     configuration::{BuildConfigType, Configuration, DocsConfig},
@@ -427,17 +431,62 @@ fn to_markdown_link(header: &str) -> String {
     link
 }
 
-fn is_entry_should_be_documented(name: &FullName, mod_name: &Name, config: &DocsConfig) -> bool {
+fn is_entry_should_be_documented(
+    program: &Program,
+    name: &FullName,
+    mod_name: &Name,
+    config: &DocsConfig,
+) -> bool {
     if &name.module() != mod_name {
         return false;
     }
     if name.to_string().contains("#") {
         return false;
     }
-    if !config.include_private && name.name.starts_with("_") {
-        return false;
+    if !config.include_private {
+        if name.name.starts_with("_") {
+            return false;
+        }
+        if is_private_field_accessor(program, name) {
+            return false;
+        }
     }
     true
+}
+
+// Returns true if `name` is a compiler-generated accessor function
+// for a private field/variant of a struct or union.
+// A field/variant is considered private when its name starts with an underscore.
+fn is_private_field_accessor(program: &Program, name: &FullName) -> bool {
+    if name.namespace.is_local() {
+        return false;
+    }
+    // The namespace of a field accessor is the full name of its owning struct/union.
+    let tycon = TyCon::new(name.namespace.clone().to_fullname());
+    let Some(ty_info) = program.type_env.tycons.get(&tycon) else {
+        return false;
+    };
+    let accessor_prefixes: &[&str] = match ty_info.variant {
+        TyConVariant::Struct => &[
+            STRUCT_GETTER_SYMBOL,
+            STRUCT_SETTER_SYMBOL,
+            STRUCT_MODIFIER_SYMBOL,
+            STRUCT_ACT_SYMBOL,
+        ],
+        TyConVariant::Union => &[UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL],
+        _ => return false,
+    };
+    for field in &ty_info.fields {
+        if !field.name.starts_with("_") {
+            continue;
+        }
+        for prefix in accessor_prefixes {
+            if name.name == format!("{}{}", prefix, &field.name) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // Creates string of kind signature with pre-space, e.e, " : * -> *".
@@ -489,7 +538,7 @@ fn type_entries(
     for (ty_name, ty_info) in program.type_env.tycons.iter() {
         let name = ty_name.name.clone();
 
-        if !is_entry_should_be_documented(&name, mod_name, config) {
+        if !is_entry_should_be_documented(program, &name, mod_name, config) {
             continue;
         }
 
@@ -533,12 +582,18 @@ fn type_entries(
 
         if ty_info.variant == TyConVariant::Struct {
             for field in ty_info.fields.iter() {
+                if !config.include_private && field.name.starts_with("_") {
+                    continue;
+                }
                 let field_sec = field_subsection(TyConVariant::Struct, field)?;
                 doc.add_subsection(field_sec);
             }
         }
         if ty_info.variant == TyConVariant::Union {
             for variant in ty_info.fields.iter() {
+                if !config.include_private && variant.name.starts_with("_") {
+                    continue;
+                }
                 let variant_sec = field_subsection(TyConVariant::Union, variant)?;
                 doc.add_subsection(variant_sec);
             }
@@ -555,7 +610,7 @@ fn type_entries(
     for (ty_name, ty_info) in program.type_env.aliases.iter() {
         let name = ty_name.name.clone();
 
-        if !is_entry_should_be_documented(&name, mod_name, config) {
+        if !is_entry_should_be_documented(program, &name, mod_name, config) {
             continue;
         }
 
@@ -634,7 +689,7 @@ fn trait_entries(
     for (id, info) in &program.trait_env.traits {
         let name = id.name.clone();
 
-        if !is_entry_should_be_documented(&name, mod_name, config) {
+        if !is_entry_should_be_documented(program, &name, mod_name, config) {
             continue;
         }
 
@@ -700,7 +755,7 @@ fn trait_entries(
     for (id, info) in &program.trait_env.aliases.data {
         let name = id.name.clone();
 
-        if !is_entry_should_be_documented(&name, mod_name, config) {
+        if !is_entry_should_be_documented(program, &name, mod_name, config) {
             continue;
         }
 
@@ -788,7 +843,7 @@ fn value_entries(
     let mut entries = vec![];
 
     for (name, gv) in &program.global_values {
-        if !is_entry_should_be_documented(&name, mod_name, config) {
+        if !is_entry_should_be_documented(program, &name, mod_name, config) {
             continue;
         }
         if gv.compiler_defined_method && !config.include_compiler_defined_methods {
@@ -799,7 +854,7 @@ fn value_entries(
 
         doc.add_paragraph(format!(
             "Type: `{}`",
-            gv.syn_scm.as_ref().unwrap().to_string()
+            gv.syn_scm.as_ref().unwrap_or(&gv.scm).to_string()
         ));
 
         // If `gv` is a trait member, also write which trait it belongs to.

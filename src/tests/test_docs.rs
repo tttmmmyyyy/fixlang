@@ -289,4 +289,132 @@ mod integration_tests {
             expected_doc_path, actual_doc_path
         );
     }
+
+    #[test]
+    fn test_docs_with_compiler_defined_methods() {
+        // This test verifies that `fix docs --with-compiler-defined-methods`:
+        // 1. Does not panic (regression: compiler-defined methods have syn_scm = None).
+        // 2. Includes accessors for public fields/variants.
+        // 3. Excludes accessors for private (underscore-prefixed) fields/variants.
+
+        install_fix();
+
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
+        let test_case_dst = temp_dir.path().join("comprehensive_docs");
+        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
+        cleanup_test_docs(&test_case_dst);
+
+        let output = Command::new("fix")
+            .args(&["docs", "--with-compiler-defined-methods"])
+            .current_dir(&test_case_dst)
+            .output()
+            .expect("Failed to execute fix docs --with-compiler-defined-methods");
+
+        if !output.status.success() {
+            eprintln!("fix docs --with-compiler-defined-methods failed:");
+            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            panic!("fix docs --with-compiler-defined-methods command failed");
+        }
+
+        let main_md = test_case_dst.join("docs/Main.md");
+        let content = fs::read_to_string(&main_md).expect("Failed to read Main.md");
+
+        // Public struct field `field` of `MyStruct`: accessors should be present.
+        for name in &["@field", "set_field", "mod_field", "act_field"] {
+            assert!(
+                content.contains(&format!("#### {}", name)),
+                "Expected accessor `{}` for public field to appear in docs",
+                name
+            );
+        }
+        // Public union variant `variant` of `MyUnion`: accessors should be present.
+        for name in &["as_variant", "is_variant", "mod_variant"] {
+            assert!(
+                content.contains(&format!("#### {}", name)),
+                "Expected accessor `{}` for public variant to appear in docs",
+                name
+            );
+        }
+        // Private struct field `_secret` of `MyStruct`: accessors should be hidden.
+        for name in &["@_secret", "set__secret", "mod__secret", "act__secret"] {
+            assert!(
+                !content.contains(&format!("#### {}", name)),
+                "Accessor `{}` for private field should NOT appear in docs",
+                name
+            );
+        }
+        // Private union variant `_hidden` of `MyUnion`: accessors should be hidden.
+        for name in &["as__hidden", "is__hidden", "mod__hidden"] {
+            assert!(
+                !content.contains(&format!("#### {}", name)),
+                "Accessor `{}` for private variant should NOT appear in docs",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_docs_with_private_and_compiler_defined_methods() {
+        // This test verifies that `fix docs --with-private --with-compiler-defined-methods`
+        // un-hides all private items that are otherwise filtered:
+        // private top-level values, private field/variant subsections,
+        // and accessors for private fields/variants.
+
+        install_fix();
+
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
+        let test_case_dst = temp_dir.path().join("comprehensive_docs");
+        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
+        cleanup_test_docs(&test_case_dst);
+
+        let output = Command::new("fix")
+            .args(&["docs", "--with-private", "--with-compiler-defined-methods"])
+            .current_dir(&test_case_dst)
+            .output()
+            .expect("Failed to execute fix docs --with-private --with-compiler-defined-methods");
+
+        if !output.status.success() {
+            eprintln!("fix docs --with-private --with-compiler-defined-methods failed:");
+            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            panic!("fix docs --with-private --with-compiler-defined-methods command failed");
+        }
+
+        let main_md = test_case_dst.join("docs/Main.md");
+        let content = fs::read_to_string(&main_md).expect("Failed to read Main.md");
+
+        // Private top-level value should appear.
+        assert!(
+            content.contains("#### _private_value"),
+            "Private top-level value should appear with --with-private"
+        );
+        // Private field/variant subsections should appear.
+        assert!(
+            content.contains("##### field `_secret`"),
+            "Private field subsection should appear with --with-private"
+        );
+        assert!(
+            content.contains("##### variant `_hidden`"),
+            "Private variant subsection should appear with --with-private"
+        );
+        // Private struct field accessors should appear.
+        for name in &["@_secret", "set__secret", "mod__secret", "act__secret"] {
+            assert!(
+                content.contains(&format!("#### {}", name)),
+                "Accessor `{}` for private field should appear with --with-private",
+                name
+            );
+        }
+        // Private union variant accessors should appear.
+        for name in &["as__hidden", "is__hidden", "mod__hidden"] {
+            assert!(
+                content.contains(&format!("#### {}", name)),
+                "Accessor `{}` for private variant should appear with --with-private",
+                name
+            );
+        }
+    }
 }
