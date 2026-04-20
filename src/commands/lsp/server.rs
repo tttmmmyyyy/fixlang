@@ -1008,7 +1008,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     config.type_check_cache = typecheck_cache;
 
     // Set up the configuration by the project file.
-    proj_file.set_config(&mut config, false)?;
+    proj_file.set_config(&mut config)?;
 
     // Set up the configuration by the lock file.
     // Automatically create/update the lock file if necessary.

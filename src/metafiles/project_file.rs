@@ -1,8 +1,9 @@
 use crate::{
-    configuration::{Configuration, PreliminaryCommand, FixOptimizationLevel, LinkType, OutputFileType},
+    configuration::{Configuration, FixOptimizationLevel, LinkType, OutputFileType},
     constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
     parse::sourcefile::{SourceFile, Span},
-    metafiles::config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, metafiles::registry_file::RegistryFile
+    preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
+    metafiles::config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, to_absolute_path, warn_msg}, metafiles::registry_file::RegistryFile
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -158,6 +159,43 @@ impl ProjectFileDependencyGit {
     }
 }
 
+// Role of a loaded project file in the current build: the build's root, or a dependency
+// of another project. Populated by the loader (`read_root_file` /
+// `DependencyLockFileEntry::project_file`); not serialized into `fixproj.toml`.
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub enum ProjectFileRole {
+    #[default]
+    Root,
+    Dependent,
+}
+
+// Where a project comes from.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum ProjectOrigin {
+    // Root project or a local-path dependency. Holds the absolute path of the project directory.
+    Local(PathBuf),
+    // Git dependency. Carries the repository URL and pinned commit hash from the lockfile.
+    Git { url: String, commit: String },
+}
+
+impl ProjectOrigin {
+    // String form used as a stable key (e.g. for the trust store).
+    pub fn to_trust_key(&self) -> String {
+        match self {
+            ProjectOrigin::Local(p) => p.to_string_lossy().to_string(),
+            ProjectOrigin::Git { url, .. } => format!("git+{}", url),
+        }
+    }
+
+    // Commit hash, if this project is pinned by one.
+    pub fn commit_hash(&self) -> Option<&str> {
+        match self {
+            ProjectOrigin::Local(_) => None,
+            ProjectOrigin::Git { commit, .. } => Some(commit),
+        }
+    }
+}
+
 // The project file.
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
@@ -175,6 +213,14 @@ pub struct ProjectFile {
     // The path to the project file.
     #[serde(skip)]
     pub path: PathBuf,
+    // Role of this project file in the current build.
+    #[serde(skip)]
+    pub role: ProjectFileRole,
+    // Where this project came from. Used to tag `preliminary_commands` for trust-store lookup.
+    // `None` on a freshly deserialized `ProjectFile`; loaders must set this to `Some(...)` before the
+    // file is handed off for `set_config`.
+    #[serde(skip)]
+    pub source: Option<ProjectOrigin>,
 }
 
 impl ProjectFile {
@@ -192,10 +238,17 @@ impl ProjectFile {
         }
     }
 
-    // Read the project file at `PROJECT_FILE_PATH`.
+    // Read the project file at `PROJECT_FILE_PATH` as the root project.
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
-        ProjectFile::read_file(&proj_file_path)
+        let mut pf = ProjectFile::read_file(&proj_file_path)?;
+        pf.role = ProjectFileRole::Root;
+        pf.source = Some(ProjectOrigin::Local(
+            to_absolute_path(pf.path.parent().expect(
+                "ProjectFile::path always points to fixproj.toml inside a directory",
+            ))?,
+        ));
+        Ok(pf)
     }
 
     // Read the project file at `PROJECT_FILE_PATH` and return the `ProjectFile`.
@@ -454,14 +507,17 @@ impl ProjectFile {
     }
 
     // Update a configuration from a project file.
-    // - `is_dependent_proj`: If true, self is the project file of a dependent project.
-    //   In this case, append the source files, libraries, library search paths, threaded mode to the configuration,
-    //   but ignore other fields such as debug mode, optimization level, output file, etc.
-    pub fn set_config(
-        &self,
-        config: &mut Configuration,
-        is_dependent_proj: bool,
-    ) -> Result<(), Errors> {
+    // Reads `self.role` to decide whether this project's dependent-only fields are skipped,
+    // and `self.source` to tag preliminary_commands for trust-store lookup. Loaders
+    // (`read_root_file` / `DependencyLockFileEntry::project_file`) are responsible for
+    // populating both before calling this method.
+    pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
+        let is_dependent_proj = self.role == ProjectFileRole::Dependent;
+        let source = self
+            .source
+            .clone()
+            .expect("ProjectFile::source must be set by the loader before set_config");
+
         // Determine the build mode.
         // If the project is a dependent project, we do not consider the `[build.test]` section.
         let mut mode = config.subcommand.build_mode();
@@ -596,10 +652,15 @@ impl ProjectFile {
         }
 
         // Set preliminary commands.
+        let work_dir = to_absolute_path(self.path.parent().expect("ProjectFile::path always points to fixproj.toml inside a directory"))?;
+        let project_name = self.general.name.clone();
         for command in &self.build.preliminary_commands {
             config.preliminary_commands.push(PreliminaryCommand {
-                work_dir: self.path.parent().unwrap().to_path_buf(),
+                work_dir: work_dir.clone(),
                 command: command.clone(),
+                project_name: project_name.clone(),
+                mode: PreliminaryCommandMode::Build,
+                source: source.clone(),
             });
         }
         if mode == BuildConfigType::Test {
@@ -610,8 +671,11 @@ impl ProjectFile {
                 .map_or(vec![], |test| test.preliminary_commands.clone())
             {
                 config.preliminary_commands.push(PreliminaryCommand {
-                    work_dir: self.path.parent().unwrap().to_path_buf(),
+                    work_dir: work_dir.clone(),
                     command: command.clone(),
+                    project_name: project_name.clone(),
+                    mode: PreliminaryCommandMode::Test,
+                    source: source.clone(),
                 });
             }
         }
@@ -845,7 +909,7 @@ impl ProjectFile {
         if path.is_absolute() {
             return path.to_path_buf();
         } else {
-            return self.path.parent().unwrap().join(path);
+            return self.path.parent().expect("ProjectFile::path always points to fixproj.toml inside a directory").join(path);
         }
     }
 

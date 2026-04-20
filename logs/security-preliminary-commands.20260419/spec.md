@@ -92,13 +92,8 @@
 ビルドが途中で失敗・中断されても承認意思は残る (次回同じ状態で再度 `y` を
 押し直す必要はない)。
 
-書き込みに成功したら、保存先パスを 1 行表示する。承認を取り消したいときに
-ユーザが直接そのファイルを編集できることを示唆するため:
-
-```
-  Choice [y/o/N]: y
-  Approved. Recorded to /home/user/.fixtrust.toml (edit the file to revoke).
-```
+承認直後に成功メッセージは出さない。書き込み先は既に `[y]` の選択肢の説明
+として事前に表示されているため、事後表示は冗長。
 
 書き込みに失敗した場合 (権限エラー、ディスク不足等) は:
 
@@ -134,6 +129,10 @@ Preliminary commands (already approved):
 プロンプトの文面はプロジェクト種別により変える。**Git 依存の場合**、
 承認はコミットに紐づくので `[y]` のリスクは低い:
 
+`[y]` の行には **承認選択時に `~/.fixtrust.toml` へ書き込まれる** ことを事前に
+示す説明を添える。後から承認を取り消す場合に編集対象のファイルが分かるようにする
+のが目的。
+
 ```
   [some-dep] (NEW)
     source: https://github.com/foo/some-dep (commit abcdef1)
@@ -141,7 +140,8 @@ Preliminary commands (already approved):
     $ ./configure --prefix=/opt/foo
 
   Approve?
-    [y] Yes — remember for this commit
+    [y] Yes — trust this commit from now on
+          (records this approval in /home/user/.fixtrust.toml)
     [o] Yes — just this run
     [n] No                                      (default)
   Choice [y/o/N]: _
@@ -158,7 +158,8 @@ Preliminary commands (already approved):
 
   Approve?
     [y] Yes — trust this path from now on
-          (future changes at /home/user/projects/my-app will not prompt)
+          (future changes at /home/user/projects/my-app will not prompt;
+           records this approval in /home/user/.fixtrust.toml)
     [o] Yes — just this run
           (recommended unless this is your own project)
     [n] No                                      (default)

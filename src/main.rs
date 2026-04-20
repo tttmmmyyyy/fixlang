@@ -42,6 +42,7 @@ mod misc;
 mod object;
 mod optimization;
 mod parse;
+mod preliminary_command;
 mod printer;
 mod tool;
 #[cfg(test)]
@@ -215,6 +216,12 @@ fn main() {
             "Disable runtime checks that would abort the program.\n\
             This includes disabling array bounds checks, union variant checks in `as_` functions, and `Std::undefined`, etc."
         );
+    let allow_preliminary_commands = Arg::new("allow-preliminary-commands")
+        .long("allow-preliminary-commands")
+        .help(
+            "Approve all preliminary_commands for this invocation without prompting.\n\
+            Intended for CI and other non-interactive runs."
+        );
 
     // "fix version" subcommand
     let version_subc = App::new("version").about("Prints the version of the Fix compiler.");
@@ -240,7 +247,8 @@ fn main() {
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
         .arg(backtrace.clone())
-        .arg(no_runtime_check.clone());
+        .arg(no_runtime_check.clone())
+        .arg(allow_preliminary_commands.clone());
 
     // "fix run" subcommand
     let run_subc = App::new("run")
@@ -264,7 +272,8 @@ fn main() {
         .arg(emit_symbols.clone())
         .arg(program_args.clone())
         .arg(backtrace.clone())
-        .arg(no_runtime_check.clone());
+        .arg(no_runtime_check.clone())
+        .arg(allow_preliminary_commands.clone());
 
     // "fix test" subcommand
     let test_subc = App::new("test")
@@ -287,7 +296,8 @@ fn main() {
         .arg(llvm_passes_file.clone())
         .arg(emit_symbols.clone())
         .arg(program_args.clone())
-        .arg(backtrace.clone());
+        .arg(backtrace.clone())
+        .arg(allow_preliminary_commands.clone());
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
@@ -614,6 +624,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             config.no_runtime_check = true;
         }
 
+        // Set `allow_preliminary_commands`.
+        if args.contains_id("allow-preliminary-commands") {
+            config.allow_preliminary_commands = true;
+        }
+
         // Set `run_program_args`.
         match config.subcommand {
             SubCommand::Run | SubCommand::Test => {
@@ -638,7 +653,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set up configuration from the project file if it exists.
         if Path::new(PROJECT_FILE_PATH).exists() {
             let proj_file = panic_if_err(ProjectFile::read_root_file());
-            panic_if_err(proj_file.set_config(&mut config, false));
+            panic_if_err(proj_file.set_config(&mut config));
             panic_if_err(proj_file.install_dependencies(&mut config, mode));
         }
 

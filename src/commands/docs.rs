@@ -23,7 +23,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
 
     // Set up the configuration by the project file.
     let proj_file = ProjectFile::read_root_file()?;
-    proj_file.set_config(&mut config, false)?;
+    proj_file.set_config(&mut config)?;
 
     let mode: BuildConfigType = match &config.subcommand {
         crate::SubCommand::Docs(docs_config) => docs_config.mode,
