@@ -213,8 +213,8 @@ pub struct Configuration {
     pub disable_cpu_features_regex: Vec<String>,
     // Subcommand of the `fix` command.
     pub subcommand: SubCommand,
-    // Extra build commands.
-    pub extra_commands: Vec<ExtraCommand>,
+    // Preliminary commands declared in fixproj.toml (root and dependencies).
+    pub preliminary_commands: Vec<PreliminaryCommand>,
     // Typecheck cache.
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
     // Number of worker threads.
@@ -236,12 +236,12 @@ pub struct Configuration {
 }
 
 #[derive(Clone)]
-pub struct ExtraCommand {
+pub struct PreliminaryCommand {
     pub work_dir: PathBuf,
     pub command: Vec<String>,
 }
 
-impl ExtraCommand {
+impl PreliminaryCommand {
     pub fn run(&self, config: &mut Configuration) -> Result<(), Errors> {
         let mut com = Command::new(&self.command[0]);
         for arg in &self.command[1..] {
@@ -340,7 +340,7 @@ impl Configuration {
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
             disable_cpu_features_regex: vec![],
-            extra_commands: vec![],
+            preliminary_commands: vec![],
             type_check_cache: Arc::new(typecheckcache::FileCache::new()),
             num_worker_thread: 0,
             llvm_passes_file: None,
@@ -639,8 +639,8 @@ impl Configuration {
         }
     }
 
-    pub fn run_extra_commands(&mut self) -> Result<(), Errors> {
-        for com in &self.extra_commands.clone() {
+    pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
+        for com in &self.preliminary_commands.clone() {
             com.run(self)?;
         }
         Ok(())

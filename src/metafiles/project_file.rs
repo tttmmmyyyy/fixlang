@@ -1,5 +1,5 @@
 use crate::{
-    configuration::{Configuration, ExtraCommand, FixOptimizationLevel, LinkType, OutputFileType},
+    configuration::{Configuration, PreliminaryCommand, FixOptimizationLevel, LinkType, OutputFileType},
     constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
     parse::sourcefile::{SourceFile, Span},
     metafiles::config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, warn_msg}, metafiles::registry_file::RegistryFile
@@ -595,9 +595,9 @@ impl ProjectFile {
             }
         }
 
-        // Set extra commands.
+        // Set preliminary commands.
         for command in &self.build.preliminary_commands {
-            config.extra_commands.push(ExtraCommand {
+            config.preliminary_commands.push(PreliminaryCommand {
                 work_dir: self.path.parent().unwrap().to_path_buf(),
                 command: command.clone(),
             });
@@ -609,7 +609,7 @@ impl ProjectFile {
                 .as_ref()
                 .map_or(vec![], |test| test.preliminary_commands.clone())
             {
-                config.extra_commands.push(ExtraCommand {
+                config.preliminary_commands.push(PreliminaryCommand {
                     work_dir: self.path.parent().unwrap().to_path_buf(),
                     command: command.clone(),
                 });
