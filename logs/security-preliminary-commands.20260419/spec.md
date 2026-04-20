@@ -15,166 +15,246 @@
 
 1. 悪意あるプロジェクトを clone して `fix build` する攻撃
 2. 信頼済み依存が後から悪意あるコマンドを追加するサプライチェーン攻撃
+3. 承認済み Git 依存が `fix deps update` 後にスクリプト本体や依存コミットを
+   差し替える攻撃
 
-単純な trust-on-first-use では 2 を防げないため、「変更検知」を含む仕様にする。
+いずれも単純な trust-on-first-use では防げない。
+また、承認情報をリポジトリにコミットして共有するモデルを採ると、
+悪意ある側が「承認済み」を偽造した状態で配布できてしまう。
+このため、**承認はユーザごとにホームディレクトリで管理し、
+リポジトリには共有しない**方針を採る。
 
 ## ユーザから見た挙動
+
+### 承認ストアの所在
+
+承認は対話ユーザごとに `~/.fixtrust.toml` に記録する (ツールが書き込む)。
+**リポジトリにはコミットしない** (共有すると偽造承認の踏み台になる)。
+
+### 承認の単位
+
+プロジェクトの種類により承認のキーが異なる:
+
+| 種類 | 承認キー | 意味 |
+|---|---|---|
+| Git 依存 | `(source, mode, commit_hash)` | 指定コミットの内容を承認 |
+| root / ローカルパス依存 | `(source, mode)` | このパスのプロジェクトを無期限に承認 |
+
+- `source`:
+  - Git 依存: `git+<repo URL>` の形式 (lockfile の `git.repo` から生成)
+  - root / ローカルパス依存: **絶対パス** (正規化済み)
+- `mode`: `build` または `test`
+- `commit_hash`: Git 依存のみ。lockfile の `git.rev`
+
+「root / ローカルパス依存」はどちらもユーザーの手元のディレクトリを直接指すので、
+「このパスに置かれているプロジェクトを信頼する」というパスベースの承認にする。
+一度承認すれば、そのパスに何があっても (`git pull` でコミットが変わっても、
+コマンドが変わっても) 再プロンプトは出ない。これは意図的な設計で、
+自分のプロジェクトでの開発を快適にするための割り切り。
+ただしその引き換えに「ローカルパスの信頼 = パスそのものへの白紙委任」となるので、
+**他人のプロジェクトを clone した / ローカル参照する場合は軽々しく永続承認
+せず、一時承認を使う**ことをドキュメントで強く推奨する (後述)。
 
 ### 通常のビルド (対話端末あり)
 
 `fix build` / `run` / `test` で `preliminary_commands` が定義されたプロジェクト
-(root または依存) があるとき:
+(root または依存) があるとき、各プロジェクトを順に処理する:
 
 1. 実行されるコマンド一覧を表示する (詳細は下記「表示仕様」)。
-2. 以下のいずれかの条件で y/N プロンプトを出す:
-   - そのプロジェクト+モードの承認履歴がない (**初回**)
-   - 承認履歴があるが、現在のコマンド内容のハッシュが記録と一致しない
-     (**変更検知**)
-3. `y` なら承認を **ロックファイルに記録** した上でコマンドを実行する。
-4. `N` (デフォルト) / EOF ならビルドを失敗させる。
-5. 承認済みかつハッシュが一致する場合はプロンプトを出さずに実行する
-   (ただしコマンド表示は常時行う)。
+2. `~/.fixtrust.toml` に一致エントリがあればプロンプトを出さずに通過。
+3. 一致エントリがなければ、そのプロジェクト単独で 3 択プロンプトを出す:
+   - `y` = 承認して `~/.fixtrust.toml` に記録、実行
+   - `o` = 一時承認 (今回だけ実行、記録しない)
+   - `n` / EOF = 拒否
+4. `n` が選ばれたら即座にビルド全体を失敗させる
+   (残りのプロジェクトは尋ねない)。
 
 ### 表示仕様
 
-1 つの `(project, mode)` ごとに以下を表示する。出力先は stderr。
+出力先は stderr。
 
-例 (承認待ち):
+承認済みプロジェクトは先に一覧表示し、その後、承認待ちのプロジェクトを
+1 つずつプロンプトにかける。
+
+プロンプトの文面はプロジェクト種別により変える。**Git 依存の場合**、
+承認はコミットに紐づくので `[y]` のリスクは低い:
 
 ```
-Preliminary commands to approve:
-
-  [myproj] (NEW)
-    cwd: /home/user/proj
-    $ sh setup.sh
-    $ make libfoo.a
-
-  [some-dep] (CHANGED from sha256:abcd…)
-    cwd: /home/user/proj/.fix/deps/some-dep
+  [some-dep] (NEW)
+    source: https://github.com/foo/some-dep (commit abcdef1)
+    path: /home/user/proj/.fix/deps/some-dep_1.2.3
     $ ./configure --prefix=/opt/foo
 
-Approve and run? [y/N]:
+  Approve?
+    [y] Yes — remember for this commit
+    [o] Yes — just this run
+    [n] No                                      (default)
+  Choice [y/o/N]: _
 ```
 
-例 (承認済みで通過):
+**root / ローカルパス依存の場合**、承認は絶対パスに紐づき以後の変更すべてに
+及ぶので、その点を明示する:
 
 ```
-Preliminary commands:
-
-  [myproj] (approved)
+  [myproj] (NEW)
+    path: /home/user/projects/my-app
     $ sh setup.sh
     $ make libfoo.a
+
+  Approve?
+    [y] Yes — trust this path from now on
+          (future changes at /home/user/projects/my-app will not prompt)
+    [o] Yes — just this run
+          (recommended unless this is your own project)
+    [n] No                                      (default)
+  Choice [y/o/N]: _
+```
+
+変更検知 (Git 依存で commit_hash が不一致) の例:
+
+```
+  [other-dep] (CHANGED from commit abcd…)
+    source: https://github.com/foo/other-dep (commit ef01234)
+    path: /home/user/proj/.fix/deps/other-dep_0.5.0
+    $ make install
 ```
 
 - プロジェクト名は `fixproj.toml` の `[general] name` をそのまま使う
-  (root / 依存の別や、どのフィールド由来かは表示しない)。
-- Status は `NEW` / `CHANGED` / `approved` / `auto-approved (--allow-preliminary-commands)` のいずれか。
+  (root / 依存の別は表示しない)。
+- ソース表示:
+  - Git 依存: `source: <URL> (commit <short-hash>)` と `path: <install path>` を
+    両方表示。URL はクリックで GitHub 等に飛べる形にする。
+  - root / ローカルパス依存: `path: <absolute path>` のみ表示
+    (`source` に相当する上流情報はないため)。
+  - `path:` はコマンドを実行する際の cwd を兼ねる。
+- Status は以下のいずれか:
+  - `NEW` — 承認履歴なし
+  - `CHANGED from commit abcd…` — Git 依存で以前のコミット承認があるが現在と不一致
+  - `approved` — `~/.fixtrust.toml` の一致エントリあり
+  - `auto-approved (--allow-preliminary-commands)` — フラグによる一括一時承認
 - コマンドは `$ ` プレフィックス + POSIX shell-escape で 1 行表示。
-- 承認待ちが複数グループあるときは縦に並べ、**最後に 1 回** `y/N` を問う
-  (部分承認はなし)。
 
 ### 非対話環境 (CI, パイプ等)
 
 対話端末がない状態で未承認のコマンドに出会った場合は、
-プロンプトを出さずに即失敗させる。失敗メッセージは以下の形式:
+プロンプトを出さずに即失敗させる。失敗メッセージの例:
 
 ```
-error: preliminary commands require approval.
+error: preliminary commands require approval, but no interactive terminal is available.
 
   [myproj] (NEW)
-    cwd: /home/user/proj
+    path: /home/user/proj
     $ sh setup.sh
     $ make libfoo.a
 
-  [some-dep] (CHANGED from sha256:abcd…)
-    cwd: /home/user/proj/.fix/deps/some-dep
+  [some-dep] (CHANGED from commit abcd…)
+    source: https://github.com/foo/some-dep (commit ef01234)
+    path: /home/user/proj/.fix/deps/some-dep_1.2.3
     $ ./configure --prefix=/opt/foo
 
-Reason: no interactive terminal available.
-
 To approve:
-  - Run fix in an interactive terminal and answer `y` at the prompt.
+  - Run fix in an interactive terminal and answer the prompt.
   - Or pass --allow-preliminary-commands to bypass for this invocation only.
 ```
 
-対話環境でユーザが `N` を押して拒否した場合は、未承認コマンド一覧を
+対話環境でユーザが `n` を選んで拒否した場合は、未承認コマンド一覧を
 再掲せず以下のみを表示して終了する:
 
 ```
 error: preliminary commands not approved. aborted.
 ```
 
-CI で回すときは以下のいずれかで明示オプトイン:
-
-- コマンドラインフラグ `--allow-preliminary-commands` で全承認しつつ実行。
-- または、承認済みのロックファイルをリポジトリにコミットしておく。
-  この場合ハッシュ一致すれば無プロンプトで通る。
-  不一致なら失敗 (プロンプトには降格しない)。
-
 ### オプトアウト / バイパス
 
-- `--allow-preliminary-commands`: 今回のコマンドを無条件承認して実行する。
-  **ロックファイルは更新しない** (単なる一時バイパスのため)。
+- `--allow-preliminary-commands`: 全プロジェクトに対して `[o]` (一時承認)
+  を与えたのと等価。`~/.fixtrust.toml` は更新しない。CI 用。
 
-ロックファイルへの記録は対話プロンプトで `y` と答えたときだけ行う
-(「熟慮された承認」だけを永続化する)。CI 等で承認を共有したい場合は、
-開発者が対話環境で一度 `y` を押してロックファイルを更新→commit する。
+### 推奨される使い分け
 
-### ロックファイルに記録される内容
+| 状況 | 推奨 |
+|---|---|
+| 自分のプロジェクト (root / ローカルパス依存) | `y` (remember) |
+| 他人のプロジェクトを clone してビルド | `o` (once) |
+| 他人のプロジェクトをローカル参照 | `o` (once) |
+| CI / 自動ビルド | `--allow-preliminary-commands` |
 
-ユーザが直接読める形式 (例: TOML) で、次の情報を保持:
+他人のコードを走らせる以上、その内容を精査すべきで、永続承認 (`y`) は
+長期的に script 差し替え攻撃の入り口になる。
 
-- プロジェクト識別
-- モード (build / test)
-- コマンド配列のハッシュ (SHA-256)
-- 人間向け参考情報 (承認時点のコマンド内容、承認日時)
+### `~/.fixtrust.toml` の内容
 
-ファイル名・配置場所は設計側で決定。リポジトリにコミットして共有する運用を想定。
+ユーザが直接読める TOML 形式で、承認ごとに 1 エントリを保持。
 
-## ハッシュの対象
+```toml
+# Git 依存: commit ごとに 1 エントリ
+[[approval]]
+source = "git+https://github.com/foo/bar"
+mode = "build"
+commit_hash = "abcdef..."
+approved_at = "2026-04-20T10:30:00Z"
+# 参考情報 (照合には使わない)
+project_name = "bar"
+commands_preview = ["./configure --prefix=/opt/foo"]
 
-**`preliminary_commands` 配列の正規化シリアライズを SHA-256**。
+# root プロジェクト / ローカルパス依存: パスベースで無期限
+[[approval]]
+source = "/home/user/projects/my-app"
+mode = "build"
+approved_at = "2026-04-20T10:31:00Z"
+project_name = "my-app"
+commands_preview = ["sh setup.sh", "make libfoo.a"]
+```
 
-「正規化シリアライズ」は以下で定義する:
+照合は `(source, mode, commit_hash)` で行う。`commit_hash` フィールドが
+エントリに存在しない場合 (root / ローカル依存) は省いて `(source, mode)`
+で照合する。
 
-- 入力: `Vec<Vec<String>>` (コマンドの配列、各コマンドは argv の配列)
-- 出力: UTF-8 の JSON 配列リテラルのバイト列
-- 規則:
-  - 外側・内側とも配列順序は入力のまま保つ (ソートしない)
-  - 文字列は JSON 標準のエスケープを適用
-    (`"` / `\` / 制御文字 `\u0000`–`\u001F` のみ)
-  - 空白・改行・インデントは挿入しない (compact 形式)
-  - 非 ASCII 文字は UTF-8 バイトのまま (`\uXXXX` エスケープはしない)
+配置場所の詳細 (ファイルロック、書き込み原子性など) は設計側で決定。
 
-例: `[["sh", "setup.sh"], ["make", "libfoo.a"]]` は
-`[["sh","setup.sh"],["make","libfoo.a"]]` の 41 バイトが入力となる。
+## 識別子の対象
 
-実装は `serde_json::to_vec` 相当の出力と一致する。
+### `commit_hash` (Git 依存のみ)
 
-採用理由:
+lockfile に記録されているコミットハッシュ (`DependencyLockGit::rev`) を
+そのまま使う。
 
-- 攻撃面は「Fix ビルド時に任意コード実行される」という一点で、
-  その実体は `preliminary_commands` の文字列そのもの。
-- コマンドが不変なら依存側が他の箇所をどう変えても新たな攻撃は発生しない。
-- コミットハッシュや `fixproj.toml` 全体のハッシュを使うと、
-  無関係な変更で再プロンプトが多発してアラーム疲労を起こし、
-  ユーザが反射的に yes を押す癖がつく → 検知能力が下がる。
+### `commands_hash` は照合に使わない
+
+コマンド内容のハッシュは `~/.fixtrust.toml` には `commands_preview` として
+参考表示のみ残す。照合には使わない。理由:
+
+- Git 依存: コミットハッシュが内容を決定するので、`commit_hash` が一致すれば
+  コマンドも一致している。二重に持つ意味がない。
+- root / ローカルパス依存: 絶対パスへの信頼をユーザが与えた時点で、そのパス
+  配下のコマンド変更も含めて委任されたと解釈する (パスの持ち主 = 自分)。
 
 ## 既知の限界
 
-### スクリプト経由の間接実行
+### スクリプト経由の間接実行 (同一コミット内)
 
-`["sh", "setup.sh"]` のようにスクリプトを呼ぶ場合、`setup.sh` の中身は
-ハッシュ対象外なので後から差し替え可能。
+`["sh", "setup.sh"]` のようにスクリプトを呼ぶ場合、同一コミット内で
+`setup.sh` の中身を差し替えても検知できない。
 
-これは本質的に「スクリプト実行を承認 = そのスクリプトに白紙委任」である
-ため、原理的に防ぎきれない。本仕様の対象外とし、ユーザ教育で補う。
+Git 依存については `fix deps update` でコミットが変われば再プロンプトされる
+ので、そこでの差し替えは検知できる。しかしコミット内の動的差し替えは
+原理的に防げない。これは「スクリプト実行を承認 = そのスクリプトに白紙委任」
+である以上本仕様の対象外とし、ユーザ教育で補う。
+
+### ローカルパスへの白紙委任
+
+root / ローカル依存を `y` で承認すると、そのパス配下のコマンド・スクリプトが
+以後どう変わっても再プロンプトは出ない。悪意ある第三者がそのパスに書き込める
+状況 (マシン侵害) では防御にならないが、そこまで侵害された時点でこの仕様の
+守備範囲外と判断する。
+
+clone してきた他人のプロジェクトを `y` で承認するのは **非推奨**。`o` を使う。
 
 ### 依存解決との関係
 
 依存を追加した瞬間にその `preliminary_commands` が起動し得るため、
-最低でも `fix build` の初回には全依存ぶんのプロンプトが出る可能性がある。
-UX 上は一覧表示して一括承認できるのが望ましい (実装詳細は設計側)。
+最低でも `fix build` の初回には全依存ぶんのプロンプトが順に出る可能性がある。
+数が多いときは煩雑になりうるが、プロジェクト単位で個別に判断できる利点と
+引き換え。一時承認で済ませたいなら `--allow-preliminary-commands`。
 
 ## デフォルトの方針
 
