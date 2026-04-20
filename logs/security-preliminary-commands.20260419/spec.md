@@ -37,14 +37,19 @@
 
 | 種類 | 承認キー | 意味 |
 |---|---|---|
-| Git 依存 | `(source, mode, commit_hash)` | 指定コミットの内容を承認 |
-| root / ローカルパス依存 | `(source, mode)` | このパスのプロジェクトを無期限に承認 |
+| Git 依存 | `(source, mode, commit_hash)` | 指定コミット・モードの内容を承認 |
+| root / ローカルパス依存 | `(source, mode)` | このパス・モードを無期限に承認 |
 
 - `source`:
   - Git 依存: `git+<repo URL>` の形式 (lockfile の `git.repo` から生成)
   - root / ローカルパス依存: **絶対パス** (正規化済み)
 - `mode`: `build` または `test`
 - `commit_hash`: Git 依存のみ。lockfile の `git.rev`
+
+承認は `(source, mode)` ごとに別レコードで記録する。例えば
+`fix build` で root プロジェクトの build モードを承認すると、後に `fix test`
+を実行したとき、build モードは再プロンプトされずに通過し、test モードの
+`preliminary_commands` のみが新たにプロンプトされる。
 
 「root / ローカルパス依存」はどちらもユーザーの手元のディレクトリを直接指すので、
 「このパスに置かれているプロジェクトを信頼する」というパスベースの承認にする。
@@ -58,16 +63,42 @@
 ### 通常のビルド (対話端末あり)
 
 `fix build` / `run` / `test` で `preliminary_commands` が定義されたプロジェクト
-(root または依存) があるとき、各プロジェクトを順に処理する:
+(root または依存) があるとき、以下の流れで処理する:
 
-1. 実行されるコマンド一覧を表示する (詳細は下記「表示仕様」)。
-2. `~/.fixtrust.toml` に一致エントリがあればプロンプトを出さずに通過。
-3. 一致エントリがなければ、そのプロジェクト単独で 3 択プロンプトを出す:
-   - `y` = 承認して `~/.fixtrust.toml` に記録、実行
-   - `o` = 一時承認 (今回だけ実行、記録しない)
-   - `n` / EOF = 拒否
+1. この invocation で実行される `(source, mode)` ペアを全て列挙する
+   (`fix build` / `fix run` なら build モード、`fix test` なら build と test
+   の両モード)。
+2. 各ペアについて `~/.fixtrust.toml` の一致エントリを探す。
+   一致したものは「approved」として先に一覧表示し、プロンプトを出さずに通過。
+3. 未承認のペアはプロジェクト (`source`) ごとにまとめて、1 プロジェクト 1 回の
+   3 択プロンプトを出す:
+   - 同じプロジェクトで build と test の両方が未承認なら、両モードのコマンドを
+     1 つのブロックにまとめて表示し、`y` で両方まとめて承認する。
+   - どちらか片方のみ未承認 (`fix test` で build は別セッションで承認済み等) なら、
+     そのモードだけ表示・承認する。
+   - 選択肢:
+     - `y` = 承認して `~/.fixtrust.toml` に記録 (未承認だった各 `(source, mode)`
+       を個別のレコードとして書き込む)、実行
+     - `o` = 一時承認 (今回だけ実行、記録しない)
+     - `n` / EOF = 拒否
 4. `n` が選ばれたら即座にビルド全体を失敗させる
    (残りのプロジェクトは尋ねない)。
+
+プロジェクトの処理順序は実装都合でよい (依存グラフ順など)。
+
+### 承認の記録タイミング / 書き込み失敗時の挙動
+
+`y` が選ばれたら、**コマンド実行の前に** `~/.fixtrust.toml` を更新する。
+ビルドが途中で失敗・中断されても承認意思は残る (次回同じ状態で再度 `y` を
+押し直す必要はない)。
+
+書き込みに失敗した場合 (権限エラー、ディスク不足等) は:
+
+- stderr に警告を出す
+- そのセッションは `[o]` (一時承認) と同等に扱ってビルドを続行する
+
+「記録できなかったので拒否」にはしない (ユーザが既に承認を意図しているので、
+少なくとも今回のビルドは成立させる)。
 
 ### 表示仕様
 
@@ -75,6 +106,22 @@
 
 承認済みプロジェクトは先に一覧表示し、その後、承認待ちのプロジェクトを
 1 つずつプロンプトにかける。
+
+承認済みの一覧 (プロンプトなしで通過する場合) の表示例:
+
+```
+Preliminary commands (already approved):
+
+  [myproj] (approved)
+    path: /home/user/projects/my-app
+    $ sh setup.sh
+    $ make libfoo.a
+
+  [some-dep] (approved)
+    source: https://github.com/foo/some-dep (commit abcdef1)
+    path: /home/user/proj/.fix/deps/some-dep_1.2.3
+    $ ./configure --prefix=/opt/foo
+```
 
 プロンプトの文面はプロジェクト種別により変える。**Git 依存の場合**、
 承認はコミットに紐づくので `[y]` のリスクは低い:
@@ -117,6 +164,29 @@
     source: https://github.com/foo/other-dep (commit ef01234)
     path: /home/user/proj/.fix/deps/other-dep_0.5.0
     $ make install
+```
+
+`fix test` で build と test の両モードが**どちらも未承認**の場合は、1 プロンプト
+にまとめて表示し、`y` で両方一括承認する:
+
+```
+  [myproj] (NEW)
+    path: /home/user/projects/my-app
+    (build)
+    $ sh setup.sh
+    $ make libfoo.a
+    (test)
+    $ ./setup_test_env.sh
+```
+
+`fix test` で **build は既に承認済みで test のみ未承認**の場合は、test モードだけ
+表示する (build モードの commands は approved 一覧側に入る):
+
+```
+  [myproj] (NEW — test mode)
+    path: /home/user/projects/my-app
+    (test)
+    $ ./setup_test_env.sh
 ```
 
 - プロジェクト名は `fixproj.toml` の `[general] name` をそのまま使う
@@ -186,7 +256,7 @@ error: preliminary commands not approved. aborted.
 ユーザが直接読める TOML 形式で、承認ごとに 1 エントリを保持。
 
 ```toml
-# Git 依存: commit ごとに 1 エントリ
+# Git 依存 (build モード): commit ごとに 1 エントリ
 [[approval]]
 source = "git+https://github.com/foo/bar"
 mode = "build"
@@ -196,13 +266,21 @@ approved_at = "2026-04-20T10:30:00Z"
 project_name = "bar"
 commands_preview = ["./configure --prefix=/opt/foo"]
 
-# root プロジェクト / ローカルパス依存: パスベースで無期限
+# root プロジェクト (build モード): パスベースで無期限
 [[approval]]
 source = "/home/user/projects/my-app"
 mode = "build"
 approved_at = "2026-04-20T10:31:00Z"
 project_name = "my-app"
 commands_preview = ["sh setup.sh", "make libfoo.a"]
+
+# 同じ root プロジェクトの test モードは別エントリ
+[[approval]]
+source = "/home/user/projects/my-app"
+mode = "test"
+approved_at = "2026-04-20T10:31:00Z"
+project_name = "my-app"
+commands_preview = ["./setup_test_env.sh"]
 ```
 
 照合は `(source, mode, commit_hash)` で行う。`commit_hash` フィールドが
