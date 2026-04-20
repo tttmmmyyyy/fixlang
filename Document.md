@@ -2725,7 +2725,7 @@ The following table shows how each setting is handled.
             <td>None</td>
             <td>Merge</td>
             <td>Affects</td>
-            <td>Commands to be executed before compilation. Requires user approval on first encounter; see <a href="#approval-of-preliminary_commands">Approval of preliminary_commands</a>.</td>
+            <td>Commands to be executed before compilation</td>
         </tr>
         <tr>
             <td>threaded</td>
