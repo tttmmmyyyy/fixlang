@@ -144,9 +144,17 @@ pub fn test_external_project(url: &str, test_name: &str) {
         .to_string()
         .replace(".git", "");
 
-    // Run `fix test`.
-    let mut cmd = Command::new("fix");
-    cmd.arg("test").current_dir(work_dir.join(dir_name));
+    // Run `fix test`. `install_fix()` writes the freshly built binary to `~/.cargo/bin/fix`;
+    // use that absolute path so we don't accidentally pick up a stale `fix` earlier on PATH.
+    // `--allow-preliminary-commands` is supplied because this test is non-interactive and
+    // some external projects legitimately ship `preliminary_commands` (e.g. cp-library).
+    let fix_path = dirs::home_dir()
+        .expect("home for cargo bin")
+        .join(".cargo/bin/fix");
+    let mut cmd = Command::new(&fix_path);
+    cmd.arg("test")
+        .arg("--allow-preliminary-commands")
+        .current_dir(work_dir.join(dir_name));
 
     // Inherit all environment variables from the parent process
     cmd.envs(env::vars());
