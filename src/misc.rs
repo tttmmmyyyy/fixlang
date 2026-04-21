@@ -251,11 +251,18 @@ pub fn disable_colored_no_tty() {
 }
 
 pub fn info_msg(msg: &str) {
-    eprintln!("{}: {}", "info".bright_blue(), msg);
+    eprintln!("{}: {}", "info".bright_blue().bold(), msg);
 }
 
 pub fn warn_msg(msg: &str) {
-    eprintln!("{}: {}", "warning".yellow(), msg);
+    eprintln!("{}: {}", "warning".yellow().bold(), msg);
+}
+
+// Styling used for interactive prompts that require the user's attention
+// (e.g. the preliminary-commands approval flow). Centralized so the look stays
+// consistent across prompt lines.
+pub fn prompt_style(s: &str) -> colored::ColoredString {
+    s.bright_green().bold()
 }
 
 // Splits a string by spaces, but keeps the words in quotes as a single word.

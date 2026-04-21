@@ -163,7 +163,7 @@ impl Error {
 
     pub fn to_string(&self) -> String {
         let mut str = String::default();
-        str += &"error".red().to_string();
+        str += &"error".red().bold().to_string();
         str += ": ";
         str += &self.msg;
         str += "\n";

@@ -10,7 +10,7 @@ use crate::{
         project_file::ProjectOrigin,
         trust_store::{make_approval, TrustStore},
     },
-    misc::{split_string_by_space_not_quated, to_absolute_path, warn_msg},
+    misc::{prompt_style, split_string_by_space_not_quated, to_absolute_path, warn_msg},
 };
 use colored::Colorize;
 use std::io::{BufRead, IsTerminal, Write};
@@ -154,7 +154,7 @@ pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
     Ok(())
 }
 
-// All preliminary commands that share the same `(source, mode)` tuple — i.e. every
+// All preliminary commands that share the same `(source, mode)` tuple -- i.e. every
 // command declared under the same `[build]` or `[build.test]` section of the same
 // project. The trust-store lookup granularity is one `Group`.
 struct Group {
@@ -254,7 +254,7 @@ enum Choice {
 // and any character other than `y` / `o` / `n` (case-insensitive) all fall back to `No`.
 fn read_choice() -> Choice {
     eprintln!();
-    eprint!("{} ", "Choice [y/o/N]:".bold());
+    eprint!("{} ", prompt_style("Approve? [y/o/N]:"));
     let _ = std::io::stderr().flush();
     let stdin = std::io::stdin();
     let mut line = String::new();
@@ -277,6 +277,8 @@ fn read_choice() -> Choice {
             Choice::No
         }
     };
+    // Blank line separating the user's answer from whatever comes next.
+    eprintln!();
     choice
 }
 
@@ -292,17 +294,16 @@ fn prompt_and_record(
     let by_source = group_classified_by_source(pending);
     // Resolve the trust-store path once so the prompt can show it to the user as part
     // of the `[y]` explanation. If resolution fails (no HOME), fall back to a generic
-    // placeholder — `save()` below will surface the real error.
+    // placeholder -- `save()` below will surface the real error.
     let trust_path = crate::metafiles::trust_store::default_path()
         .unwrap_or_else(|_| std::path::PathBuf::from("~/.fixtrust.toml"));
 
-    // Single header line that sets the context for every per-project prompt that follows.
-    eprintln!(
-        "{}",
-        "Preliminary commands require your approval.".bold()
-    );
-
     for sg in &by_source {
+        // Header line that sets the context for every per-project prompt.
+        eprintln!(
+            "{}",
+            prompt_style("The following project requests your approval to run preliminary commands:")
+        );
         display_prompt_block(sg, &trust_path);
         match read_choice() {
             Choice::Yes => {
@@ -413,23 +414,23 @@ fn short_commit(commit: &str) -> String {
 }
 
 // Print the `source: <url> (commit <short>)` line when this project came from git.
-// Emits nothing for local/root projects — their origin is already conveyed by `path:`.
+// Emits nothing for local/root projects -- their origin is already conveyed by `path:`.
 fn print_source_line(source: &ProjectOrigin) {
     if let ProjectOrigin::Git { url, commit } = source {
-        eprintln!("  source: {} (commit {})", url, short_commit(commit));
+        eprintln!("    source: {} (commit {})", url, short_commit(commit));
     }
 }
 
 // Print the `path: <work_dir>` line, doubling as both the filesystem location and the
 // cwd in which the commands will run.
 fn print_path_line(work_dir: &Path) {
-    eprintln!("  path: {}", work_dir.display());
+    eprintln!("    path: {}", work_dir.display());
 }
 
 // Print each command on its own `$ ...` line.
 fn print_command_lines(commands: &[PreliminaryCommand]) {
     for c in commands {
-        eprintln!("  $ {}", format_argv(&c.command));
+        eprintln!("    $ {}", format_argv(&c.command));
     }
 }
 
@@ -441,14 +442,14 @@ fn display_approved(approved: &[Classified]) {
     // Re-group by source for cleaner display (same path/source shown once).
     let by_source = group_classified_by_source(approved);
     for sg in &by_source {
-        eprintln!("[{}] (approved)", sg.project_name);
+        eprintln!("  [{}] (approved)", sg.project_name);
         print_source_line(&sg.source);
         if let Some(first) = sg.entries.first().and_then(|e| e.group.commands.first()) {
             print_path_line(&first.work_dir);
         }
         for e in &sg.entries {
             if sg.entries.len() > 1 {
-                eprintln!("  ({})", e.group.mode.as_str());
+                eprintln!("    ({})", e.group.mode.as_str());
             }
             print_command_lines(&e.group.commands);
         }
@@ -468,7 +469,7 @@ fn display_auto_approved(pending: &[Classified]) {
     let by_source = group_classified_by_source(pending);
     for sg in &by_source {
         eprintln!(
-            "[{}] (auto-approved (--allow-preliminary-commands))",
+            "  [{}] (auto-approved (--allow-preliminary-commands))",
             sg.project_name
         );
         print_source_line(&sg.source);
@@ -477,7 +478,7 @@ fn display_auto_approved(pending: &[Classified]) {
         }
         for e in &sg.entries {
             if sg.entries.len() > 1 {
-                eprintln!("  ({})", e.group.mode.as_str());
+                eprintln!("    ({})", e.group.mode.as_str());
             }
             print_command_lines(&e.group.commands);
         }
@@ -490,7 +491,8 @@ fn display_auto_approved(pending: &[Classified]) {
 // and points the reader at the two ways to approve.
 fn display_non_interactive_error(pending: &[Classified]) {
     eprintln!(
-        "error: preliminary commands require approval, but no interactive terminal is available."
+        "{}: preliminary commands require approval, but no interactive terminal is available.",
+        "error".red().bold()
     );
     eprintln!();
     let by_source = group_classified_by_source(pending);
@@ -502,7 +504,7 @@ fn display_non_interactive_error(pending: &[Classified]) {
         }
         for e in &sg.entries {
             if sg.entries.len() > 1 {
-                eprintln!("  ({})", e.group.mode.as_str());
+                eprintln!("    ({})", e.group.mode.as_str());
             }
             print_command_lines(&e.group.commands);
         }
@@ -520,7 +522,6 @@ fn display_non_interactive_error(pending: &[Classified]) {
 // source kind (git vs local/root), and `trust_path` is inlined so the user can see
 // which file will be edited on `y`.
 fn display_prompt_block(sg: &SourceGroup, trust_path: &Path) {
-    eprintln!();
     print_pending_entry_header(sg);
     print_source_line(&sg.source);
     if let Some(first) = sg.entries.first().and_then(|e| e.group.commands.first()) {
@@ -528,24 +529,24 @@ fn display_prompt_block(sg: &SourceGroup, trust_path: &Path) {
     }
     for e in &sg.entries {
         if sg.entries.len() > 1 {
-            eprintln!("  ({})", e.group.mode.as_str());
+            eprintln!("    ({})", e.group.mode.as_str());
         }
         print_command_lines(&e.group.commands);
     }
     eprintln!();
-    eprintln!("{}", "Approve?".bold());
+    eprintln!("{}", prompt_style("Choices:"));
     match &sg.source {
         ProjectOrigin::Git { .. } => {
-            eprintln!("  [y] Yes — trust this commit from now on");
+            eprintln!("  [y] Yes, I approve -- and trust this commit from now on");
             eprintln!(
                 "        (records this approval in {})",
                 trust_path.display()
             );
-            eprintln!("  [o] Yes — just this run");
-            eprintln!("  [n] No");
+            eprintln!("  [o] Yes, I approve -- but only for this run");
+            eprintln!("  [n] No, I decline");
         }
         ProjectOrigin::Local(p) => {
-            eprintln!("  [y] Yes — trust this path from now on");
+            eprintln!("  [y] Yes, I approve -- and trust this path from now on");
             eprintln!(
                 "        (future changes at {} will not prompt;",
                 p.display()
@@ -554,9 +555,9 @@ fn display_prompt_block(sg: &SourceGroup, trust_path: &Path) {
                 "         records this approval in {})",
                 trust_path.display()
             );
-            eprintln!("  [o] Yes — just this run");
+            eprintln!("  [o] Yes, I approve -- but only for this run");
             eprintln!("        (recommended unless this is your own project)");
-            eprintln!("  [n] No");
+            eprintln!("  [n] No, I decline");
         }
     }
 }
@@ -573,7 +574,7 @@ fn print_pending_entry_header(sg: &SourceGroup) {
             Some(c) => format!("CHANGED from commit {}", short_commit(&c)),
             None => "CHANGED".to_string(),
         };
-        eprintln!("[{}] ({})", sg.project_name, tag);
+        eprintln!("  [{}] ({})", sg.project_name, tag);
         return;
     }
     // All entries are NEW. If only a single mode entry exists we annotate which one
@@ -582,10 +583,10 @@ fn print_pending_entry_header(sg: &SourceGroup) {
     let mode_hint = if sg.entries.len() == 1 {
         match sg.entries[0].group.mode {
             PreliminaryCommandMode::Build => "",
-            PreliminaryCommandMode::Test => " — test mode",
+            PreliminaryCommandMode::Test => " -- test mode",
         }
     } else {
         ""
     };
-    eprintln!("[{}] (NEW{})", sg.project_name, mode_hint);
+    eprintln!("  [{}] (NEW{})", sg.project_name, mode_hint);
 }
