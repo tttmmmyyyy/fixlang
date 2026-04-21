@@ -12,6 +12,7 @@ use crate::{
     },
     misc::{split_string_by_space_not_quated, to_absolute_path, warn_msg},
 };
+use colored::Colorize;
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -252,7 +253,8 @@ enum Choice {
 // Prompt the user once and read their answer from stdin. EOF, I/O errors, empty input,
 // and any character other than `y` / `o` / `n` (case-insensitive) all fall back to `No`.
 fn read_choice() -> Choice {
-    eprint!("  Choice [y/o/N]: ");
+    eprintln!();
+    eprint!("{} ", "Choice [y/o/N]:".bold());
     let _ = std::io::stderr().flush();
     let stdin = std::io::stdin();
     let mut line = String::new();
@@ -293,6 +295,12 @@ fn prompt_and_record(
     // placeholder — `save()` below will surface the real error.
     let trust_path = crate::metafiles::trust_store::default_path()
         .unwrap_or_else(|_| std::path::PathBuf::from("~/.fixtrust.toml"));
+
+    // Single header line that sets the context for every per-project prompt that follows.
+    eprintln!(
+        "{}",
+        "Preliminary commands require your approval.".bold()
+    );
 
     for sg in &by_source {
         display_prompt_block(sg, &trust_path);
@@ -408,39 +416,39 @@ fn short_commit(commit: &str) -> String {
 // Emits nothing for local/root projects — their origin is already conveyed by `path:`.
 fn print_source_line(source: &ProjectOrigin) {
     if let ProjectOrigin::Git { url, commit } = source {
-        eprintln!("    source: {} (commit {})", url, short_commit(commit));
+        eprintln!("  source: {} (commit {})", url, short_commit(commit));
     }
 }
 
 // Print the `path: <work_dir>` line, doubling as both the filesystem location and the
 // cwd in which the commands will run.
 fn print_path_line(work_dir: &Path) {
-    eprintln!("    path: {}", work_dir.display());
+    eprintln!("  path: {}", work_dir.display());
 }
 
 // Print each command on its own `$ ...` line.
 fn print_command_lines(commands: &[PreliminaryCommand]) {
     for c in commands {
-        eprintln!("    $ {}", format_argv(&c.command));
+        eprintln!("  $ {}", format_argv(&c.command));
     }
 }
 
 // Render the `(already approved)` header and the command listing for every project
 // whose preliminary_commands were pre-approved by the trust store.
 fn display_approved(approved: &[Classified]) {
-    eprintln!("Preliminary commands (already approved):");
+    eprintln!("{}", "Preliminary commands (already approved):".bold());
     eprintln!();
     // Re-group by source for cleaner display (same path/source shown once).
     let by_source = group_classified_by_source(approved);
     for sg in &by_source {
-        eprintln!("  [{}] (approved)", sg.project_name);
+        eprintln!("[{}] (approved)", sg.project_name);
         print_source_line(&sg.source);
         if let Some(first) = sg.entries.first().and_then(|e| e.group.commands.first()) {
             print_path_line(&first.work_dir);
         }
         for e in &sg.entries {
             if sg.entries.len() > 1 {
-                eprintln!("    ({})", e.group.mode.as_str());
+                eprintln!("  ({})", e.group.mode.as_str());
             }
             print_command_lines(&e.group.commands);
         }
@@ -453,13 +461,14 @@ fn display_approved(approved: &[Classified]) {
 // that the approval came from the CLI flag, not from a recorded trust entry.
 fn display_auto_approved(pending: &[Classified]) {
     eprintln!(
-        "Preliminary commands (auto-approved via --allow-preliminary-commands):"
+        "{}",
+        "Preliminary commands (auto-approved via --allow-preliminary-commands):".bold()
     );
     eprintln!();
     let by_source = group_classified_by_source(pending);
     for sg in &by_source {
         eprintln!(
-            "  [{}] (auto-approved (--allow-preliminary-commands))",
+            "[{}] (auto-approved (--allow-preliminary-commands))",
             sg.project_name
         );
         print_source_line(&sg.source);
@@ -468,7 +477,7 @@ fn display_auto_approved(pending: &[Classified]) {
         }
         for e in &sg.entries {
             if sg.entries.len() > 1 {
-                eprintln!("    ({})", e.group.mode.as_str());
+                eprintln!("  ({})", e.group.mode.as_str());
             }
             print_command_lines(&e.group.commands);
         }
@@ -493,7 +502,7 @@ fn display_non_interactive_error(pending: &[Classified]) {
         }
         for e in &sg.entries {
             if sg.entries.len() > 1 {
-                eprintln!("    ({})", e.group.mode.as_str());
+                eprintln!("  ({})", e.group.mode.as_str());
             }
             print_command_lines(&e.group.commands);
         }
@@ -519,35 +528,35 @@ fn display_prompt_block(sg: &SourceGroup, trust_path: &Path) {
     }
     for e in &sg.entries {
         if sg.entries.len() > 1 {
-            eprintln!("    ({})", e.group.mode.as_str());
+            eprintln!("  ({})", e.group.mode.as_str());
         }
         print_command_lines(&e.group.commands);
     }
     eprintln!();
-    eprintln!("  Approve?");
+    eprintln!("{}", "Approve?".bold());
     match &sg.source {
         ProjectOrigin::Git { .. } => {
-            eprintln!("    [y] Yes — trust this commit from now on");
+            eprintln!("  [y] Yes — trust this commit from now on");
             eprintln!(
-                "          (records this approval in {})",
+                "        (records this approval in {})",
                 trust_path.display()
             );
-            eprintln!("    [o] Yes — just this run");
-            eprintln!("    [n] No                                      (default)");
+            eprintln!("  [o] Yes — just this run");
+            eprintln!("  [n] No");
         }
         ProjectOrigin::Local(p) => {
-            eprintln!("    [y] Yes — trust this path from now on");
+            eprintln!("  [y] Yes — trust this path from now on");
             eprintln!(
-                "          (future changes at {} will not prompt;",
+                "        (future changes at {} will not prompt;",
                 p.display()
             );
             eprintln!(
-                "           records this approval in {})",
+                "         records this approval in {})",
                 trust_path.display()
             );
-            eprintln!("    [o] Yes — just this run");
-            eprintln!("          (recommended unless this is your own project)");
-            eprintln!("    [n] No                                      (default)");
+            eprintln!("  [o] Yes — just this run");
+            eprintln!("        (recommended unless this is your own project)");
+            eprintln!("  [n] No");
         }
     }
 }
@@ -564,7 +573,7 @@ fn print_pending_entry_header(sg: &SourceGroup) {
             Some(c) => format!("CHANGED from commit {}", short_commit(&c)),
             None => "CHANGED".to_string(),
         };
-        eprintln!("  [{}] ({})", sg.project_name, tag);
+        eprintln!("[{}] ({})", sg.project_name, tag);
         return;
     }
     // All entries are NEW. If only a single mode entry exists we annotate which one
@@ -578,5 +587,5 @@ fn print_pending_entry_header(sg: &SourceGroup) {
     } else {
         ""
     };
-    eprintln!("  [{}] (NEW{})", sg.project_name, mode_hint);
+    eprintln!("[{}] (NEW{})", sg.project_name, mode_hint);
 }
