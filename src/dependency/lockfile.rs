@@ -16,7 +16,7 @@ use crate::{
     error::Errors,
     misc::info_msg,
     misc::{to_absolute_path, warn_msg},
-    metafiles::project_file::{ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName},
+    metafiles::project_file::{ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName, ProjectOrigin},
 };
 
 #[derive(Clone, Copy)]
@@ -64,7 +64,7 @@ impl DependecyLockFile {
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         for dep in &self.dependencies {
             let proj_file = dep.project_file()?;
-            proj_file.set_config(config, true)?;
+            proj_file.set_config(config)?;
         }
         Ok(())
     }
@@ -328,9 +328,22 @@ pub struct DependencyLockFileEntry {
 }
 
 impl DependencyLockFileEntry {
+    // Read this dependency's `fixproj.toml` and populate `role = Dependent` plus
+    // `source` (Git when the lockfile entry carries git info, Local otherwise) so that
+    // the returned `ProjectFile` is ready to be passed into `set_config`.
     pub fn project_file(&self) -> Result<ProjectFile, Errors> {
+        use crate::metafiles::project_file::ProjectFileRole;
         let proj_file_path = self.path.join(PROJECT_FILE_PATH);
-        ProjectFile::read_file(&proj_file_path)
+        let mut pf = ProjectFile::read_file(&proj_file_path)?;
+        pf.role = ProjectFileRole::Dependent;
+        pf.source = Some(match &self.git {
+            Some(g) => ProjectOrigin::Git {
+                url: g.repo.clone(),
+                commit: g.rev.clone(),
+            },
+            None => ProjectOrigin::Local(to_absolute_path(&self.path)?),
+        });
+        Ok(pf)
     }
 
     pub fn check_name_version_match_proj_file(&self) -> Result<(), Errors> {

@@ -32,6 +32,7 @@
 - `fix build` and `fix run` now type-check all symbols, not just those reachable from the entry point. Previously, only required symbols were type-checked.
 - Docs: In the "Values" section, values that are generated from trait members now have an additional description "Trait member of `<trait_name>`".
 - LSP: Introduced automatic lock file management for language server. The language server now automatically generates and updates `.fixlang/fixdeps.lsp.lock` when the project file changes, without requiring manual `fix deps update` commands.
+- `preliminary_commands` (both `[build]` and `[build.test]`) now require user approval before they run. On the first encounter `fix build` / `fix run` / `fix test` prompt with a 3-choice menu — `y` to trust the project and record the approval in `~/.fixtrust.toml`, `o` to allow just this invocation, or `n` to abort. Approvals for git dependencies are scoped to the pinned commit hash and re-prompted when the dependency advances to a new commit; approvals for the root project and local-path dependencies are scoped to the absolute path. CI or other non-interactive runs should pass `--allow-preliminary-commands` to bypass the prompt without writing to the trust store. See `Document.md` / `Document-ja.md` "Approval of preliminary_commands" for details.
 
 ### Fixed
 

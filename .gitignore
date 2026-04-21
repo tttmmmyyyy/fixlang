@@ -1,6 +1,7 @@
 /target
 /sanitizer/target
 .vscode/
+/.claude/settings.json
 /sanitizer/libfixsanitizer.so
 /main.ll
 /examples/*.o

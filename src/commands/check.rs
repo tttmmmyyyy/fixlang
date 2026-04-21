@@ -9,7 +9,7 @@ pub fn check(mut config: Configuration) -> Result<(), Errors> {
 
     // Set up the configuration by the project file.
     let proj_file = ProjectFile::read_root_file()?;
-    proj_file.set_config(&mut config, false)?;
+    proj_file.set_config(&mut config)?;
 
     // Automatically generate/update lock file and install dependencies.
     // Use Test mode to include test dependencies.

@@ -18,9 +18,9 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
 
     let out_path = config.get_output_file_path();
 
-    // Run extra commands.
+    // Run preliminary commands.
     if config.subcommand.run_preliminary_commands() {
-        config.run_extra_commands()?;
+        config.run_preliminary_commands()?;
     }
 
     let program = elaborate_via_config(&config)?;

@@ -2790,6 +2790,27 @@ Note:
 For some settings, such as optimization level and debugging information generation, you might expect that settings in dependent projects would take effect only within the scope of those dependent projects, rather than not affecting the main project at all.
 However, the Fix build system currently does not have a mechanism to separate compilation units on a per-dependent-project basis, so settings like optimization level and debugging information generation use a single value across the entire build.
 
+### Approval of `preliminary_commands`
+
+`preliminary_commands` run arbitrary processes before compilation, both from the root project and from dependencies. To prevent malicious projects or compromised dependencies from running unreviewed shell code, `fix build` / `fix run` / `fix test` require the commands to be approved before they execute.
+
+On the first build that encounters a `preliminary_commands` entry, `fix` shows the commands together with the project they come from and asks for your decision:
+
+- `[y]` — Approve and remember. The approval is recorded to `~/.fixtrust.toml` so future builds of the same project skip the prompt.
+- `[o]` — Approve for this invocation only. Nothing is written to the trust store.
+- `[n]` — Reject (default). The build aborts immediately.
+
+The approval granularity depends on the source of the project:
+
+- **Root project / local-path dependencies** are keyed by absolute path. Once you press `[y]` for a path, subsequent builds at that path are auto-approved regardless of any changes to its `preliminary_commands`. This keeps the edit/build loop on your own projects friction-free, but it also means you should not press `[y]` on third-party projects that you have only cloned for inspection — use `[o]` for those.
+- **Git dependencies** are keyed by the repository URL plus the commit hash recorded in the lock file. Updating the dependency to a new commit (`fix deps update`) re-prompts so that you can review the new commit's `preliminary_commands`.
+
+To bypass the prompt in CI or any other non-interactive environment, pass `--allow-preliminary-commands`. This treats every pending command as a one-shot approval and does not write to the trust store.
+
+If the session is non-interactive (no TTY attached) and `--allow-preliminary-commands` was not given, the build fails with a descriptive error rather than blocking on a prompt.
+
+Entries in `~/.fixtrust.toml` are plain TOML; to revoke an approval, either delete the whole file or remove the offending `[[approval]]` block manually.
+
 ## Managing dependencies
 
 Dependencies of a Fix project are represented by [[dependencies]] elements in the "fixproj.toml" file.

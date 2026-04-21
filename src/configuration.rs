@@ -5,15 +5,13 @@ use crate::constants::{
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
-    OPTIMIZATION_LEVEL_NONE, PRELIMINARY_BUILD_LD_FLAGS,
+    OPTIMIZATION_LEVEL_NONE,
 };
+use crate::preliminary_command::PreliminaryCommand;
 use crate::elaboration::typecheckcache::{self, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
-use crate::misc::{
-    platform_valgrind_supported, split_string_by_space_not_quated, to_absolute_path, warn_msg,
-    Finally,
-};
+use crate::misc::{platform_valgrind_supported, warn_msg, Finally};
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
@@ -213,8 +211,11 @@ pub struct Configuration {
     pub disable_cpu_features_regex: Vec<String>,
     // Subcommand of the `fix` command.
     pub subcommand: SubCommand,
-    // Extra build commands.
-    pub extra_commands: Vec<ExtraCommand>,
+    // Preliminary commands declared in fixproj.toml (root and dependencies).
+    pub preliminary_commands: Vec<PreliminaryCommand>,
+    // If true, bypass the trust-store approval prompt and treat all pending
+    // preliminary_commands as one-shot approvals. Set by `--allow-preliminary-commands`.
+    pub allow_preliminary_commands: bool,
     // Typecheck cache.
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
     // Number of worker threads.
@@ -233,58 +234,6 @@ pub struct Configuration {
     pub backtrace: bool,
     // Disable runtime checks such as array bounds check.
     pub no_runtime_check: bool,
-}
-
-#[derive(Clone)]
-pub struct ExtraCommand {
-    pub work_dir: PathBuf,
-    pub command: Vec<String>,
-}
-
-impl ExtraCommand {
-    pub fn run(&self, config: &mut Configuration) -> Result<(), Errors> {
-        let mut com = Command::new(&self.command[0]);
-        for arg in &self.command[1..] {
-            com.arg(arg);
-        }
-        let work_dir = to_absolute_path(&self.work_dir)?;
-        com.current_dir(&work_dir);
-        let status = com.status().map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to run command \"{}\": {:?}",
-                self.command.join(" "),
-                e
-            ))
-        })?;
-        if !status.success() {
-            return Err(Errors::from_msg(format!(
-                "Command \"{}\" failed with exit code {}.",
-                self.command.join(" "),
-                status.code().unwrap_or(-1)
-            )));
-        }
-
-        // Get stdout as String.
-        let output = com.output().map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to run command \"{}\": {:?}",
-                self.command.join(" "),
-                e
-            ))
-        })?;
-
-        // If the command outputs build flags in the designated format, add them to the configuration.
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stdout_lines: Vec<&str> = stdout.lines().collect();
-        for stdout_line in stdout_lines {
-            if stdout_line.starts_with(PRELIMINARY_BUILD_LD_FLAGS) {
-                let ld_flags = stdout_line[PRELIMINARY_BUILD_LD_FLAGS.len()..].trim();
-                let mut ld_flags = split_string_by_space_not_quated(ld_flags);
-                config.ld_flags.append(&mut ld_flags);
-            }
-        }
-        Ok(())
-    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
@@ -340,7 +289,8 @@ impl Configuration {
             library_search_paths: vec![],
             c_type_sizes: CTypeSizes::load_or_check()?,
             disable_cpu_features_regex: vec![],
-            extra_commands: vec![],
+            preliminary_commands: vec![],
+            allow_preliminary_commands: false,
             type_check_cache: Arc::new(typecheckcache::FileCache::new()),
             num_worker_thread: 0,
             llvm_passes_file: None,
@@ -639,11 +589,8 @@ impl Configuration {
         }
     }
 
-    pub fn run_extra_commands(&mut self) -> Result<(), Errors> {
-        for com in &self.extra_commands.clone() {
-            com.run(self)?;
-        }
-        Ok(())
+    pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
+        crate::preliminary_command::approve_and_run(self)
     }
 
     #[allow(dead_code)]
