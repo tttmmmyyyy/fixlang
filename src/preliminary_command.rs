@@ -10,7 +10,7 @@ use crate::{
         project_file::ProjectOrigin,
         trust_store::{make_approval, TrustStore},
     },
-    misc::{prompt_style, split_string_by_space_not_quated, to_absolute_path, warn_msg},
+    misc::{info_msg, prompt_style, split_string_by_space_not_quated, to_absolute_path, warn_msg},
 };
 use colored::Colorize;
 use std::io::{BufRead, IsTerminal, Write};
@@ -437,7 +437,7 @@ fn print_command_lines(commands: &[PreliminaryCommand]) {
 // Render the `(already approved)` header and the command listing for every project
 // whose preliminary_commands were pre-approved by the trust store.
 fn display_approved(approved: &[Classified]) {
-    eprintln!("{}", "Preliminary commands (already approved):".bold());
+    info_msg("Running preliminary commands (already approved).");
     eprintln!();
     // Re-group by source for cleaner display (same path/source shown once).
     let by_source = group_classified_by_source(approved);
@@ -461,10 +461,7 @@ fn display_approved(approved: &[Classified]) {
 // still run, but the trust store is not updated; the status label reminds the reader
 // that the approval came from the CLI flag, not from a recorded trust entry.
 fn display_auto_approved(pending: &[Classified]) {
-    eprintln!(
-        "{}",
-        "Preliminary commands (auto-approved via --allow-preliminary-commands):".bold()
-    );
+    info_msg("Running preliminary commands (auto-approved via --allow-preliminary-commands).");
     eprintln!();
     let by_source = group_classified_by_source(pending);
     for sg in &by_source {
