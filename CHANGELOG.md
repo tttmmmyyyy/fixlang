@@ -34,6 +34,10 @@
 - LSP: Introduced automatic lock file management for language server. The language server now automatically generates and updates `.fixlang/fixdeps.lsp.lock` when the project file changes, without requiring manual `fix deps update` commands.
 - `preliminary_commands` (both `[build]` and `[build.test]`) now require user approval before they run. On the first encounter `fix build` / `fix run` / `fix test` prompt with a 3-choice menu — `y` to trust the project and record the approval in `~/.fixtrust.toml`, `o` to allow just this invocation, or `n` to abort. Approvals for git dependencies are scoped to the pinned commit hash and re-prompted when the dependency advances to a new commit; approvals for the root project and local-path dependencies are scoped to the absolute path. CI or other non-interactive runs should pass `--allow-preliminary-commands` to bypass the prompt without writing to the trust store. See `Document.md` / `Document-ja.md` "Approval of preliminary_commands" for details.
 
+#### Std
+
+- Iterator-returning functions in `Std` (e.g. `Iterator::map`, `filter`, `flat_map`, `range`, `Array::to_iter`, `Option::to_iter`, `String::split`) now return an opaque iterator type instead of a concrete one such as `MapIterator` or `ArrayIterator`. Code that annotates the return of these functions with a concrete iterator type (e.g. `(xs.to_iter : ArrayIterator I64)`) must be updated; call sites that just chain combinators or consume the iterator are unaffected.
+
 ### Fixed
 
 #### Language
