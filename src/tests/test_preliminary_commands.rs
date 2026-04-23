@@ -389,7 +389,7 @@ commands_preview = [["echo", "hello"]]
         assert!(out2.status.success(), "stderr: {}", stderr_str(&out2));
         let err2 = stderr_str(&out2);
         assert!(
-            err2.contains("(NEW — test mode)"),
+            err2.contains("(NEW -- test mode)"),
             "expected the prompt to mention test mode only; stderr: {}",
             err2
         );
