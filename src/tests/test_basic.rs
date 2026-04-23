@@ -2130,8 +2130,8 @@ pub fn test89() {
         let rhs = Iterator::from_array([]);
         assert_eq(|_|"", lhs.append(rhs).to_array, [1,2,3]);;
 
-        let lhs : ArrayIterator I64 = Iterator::from_array([]);
-        let rhs = Iterator::from_array([]);
+        let lhs = Iterator::from_array(([] : Array I64));
+        let rhs = Iterator::from_array(([] : Array I64));
         assert_eq(|_|"", lhs.append(rhs).to_array, []);;
     
         pure()
@@ -5798,7 +5798,8 @@ pub fn test_iterator_empty() {
     
     main : IO ();
     main = (
-        assert_eq(|_|"", (empty : EmptyIterator I64).get_size, 0);;
+        let it : DynIterator I64 = Iterator::empty.to_dyn;
+        assert_eq(|_|"", it.get_size, 0);;
         pure()
     );
     "##;

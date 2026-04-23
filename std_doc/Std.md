@@ -597,7 +597,7 @@ Note: Currently this is implemented by merge sort, which is not in-place.
 
 #### to_iter
 
-Type: `Std::Array a -> Std::Iterator::ArrayIterator a`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] Std::Array a -> ?it`
 
 Converts an array to an iterator.
 
@@ -3184,7 +3184,7 @@ If the iterator has no more elements, it returns `none()`.
 
 #### append
 
-Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = a] i2 -> i1 -> Std::Iterator::AppendIterator i1 i2`
+Type: `[?out : Std::Iterator, input1 : Std::Iterator, input2 : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input1 = a, Std::Iterator::Item input2 = a] input2 -> input1 -> ?out`
 
 Append two iterators.
 
@@ -3197,7 +3197,7 @@ NOTE: Since this function is designed so that `iter1.append(iter2)` appends `ite
 
 #### bang
 
-Type: `[iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> Std::Iterator::ArrayIterator a`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input = a] input -> ?out`
 
 Convert any iterator to an array iterator.
 
@@ -3240,7 +3240,7 @@ Executes monadic actions and collects the results into an array.
 
 #### count_up
 
-Type: `Std::I64 -> Std::Iterator::CountUpIterator`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::I64] Std::I64 -> ?it`
 
 Create an iterator that counts up from a number.
 
@@ -3252,15 +3252,15 @@ Create an iterator that counts up from a number.
 
 #### empty
 
-Type: `Std::Iterator::EmptyIterator a`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] ?it`
 
 An iterator that yields no elements.
 
-NOTE: When using this iterator, you may need to specify the type of the iterator explicitly, e.g, `(empty : EmptyIterator I64)`.
+NOTE: When using this iterator, you may need to specify the element type explicitly, e.g., via a type annotation on the surrounding expression.
 
 #### enumerate
 
-Type: `[i : Std::Iterator] i -> Std::Iterator::EnumerateIterator i`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = (Std::I64, Std::Iterator::Item input)] input -> ?out`
 
 Creates an iterator that yields elements along with their index.
 
@@ -3270,7 +3270,7 @@ Creates an iterator that yields elements along with their index.
 
 #### filter
 
-Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::FilterIterator i a`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input = a] (a -> Std::Bool) -> input -> ?out`
 
 Filter the elements of an iterator by a predicate.
 
@@ -3283,7 +3283,7 @@ Filter the elements of an iterator by a predicate.
 
 #### filter_map
 
-Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Option b) -> i -> Std::Iterator::FilterMapIterator i a b`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = b, Std::Iterator::Item input = a] (a -> Std::Option b) -> input -> ?out`
 
 Filter and map the elements of an iterator.
 
@@ -3296,7 +3296,7 @@ Filter and map the elements of an iterator.
 
 #### flat_map
 
-Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] (a -> i2) -> i1 -> Std::Iterator::FlatMapIterator i1 a i2`
+Type: `[?out : Std::Iterator, inner : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = b, Std::Iterator::Item inner = b, Std::Iterator::Item input = a] (a -> inner) -> input -> ?out`
 
 Apply a function to each element of an iterator and flatten the result.
 
@@ -3307,7 +3307,7 @@ Apply a function to each element of an iterator and flatten the result.
 
 #### flatten
 
-Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i2 = i1] i2 -> Std::Iterator::FlattenIterator i2 i1`
+Type: `[?out : Std::Iterator, inner : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = Std::Iterator::Item inner, Std::Iterator::Item input = inner] input -> ?out`
 
 Flatten an iterator of iterators.
 
@@ -3343,7 +3343,7 @@ Fold the elements of an iterator from left to right by monadic action.
 
 #### from_array
 
-Type: `Std::Array a -> Std::Iterator::ArrayIterator a`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] Std::Array a -> ?it`
 
 Create an iterator from an array.
 
@@ -3353,7 +3353,7 @@ Create an iterator from an array.
 
 #### from_map
 
-Type: `(Std::I64 -> a) -> Std::Iterator::MapIterator Std::Iterator::CountUpIterator Std::I64 a`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] (Std::I64 -> a) -> ?it`
 
 Create an iterator by a function that returns element at each index.
 
@@ -3363,7 +3363,7 @@ Create an iterator by a function that returns element at each index.
 
 #### generate
 
-Type: `s -> (s -> Std::Option (s, a)) -> Std::Iterator::StateIterator s a`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] s -> (s -> Std::Option (s, a)) -> ?it`
 
 Create an iterator that generates elements by the state transition function.
 
@@ -3420,7 +3420,7 @@ If the iterator is empty, this function returns `none()`.
 
 #### intersperse
 
-Type: `[i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::IntersperseIterator i a`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input = a] a -> input -> ?out`
 
 Intersperse an element between elements of an iterator.
 
@@ -3513,7 +3513,7 @@ This allows you to return different types for `break` and `continue`.
 
 #### map
 
-Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> b) -> i -> Std::Iterator::MapIterator i a b`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = b, Std::Iterator::Item input = a] (a -> b) -> input -> ?out`
 
 Map a function over an iterator.
 
@@ -3538,7 +3538,7 @@ If the iterator is empty, this function does nothing.
 
 #### product
 
-Type: `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] i2 -> i1 -> Std::Iterator::ProductIterator i1 i2 a b`
+Type: `[?out : Std::Iterator, input1 : Std::Iterator, input2 : Std::Iterator, Std::Iterator::Item ?out = (a, b), Std::Iterator::Item input1 = a, Std::Iterator::Item input2 = b] input2 -> input1 -> ?out`
 
 Create an iterator that yields the Cartesian product of two iterators.
 
@@ -3556,7 +3556,7 @@ assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'),
 
 #### push_front
 
-Type: `[i : Std::Iterator, Std::Iterator::Item i = a] a -> i -> Std::Iterator::ConsIterator i a`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input = a] a -> input -> ?out`
 
 Push an element to the front of an iterator.
 
@@ -3567,7 +3567,7 @@ Push an element to the front of an iterator.
 
 #### range
 
-Type: `Std::I64 -> Std::I64 -> Std::Iterator::RangeIterator`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::I64] Std::I64 -> Std::I64 -> ?it`
 
 Create an iterator that generates a range of numbers.
 
@@ -3582,7 +3582,7 @@ If `a` is greater than or equal to `b`, the iterator will an empty iterator.
 
 #### range_step
 
-Type: `Std::I64 -> Std::I64 -> Std::I64 -> Std::Iterator::RangeStepIterator`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::I64] Std::I64 -> Std::I64 -> Std::I64 -> ?it`
 
 Create an iterator that generates a range of numbers with a step.
 
@@ -3594,7 +3594,7 @@ Create an iterator that generates a range of numbers with a step.
 
 #### reverse
 
-Type: `[i : Std::Iterator, Std::Iterator::Item i = a] i -> Std::Iterator::ReverseIterator i a`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input = a] input -> ?out`
 
 Reverses an iterator.
 
@@ -3616,7 +3616,7 @@ Calcculate sum of the elements of an iterator.
 
 #### take
 
-Type: `[i : Std::Iterator] Std::I64 -> i -> Std::Iterator::TakeIterator i`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = Std::Iterator::Item input] Std::I64 -> input -> ?out`
 
 Take the first `n` elements of an iterator.
 
@@ -3627,7 +3627,7 @@ Take the first `n` elements of an iterator.
 
 #### take_while
 
-Type: `[i : Std::Iterator, Std::Iterator::Item i = a] (a -> Std::Bool) -> i -> Std::Iterator::TakeWhileIterator i a`
+Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input = a] (a -> Std::Bool) -> input -> ?out`
 
 Take elements from an iterator while a predicate holds.
 
@@ -3658,7 +3658,7 @@ Convert an iterator into a dynamic iterator.
 
 #### zip
 
-Type: `[i1 : Std::Iterator, i2 : Std::Iterator] i2 -> i1 -> Std::Iterator::ZipIterator i1 i2`
+Type: `[?out : Std::Iterator, input1 : Std::Iterator, input2 : Std::Iterator, Std::Iterator::Item ?out = (Std::Iterator::Item input1, Std::Iterator::Item input2)] input2 -> input1 -> ?out`
 
 Zip two iterators.
 
@@ -3867,7 +3867,7 @@ Returns the provided default value if the option is none, or applies a function 
 
 #### to_iter
 
-Type: `Std::Option a -> Std::Option::OptionIterator (Std::Option a)`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] Std::Option a -> ?it`
 
 Converts an option into an iterator.
 
@@ -4156,7 +4156,7 @@ If the number of placeholders does not match with the number of strings, this fu
 
 #### split
 
-Type: `Std::String -> Std::String -> Std::String::StringSplitIterator`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::String] Std::String -> Std::String -> ?it`
 
 `str.split(sep)` splits `str` by `sep` into an iterator.
 
@@ -4246,7 +4246,7 @@ Strips leading and trailing whitespace characters.
 
 #### to_iter_bytes
 
-Type: `Std::String -> Std::String::StringBytesIterator`
+Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::U8] Std::String -> ?it`
 
 Creates an iterator over the bytes of a string, excluding null-terminator.
 

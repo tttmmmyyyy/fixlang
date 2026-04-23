@@ -657,12 +657,12 @@ namespace Array {
     );
 
     // Converts an array to an iterator.
-    // 
+    //
     // # Parameters
-    // 
+    //
     // * `array` - The array to be converted.
-    to_iter : Array a -> ArrayIterator a;
-    to_iter = Iterator::from_array;
+    to_iter : [?it : Iterator, Item ?it = a] Array a -> ?it;
+    to_iter = |arr| ArrayIterator { arr: arr, idx: 0 };
 
     // Truncates an array, keeping the given number of first elements.
     // 
@@ -1886,7 +1886,7 @@ namespace Iterator {
     // # Parameters
     //
     // * `array` - The array to be converted to an iterator.
-    from_array : Array a -> ArrayIterator a;
+    from_array : [?it : Iterator, Item ?it = a] Array a -> ?it;
     from_array = |arr| ArrayIterator { arr: arr, idx: 0 };
 
     // Iterators that yields elements of an array.
@@ -1909,7 +1909,7 @@ namespace Iterator {
     // # Parameters
     //
     // * `iter` - The iterator.
-    bang : [iter : Iterator, Item iter = a] iter -> ArrayIterator a;
+    bang : [?out : Iterator, Item ?out = a, input : Iterator, Item input = a] input -> ?out;
     bang = |iter| iter.to_array.to_iter;
 
     /*
@@ -1925,8 +1925,8 @@ namespace Iterator {
 
     // An iterator that yields no elements.
     // 
-    // NOTE: When using this iterator, you may need to specify the type of the iterator explicitly, e.g, `(empty : EmptyIterator I64)`.
-    empty : EmptyIterator a;
+    // NOTE: When using this iterator, you may need to specify the element type explicitly, e.g., via a type annotation on the surrounding expression.
+    empty : [?it : Iterator, Item ?it = a] ?it;
     empty = EmptyIterator {};
 
     // Iterators that yields reversed elements of an iterator.
@@ -1950,7 +1950,7 @@ namespace Iterator {
     //
     // * `start` - The start of the range.
     // * `end` - The end of the range.
-    range : I64 -> I64 -> RangeIterator;
+    range : [?it : Iterator, Item ?it = I64] I64 -> I64 -> ?it;
     range = |start, end| (
         if start >= end {
             RangeIterator { next: start, end: start } // Return an empty iterator.
@@ -1975,7 +1975,7 @@ namespace Iterator {
     // * `start` - The start of the range.
     // * `end` - The end of the range.
     // * `step` - The step of the range.
-    range_step : I64 -> I64 -> I64 -> RangeStepIterator;
+    range_step : [?it : Iterator, Item ?it = I64] I64 -> I64 -> I64 -> ?it;
     range_step = |start, end, step| (
         if (step > 0 && (start - end) > 0) || (step < 0 && (start - end) < 0) {
             RangeStepIterator { next: start, end: start, step: step } // Return an empty iterator.
@@ -2007,7 +2007,7 @@ namespace Iterator {
     // # Parameters
     //
     // * `start` - The start of the count.
-    count_up : I64 -> CountUpIterator;
+    count_up : [?it : Iterator, Item ?it = I64] I64 -> ?it;
     count_up = |start| CountUpIterator { next: start };
 
     type StateIterator s a = unbox struct {
@@ -2016,13 +2016,13 @@ namespace Iterator {
     };
 
     impl StateIterator s a : Iterator {
-        type Item (StateIterator s a) = a;    
+        type Item (StateIterator s a) = a;
         advance = |StateIterator { state : s, transit : f }| (
             match s {
                 none() => none(),
                 some(s) => match f(s) {
                     none() => none(),
-                    some((s, a)) => some((generate(s, f), a))
+                    some((s, a)) => some((StateIterator { state: some(s), transit: f }, a))
                 }
             }
         );
@@ -2034,7 +2034,7 @@ namespace Iterator {
     //
     // * `state` - The initial state.
     // * `transition` - The state transition function that takes the current state and returns the next state and the next element.
-    generate : s -> (s -> Option (s, a)) -> StateIterator s a;
+    generate : [?it : Iterator, Item ?it = a] s -> (s -> Option (s, a)) -> ?it;
     generate = |state, transit| StateIterator { state: some(state), transit: transit };
 
     // Create an iterator by a function that returns element at each index.
@@ -2042,7 +2042,7 @@ namespace Iterator {
     // # Parameters
     //
     // * `map` - The function that takes an index and returns the element at that index.
-    from_map : (I64 -> a) -> MapIterator CountUpIterator I64 a;
+    from_map : [?it : Iterator, Item ?it = a] (I64 -> a) -> ?it;
     from_map = |f| count_up(0).map(f);
 
     /*
@@ -2133,7 +2133,7 @@ namespace Iterator {
     //
     // * `f` - The function to be applied to each element of the iterator.
     // * `iter` - The iterator to be mapped.
-    map : [i : Iterator, Item i = a] (a -> b) -> i -> MapIterator i a b;
+    map : [?out : Iterator, Item ?out = b, input : Iterator, Item input = a] (a -> b) -> input -> ?out;
     map = |f, iter| MapIterator { iter: iter, f: f };
 
     type FilterIterator i a = unbox struct { iter : i, pred : a -> Bool };
@@ -2159,7 +2159,7 @@ namespace Iterator {
     //
     // * `predicate` - The predicate function to be applied to each element of the iterator.
     // * `iter` - The iterator to be filtered.
-    filter : [i : Iterator, Item i = a] (a -> Bool) -> i -> FilterIterator i a;
+    filter : [?out : Iterator, Item ?out = a, input : Iterator, Item input = a] (a -> Bool) -> input -> ?out;
     filter = |pred, iter| FilterIterator { iter: iter, pred: pred };
 
     type FilterMapIterator i a b = unbox struct { iter : i, f : a -> Option b };
@@ -2184,7 +2184,7 @@ namespace Iterator {
     //
     // * `f` - The function to be applied to each element of the iterator.
     // * `iter` - The iterator to be filtered and mapped.
-    filter_map : [i : Iterator, Item i = a] (a -> Option b) -> i -> FilterMapIterator i a b;
+    filter_map : [?out : Iterator, Item ?out = b, input : Iterator, Item input = a] (a -> Option b) -> input -> ?out;
     filter_map = |f, iter| FilterMapIterator { iter: iter, f: f };
 
     type FlattenIterator i2 i1 = unbox struct { i2 : i2, i1 : Option i1 };
@@ -2213,8 +2213,8 @@ namespace Iterator {
     // # Parameters
     //
     // * `iter_iter` - The iterator of iterators.
-    flatten : [i2 : Iterator, i1 : Iterator, Item i2 = i1] i2 -> FlattenIterator i2 i1;
-    flatten = |i2| FlattenIterator { i2: i2, i1: none() };
+    flatten : [?out : Iterator, Item ?out = Item inner, input : Iterator, inner : Iterator, Item input = inner] input -> ?out;
+    flatten = |iter| FlattenIterator { i2: iter, i1: none() };
 
     type FlatMapIterator i1 a i2 = FlattenIterator (MapIterator i1 a i2) i2;
 
@@ -2224,7 +2224,7 @@ namespace Iterator {
     //
     // * `f` - The function to be applied to each element of the iterator.
     // * `iter` - The iterator.
-    flat_map : [i1 : Iterator, Item i1 = a, i2 : Iterator, Item i2 = b] (a -> i2) -> i1 -> FlatMapIterator i1 a i2;
+    flat_map : [?out : Iterator, Item ?out = b, input : Iterator, Item input = a, inner : Iterator, Item inner = b] (a -> inner) -> input -> ?out;
     flat_map = |f, iter| iter.map(f).flatten;
 
     type ProductIterator i1 i2 a b = unbox struct { iter1 : i1, iter2 : i2, e2 : Option b, iter1_org : i1 };
@@ -2264,7 +2264,7 @@ namespace Iterator {
     //
     // * `second` - The second iterator.
     // * `first` - The first iterator.
-    product : [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = b] i2 -> i1 -> ProductIterator i1 i2 a b;
+    product : [?out : Iterator, Item ?out = (a, b), input1 : Iterator, input2 : Iterator, Item input1 = a, Item input2 = b] input2 -> input1 -> ?out;
     product = |iter2, iter1| ProductIterator { iter1: iter1, iter2: iter2, e2: none(), iter1_org: iter1 };
 
     type AppendIterator i1 i2 = unbox struct { iter1 : Option i1, iter2 : i2 };
@@ -2297,7 +2297,7 @@ namespace Iterator {
     //
     // * `second` - The second iterator.
     // * `first` - The first iterator.
-    append : [i1 : Iterator, i2 : Iterator, Item i1 = a, Item i2 = a] i2 -> i1 -> AppendIterator i1 i2;
+    append : [?out : Iterator, Item ?out = a, input1 : Iterator, input2 : Iterator, Item input1 = a, Item input2 = a] input2 -> input1 -> ?out;
     append = |iter2, iter1| AppendIterator { iter1 : some(iter1), iter2 : iter2 };
 
     type IntersperseIterator i a = unbox struct { iter : i, sep : a, next_is_sep : Bool };
@@ -2327,7 +2327,7 @@ namespace Iterator {
     //
     // * `sep` - The element to be interspersed.
     // * `iter` - The iterator.
-    intersperse : [i : Iterator, Item i = a] a -> i -> IntersperseIterator i a;
+    intersperse : [?out : Iterator, Item ?out = a, input : Iterator, Item input = a] a -> input -> ?out;
     intersperse = |sep, iter| IntersperseIterator { iter: iter, sep: sep, next_is_sep: false };
 
     type ConsIterator i a = unbox struct { head : Option a, tail : i };
@@ -2350,7 +2350,7 @@ namespace Iterator {
     //
     // * `head` - The element to be pushed.
     // * `tail` - The iterator to be pushed to.
-    push_front : [i : Iterator, Item i = a] a -> i -> ConsIterator i a;
+    push_front : [?out : Iterator, Item ?out = a, input : Iterator, Item input = a] a -> input -> ?out;
     push_front = |head, tail| ConsIterator { head: some(head), tail: tail };
 
     type ReverseIterator i a = unbox struct { idx : I64, arr : Array a };
@@ -2369,11 +2369,12 @@ namespace Iterator {
     // # Parameters
     //
     // * `iter` - The iterator to be reversed.
-    reverse : [i : Iterator, Item i = a] i -> ReverseIterator i a;
+    reverse : [?out : Iterator, Item ?out = a, input : Iterator, Item input = a] input -> ?out;
     reverse = |iter| (
         let arr = iter.to_array;
         let n = arr.@size;
-        ReverseIterator { idx: n - 1, arr: arr }
+        let result : ReverseIterator input a = ReverseIterator { idx: n - 1, arr: arr };
+        result
     );
 
     type TakeIterator i = unbox struct { iter : i, n : I64 };
@@ -2394,7 +2395,7 @@ namespace Iterator {
     //
     // * `n` - The number of elements to be taken.
     // * `iter` - The iterator to be taken from.
-    take : [i : Iterator] I64 -> i -> TakeIterator i;
+    take : [?out : Iterator, Item ?out = Item input, input : Iterator] I64 -> input -> ?out;
     take = |n, iter| TakeIterator { iter: iter, n: n };
 
     type TakeWhileIterator i a = unbox struct { iter : i, pred : a -> Bool };
@@ -2418,7 +2419,7 @@ namespace Iterator {
     //
     // * `predicate` - The predicate function to be applied to each element of the iterator.
     // * `iter` - The iterator to be taken from.
-    take_while : [i : Iterator, Item i = a] (a -> Bool) -> i -> TakeWhileIterator i a;
+    take_while : [?out : Iterator, Item ?out = a, input : Iterator, Item input = a] (a -> Bool) -> input -> ?out;
     take_while = |pred, iter| TakeWhileIterator { iter: iter, pred: pred };
 
     type ZipIterator i1 i2 = unbox struct { iter1 : i1, iter2 : i2 };
@@ -2443,7 +2444,7 @@ namespace Iterator {
     //
     // * `second` - The second iterator.
     // * `first` - The first iterator.
-    zip : [i1 : Iterator, i2 : Iterator] i2 -> i1 -> ZipIterator i1 i2;
+    zip : [?out : Iterator, Item ?out = (Item input1, Item input2), input1 : Iterator, input2 : Iterator] input2 -> input1 -> ?out;
     zip = |iter2, iter1| ZipIterator { iter1: iter1, iter2: iter2 };
 
     type EnumerateIterator it = unbox struct { it : it, index : I64 };
@@ -2461,7 +2462,7 @@ namespace Iterator {
     // 
     // # Parameters
     // * `iter` - The iterator to be enumerated.
-    enumerate : [i : Iterator] i -> EnumerateIterator i;
+    enumerate : [?out : Iterator, Item ?out = (I64, Item input), input : Iterator] input -> ?out;
     enumerate = |iter| EnumerateIterator { it: iter, index: 0 };
 
     // Check if all elements of an iterator satisfy a given predicate.
@@ -2598,7 +2599,7 @@ namespace Option {
     map_or = |def, f, opt| if opt.is_some { f(opt.as_some) } else { def };
 
     // Converts an option into an iterator.
-    to_iter : Option a -> OptionIterator (Option a);
+    to_iter : [?it : Iterator, Item ?it = a] Option a -> ?it;
     to_iter = |opt| OptionIterator { opt: opt };
 
     type OptionIterator opt = unbox struct { opt : opt };
@@ -2983,7 +2984,7 @@ namespace String {
     // # Parameters
     //
     // * `s` - The string to iterate over.
-    to_iter_bytes : String -> StringBytesIterator;
+    to_iter_bytes : [?it : Iterator, Item ?it = U8] String -> ?it;
     to_iter_bytes = |s| StringBytesIterator { _s: s, _i: 0 };
 
     // Gets the first byte of a string. Returns none if the string is empty.
@@ -3083,7 +3084,7 @@ namespace String {
     //
     // * `sep` - The separator to be used for splitting.
     // * `str` - The string to be split.
-    split : String -> String -> StringSplitIterator;
+    split : [?it : Iterator, Item ?it = String] String -> String -> ?it;
     split = |sep, str| StringSplitIterator { idx: 0, str: str, strlen: str.@size, sep: sep, sep_len: sep.@size };
 
     type StringSplitIterator = unbox struct { idx : I64, str : String, strlen : I64, sep : String, sep_len : I64 };
