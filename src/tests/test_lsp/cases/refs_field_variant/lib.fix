@@ -1,0 +1,19 @@
+module Lib;
+
+// Struct with two fields. Cursor on `x` (line 3, col 27) should resolve
+// to EndNode::Field(Lib::Point, "x").
+type Point = unbox struct { x : I64, y : I64 };
+
+// Union with two variants. Cursor on `some` should resolve to
+// EndNode::Variant(Lib::Maybe, "some").
+type Maybe a = box union {
+    some : a,
+    none : (),
+};
+
+// Some uses to keep diagnostics happy.
+make_point : Point;
+make_point = Point { x : 1, y : 2 };
+
+make_some : Maybe I64;
+make_some = Maybe::some(42);

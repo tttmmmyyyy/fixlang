@@ -13,7 +13,7 @@ use crate::ast::program::{Program, SymbolExpr};
 use crate::ast::qual_pred::QualPred;
 use crate::ast::qual_type::QualType;
 use crate::ast::traits::TraitId;
-use crate::ast::typedecl::{TypeDeclValue, TypeDefn};
+use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
 use crate::ast::equality::Equality;
 use crate::ast::traits::AssocTypeImpl;
 use crate::ast::types::{Scheme, AssocType, Type, TyCon, TypeNode};
@@ -97,6 +97,9 @@ fn find_all_references(
         }
         EndNode::AssocType(assoc_type) => {
             find_assoc_type_references(program, assoc_type, include_declaration)
+        }
+        EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
+            find_member_declaration_refs(program, tc, name, include_declaration)
         }
         EndNode::Module(_) => {
             // Module references are not supported yet.
@@ -742,6 +745,37 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
             }
         }
     }
+}
+
+// Find references to a struct field or union variant. Phase B1 scope: only
+// the declaration span (= field/variant name in the type definition). Use
+// sites (auto-method calls, MakeStruct, Pattern::Struct/Union, etc.) are
+// added in subsequent phases.
+fn find_member_declaration_refs(
+    program: &Program,
+    tc: &TyCon,
+    name: &Name,
+    include_declaration: bool,
+) -> Vec<Span> {
+    let mut refs = vec![];
+    if !include_declaration {
+        return refs;
+    }
+    if let Some(td) = program.type_defns.iter().find(|td| td.tycon() == *tc) {
+        let fields: Option<&[Field]> = match &td.value {
+            TypeDeclValue::Struct(s) => Some(&s.fields),
+            TypeDeclValue::Union(u) => Some(&u.fields),
+            TypeDeclValue::Alias(_) => None,
+        };
+        if let Some(fields) = fields {
+            if let Some(f) = fields.iter().find(|f| &f.name == name) {
+                if let Some(span) = &f.name_src {
+                    refs.push(span.clone());
+                }
+            }
+        }
+    }
+    refs
 }
 
 // Collect spans of import-statement leaves that refer to `target`.

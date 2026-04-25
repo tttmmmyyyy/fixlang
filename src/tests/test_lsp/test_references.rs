@@ -840,6 +840,61 @@ mod tests {
     }
 
     // =======================================================================
+    // FV: Field / Variant declaration reference tests (Phase B1 scope:
+    // declaration span only; use sites added in later phases)
+    // =======================================================================
+    //
+    // refs_field_variant/lib.fix lines (0-indexed):
+    //   4: `type Point = unbox struct { x : I64, y : I64 };`
+    //                                ^ col 28 = field name `x`
+    //   9: `type Maybe a = box union {`
+    //  10: `    some : a,`
+    //          ^ col 4 = variant name `some`
+
+    /// FV-1: refs from a struct field declaration name.
+    #[test]
+    fn test_refs_fv1_struct_field_decl() {
+        let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
+        // Cursor on `x` in the struct definition.
+        let locs = ctx.find_refs("lib.fix", 4, 28, true);
+        // Phase B1: only the declaration site.
+        assert_eq!(
+            locs.len(),
+            1,
+            "Expected exactly 1 reference to field `x`, got {}: {:?}",
+            locs.len(),
+            locs
+        );
+        ctx.shutdown();
+    }
+
+    /// FV-2: refs from a union variant declaration name.
+    #[test]
+    fn test_refs_fv2_union_variant_decl() {
+        let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
+        // Cursor on `some` in the union definition.
+        let locs = ctx.find_refs("lib.fix", 9, 4, true);
+        assert_eq!(
+            locs.len(),
+            1,
+            "Expected exactly 1 reference to variant `some`, got {}: {:?}",
+            locs.len(),
+            locs
+        );
+        ctx.shutdown();
+    }
+
+    /// FV-3: include_declaration=false on a field returns no spans
+    /// (Phase B1: only declaration is supported).
+    #[test]
+    fn test_refs_fv3_struct_field_no_decl() {
+        let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
+        let locs = ctx.find_refs("lib.fix", 4, 28, false);
+        assert_eq!(locs.len(), 0, "Expected 0 references with include_declaration=false");
+        ctx.shutdown();
+    }
+
+    // =======================================================================
     // Loc: Local-name tests (project: goto_local, reused)
     // =======================================================================
     //

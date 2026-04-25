@@ -2411,4 +2411,10 @@ pub enum EndNode {
     ValueDecl(FullName),
     // An associated type name (e.g., `Item` in `Item iter`).
     AssocType(AssocType),
+    // A struct field name; the cursor is on the bare name in the type
+    // definition (and, after Phase B3, on MakeStruct / Pattern::Struct uses).
+    Field(TyCon, Name),
+    // A union variant name; the cursor is on the bare name in the type
+    // definition (and, after Phase B3, on Pattern::Union uses).
+    Variant(TyCon, Name),
 }

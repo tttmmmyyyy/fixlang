@@ -283,6 +283,7 @@ fn run_on_type(ty: &Arc<TypeNode>, env: &mut Env) -> Arc<TypeNode> {
                 syn_ty: field.syn_ty.clone(),
                 is_punched: field.is_punched,
                 source: field.source.clone(),
+                name_src: field.name_src.clone(),
             };
             new_ti.fields.push(new_field);
         }

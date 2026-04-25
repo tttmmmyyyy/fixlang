@@ -1093,9 +1093,13 @@ fn parse_type_field(pair: Pair<Rule>, ctx: &mut ParseContext) -> Field {
     assert_eq!(pair.as_rule(), Rule::type_field);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let name = pairs.next().unwrap().as_str();
+    let name_pair = pairs.next().unwrap();
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
+    let name = name_pair.as_str();
     let ty = parse_type(pairs.next().unwrap(), ctx);
-    Field::make(name.to_string(), ty, Some(span))
+    let mut field = Field::make(name.to_string(), ty, Some(span));
+    field.name_src = Some(name_span);
+    field
 }
 
 fn parse_expr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
