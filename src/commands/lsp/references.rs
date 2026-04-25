@@ -176,7 +176,7 @@ pub(super) fn find_global_value_references(
 }
 
 // Find all references to a type constructor.
-fn find_type_references(
+pub(super) fn find_type_references(
     program: &Program,
     target: &TyCon,
     include_declaration: bool,
@@ -195,9 +195,12 @@ fn find_type_references(
         }
     }
 
-    // Walk all global values' type signatures.
+    // Walk all global values' type signatures. Use `syn_scm` (which keeps
+    // user-written aliases) when present so that `type T = U; f : T;` reports
+    // the `T` occurrence in `f`'s signature when renaming the alias `T`.
     for (_name, gv) in &program.global_values {
-        collect_scheme_type_refs(&gv.scm, target, &mut refs);
+        let scm_for_walk = gv.syn_scm.as_ref().unwrap_or(&gv.scm);
+        collect_scheme_type_refs(scm_for_walk, target, &mut refs);
         // Walk expression trees for type annotations and patterns.
         collect_symbol_expr_type_refs(&gv.expr, target, &mut refs);
     }
@@ -231,7 +234,7 @@ fn find_type_references(
 }
 
 // Find all references to a trait.
-fn find_trait_references(
+pub(super) fn find_trait_references(
     program: &Program,
     target: &TraitId,
     include_declaration: bool,
@@ -282,7 +285,7 @@ fn find_trait_references(
 }
 
 // Find all references to an associated type.
-fn find_assoc_type_references(
+pub(super) fn find_assoc_type_references(
     program: &Program,
     target: &AssocType,
     include_declaration: bool,

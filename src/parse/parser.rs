@@ -183,6 +183,16 @@ pub enum TokenCategory {
 // category. Returns Ok(()) if pest accepts the entire string under the
 // matching rule; otherwise an error describing the rejection.
 pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String> {
+    // The `type_field_name` grammar rule's `(name_head ~ !"@")` only
+    // forbids `@@`-prefixed names, not leading `@`. Field and variant
+    // names cannot start with `@` in practice (the auto-generated getter
+    // `@x` would collide), so reject leading `@` here explicitly.
+    if matches!(category, TokenCategory::TypeFieldName) && s.starts_with('@') {
+        return Err(format!(
+            "`{}` is not a valid field or variant name (leading `@` is reserved)",
+            s
+        ));
+    }
     let rule = match category {
         TokenCategory::Name => Rule::name,
         TokenCategory::TypeFieldName => Rule::type_field_name,

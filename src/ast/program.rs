@@ -295,7 +295,11 @@ impl GlobalValue {
         if node.is_some() {
             return node;
         }
-        let node = self.scm.find_node_at(pos);
+        // Walk the syntactic scheme if available so that type aliases written
+        // in source resolve back to the alias name (rather than the expanded
+        // type, which is what `scm` carries).
+        let scm_for_lookup = self.syn_scm.as_ref().unwrap_or(&self.scm);
+        let node = scm_for_lookup.find_node_at(pos);
         if node.is_some() {
             return node;
         }

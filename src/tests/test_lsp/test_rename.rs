@@ -320,17 +320,235 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-10: prepareRename returns null for a position where rename isn't
-    /// supported yet (Phase C1: types are not supported).
+    /// RB-10: prepareRename returns null when the position is on a struct/union
+    /// type — that case is deferred to Phase D.
     #[test]
     fn test_prepare_rename_type_not_supported_yet() {
-        let mut ctx = LspTestCtx::setup("rename_basic", &["lib.fix", "main.fix"]);
-        // `helper : I64 -> I64;` — cursor on `I64` (the return type, after `> `).
-        // line 2, col 14 = `I64` start.
-        let result = ctx.prepare_rename("lib.fix", 2, 14);
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // `type Point = ...;` — cursor on `Point` at line 9, col 5.
+        let result = ctx.prepare_rename("lib.fix", 9, 5);
         assert!(
             result.is_null(),
-            "expected null (rename not allowed) for a type, got: {:?}",
+            "expected null (rename not allowed) for a struct type, got: {:?}",
+            result
+        );
+        ctx.shutdown();
+    }
+
+    // =======================================================================
+    // rename_types fixture (lines are 0-indexed):
+    //
+    // lib.fix:
+    //   3: type MyInt = I64;                (col 5 = `MyInt` decl)
+    //   5: inc : MyInt -> MyInt;            (cols 6, 15)
+    //   9: type Point = unbox struct { x : I64, y : I64 };
+    //                                        (col 5 = `Point`, col 28 = `x`)
+    //  12: mk_point = Point { x : 1, y : 2 };  (col 19 = `x`)
+    //  15: get_x = |p| p.@x;                  (col 14 = `@x`)
+    //  18: type Maybe a = box union {
+    //  19:     some : a,                      (col 4 = `some` decl)
+    //  25:     some(v) => v,                  (col 4 = `some` pattern)
+    //  30: trait a : Greeter {                (col 10 = `Greeter` decl)
+    //  34: impl Point : Greeter {             (col 13 = `Greeter` use)
+    //  35:     greet = |p| p.@x;              (col 18 = `@x`)
+    //
+    // main.fix:
+    //   2: import Lib::{MyInt, Greeter};    (col 13 = `MyInt`, col 20 = `Greeter`)
+    //   4: bump : MyInt -> MyInt;           (cols 7, 16)
+    // =======================================================================
+
+    /// RT-1: rename a type alias from its declaration.
+    #[test]
+    fn test_rename_type_alias_decl() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let we = ctx.rename("lib.fix", 3, 5, "Counter");
+        // decl + 2 in lib.fix type sig + 1 import + 2 in main.fix type sig = 6
+        assert_eq!(count_edits(&we), 6, "WorkspaceEdit: {:?}", we);
+        let per_file = changes_per_file(&we);
+        assert_eq!(
+            per_file,
+            vec![("lib.fix".to_string(), 3), ("main.fix".to_string(), 3)]
+        );
+        assert_all_edits_have_new_text(&we, "Counter");
+        ctx.shutdown();
+    }
+
+    /// RT-2: rename a trait.
+    #[test]
+    fn test_rename_trait() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // Cursor on `Greeter` in the trait declaration (line 30, col 10).
+        let we = ctx.rename("lib.fix", 30, 10, "Speaker");
+        // decl + impl + import = 3
+        assert_eq!(count_edits(&we), 3, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "Speaker");
+        ctx.shutdown();
+    }
+
+    /// RT-3: rename a struct field. Auto-method occurrences (`@x`) must
+    /// switch to `@new_name` and the bare field-name (decl + MakeStruct)
+    /// edits must use just `new_name`.
+    #[test]
+    fn test_rename_struct_field() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // Cursor on the field-name `x` in the struct declaration (line 9, col 28).
+        let we = ctx.rename("lib.fix", 9, 28, "horiz");
+        // decl + MakeStruct + 2 getter calls = 4
+        assert_eq!(count_edits(&we), 4, "WorkspaceEdit: {:?}", we);
+
+        // Verify that `@x` becomes `@horiz` and bare `x` becomes `horiz`.
+        let changes = we.get("changes").unwrap().as_object().unwrap();
+        let edits: Vec<&Value> = changes
+            .values()
+            .flat_map(|arr| arr.as_array().unwrap().iter())
+            .collect();
+        let new_texts: Vec<&str> = edits
+            .iter()
+            .map(|e| e.get("newText").and_then(|n| n.as_str()).unwrap())
+            .collect();
+        // Two of the four edits should be `@horiz` (the two `@x` use sites).
+        let at_count = new_texts.iter().filter(|s| **s == "@horiz").count();
+        let bare_count = new_texts.iter().filter(|s| **s == "horiz").count();
+        assert_eq!(
+            at_count, 2,
+            "expected 2 `@horiz` edits, got {}: {:?}",
+            at_count, new_texts
+        );
+        assert_eq!(
+            bare_count, 2,
+            "expected 2 bare `horiz` edits, got {}: {:?}",
+            bare_count, new_texts
+        );
+        ctx.shutdown();
+    }
+
+    /// RT-4: rename a union variant. Pattern::Union and bare-name
+    /// occurrences both update.
+    #[test]
+    fn test_rename_union_variant() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // Cursor on the variant `some` declaration (line 19, col 4).
+        let we = ctx.rename("lib.fix", 19, 4, "present");
+        // decl + Pattern::Union usage = 2
+        assert_eq!(count_edits(&we), 2, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "present");
+        ctx.shutdown();
+    }
+
+    /// RT-5: rename a type alias from a use site in another file.
+    #[test]
+    fn test_rename_type_alias_from_other_file() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // `bump : MyInt -> MyInt;` — `MyInt` at line 4, col 7 in main.fix.
+        let we = ctx.rename("main.fix", 4, 7, "Counter");
+        assert_eq!(count_edits(&we), 6);
+        ctx.shutdown();
+    }
+
+    /// RT-6: renaming a struct type itself is rejected (deferred to Phase D).
+    #[test]
+    fn test_rename_struct_type_rejected() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // Cursor on `Point` at the struct declaration (line 9, col 5).
+        let resp = ctx.rename_raw("lib.fix", 9, 5, "Pixel");
+        let error_msg = resp
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
+        assert!(
+            error_msg.contains("struct or union"),
+            "expected a struct/union rejection message, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
+
+    /// RT-7: renaming a union type itself is rejected for the same reason.
+    #[test]
+    fn test_rename_union_type_rejected() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // Cursor on `Maybe` at the union declaration (line 18, col 5).
+        let resp = ctx.rename_raw("lib.fix", 18, 5, "Optional");
+        assert!(
+            resp.get("error").is_some(),
+            "expected a rejection, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
+
+    /// RT-8: renaming a struct field to `@y` is rejected by the
+    /// `type_field_name` rule (no leading `@`).
+    #[test]
+    fn test_rename_field_reject_at_prefix() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let resp = ctx.rename_raw("lib.fix", 9, 28, "@horiz");
+        assert!(
+            resp.get("error").is_some(),
+            "expected rejection of `@`-prefixed field name, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
+
+    /// RT-9: renaming a type alias to a lowercase name is rejected by the
+    /// `capital_name` rule.
+    #[test]
+    fn test_rename_type_alias_reject_lowercase() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let resp = ctx.rename_raw("lib.fix", 3, 5, "counter");
+        assert!(
+            resp.get("error").is_some(),
+            "expected rejection of lowercase name for a type, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
+
+    /// RT-10: prepareRename returns defaultBehavior for a type alias.
+    #[test]
+    fn test_prepare_rename_type_alias() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let result = ctx.prepare_rename("lib.fix", 3, 5);
+        assert!(
+            result
+                .get("defaultBehavior")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            "expected defaultBehavior=true, got: {:?}",
+            result
+        );
+        ctx.shutdown();
+    }
+
+    /// RT-11: prepareRename returns defaultBehavior for a trait.
+    #[test]
+    fn test_prepare_rename_trait() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let result = ctx.prepare_rename("lib.fix", 30, 10);
+        assert!(
+            result
+                .get("defaultBehavior")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            "expected defaultBehavior=true, got: {:?}",
+            result
+        );
+        ctx.shutdown();
+    }
+
+    /// RT-12: prepareRename returns defaultBehavior for a struct field.
+    #[test]
+    fn test_prepare_rename_field() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let result = ctx.prepare_rename("lib.fix", 9, 28);
+        assert!(
+            result
+                .get("defaultBehavior")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            "expected defaultBehavior=true, got: {:?}",
             result
         );
         ctx.shutdown();

@@ -1,0 +1,37 @@
+module Lib;
+
+// Type alias: no auto-namespace.
+type MyInt = I64;
+
+inc : MyInt -> MyInt;
+inc = |x| x + 1;
+
+// Struct (not yet renameable as the type itself, but its fields are).
+type Point = unbox struct { x : I64, y : I64 };
+
+mk_point : Point;
+mk_point = Point { x : 1, y : 2 };
+
+get_x : Point -> I64;
+get_x = |p| p.@x;
+
+// Union with two variants.
+type Maybe a = box union {
+    some : a,
+    none : (),
+};
+
+unwrap_default : Maybe I64 -> I64;
+unwrap_default = |m| match m {
+    some(v) => v,
+    none() => 0,
+};
+
+// Trait + impl.
+trait a : Greeter {
+    greet : a -> I64;
+}
+
+impl Point : Greeter {
+    greet = |p| p.@x;
+}
