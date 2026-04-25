@@ -103,7 +103,7 @@ pub struct PendingDocumentSymbolRequest {
 // The latest content of each file (which may not have been saved to disk yet) and its associated information
 pub struct LatestContent {
     // The path.
-    path: PathBuf,
+    pub path: PathBuf,
     // The latest content of the file.
     pub content: String,
     // Module name. None if not parsed yet or failed to parse.
@@ -1047,6 +1047,23 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     // Determine the source files for which diagnostics are run.
     let files = proj_file.get_files(BuildConfigType::Test);
 
+    // Capture the absolute paths and current contents of user source files
+    // before elaboration, so the resulting `Program` can support stale-buffer
+    // detection and "is this symbol user-defined?" queries in the LSP
+    // (rename, primarily).
+    let mut user_source_files: crate::misc::Set<PathBuf> = Default::default();
+    let mut source_contents: Map<PathBuf, String> = Default::default();
+    for file_path in &files {
+        let abs = match crate::misc::to_absolute_path(file_path) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        user_source_files.insert(abs.clone());
+        if let Ok(content) = std::fs::read_to_string(&abs) {
+            source_contents.insert(abs, content);
+        }
+    }
+
     // Create the configuration.
     let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
     config.type_check_cache = typecheck_cache;
@@ -1061,7 +1078,9 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
         .set_config(&mut config)?;
 
     // Build the file and get the errors.
-    let program = elaborate_via_config(&config)?;
+    let mut program = elaborate_via_config(&config)?;
+    program.user_source_files = user_source_files;
+    program.source_contents = source_contents;
 
     Ok(DiagnosticsResult { program })
 }

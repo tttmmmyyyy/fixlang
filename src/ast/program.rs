@@ -513,6 +513,17 @@ pub struct Program {
     // Number of optimization steps.
     // This is used to name the symbol files when outputting them at each optimization step.
     pub optimization_step: usize,
+
+    /* LSP rename support */
+    // Absolute paths of the source files that belong to this project (i.e.
+    // listed in `fixproj.toml`'s `files` section, excluding dependencies).
+    // Used by LSP rename to reject renaming symbols defined outside the
+    // project, and as the key set for `source_contents`.
+    pub user_source_files: Set<PathBuf>,
+    // The exact textual content of each user source file as it was when
+    // this `Program` was elaborated. Used by LSP rename to verify that the
+    // editor buffer hasn't drifted from the AST before producing edits.
+    pub source_contents: Map<PathBuf, String>,
 }
 
 impl Program {
@@ -585,6 +596,8 @@ impl Program {
             import_required: Default::default(),
             optimization_step: 0,
             opaque_types: Map::default(),
+            user_source_files: Set::default(),
+            source_contents: Map::default(),
         };
         fix_mod.add_import_statement_no_verify(ImportStatement::implicit_self_import(
             mod_info.name.clone(),

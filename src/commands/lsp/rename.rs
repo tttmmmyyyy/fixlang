@@ -5,6 +5,9 @@
 // struct fields, and union variants. Renaming a struct or union type
 // itself is deferred to Phase D because it requires updating the
 // auto-implemented method namespace.
+// Phase C3 adds gating: stale-buffer detection, refusal to rename
+// symbols defined outside the project, and refusal to rename
+// auto-generated accessors directly.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -27,9 +30,9 @@ use crate::ast::program::{EndNode, Program};
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::TyCon;
-use crate::misc::Map;
+use crate::misc::{to_absolute_path, Map};
 use crate::parse::parser::{validate_token_str, TokenCategory};
-use crate::parse::sourcefile::Span;
+use crate::parse::sourcefile::{SourcePos, Span};
 
 // LSP `ResponseError` shape: `{ code, message }`.
 #[derive(Serialize)]
@@ -60,6 +63,15 @@ pub(super) fn handle_prepare_rename(
     program: &Program,
     uri_to_content: &Map<Uri, LatestContent>,
 ) {
+    // Stale-buffer check first: if the editor buffer has drifted from the
+    // AST the program was built against, even resolve_source_pos and
+    // find_node_at can land on the wrong node, so bail out before any
+    // node-shape analysis.
+    if check_buffer_in_sync_with_program(program, uri_to_content).is_err() {
+        send_response(id, Ok::<_, ()>(None::<PrepareRenameResponse>));
+        return;
+    }
+
     let Some(pos) = resolve_source_pos(params, program, uri_to_content) else {
         send_response(id, Ok::<_, ()>(None::<PrepareRenameResponse>));
         return;
@@ -69,7 +81,10 @@ pub(super) fn handle_prepare_rename(
         return;
     };
 
-    if !rename_target_supported(program, &node) {
+    if !rename_target_supported(program, &node)
+        || is_auto_method_var(program, &node)
+        || !target_is_user_defined(program, &node, &pos)
+    {
         send_response(id, Ok::<_, ()>(None::<PrepareRenameResponse>));
         return;
     }
@@ -89,6 +104,12 @@ pub(super) fn handle_rename(
 ) {
     let new_name = &params.new_name;
 
+    // Stale-buffer check first (see prepareRename for reasoning).
+    if let Err(msg) = check_buffer_in_sync_with_program(program, uri_to_content) {
+        send_response(id, Err::<(), _>(ResponseError::invalid_request(msg)));
+        return;
+    }
+
     let Some(pos) = resolve_source_pos(&params.text_document_position, program, uri_to_content)
     else {
         send_response(id, Ok::<_, ()>(None::<WorkspaceEdit>));
@@ -104,6 +125,34 @@ pub(super) fn handle_rename(
             id,
             Err::<(), _>(ResponseError::invalid_request(
                 rename_unsupported_message(program, &node),
+            )),
+        );
+        return;
+    }
+
+    // Reject auto-generated accessors before any further analysis. The
+    // user must rename the field/variant itself instead, where they don't
+    // have to think about whether the new name should include the `@`,
+    // `set_`, etc. prefix.
+    if is_auto_method_var(program, &node) {
+        send_response(
+            id,
+            Err::<(), _>(ResponseError::invalid_request(
+                "Cannot rename an auto-generated accessor. \
+                 Rename the field or variant declaration instead.",
+            )),
+        );
+        return;
+    }
+
+    // Reject symbols whose declaration lives outside this project's source
+    // tree (i.e. not listed in `fixproj.toml`'s `files` section).
+    if !target_is_user_defined(program, &node, &pos) {
+        send_response(
+            id,
+            Err::<(), _>(ResponseError::invalid_request(
+                "Cannot rename a symbol defined outside this project \
+                 (e.g. Std or a dependency).",
             )),
         );
         return;
@@ -306,5 +355,194 @@ fn range_eq(a: &Range, b: &Range) -> bool {
         && a.start.character == b.start.character
         && a.end.line == b.end.line
         && a.end.character == b.end.character
+}
+
+// Compare each user source file's current content (from the editor buffer
+// if open, otherwise from disk) against the content recorded at
+// elaboration time. If any mismatch is found, return an error message
+// suitable for surfacing to the user.
+//
+// The strict whole-project policy (per the rename plan) is intentional:
+// rename touches AST spans, and any drift between the AST and the buffer
+// can produce silently corrupt edits.
+fn check_buffer_in_sync_with_program(
+    program: &Program,
+    uri_to_content: &Map<Uri, LatestContent>,
+) -> Result<(), String> {
+    if program.source_contents.is_empty() {
+        // The diagnostics thread didn't (or couldn't) record source
+        // contents; treat that as "we don't know" and refuse rather than
+        // produce edits we can't validate.
+        return Err(
+            "Cannot rename: source contents from the last build are not available. \
+             Save the file and wait for diagnostics to refresh."
+                .to_string(),
+        );
+    }
+
+    // Collect (absolute path -> current buffer content) from `uri_to_content`
+    // so we can look up by path below.
+    let mut buffer_by_path: Map<PathBuf, String> = Map::default();
+    for lc in uri_to_content.values() {
+        if let Ok(abs) = to_absolute_path(&lc.path) {
+            buffer_by_path.insert(abs, lc.content.clone());
+        }
+    }
+
+    for path in &program.user_source_files {
+        let elaborated = match program.source_contents.get(path) {
+            Some(c) => c,
+            // No record of this file; can't verify, so be safe.
+            None => {
+                return Err(format!(
+                    "Cannot rename: source contents missing for `{}`. \
+                     Save the file and wait for diagnostics to refresh.",
+                    path.display()
+                ));
+            }
+        };
+
+        let current_owned: String;
+        let current: &str = if let Some(buf) = buffer_by_path.get(path) {
+            buf.as_str()
+        } else {
+            // No editor buffer — read from disk.
+            current_owned = std::fs::read_to_string(path).unwrap_or_default();
+            current_owned.as_str()
+        };
+
+        if current != elaborated {
+            return Err(format!(
+                "Cannot rename: `{}` has been edited since the last successful build. \
+                 Save the file and wait for diagnostics to refresh.",
+                path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+// True if the EndNode at `pos` resolves to an auto-generated accessor
+// (a global value with `compiler_defined_method == true`). Used to reject
+// rename starting on `@x`, `set_x`, `act_x`, `[^x]`, `as_v`, `is_v`,
+// `mod_v` and the union variant constructor — the user should rename the
+// field or variant declaration itself.
+fn is_auto_method_var(program: &Program, node: &EndNode) -> bool {
+    let name = match node {
+        EndNode::Expr(var, _) | EndNode::Pattern(var, _) => &var.name,
+        EndNode::ValueDecl(name) => name,
+        _ => return false,
+    };
+    if name.is_local() {
+        return false;
+    }
+    program
+        .global_values
+        .get(name)
+        .map(|gv| gv.compiler_defined_method)
+        .unwrap_or(false)
+}
+
+// True if the symbol at `node` is declared in a file listed in
+// `fixproj.toml`'s `files` section. `pos` is the cursor position; for
+// local variables we use the scope walker to find the binder span.
+fn target_is_user_defined(program: &Program, node: &EndNode, pos: &SourcePos) -> bool {
+    let decl_span = declaration_span(program, node, pos);
+    let Some(span) = decl_span else {
+        // No declaration span => can't verify => be conservative and refuse.
+        return false;
+    };
+    let Ok(abs) = to_absolute_path(&span.input.file_path) else {
+        return false;
+    };
+    program.user_source_files.contains(&abs)
+}
+
+// Return a span pointing to where the symbol at `node` is declared
+// (defined) in source, used for the user-defined check. May return None
+// if the symbol has no recorded declaration span (e.g. compiler builtins
+// or a local that fails the scope lookup).
+fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Option<Span> {
+    match node {
+        EndNode::Expr(var, _) | EndNode::Pattern(var, _) => {
+            let name = &var.name;
+            if name.is_local() {
+                find_local_occurrences(program, pos, name).map(|o| o.definition)
+            } else {
+                program
+                    .global_values
+                    .get(name)
+                    .and_then(|gv| gv.decl_src.clone().or_else(|| gv.defn_src.clone()))
+            }
+        }
+        EndNode::ValueDecl(name) => program
+            .global_values
+            .get(name)
+            .and_then(|gv| gv.decl_src.clone().or_else(|| gv.defn_src.clone())),
+        EndNode::Type(tc) => program
+            .type_defns
+            .iter()
+            .find(|td| td.tycon() == *tc)
+            .and_then(|td| td.name_src.clone()),
+        EndNode::TypeOrTrait(name) => {
+            let tc = TyCon { name: name.clone() };
+            if let Some(td) = program.type_defns.iter().find(|td| td.tycon() == tc) {
+                td.name_src.clone()
+            } else {
+                let trait_id = TraitId::from_fullname(name.clone());
+                program
+                    .trait_env
+                    .traits
+                    .get(&trait_id)
+                    .and_then(|ti| ti.name_src.clone())
+                    .or_else(|| {
+                        program
+                            .trait_env
+                            .aliases
+                            .data
+                            .get(&trait_id)
+                            .and_then(|ta| ta.name_src.clone())
+                    })
+            }
+        }
+        EndNode::Trait(trait_id) => program
+            .trait_env
+            .traits
+            .get(trait_id)
+            .and_then(|ti| ti.name_src.clone())
+            .or_else(|| {
+                program
+                    .trait_env
+                    .aliases
+                    .data
+                    .get(trait_id)
+                    .and_then(|ta| ta.name_src.clone())
+            }),
+        EndNode::AssocType(at) => {
+            let trait_id = at.trait_id();
+            program
+                .trait_env
+                .traits
+                .get(&trait_id)
+                .and_then(|ti| ti.assoc_types.get(&at.name.name))
+                .and_then(|atd| atd.name_src.clone())
+        }
+        EndNode::Field(tc, name) | EndNode::Variant(tc, name) => program
+            .type_defns
+            .iter()
+            .find(|td| td.tycon() == *tc)
+            .and_then(|td| {
+                let fields = match &td.value {
+                    TypeDeclValue::Struct(s) => &s.fields,
+                    TypeDeclValue::Union(u) => &u.fields,
+                    TypeDeclValue::Alias(_) => return None,
+                };
+                fields
+                    .iter()
+                    .find(|f| &f.name == name)
+                    .and_then(|f| f.name_src.clone())
+            }),
+        EndNode::Module(_) => None,
+    }
 }
 

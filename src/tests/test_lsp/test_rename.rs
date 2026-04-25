@@ -377,26 +377,25 @@ mod tests {
     #[test]
     fn test_rename_trait() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
-        // Cursor on `Greeter` in the trait declaration (line 30, col 10).
-        let we = ctx.rename("lib.fix", 30, 10, "Speaker");
+        // Cursor on `Greeter` in the trait declaration (line 33, col 10).
+        let we = ctx.rename("lib.fix", 33, 10, "Speaker");
         // decl + impl + import = 3
         assert_eq!(count_edits(&we), 3, "WorkspaceEdit: {:?}", we);
         assert_all_edits_have_new_text(&we, "Speaker");
         ctx.shutdown();
     }
 
-    /// RT-3: rename a struct field. Auto-method occurrences (`@x`) must
-    /// switch to `@new_name` and the bare field-name (decl + MakeStruct)
-    /// edits must use just `new_name`.
+    /// RT-3: rename a struct field. Auto-method occurrences (`@x`,
+    /// `[^x]`) must switch to `@new_name` / `^new_name`, and the bare
+    /// field-name (decl + MakeStruct) edits must use just `new_name`.
     #[test]
     fn test_rename_struct_field() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
         // Cursor on the field-name `x` in the struct declaration (line 9, col 28).
         let we = ctx.rename("lib.fix", 9, 28, "horiz");
-        // decl + MakeStruct + 2 getter calls = 4
-        assert_eq!(count_edits(&we), 4, "WorkspaceEdit: {:?}", we);
+        // decl + MakeStruct + 2 getter calls + 1 index-syntax = 5.
+        assert_eq!(count_edits(&we), 5, "WorkspaceEdit: {:?}", we);
 
-        // Verify that `@x` becomes `@horiz` and bare `x` becomes `horiz`.
         let changes = we.get("changes").unwrap().as_object().unwrap();
         let edits: Vec<&Value> = changes
             .values()
@@ -406,13 +405,18 @@ mod tests {
             .iter()
             .map(|e| e.get("newText").and_then(|n| n.as_str()).unwrap())
             .collect();
-        // Two of the four edits should be `@horiz` (the two `@x` use sites).
         let at_count = new_texts.iter().filter(|s| **s == "@horiz").count();
+        let caret_count = new_texts.iter().filter(|s| **s == "^horiz").count();
         let bare_count = new_texts.iter().filter(|s| **s == "horiz").count();
         assert_eq!(
             at_count, 2,
             "expected 2 `@horiz` edits, got {}: {:?}",
             at_count, new_texts
+        );
+        assert_eq!(
+            caret_count, 1,
+            "expected 1 `^horiz` edit (index syntax), got {}: {:?}",
+            caret_count, new_texts
         );
         assert_eq!(
             bare_count, 2,
@@ -427,8 +431,8 @@ mod tests {
     #[test]
     fn test_rename_union_variant() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
-        // Cursor on the variant `some` declaration (line 19, col 4).
-        let we = ctx.rename("lib.fix", 19, 4, "present");
+        // Cursor on the variant `some` declaration (line 22, col 4).
+        let we = ctx.rename("lib.fix", 22, 4, "present");
         // decl + Pattern::Union usage = 2
         assert_eq!(count_edits(&we), 2, "WorkspaceEdit: {:?}", we);
         assert_all_edits_have_new_text(&we, "present");
@@ -468,8 +472,8 @@ mod tests {
     #[test]
     fn test_rename_union_type_rejected() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
-        // Cursor on `Maybe` at the union declaration (line 18, col 5).
-        let resp = ctx.rename_raw("lib.fix", 18, 5, "Optional");
+        // Cursor on `Maybe` at the union declaration (line 21, col 5).
+        let resp = ctx.rename_raw("lib.fix", 21, 5, "Optional");
         assert!(
             resp.get("error").is_some(),
             "expected a rejection, got: {:?}",
@@ -526,7 +530,7 @@ mod tests {
     #[test]
     fn test_prepare_rename_trait() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
-        let result = ctx.prepare_rename("lib.fix", 30, 10);
+        let result = ctx.prepare_rename("lib.fix", 33, 10);
         assert!(
             result
                 .get("defaultBehavior")
@@ -549,6 +553,155 @@ mod tests {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
             "expected defaultBehavior=true, got: {:?}",
+            result
+        );
+        ctx.shutdown();
+    }
+
+    // =======================================================================
+    // Phase C3: gating (auto-method rejection, external rejection,
+    // stale-buffer rejection)
+    // =======================================================================
+
+    /// RG-1: rename rejected on `@x` (auto-generated getter).
+    #[test]
+    fn test_rename_reject_at_accessor() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // `get_x = |p| p.@x;` — `@x` at line 15 col 14.
+        let resp = ctx.rename_raw("lib.fix", 15, 14, "horiz");
+        let msg = resp
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
+        assert!(
+            msg.contains("auto-generated"),
+            "expected auto-generated rejection, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
+
+    /// RG-2: rename rejected on `[^x]` index syntax (the Var the parser
+    /// generates is `Point::act_x`, also auto-generated).
+    #[test]
+    fn test_rename_reject_index_syntax() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // `set_x_zero = |p| p[^x].iset(0);` — `^x` at line 18 col 19.
+        let resp = ctx.rename_raw("lib.fix", 18, 19, "horiz");
+        assert!(
+            resp.get("error").is_some(),
+            "expected rejection on index-syntax cursor, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
+
+    /// RG-3: prepareRename returns null on an auto-generated accessor.
+    #[test]
+    fn test_prepare_rename_reject_at_accessor() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let result = ctx.prepare_rename("lib.fix", 15, 14);
+        assert!(
+            result.is_null(),
+            "expected null on `@x`, got: {:?}",
+            result
+        );
+        ctx.shutdown();
+    }
+
+    /// RG-4: rename rejected on a Std symbol (defined outside the project).
+    /// The cursor on `I64` in `type MyInt = I64;` resolves to `Std::I64`,
+    /// which is not in `program.user_source_files`.
+    #[test]
+    fn test_rename_reject_external_type() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // `type MyInt = I64;` — `I64` starts at line 3 col 13.
+        let resp = ctx.rename_raw("lib.fix", 3, 13, "MyI64");
+        let msg = resp
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
+        assert!(
+            msg.contains("outside this project"),
+            "expected external-symbol rejection, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
+
+    /// RG-5: prepareRename returns null on an external symbol.
+    #[test]
+    fn test_prepare_rename_reject_external() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let result = ctx.prepare_rename("lib.fix", 3, 13);
+        assert!(
+            result.is_null(),
+            "expected null on `I64` (external), got: {:?}",
+            result
+        );
+        ctx.shutdown();
+    }
+
+    /// RG-6: rename rejected after the buffer drifts from the AST.
+    /// We send a didChange with modified text but don't trigger a rebuild,
+    /// so `program.source_contents[lib.fix]` is now out of sync.
+    #[test]
+    fn test_rename_reject_stale_buffer() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        // Send a didChange that mutates lib.fix in memory.
+        let uri = ctx.file_uri("lib.fix");
+        let new_content =
+            "module Lib;\n\n// stale-test\ntype MyInt = I64;\ninc : MyInt -> MyInt;\ninc = |x| x;\n";
+        ctx.client
+            .send_notification(
+                "textDocument/didChange",
+                json!({
+                    "textDocument": { "uri": uri, "version": 99 },
+                    "contentChanges": [{ "text": new_content }],
+                }),
+            )
+            .expect("Failed to send didChange");
+        // Give the server a moment to process the notification (no
+        // diagnostic re-run is triggered, so the AST stays stale).
+        ctx.client.wait_for_server(std::time::Duration::from_millis(300));
+
+        let resp = ctx.rename_raw("lib.fix", 3, 5, "Counter");
+        let msg = resp
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
+        assert!(
+            msg.contains("edited since the last successful build"),
+            "expected stale-buffer rejection, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
+
+    /// RG-7: prepareRename returns null when the buffer is stale.
+    #[test]
+    fn test_prepare_rename_reject_stale_buffer() {
+        let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
+        let uri = ctx.file_uri("lib.fix");
+        let new_content = "module Lib;\n";
+        ctx.client
+            .send_notification(
+                "textDocument/didChange",
+                json!({
+                    "textDocument": { "uri": uri, "version": 99 },
+                    "contentChanges": [{ "text": new_content }],
+                }),
+            )
+            .expect("Failed to send didChange");
+        ctx.client.wait_for_server(std::time::Duration::from_millis(300));
+
+        let result = ctx.prepare_rename("lib.fix", 3, 5);
+        assert!(
+            result.is_null(),
+            "expected null after stale buffer change, got: {:?}",
             result
         );
         ctx.shutdown();

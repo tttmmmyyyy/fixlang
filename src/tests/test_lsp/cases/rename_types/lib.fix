@@ -15,6 +15,9 @@ mk_point = Point { x : 1, y : 2 };
 get_x : Point -> I64;
 get_x = |p| p.@x;
 
+set_x_zero : Point -> Point;
+set_x_zero = |p| p[^x].iset(0);
+
 // Union with two variants.
 type Maybe a = box union {
     some : a,
