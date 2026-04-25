@@ -4,6 +4,7 @@ use super::document_symbol;
 use super::goto_definition;
 use super::hover;
 use super::references;
+use super::rename;
 use super::util::{get_current_dir, path_to_uri, span_to_location, span_to_range, uri_to_path};
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
@@ -23,11 +24,12 @@ use lsp_types::{
     CompletionOptions, CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
     GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, PositionEncodingKind,
-    ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, ReferenceParams, SaveOptions,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressBegin,
-    WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
+    InitializeResult, InitializedParams, OneOf, PositionEncodingKind,
+    ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, ReferenceParams, RenameOptions,
+    RenameParams, SaveOptions, ServerCapabilities, TextDocumentPositionParams,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    TextDocumentSyncSaveOptions, Uri, WorkDoneProgressBegin, WorkDoneProgressCreateParams,
+    WorkDoneProgressEnd, WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -452,6 +454,45 @@ pub fn launch_language_server() {
                     program,
                     &uri_to_latest_content,
                 );
+            } else if method == "textDocument/rename" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().program;
+                let id = parse_id(&message, method);
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<RenameParams> = parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                rename::handle_rename(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    program,
+                    &uri_to_latest_content,
+                );
+            } else if method == "textDocument/prepareRename" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let program = &last_diag.as_ref().unwrap().program;
+                let id = parse_id(&message, method);
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<TextDocumentPositionParams> =
+                    parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                rename::handle_prepare_rename(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    program,
+                    &uri_to_latest_content,
+                );
             } else if method == "textDocument/prepareCallHierarchy" {
                 if last_diag.is_none() {
                     continue;
@@ -622,7 +663,10 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
             document_formatting_provider: None,
             document_range_formatting_provider: None,
             document_on_type_formatting_provider: None,
-            rename_provider: None,
+            rename_provider: Some(OneOf::Right(RenameOptions {
+                prepare_provider: Some(true),
+                work_done_progress_options: WorkDoneProgressOptions::default(),
+            })),
             document_link_provider: None,
             color_provider: None,
             folding_range_provider: None,

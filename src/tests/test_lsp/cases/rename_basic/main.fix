@@ -1,0 +1,15 @@
+module Main;
+
+import Lib::{helper};
+
+use_helper : I64 -> I64;
+use_helper = |a| helper(a) + 2;
+
+local_demo : I64;
+local_demo = (
+    let y = 10 in
+    y + y + y
+);
+
+main : IO ();
+main = pure();

@@ -158,6 +158,58 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
     parse_source_file(source, config)
 }
 
+// Identifier categories that can be passed to `validate_token_str`.
+//
+// These map onto pest grammar rules whose shape is exactly "an identifier
+// in the corresponding category" (with `!keywords` and the right
+// uppercase/lowercase head). LSP rename uses this to validate the
+// user-supplied new name against the same tokenisation rules the parser
+// applies to source code.
+#[derive(Clone, Copy)]
+#[allow(dead_code)] // TypeFieldName and CapitalName are used in later rename phases.
+pub enum TokenCategory {
+    // Lowercase-headed value names: locals, global values, lambda params.
+    // Allows a leading `@` as well.
+    Name,
+    // Lowercase-headed names that disallow a leading `@`: struct field
+    // names and union variant names.
+    TypeFieldName,
+    // Uppercase-headed names: types, type aliases, traits, trait aliases,
+    // associated types, modules, namespaces.
+    CapitalName,
+}
+
+// Validate that `s` is a syntactically valid identifier in the given
+// category. Returns Ok(()) if pest accepts the entire string under the
+// matching rule; otherwise an error describing the rejection.
+pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String> {
+    let rule = match category {
+        TokenCategory::Name => Rule::name,
+        TokenCategory::TypeFieldName => Rule::type_field_name,
+        TokenCategory::CapitalName => Rule::capital_name,
+    };
+    // Why we append a trailing ` `:
+    //   The grammar's `keywords` rule requires `keyword ~ sep+`, so a
+    //   bare keyword like `"let"` is *not* matched by `keywords` and hence
+    //   `!keywords` in the `name` rule incorrectly admits it. By appending
+    //   a separator, the keyword check fires exactly as it would in source
+    //   code, and the rule then rejects keywords as expected.
+    let probe = format!("{} ", s);
+    match FixParser::parse(rule, &probe) {
+        Ok(mut pairs) => {
+            let pair = pairs.next().ok_or_else(|| "empty parse result".to_string())?;
+            if pair.as_str() != s {
+                return Err(format!(
+                    "`{}` is not a valid identifier in this context",
+                    s
+                ));
+            }
+            Ok(())
+        }
+        Err(_) => Err(format!("`{}` is not a valid identifier in this context", s)),
+    }
+}
+
 pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<Program, Errors> {
     let source_cloned = source.clone();
     let source_code = source.string()?;

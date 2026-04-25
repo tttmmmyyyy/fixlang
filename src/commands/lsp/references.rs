@@ -140,7 +140,7 @@ fn find_local_refs(
 }
 
 // Find all references to a global value (function/constant).
-fn find_global_value_references(
+pub(super) fn find_global_value_references(
     program: &Program,
     target: &FullName,
     include_declaration: bool,
