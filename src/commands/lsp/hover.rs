@@ -1,5 +1,5 @@
 use super::server::{send_response, LatestContent};
-use super::util::{document_from_endnode, get_node_at};
+use super::util::{document_from_endnode, resolve_source_pos};
 use crate::ast::program::Program;
 use crate::misc::Map;
 use lsp_types::HoverParams;
@@ -11,17 +11,19 @@ pub(super) fn handle_hover(
     program: &Program,
     uri_to_content: &Map<lsp_types::Uri, LatestContent>,
 ) {
-    // Get the node at the cursor position.
-    let node = get_node_at(
+    // Resolve the cursor into a source position, then look up the AST node.
+    let Some(pos) = resolve_source_pos(
         &params.text_document_position_params,
         program,
         uri_to_content,
-    );
-    if node.is_none() {
+    ) else {
         send_response(id, Ok::<_, ()>(None::<()>));
         return;
-    }
-    let node = node.unwrap();
+    };
+    let Some(node) = program.find_node_at(&pos) else {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    };
     let content = document_from_endnode(&node, program);
     let hover = lsp_types::Hover {
         contents: lsp_types::HoverContents::Markup(content),

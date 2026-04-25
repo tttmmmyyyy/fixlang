@@ -1,7 +1,10 @@
 // This module implements "Find All References" and "Call Hierarchy" LSP features.
 
 use super::server::{send_response, LatestContent};
-use super::util::{get_current_dir, get_node_at, path_to_uri, span_to_range, spans_to_locations};
+use super::util::{
+    find_local_occurrences, get_current_dir, path_to_uri, resolve_source_pos, span_to_range,
+    spans_to_locations,
+};
 use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::name::FullName;
 use crate::ast::pattern::{Pattern, PatternNode};
@@ -15,7 +18,7 @@ use crate::ast::traits::AssocTypeImpl;
 use crate::ast::types::{Scheme, AssocType, Type, TyCon, TypeNode};
 use crate::misc::Map;
 use crate::ast::program::EndNode;
-use crate::parse::sourcefile::Span;
+use crate::parse::sourcefile::{SourcePos, Span};
 use lsp_types::{
     CallHierarchyIncomingCall, CallHierarchyIncomingCallsParams, CallHierarchyItem,
     CallHierarchyOutgoingCall, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
@@ -30,22 +33,24 @@ pub(super) fn handle_references(
     program: &Program,
     uri_to_content: &Map<lsp_types::Uri, LatestContent>,
 ) {
-    // Get the node at the cursor position.
-    let node = get_node_at(
+    // Resolve the cursor into a source position, then look up the AST node.
+    let Some(pos) = resolve_source_pos(
         &params.text_document_position,
         program,
         uri_to_content,
-    );
-    if node.is_none() {
+    ) else {
         send_response(id, Ok::<_, ()>(None::<Vec<lsp_types::Location>>));
         return;
-    }
-    let node = node.unwrap();
+    };
+    let Some(node) = program.find_node_at(&pos) else {
+        send_response(id, Ok::<_, ()>(None::<Vec<lsp_types::Location>>));
+        return;
+    };
 
     let include_declaration = params.context.include_declaration;
 
     // Collect all reference spans.
-    let spans = find_all_references(program, &node, include_declaration);
+    let spans = find_all_references(program, &node, &pos, include_declaration);
 
     // Convert spans to Locations.
     let Some(cdir) = get_current_dir() else {
@@ -59,13 +64,17 @@ pub(super) fn handle_references(
 }
 
 // Find all references to the entity represented by `node` in the program.
-fn find_all_references(program: &Program, node: &EndNode, include_declaration: bool) -> Vec<Span> {
+fn find_all_references(
+    program: &Program,
+    node: &EndNode,
+    pos: &SourcePos,
+    include_declaration: bool,
+) -> Vec<Span> {
     let mut refs = match node {
         EndNode::Expr(var, _) | EndNode::Pattern(var, _) => {
             let name = &var.name;
             if name.is_local() {
-                // Local variables: no cross-file reference search supported.
-                return vec![];
+                return find_local_refs(program, pos, name, include_declaration);
             }
             find_global_value_references(program, name, include_declaration)
         }
@@ -98,6 +107,24 @@ fn find_all_references(program: &Program, node: &EndNode, include_declaration: b
     refs.sort();
     refs.dedup();
 
+    refs
+}
+
+// Find all references to the local symbol under the cursor. The symbol is
+// the innermost binding of `name` that is visible at `pos`.
+fn find_local_refs(
+    program: &Program,
+    pos: &SourcePos,
+    name: &FullName,
+    include_declaration: bool,
+) -> Vec<Span> {
+    let Some(occ) = find_local_occurrences(program, pos, name) else {
+        return vec![];
+    };
+    let mut refs = occ.uses;
+    if include_declaration {
+        refs.push(occ.definition);
+    }
     refs
 }
 
@@ -714,17 +741,19 @@ pub(super) fn handle_call_hierarchy_prepare(
     program: &Program,
     uri_to_content: &Map<lsp_types::Uri, LatestContent>,
 ) {
-    // Get the node at the cursor position.
-    let node = get_node_at(
+    // Resolve the cursor into a source position, then look up the AST node.
+    let Some(pos) = resolve_source_pos(
         &params.text_document_position_params,
         program,
         uri_to_content,
-    );
-    if node.is_none() {
+    ) else {
         send_response(id, Ok::<_, ()>(None::<Vec<CallHierarchyItem>>));
         return;
-    }
-    let node = node.unwrap();
+    };
+    let Some(node) = program.find_node_at(&pos) else {
+        send_response(id, Ok::<_, ()>(None::<Vec<CallHierarchyItem>>));
+        return;
+    };
 
     // Only support call hierarchy for global values (functions).
     let full_name = match &node {

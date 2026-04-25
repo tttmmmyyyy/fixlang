@@ -200,18 +200,25 @@ impl PatternNode {
         }
     }
 
-    // Get the list of names in the pattern with their types (if set).
-    pub fn vars_with_types(&self) -> Vec<(FullName, Option<Arc<TypeNode>>)> {
+    // For every `Pattern::Var` in this pattern tree, return its name and
+    // the `PatternInfo` of the `PatternNode` wrapping it — so callers get
+    // the binder's type and source span alongside the name. Sub-patterns
+    // of `Struct` / `Union` are walked left-to-right.
+    pub fn var_infos(&self) -> Vec<(FullName, PatternInfo)> {
+        let mut out = vec![];
+        self.collect_var_infos(&mut out);
+        out
+    }
+
+    fn collect_var_infos(&self, out: &mut Vec<(FullName, PatternInfo)>) {
         match &self.pattern {
-            Pattern::Var(var, _) => vec![(var.name.clone(), self.info.type_.clone())],
-            Pattern::Struct(_, pats) => {
-                let mut ret = vec![];
-                for (_, pat) in pats {
-                    ret.extend(pat.vars_with_types());
+            Pattern::Var(v, _) => out.push((v.name.clone(), self.info.clone())),
+            Pattern::Struct(_, fields) => {
+                for (_, sub) in fields {
+                    sub.collect_var_infos(out);
                 }
-                ret
             }
-            Pattern::Union(_, pat) => pat.vars_with_types(),
+            Pattern::Union(_, sub) => sub.collect_var_infos(out),
         }
     }
 

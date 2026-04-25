@@ -1,0 +1,79 @@
+module Lib;
+
+// Line numbers below are 0-indexed (matching LSP positions).
+
+// simple_let — local `x` bound in a `let`.
+//   line  8:    `    let x = 1 in`   binder `x` at col 8
+//   line  9:    `    x + 1`          use of `x` at col 4
+simple_let : I64;
+simple_let = (
+    let x = 1 in
+    x + 1
+);
+
+// lam_arg — lambda parameter `a`.
+//   line 14: `lam_arg = |a| a + 1;`  binder `a` at col 11, use at col 14
+lam_arg : I64 -> I64;
+lam_arg = |a| a + 1;
+
+type OneOrTwo a = box union { one : a, two : (a, a) };
+
+// match_arm — match-arm bindings.
+//   line 24: `        one(h) => h,`           binder `h` at col 12, use at col 18
+//   line 25: `        two((hh, _)) => hh`     binder `hh` at col 13, use at col 24
+match_arm : I64;
+match_arm = (
+    let v : OneOrTwo I64 = OneOrTwo::one(42);
+    match v {
+        one(h) => h,
+        two((hh, _)) => hh
+    }
+);
+
+type Point = unbox struct { px : I64, py : I64 };
+
+// destructure — struct-destructuring pattern.
+//   line 36: `    let Point { px : a, py : b } = p in`  binder `a` at col 21
+//   line 37: `    a + b`                                use of `a` at col 4
+destructure : I64;
+destructure = (
+    let p = Point { px : 10, py : 20 };
+    let Point { px : a, py : b } = p in
+    a + b
+);
+
+// shadow — inner binding shadows outer.
+//   line 45: `    let s = 1 in`  outer binder at col 8
+//   line 46: `    let s = 2 in`  inner binder at col 8
+//   line 47: `    s`             use at col 4 → resolves to inner (line 46)
+shadow : I64;
+shadow = (
+    let s = 1 in
+    let s = 2 in
+    s
+);
+
+// multi_use — one binder, multiple in-scope uses.
+//   binder `y`, then three uses in the body.
+multi_use : I64;
+multi_use = (
+    let y = 1 in
+    y + y + y + 1
+);
+
+// Regression — global reference still resolves via `decl_src`.
+//   line 52: `use_global = simple_let + 1;`  `simple_let` at col 13
+use_global : I64;
+use_global = simple_let + 1;
+
+// Repro: && desugars to a synthesized `if` whose source span is None,
+// so the LHS sub-expression is unreachable from `find_node_at`.
+//   binder `b` at line 73, col 8.
+//   `b` in `b >= 0 && b < 10`: the FIRST `b` (LHS of &&) lives inside
+//   the synthesized If's cond; the SECOND `b` (RHS of &&) is the then
+//   branch — both should jump to the binder.
+and_short_circuit : I64;
+and_short_circuit = (
+    let b = 5 in
+    if b >= 0 && b < 10 { b } else { 0 - b }
+);

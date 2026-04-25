@@ -298,12 +298,12 @@ pub trait ExprVisitor {
                 match res {
                     StartVisitResult::VisitChildren => {
                         let bound = self.visit_expr(bound, state).unwrap(&mut changed);
-                        let names = pat.vars_with_types();
-                        for (v, opt_ty) in &names {
-                            state.scope.push(&v.name, opt_ty.clone());
+                        let vars = pat.var_infos();
+                        for (v, info) in &vars {
+                            state.scope.push(&v.name, info.type_.clone());
                         }
                         let val = self.visit_expr(val, state).unwrap(&mut changed);
-                        for (v, _) in names.iter().rev() {
+                        for (v, _) in vars.iter().rev() {
                             state.scope.pop(&v.name);
                         }
                         if changed {
@@ -361,12 +361,12 @@ pub trait ExprVisitor {
                         let cond = self.visit_expr(cond, state).unwrap(&mut changed);
                         let mut new_pat_vals = vec![];
                         for (pat, val) in pat_vals {
-                            let names = pat.vars_with_types();
-                            for (v, opt_ty) in &names {
-                                state.scope.push(&v.name, opt_ty.clone());
+                            let vars = pat.var_infos();
+                            for (v, info) in &vars {
+                                state.scope.push(&v.name, info.type_.clone());
                             }
                             let val = self.visit_expr(&val, state).unwrap(&mut changed);
-                            for (v, _) in names.iter().rev() {
+                            for (v, _) in vars.iter().rev() {
                                 state.scope.pop(&v.name);
                             }
                             new_pat_vals.push((pat.clone(), val));
