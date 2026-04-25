@@ -1,7 +1,7 @@
 // LSP "textDocument/definition" handler.
 
 use super::server::{send_response, LatestContent};
-use super::util::{find_trait_or_alias_def_src, find_tycon_def_src, get_current_dir, get_node_at, span_to_location};
+use super::util::{find_local_occurrences, find_trait_or_alias_def_src, find_tycon_def_src, get_current_dir, resolve_source_pos, span_to_location};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::traits::TraitId;
 use crate::ast::types::TyCon;
@@ -15,17 +15,19 @@ pub(super) fn handle_goto_definition(
     program: &Program,
     uri_to_content: &Map<lsp_types::Uri, LatestContent>,
 ) {
-    // Get the node at the cursor position.
-    let node = get_node_at(
+    // Resolve the cursor into a source position, then look up the AST node.
+    let Some(pos) = resolve_source_pos(
         &params.text_document_position_params,
         program,
         uri_to_content,
-    );
-    if node.is_none() {
+    ) else {
         send_response(id, Ok::<_, ()>(None::<()>));
         return;
-    }
-    let node = node.unwrap();
+    };
+    let Some(node) = program.find_node_at(&pos) else {
+        send_response(id, Ok::<_, ()>(None::<()>));
+        return;
+    };
 
     // The source location where the item is defined.
     let mut def_src;
@@ -43,10 +45,9 @@ pub(super) fn handle_goto_definition(
         EndNode::ValueDecl(_) => None,
     };
     if let Some(var_name) = var_name {
-        // If the variable is local, do nothing.
         let full_name = &var_name;
         if full_name.is_local() {
-            def_src = None;
+            def_src = find_local_occurrences(program, &pos, full_name).map(|o| o.definition);
         } else {
             def_src = program
                 .global_values

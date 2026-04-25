@@ -766,4 +766,91 @@ mod tests {
         ctx.assert_refs(&locs, 2, "Lib::Nat::Sum");
         ctx.shutdown();
     }
+
+    // =======================================================================
+    // Loc: Local-name tests (project: goto_local, reused)
+    // =======================================================================
+    //
+    // These verify that find-references on a local name (let binder, lambda
+    // param, match arm binding, struct destructure field) returns the binder
+    // plus every in-scope use, with shadowed uses excluded.
+    //
+    // lib.fix lines (0-indexed) — see cases/goto_local/lib.fix:
+    //   9:  `    let x = 1 in`                binder `x` at col 8
+    //  10:  `    x + 1`                       use of `x` at col 4
+    //  16:  `lam_arg = |a| a + 1;`            binder `a` at col 11, use at col 14
+    //  50:  `    let s = 1 in`                outer binder `s` at col 8
+    //  51:  `    let s = 2 in`                inner binder `s` at col 8
+    //  52:  `    s`                           inner `s` use at col 4
+    //  59:  `    let y = 1 in`                binder `y` at col 8
+    //  60:  `    y + y + y + 1`               three uses at cols 4, 8, 12
+
+    /// Loc-1: simple `let` binder + single use (include_declaration=true).
+    #[test]
+    fn test_refs_local_let_include_decl() {
+        let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);
+        let locs = ctx.find_refs("lib.fix", 10, 4, true);
+        ctx.assert_refs(&locs, 2, "x");
+        ctx.shutdown();
+    }
+
+    /// Loc-2: simple `let` without the declaration.
+    #[test]
+    fn test_refs_local_let_exclude_decl() {
+        let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);
+        let locs = ctx.find_refs("lib.fix", 10, 4, false);
+        ctx.assert_refs(&locs, 1, "x");
+        ctx.shutdown();
+    }
+
+    /// Loc-3: lambda parameter — click on binder, get binder + use.
+    #[test]
+    fn test_refs_local_lambda_from_binder() {
+        let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);
+        let locs = ctx.find_refs("lib.fix", 16, 11, true);
+        ctx.assert_refs(&locs, 2, "a");
+        ctx.shutdown();
+    }
+
+    /// Loc-4: multi-use `let` — all three uses plus the binder.
+    #[test]
+    fn test_refs_local_multi_use() {
+        let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);
+        let locs = ctx.find_refs("lib.fix", 60, 4, true);
+        ctx.assert_refs(&locs, 4, "y");
+        ctx.shutdown();
+    }
+
+    /// Loc-5: shadowing — references for the OUTER `s` exclude the inner
+    /// binder and the inner use. With include_declaration=true, only the
+    /// outer binder itself is returned (it has zero uses).
+    #[test]
+    fn test_refs_local_shadow_outer() {
+        let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);
+        let locs = ctx.find_refs("lib.fix", 50, 8, true);
+        ctx.assert_refs(&locs, 1, "s");
+        // Confirm the single location is the outer binder, not the inner.
+        let loc = &locs[0];
+        let line = loc["range"]["start"]["line"].as_u64().unwrap();
+        assert_eq!(line, 50, "Should point to the outer binder");
+        ctx.shutdown();
+    }
+
+    /// Loc-6: shadowing — references for the INNER `s` include the inner
+    /// binder and the inner use, but not the outer binder.
+    #[test]
+    fn test_refs_local_shadow_inner() {
+        let mut ctx = LspTestCtx::setup("goto_local", &["lib.fix"]);
+        let locs = ctx.find_refs("lib.fix", 51, 8, true);
+        ctx.assert_refs(&locs, 2, "s");
+        for loc in &locs {
+            let line = loc["range"]["start"]["line"].as_u64().unwrap();
+            assert!(
+                line == 51 || line == 52,
+                "Inner scope reference should be on line 51 or 52, got {}",
+                line
+            );
+        }
+        ctx.shutdown();
+    }
 }
