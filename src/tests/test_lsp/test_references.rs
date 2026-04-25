@@ -840,28 +840,36 @@ mod tests {
     }
 
     // =======================================================================
-    // FV: Field / Variant declaration reference tests (Phase B1 scope:
-    // declaration span only; use sites added in later phases)
+    // FV: Field / Variant references (Phase B2 scope: declaration plus
+    // auto-method call sites and import-leaves; MakeStruct/Pattern uses
+    // are added in Phase B3)
     // =======================================================================
     //
     // refs_field_variant/lib.fix lines (0-indexed):
     //   4: `type Point = unbox struct { x : I64, y : I64 };`
-    //                                ^ col 28 = field name `x`
+    //                                  ^ col 28 = field name `x`
     //   9: `type Maybe a = box union {`
     //  10: `    some : a,`
     //          ^ col 4 = variant name `some`
+    //  19: `use_getter = |p| p.@x;`
+    //  22: `use_setter = |p| p.set_x(0);`
+    //  25: `use_modifier = |p| p.mod_x(|x| x + 1);`
+    //  30: `use_index = |p| p[^x].iset(99);`
+    //  34: `make_some_val = Maybe::some(42);`
+    //  37: `use_is = |m| m.is_some;`
+    //  40: `use_as = |m| m.as_some;`
+    //  43: `use_mod = |m| m.mod_some(|x| x + 1);`
 
     /// FV-1: refs from a struct field declaration name.
+    /// Decl + getter (@x) + setter (set_x) + modifier (mod_x) + index syntax (^x) = 5.
     #[test]
     fn test_refs_fv1_struct_field_decl() {
         let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
-        // Cursor on `x` in the struct definition.
         let locs = ctx.find_refs("lib.fix", 4, 28, true);
-        // Phase B1: only the declaration site.
         assert_eq!(
             locs.len(),
-            1,
-            "Expected exactly 1 reference to field `x`, got {}: {:?}",
+            5,
+            "Expected exactly 5 references to field `x`, got {}: {:?}",
             locs.len(),
             locs
         );
@@ -869,28 +877,59 @@ mod tests {
     }
 
     /// FV-2: refs from a union variant declaration name.
+    /// Decl + constructor + is_some + as_some + mod_some = 5.
     #[test]
     fn test_refs_fv2_union_variant_decl() {
         let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
-        // Cursor on `some` in the union definition.
         let locs = ctx.find_refs("lib.fix", 9, 4, true);
         assert_eq!(
             locs.len(),
-            1,
-            "Expected exactly 1 reference to variant `some`, got {}: {:?}",
+            5,
+            "Expected exactly 5 references to variant `some`, got {}: {:?}",
             locs.len(),
             locs
         );
         ctx.shutdown();
     }
 
-    /// FV-3: include_declaration=false on a field returns no spans
-    /// (Phase B1: only declaration is supported).
+    /// FV-3: include_declaration=false strips just the declaration span,
+    /// leaving 4 auto-method occurrences.
     #[test]
     fn test_refs_fv3_struct_field_no_decl() {
         let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
         let locs = ctx.find_refs("lib.fix", 4, 28, false);
-        assert_eq!(locs.len(), 0, "Expected 0 references with include_declaration=false");
+        assert_eq!(
+            locs.len(),
+            4,
+            "Expected 4 occurrences (auto-methods only), got {}: {:?}",
+            locs.len(),
+            locs
+        );
+        ctx.shutdown();
+    }
+
+    /// FV-4: an `[^x]` index-syntax span reports as a reference to field `x`.
+    /// Verify by reading the text at one of the locations and checking that
+    /// `^x` appears in the result set.
+    #[test]
+    fn test_refs_fv4_index_syntax_in_field_refs() {
+        let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
+        let locs = ctx.find_refs("lib.fix", 4, 28, true);
+        let mut found_caret_x = false;
+        for loc in &locs {
+            let uri = loc["uri"].as_str().unwrap();
+            let file_path = std::path::PathBuf::from(uri.strip_prefix("file://").unwrap());
+            let text = read_text_at_range(&file_path, loc.get("range").unwrap());
+            if text == "^x" {
+                found_caret_x = true;
+                break;
+            }
+        }
+        assert!(
+            found_caret_x,
+            "Expected `^x` (index syntax span) among field refs, got: {:?}",
+            locs
+        );
         ctx.shutdown();
     }
 

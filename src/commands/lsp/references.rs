@@ -14,6 +14,10 @@ use crate::ast::qual_pred::QualPred;
 use crate::ast::qual_type::QualType;
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
+use crate::constants::{
+    STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_SETTER_SYMBOL,
+    UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
+};
 use crate::ast::equality::Equality;
 use crate::ast::traits::AssocTypeImpl;
 use crate::ast::types::{Scheme, AssocType, Type, TyCon, TypeNode};
@@ -99,7 +103,10 @@ fn find_all_references(
             find_assoc_type_references(program, assoc_type, include_declaration)
         }
         EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
-            find_member_declaration_refs(program, tc, name, include_declaration)
+            find_member_occurrences(program, tc, name, include_declaration)
+                .into_iter()
+                .map(|o| o.span)
+                .collect()
         }
         EndNode::Module(_) => {
             // Module references are not supported yet.
@@ -747,35 +754,280 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
     }
 }
 
-// Find references to a struct field or union variant. Phase B1 scope: only
-// the declaration span (= field/variant name in the type definition). Use
-// sites (auto-method calls, MakeStruct, Pattern::Struct/Union, etc.) are
-// added in subsequent phases.
-fn find_member_declaration_refs(
+// A reference to a struct field or union variant. The `prefix` records what
+// the source-level token actually starts with: "" for the bare member name
+// (declaration, MakeStruct field, Pattern::Struct/Union — the latter two
+// added in Phase B3), the auto-method's literal prefix
+// (`@`/`set_`/`mod_`/`act_`/`as_`/`is_`) for auto-method call sites, or
+// `^` for `act_` Vars desugared from `[^field]` index syntax. Refs throws
+// the prefix away; rename uses it to compose `prefix + new_name` for the
+// new text.
+#[allow(dead_code)]
+pub(super) struct MemberOccurrence {
+    pub span: Span,
+    pub prefix: &'static str,
+}
+
+// Generate the (prefix, fullname) pairs for each user-callable auto-method
+// of a struct field or union variant. Internal helpers like
+// `_act_x_identity` and `#punch_x` are intentionally excluded (they are
+// not user-visible). Only entries that actually exist in
+// `program.global_values` are returned.
+fn auto_methods_for(
+    program: &Program,
+    tc: &TyCon,
+    name: &Name,
+) -> Vec<(&'static str, FullName)> {
+    let Some(td) = program.type_defns.iter().find(|td| td.tycon() == *tc) else {
+        return vec![];
+    };
+    let prefixes: &[&'static str] = match &td.value {
+        TypeDeclValue::Struct(_) => &[
+            STRUCT_GETTER_SYMBOL,
+            STRUCT_SETTER_SYMBOL,
+            STRUCT_MODIFIER_SYMBOL,
+            STRUCT_ACT_SYMBOL,
+        ],
+        // Union: bare variant name is the constructor; `as_/is_/mod_` are
+        // helper functions.
+        TypeDeclValue::Union(_) => &["", UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL],
+        TypeDeclValue::Alias(_) => return vec![],
+    };
+    let ns = td.name.to_namespace();
+    let mut result = vec![];
+    for &prefix in prefixes {
+        let fullname = FullName::new(&ns, &format!("{}{}", prefix, name));
+        if program.global_values.contains_key(&fullname) {
+            result.push((prefix, fullname));
+        }
+    }
+    result
+}
+
+// Collect all references to a struct field or union variant. This is the
+// shared collector used by both refs (which discards `prefix`) and rename
+// (which uses `prefix` to compose the replacement text). When
+// `include_declaration` is true, the field/variant's bare-name declaration
+// span is included with `prefix = ""`.
+//
+// Phase B2 scope: declaration + auto-method Var occurrences + import-leaf
+// occurrences for those auto-methods. The bare member-name use sites
+// (`MakeStruct` field-name, `Pattern::Struct/Union`) are added in Phase B3.
+pub(super) fn find_member_occurrences(
     program: &Program,
     tc: &TyCon,
     name: &Name,
     include_declaration: bool,
-) -> Vec<Span> {
-    let mut refs = vec![];
-    if !include_declaration {
-        return refs;
-    }
-    if let Some(td) = program.type_defns.iter().find(|td| td.tycon() == *tc) {
-        let fields: Option<&[Field]> = match &td.value {
-            TypeDeclValue::Struct(s) => Some(&s.fields),
-            TypeDeclValue::Union(u) => Some(&u.fields),
-            TypeDeclValue::Alias(_) => None,
-        };
-        if let Some(fields) = fields {
-            if let Some(f) = fields.iter().find(|f| &f.name == name) {
-                if let Some(span) = &f.name_src {
-                    refs.push(span.clone());
+) -> Vec<MemberOccurrence> {
+    let mut occs: Vec<MemberOccurrence> = vec![];
+
+    // (1) Declaration span.
+    if include_declaration {
+        if let Some(td) = program.type_defns.iter().find(|td| td.tycon() == *tc) {
+            let fields: Option<&[Field]> = match &td.value {
+                TypeDeclValue::Struct(s) => Some(&s.fields),
+                TypeDeclValue::Union(u) => Some(&u.fields),
+                TypeDeclValue::Alias(_) => None,
+            };
+            if let Some(fields) = fields {
+                if let Some(f) = fields.iter().find(|f| &f.name == name) {
+                    if let Some(span) = &f.name_src {
+                        occs.push(MemberOccurrence {
+                            span: span.clone(),
+                            prefix: "",
+                        });
+                    }
                 }
             }
         }
     }
-    refs
+
+    // (2) For each user-callable auto-method, walk all Var nodes in the
+    // program and emit an occurrence at each matching call site, plus any
+    // import-leaf that names that auto-method.
+    for (prefix, fullname) in auto_methods_for(program, tc, name) {
+        for (_n, gv) in &program.global_values {
+            collect_member_var_occs(&gv.expr, prefix, &fullname, &mut occs);
+        }
+        collect_member_import_occs(program, prefix, &fullname, &mut occs);
+    }
+
+    occs
+}
+
+fn collect_member_var_occs(
+    expr: &SymbolExpr,
+    prefix: &'static str,
+    target: &FullName,
+    occs: &mut Vec<MemberOccurrence>,
+) {
+    match expr {
+        SymbolExpr::Simple(typed_expr) => {
+            collect_exprnode_member_occs(&typed_expr.expr, prefix, target, occs);
+        }
+        SymbolExpr::Method(impls) => {
+            for impl_ in impls {
+                collect_exprnode_member_occs(&impl_.expr.expr, prefix, target, occs);
+            }
+        }
+    }
+}
+
+fn collect_exprnode_member_occs(
+    expr: &Arc<ExprNode>,
+    prefix: &'static str,
+    target: &FullName,
+    occs: &mut Vec<MemberOccurrence>,
+) {
+    match &*expr.expr {
+        Expr::Var(v) => {
+            if &v.name == target {
+                if let Some(span) = &expr.source {
+                    // For `act_<field>` Vars desugared from `[^field]`,
+                    // the source span covers `^field` and the source-level
+                    // prefix is `^` rather than `act_`.
+                    let effective_prefix = if prefix == STRUCT_ACT_SYMBOL
+                        && expr.struct_act_func_in_index_syntax
+                    {
+                        "^"
+                    } else {
+                        prefix
+                    };
+                    occs.push(MemberOccurrence {
+                        span: span.clone(),
+                        prefix: effective_prefix,
+                    });
+                }
+            }
+        }
+        Expr::LLVM(_) => {}
+        Expr::App(func, args) => {
+            collect_exprnode_member_occs(func, prefix, target, occs);
+            for arg in args {
+                collect_exprnode_member_occs(arg, prefix, target, occs);
+            }
+        }
+        Expr::Lam(_, body) => {
+            collect_exprnode_member_occs(body, prefix, target, occs);
+        }
+        Expr::Let(_pat, bound, val) => {
+            collect_exprnode_member_occs(bound, prefix, target, occs);
+            collect_exprnode_member_occs(val, prefix, target, occs);
+        }
+        Expr::If(cond, then_expr, else_expr) => {
+            collect_exprnode_member_occs(cond, prefix, target, occs);
+            collect_exprnode_member_occs(then_expr, prefix, target, occs);
+            collect_exprnode_member_occs(else_expr, prefix, target, occs);
+        }
+        Expr::Match(cond, pat_vals) => {
+            collect_exprnode_member_occs(cond, prefix, target, occs);
+            for (_, val) in pat_vals {
+                collect_exprnode_member_occs(val, prefix, target, occs);
+            }
+        }
+        Expr::TyAnno(e, _) => {
+            collect_exprnode_member_occs(e, prefix, target, occs);
+        }
+        Expr::MakeStruct(_, fields) => {
+            for (_, val) in fields {
+                collect_exprnode_member_occs(val, prefix, target, occs);
+            }
+        }
+        Expr::ArrayLit(elems) => {
+            for elem in elems {
+                collect_exprnode_member_occs(elem, prefix, target, occs);
+            }
+        }
+        Expr::FFICall(_, _, _, _, args, _) => {
+            for arg in args {
+                collect_exprnode_member_occs(arg, prefix, target, occs);
+            }
+        }
+        Expr::Eval(side, main) => {
+            collect_exprnode_member_occs(side, prefix, target, occs);
+            collect_exprnode_member_occs(main, prefix, target, occs);
+        }
+    }
+}
+
+fn collect_member_import_occs(
+    program: &Program,
+    prefix: &'static str,
+    target: &FullName,
+    occs: &mut Vec<MemberOccurrence>,
+) {
+    if target.namespace.names.is_empty() {
+        return;
+    }
+    let target_module = target.module();
+    let target_ns_after_module: &[Name] = &target.namespace.names[1..];
+    let target_name = &target.name;
+
+    for (_importer, stmts) in &program.mod_to_import_stmts {
+        for stmt in stmts {
+            if stmt.module.0 != target_module {
+                continue;
+            }
+            for item in &stmt.items {
+                walk_import_node_for_member(
+                    item,
+                    &[],
+                    target_ns_after_module,
+                    target_name,
+                    prefix,
+                    occs,
+                );
+            }
+            for item in &stmt.hiding {
+                walk_import_node_for_member(
+                    item,
+                    &[],
+                    target_ns_after_module,
+                    target_name,
+                    prefix,
+                    occs,
+                );
+            }
+        }
+    }
+}
+
+fn walk_import_node_for_member(
+    node: &ImportTreeNode,
+    traversed: &[Name],
+    target_ns: &[Name],
+    target_name: &str,
+    prefix: &'static str,
+    occs: &mut Vec<MemberOccurrence>,
+) {
+    match node {
+        ImportTreeNode::Any(_) => {}
+        ImportTreeNode::Symbol(name, span) => {
+            if traversed == target_ns && name == target_name {
+                if let Some(span) = span {
+                    occs.push(MemberOccurrence {
+                        span: span.clone(),
+                        prefix,
+                    });
+                }
+            }
+        }
+        ImportTreeNode::TypeOrTrait(_, _) => {}
+        ImportTreeNode::NameSpace(ns_name, children, _) => {
+            let mut new_traversed = traversed.to_vec();
+            new_traversed.push(ns_name.clone());
+            for child in children {
+                walk_import_node_for_member(
+                    child,
+                    &new_traversed,
+                    target_ns,
+                    target_name,
+                    prefix,
+                    occs,
+                );
+            }
+        }
+    }
 }
 
 // Collect spans of import-statement leaves that refer to `target`.
