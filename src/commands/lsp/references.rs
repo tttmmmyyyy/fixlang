@@ -491,7 +491,7 @@ fn collect_exprnode_var_refs(expr: &Arc<ExprNode>, target: &FullName, refs: &mut
             collect_exprnode_var_refs(e, target, refs);
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, val) in fields {
+            for (_, _, val) in fields {
                 collect_exprnode_var_refs(val, target, refs);
             }
         }
@@ -523,11 +523,11 @@ fn collect_pattern_var_refs(pat: &Arc<PatternNode>, target: &FullName, refs: &mu
             }
         }
         Pattern::Struct(_, field_pats) => {
-            for (_, sub_pat) in field_pats {
+            for (_, _, sub_pat) in field_pats {
                 collect_pattern_var_refs(sub_pat, target, refs);
             }
         }
-        Pattern::Union(_, sub_pat) => {
+        Pattern::Union(_, _, sub_pat) => {
             collect_pattern_var_refs(sub_pat, target, refs);
         }
     }
@@ -587,7 +587,7 @@ fn collect_exprnode_type_refs(expr: &Arc<ExprNode>, target: &TyCon, refs: &mut V
                     refs.push(span.clone());
                 }
             }
-            for (_, val) in fields {
+            for (_, _, val) in fields {
                 collect_exprnode_type_refs(val, target, refs);
             }
         }
@@ -622,11 +622,11 @@ fn collect_pattern_type_refs(pat: &Arc<PatternNode>, target: &TyCon, refs: &mut 
                     refs.push(span.clone());
                 }
             }
-            for (_, sub_pat) in field_pats {
+            for (_, _, sub_pat) in field_pats {
                 collect_pattern_type_refs(sub_pat, target, refs);
             }
         }
-        Pattern::Union(_, sub_pat) => {
+        Pattern::Union(_, _, sub_pat) => {
             collect_pattern_type_refs(sub_pat, target, refs);
         }
     }
@@ -810,9 +810,10 @@ fn auto_methods_for(
 // `include_declaration` is true, the field/variant's bare-name declaration
 // span is included with `prefix = ""`.
 //
-// Phase B2 scope: declaration + auto-method Var occurrences + import-leaf
-// occurrences for those auto-methods. The bare member-name use sites
-// (`MakeStruct` field-name, `Pattern::Struct/Union`) are added in Phase B3.
+// Phase B3 scope: declaration + auto-method Var occurrences + import-leaf
+// occurrences for those auto-methods + bare member-name use sites
+// (`MakeStruct` field-name, `Pattern::Struct` field-name, `Pattern::Union`
+// variant-name).
 pub(super) fn find_member_occurrences(
     program: &Program,
     tc: &TyCon,
@@ -852,7 +853,153 @@ pub(super) fn find_member_occurrences(
         collect_member_import_occs(program, prefix, &fullname, &mut occs);
     }
 
+    // (3) Bare member-name uses in MakeStruct, Pattern::Struct, Pattern::Union.
+    for (_n, gv) in &program.global_values {
+        collect_member_bare_occs(&gv.expr, tc, name, &mut occs);
+    }
+
     occs
+}
+
+// Walk a SymbolExpr and emit occurrences at every bare member-name source
+// position: MakeStruct field-name spans (struct case), Pattern::Struct
+// field-name spans (struct case), and Pattern::Union variant-name spans
+// (union case). The TyCon stored in the expression/pattern node must match
+// `tc` for an occurrence to be emitted.
+fn collect_member_bare_occs(
+    expr: &SymbolExpr,
+    tc: &TyCon,
+    name: &Name,
+    occs: &mut Vec<MemberOccurrence>,
+) {
+    match expr {
+        SymbolExpr::Simple(typed_expr) => {
+            collect_exprnode_bare_member_occs(&typed_expr.expr, tc, name, occs);
+        }
+        SymbolExpr::Method(impls) => {
+            for impl_ in impls {
+                collect_exprnode_bare_member_occs(&impl_.expr.expr, tc, name, occs);
+            }
+        }
+    }
+}
+
+fn collect_exprnode_bare_member_occs(
+    expr: &Arc<ExprNode>,
+    tc: &TyCon,
+    name: &Name,
+    occs: &mut Vec<MemberOccurrence>,
+) {
+    match &*expr.expr {
+        Expr::Var(_) | Expr::LLVM(_) => {}
+        Expr::App(func, args) => {
+            collect_exprnode_bare_member_occs(func, tc, name, occs);
+            for arg in args {
+                collect_exprnode_bare_member_occs(arg, tc, name, occs);
+            }
+        }
+        Expr::Lam(_, body) => {
+            collect_exprnode_bare_member_occs(body, tc, name, occs);
+        }
+        Expr::Let(pat, bound, val) => {
+            collect_pattern_bare_member_occs(pat, tc, name, occs);
+            collect_exprnode_bare_member_occs(bound, tc, name, occs);
+            collect_exprnode_bare_member_occs(val, tc, name, occs);
+        }
+        Expr::If(cond, then_expr, else_expr) => {
+            collect_exprnode_bare_member_occs(cond, tc, name, occs);
+            collect_exprnode_bare_member_occs(then_expr, tc, name, occs);
+            collect_exprnode_bare_member_occs(else_expr, tc, name, occs);
+        }
+        Expr::Match(cond, pat_vals) => {
+            collect_exprnode_bare_member_occs(cond, tc, name, occs);
+            for (pat, val) in pat_vals {
+                collect_pattern_bare_member_occs(pat, tc, name, occs);
+                collect_exprnode_bare_member_occs(val, tc, name, occs);
+            }
+        }
+        Expr::TyAnno(e, _) => {
+            collect_exprnode_bare_member_occs(e, tc, name, occs);
+        }
+        Expr::MakeStruct(expr_tc, fields) => {
+            if expr_tc.as_ref() == tc {
+                for (fname, fname_src, _) in fields {
+                    if fname == name {
+                        if let Some(span) = fname_src {
+                            occs.push(MemberOccurrence {
+                                span: span.clone(),
+                                prefix: "",
+                            });
+                        }
+                    }
+                }
+            }
+            for (_, _, val) in fields {
+                collect_exprnode_bare_member_occs(val, tc, name, occs);
+            }
+        }
+        Expr::ArrayLit(elems) => {
+            for elem in elems {
+                collect_exprnode_bare_member_occs(elem, tc, name, occs);
+            }
+        }
+        Expr::FFICall(_, _, _, _, args, _) => {
+            for arg in args {
+                collect_exprnode_bare_member_occs(arg, tc, name, occs);
+            }
+        }
+        Expr::Eval(side, main) => {
+            collect_exprnode_bare_member_occs(side, tc, name, occs);
+            collect_exprnode_bare_member_occs(main, tc, name, occs);
+        }
+    }
+}
+
+fn collect_pattern_bare_member_occs(
+    pat: &Arc<PatternNode>,
+    tc: &TyCon,
+    name: &Name,
+    occs: &mut Vec<MemberOccurrence>,
+) {
+    match &pat.pattern {
+        Pattern::Var(_, _) => {}
+        Pattern::Struct(pat_tc, fields) => {
+            if pat_tc.as_ref() == tc {
+                for (fname, fname_src, _) in fields {
+                    if fname == name {
+                        if let Some(span) = fname_src {
+                            occs.push(MemberOccurrence {
+                                span: span.clone(),
+                                prefix: "",
+                            });
+                        }
+                    }
+                }
+            }
+            for (_, _, sub) in fields {
+                collect_pattern_bare_member_occs(sub, tc, name, occs);
+            }
+        }
+        Pattern::Union(variant, variant_src, sub) => {
+            // The variant FullName has the namespace `tc.name::*`.
+            // Compare via the TyCon constructed from the variant's namespace.
+            // After elaboration the namespace is populated (validate_variant_name
+            // sets it from the matched union); guard against the unresolved
+            // pre-elaboration shape just in case.
+            if !variant.namespace.names.is_empty() {
+                let variant_tc = TyCon::new(variant.namespace.clone().to_fullname());
+                if &variant_tc == tc && &variant.name == name {
+                    if let Some(span) = variant_src {
+                        occs.push(MemberOccurrence {
+                            span: span.clone(),
+                            prefix: "",
+                        });
+                    }
+                }
+            }
+            collect_pattern_bare_member_occs(sub, tc, name, occs);
+        }
+    }
 }
 
 fn collect_member_var_occs(
@@ -929,7 +1076,7 @@ fn collect_exprnode_member_occs(
             collect_exprnode_member_occs(e, prefix, target, occs);
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, val) in fields {
+            for (_, _, val) in fields {
                 collect_exprnode_member_occs(val, prefix, target, occs);
             }
         }
@@ -1364,7 +1511,7 @@ fn collect_exprnode_called_globals(
             collect_exprnode_called_globals(e, result);
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, val) in fields {
+            for (_, _, val) in fields {
                 collect_exprnode_called_globals(val, result);
             }
         }

@@ -629,8 +629,12 @@ fn resolve_opaque_tycon_in_pattern(
         Pattern::Struct(tc, field_to_pat) => {
             let new_field_to_pat: Vec<_> = field_to_pat
                 .iter()
-                .map(|(name, subpat)| {
-                    (name.clone(), resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions))
+                .map(|(name, name_src, subpat)| {
+                    (
+                        name.clone(),
+                        name_src.clone(),
+                        resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions),
+                    )
                 })
                 .collect();
             Arc::new(PatternNode {
@@ -638,9 +642,13 @@ fn resolve_opaque_tycon_in_pattern(
                 info,
             })
         }
-        Pattern::Union(variant, subpat) => {
+        Pattern::Union(variant, variant_src, subpat) => {
             Arc::new(PatternNode {
-                pattern: Pattern::Union(variant.clone(), resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions)),
+                pattern: Pattern::Union(
+                    variant.clone(),
+                    variant_src.clone(),
+                    resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions),
+                ),
                 info,
             })
         }
@@ -714,9 +722,10 @@ pub fn resolve_opaque_tycon_in_expr(
         Expr::MakeStruct(_tc, fields) => {
             let new_fields: Vec<_> = fields
                 .iter()
-                .map(|(name, e)| {
+                .map(|(name, name_src, e)| {
                     (
                         name.clone(),
+                        name_src.clone(),
                         resolve_opaque_tycon_in_expr(e, opaque_resolutions),
                     )
                 })

@@ -309,7 +309,7 @@ fn run_on_pattern(pat: &Arc<PatternNode>, env: &mut Env) -> Arc<PatternNode> {
             run_on_pattern_info(&mut info, env);
             let new_tc = info.type_.as_ref().unwrap().toplevel_tycon().unwrap();
             let mut field_to_pat = field_to_pat.clone();
-            for (_field, subpat) in &mut field_to_pat {
+            for (_field, _, subpat) in &mut field_to_pat {
                 *subpat = run_on_pattern(subpat, env);
             }
             Arc::new(PatternNode {
@@ -317,7 +317,7 @@ fn run_on_pattern(pat: &Arc<PatternNode>, env: &mut Env) -> Arc<PatternNode> {
                 info,
             })
         }
-        Pattern::Union(variant, subpat) => {
+        Pattern::Union(variant, variant_src, subpat) => {
             let mut info = pat.info.clone();
             run_on_pattern_info(&mut info, env);
             let tc = info
@@ -331,7 +331,7 @@ fn run_on_pattern(pat: &Arc<PatternNode>, env: &mut Env) -> Arc<PatternNode> {
                 .to_namespace();
             let variant = FullName::new(&tc, &variant.name.clone());
             Arc::new(PatternNode {
-                pattern: Pattern::Union(variant, run_on_pattern(subpat, env)),
+                pattern: Pattern::Union(variant, variant_src.clone(), run_on_pattern(subpat, env)),
                 info,
             })
         }

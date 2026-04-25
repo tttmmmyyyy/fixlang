@@ -28,11 +28,11 @@ impl Collector {
                 ty.free_vars_to_vec_with_span(&mut self.tyvars);
             }
             Pattern::Struct(_, fields) => {
-                for (_, field_pat) in fields {
+                for (_, _, field_pat) in fields {
                     self.collect_from_pattern(field_pat);
                 }
             }
-            Pattern::Union(_, inner_pat) => {
+            Pattern::Union(_, _, inner_pat) => {
                 self.collect_from_pattern(inner_pat);
             }
             Pattern::Var(_, None) => {}

@@ -304,7 +304,7 @@ fn find_enclosing_binder(
             find_enclosing_binder(e, pos, target, stack).or_else(|| lookup(stack))
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, e) in fields {
+            for (_, _, e) in fields {
                 if let Some(s) = find_enclosing_binder(e, pos, target, stack) {
                     return Some(s);
                 }
@@ -416,7 +416,7 @@ fn collect_uses_of_binding(
             collect_uses_of_binding(e, target, def_span, stack, out);
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, e) in fields {
+            for (_, _, e) in fields {
                 collect_uses_of_binding(e, target, def_span, stack, out);
             }
         }

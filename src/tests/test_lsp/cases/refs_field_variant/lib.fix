@@ -11,10 +11,13 @@ type Maybe a = box union {
     none : (),
 };
 
-// Auto-method usage sites: getter, setter, modifier, plus `[^x]` index
-// syntax.
+// Auto-method usage sites + bare field-name uses (MakeStruct,
+// Pattern::Struct).
 make_point : Point;
 make_point = Point { x : 1, y : 2 };
+
+destruct : Point -> I64;
+destruct = |Point { x : x, y : _ }| x;
 
 use_getter : Point -> I64;
 use_getter = |p| p.@x;
@@ -30,7 +33,7 @@ use_modifier = |p| p.mod_x(|x| x + 1);
 use_index : Point -> Point;
 use_index = |p| p[^x].iset(99);
 
-// Variant constructor + helpers.
+// Variant constructor + helpers + Pattern::Union use site.
 make_some_val : Maybe I64;
 make_some_val = Maybe::some(42);
 
@@ -42,3 +45,9 @@ use_as = |m| m.as_some;
 
 use_mod : Maybe I64 -> Maybe I64;
 use_mod = |m| m.mod_some(|x| x + 1);
+
+unwrap_some : Maybe I64 -> I64;
+unwrap_some = |m| match m {
+    some(v) => v,
+    none() => 0,
+};

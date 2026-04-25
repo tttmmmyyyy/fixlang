@@ -840,9 +840,9 @@ mod tests {
     }
 
     // =======================================================================
-    // FV: Field / Variant references (Phase B2 scope: declaration plus
-    // auto-method call sites and import-leaves; MakeStruct/Pattern uses
-    // are added in Phase B3)
+    // FV: Field / Variant references (Phase B3 scope: declaration plus
+    // auto-method call sites, import-leaves, and bare member-name uses
+    // in MakeStruct, Pattern::Struct, Pattern::Union)
     // =======================================================================
     //
     // refs_field_variant/lib.fix lines (0-indexed):
@@ -851,25 +851,28 @@ mod tests {
     //   9: `type Maybe a = box union {`
     //  10: `    some : a,`
     //          ^ col 4 = variant name `some`
-    //  19: `use_getter = |p| p.@x;`
-    //  22: `use_setter = |p| p.set_x(0);`
-    //  25: `use_modifier = |p| p.mod_x(|x| x + 1);`
-    //  30: `use_index = |p| p[^x].iset(99);`
-    //  34: `make_some_val = Maybe::some(42);`
-    //  37: `use_is = |m| m.is_some;`
-    //  40: `use_as = |m| m.as_some;`
-    //  43: `use_mod = |m| m.mod_some(|x| x + 1);`
+    //  16: `make_point = Point { x : 1, y : 2 };`        (MakeStruct field-name)
+    //  19: `destruct = |Point { x : x, y : _ }| x;`      (Pattern::Struct field-name)
+    //  22: `use_getter = |p| p.@x;`                      (auto getter)
+    //  25: `use_setter = |p| p.set_x(0);`                (auto setter)
+    //  28: `use_modifier = |p| p.mod_x(|x| x + 1);`      (auto modifier)
+    //  33: `use_index = |p| p[^x].iset(99);`             (index syntax)
+    //  37: `make_some_val = Maybe::some(42);`            (variant constructor)
+    //  40: `use_is = |m| m.is_some;`                     (auto is_)
+    //  43: `use_as = |m| m.as_some;`                     (auto as_)
+    //  46: `use_mod = |m| m.mod_some(|x| x + 1);`        (auto mod_)
+    //  50: `    some(v) => v,`                           (Pattern::Union)
 
     /// FV-1: refs from a struct field declaration name.
-    /// Decl + getter (@x) + setter (set_x) + modifier (mod_x) + index syntax (^x) = 5.
+    /// Decl + MakeStruct + Pattern::Struct + getter + setter + modifier + index = 7.
     #[test]
     fn test_refs_fv1_struct_field_decl() {
         let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
         let locs = ctx.find_refs("lib.fix", 4, 28, true);
         assert_eq!(
             locs.len(),
-            5,
-            "Expected exactly 5 references to field `x`, got {}: {:?}",
+            7,
+            "Expected exactly 7 references to field `x`, got {}: {:?}",
             locs.len(),
             locs
         );
@@ -877,15 +880,15 @@ mod tests {
     }
 
     /// FV-2: refs from a union variant declaration name.
-    /// Decl + constructor + is_some + as_some + mod_some = 5.
+    /// Decl + constructor + is_some + as_some + mod_some + Pattern::Union = 6.
     #[test]
     fn test_refs_fv2_union_variant_decl() {
         let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
         let locs = ctx.find_refs("lib.fix", 9, 4, true);
         assert_eq!(
             locs.len(),
-            5,
-            "Expected exactly 5 references to variant `some`, got {}: {:?}",
+            6,
+            "Expected exactly 6 references to variant `some`, got {}: {:?}",
             locs.len(),
             locs
         );
@@ -893,15 +896,15 @@ mod tests {
     }
 
     /// FV-3: include_declaration=false strips just the declaration span,
-    /// leaving 4 auto-method occurrences.
+    /// leaving 6 occurrences for field `x`.
     #[test]
     fn test_refs_fv3_struct_field_no_decl() {
         let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
         let locs = ctx.find_refs("lib.fix", 4, 28, false);
         assert_eq!(
             locs.len(),
-            4,
-            "Expected 4 occurrences (auto-methods only), got {}: {:?}",
+            6,
+            "Expected 6 use-site occurrences, got {}: {:?}",
             locs.len(),
             locs
         );
@@ -909,8 +912,6 @@ mod tests {
     }
 
     /// FV-4: an `[^x]` index-syntax span reports as a reference to field `x`.
-    /// Verify by reading the text at one of the locations and checking that
-    /// `^x` appears in the result set.
     #[test]
     fn test_refs_fv4_index_syntax_in_field_refs() {
         let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
@@ -928,6 +929,58 @@ mod tests {
         assert!(
             found_caret_x,
             "Expected `^x` (index syntax span) among field refs, got: {:?}",
+            locs
+        );
+        ctx.shutdown();
+    }
+
+    /// FV-5: cursor on a MakeStruct field name resolves to the same Field
+    /// EndNode and yields the full set of references.
+    #[test]
+    fn test_refs_fv5_makestruct_field_name() {
+        let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
+        // `make_point = Point { x : 1, y : 2 };` — `x` is at col 21.
+        let locs = ctx.find_refs("lib.fix", 16, 21, true);
+        assert_eq!(
+            locs.len(),
+            7,
+            "Expected 7 references when starting from MakeStruct field-name, got {}: {:?}",
+            locs.len(),
+            locs
+        );
+        ctx.shutdown();
+    }
+
+    /// FV-6: cursor on a Pattern::Struct field name resolves to the same
+    /// Field EndNode.
+    #[test]
+    fn test_refs_fv6_pattern_struct_field_name() {
+        let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
+        // `destruct = |Point { x : x, y : _ }| x;` — first `x` (the field
+        // name) is at col 20.
+        let locs = ctx.find_refs("lib.fix", 19, 20, true);
+        assert_eq!(
+            locs.len(),
+            7,
+            "Expected 7 references when starting from Pattern::Struct field-name, got {}: {:?}",
+            locs.len(),
+            locs
+        );
+        ctx.shutdown();
+    }
+
+    /// FV-7: cursor on a Pattern::Union variant name resolves to the same
+    /// Variant EndNode.
+    #[test]
+    fn test_refs_fv7_pattern_union_variant_name() {
+        let mut ctx = LspTestCtx::setup("refs_field_variant", &["lib.fix"]);
+        // `    some(v) => v,` — `some` at col 4.
+        let locs = ctx.find_refs("lib.fix", 50, 4, true);
+        assert_eq!(
+            locs.len(),
+            6,
+            "Expected 6 references when starting from Pattern::Union variant-name, got {}: {:?}",
+            locs.len(),
             locs
         );
         ctx.shutdown();

@@ -723,7 +723,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
             if expr_mames.contains(&self.target_name) {
                 // Then the target name appears in some field.
                 let struct_fields = expr.get_make_struct_fields();
-                for (_, field) in &struct_fields {
+                for (_, _, field) in &struct_fields {
                     let field_free_vars = field.free_vars();
                     if !field_free_vars.contains(&self.target_name)
                         && FreeOccurrenceProbe::contains_local_name(field)

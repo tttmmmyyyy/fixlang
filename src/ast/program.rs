@@ -1464,7 +1464,7 @@ impl Program {
             }
             Expr::MakeStruct(_, fields) => {
                 let mut expr = expr.clone();
-                for (field_name, field_expr) in fields {
+                for (field_name, _, field_expr) in fields {
                     let field_expr = self.instantiate_expr(field_expr)?;
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }

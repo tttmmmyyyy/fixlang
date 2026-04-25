@@ -7,7 +7,7 @@ use crate::ast::{
     export_statement::ExportStatement,
     expr::{
         expr_abs, expr_abs_param_src, expr_app, expr_array_lit, expr_eval,
-        expr_ffi_call, expr_if, expr_let, expr_make_struct,
+        expr_ffi_call, expr_if, expr_let, expr_make_struct, expr_make_struct_with_spans,
         expr_match, expr_tyanno, expr_var, AppSourceCodeOrderType, ExprNode, Var,
         var_local, var_var,
     },
@@ -2028,11 +2028,13 @@ fn parse_expr_make_struct(
     let tycon = parse_tycon(tycon_pair);
     let mut fields = vec![];
     while pairs.peek().is_some() {
-        let field_name = pairs.next().unwrap().as_str().to_string();
+        let name_pair = pairs.next().unwrap();
+        let field_name_span = Span::from_pair(&ctx.source, &name_pair);
+        let field_name = name_pair.as_str().to_string();
         let field_expr = parse_expr(pairs.next().unwrap(), ctx)?;
-        fields.push((field_name, field_expr));
+        fields.push((field_name, Some(field_name_span), field_expr));
     }
-    Ok(expr_make_struct(tycon, fields)
+    Ok(expr_make_struct_with_spans(tycon, fields)
         .set_source(Some(span))
         .set_aux_src(Some(tycon_span)))
 }
@@ -2599,11 +2601,13 @@ fn parse_pattern_struct(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Pattern
     let tycon = parse_tycon(tycon_pair);
     let mut field_to_pats = Vec::default();
     while pairs.peek().is_some() {
-        let field_name = pairs.next().unwrap().as_str().to_string();
+        let name_pair = pairs.next().unwrap();
+        let field_name_span = Span::from_pair(&ctx.source, &name_pair);
+        let field_name = name_pair.as_str().to_string();
         let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
-        field_to_pats.push((field_name, pat));
+        field_to_pats.push((field_name, Some(field_name_span), pat));
     }
-    PatternNode::make_struct(tycon, field_to_pats)
+    PatternNode::make_struct_with_spans(tycon, field_to_pats)
         .set_source(span)
         .set_aux_src(tycon_span)
 }
@@ -2618,13 +2622,14 @@ fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
     }
     let pair = pairs.next().unwrap();
     assert_eq!(pair.as_rule(), Rule::type_field_name);
+    let variant_span = Span::from_pair(&ctx.source, &pair);
     let variant = FullName::new(&NameSpace::new(names), pair.as_str());
     let pat = if let Some(pair) = pairs.next() {
         parse_pattern_nounion(pair, ctx)
     } else {
         PatternNode::make_struct(tycon(make_tuple_name_abs(0 as u32)), vec![])
     };
-    PatternNode::make_union(variant, pat).set_source(span)
+    PatternNode::make_union_with_span(variant, Some(variant_span), pat).set_source(span)
 }
 
 fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportStatement {

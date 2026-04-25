@@ -1693,7 +1693,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             Expr::TyAnno(e, _) => self.eval_expr(e.clone(), tail),
             Expr::MakeStruct(_, fields) => {
                 let struct_ty = expr.type_.clone().unwrap();
-                self.eval_make_struct(fields.clone(), struct_ty, tail)
+                let fields_pairs: Vec<(Name, Arc<ExprNode>)> =
+                    fields.iter().map(|(n, _, e)| (n.clone(), e.clone())).collect();
+                self.eval_make_struct(fields_pairs, struct_ty, tail)
             }
             Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.type_.clone().unwrap(), tail),
             Expr::FFICall(fun_name, ret_ty, param_tys, is_var_args, args, is_io) => self
@@ -2163,16 +2165,16 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // Extract fields.
                 let field_indices = field_to_pat
                     .iter()
-                    .map(|(name, _)| field_to_idx[name])
+                    .map(|(name, _, _)| field_to_idx[name])
                     .collect::<Vec<_>>();
                 let fields = ObjectFieldType::get_struct_fields(self, obj, &field_indices);
 
                 // Match to subpatterns.
-                for (i, (_, pat)) in field_to_pat.iter().enumerate() {
+                for (i, (_, _, pat)) in field_to_pat.iter().enumerate() {
                     ret.append(&mut self.destructure_object_by_pattern(&pat, &fields[i]));
                 }
             }
-            Pattern::Union(variant_name, subpat) => {
+            Pattern::Union(variant_name, _, subpat) => {
                 let (variant_idx, _union_tycon, _union_ti) =
                     Pattern::get_variant_info(variant_name, self.type_env());
                 let variant_ty = obj.ty.field_types(self.type_env())[variant_idx].clone();

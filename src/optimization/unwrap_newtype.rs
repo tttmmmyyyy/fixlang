@@ -316,7 +316,7 @@ impl<'a> ExprVisitor for NewtypeUnwrapper<'a> {
         let mut expr = run_on_inferred_type(&expr, self.type_env);
         if let Expr::MakeStruct(tycon, fields) = expr.expr.as_ref() {
             if is_unwrappable_newtype(tycon, &self.type_env) {
-                expr = fields[0].1.clone();
+                expr = fields[0].2.clone();
             }
         } else {
             unreachable!()
@@ -442,11 +442,11 @@ fn unwrap_newtype_on_pattern(
         Pattern::Struct(tc, field_to_pat) => {
             if is_unwrappable_newtype(tc, env) {
                 assert_eq!(field_to_pat.len(), 1);
-                let (_, pat) = &field_to_pat[0];
+                let (_, _, pat) = &field_to_pat[0];
                 unwrap_newtype_on_pattern(pat, env)
             } else {
                 let mut field_to_pat = field_to_pat.clone();
-                for (_, pat) in &mut field_to_pat {
+                for (_, _, pat) in &mut field_to_pat {
                     *pat = unwrap_newtype_on_pattern(pat, env);
                 }
                 let mut info = pat.info.clone();
@@ -457,11 +457,15 @@ fn unwrap_newtype_on_pattern(
                 })
             }
         }
-        Pattern::Union(variant, subpat) => {
+        Pattern::Union(variant, variant_src, subpat) => {
             let mut info = pat.info.clone();
             unwrap_newtype_on_pattern_info(&mut info, env);
             Arc::new(PatternNode {
-                pattern: Pattern::Union(variant.clone(), unwrap_newtype_on_pattern(subpat, env)),
+                pattern: Pattern::Union(
+                    variant.clone(),
+                    variant_src.clone(),
+                    unwrap_newtype_on_pattern(subpat, env),
+                ),
                 info,
             })
         }

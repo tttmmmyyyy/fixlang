@@ -419,9 +419,9 @@ pub trait ExprVisitor {
                 match res {
                     StartVisitResult::VisitChildren => {
                         let mut new_fields = vec![];
-                        for (name, val) in fields {
+                        for (name, name_src, val) in fields {
                             let val = self.visit_expr(&val, state).unwrap(&mut changed);
-                            new_fields.push((name.clone(), val));
+                            new_fields.push((name.clone(), name_src.clone(), val));
                         }
                         if changed {
                             expr = expr.set_make_struct_fields(new_fields);
