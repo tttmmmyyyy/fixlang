@@ -1,0 +1,14 @@
+module Lib;
+
+type Point = unbox struct { x : I64, y : I64 };
+
+// User-defined helper that lives in the same auto-namespace as the
+// struct's compiler-generated methods. After renaming the type, this
+// item should NOT move (the user wrote it explicitly).
+namespace Point {
+    user_helper : Point -> I64;
+    user_helper = |p| p.@x + p.@y;
+}
+
+mk_point : Point;
+mk_point = Point { x : 1, y : 2 };

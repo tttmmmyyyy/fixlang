@@ -1,0 +1,6 @@
+[general]
+name = "rename-mixed-import"
+version = "0.1.0"
+
+[build]
+files = ["lib.fix", "main.fix"]

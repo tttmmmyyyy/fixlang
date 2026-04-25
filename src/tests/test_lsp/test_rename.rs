@@ -320,16 +320,18 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RB-10: prepareRename returns null when the position is on a struct/union
-    /// type — that case is deferred to Phase D.
+    /// RB-10: prepareRename returns defaultBehavior on a struct type.
     #[test]
-    fn test_prepare_rename_type_not_supported_yet() {
+    fn test_prepare_rename_struct_type() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
         // `type Point = ...;` — cursor on `Point` at line 9, col 5.
         let result = ctx.prepare_rename("lib.fix", 9, 5);
         assert!(
-            result.is_null(),
-            "expected null (rename not allowed) for a struct type, got: {:?}",
+            result
+                .get("defaultBehavior")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            "expected defaultBehavior=true on a struct type, got: {:?}",
             result
         );
         ctx.shutdown();
@@ -449,36 +451,30 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RT-6: renaming a struct type itself is rejected (deferred to Phase D).
+    /// RT-6: renaming a struct type renames every bare-name occurrence
+    /// (declaration, MakeStruct, type sigs, impl blocks).
     #[test]
-    fn test_rename_struct_type_rejected() {
+    fn test_rename_struct_type() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
         // Cursor on `Point` at the struct declaration (line 9, col 5).
-        let resp = ctx.rename_raw("lib.fix", 9, 5, "Pixel");
-        let error_msg = resp
-            .get("error")
-            .and_then(|e| e.get("message"))
-            .and_then(|m| m.as_str())
-            .unwrap_or("");
-        assert!(
-            error_msg.contains("struct or union"),
-            "expected a struct/union rejection message, got: {:?}",
-            resp
-        );
+        let we = ctx.rename("lib.fix", 9, 5, "Pixel");
+        // Bare token occurrences in lib.fix:
+        //   line 9 decl, line 11 sig, line 12 MakeStruct ctor, line 14 sig (2),
+        //   line 17 sig (2), line 37 impl. = 8
+        assert!(count_edits(&we) >= 7, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "Pixel");
         ctx.shutdown();
     }
 
-    /// RT-7: renaming a union type itself is rejected for the same reason.
+    /// RT-7: renaming a union type renames every bare-name occurrence.
     #[test]
-    fn test_rename_union_type_rejected() {
+    fn test_rename_union_type() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
         // Cursor on `Maybe` at the union declaration (line 21, col 5).
-        let resp = ctx.rename_raw("lib.fix", 21, 5, "Optional");
-        assert!(
-            resp.get("error").is_some(),
-            "expected a rejection, got: {:?}",
-            resp
-        );
+        let we = ctx.rename("lib.fix", 21, 5, "Optional");
+        // Bare-name occurrences: decl + 1 in `unwrap_default`'s sig = 2.
+        assert_eq!(count_edits(&we), 2, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "Optional");
         ctx.shutdown();
     }
 
@@ -703,6 +699,243 @@ mod tests {
             result.is_null(),
             "expected null after stale buffer change, got: {:?}",
             result
+        );
+        ctx.shutdown();
+    }
+
+    // =======================================================================
+    // Phase D: struct/union type rename with auto-namespace coupling
+    //
+    // rename_struct_type fixture (0-indexed):
+    // lib.fix:
+    //   2: type Point = unbox struct { x : I64, y : I64 };
+    //   7: namespace Point {                       (col 10 = `Point`)
+    //   8:     user_helper : Point -> I64;         (col 18 = `Point`)
+    //   9:     user_helper = |p| p.@x + p.@y;
+    //  10: }
+    //  12: mk_point : Point;                       (col 11 = `Point`)
+    //  13: mk_point = Point { x : 1, y : 2 };      (col 11 = `Point`)
+    //
+    // main.fix:
+    //   5: import Lib::{Point, Point::{@x, act_x}};
+    //                  ^col 14 = `Point` (TypeOrTrait)
+    //                         ^col 21 = `Point` (NameSpace)
+    //   8: qualified_get : Point -> I64;           (col 17 = `Point`)
+    //   9: qualified_get = |p| Point::@x(p);       (col 22 = inline `Point`)
+    //  12: qualified_idx : Point -> Point;
+    //  13: qualified_idx = |p| p[^Point::x].iset(0);  (col 23 = inline `Point`)
+    // =======================================================================
+
+    /// RD-1: rename a struct type and observe that all bare uses, the
+    /// auto-namespace component in the all-auto import, and the inline
+    /// qualified Var references are all rewritten.
+    #[test]
+    fn test_rename_struct_type_phase_d() {
+        let mut ctx =
+            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let we = ctx.rename("lib.fix", 2, 5, "Pixel");
+
+        let per_file = changes_per_file(&we);
+        assert_eq!(
+            per_file.iter().map(|(_, n)| n).sum::<usize>(),
+            count_edits(&we)
+        );
+
+        let lib_count = per_file
+            .iter()
+            .find(|(f, _)| f == "lib.fix")
+            .map(|(_, n)| *n)
+            .unwrap_or(0);
+        let main_count = per_file
+            .iter()
+            .find(|(f, _)| f == "main.fix")
+            .map(|(_, n)| *n)
+            .unwrap_or(0);
+
+        // lib.fix bare-name occurrences: decl + user_helper sig + mk_point
+        // sig + MakeStruct = 4.
+        assert_eq!(lib_count, 4, "lib.fix edits: {:?}", we);
+
+        // main.fix: 4 bare (one TypeOrTrait import + 3 type sigs) +
+        // 1 NameSpace import + 2 inline qualified = 7.
+        assert_eq!(main_count, 7, "main.fix edits: {:?}", we);
+
+        // Every edit's new_text should be just `Pixel` (the rebuilt-import
+        // case is not triggered here because the namespace import is all-auto).
+        assert_all_edits_have_new_text(&we, "Pixel");
+        ctx.shutdown();
+    }
+
+    /// RD-2: the user-defined namespace block in lib.fix
+    /// (`namespace Point { ... }`) must NOT be touched, because its
+    /// `Point` is a user-written namespace name, independent of the type.
+    #[test]
+    fn test_rename_struct_type_skips_user_namespace_block() {
+        let mut ctx =
+            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let we = ctx.rename("lib.fix", 2, 5, "Pixel");
+
+        // Verify no edit lands on line 7 col 10 (the `namespace Point {`
+        // declaration).
+        let changes = we.get("changes").unwrap().as_object().unwrap();
+        for (_uri, arr) in changes {
+            for edit in arr.as_array().unwrap() {
+                let start = edit.get("range").unwrap().get("start").unwrap();
+                let line = start.get("line").unwrap().as_u64().unwrap();
+                let ch = start.get("character").unwrap().as_u64().unwrap();
+                assert!(
+                    !(line == 7 && ch == 10),
+                    "should not rewrite the `namespace Point {{` declaration"
+                );
+            }
+        }
+        ctx.shutdown();
+    }
+
+    /// RD-3: the inline qualified reference `Point::@x` in main.fix has
+    /// just its `Point` sub-span rewritten to `Pixel`, leaving `::@x`.
+    /// We verify by reading the post-edit text at the reported range.
+    #[test]
+    fn test_rename_struct_type_inline_qualified_var() {
+        let mut ctx =
+            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let we = ctx.rename("lib.fix", 2, 5, "Pixel");
+
+        // Find an edit on main.fix line 9 (qualified_get's body) that
+        // covers exactly 5 chars (= length of "Point").
+        let changes = we.get("changes").unwrap().as_object().unwrap();
+        let mut found = false;
+        for (uri, arr) in changes {
+            if !uri.contains("main.fix") {
+                continue;
+            }
+            for edit in arr.as_array().unwrap() {
+                let r = edit.get("range").unwrap();
+                let s = r.get("start").unwrap();
+                let e = r.get("end").unwrap();
+                if s.get("line").unwrap().as_u64() == Some(9)
+                    && e.get("line").unwrap().as_u64() == Some(9)
+                {
+                    let s_ch = s.get("character").unwrap().as_u64().unwrap();
+                    let e_ch = e.get("character").unwrap().as_u64().unwrap();
+                    if e_ch - s_ch == 5 {
+                        found = true;
+                        assert_eq!(
+                            edit.get("newText").unwrap().as_str(),
+                            Some("Pixel"),
+                            "inline qualified Point edit should be 'Pixel'"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(found, "expected inline qualified `Point` edit on line 9");
+        ctx.shutdown();
+    }
+
+    /// RD-4: the qualified index syntax `[^Point::x]` has its `Point`
+    /// sub-span rewritten too — Var.source covers `^Point::x`, so the
+    /// `^` is skipped during sub-span extraction.
+    #[test]
+    fn test_rename_struct_type_inline_index_syntax() {
+        let mut ctx =
+            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let we = ctx.rename("lib.fix", 2, 5, "Pixel");
+
+        // Look for an edit on main.fix line 13 covering 5 chars
+        // (= length of "Point") with new_text "Pixel".
+        let changes = we.get("changes").unwrap().as_object().unwrap();
+        let mut found = false;
+        for (uri, arr) in changes {
+            if !uri.contains("main.fix") {
+                continue;
+            }
+            for edit in arr.as_array().unwrap() {
+                let r = edit.get("range").unwrap();
+                let s = r.get("start").unwrap();
+                let e = r.get("end").unwrap();
+                if s.get("line").unwrap().as_u64() == Some(13)
+                    && e.get("line").unwrap().as_u64() == Some(13)
+                    && e.get("character").unwrap().as_u64().unwrap()
+                        - s.get("character").unwrap().as_u64().unwrap()
+                        == 5
+                    && edit.get("newText").unwrap().as_str() == Some("Pixel")
+                {
+                    found = true;
+                }
+            }
+        }
+        assert!(
+            found,
+            "expected inline `^Point::x` -> `^Pixel::x` edit on line 13"
+        );
+        ctx.shutdown();
+    }
+
+    /// RD-5: prepareRename returns defaultBehavior on a struct type
+    /// (Phase D enables this).
+    #[test]
+    fn test_prepare_rename_struct_type_phase_d() {
+        let mut ctx =
+            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let result = ctx.prepare_rename("lib.fix", 2, 5);
+        assert!(
+            result
+                .get("defaultBehavior")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            "expected defaultBehavior=true on struct type, got: {:?}",
+            result
+        );
+        ctx.shutdown();
+    }
+
+    /// RD-6: a mixed import (`Lib::{Point::{act_x, user_helper}}`) is
+    /// rebuilt as a single TextEdit covering the entire import statement.
+    /// The new text must contain both `Pixel::` (for the auto-method
+    /// half) and `Point::` (for the user-defined half).
+    #[test]
+    fn test_rename_struct_type_mixed_import_split() {
+        let mut ctx =
+            LspTestCtx::setup("rename_mixed_import", &["lib.fix", "main.fix"]);
+        let we = ctx.rename("lib.fix", 2, 5, "Pixel");
+
+        // Find the rebuilt import edit on main.fix line 6 (the import
+        // statement). It should cover the whole `import ...;` line.
+        let changes = we.get("changes").unwrap().as_object().unwrap();
+        let main_edits = changes
+            .iter()
+            .find(|(k, _)| k.contains("main.fix"))
+            .map(|(_, v)| v.as_array().unwrap().clone())
+            .expect("main.fix should have edits");
+
+        // At least one edit on line 6 must be the whole-import rebuild
+        // and contain both `Pixel::` and `Point::` in its newText.
+        let mut found_split = false;
+        for edit in main_edits {
+            let r = edit.get("range").unwrap();
+            let s_line = r["start"]["line"].as_u64().unwrap();
+            let e_line = r["end"]["line"].as_u64().unwrap();
+            let text = edit.get("newText").unwrap().as_str().unwrap();
+            if s_line == 6 && e_line == 6 && text.contains("Pixel") && text.contains("Point") {
+                // Must contain both halves.
+                assert!(
+                    text.contains("act_x"),
+                    "expected `act_x` under `Pixel::` in {:?}",
+                    text
+                );
+                assert!(
+                    text.contains("user_helper"),
+                    "expected `user_helper` under `Point::` in {:?}",
+                    text
+                );
+                found_split = true;
+            }
+        }
+        assert!(
+            found_split,
+            "did not find a split-rebuilt import on line 6 in {:?}",
+            we
         );
         ctx.shutdown();
     }

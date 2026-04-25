@@ -179,6 +179,40 @@ pub enum TokenCategory {
     CapitalName,
 }
 
+// A namespace_item parsed from a fullname, with its byte-offset range
+// within the input that was parsed.
+pub struct NamespaceItemSpan {
+    pub name: Name,
+    pub start: usize,
+    pub end: usize,
+}
+
+// Re-parse `text` as a `fullname` (e.g. `"Foo::Point::act_x"`) and return
+// each `namespace_item` with its byte-offset range within `text`.
+//
+// Used by LSP rename to locate the sub-span of a namespace component
+// (e.g. the `Point` in `Point::@x`) inside an `Expr::Var`'s source span,
+// so a struct/union rename can rewrite just that component.
+pub fn parse_namespace_items_in_fullname(text: &str) -> Option<Vec<NamespaceItemSpan>> {
+    let mut pairs = FixParser::parse(Rule::fullname, text).ok()?;
+    let outer = pairs.next()?;
+    if outer.as_str() != text {
+        return None;
+    }
+    let mut result = vec![];
+    for inner in outer.into_inner() {
+        if inner.as_rule() == Rule::namespace_item {
+            let span = inner.as_span();
+            result.push(NamespaceItemSpan {
+                name: inner.as_str().to_string(),
+                start: span.start(),
+                end: span.end(),
+            });
+        }
+    }
+    Some(result)
+}
+
 // Validate that `s` is a syntactically valid identifier in the given
 // category. Returns Ok(()) if pest accepts the entire string under the
 // matching rule; otherwise an error describing the rejection.

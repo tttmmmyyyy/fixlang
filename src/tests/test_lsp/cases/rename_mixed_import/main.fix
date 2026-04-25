@@ -1,0 +1,10 @@
+module Main;
+
+// Mixed import: `act_x` is a compiler-generated auto-method, while
+// `user_helper` is a user-defined item that lives in the same
+// `Foo::Point::*` namespace. Renaming `Point` should split this
+// import into `Pixel::{act_x}` and `Point::{user_helper}`.
+import Lib::{Point::{act_x, user_helper}};
+
+main : IO ();
+main = pure();
