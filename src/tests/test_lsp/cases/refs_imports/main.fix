@@ -1,0 +1,20 @@
+module Main;
+
+// Explicit named imports — these spans should appear in references results.
+import Lib::{helper, Vec2, MyTrait};
+import Lib hiding {truth};
+
+use_helper : I64 -> I64;
+use_helper = |x| helper(x);
+
+make_vec : Vec2;
+make_vec = Vec2 { x : 1, y : 2 };
+
+type MyType = unbox struct { v : I64 };
+
+impl MyType : MyTrait {
+    process = |m| m.@v;
+}
+
+main : IO ();
+main = pure();

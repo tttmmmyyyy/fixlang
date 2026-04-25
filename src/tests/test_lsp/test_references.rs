@@ -768,6 +768,78 @@ mod tests {
     }
 
     // =======================================================================
+    // Imp: Import-statement reference tests (project: refs_imports)
+    // =======================================================================
+    //
+    // refs_imports/lib.fix:
+    //   2: helper : I64 -> I64;
+    //   3: helper = |x| x + 1;
+    //   5: truth : I64;
+    //   6: truth = 42;
+    //   8: type Vec2 = struct { x : I64, y : I64 };
+    //  10: trait a : MyTrait { ... }
+    //
+    // refs_imports/main.fix:
+    //   3: import Lib::{helper, Vec2, MyTrait};
+    //   4: import Lib hiding {truth};
+    //   7: use_helper = |x| helper(x);
+    //  10: make_vec = Vec2 { x : 1, y : 2 };
+    //  14: impl MyType : MyTrait { ... }
+
+    /// IMP-1: refs of a value (`helper`) include its leaf in `import` items.
+    #[test]
+    fn test_refs_imp1_value_in_import() {
+        let mut ctx = LspTestCtx::setup("refs_imports", &["lib.fix", "main.fix"]);
+        // From the declaration LHS in lib.fix.
+        let locs = ctx.find_refs("lib.fix", 2, 0, true);
+        ctx.assert_ref_texts(&locs, "Lib::helper");
+        assert_has_ref_in_file(&locs, "lib.fix");
+        assert_has_ref_in_file(&locs, "main.fix");
+        // Expected refs: decl + def in lib.fix + the import-leaf + the use.
+        ctx.assert_refs(&locs, 4, "Lib::helper");
+        ctx.shutdown();
+    }
+
+    /// IMP-2: refs of a value include the leaf in a `hiding {...}` clause.
+    #[test]
+    fn test_refs_imp2_value_in_hiding() {
+        let mut ctx = LspTestCtx::setup("refs_imports", &["lib.fix", "main.fix"]);
+        // From the declaration LHS of `truth`.
+        let locs = ctx.find_refs("lib.fix", 5, 0, true);
+        ctx.assert_ref_texts(&locs, "Lib::truth");
+        assert_has_ref_in_file(&locs, "main.fix");
+        // Expected: decl + def in lib.fix + hiding-leaf in main.fix.
+        ctx.assert_refs(&locs, 3, "Lib::truth");
+        ctx.shutdown();
+    }
+
+    /// IMP-3: refs of a type (`Vec2`) include its leaf in `import` items.
+    #[test]
+    fn test_refs_imp3_type_in_import() {
+        let mut ctx = LspTestCtx::setup("refs_imports", &["lib.fix", "main.fix"]);
+        // Cursor on `Vec2` in its type definition (line 8, col 5).
+        let locs = ctx.find_refs("lib.fix", 8, 5, true);
+        ctx.assert_ref_texts(&locs, "Lib::Vec2");
+        assert_has_ref_in_file(&locs, "main.fix");
+        // Expected refs: type defn + import-leaf + type sig + MakeStruct.
+        ctx.assert_refs(&locs, 4, "Lib::Vec2");
+        ctx.shutdown();
+    }
+
+    /// IMP-4: refs of a trait (`MyTrait`) include its leaf in `import` items.
+    #[test]
+    fn test_refs_imp4_trait_in_import() {
+        let mut ctx = LspTestCtx::setup("refs_imports", &["lib.fix", "main.fix"]);
+        // Cursor on `MyTrait` in its trait declaration (line 10, col 11).
+        let locs = ctx.find_refs("lib.fix", 10, 11, true);
+        ctx.assert_ref_texts(&locs, "Lib::MyTrait");
+        assert_has_ref_in_file(&locs, "main.fix");
+        // Expected refs: trait decl + import-leaf + impl block.
+        ctx.assert_refs(&locs, 3, "Lib::MyTrait");
+        ctx.shutdown();
+    }
+
+    // =======================================================================
     // Loc: Local-name tests (project: goto_local, reused)
     // =======================================================================
     //

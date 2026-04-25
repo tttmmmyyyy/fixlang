@@ -6,7 +6,8 @@ use super::util::{
     spans_to_locations,
 };
 use crate::ast::expr::{Expr, ExprNode};
-use crate::ast::name::FullName;
+use crate::ast::import::ImportTreeNode;
+use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::program::{Program, SymbolExpr};
 use crate::ast::qual_pred::QualPred;
@@ -158,6 +159,9 @@ fn find_global_value_references(
         collect_symbol_expr_var_refs(&gv.expr, target, &mut refs);
     }
 
+    // Walk import statements.
+    collect_import_refs(program, target, true, &mut refs);
+
     refs
 }
 
@@ -210,6 +214,9 @@ fn find_type_references(
         }
     }
 
+    // Walk import statements.
+    collect_import_refs(program, &target.name, false, &mut refs);
+
     refs
 }
 
@@ -257,6 +264,9 @@ fn find_trait_references(
             collect_qualtype_trait_refs(&member.qual_ty, target, &mut refs);
         }
     }
+
+    // Walk import statements.
+    collect_import_refs(program, &target.name, false, &mut refs);
 
     refs
 }
@@ -729,6 +739,103 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
         if &pred.trait_id == target {
             if let Some(span) = &pred.trait_src {
                 refs.push(span.clone());
+            }
+        }
+    }
+}
+
+// Collect spans of import-statement leaves that refer to `target`.
+//
+// `is_value`: when true, match `ImportTreeNode::Symbol` (lowercase value
+// names like `bar` or `act_x`); when false, match
+// `ImportTreeNode::TypeOrTrait` (uppercase type/trait names).
+//
+// Wildcards (`Any(*)`) are not matched since they do not name `target`
+// explicitly.
+fn collect_import_refs(
+    program: &Program,
+    target: &FullName,
+    is_value: bool,
+    refs: &mut Vec<Span>,
+) {
+    if target.namespace.names.is_empty() {
+        return;
+    }
+    let target_module = target.module();
+    let target_ns_after_module: &[Name] = &target.namespace.names[1..];
+    let target_name = &target.name;
+
+    for (_importer, stmts) in &program.mod_to_import_stmts {
+        for stmt in stmts {
+            if stmt.module.0 != target_module {
+                continue;
+            }
+            for item in &stmt.items {
+                walk_import_node_for_refs(
+                    item,
+                    &[],
+                    target_ns_after_module,
+                    target_name,
+                    is_value,
+                    refs,
+                );
+            }
+            for item in &stmt.hiding {
+                walk_import_node_for_refs(
+                    item,
+                    &[],
+                    target_ns_after_module,
+                    target_name,
+                    is_value,
+                    refs,
+                );
+            }
+        }
+    }
+}
+
+fn walk_import_node_for_refs(
+    node: &ImportTreeNode,
+    traversed: &[Name],
+    target_ns: &[Name],
+    target_name: &str,
+    is_value: bool,
+    refs: &mut Vec<Span>,
+) {
+    match node {
+        ImportTreeNode::Any(_) => {}
+        ImportTreeNode::Symbol(name, span) => {
+            if !is_value {
+                return;
+            }
+            if traversed == target_ns && name == target_name {
+                if let Some(span) = span {
+                    refs.push(span.clone());
+                }
+            }
+        }
+        ImportTreeNode::TypeOrTrait(name, span) => {
+            if is_value {
+                return;
+            }
+            if traversed == target_ns && name == target_name {
+                if let Some(span) = span {
+                    refs.push(span.clone());
+                }
+            }
+        }
+        ImportTreeNode::NameSpace(name, children, _span) => {
+            let mut new_traversed = traversed.to_vec();
+            new_traversed.push(name.clone());
+            for child in children {
+                walk_import_node_for_refs(
+                    child,
+                    &new_traversed,
+                    target_ns,
+                    target_name,
+                    is_value,
+                    refs,
+                );
             }
         }
     }

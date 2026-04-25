@@ -1,0 +1,13 @@
+module Lib;
+
+helper : I64 -> I64;
+helper = |x| x + 1;
+
+truth : I64;
+truth = 42;
+
+type Vec2 = struct { x : I64, y : I64 };
+
+trait a : MyTrait {
+    process : a -> I64;
+}
