@@ -1339,7 +1339,8 @@ fn parse_expr_and(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
             ps[0].clone()
         } else {
             let sub = and_boolean_exprs(&ps[1..]);
-            expr_if(ps[0].clone(), sub, expr_bool_lit(false, None), None)
+            let span = unite_span(&ps[0].source, &sub.source);
+            expr_if(ps[0].clone(), sub, expr_bool_lit(false, span.clone()), span)
         }
     }
 
@@ -1359,7 +1360,8 @@ fn parse_expr_or(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNod
             ps[0].clone()
         } else {
             let sub = or_boolean_exprs(&ps[1..]);
-            expr_if(ps[0].clone(), expr_bool_lit(true, None), sub, None)
+            let span = unite_span(&ps[0].source, &sub.source);
+            expr_if(ps[0].clone(), expr_bool_lit(true, span.clone()), sub, span)
         }
     }
 
