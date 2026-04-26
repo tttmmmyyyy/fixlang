@@ -113,8 +113,7 @@ pub(super) fn handle_prepare_rename(
         send_response(
             id,
             Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename a symbol defined outside this project \
-                 (e.g. Std or a dependency).",
+                "Cannot rename a symbol defined outside this project.",
             )),
         );
         return;
@@ -182,8 +181,7 @@ pub(super) fn handle_rename(
         send_response(
             id,
             Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename a symbol defined outside this project \
-                 (e.g. Std or a dependency).",
+                "Cannot rename a symbol defined outside this project.",
             )),
         );
         return;
