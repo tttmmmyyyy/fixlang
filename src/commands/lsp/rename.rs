@@ -59,10 +59,16 @@ impl ResponseError {
 
 // Handle "textDocument/prepareRename".
 //
-// Returns `null` for positions where rename is not supported (the LSP
-// client treats this as "rename not allowed at this position"), and
-// `defaultBehavior: true` for supported positions (the client computes
-// the token range itself).
+// LSP clients usually surface the result like this:
+//   - `null`                     => "This element can't be renamed."
+//                                   (a generic, not-very-helpful message)
+//   - `ResponseError { message }` => the message verbatim, in a popup
+//   - `DefaultBehavior { true }` => proceed to the rename input box
+//
+// So we use `ResponseError` whenever there is a clear, actionable reason
+// to refuse (stale buffer, external symbol, auto-method click). We keep
+// `null` for cases where the cursor is not on anything renameable in the
+// first place — there's no element to talk about.
 pub(super) fn handle_prepare_rename(
     id: u32,
     params: &TextDocumentPositionParams,
@@ -73,8 +79,8 @@ pub(super) fn handle_prepare_rename(
     // AST the program was built against, even resolve_source_pos and
     // find_node_at can land on the wrong node, so bail out before any
     // node-shape analysis.
-    if check_buffer_in_sync_with_program(program, uri_to_content).is_err() {
-        send_response(id, Ok::<_, ()>(None::<PrepareRenameResponse>));
+    if let Err(msg) = check_buffer_in_sync_with_program(program, uri_to_content) {
+        send_response(id, Err::<(), _>(ResponseError::invalid_request(msg)));
         return;
     }
 
@@ -87,11 +93,30 @@ pub(super) fn handle_prepare_rename(
         return;
     };
 
-    if !rename_target_supported(program, &node)
-        || is_auto_method_var(program, &node)
-        || !target_is_user_defined(program, &node, &pos)
-    {
+    if !rename_target_supported(program, &node) {
+        // Nothing renameable here at all (e.g. a module name) — the
+        // generic "can't be renamed" message is acceptable.
         send_response(id, Ok::<_, ()>(None::<PrepareRenameResponse>));
+        return;
+    }
+    if is_auto_method_var(program, &node) {
+        send_response(
+            id,
+            Err::<(), _>(ResponseError::invalid_request(
+                "Cannot rename an auto-generated accessor. \
+                 Rename the field or variant declaration instead.",
+            )),
+        );
+        return;
+    }
+    if !target_is_user_defined(program, &node, &pos) {
+        send_response(
+            id,
+            Err::<(), _>(ResponseError::invalid_request(
+                "Cannot rename a symbol defined outside this project \
+                 (e.g. Std or a dependency).",
+            )),
+        );
         return;
     }
 
@@ -384,7 +409,14 @@ fn collect_type_rename_edits(
 
     // (C) inline qualified Var references (`Point::@x`, `[^Point::x]`).
     for (_n, gv) in &program.global_values {
-        collect_inline_qualified_edits(&gv.expr, &auto_ns, type_old, new_name, &mut edits);
+        collect_inline_qualified_edits(
+            program,
+            &gv.expr,
+            &auto_ns,
+            type_old,
+            new_name,
+            &mut edits,
+        );
     }
 
     // Drop any individual edit whose span is fully contained in a
@@ -695,8 +727,12 @@ fn make_fullname(namespace_path: &[Name], name: &Name) -> FullName {
 
 // (C) Walk every Var node in `expr` and emit an edit when it is a
 // qualified reference to an auto-method of the type identified by
-// `auto_ns`.
+// `auto_ns`. User-defined items that happen to live in the same
+// namespace (because the user wrote `namespace Point { ... }` next to
+// the type definition) are intentionally left alone — the type rename
+// only moves compiler-generated accessors.
 fn collect_inline_qualified_edits(
+    program: &Program,
     expr: &SymbolExpr,
     auto_ns: &[Name],
     type_old: &Name,
@@ -705,11 +741,19 @@ fn collect_inline_qualified_edits(
 ) {
     match expr {
         SymbolExpr::Simple(typed_expr) => {
-            walk_expr_for_inline_qualified(&typed_expr.expr, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(
+                program,
+                &typed_expr.expr,
+                auto_ns,
+                type_old,
+                new_name,
+                edits,
+            );
         }
         SymbolExpr::Method(impls) => {
             for impl_ in impls {
                 walk_expr_for_inline_qualified(
+                    program,
                     &impl_.expr.expr,
                     auto_ns,
                     type_old,
@@ -722,6 +766,7 @@ fn collect_inline_qualified_edits(
 }
 
 fn walk_expr_for_inline_qualified(
+    program: &Program,
     expr: &Arc<ExprNode>,
     auto_ns: &[Name],
     type_old: &Name,
@@ -730,64 +775,75 @@ fn walk_expr_for_inline_qualified(
 ) {
     match &*expr.expr {
         Expr::Var(v) => {
-            // Only Vars whose resolved namespace matches the type's
-            // auto-namespace and whose target is an auto-method.
+            // Only rewrite Vars that resolve to a compiler-defined method
+            // sitting in the type's auto-namespace. Skipping the
+            // `compiler_defined_method` check would also rewrite
+            // qualified references to helper functions the user wrote
+            // under `namespace Point { ... }`, breaking calls like
+            // `MinCostFlowGraph::create(...)` after the type is renamed.
             if v.name.namespace.names == auto_ns {
-                // Treat `compiler_defined_method` as the marker for
-                // "auto-method" (caller has guaranteed type is struct/union).
-                if let Some(span) = &expr.source {
-                    if let Some(edit) = extract_inline_qualified_edit(span, type_old, new_name) {
-                        edits.push(edit);
+                let is_auto = program
+                    .global_values
+                    .get(&v.name)
+                    .map(|gv| gv.compiler_defined_method)
+                    .unwrap_or(false);
+                if is_auto {
+                    if let Some(span) = &expr.source {
+                        if let Some(edit) =
+                            extract_inline_qualified_edit(span, type_old, new_name)
+                        {
+                            edits.push(edit);
+                        }
                     }
                 }
             }
         }
         Expr::LLVM(_) => {}
         Expr::App(func, args) => {
-            walk_expr_for_inline_qualified(func, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, func, auto_ns, type_old, new_name, edits);
             for a in args {
-                walk_expr_for_inline_qualified(a, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(program, a, auto_ns, type_old, new_name, edits);
             }
         }
         Expr::Lam(_, body) => {
-            walk_expr_for_inline_qualified(body, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, body, auto_ns, type_old, new_name, edits);
         }
         Expr::Let(_pat, bound, val) => {
-            walk_expr_for_inline_qualified(bound, auto_ns, type_old, new_name, edits);
-            walk_expr_for_inline_qualified(val, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, bound, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, val, auto_ns, type_old, new_name, edits);
         }
         Expr::If(c, t, e) => {
-            walk_expr_for_inline_qualified(c, auto_ns, type_old, new_name, edits);
-            walk_expr_for_inline_qualified(t, auto_ns, type_old, new_name, edits);
-            walk_expr_for_inline_qualified(e, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, c, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, t, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, e, auto_ns, type_old, new_name, edits);
         }
         Expr::Match(c, pat_vals) => {
-            walk_expr_for_inline_qualified(c, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, c, auto_ns, type_old, new_name, edits);
             for (_p, v) in pat_vals {
-                walk_expr_for_inline_qualified(v, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(program, v, auto_ns, type_old, new_name, edits);
             }
         }
         Expr::TyAnno(e, _) => {
-            walk_expr_for_inline_qualified(e, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, e, auto_ns, type_old, new_name, edits);
         }
         Expr::MakeStruct(_, fields) => {
             for (_, _, val) in fields {
-                walk_expr_for_inline_qualified(val, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(program, val, auto_ns, type_old, new_name, edits);
             }
         }
         Expr::ArrayLit(elems) => {
             for e in elems {
-                walk_expr_for_inline_qualified(e, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(program, e, auto_ns, type_old, new_name, edits);
             }
         }
         Expr::FFICall(_, _, _, _, args, _) => {
             for a in args {
-                walk_expr_for_inline_qualified(a, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(program, a, auto_ns, type_old, new_name, edits);
             }
         }
         Expr::Eval(side, main) => {
-            walk_expr_for_inline_qualified(side, auto_ns, type_old, new_name, edits);
-            walk_expr_for_inline_qualified(main, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, side, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(program, main, auto_ns, type_old, new_name, edits);
         }
     }
 }

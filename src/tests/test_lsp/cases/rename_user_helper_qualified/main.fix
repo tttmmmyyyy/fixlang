@@ -1,0 +1,13 @@
+module Main;
+
+import Lib::{MinCostFlowGraph, MinCostFlowGraph::create};
+
+// Qualified call to the user-defined helper. After renaming the type
+// `MinCostFlowGraph` to `MCFGraph`, this call must keep using
+// `MinCostFlowGraph::create` (the helper still lives in the original
+// namespace), not become `MCFGraph::create`.
+make_graph : MinCostFlowGraph;
+make_graph = MinCostFlowGraph::create(10);
+
+main : IO ();
+main = pure();

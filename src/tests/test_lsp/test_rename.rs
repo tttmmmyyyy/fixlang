@@ -99,8 +99,9 @@ mod tests {
                 .clone()
         }
 
-        // Send `textDocument/prepareRename` and return the result value.
-        fn prepare_rename(&mut self, file: &str, line: u32, col: u32) -> Value {
+        // Send `textDocument/prepareRename` and return the full response
+        // value (so tests can inspect `result` and `error` independently).
+        fn prepare_rename_raw(&mut self, file: &str, line: u32, col: u32) -> Value {
             let uri = self.file_uri(file);
             let id = self
                 .client
@@ -113,10 +114,20 @@ mod tests {
                 )
                 .expect("Failed to send prepareRename request");
             self.client.wait_for_server(Duration::from_secs(5));
-            let resp = self
-                .client
+            self.client
                 .get_response(id)
-                .expect("Should receive a prepareRename response");
+                .expect("Should receive a prepareRename response")
+        }
+
+        // Send `textDocument/prepareRename` and return the `result`
+        // value; panics if the server returned a `ResponseError`.
+        fn prepare_rename(&mut self, file: &str, line: u32, col: u32) -> Value {
+            let resp = self.prepare_rename_raw(file, line, col);
+            assert!(
+                resp.get("error").is_none(),
+                "prepareRename returned error: {:?}",
+                resp.get("error")
+            );
             resp.get("result")
                 .expect("prepareRename response should have a result")
                 .clone()
@@ -593,15 +604,22 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-3: prepareRename returns null on an auto-generated accessor.
+    /// RG-3: prepareRename returns a ResponseError with an explanatory
+    /// message on an auto-generated accessor (so the editor can surface
+    /// a useful message instead of the generic "can't be renamed").
     #[test]
     fn test_prepare_rename_reject_at_accessor() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
-        let result = ctx.prepare_rename("lib.fix", 15, 14);
+        let resp = ctx.prepare_rename_raw("lib.fix", 15, 14);
+        let msg = resp
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
         assert!(
-            result.is_null(),
-            "expected null on `@x`, got: {:?}",
-            result
+            msg.contains("auto-generated"),
+            "expected auto-generated rejection on prepareRename, got: {:?}",
+            resp
         );
         ctx.shutdown();
     }
@@ -627,15 +645,20 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-5: prepareRename returns null on an external symbol.
+    /// RG-5: prepareRename returns a ResponseError on an external symbol.
     #[test]
     fn test_prepare_rename_reject_external() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
-        let result = ctx.prepare_rename("lib.fix", 3, 13);
+        let resp = ctx.prepare_rename_raw("lib.fix", 3, 13);
+        let msg = resp
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
         assert!(
-            result.is_null(),
-            "expected null on `I64` (external), got: {:?}",
-            result
+            msg.contains("outside this project"),
+            "expected external-symbol rejection on prepareRename, got: {:?}",
+            resp
         );
         ctx.shutdown();
     }
@@ -677,7 +700,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RG-7: prepareRename returns null when the buffer is stale.
+    /// RG-7: prepareRename returns a ResponseError when the buffer is
+    /// stale, so the editor can show the actionable message ("save and
+    /// wait for diagnostics").
     #[test]
     fn test_prepare_rename_reject_stale_buffer() {
         let mut ctx = LspTestCtx::setup("rename_types", &["lib.fix", "main.fix"]);
@@ -694,11 +719,16 @@ mod tests {
             .expect("Failed to send didChange");
         ctx.client.wait_for_server(std::time::Duration::from_millis(300));
 
-        let result = ctx.prepare_rename("lib.fix", 3, 5);
+        let resp = ctx.prepare_rename_raw("lib.fix", 3, 5);
+        let msg = resp
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("");
         assert!(
-            result.is_null(),
-            "expected null after stale buffer change, got: {:?}",
-            result
+            msg.contains("edited since the last successful build"),
+            "expected stale-buffer rejection on prepareRename, got: {:?}",
+            resp
         );
         ctx.shutdown();
     }
@@ -890,7 +920,55 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// RD-6: a mixed import (`Lib::{Point::{act_x, user_helper}}`) is
+    /// RD-6 regression: a qualified call to a user-defined helper
+    /// (`MinCostFlowGraph::create(...)`) sitting in the type's
+    /// namespace must NOT have its `MinCostFlowGraph::` prefix rewritten
+    /// when the type is renamed. Only auto-generated accessors travel
+    /// with the type. (Originally observed in cp-library/mincostflow.)
+    #[test]
+    fn test_rename_struct_type_skips_user_helper_qualified_call() {
+        let mut ctx = LspTestCtx::setup(
+            "rename_user_helper_qualified",
+            &["lib.fix", "main.fix"],
+        );
+        let we = ctx.rename("lib.fix", 2, 5, "MCFGraph");
+
+        // Inspect every edit: any change inside main.fix's body must
+        // be a bare-token rename, never a sub-span rewrite of
+        // `MinCostFlowGraph::create`.
+        let changes = we.get("changes").unwrap().as_object().unwrap();
+        for (uri, arr) in changes {
+            if !uri.contains("main.fix") {
+                continue;
+            }
+            for edit in arr.as_array().unwrap() {
+                let r = edit.get("range").unwrap();
+                let line = r["start"]["line"].as_u64().unwrap();
+                let col = r["start"]["character"].as_u64().unwrap();
+                let new_text = edit.get("newText").and_then(|v| v.as_str()).unwrap();
+                // The `make_graph = MinCostFlowGraph::create(10);` line
+                // is line 9. The qualifier `MinCostFlowGraph` here must
+                // not be touched, so no edit should land on its column
+                // (col 13). The only valid edits on line 9 are on the
+                // type-annotation `MinCostFlowGraph` of line 8.
+                assert!(
+                    !(line == 9 && col == 13),
+                    "should not rewrite `MinCostFlowGraph::` qualifier in user-helper call, got edit: {:?}",
+                    edit
+                );
+                // And we definitely shouldn't be writing `MCFGraph::create`
+                // anywhere as a single new_text.
+                assert!(
+                    !new_text.contains("MCFGraph::create"),
+                    "edit should not produce `MCFGraph::create` text: {:?}",
+                    edit
+                );
+            }
+        }
+        ctx.shutdown();
+    }
+
+    /// RD-7: a mixed import (`Lib::{Point::{act_x, user_helper}}`) is
     /// rebuilt as a single TextEdit covering the entire import statement.
     /// The new text must contain both `Pixel::` (for the auto-method
     /// half) and `Point::` (for the user-defined half).
