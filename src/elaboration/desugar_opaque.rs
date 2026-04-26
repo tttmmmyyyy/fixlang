@@ -627,20 +627,22 @@ fn resolve_opaque_tycon_in_pattern(
             })
         }
         Pattern::Struct(tc, field_to_pat) => {
-            let new_field_to_pat: Vec<_> = field_to_pat
-                .iter()
-                .map(|(name, subpat)| {
-                    (name.clone(), resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions))
-                })
-                .collect();
+            let mut new_field_to_pat = field_to_pat.clone();
+            for (_, _, subpat) in new_field_to_pat.iter_mut() {
+                *subpat = resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions);
+            }
             Arc::new(PatternNode {
                 pattern: Pattern::Struct(tc.clone(), new_field_to_pat),
                 info,
             })
         }
-        Pattern::Union(variant, subpat) => {
+        Pattern::Union(variant, variant_src, subpat) => {
             Arc::new(PatternNode {
-                pattern: Pattern::Union(variant.clone(), resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions)),
+                pattern: Pattern::Union(
+                    variant.clone(),
+                    variant_src.clone(),
+                    resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions),
+                ),
                 info,
             })
         }
@@ -712,15 +714,10 @@ pub fn resolve_opaque_tycon_in_expr(
             expr.set_eval_side(new_side).set_eval_main(new_main)
         }
         Expr::MakeStruct(_tc, fields) => {
-            let new_fields: Vec<_> = fields
-                .iter()
-                .map(|(name, e)| {
-                    (
-                        name.clone(),
-                        resolve_opaque_tycon_in_expr(e, opaque_resolutions),
-                    )
-                })
-                .collect();
+            let mut new_fields = fields.clone();
+            for (_, _, e) in new_fields.iter_mut() {
+                *e = resolve_opaque_tycon_in_expr(e, opaque_resolutions);
+            }
             expr.set_make_struct_fields(new_fields)
         }
         Expr::FFICall(_name, _ret_ty, _param_tys, _va_args, args, _is_ios) => {

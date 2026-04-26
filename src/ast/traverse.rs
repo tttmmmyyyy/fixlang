@@ -418,13 +418,12 @@ pub trait ExprVisitor {
                 let res = self.start_visit_make_struct(&expr, state);
                 match res {
                     StartVisitResult::VisitChildren => {
-                        let mut new_fields = vec![];
-                        for (name, val) in fields {
-                            let val = self.visit_expr(&val, state).unwrap(&mut changed);
-                            new_fields.push((name.clone(), val));
+                        let mut fields = fields.clone();
+                        for field in &mut fields {
+                            field.2 = self.visit_expr(&field.2, state).unwrap(&mut changed);
                         }
                         if changed {
-                            expr = expr.set_make_struct_fields(new_fields);
+                            expr = expr.set_make_struct_fields(fields);
                         }
                     }
                     StartVisitResult::ReplaceAndRevisit(expr) => {

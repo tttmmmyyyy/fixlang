@@ -1092,7 +1092,7 @@ impl TypeCheckContext {
                 let field_names_in_struct_defn: Set<Name> =
                     Set::from_iter(field_names.iter().cloned());
                 let field_names_in_expression: Set<Name> =
-                    Set::from_iter(fields.iter().map(|(name, _)| name.clone()));
+                    Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
                 for f in &field_names_in_struct_defn {
                     if !field_names_in_expression.contains(f) {
                         return Err(Errors::from_msg_srcs(
@@ -1120,13 +1120,20 @@ impl TypeCheckContext {
                 assert_eq!(field_tys.len(), fields.len());
 
                 // Reorder fields as ordering of fields in struct definition.
-                let fields: Map<Name, Arc<ExprNode>> = Map::from_iter(fields.iter().cloned());
+                let fields: Map<Name, (Option<Span>, Arc<ExprNode>)> = Map::from_iter(
+                    fields
+                        .iter()
+                        .map(|(n, s, e)| (n.clone(), (s.clone(), e.clone()))),
+                );
                 let mut fields = field_names
                     .iter()
-                    .map(|name| (name.clone(), fields[name].clone()))
+                    .map(|name| {
+                        let (name_src, e) = fields[name].clone();
+                        (name.clone(), name_src, e)
+                    })
                     .collect::<Vec<_>>();
 
-                for (field_ty, (_, field_expr)) in field_tys.iter().zip(fields.iter_mut()) {
+                for (field_ty, (_, _, field_expr)) in field_tys.iter().zip(fields.iter_mut()) {
                     *field_expr = self.unify_type_of_expr(field_expr, field_ty.clone())?;
                 }
                 Ok(ei.set_make_struct_fields(fields))
@@ -1208,7 +1215,7 @@ impl TypeCheckContext {
                 let fields_str = ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
                 let fields_pat = pats
                     .iter()
-                    .map(|(name, _)| name.clone())
+                    .map(|(name, _, _)| name.clone())
                     .collect::<Set<_>>();
                 if fields_pat.len() < pats.len() {
                     return Err(Errors::from_msg_srcs(
@@ -1228,11 +1235,11 @@ impl TypeCheckContext {
                         ));
                     }
                 }
-                for (_, p) in pats {
+                for (_, _, p) in pats {
                     self.validate_pattern(p)?;
                 }
             }
-            Pattern::Union(_, subpat) => {
+            Pattern::Union(_, _, subpat) => {
                 self.validate_pattern(subpat)?;
             }
         }
@@ -1748,13 +1755,13 @@ impl TypeCheckContext {
                 // Currently, type annotation is not used in the following processes, so there is no need to finish type annotation.
                 pat
             }
-            Pattern::Union(_, subpat) => {
+            Pattern::Union(_, _, subpat) => {
                 let subpat = self.fix_types_for_pattern(subpat.clone())?;
                 pat.set_union_pat(subpat)
             }
             Pattern::Struct(_, fied_to_pat) => {
                 let mut field_to_pat = fied_to_pat.clone();
-                for (_field_name, subpat) in field_to_pat.iter_mut() {
+                for (_field_name, _, subpat) in field_to_pat.iter_mut() {
                     let new_subpat = self.fix_types_for_pattern(subpat.clone())?;
                     *subpat = new_subpat;
                 }
@@ -1841,12 +1848,11 @@ impl TypeCheckContext {
             }
             Expr::TyAnno(e, _) => expr.set_tyanno_expr(self.fix_types(e.clone())?),
             Expr::MakeStruct(_tc, fields) => {
-                let mut fields_res = vec![];
-                for (name, e) in fields {
-                    let e = self.fix_types(e.clone())?;
-                    fields_res.push((name.clone(), e));
+                let mut new_fields = fields.clone();
+                for (_, _, e) in new_fields.iter_mut() {
+                    *e = self.fix_types(e.clone())?;
                 }
-                expr.set_make_struct_fields(fields_res)
+                expr.set_make_struct_fields(new_fields)
             }
             Expr::ArrayLit(elems) => {
                 let elems = collect_results(elems.iter().map(|e| self.fix_types(e.clone())))?;

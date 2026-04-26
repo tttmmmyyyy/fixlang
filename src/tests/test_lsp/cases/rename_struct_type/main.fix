@@ -1,0 +1,17 @@
+module Main;
+
+// Various ways another module can refer to the struct and its
+// auto-namespace. Each of these should keep working after the type is
+// renamed.
+import Lib::{Point, Point::{@x, act_x}};
+
+// Inline qualified reference to an auto-method (the getter `@x`).
+qualified_get : Point -> I64;
+qualified_get = |p| Point::@x(p);
+
+// Qualified index syntax: `[^Point::x]` desugars to `Point::act_x`.
+qualified_idx : Point -> Point;
+qualified_idx = |p| p[^Point::x].iset(0);
+
+main : IO ();
+main = pure();

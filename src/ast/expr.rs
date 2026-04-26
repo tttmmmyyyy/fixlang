@@ -396,7 +396,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn get_make_struct_fields(&self) -> Vec<(Name, Arc<ExprNode>)> {
+    pub fn get_make_struct_fields(&self) -> Vec<(Name, Option<Span>, Arc<ExprNode>)> {
         match &*self.expr {
             Expr::MakeStruct(_, fields) => fields.clone(),
             _ => {
@@ -666,7 +666,7 @@ impl ExprNode {
         match &*self.expr {
             Expr::MakeStruct(tc, fields) => {
                 let mut fields = fields.clone();
-                for (name, expr) in &mut fields {
+                for (name, _, expr) in &mut fields {
                     if name == field_name {
                         *expr = field_expr.clone();
                     }
@@ -680,7 +680,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_make_struct_fields(&self, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<Self> {
+    pub fn set_make_struct_fields(&self, fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::MakeStruct(tc, _) => {
@@ -846,7 +846,7 @@ impl ExprNode {
                 let mut tc = tc.as_ref().clone();
                 tc.resolve_namespace(ctx, &self.source)?;
                 expr = expr.set_make_struct_tycon(Arc::new(tc));
-                for (field_name, field_expr) in fields {
+                for (field_name, _, field_expr) in fields {
                     let field_expr = field_expr.resolve_namespace(ctx)?;
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }
@@ -931,7 +931,7 @@ impl ExprNode {
                         &[&self.source],
                     ));
                 }
-                for (field_name, field_expr) in fields {
+                for (field_name, _, field_expr) in fields {
                     let field_expr = field_expr.resolve_type_aliases(type_env)?;
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }
@@ -1031,7 +1031,12 @@ impl ExprNode {
                 ty.find_node_at(pos)
             }
             Expr::MakeStruct(tc, fields) => {
-                for (_, field_expr) in fields {
+                for (name, name_src, field_expr) in fields {
+                    if let Some(ns) = name_src {
+                        if ns.includes_pos_lsp(pos) {
+                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
+                        }
+                    }
                     let node = field_expr.find_node_at(pos);
                     if node.is_some() {
                         return node;
@@ -1122,7 +1127,7 @@ impl ExprNode {
             Expr::TyAnno(e, _) => e.free_vars(),
             Expr::MakeStruct(_, fields) => {
                 let mut free_vars = Set::default();
-                for (_field_name, field_expr) in fields {
+                for (_field_name, _, field_expr) in fields {
                     free_vars.extend(field_expr.free_vars());
                 }
                 free_vars
@@ -1214,10 +1219,10 @@ impl ExprNode {
             }
             Expr::MakeStruct(tc, fields) => {
                 let new_tc = tc.global_to_absolute();
-                let new_fields = fields
-                    .iter()
-                    .map(|(name, expr)| (name.clone(), expr.global_to_absolute()))
-                    .collect();
+                let mut new_fields = fields.clone();
+                for (_, _, expr) in new_fields.iter_mut() {
+                    *expr = expr.global_to_absolute();
+                }
                 Arc::new(Expr::MakeStruct(new_tc, new_fields))
             }
             Expr::ArrayLit(elems) => {
@@ -1280,7 +1285,10 @@ pub enum Expr {
     Match(Arc<ExprNode>, Vec<(Arc<PatternNode>, Arc<ExprNode>)>),
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
     ArrayLit(Vec<Arc<ExprNode>>),
-    MakeStruct(Arc<TyCon>, Vec<(Name, Arc<ExprNode>)>),
+    // Struct construction. 
+    // Each entry is (field name, optional source span
+    // of just that field name, field value).
+    MakeStruct(Arc<TyCon>, Vec<(Name, Option<Span>, Arc<ExprNode>)>),
     FFICall(
         Name,               /* function name */
         Arc<TyCon>,         /* Return type */
@@ -1391,7 +1399,7 @@ impl Expr {
                 .append_to_last_line(&t.to_string()),
             Expr::MakeStruct(tc, fields) => {
                 let mut field_lines: Vec<Text> = vec![];
-                for (name, expr) in fields {
+                for (name, _, expr) in fields {
                     let field = Text::from_str(&name)
                         .append_to_last_line(" : ")
                         .append_nobreak(expr.expr.stringify().brace_if_multiline());
@@ -1595,7 +1603,22 @@ pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) ->
     Arc::new(Expr::TyAnno(expr, ty)).into_expr_node(src)
 }
 
-pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<ExprNode> {
+// Construct a MakeStruct from `(field name, field value)` pairs, with no
+// per-field-name source spans (the entries get `None` spans).
+pub fn expr_make_struct(
+    tc: Arc<TyCon>,
+    fields: Vec<(Name, Arc<ExprNode>)>,
+) -> Arc<ExprNode> {
+    let fields = fields.into_iter().map(|(n, e)| (n, None, e)).collect();
+    Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
+}
+
+// Construct a MakeStruct from `(field name, optional field-name source
+// span, field value)` triples.
+pub fn expr_make_struct_with_spans(
+    tc: Arc<TyCon>,
+    fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>,
+) -> Arc<ExprNode> {
     Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
 }
 

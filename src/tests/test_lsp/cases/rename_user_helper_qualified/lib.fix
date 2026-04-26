@@ -1,0 +1,11 @@
+module Lib;
+
+type MinCostFlowGraph = unbox struct { n : I64 };
+
+// User-defined helper sitting in the same auto-namespace as the
+// struct's compiler-generated methods. Renaming the type must NOT
+// touch this name (it's a user item, not an auto-method).
+namespace MinCostFlowGraph {
+    create : I64 -> MinCostFlowGraph;
+    create = |n| MinCostFlowGraph { n : n };
+}

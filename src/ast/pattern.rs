@@ -64,7 +64,7 @@ impl PatternNode {
                 // Recursively match each field pattern with its expected type
                 let field_types = type_.field_types(type_env);
                 let mut field_to_pat = field_to_pat.clone();
-                for (field_name, pat) in field_to_pat.iter_mut() {
+                for (field_name, _, pat) in field_to_pat.iter_mut() {
                     let field_idx = *field_name_to_idx.get(field_name)?;
                     let field_ty = &field_types[field_idx];
                     let matched_pat = pat.get_typed_matching(field_ty, type_env)?;
@@ -76,7 +76,7 @@ impl PatternNode {
                         .set_struct_field_to_pat(field_to_pat),
                 )
             }
-            Pattern::Union(variant_name, subpat) => {
+            Pattern::Union(variant_name, _, subpat) => {
                 let tc = TyCon::new(variant_name.namespace.clone().to_fullname());
                 let variant_name = &variant_name.name;
 
@@ -142,7 +142,7 @@ impl PatternNode {
                     })
                     .collect::<Map<_, _>>();
                 let mut field_to_pat = field_to_pat.clone();
-                for (field_name, pat) in &mut field_to_pat {
+                for (field_name, _, pat) in &mut field_to_pat {
                     let (typed_pat, var_ty) = pat.get_typed(typechcker)?;
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
@@ -167,7 +167,7 @@ impl PatternNode {
                     var_to_ty,
                 ))
             }
-            Pattern::Union(variant_name, subpat) => {
+            Pattern::Union(variant_name, _, subpat) => {
                 let (variant_idx, tc, _ti) =
                     Pattern::get_variant_info(&variant_name, &typechcker.type_env);
 
@@ -214,11 +214,11 @@ impl PatternNode {
         match &self.pattern {
             Pattern::Var(v, _) => out.push((v.name.clone(), self.info.clone())),
             Pattern::Struct(_, fields) => {
-                for (_, sub) in fields {
+                for (_, _, sub) in fields {
                     sub.collect_var_infos(out);
                 }
             }
-            Pattern::Union(_, sub) => sub.collect_var_infos(out),
+            Pattern::Union(_, _, sub) => sub.collect_var_infos(out),
         }
     }
 
@@ -246,7 +246,16 @@ impl PatternNode {
                 ))
             }
             Pattern::Struct(tc, field_to_pat) => {
-                for (_, pat) in field_to_pat {
+                // Check if cursor is on any field-name span first.
+                for (name, name_src, pat) in field_to_pat {
+                    if let Some(ns) = name_src {
+                        if ns.includes_pos_lsp(pos) {
+                            return Some(EndNode::Field(
+                                tc.as_ref().clone(),
+                                name.clone(),
+                            ));
+                        }
+                    }
                     let res = pat.find_node_at_pos(pos);
                     if res.is_some() {
                         return res;
@@ -254,7 +263,13 @@ impl PatternNode {
                 }
                 Some(EndNode::Type(tc.as_ref().clone()))
             }
-            Pattern::Union(_variant, subpat) => {
+            Pattern::Union(variant, variant_src, subpat) => {
+                if let Some(vs) = variant_src {
+                    if vs.includes_pos_lsp(pos) && !variant.namespace.names.is_empty() {
+                        let tc = TyCon::new(variant.namespace.clone().to_fullname());
+                        return Some(EndNode::Variant(tc, variant.name.clone()));
+                    }
+                }
                 let node = subpat.find_node_at_pos(pos);
                 if node.is_some() {
                     return node;
@@ -279,15 +294,15 @@ impl PatternNode {
             Pattern::Struct(tc, field_to_pat) => {
                 let mut tc = tc.as_ref().clone();
                 tc.resolve_namespace(ctx, &self.info.source)?;
-                let mut field_to_pat_res = vec![];
-                for (field_name, pat) in field_to_pat {
-                    field_to_pat_res.push((field_name.clone(), pat.resolve_namespace(ctx)?));
+                let mut field_to_pat = field_to_pat.clone();
+                for (_, _, pat) in &mut field_to_pat {
+                    *pat = pat.resolve_namespace(ctx)?;
                 }
                 Ok(self
                     .set_struct_tycon(Arc::new(tc))
-                    .set_struct_field_to_pat(field_to_pat_res))
+                    .set_struct_field_to_pat(field_to_pat))
             }
-            Pattern::Union(_, subpat) => {
+            Pattern::Union(_, _, subpat) => {
                 // Namespace of the variant name is resolved in the type-checking phase (`validate_variant_name`).
                 let subpat = subpat.resolve_namespace(ctx)?;
                 Ok(self.set_union_pat(subpat))
@@ -313,14 +328,13 @@ impl PatternNode {
                         &[&self.info.source],
                     ));
                 }
-                let mut field_to_pat_res = vec![];
-                for (field_name, pat) in field_to_pat {
-                    field_to_pat_res
-                        .push((field_name.clone(), pat.resolve_type_aliases(type_env)?));
+                let mut field_to_pat = field_to_pat.clone();
+                for (_, _, pat) in &mut field_to_pat {
+                    *pat = pat.resolve_type_aliases(type_env)?;
                 }
-                Ok(self.set_struct_field_to_pat(field_to_pat_res))
+                Ok(self.set_struct_field_to_pat(field_to_pat))
             }
-            Pattern::Union(_, subpat) => {
+            Pattern::Union(_, _, subpat) => {
                 let subpat = subpat.resolve_type_aliases(type_env)?;
                 Ok(self.set_union_pat(subpat))
             }
@@ -338,17 +352,18 @@ impl PatternNode {
             }
             Pattern::Struct(tc, field_to_pat) => {
                 let new_tc = tc.global_to_absolute();
-                let new_field_to_pat = field_to_pat
-                    .iter()
-                    .map(|(name, pat)| (name.clone(), pat.global_to_absolute()))
-                    .collect();
-                node.pattern = Pattern::Struct(new_tc, new_field_to_pat);
+                let mut field_to_pat = field_to_pat.clone();
+                for (_, _, pat) in &mut field_to_pat {
+                    *pat = pat.global_to_absolute();
+                }
+                node.pattern = Pattern::Struct(new_tc, field_to_pat);
             }
-            Pattern::Union(variant_name, subpat) => {
+            Pattern::Union(variant_name, variant_src, subpat) => {
                 let mut new_variant_name = variant_name.clone();
                 new_variant_name.global_to_absolute();
                 let new_subpat = subpat.global_to_absolute();
-                node.pattern = Pattern::Union(new_variant_name, new_subpat);
+                node.pattern =
+                    Pattern::Union(new_variant_name, variant_src.clone(), new_subpat);
             }
         }
         Arc::new(node)
@@ -378,7 +393,7 @@ impl PatternNode {
 
     pub fn set_struct_field_to_pat(
         self: &PatternNode,
-        field_to_pat: Vec<(Name, Arc<PatternNode>)>,
+        field_to_pat: Vec<(Name, Option<Span>, Arc<PatternNode>)>,
     ) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
@@ -393,8 +408,8 @@ impl PatternNode {
     pub fn set_union_pat(self: &PatternNode, pat: Arc<PatternNode>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
-            Pattern::Union(variant, _) => {
-                node.pattern = Pattern::Union(variant.clone(), pat);
+            Pattern::Union(variant, variant_src, _) => {
+                node.pattern = Pattern::Union(variant.clone(), variant_src.clone(), pat);
             }
             _ => panic!(),
         }
@@ -403,13 +418,13 @@ impl PatternNode {
 
     pub fn get_union_variant(&self) -> &FullName {
         match &self.pattern {
-            Pattern::Union(variant, _) => variant,
+            Pattern::Union(variant, _, _) => variant,
             _ => panic!(),
         }
     }
 
     pub fn is_union(&self) -> bool {
-        matches!(&self.pattern, Pattern::Union(_, _))
+        matches!(&self.pattern, Pattern::Union(_, _, _))
     }
 
     pub fn is_var(&self) -> bool {
@@ -448,9 +463,25 @@ impl PatternNode {
         })
     }
 
+    // Construct a struct destructuring pattern from `(field name,
+    // sub-pattern)` pairs, with no per-field-name source spans (the
+    // entries get `None` spans).
     pub fn make_struct(
         tycon: Arc<TyCon>,
         fields: Vec<(Name, Arc<PatternNode>)>,
+    ) -> Arc<PatternNode> {
+        let fields = fields.into_iter().map(|(n, p)| (n, None, p)).collect();
+        Arc::new(PatternNode {
+            pattern: Pattern::Struct(tycon, fields),
+            info: PatternInfo::default(),
+        })
+    }
+
+    // Construct a struct destructuring pattern from `(field name,
+    // optional field-name source span, sub-pattern)` triples.
+    pub fn make_struct_with_spans(
+        tycon: Arc<TyCon>,
+        fields: Vec<(Name, Option<Span>, Arc<PatternNode>)>,
     ) -> Arc<PatternNode> {
         Arc::new(PatternNode {
             pattern: Pattern::Struct(tycon, fields),
@@ -458,14 +489,40 @@ impl PatternNode {
         })
     }
 
+    // Construct a union match pattern with no variant-name source span.
+    #[allow(dead_code)]
     pub fn make_union(variant: FullName, subpat: Arc<PatternNode>) -> Arc<PatternNode> {
         Arc::new(PatternNode {
-            pattern: Pattern::Union(variant, subpat),
+            pattern: Pattern::Union(variant, None, subpat),
             info: PatternInfo::default(),
         })
     }
 
-    // Validate the variant name of `Union` pattern.
+    // Construct a union match pattern with the variant name's source span.
+    pub fn make_union_with_span(
+        variant: FullName,
+        variant_src: Option<Span>,
+        subpat: Arc<PatternNode>,
+    ) -> Arc<PatternNode> {
+        Arc::new(PatternNode {
+            pattern: Pattern::Union(variant, variant_src, subpat),
+            info: PatternInfo::default(),
+        })
+    }
+
+    // Validate the variant name of a `Union` pattern against the union
+    // type being matched, and return a normalized copy of the pattern.
+    //
+    // Validation: the parsed variant name's namespace must be a suffix of
+    // the union's namespace, and the bare variant name must be one of the
+    // union's variants.
+    //
+    // Normalization (the reason this returns a new pattern rather than
+    // just `Result<(), Errors>`): the user may have written the variant
+    // unqualified (e.g. `some(v)`) or partially qualified (e.g.
+    // `Maybe::some(v)`); we replace its namespace with the union's full
+    // namespace so downstream code can treat the variant as a single,
+    // fully-qualified `FullName` without re-resolving it.
     pub fn validate_variant_name(
         self: &PatternNode,
         cond_tycon: &TyCon,
@@ -473,7 +530,7 @@ impl PatternNode {
     ) -> Result<Arc<PatternNode>, Errors> {
         let name_space = cond_tycon.name.to_namespace();
         match &self.pattern {
-            Pattern::Union(variant, subpat) => {
+            Pattern::Union(variant, variant_src, subpat) => {
                 // Check the variant name.
                 let is_ns_ok = variant.namespace.is_suffix_of(&name_space);
                 let is_name_ok = cond_ti.fields.iter().any(|f| &f.name == &variant.name);
@@ -492,7 +549,7 @@ impl PatternNode {
                 let mut variant = variant.clone();
                 variant.namespace = name_space;
                 Ok(Arc::new(PatternNode {
-                    pattern: Pattern::Union(variant, subpat.clone()),
+                    pattern: Pattern::Union(variant, variant_src.clone(), subpat.clone()),
                     info: self.info.clone(),
                 }))
             }
@@ -511,11 +568,11 @@ impl PatternNode {
                 }
             }
             Pattern::Struct(_, fields) => {
-                for (_, pat) in fields {
+                for (_, _, pat) in fields {
                     *pat = pat.rename_by_map(rename);
                 }
             }
-            Pattern::Union(_, pat) => {
+            Pattern::Union(_, _, pat) => {
                 *pat = pat.rename_by_map(rename);
             }
         }
@@ -560,8 +617,12 @@ pub struct PatternInfo {
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Pattern {
     Var(Arc<Var>, Option<Arc<TypeNode>>),
-    Struct(Arc<TyCon>, Vec<(Name, Arc<PatternNode>)>),
-    Union(FullName, Arc<PatternNode>),
+    // Struct destructuring pattern. Each entry is (field name, optional
+    // source span of just the field name, sub-pattern).
+    Struct(Arc<TyCon>, Vec<(Name, Option<Span>, Arc<PatternNode>)>),
+    // Union match pattern. The optional Span is the source span of just the
+    // variant name (without any namespace prefix).
+    Union(FullName, Option<Span>, Arc<PatternNode>),
 }
 
 impl Pattern {
@@ -583,12 +644,12 @@ impl Pattern {
             Pattern::Var(_, _) => 1,
             Pattern::Struct(_, field_to_pat) => {
                 let mut ret = 0;
-                for (_, pat) in field_to_pat {
+                for (_, _, pat) in field_to_pat {
                     ret += pat.pattern.count_vars();
                 }
                 ret
             }
-            Pattern::Union(_, pat) => pat.pattern.count_vars(),
+            Pattern::Union(_, _, pat) => pat.pattern.count_vars(),
         }
     }
 
@@ -598,12 +659,12 @@ impl Pattern {
             Pattern::Var(var, _) => make_set([var.name.clone()]),
             Pattern::Struct(_, pats) => {
                 let mut ret = Set::default();
-                for (_, pat) in pats {
+                for (_, _, pat) in pats {
                     ret.extend(pat.pattern.vars());
                 }
                 ret
             }
-            Pattern::Union(_, pat) => pat.pattern.vars(),
+            Pattern::Union(_, _, pat) => pat.pattern.vars(),
         }
     }
 
@@ -629,7 +690,7 @@ impl Pattern {
                 if let Some(n) = get_tuple_n(&tc.name) {
                     let pats = fields
                         .iter()
-                        .map(|(_, pat)| pat.to_string_internal(with_type))
+                        .map(|(_, _, pat)| pat.to_string_internal(with_type))
                         .collect::<Vec<_>>();
                     if n == 1 {
                         format!("({},)", pats[0])
@@ -639,14 +700,14 @@ impl Pattern {
                 } else {
                     let pats = fields
                         .iter()
-                        .map(|(name, pat)| {
+                        .map(|(name, _, pat)| {
                             format!("{}: {}", name, pat.to_string_internal(with_type))
                         })
                         .collect::<Vec<_>>();
                     format!("{} {{{}}}", tc.to_string(), pats.join(", "))
                 }
             }
-            Pattern::Union(variant, pat) => {
+            Pattern::Union(variant, _, pat) => {
                 format!(
                     "{}({})",
                     variant.to_string(),
@@ -682,7 +743,7 @@ impl Pattern {
         let mut found_otherwise = false;
         for pat in pats {
             match &pat.pattern {
-                Pattern::Union(variant, _) => {
+                Pattern::Union(variant, _, _) => {
                     if !variants.contains(&variant.name) {
                         return Err(Errors::from_msg_srcs(
                             format!(

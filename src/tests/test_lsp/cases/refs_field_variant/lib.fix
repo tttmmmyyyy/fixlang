@@ -1,0 +1,53 @@
+module Lib;
+
+// Struct with two fields. Cursor on `x` (line 4, col 28) should resolve
+// to EndNode::Field(Lib::Point, "x").
+type Point = unbox struct { x : I64, y : I64 };
+
+// Union with two variants. Cursor on `some` (line 9, col 4) should
+// resolve to EndNode::Variant(Lib::Maybe, "some").
+type Maybe a = box union {
+    some : a,
+    none : (),
+};
+
+// Auto-method usage sites + bare field-name uses (MakeStruct,
+// Pattern::Struct).
+make_point : Point;
+make_point = Point { x : 1, y : 2 };
+
+destruct : Point -> I64;
+destruct = |Point { x : x, y : _ }| x;
+
+use_getter : Point -> I64;
+use_getter = |p| p.@x;
+
+use_setter : Point -> Point;
+use_setter = |p| p.set_x(0);
+
+use_modifier : Point -> Point;
+use_modifier = |p| p.mod_x(|x| x + 1);
+
+// Index syntax `[^x]` desugars to a `Point::act_x` Var; the source span
+// covers `^x`. We use it together with `iset` to keep type checking happy.
+use_index : Point -> Point;
+use_index = |p| p[^x].iset(99);
+
+// Variant constructor + helpers + Pattern::Union use site.
+make_some_val : Maybe I64;
+make_some_val = Maybe::some(42);
+
+use_is : Maybe I64 -> Bool;
+use_is = |m| m.is_some;
+
+use_as : Maybe I64 -> I64;
+use_as = |m| m.as_some;
+
+use_mod : Maybe I64 -> Maybe I64;
+use_mod = |m| m.mod_some(|x| x + 1);
+
+unwrap_some : Maybe I64 -> I64;
+unwrap_some = |m| match m {
+    some(v) => v,
+    none() => 0,
+};

@@ -295,7 +295,11 @@ impl GlobalValue {
         if node.is_some() {
             return node;
         }
-        let node = self.scm.find_node_at(pos);
+        // Walk the syntactic scheme if available so that type aliases written
+        // in source resolve back to the alias name (rather than the expanded
+        // type, which is what `scm` carries).
+        let scm_for_lookup = self.syn_scm.as_ref().unwrap_or(&self.scm);
+        let node = scm_for_lookup.find_node_at(pos);
         if node.is_some() {
             return node;
         }
@@ -1464,7 +1468,7 @@ impl Program {
             }
             Expr::MakeStruct(_, fields) => {
                 let mut expr = expr.clone();
-                for (field_name, field_expr) in fields {
+                for (field_name, _, field_expr) in fields {
                     let field_expr = self.instantiate_expr(field_expr)?;
                     expr = expr.set_make_struct_field(field_name, field_expr);
                 }
@@ -2411,4 +2415,10 @@ pub enum EndNode {
     ValueDecl(FullName),
     // An associated type name (e.g., `Item` in `Item iter`).
     AssocType(AssocType),
+    // A struct field name; the cursor is on the bare name in the type
+    // definition or on a MakeStruct / Pattern::Struct field-name use.
+    Field(TyCon, Name),
+    // A union variant name; the cursor is on the bare name in the type
+    // definition or on a Pattern::Union variant-name use.
+    Variant(TyCon, Name),
 }

@@ -1,0 +1,9 @@
+module Main;
+
+import Lib::{MyInt, Greeter};
+
+bump : MyInt -> MyInt;
+bump = |x| x + 2;
+
+main : IO ();
+main = pure();

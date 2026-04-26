@@ -261,7 +261,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
         Expr::MakeStruct(_, fields) => {
             let fields = fields.clone();
             let mut expr = expr;
-            for (field_name, field_expr) in fields {
+            for (field_name, _, field_expr) in fields {
                 let field_expr = replace_closure_call_to_funptr_call_subexprs(&field_expr, symbols);
                 expr = expr.set_make_struct_field(&field_name, field_expr);
             }

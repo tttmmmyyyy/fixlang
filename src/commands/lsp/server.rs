@@ -4,6 +4,7 @@ use super::document_symbol;
 use super::goto_definition;
 use super::hover;
 use super::references;
+use super::rename;
 use super::util::{get_current_dir, path_to_uri, span_to_location, span_to_range, uri_to_path};
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
@@ -23,11 +24,12 @@ use lsp_types::{
     CompletionOptions, CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
     GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, PositionEncodingKind,
-    ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, ReferenceParams, SaveOptions,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgressBegin,
-    WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
+    InitializeResult, InitializedParams, OneOf, PositionEncodingKind,
+    ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, ReferenceParams, RenameOptions,
+    RenameParams, SaveOptions, ServerCapabilities, TextDocumentPositionParams,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    TextDocumentSyncSaveOptions, Uri, WorkDoneProgressBegin, WorkDoneProgressCreateParams,
+    WorkDoneProgressEnd, WorkDoneProgressOptions,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -90,6 +92,14 @@ enum DiagnosticsMessage {
 // The result of diagnostics.
 pub struct DiagnosticsResult {
     pub program: Program,
+    // Absolute paths of the source files that belong to this project (i.e.
+    // listed in `fixproj.toml`'s `files` section, excluding dependencies),
+    // mapped to their exact textual content as captured when `program` was
+    // elaborated. The keys serve as the user-source membership set (used
+    // to refuse renaming symbols defined outside the project) and the
+    // values let consumers detect drift between the AST and the current
+    // editor buffer (used for the rename stale-buffer check).
+    pub user_source_contents: Map<PathBuf, String>,
 }
 
 // Document symbol request which are waiting for diagnostics.
@@ -101,7 +111,7 @@ pub struct PendingDocumentSymbolRequest {
 // The latest content of each file (which may not have been saved to disk yet) and its associated information
 pub struct LatestContent {
     // The path.
-    path: PathBuf,
+    pub path: PathBuf,
     // The latest content of the file.
     pub content: String,
     // Module name. None if not parsed yet or failed to parse.
@@ -452,6 +462,45 @@ pub fn launch_language_server() {
                     program,
                     &uri_to_latest_content,
                 );
+            } else if method == "textDocument/rename" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let diag = last_diag.as_ref().unwrap();
+                let id = parse_id(&message, method);
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<RenameParams> = parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                rename::handle_rename(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    diag,
+                    &uri_to_latest_content,
+                );
+            } else if method == "textDocument/prepareRename" {
+                if last_diag.is_none() {
+                    continue;
+                }
+                let diag = last_diag.as_ref().unwrap();
+                let id = parse_id(&message, method);
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<TextDocumentPositionParams> =
+                    parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                rename::handle_prepare_rename(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    diag,
+                    &uri_to_latest_content,
+                );
             } else if method == "textDocument/prepareCallHierarchy" {
                 if last_diag.is_none() {
                     continue;
@@ -622,7 +671,10 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
             document_formatting_provider: None,
             document_range_formatting_provider: None,
             document_on_type_formatting_provider: None,
-            rename_provider: None,
+            rename_provider: Some(OneOf::Right(RenameOptions {
+                prepare_provider: Some(true),
+                work_done_progress_options: WorkDoneProgressOptions::default(),
+            })),
             document_link_provider: None,
             color_provider: None,
             folding_range_provider: None,
@@ -1003,6 +1055,23 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     // Determine the source files for which diagnostics are run.
     let files = proj_file.get_files(BuildConfigType::Test);
 
+    // Capture the absolute paths and current contents of user source files
+    // before elaboration, so the resulting `DiagnosticsResult` can support
+    // stale-buffer detection and "is this symbol user-defined?" queries. A
+    // file whose content fails to read is omitted entirely (no entry for
+    // it), so the user-defined membership check and the stale check stay
+    // consistent.
+    let mut user_source_contents: Map<PathBuf, String> = Default::default();
+    for file_path in &files {
+        let abs = match to_absolute_path(file_path) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        if let Ok(content) = std::fs::read_to_string(&abs) {
+            user_source_contents.insert(abs, content);
+        }
+    }
+
     // Create the configuration.
     let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
     config.type_check_cache = typecheck_cache;
@@ -1019,7 +1088,10 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     // Build the file and get the errors.
     let program = elaborate_via_config(&config)?;
 
-    Ok(DiagnosticsResult { program })
+    Ok(DiagnosticsResult {
+        program,
+        user_source_contents,
+    })
 }
 
 // Create work done progress.

@@ -53,7 +53,7 @@ use crate::{
         expr::ExprNode,
         name::FullName,
         program::Program,
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
+        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
     optimization::rename::{rename_free_name, substitute_free_name},
@@ -97,80 +97,80 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
     fn start_visit_var(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_llvm(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_llvm(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_app(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_lam(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_let(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         // Check if the expression is of the form `let x = {e0} in {e1}`.
         let x = expr.get_let_pat();
         if !x.is_var() {
@@ -238,32 +238,32 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
     fn start_visit_if(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_if(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_match(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         // Check if the expression is of the form `match x { y -> {expr} }`.
         let cond = expr.get_match_cond();
         if !cond.is_var() {
@@ -288,71 +288,71 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
     fn start_visit_tyanno(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_make_struct(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_array_lit(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_ffi_call(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_eval(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        _state: &mut VisitState,
     ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
@@ -360,7 +360,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
     fn end_visit_eval(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        _state: &mut VisitState,
     ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
@@ -412,16 +412,16 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn start_visit_var(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         let var = expr.get_var();
 
         // If the target name is shadowed, do nothing
@@ -440,16 +440,16 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn start_visit_llvm(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_llvm(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         let llvm = expr.get_llvm();
 
         if !self.shadowed.contains(&self.target_name) {
@@ -478,8 +478,8 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // Function application expression {f}({x}).
 
         // If {x} contains the target name, and {f} contains local name, then set `used_before_any_other_local_names` to false.
@@ -501,8 +501,8 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         // Check if the applied function is the target name
         if !self.shadowed.contains(&self.target_name) {
             let func = expr.get_app_func();
@@ -519,8 +519,8 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // Set is_captured_by_lambda if the target name is free in this lambda.
         if !self.shadowed.contains(&self.target_name) {
             let lam_names = expr.free_vars();
@@ -552,16 +552,16 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // Let expression `let {pat} = {bound} in {value}`.
 
         // If {value} contains the target name, and {bound} contains local name, then set `used_before_any_other_local_names` to false.
@@ -603,16 +603,16 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_if(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // If expression `if {cond} { {then} } else { {else} }`.
 
         // if the target name appears in {then} or {else}, and {cond} contains local name, then set `used_before_any_other_local_names` to false.
@@ -633,16 +633,16 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_if(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // Match expression `match {cond} { pat1 => {val1}; pat2 => {val2}; ... }`.
         // If the target name appears in any {val} (not shadowed by {pat}), and {cond} contains local name, then set `used_before_any_other_local_names` to false.
         if !self.shadowed.contains(&self.target_name) {
@@ -691,39 +691,39 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_tyanno(
         &mut self,
         _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
 
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // If any field contains the target name, and any other field contains local name, then set `used_before_any_other_local_names` to false.
         if !self.shadowed.contains(&self.target_name) {
             let expr_mames = expr.free_vars();
             if expr_mames.contains(&self.target_name) {
                 // Then the target name appears in some field.
                 let struct_fields = expr.get_make_struct_fields();
-                for (_, field) in &struct_fields {
+                for (_, _, field) in &struct_fields {
                     let field_free_vars = field.free_vars();
                     if !field_free_vars.contains(&self.target_name)
                         && FreeOccurrenceProbe::contains_local_name(field)
@@ -742,16 +742,16 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_make_struct(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // If any element contains the target name, and any other element contains local name, then set `used_before_any_other_local_names` to false.
         if !self.shadowed.contains(&self.target_name) {
             let expr_mames = expr.free_vars();
@@ -776,16 +776,16 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         // If any argument contains the target name, and any other argument contains local name, then set `used_before_any_other_local_names` to false.
         if !self.shadowed.contains(&self.target_name) {
             let expr_names = expr.free_vars();
@@ -810,15 +810,15 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_eval(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        _state: &mut VisitState,
     ) -> StartVisitResult {
         // If the main expression contains the target name, and the sub-expression contains local name, then set `used_before_any_other_local_names` to false.
         if !self.shadowed.contains(&self.target_name) {
@@ -836,7 +836,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
     fn end_visit_eval(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
+        _state: &mut VisitState,
     ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }

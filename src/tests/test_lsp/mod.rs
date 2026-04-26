@@ -4,6 +4,7 @@ pub mod test_code_action;
 pub mod test_completion;
 pub mod test_goto_definition;
 pub mod test_references;
+pub mod test_rename;
 
 // LSP Integration Tests
 // Tests for automatic lock file management in language server mode

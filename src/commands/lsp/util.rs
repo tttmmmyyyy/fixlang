@@ -2,10 +2,11 @@
 
 use super::server::{get_file_content_at_previous_diagnostics, LatestContent};
 use crate::ast::expr::{Expr, ExprNode};
-use crate::ast::name::FullName;
+use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::PatternNode;
 use crate::ast::program::{Program, SymbolExpr};
 use crate::ast::traits::TraitId;
+use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::TyCon;
 use crate::commands::docs::MarkdownSection;
 use crate::constants::chars_allowed_in_identifiers;
@@ -303,7 +304,7 @@ fn find_enclosing_binder(
             find_enclosing_binder(e, pos, target, stack).or_else(|| lookup(stack))
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, e) in fields {
+            for (_, _, e) in fields {
                 if let Some(s) = find_enclosing_binder(e, pos, target, stack) {
                     return Some(s);
                 }
@@ -415,7 +416,7 @@ fn collect_uses_of_binding(
             collect_uses_of_binding(e, target, def_span, stack, out);
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, e) in fields {
+            for (_, _, e) in fields {
                 collect_uses_of_binding(e, target, def_span, stack, out);
             }
         }
@@ -682,6 +683,19 @@ pub(super) fn find_tycon_def_src(program: &Program, tycon: TyCon) -> Option<Span
         .and_then(|ti| ti.source.clone())
 }
 
+// Find the source location of a struct field or union variant declaration
+// (the bare name span in the type definition).
+pub(super) fn find_field_def_src(program: &Program, tc: &TyCon, name: &Name) -> Option<Span> {
+    let td = program.type_defns.iter().find(|td| td.tycon() == *tc)?;
+    let fields = match &td.value {
+        TypeDeclValue::Struct(s) => &s.fields,
+        TypeDeclValue::Union(u) => &u.fields,
+        TypeDeclValue::Alias(_) => return None,
+    };
+    let field = fields.iter().find(|f| &f.name == name)?;
+    field.name_src.clone()
+}
+
 pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
     fn document_tycon_or_alias(program: &Program, docs: &mut String, tycon: &TyCon) {
         *docs += &format!("```\n{}\n```", tycon.to_string());
@@ -822,6 +836,28 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
                 }
             } else {
                 docs += &format!("```\n{}\n```", name.to_string());
+            }
+        }
+        EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
+            // Show the field/variant name and its type.
+            let ty_str = program
+                .type_defns
+                .iter()
+                .find(|td| td.tycon() == *tc)
+                .and_then(|td| {
+                    let fields = match &td.value {
+                        TypeDeclValue::Struct(s) => &s.fields,
+                        TypeDeclValue::Union(u) => &u.fields,
+                        TypeDeclValue::Alias(_) => return None,
+                    };
+                    fields
+                        .iter()
+                        .find(|f| &f.name == name)
+                        .map(|f| f.syn_ty.to_string_normalize())
+                });
+            match ty_str {
+                Some(t) => docs += &format!("```\n{} : {}\n```", name, t),
+                None => docs += &format!("```\n{}\n```", name),
             }
         }
     }

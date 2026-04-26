@@ -13,7 +13,11 @@ use crate::ast::program::{Program, SymbolExpr};
 use crate::ast::qual_pred::QualPred;
 use crate::ast::qual_type::QualType;
 use crate::ast::traits::TraitId;
-use crate::ast::typedecl::{TypeDeclValue, TypeDefn};
+use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
+use crate::constants::{
+    STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_SETTER_SYMBOL,
+    UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
+};
 use crate::ast::equality::Equality;
 use crate::ast::traits::AssocTypeImpl;
 use crate::ast::types::{Scheme, AssocType, Type, TyCon, TypeNode};
@@ -98,6 +102,12 @@ fn find_all_references(
         EndNode::AssocType(assoc_type) => {
             find_assoc_type_references(program, assoc_type, include_declaration)
         }
+        EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
+            find_field_occurrences(program, tc, name, include_declaration)
+                .into_iter()
+                .map(|o| o.span)
+                .collect()
+        }
         EndNode::Module(_) => {
             // Module references are not supported yet.
             vec![]
@@ -130,7 +140,7 @@ fn find_local_refs(
 }
 
 // Find all references to a global value (function/constant).
-fn find_global_value_references(
+pub(super) fn find_global_value_references(
     program: &Program,
     target: &FullName,
     include_declaration: bool,
@@ -166,7 +176,7 @@ fn find_global_value_references(
 }
 
 // Find all references to a type constructor.
-fn find_type_references(
+pub(super) fn find_type_references(
     program: &Program,
     target: &TyCon,
     include_declaration: bool,
@@ -185,9 +195,12 @@ fn find_type_references(
         }
     }
 
-    // Walk all global values' type signatures.
+    // Walk all global values' type signatures. Use `syn_scm` (which keeps
+    // user-written aliases) when present so that `type T = U; f : T;` reports
+    // the `T` occurrence in `f`'s signature when renaming the alias `T`.
     for (_name, gv) in &program.global_values {
-        collect_scheme_type_refs(&gv.scm, target, &mut refs);
+        let scm_for_walk = gv.syn_scm.as_ref().unwrap_or(&gv.scm);
+        collect_scheme_type_refs(scm_for_walk, target, &mut refs);
         // Walk expression trees for type annotations and patterns.
         collect_symbol_expr_type_refs(&gv.expr, target, &mut refs);
     }
@@ -221,7 +234,7 @@ fn find_type_references(
 }
 
 // Find all references to a trait.
-fn find_trait_references(
+pub(super) fn find_trait_references(
     program: &Program,
     target: &TraitId,
     include_declaration: bool,
@@ -272,7 +285,7 @@ fn find_trait_references(
 }
 
 // Find all references to an associated type.
-fn find_assoc_type_references(
+pub(super) fn find_assoc_type_references(
     program: &Program,
     target: &AssocType,
     include_declaration: bool,
@@ -481,7 +494,7 @@ fn collect_exprnode_var_refs(expr: &Arc<ExprNode>, target: &FullName, refs: &mut
             collect_exprnode_var_refs(e, target, refs);
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, val) in fields {
+            for (_, _, val) in fields {
                 collect_exprnode_var_refs(val, target, refs);
             }
         }
@@ -513,11 +526,11 @@ fn collect_pattern_var_refs(pat: &Arc<PatternNode>, target: &FullName, refs: &mu
             }
         }
         Pattern::Struct(_, field_pats) => {
-            for (_, sub_pat) in field_pats {
+            for (_, _, sub_pat) in field_pats {
                 collect_pattern_var_refs(sub_pat, target, refs);
             }
         }
-        Pattern::Union(_, sub_pat) => {
+        Pattern::Union(_, _, sub_pat) => {
             collect_pattern_var_refs(sub_pat, target, refs);
         }
     }
@@ -577,7 +590,7 @@ fn collect_exprnode_type_refs(expr: &Arc<ExprNode>, target: &TyCon, refs: &mut V
                     refs.push(span.clone());
                 }
             }
-            for (_, val) in fields {
+            for (_, _, val) in fields {
                 collect_exprnode_type_refs(val, target, refs);
             }
         }
@@ -612,11 +625,11 @@ fn collect_pattern_type_refs(pat: &Arc<PatternNode>, target: &TyCon, refs: &mut 
                     refs.push(span.clone());
                 }
             }
-            for (_, sub_pat) in field_pats {
+            for (_, _, sub_pat) in field_pats {
                 collect_pattern_type_refs(sub_pat, target, refs);
             }
         }
-        Pattern::Union(_, sub_pat) => {
+        Pattern::Union(_, _, sub_pat) => {
             collect_pattern_type_refs(sub_pat, target, refs);
         }
     }
@@ -739,6 +752,424 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
         if &pred.trait_id == target {
             if let Some(span) = &pred.trait_src {
                 refs.push(span.clone());
+            }
+        }
+    }
+}
+
+// A reference to a struct field or union variant. The `prefix` records what
+// the source-level token actually starts with: "" for the bare field name
+// (declaration, MakeStruct field, Pattern::Struct/Union), the auto-method's
+// literal prefix (`@`/`set_`/`mod_`/`act_`/`as_`/`is_`) for auto-method
+// call sites, or `^` for `act_` Vars desugared from `[^field]` index
+// syntax. Refs throws the prefix away; rename uses it to compose
+// `prefix + new_name` for the new text.
+#[allow(dead_code)]
+pub(super) struct FieldOccurrence {
+    pub span: Span,
+    pub prefix: &'static str,
+}
+
+// Generate the (prefix, fullname) pairs for each user-callable auto-method
+// of a struct field or union variant. Internal helpers like
+// `_act_x_identity` and `#punch_x` are intentionally excluded (they are
+// not user-visible). Only entries that actually exist in
+// `program.global_values` are returned.
+fn auto_methods_for(
+    program: &Program,
+    tc: &TyCon,
+    name: &Name,
+) -> Vec<(&'static str, FullName)> {
+    let Some(td) = program.type_defns.iter().find(|td| td.tycon() == *tc) else {
+        return vec![];
+    };
+    let prefixes: &[&'static str] = match &td.value {
+        TypeDeclValue::Struct(_) => &[
+            STRUCT_GETTER_SYMBOL,
+            STRUCT_SETTER_SYMBOL,
+            STRUCT_MODIFIER_SYMBOL,
+            STRUCT_ACT_SYMBOL,
+        ],
+        // Union: bare variant name is the constructor; `as_/is_/mod_` are
+        // helper functions.
+        TypeDeclValue::Union(_) => &["", UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL],
+        TypeDeclValue::Alias(_) => return vec![],
+    };
+    let ns = td.name.to_namespace();
+    let mut result = vec![];
+    for &prefix in prefixes {
+        let fullname = FullName::new(&ns, &format!("{}{}", prefix, name));
+        if program.global_values.contains_key(&fullname) {
+            result.push((prefix, fullname));
+        }
+    }
+    result
+}
+
+// Collect all references to a struct field or union variant. The result
+// covers: the bare-name declaration span (when `include_declaration` is
+// true, with `prefix = ""`), every Var occurrence of each user-callable
+// auto-method (`@x`, `set_x`, ...), each import-leaf naming such an
+// auto-method, and bare field-name use sites in `MakeStruct`,
+// `Pattern::Struct`, and `Pattern::Union`.
+pub(super) fn find_field_occurrences(
+    program: &Program,
+    tc: &TyCon,
+    name: &Name,
+    include_declaration: bool,
+) -> Vec<FieldOccurrence> {
+    let mut occs: Vec<FieldOccurrence> = vec![];
+
+    // (1) Declaration span.
+    if include_declaration {
+        if let Some(td) = program.type_defns.iter().find(|td| td.tycon() == *tc) {
+            let fields: Option<&[Field]> = match &td.value {
+                TypeDeclValue::Struct(s) => Some(&s.fields),
+                TypeDeclValue::Union(u) => Some(&u.fields),
+                TypeDeclValue::Alias(_) => None,
+            };
+            if let Some(fields) = fields {
+                if let Some(f) = fields.iter().find(|f| &f.name == name) {
+                    if let Some(span) = &f.name_src {
+                        occs.push(FieldOccurrence {
+                            span: span.clone(),
+                            prefix: "",
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // (2) For each user-callable auto-method, walk all Var nodes in the
+    // program and emit an occurrence at each matching call site, plus any
+    // import-leaf that names that auto-method.
+    for (prefix, fullname) in auto_methods_for(program, tc, name) {
+        for (_n, gv) in &program.global_values {
+            collect_field_var_occs(&gv.expr, prefix, &fullname, &mut occs);
+        }
+        collect_field_import_occs(program, prefix, &fullname, &mut occs);
+    }
+
+    // (3) Bare field-name uses in MakeStruct, Pattern::Struct, Pattern::Union.
+    for (_n, gv) in &program.global_values {
+        collect_field_bare_occs(&gv.expr, tc, name, &mut occs);
+    }
+
+    occs
+}
+
+// Walk a SymbolExpr and emit occurrences at every bare field-name source
+// position: MakeStruct field-name spans (struct case), Pattern::Struct
+// field-name spans (struct case), and Pattern::Union variant-name spans
+// (union case). The TyCon stored in the expression/pattern node must match
+// `tc` for an occurrence to be emitted.
+fn collect_field_bare_occs(
+    expr: &SymbolExpr,
+    tc: &TyCon,
+    name: &Name,
+    occs: &mut Vec<FieldOccurrence>,
+) {
+    match expr {
+        SymbolExpr::Simple(typed_expr) => {
+            collect_exprnode_bare_field_occs(&typed_expr.expr, tc, name, occs);
+        }
+        SymbolExpr::Method(impls) => {
+            for impl_ in impls {
+                collect_exprnode_bare_field_occs(&impl_.expr.expr, tc, name, occs);
+            }
+        }
+    }
+}
+
+fn collect_exprnode_bare_field_occs(
+    expr: &Arc<ExprNode>,
+    tc: &TyCon,
+    name: &Name,
+    occs: &mut Vec<FieldOccurrence>,
+) {
+    match &*expr.expr {
+        Expr::Var(_) | Expr::LLVM(_) => {}
+        Expr::App(func, args) => {
+            collect_exprnode_bare_field_occs(func, tc, name, occs);
+            for arg in args {
+                collect_exprnode_bare_field_occs(arg, tc, name, occs);
+            }
+        }
+        Expr::Lam(_, body) => {
+            collect_exprnode_bare_field_occs(body, tc, name, occs);
+        }
+        Expr::Let(pat, bound, val) => {
+            collect_pattern_bare_field_occs(pat, tc, name, occs);
+            collect_exprnode_bare_field_occs(bound, tc, name, occs);
+            collect_exprnode_bare_field_occs(val, tc, name, occs);
+        }
+        Expr::If(cond, then_expr, else_expr) => {
+            collect_exprnode_bare_field_occs(cond, tc, name, occs);
+            collect_exprnode_bare_field_occs(then_expr, tc, name, occs);
+            collect_exprnode_bare_field_occs(else_expr, tc, name, occs);
+        }
+        Expr::Match(cond, pat_vals) => {
+            collect_exprnode_bare_field_occs(cond, tc, name, occs);
+            for (pat, val) in pat_vals {
+                collect_pattern_bare_field_occs(pat, tc, name, occs);
+                collect_exprnode_bare_field_occs(val, tc, name, occs);
+            }
+        }
+        Expr::TyAnno(e, _) => {
+            collect_exprnode_bare_field_occs(e, tc, name, occs);
+        }
+        Expr::MakeStruct(expr_tc, fields) => {
+            if expr_tc.as_ref() == tc {
+                for (fname, fname_src, _) in fields {
+                    if fname == name {
+                        if let Some(span) = fname_src {
+                            occs.push(FieldOccurrence {
+                                span: span.clone(),
+                                prefix: "",
+                            });
+                        }
+                    }
+                }
+            }
+            for (_, _, val) in fields {
+                collect_exprnode_bare_field_occs(val, tc, name, occs);
+            }
+        }
+        Expr::ArrayLit(elems) => {
+            for elem in elems {
+                collect_exprnode_bare_field_occs(elem, tc, name, occs);
+            }
+        }
+        Expr::FFICall(_, _, _, _, args, _) => {
+            for arg in args {
+                collect_exprnode_bare_field_occs(arg, tc, name, occs);
+            }
+        }
+        Expr::Eval(side, main) => {
+            collect_exprnode_bare_field_occs(side, tc, name, occs);
+            collect_exprnode_bare_field_occs(main, tc, name, occs);
+        }
+    }
+}
+
+fn collect_pattern_bare_field_occs(
+    pat: &Arc<PatternNode>,
+    tc: &TyCon,
+    name: &Name,
+    occs: &mut Vec<FieldOccurrence>,
+) {
+    match &pat.pattern {
+        Pattern::Var(_, _) => {}
+        Pattern::Struct(pat_tc, fields) => {
+            if pat_tc.as_ref() == tc {
+                for (fname, fname_src, _) in fields {
+                    if fname == name {
+                        if let Some(span) = fname_src {
+                            occs.push(FieldOccurrence {
+                                span: span.clone(),
+                                prefix: "",
+                            });
+                        }
+                    }
+                }
+            }
+            for (_, _, sub) in fields {
+                collect_pattern_bare_field_occs(sub, tc, name, occs);
+            }
+        }
+        Pattern::Union(variant, variant_src, sub) => {
+            // The variant FullName has the namespace `tc.name::*`.
+            // Compare via the TyCon constructed from the variant's namespace.
+            // After elaboration the namespace is populated (validate_variant_name
+            // sets it from the matched union); guard against the unresolved
+            // pre-elaboration shape just in case.
+            if !variant.namespace.names.is_empty() {
+                let variant_tc = TyCon::new(variant.namespace.clone().to_fullname());
+                if &variant_tc == tc && &variant.name == name {
+                    if let Some(span) = variant_src {
+                        occs.push(FieldOccurrence {
+                            span: span.clone(),
+                            prefix: "",
+                        });
+                    }
+                }
+            }
+            collect_pattern_bare_field_occs(sub, tc, name, occs);
+        }
+    }
+}
+
+fn collect_field_var_occs(
+    expr: &SymbolExpr,
+    prefix: &'static str,
+    target: &FullName,
+    occs: &mut Vec<FieldOccurrence>,
+) {
+    match expr {
+        SymbolExpr::Simple(typed_expr) => {
+            collect_exprnode_field_occs(&typed_expr.expr, prefix, target, occs);
+        }
+        SymbolExpr::Method(impls) => {
+            for impl_ in impls {
+                collect_exprnode_field_occs(&impl_.expr.expr, prefix, target, occs);
+            }
+        }
+    }
+}
+
+fn collect_exprnode_field_occs(
+    expr: &Arc<ExprNode>,
+    prefix: &'static str,
+    target: &FullName,
+    occs: &mut Vec<FieldOccurrence>,
+) {
+    match &*expr.expr {
+        Expr::Var(v) => {
+            if &v.name == target {
+                if let Some(span) = &expr.source {
+                    // For `act_<field>` Vars desugared from `[^field]`,
+                    // the source span covers `^field` and the source-level
+                    // prefix is `^` rather than `act_`.
+                    let effective_prefix = if prefix == STRUCT_ACT_SYMBOL
+                        && expr.struct_act_func_in_index_syntax
+                    {
+                        "^"
+                    } else {
+                        prefix
+                    };
+                    occs.push(FieldOccurrence {
+                        span: span.clone(),
+                        prefix: effective_prefix,
+                    });
+                }
+            }
+        }
+        Expr::LLVM(_) => {}
+        Expr::App(func, args) => {
+            collect_exprnode_field_occs(func, prefix, target, occs);
+            for arg in args {
+                collect_exprnode_field_occs(arg, prefix, target, occs);
+            }
+        }
+        Expr::Lam(_, body) => {
+            collect_exprnode_field_occs(body, prefix, target, occs);
+        }
+        Expr::Let(_pat, bound, val) => {
+            collect_exprnode_field_occs(bound, prefix, target, occs);
+            collect_exprnode_field_occs(val, prefix, target, occs);
+        }
+        Expr::If(cond, then_expr, else_expr) => {
+            collect_exprnode_field_occs(cond, prefix, target, occs);
+            collect_exprnode_field_occs(then_expr, prefix, target, occs);
+            collect_exprnode_field_occs(else_expr, prefix, target, occs);
+        }
+        Expr::Match(cond, pat_vals) => {
+            collect_exprnode_field_occs(cond, prefix, target, occs);
+            for (_, val) in pat_vals {
+                collect_exprnode_field_occs(val, prefix, target, occs);
+            }
+        }
+        Expr::TyAnno(e, _) => {
+            collect_exprnode_field_occs(e, prefix, target, occs);
+        }
+        Expr::MakeStruct(_, fields) => {
+            for (_, _, val) in fields {
+                collect_exprnode_field_occs(val, prefix, target, occs);
+            }
+        }
+        Expr::ArrayLit(elems) => {
+            for elem in elems {
+                collect_exprnode_field_occs(elem, prefix, target, occs);
+            }
+        }
+        Expr::FFICall(_, _, _, _, args, _) => {
+            for arg in args {
+                collect_exprnode_field_occs(arg, prefix, target, occs);
+            }
+        }
+        Expr::Eval(side, main) => {
+            collect_exprnode_field_occs(side, prefix, target, occs);
+            collect_exprnode_field_occs(main, prefix, target, occs);
+        }
+    }
+}
+
+fn collect_field_import_occs(
+    program: &Program,
+    prefix: &'static str,
+    target: &FullName,
+    occs: &mut Vec<FieldOccurrence>,
+) {
+    if target.namespace.names.is_empty() {
+        return;
+    }
+    let target_module = target.module();
+    let target_ns_after_module: &[Name] = &target.namespace.names[1..];
+    let target_name = &target.name;
+
+    for (_importer, stmts) in &program.mod_to_import_stmts {
+        for stmt in stmts {
+            if stmt.module.0 != target_module {
+                continue;
+            }
+            for item in &stmt.items {
+                walk_import_node_for_field(
+                    item,
+                    &[],
+                    target_ns_after_module,
+                    target_name,
+                    prefix,
+                    occs,
+                );
+            }
+            for item in &stmt.hiding {
+                walk_import_node_for_field(
+                    item,
+                    &[],
+                    target_ns_after_module,
+                    target_name,
+                    prefix,
+                    occs,
+                );
+            }
+        }
+    }
+}
+
+fn walk_import_node_for_field(
+    node: &ImportTreeNode,
+    traversed: &[Name],
+    target_ns: &[Name],
+    target_name: &str,
+    prefix: &'static str,
+    occs: &mut Vec<FieldOccurrence>,
+) {
+    match node {
+        ImportTreeNode::Any(_) => {}
+        ImportTreeNode::Symbol(name, span) => {
+            if traversed == target_ns && name == target_name {
+                if let Some(span) = span {
+                    occs.push(FieldOccurrence {
+                        span: span.clone(),
+                        prefix,
+                    });
+                }
+            }
+        }
+        ImportTreeNode::TypeOrTrait(_, _) => {}
+        ImportTreeNode::NameSpace(ns_name, children, _) => {
+            let mut new_traversed = traversed.to_vec();
+            new_traversed.push(ns_name.clone());
+            for child in children {
+                walk_import_node_for_field(
+                    child,
+                    &new_traversed,
+                    target_ns,
+                    target_name,
+                    prefix,
+                    occs,
+                );
             }
         }
     }
@@ -1078,7 +1509,7 @@ fn collect_exprnode_called_globals(
             collect_exprnode_called_globals(e, result);
         }
         Expr::MakeStruct(_, fields) => {
-            for (_, val) in fields {
+            for (_, _, val) in fields {
                 collect_exprnode_called_globals(val, result);
             }
         }

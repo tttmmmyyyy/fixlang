@@ -1,7 +1,7 @@
 // LSP "textDocument/definition" handler.
 
 use super::server::{send_response, LatestContent};
-use super::util::{find_local_occurrences, find_trait_or_alias_def_src, find_tycon_def_src, get_current_dir, resolve_source_pos, span_to_location};
+use super::util::{find_local_occurrences, find_field_def_src, find_trait_or_alias_def_src, find_tycon_def_src, get_current_dir, resolve_source_pos, span_to_location};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::traits::TraitId;
 use crate::ast::types::TyCon;
@@ -41,6 +41,8 @@ pub(super) fn handle_goto_definition(
         EndNode::Module(_) => None,
         EndNode::TypeOrTrait(_) => None,
         EndNode::AssocType(_) => None,
+        EndNode::Field(_, _) => None,
+        EndNode::Variant(_, _) => None,
         // The cursor is on the declaration name itself; there is no other definition to jump to.
         EndNode::ValueDecl(_) => None,
     };
@@ -91,6 +93,9 @@ pub(super) fn handle_goto_definition(
                     .get(&trait_id)
                     .and_then(|ti| ti.assoc_types.get(&assoc_type.name.name))
                     .and_then(|atd| atd.name_src.clone());
+            }
+            EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
+                def_src = find_field_def_src(program, &tc, &name);
             }
             EndNode::ValueDecl(_) => {
                 unreachable!()

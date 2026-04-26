@@ -42,6 +42,28 @@ impl TypeDefn {
                 return Some(EndNode::Type(self.tycon()));
             }
         }
+        // Check if cursor is on a struct field name or union variant name.
+        match &self.value {
+            TypeDeclValue::Struct(s) => {
+                for f in &s.fields {
+                    if let Some(name_src) = &f.name_src {
+                        if name_src.includes_pos_lsp(pos) {
+                            return Some(EndNode::Field(self.tycon(), f.name.clone()));
+                        }
+                    }
+                }
+            }
+            TypeDeclValue::Union(u) => {
+                for f in &u.fields {
+                    if let Some(name_src) = &f.name_src {
+                        if name_src.includes_pos_lsp(pos) {
+                            return Some(EndNode::Variant(self.tycon(), f.name.clone()));
+                        }
+                    }
+                }
+            }
+            TypeDeclValue::Alias(_) => {}
+        }
         self.value.find_node_at(pos)
     }
 
@@ -376,6 +398,8 @@ pub struct Field {
     pub syn_ty: Arc<TypeNode>,
     pub is_punched: bool,
     pub source: Option<Span>,
+    // Source span of the field name only (e.g., `x` in `x : I64`).
+    pub name_src: Option<Span>,
 }
 
 impl Field {
@@ -386,6 +410,7 @@ impl Field {
             syn_ty,
             is_punched: false,
             source,
+            name_src: None,
         }
     }
 

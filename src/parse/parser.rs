@@ -7,7 +7,7 @@ use crate::ast::{
     export_statement::ExportStatement,
     expr::{
         expr_abs, expr_abs_param_src, expr_app, expr_array_lit, expr_eval,
-        expr_ffi_call, expr_if, expr_let, expr_make_struct,
+        expr_ffi_call, expr_if, expr_let, expr_make_struct, expr_make_struct_with_spans,
         expr_match, expr_tyanno, expr_var, AppSourceCodeOrderType, ExprNode, Var,
         var_local, var_var,
     },
@@ -156,6 +156,101 @@ pub fn parse_and_save_to_temporary_file(
 pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Program, Errors> {
     let source = SourceFile::from_file_path(file_path);
     parse_source_file(source, config)
+}
+
+// Identifier categories that can be passed to `validate_token_str`.
+//
+// These map onto pest grammar rules whose shape is exactly "an identifier
+// in the corresponding category" (with `!keywords` and the right
+// uppercase/lowercase head), so a string can be checked against the same
+// tokenisation rules the parser applies to source code.
+#[derive(Clone, Copy)]
+#[allow(dead_code)]
+pub enum TokenCategory {
+    // Lowercase-headed value names: locals, global values, lambda params.
+    // Allows a leading `@` as well.
+    Name,
+    // Lowercase-headed names that disallow a leading `@`: struct field
+    // names and union variant names.
+    TypeFieldName,
+    // Uppercase-headed names: types, type aliases, traits, trait aliases,
+    // associated types, modules, namespaces.
+    CapitalName,
+}
+
+// A namespace_item parsed from a fullname, with its byte-offset range
+// within the input that was parsed.
+pub struct NamespaceItemSpan {
+    pub name: Name,
+    pub start: usize,
+    pub end: usize,
+}
+
+// Re-parse `text` as a `fullname` (e.g. `"Foo::Point::act_x"`) and return
+// each `namespace_item` with its byte-offset range within `text`.
+//
+// Used by LSP rename to locate the sub-span of a namespace component
+// (e.g. the `Point` in `Point::@x`) inside an `Expr::Var`'s source span,
+// so a struct/union rename can rewrite just that component.
+pub fn parse_namespace_items_in_fullname(text: &str) -> Option<Vec<NamespaceItemSpan>> {
+    let mut pairs = FixParser::parse(Rule::fullname, text).ok()?;
+    let outer = pairs.next()?;
+    if outer.as_str() != text {
+        return None;
+    }
+    let mut result = vec![];
+    for inner in outer.into_inner() {
+        if inner.as_rule() == Rule::namespace_item {
+            let span = inner.as_span();
+            result.push(NamespaceItemSpan {
+                name: inner.as_str().to_string(),
+                start: span.start(),
+                end: span.end(),
+            });
+        }
+    }
+    Some(result)
+}
+
+// Validate that `s` is a syntactically valid identifier in the given
+// category. Returns Ok(()) if pest accepts the entire string under the
+// matching rule; otherwise an error describing the rejection.
+pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String> {
+    // The `type_field_name` grammar rule's `(name_head ~ !"@")` only
+    // forbids `@@`-prefixed names, not leading `@`. Field and variant
+    // names cannot start with `@` in practice (the auto-generated getter
+    // `@x` would collide), so reject leading `@` here explicitly.
+    if matches!(category, TokenCategory::TypeFieldName) && s.starts_with('@') {
+        return Err(format!(
+            "`{}` is not a valid field or variant name (leading `@` is reserved)",
+            s
+        ));
+    }
+    let rule = match category {
+        TokenCategory::Name => Rule::name,
+        TokenCategory::TypeFieldName => Rule::type_field_name,
+        TokenCategory::CapitalName => Rule::capital_name,
+    };
+    // Why we append a trailing ` `:
+    //   The grammar's `keywords` rule requires `keyword ~ sep+`, so a
+    //   bare keyword like `"let"` is *not* matched by `keywords` and hence
+    //   `!keywords` in the `name` rule incorrectly admits it. By appending
+    //   a separator, the keyword check fires exactly as it would in source
+    //   code, and the rule then rejects keywords as expected.
+    let probe = format!("{} ", s);
+    match FixParser::parse(rule, &probe) {
+        Ok(mut pairs) => {
+            let pair = pairs.next().ok_or_else(|| "empty parse result".to_string())?;
+            if pair.as_str() != s {
+                return Err(format!(
+                    "`{}` is not a valid identifier in this context",
+                    s
+                ));
+            }
+            Ok(())
+        }
+        Err(_) => Err(format!("`{}` is not a valid identifier in this context", s)),
+    }
 }
 
 pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<Program, Errors> {
@@ -1093,9 +1188,13 @@ fn parse_type_field(pair: Pair<Rule>, ctx: &mut ParseContext) -> Field {
     assert_eq!(pair.as_rule(), Rule::type_field);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
-    let name = pairs.next().unwrap().as_str();
+    let name_pair = pairs.next().unwrap();
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
+    let name = name_pair.as_str();
     let ty = parse_type(pairs.next().unwrap(), ctx);
-    Field::make(name.to_string(), ty, Some(span))
+    let mut field = Field::make(name.to_string(), ty, Some(span));
+    field.name_src = Some(name_span);
+    field
 }
 
 fn parse_expr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
@@ -2024,11 +2123,13 @@ fn parse_expr_make_struct(
     let tycon = parse_tycon(tycon_pair);
     let mut fields = vec![];
     while pairs.peek().is_some() {
-        let field_name = pairs.next().unwrap().as_str().to_string();
+        let name_pair = pairs.next().unwrap();
+        let field_name_span = Span::from_pair(&ctx.source, &name_pair);
+        let field_name = name_pair.as_str().to_string();
         let field_expr = parse_expr(pairs.next().unwrap(), ctx)?;
-        fields.push((field_name, field_expr));
+        fields.push((field_name, Some(field_name_span), field_expr));
     }
-    Ok(expr_make_struct(tycon, fields)
+    Ok(expr_make_struct_with_spans(tycon, fields)
         .set_source(Some(span))
         .set_aux_src(Some(tycon_span)))
 }
@@ -2595,11 +2696,13 @@ fn parse_pattern_struct(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Pattern
     let tycon = parse_tycon(tycon_pair);
     let mut field_to_pats = Vec::default();
     while pairs.peek().is_some() {
-        let field_name = pairs.next().unwrap().as_str().to_string();
+        let name_pair = pairs.next().unwrap();
+        let field_name_span = Span::from_pair(&ctx.source, &name_pair);
+        let field_name = name_pair.as_str().to_string();
         let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
-        field_to_pats.push((field_name, pat));
+        field_to_pats.push((field_name, Some(field_name_span), pat));
     }
-    PatternNode::make_struct(tycon, field_to_pats)
+    PatternNode::make_struct_with_spans(tycon, field_to_pats)
         .set_source(span)
         .set_aux_src(tycon_span)
 }
@@ -2614,13 +2717,14 @@ fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternN
     }
     let pair = pairs.next().unwrap();
     assert_eq!(pair.as_rule(), Rule::type_field_name);
+    let variant_span = Span::from_pair(&ctx.source, &pair);
     let variant = FullName::new(&NameSpace::new(names), pair.as_str());
     let pat = if let Some(pair) = pairs.next() {
         parse_pattern_nounion(pair, ctx)
     } else {
         PatternNode::make_struct(tycon(make_tuple_name_abs(0 as u32)), vec![])
     };
-    PatternNode::make_union(variant, pat).set_source(span)
+    PatternNode::make_union_with_span(variant, Some(variant_span), pat).set_source(span)
 }
 
 fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportStatement {

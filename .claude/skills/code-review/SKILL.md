@@ -22,13 +22,14 @@ This orchestrator owns scope selection. It resolves the argument into a single *
 
 Run these in this order, each in its own subagent:
 
-1. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports.
-2. **comment-style** — apply project comment conventions.
+1. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, etc.).
+2. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports introduced by step 1).
+3. **comment-style** — apply project comment conventions to whatever survived steps 1–2.
 
 ## Why Sequential, Not Parallel
 
 1. **Avoid conflicting edits.** Skills modify files. Parallel runs would fight each other.
-2. **Each skill should see prior changes.** E.g., `comment-style` may want to review comments around code that `shorten-qualifiers` just touched.
+2. **Each skill should see prior changes.** E.g., `shorten-qualifiers` should see imports added by `code-quality`; `comment-style` shouldn't waste effort polishing comments that `code-quality` just deleted.
 
 ## Procedure
 
