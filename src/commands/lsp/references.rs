@@ -757,14 +757,12 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
     }
 }
 
-// A reference to a struct field or union variant. The `prefix` records what
-// the source-level token actually starts with: "" for the bare field name
-// (declaration, MakeStruct field, Pattern::Struct/Union), the auto-method's
-// literal prefix (`@`/`set_`/`mod_`/`act_`/`as_`/`is_`) for auto-method
-// call sites, or `^` for `act_` Vars desugared from `[^field]` index
-// syntax. Refs throws the prefix away; rename uses it to compose
-// `prefix + new_name` for the new text.
-#[allow(dead_code)]
+// A reference to a struct field or union variant. `prefix` records the
+// literal text that precedes the field/variant name at the source-level
+// occurrence: "" for a bare-name occurrence (declaration, MakeStruct
+// field, Pattern::Struct/Union), the auto-method's literal prefix
+// (`@`/`set_`/`mod_`/`act_`/`as_`/`is_`) for an auto-method call site, or
+// `^` for an `act_` Var desugared from `[^field]` index syntax.
 pub(super) struct FieldOccurrence {
     pub span: Span,
     pub prefix: &'static str,
@@ -882,6 +880,7 @@ fn collect_field_bare_occs(
     }
 }
 
+// Recursive walker for `collect_field_bare_occs` over an expression tree.
 fn collect_exprnode_bare_field_occs(
     expr: &Arc<ExprNode>,
     tc: &TyCon,
@@ -953,6 +952,7 @@ fn collect_exprnode_bare_field_occs(
     }
 }
 
+// Recursive walker for `collect_field_bare_occs` over a pattern tree.
 fn collect_pattern_bare_field_occs(
     pat: &Arc<PatternNode>,
     tc: &TyCon,
@@ -1000,6 +1000,8 @@ fn collect_pattern_bare_field_occs(
     }
 }
 
+// Walk a SymbolExpr's expression trees and emit a `FieldOccurrence` for
+// every Var whose `FullName` equals `target`, tagging it with `prefix`.
 fn collect_field_var_occs(
     expr: &SymbolExpr,
     prefix: &'static str,
@@ -1018,6 +1020,7 @@ fn collect_field_var_occs(
     }
 }
 
+// Recursive walker for `collect_field_var_occs` over an expression tree.
 fn collect_exprnode_field_occs(
     expr: &Arc<ExprNode>,
     prefix: &'static str,
@@ -1095,6 +1098,8 @@ fn collect_exprnode_field_occs(
     }
 }
 
+// Emit a `FieldOccurrence` for each import-statement leaf that names the
+// auto-method `target`, tagging it with `prefix`.
 fn collect_field_import_occs(
     program: &Program,
     prefix: &'static str,
@@ -1137,6 +1142,9 @@ fn collect_field_import_occs(
     }
 }
 
+// Recursive walker for `collect_field_import_occs` over a single
+// import-tree node, with `traversed` accumulating the namespace path so
+// far.
 fn walk_import_node_for_field(
     node: &ImportTreeNode,
     traversed: &[Name],

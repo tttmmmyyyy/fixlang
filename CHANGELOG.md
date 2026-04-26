@@ -11,6 +11,7 @@
 - Added `rev` and `tag` fields for git dependencies in `fixproj.toml`. You can now pin a dependency to a specific commit hash (`rev`) or tag (`tag`). For example: `git = { url = "...", tag = "v1.0.0" }`. Pinning only applies to direct dependencies; transitive dependencies with `rev`/`tag` are ignored with a warning.
 - LSP: Added support for "Find All References" and "Call Hierarchy" features. You can now find all references to global values, types, traits, and associated types across your project, and navigate call hierarchies of functions.
 - LSP: Added a quick fix for missing trait implementation items. When a trait implementation is missing members or associated types, a code action is now available to insert stub implementations automatically.
+- LSP: Added support for the "Rename Symbol" feature. You can now rename local variables, global values, types, traits, type aliases, trait aliases, associated types, struct fields, and union variants across your project. Renaming a struct or union type also updates its auto-method namespace path.
 
 #### Std
 

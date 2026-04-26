@@ -46,7 +46,6 @@
 // (see `resolve_opaque_type_in_type`, `remove_opaque_wrapper_func`).
 
 use std::sync::Arc;
-
 use crate::ast::equality::Equality;
 use crate::ast::expr::{expr_app, expr_array_lit, expr_var, Expr, ExprNode};
 use crate::ast::pattern::{Pattern, PatternNode};

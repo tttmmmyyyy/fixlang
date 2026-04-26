@@ -1,7 +1,6 @@
 // This module provides a way to traverse the AST of a program.
 
 use std::sync::Arc;
-
 use super::{types::TypeNode, expr::{Expr, ExprNode}};
 use crate::elaboration::typecheck::Scope;
 

@@ -165,7 +165,6 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
 // uppercase/lowercase head), so a string can be checked against the same
 // tokenisation rules the parser applies to source code.
 #[derive(Clone, Copy)]
-#[allow(dead_code)]
 pub enum TokenCategory {
     // Lowercase-headed value names: locals, global values, lambda params.
     // Allows a leading `@` as well.
@@ -187,11 +186,9 @@ pub struct NamespaceItemSpan {
 }
 
 // Re-parse `text` as a `fullname` (e.g. `"Foo::Point::act_x"`) and return
-// each `namespace_item` with its byte-offset range within `text`.
-//
-// Used by LSP rename to locate the sub-span of a namespace component
-// (e.g. the `Point` in `Point::@x`) inside an `Expr::Var`'s source span,
-// so a struct/union rename can rewrite just that component.
+// each `namespace_item` with its byte-offset range within `text`. Useful
+// for locating the sub-span of an individual namespace component (e.g.
+// the `Point` in `Point::@x`) within a larger source span.
 pub fn parse_namespace_items_in_fullname(text: &str) -> Option<Vec<NamespaceItemSpan>> {
     let mut pairs = FixParser::parse(Rule::fullname, text).ok()?;
     let outer = pairs.next()?;

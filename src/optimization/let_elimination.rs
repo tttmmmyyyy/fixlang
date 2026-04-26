@@ -47,7 +47,6 @@ and the cost for retaining and releasing an array is saved.
 */
 
 use std::sync::Arc;
-
 use crate::{
     ast::{
         expr::ExprNode,

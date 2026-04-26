@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::ast::expr::Var;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, TypeEnv};
@@ -485,15 +484,6 @@ impl PatternNode {
     ) -> Arc<PatternNode> {
         Arc::new(PatternNode {
             pattern: Pattern::Struct(tycon, fields),
-            info: PatternInfo::default(),
-        })
-    }
-
-    // Construct a union match pattern with no variant-name source span.
-    #[allow(dead_code)]
-    pub fn make_union(variant: FullName, subpat: Arc<PatternNode>) -> Arc<PatternNode> {
-        Arc::new(PatternNode {
-            pattern: Pattern::Union(variant, None, subpat),
             info: PatternInfo::default(),
         })
     }

@@ -95,10 +95,9 @@ pub struct DiagnosticsResult {
     // Absolute paths of the source files that belong to this project (i.e.
     // listed in `fixproj.toml`'s `files` section, excluding dependencies),
     // mapped to their exact textual content as captured when `program` was
-    // elaborated. The keys serve as the user-source membership set (used
-    // to refuse renaming symbols defined outside the project) and the
-    // values let consumers detect drift between the AST and the current
-    // editor buffer (used for the rename stale-buffer check).
+    // elaborated. The keys identify which symbols are user-defined; the
+    // values record the source as the AST saw it, so a comparison against
+    // the current editor buffer detects drift.
     pub user_source_contents: Map<PathBuf, String>,
 }
 

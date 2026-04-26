@@ -11,7 +11,6 @@ NOTE: I hope to implement higher-order uncurrying optimization (https://xavierle
 */
 
 use std::{sync::Arc, usize};
-
 use crate::{
     ast::{
         expr::{collect_app, expr_abs, expr_app, expr_let_typed, expr_var, Expr, ExprNode, Var},
@@ -24,7 +23,6 @@ use crate::{
     misc::Set,
     optimization::eta_expansion,
 };
-
 use super::rename::rename_lam_param_avoiding;
 
 pub fn run(fix_mod: &mut Program) {

@@ -9,13 +9,11 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-
 use lsp_types::{
-    PrepareRenameResponse, Range, RenameParams, TextDocumentPositionParams, TextEdit, Uri,
+    PrepareRenameResponse, RenameParams, TextDocumentPositionParams, TextEdit, Uri,
     WorkspaceEdit,
 };
 use serde::Serialize;
-
 use super::references::{
     find_assoc_type_references, find_global_value_references, find_field_occurrences,
     find_trait_references, find_type_references,
@@ -93,7 +91,7 @@ pub(super) fn handle_prepare_rename(
         return;
     };
 
-    if !rename_target_supported(program, &node) {
+    if !rename_target_supported(&node) {
         // Nothing renameable here at all (e.g. a module name) — the
         // generic "can't be renamed" message is acceptable.
         send_response(id, Ok::<_, ()>(None::<PrepareRenameResponse>));
@@ -151,11 +149,11 @@ pub(super) fn handle_rename(
         return;
     };
 
-    if !rename_target_supported(program, &node) {
+    if !rename_target_supported(&node) {
         send_response(
             id,
             Err::<(), _>(ResponseError::invalid_request(
-                rename_unsupported_message(program, &node),
+                rename_unsupported_message(&node),
             )),
         );
         return;
@@ -267,7 +265,7 @@ pub(super) fn handle_rename(
 
 // Whether the symbol at this EndNode is renameable at all. Used by both
 // prepareRename and rename to keep their answers consistent.
-fn rename_target_supported(_program: &Program, node: &EndNode) -> bool {
+fn rename_target_supported(node: &EndNode) -> bool {
     match node {
         EndNode::Expr(_, _) | EndNode::Pattern(_, _) | EndNode::ValueDecl(_) => true,
         EndNode::Trait(_) | EndNode::AssocType(_) => true,
@@ -279,7 +277,7 @@ fn rename_target_supported(_program: &Program, node: &EndNode) -> bool {
 
 // Diagnostic message for the unsupported-target rejection. Keeps
 // prepareRename and rename consistent in what they tell the user.
-fn rename_unsupported_message(_program: &Program, node: &EndNode) -> String {
+fn rename_unsupported_message(node: &EndNode) -> String {
     match node {
         EndNode::Module(_) => "Renaming modules is not supported.".to_string(),
         _ => "Rename is not supported for this kind of symbol.".to_string(),
@@ -328,21 +326,8 @@ fn build_workspace_edit(edits: Vec<(Span, String)>, cdir: &PathBuf) -> Workspace
     }
     // Deduplicate (range, new_text) pairs per URI.
     for edits in by_uri.values_mut() {
-        edits.sort_by(|a, b| {
-            (
-                a.range.start.line,
-                a.range.start.character,
-                a.range.end.line,
-                a.range.end.character,
-            )
-                .cmp(&(
-                    b.range.start.line,
-                    b.range.start.character,
-                    b.range.end.line,
-                    b.range.end.character,
-                ))
-        });
-        edits.dedup_by(|a, b| range_eq(&a.range, &b.range) && a.new_text == b.new_text);
+        edits.sort_by(|a, b| (a.range.start, a.range.end).cmp(&(b.range.start, b.range.end)));
+        edits.dedup_by(|a, b| a.range == b.range && a.new_text == b.new_text);
     }
     WorkspaceEdit {
         changes: Some(by_uri),
@@ -434,10 +419,16 @@ fn collect_type_rename_edits(
     filtered
 }
 
+// Classification of the children of an `ImportTreeNode::NameSpace` whose
+// path equals a struct/union type's auto-namespace.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum NamespaceClassification {
+    // Every child resolves to a compiler-generated method.
     AllAuto,
+    // Every child resolves to a user-defined item, or no children resolve.
     AllUser,
+    // Some children are auto, some are user — the import must be split
+    // when the type is renamed.
     Mixed,
 }
 
@@ -507,6 +498,10 @@ fn collect_import_edits_for_type(
     }
 }
 
+// One entry produced by `scan_import_tree_for_type`: a classification of
+// the children of a `NameSpace` whose resolved path equals the type's
+// auto-namespace, paired with the span of that `NameSpace`'s own name
+// component.
 struct NamespaceClassificationEntry {
     classification: NamespaceClassification,
     // The source span of just the NameSpace's name component; None if the
@@ -641,6 +636,9 @@ fn classify_namespace_children(
     }
 }
 
+// Decide whether a single import-tree child of a NameSpace resolves to
+// auto-generated method(s), user-defined item(s), or both. The two flags
+// are independent because `Any(*)` can match both kinds at once.
 fn classify_child(
     program: &Program,
     namespace_path: &[Name],
@@ -714,6 +712,8 @@ fn split_children_auto_user(
     (auto_children, user_children)
 }
 
+// Build a `FullName` whose namespace is exactly `namespace_path` and
+// whose simple name is `name`.
 fn make_fullname(namespace_path: &[Name], name: &Name) -> FullName {
     let mut ns_names = namespace_path.to_vec();
     ns_names.push(name.clone());
@@ -764,6 +764,8 @@ fn collect_inline_qualified_edits(
     }
 }
 
+// Recursive walker for `collect_inline_qualified_edits` over an
+// expression tree.
 fn walk_expr_for_inline_qualified(
     program: &Program,
     expr: &Arc<ExprNode>,
@@ -849,8 +851,7 @@ fn walk_expr_for_inline_qualified(
 
 // Re-parse a Var's source span (covering whatever qualified name the
 // user actually wrote) and return an edit that rewrites just the type
-// component within it. Returns None if the source doesn't contain the
-// type name (e.g. unqualified `act_x`) or can't be re-parsed.
+// component within it.
 fn extract_inline_qualified_edit(
     var_source: &Span,
     type_old: &Name,
@@ -885,13 +886,6 @@ fn extract_inline_qualified_edit(
         },
         new_name.clone(),
     ))
-}
-
-fn range_eq(a: &Range, b: &Range) -> bool {
-    a.start.line == b.start.line
-        && a.start.character == b.start.character
-        && a.end.line == b.end.line
-        && a.end.character == b.end.character
 }
 
 // Compare each user source file's current content (from the editor buffer
@@ -984,9 +978,7 @@ fn target_is_user_defined(diag: &DiagnosticsResult, node: &EndNode, pos: &Source
 }
 
 // Return a span pointing to where the symbol at `node` is declared
-// (defined) in source, used for the user-defined check. May return None
-// if the symbol has no recorded declaration span (e.g. compiler builtins
-// or a local that fails the scope lookup).
+// (defined) in source, used for the user-defined check.
 fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Option<Span> {
     match node {
         EndNode::Expr(var, _) | EndNode::Pattern(var, _) => {
