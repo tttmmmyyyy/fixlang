@@ -293,4 +293,34 @@ mod tests {
         assert_eq!(text, "simple_let", "Expected to land on `simple_let` decl");
         ctx.shutdown();
     }
+
+    /// Cursor on a name inside `DEPRECATED[...]` should jump to the decl.
+    #[test]
+    fn test_goto_from_deprecated_pragma_name() {
+        let mut ctx = LspTestCtx::setup("rename_pragmas", &["main.fix"]);
+        // Line 4: `DEPRECATED[old_func, "Use new_func."];`
+        let result = ctx.goto_definition("main.fix", 4, 11);
+        assert!(result.is_object(), "Expected a Location, got {:?}", result);
+        let uri = result["uri"].as_str().unwrap();
+        let range = result.get("range").unwrap();
+        let file_path = PathBuf::from(uri.strip_prefix("file://").unwrap());
+        let text = read_text_at_range(&file_path, range);
+        assert_eq!(text, "old_func");
+        ctx.shutdown();
+    }
+
+    /// Cursor on a name inside `FFI_EXPORT[...]` should jump to the decl.
+    #[test]
+    fn test_goto_from_ffi_export_pragma_name() {
+        let mut ctx = LspTestCtx::setup("rename_pragmas", &["main.fix"]);
+        // Line 5: `FFI_EXPORT[old_func, c_old_func];`
+        let result = ctx.goto_definition("main.fix", 5, 11);
+        assert!(result.is_object(), "Expected a Location, got {:?}", result);
+        let uri = result["uri"].as_str().unwrap();
+        let range = result.get("range").unwrap();
+        let file_path = PathBuf::from(uri.strip_prefix("file://").unwrap());
+        let text = read_text_at_range(&file_path, range);
+        assert_eq!(text, "old_func");
+        ctx.shutdown();
+    }
 }

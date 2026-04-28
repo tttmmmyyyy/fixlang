@@ -23,7 +23,8 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         config.run_preliminary_commands()?;
     }
 
-    let program = elaborate_via_config(&config)?;
+    let mut program = elaborate_via_config(&config)?;
+    program.flush_warnings_to_stderr();
     let obj_files = build_object_files(program, &config)?;
 
     let mut library_search_path_opts: Vec<String> = vec![];

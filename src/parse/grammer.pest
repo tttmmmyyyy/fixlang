@@ -266,7 +266,7 @@ trait_fullname = { capital_fullname }
 
 trait_defn = { "trait" ~ sep+ ~ constraints? ~ sep* ~ type_var ~ sep* ~ ":" ~ sep* ~ trait_name ~ sep* ~ "{" ~ (sep* ~ trait_member_defn)* ~ sep* ~ "}" }
 
-trait_member_defn = { trait_member_value_defn | trait_member_type_defn }
+trait_member_defn = { trait_member_value_defn | trait_member_type_defn | deprecated_statement }
 
 trait_member_value_defn = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
 
@@ -315,7 +315,7 @@ import_item_capital_item = { namespace_item ~ (sep* ~ "::" ~ sep* ~ import_items
 // === Module ===
 module_defn = { "module" ~ sep+ ~ namespace_item ~ sep* ~ semicolon }
 
-global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_alias_defn | export_statement | trait_impl }
+global_defns = { global_defns_in_namespace | type_defn | global_name_type_sign | global_name_defn | trait_defn | trait_alias_defn | export_statement | deprecated_statement | trait_impl }
 
 global_defns_in_namespace = { "namespace" ~ sep+ ~ namespace ~ sep* ~ "{" ~ (sep* ~ global_defns)* ~ sep* ~ "}" }
 
@@ -367,7 +367,12 @@ exported_c_function_char = _{ !"]" ~ ANY }
 
 exported_c_function_name = { exported_c_function_char+ }
 
-export_statement = { export_symbol ~ sep* ~ "[" ~ sep* ~ name ~ sep* ~ "," ~ sep* ~ exported_c_function_name ~ sep* ~ "]" ~ sep* ~ semicolon }
+export_statement = { export_symbol ~ sep* ~ "[" ~ sep* ~ fullname ~ sep* ~ "," ~ sep* ~ exported_c_function_name ~ sep* ~ "]" ~ sep* ~ semicolon }
+
+// === Deprecation pragma ===
+deprecated_symbol = { "DEPRECATED" }
+
+deprecated_statement = { deprecated_symbol ~ sep* ~ "[" ~ sep* ~ fullname ~ sep* ~ "," ~ sep* ~ expr_string_lit ~ sep* ~ "]" ~ sep* ~ semicolon }
 
 // === Comments ===
 block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }

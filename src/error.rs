@@ -1,10 +1,23 @@
 use std::{fmt::Display, path::PathBuf};
-
 use colored::Colorize;
 use serde_json::Value;
-
 use crate::misc::{Map, Set};
 use crate::{misc, parse::sourcefile::Span};
+
+/// Diagnostic code for "use of a deprecated item".
+pub const WARN_DEPRECATED: &'static str = "deprecated";
+
+/// Severity of a diagnostic.
+///
+/// Errors are fatal and cause compilation to fail. Warnings are non-fatal:
+/// they are reported to the user but do not by themselves block compilation.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Severity {
+    /// Fatal diagnostic; compilation fails when any error is present.
+    Error,
+    /// Non-fatal diagnostic; reported but does not block compilation.
+    Warning,
+}
 
 pub struct Errors {
     errs: Vec<Error>,
@@ -21,7 +34,16 @@ impl Errors {
         Errors { errs: vec![] }
     }
 
+    // Whether this collection contains any item with `Severity::Error`.
+    //
+    // Items with `Severity::Warning` are not counted; a collection that
+    // holds only warnings is treated as a successful compilation.
     pub fn has_error(&self) -> bool {
+        self.errs.iter().any(|e| e.severity == Severity::Error)
+    }
+
+    /// Whether this collection contains any diagnostic at all (errors or warnings).
+    pub fn has_diagnostics(&self) -> bool {
         !self.errs.is_empty()
     }
 
@@ -31,6 +53,17 @@ impl Errors {
         } else {
             Ok(())
         }
+    }
+
+    /// Drain all warning-severity items into a fresh `Errors`, leaving only
+    /// error-severity items in `self`. Useful for printing warnings before
+    /// checking `to_result()`.
+    pub fn take_warnings(&mut self) -> Errors {
+        let (warnings, errors) = std::mem::take(&mut self.errs)
+            .into_iter()
+            .partition(|err| err.severity == Severity::Warning);
+        self.errs = errors;
+        Errors { errs: warnings }
     }
 
     pub fn append(&mut self, mut other: Errors) {
@@ -128,6 +161,10 @@ pub struct Error {
     pub code: Option<&'static str>,
     // The metadata. Content depends on the error code.
     pub data: Option<Value>,
+    /// Severity of this diagnostic. Construct warnings via
+    /// `Error::warning_from_msg_srcs`; the other constructors produce
+    /// `Severity::Error`.
+    pub severity: Severity,
 }
 
 impl Error {
@@ -137,6 +174,7 @@ impl Error {
             srcs: vec![],
             code: None,
             data: None,
+            severity: Severity::Error,
         }
     }
 
@@ -149,7 +187,15 @@ impl Error {
                 .collect(),
             code: None,
             data: None,
+            severity: Severity::Error,
         }
+    }
+
+    /// Build a warning-severity diagnostic.
+    pub fn warning_from_msg_srcs(msg: String, srcs: &[&Option<Span>]) -> Error {
+        let mut err = Error::from_msg_srcs(msg, srcs);
+        err.severity = Severity::Warning;
+        err
     }
 
     #[allow(dead_code)]
@@ -163,7 +209,11 @@ impl Error {
 
     pub fn to_string(&self) -> String {
         let mut str = String::default();
-        str += &"error".red().bold().to_string();
+        let label = match self.severity {
+            Severity::Error => "error".red().bold().to_string(),
+            Severity::Warning => "warning".yellow().bold().to_string(),
+        };
+        str += &label;
         str += ": ";
         str += &self.msg;
         str += "\n";

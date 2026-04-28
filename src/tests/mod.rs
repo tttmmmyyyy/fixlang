@@ -4,6 +4,7 @@ mod test_associated_type;
 mod test_basic;
 mod test_check;
 mod test_dependencies;
+mod test_deprecation;
 mod test_docs;
 mod test_explicit_import;
 mod test_external_projects;

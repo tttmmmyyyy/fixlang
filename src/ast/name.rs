@@ -250,6 +250,24 @@ impl FullName {
         return !self.is_local();
     }
 
+    /// Treat `self` as a path relative to `container` and return the
+    /// qualified `FullName` (with `container` prepended to `self`'s namespace).
+    ///
+    /// If `self` is marked absolute (was written with a leading `::`), it is
+    /// returned unchanged with the `is_absolute` flag preserved, so callers
+    /// can detect and reject absolute paths in contexts where they are not
+    /// allowed (e.g. `DEPRECATED[...]` / `FFI_EXPORT[...]`).
+    pub fn join_under(mut self, container: &NameSpace) -> FullName {
+        if self.namespace.is_absolute {
+            return self;
+        }
+        let mut joined = container.names.clone();
+        joined.append(&mut self.namespace.names);
+        self.namespace.names = joined;
+        self.namespace.is_absolute = false;
+        self
+    }
+
     pub fn to_string(&self) -> String {
         let ns = self.namespace.to_string();
         if ns.is_empty() {

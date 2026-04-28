@@ -24,7 +24,11 @@ pub fn check(mut config: Configuration) -> Result<(), Errors> {
     }
 
     // Elaborate (parse, resolve, type-check) all entities.
-    let program = elaborate_via_config(&config)?;
+    let mut program = elaborate_via_config(&config)?;
+
+    // Surface warnings (e.g. uses of `DEPRECATED` items) to the terminal,
+    // even when compilation is otherwise successful.
+    program.flush_warnings_to_stderr();
 
     // Check for deferred errors (parse errors and type errors accumulated during diagnostics).
     if program.deferred_errors.has_error() {

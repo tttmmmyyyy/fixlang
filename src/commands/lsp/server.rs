@@ -11,7 +11,7 @@ use crate::ast::program::{ModuleInfo, Program};
 use crate::elaboration::elaborate_via_config;
 use crate::configuration::BuildConfigType;
 use crate::dependency::lockfile::LockFileType;
-use crate::error::{any_to_string, Error, Errors};
+use crate::error::{any_to_string, Error, Errors, Severity, WARN_DEPRECATED};
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parse::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::metafiles::project_file::ProjectFile;
@@ -21,7 +21,8 @@ use crate::configuration::{Configuration, DiagnosticsConfig};
 use lsp_types::{
     CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
     CallHierarchyServerCapability, CompletionItem,
-    CompletionOptions, CompletionParams, DiagnosticSeverity, DidChangeTextDocumentParams,
+    CompletionOptions, CompletionParams, DiagnosticSeverity, DiagnosticTag,
+    DidChangeTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
     GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams,
     InitializeResult, InitializedParams, OneOf, PositionEncodingKind,
@@ -984,16 +985,25 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
         Some(related_information)
     };
 
+    let severity = match err.severity {
+        Severity::Error => DiagnosticSeverity::ERROR,
+        Severity::Warning => DiagnosticSeverity::WARNING,
+    };
+    let tags = if err.code == Some(WARN_DEPRECATED) {
+        Some(vec![DiagnosticTag::DEPRECATED])
+    } else {
+        None
+    };
     lsp_types::Diagnostic {
         range,
-        severity: Some(DiagnosticSeverity::ERROR),
+        severity: Some(severity),
         code: err
             .code
             .map(|c| lsp_types::NumberOrString::String(c.to_string())),
         code_description: None,
         source: None,
         message: err.msg.clone(),
-        tags: None,
+        tags,
         related_information,
         data: err.data.clone(),
     }

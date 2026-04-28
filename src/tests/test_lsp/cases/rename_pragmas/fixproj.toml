@@ -1,0 +1,6 @@
+[general]
+name = "rename-pragmas"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

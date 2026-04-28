@@ -3,6 +3,7 @@
 struct FixParser;
 
 use crate::ast::{
+    deprecation::DeprecationStatement,
     equality::Equality,
     export_statement::ExportStatement,
     expr::{
@@ -340,6 +341,7 @@ fn parse_module(
     let mut trait_impls: Vec<TraitImpl> = vec![];
     let mut import_statements: Vec<ImportStatement> = vec![];
     let mut export_statements: Vec<ExportStatement> = vec![];
+    let mut deprecation_statements: Vec<DeprecationStatement> = vec![];
 
     for pair in pairs {
         match pair.as_rule() {
@@ -353,6 +355,7 @@ fn parse_module(
                 &mut trait_aliases,
                 &mut trait_impls,
                 &mut export_statements,
+                &mut deprecation_statements,
             )),
             Rule::import_statement => {
                 import_statements.push(parse_import_statement(pair, &mut ctx));
@@ -367,10 +370,14 @@ fn parse_module(
     errors.eat_err(fix_mod.add_import_statements(import_statements));
     fix_mod.used_tuple_sizes.append(&mut ctx.tuple_sizes);
     fix_mod.export_statements = std::mem::replace(&mut export_statements, vec![]);
+    fix_mod.deprecation_statements = std::mem::replace(&mut deprecation_statements, vec![]);
 
     errors.to_result().map(|_| fix_mod)
 }
 
+/// Parse one `global_defns` node and append the recognised top-level items
+/// (declarations, definitions, type defns, traits, impls, exports,
+/// deprecations) into the matching output vectors.
 fn parse_global_defns(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -381,6 +388,7 @@ fn parse_global_defns(
     trait_aliases: &mut Vec<TraitAlias>,
     trait_impls: &mut Vec<TraitImpl>,
     export_statements: &mut Vec<ExportStatement>,
+    deprecation_statements: &mut Vec<DeprecationStatement>,
 ) -> Result<(), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_defns);
     let mut errors = Errors::empty();
@@ -399,6 +407,7 @@ fn parse_global_defns(
                     trait_aliases,
                     trait_impls,
                     export_statements,
+                    deprecation_statements,
                 ));
             }
             Rule::type_defn => {
@@ -418,7 +427,9 @@ fn parse_global_defns(
                 });
             }
             Rule::trait_defn => {
-                errors.eat_err_or(parse_trait_defn(pair, ctx), |ti| trait_infos.push(ti));
+                errors.eat_err_or(parse_trait_defn(pair, ctx, deprecation_statements), |ti| {
+                    trait_infos.push(ti)
+                });
             }
             Rule::trait_alias_defn => {
                 trait_aliases.push(parse_trait_alias(pair, ctx));
@@ -429,12 +440,19 @@ fn parse_global_defns(
             Rule::export_statement => {
                 export_statements.push(parse_export_statement(pair, ctx));
             }
+            Rule::deprecated_statement => {
+                errors.eat_err_or(parse_deprecated_statement(pair, ctx), |stmt| {
+                    deprecation_statements.push(stmt);
+                });
+            }
             _ => unreachable!(),
         }
     }
     errors.to_result()
 }
 
+/// Parse a `namespace Foo { ... }` block by extending `ctx.namespace` with
+/// the declared namespace name and recursing into the contained `global_defns`.
 fn parse_global_defns_in_namespace(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -445,6 +463,7 @@ fn parse_global_defns_in_namespace(
     trait_aliases: &mut Vec<TraitAlias>,
     trait_impls: &mut Vec<TraitImpl>,
     export_statements: &mut Vec<ExportStatement>,
+    deprecation_statements: &mut Vec<DeprecationStatement>,
 ) -> Result<(), Errors> {
     assert_eq!(pair.as_rule(), Rule::global_defns_in_namespace);
     let src = Span::from_pair(&ctx.source, &pair);
@@ -472,6 +491,7 @@ fn parse_global_defns_in_namespace(
             trait_aliases,
             trait_impls,
             export_statements,
+            deprecation_statements,
         )?;
     }
     ctx.namespace = bak_namespace;
@@ -506,7 +526,14 @@ fn parse_trait_alias(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitAlias {
     }
 }
 
-fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitDefn, Errors> {
+/// Parse a `trait <ctx> => <var> : Name { ... }` declaration, including its
+/// member value/type signatures and any `DEPRECATED[...]` pragmas appearing
+/// inside the trait body.
+fn parse_trait_defn(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+    deprecation_statements: &mut Vec<DeprecationStatement>,
+) -> Result<TraitDefn, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_defn);
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -534,33 +561,45 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitDef
     let trait_name_pair = pairs.next().unwrap();
     let trait_name_span = Span::from_pair(&ctx.source, &trait_name_pair);
     let trait_name = trait_name_pair.as_str().to_string();
+    // Push the trait name onto `ctx.namespace` for the duration of the body
+    // so that pragmas like `DEPRECATED[member, ...]` resolve their relative
+    // path against `<ctx.namespace>::<trait>`.
+    let bak_namespace = ctx.namespace.clone();
+    ctx.namespace = ctx.namespace.append(NameSpace::new(vec![trait_name.clone()]));
     let mut methods: Vec<TraitMember> = vec![];
     let mut type_syns: Map<Name, AssocTypeDefn> = Map::default();
+    let mut body_errors = Errors::empty();
     for pair in pairs {
-        match parse_trait_member_defn(pair, &impl_type, ctx)? {
-            Either::Left(method_info) => {
+        match parse_trait_member_defn(pair, &impl_type, ctx, deprecation_statements) {
+            Ok(None) => {} // Already pushed (deprecated_statement).
+            Ok(Some(Either::Left(method_info))) => {
                 if methods.iter().any(|mi| mi.name == method_info.name) {
-                    return Err(Errors::from_msg_srcs(
+                    body_errors.append(Errors::from_msg_srcs(
                         format!("Duplicate definitions of member `{}`.", method_info.name),
-                        &[&Some(span)],
+                        &[&Some(span.clone())],
                     ));
+                } else {
+                    methods.push(method_info);
                 }
-                methods.push(method_info);
             }
-            Either::Right(assoc_type) => {
+            Ok(Some(Either::Right(assoc_type))) => {
                 if type_syns.contains_key(&assoc_type.name.to_string()) {
-                    return Err(Errors::from_msg_srcs(
+                    body_errors.append(Errors::from_msg_srcs(
                         format!(
                             "Duplicate definitions of associated type `{}`.",
                             assoc_type.name.to_string()
                         ),
-                        &[&Some(span)],
+                        &[&Some(span.clone())],
                     ));
+                } else {
+                    type_syns.insert(assoc_type.name.to_string(), assoc_type);
                 }
-                type_syns.insert(assoc_type.name.to_string(), assoc_type);
             }
+            Err(errs) => body_errors.append(errs),
         }
     }
+    ctx.namespace = bak_namespace;
+    body_errors.to_result()?;
     Ok(TraitDefn {
         trait_: TraitId::from_fullname(FullName::new(&ctx.namespace, &trait_name)),
         type_var: make_tyvar(&trait_tyvar, &kind_star()),
@@ -573,17 +612,28 @@ fn parse_trait_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitDef
     })
 }
 
+/// Parse one item appearing inside a trait body. Returns `Ok(Some(..))` for
+/// a value or associated-type member; returns `Ok(None)` when the item was a
+/// `DEPRECATED[...]` pragma, which is pushed into `deprecation_statements`
+/// rather than yielded as a member.
 fn parse_trait_member_defn(
     pair: Pair<Rule>,
     impl_type: &Arc<TypeNode>,
     ctx: &mut ParseContext,
-) -> Result<Either<TraitMember, AssocTypeDefn>, Errors> {
+    deprecation_statements: &mut Vec<DeprecationStatement>,
+) -> Result<Option<Either<TraitMember, AssocTypeDefn>>, Errors> {
     assert_eq!(pair.as_rule(), Rule::trait_member_defn);
     let pair = pair.into_inner().next().unwrap();
     Ok(match pair.as_rule() {
-        Rule::trait_member_value_defn => Either::Left(parse_trait_member_value_defn(pair, ctx)?),
-        Rule::trait_member_type_defn => {
-            Either::Right(parse_trait_member_type_defn(pair, impl_type, ctx)?)
+        Rule::trait_member_value_defn => {
+            Some(Either::Left(parse_trait_member_value_defn(pair, ctx)?))
+        }
+        Rule::trait_member_type_defn => Some(Either::Right(parse_trait_member_type_defn(
+            pair, impl_type, ctx,
+        )?)),
+        Rule::deprecated_statement => {
+            deprecation_statements.push(parse_deprecated_statement(pair, ctx)?);
+            None
         }
         _ => unreachable!(),
     })
@@ -606,6 +656,7 @@ fn parse_trait_member_value_defn(
         syn_qual_ty: None,
         decl_src: Some(method_name_span),
         document: None, // Document can be obtained from `source`
+        deprecation: None, // Set later in elaboration if a `DEPRECATED[...]` pragma matches.
     })
 }
 
@@ -825,13 +876,42 @@ fn parse_export_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ExportSta
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
     pairs.next().unwrap(); // Skip `FFI_EXPORT`.
-    let fix_value_name = pairs.next().unwrap().as_str().to_string();
+    let fullname_pair = pairs.next().unwrap();
+    let (relative_path, name_span) = parse_fullname(fullname_pair, ctx);
+    let fix_value_name = relative_path.join_under(&ctx.namespace);
     let c_function_name = pairs.next().unwrap().as_str().to_string();
-    ExportStatement::new(
-        FullName::new(&ctx.namespace, &fix_value_name),
-        c_function_name,
-        Some(span),
-    )
+    let mut stmt = ExportStatement::new(fix_value_name, c_function_name, Some(span));
+    stmt.value_name_src = name_span;
+    stmt
+}
+
+/// Parse a `DEPRECATED[<path>, "<message>"];` pragma into a
+/// `DeprecationStatement` recording the (relative) target path, the message,
+/// and the spans needed for later diagnostics and LSP support.
+fn parse_deprecated_statement(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<DeprecationStatement, Errors> {
+    assert_eq!(pair.as_rule(), Rule::deprecated_statement);
+    let span = Span::from_pair(&ctx.source, &pair);
+    let mut pairs = pair.into_inner();
+    pairs.next().unwrap(); // Skip `DEPRECATED`.
+    let fullname_pair = pairs.next().unwrap();
+    let (relative_path, name_span) = parse_fullname(fullname_pair, ctx);
+    let target_path = relative_path.join_under(&ctx.namespace);
+    // Parse the message string literal. Surface escape-sequence errors
+    // (e.g. invalid `\uXXXX`) instead of silently falling back to raw text.
+    let msg_pair = pairs.next().unwrap();
+    let msg_span = Span::from_pair(&ctx.source, &msg_pair);
+    let raw = msg_pair.into_inner().next().unwrap().as_str();
+    let message = unescape_string_lit_inner(raw, &Some(msg_span))?;
+    Ok(DeprecationStatement {
+        target_path,
+        target_name_src: name_span,
+        origin_namespace: ctx.namespace.clone(),
+        message,
+        src: Some(span),
+    })
 }
 
 fn parse_predicate_qualified(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<QualPred, Errors> {
@@ -1785,7 +1865,7 @@ fn parse_index_syntax(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexS
             }
             Rule::field_accessor => {
                 let pair = pair.into_inner().next().unwrap();
-                let field_name = parse_fullname(pair);
+                let (field_name, _) = parse_fullname(pair, ctx);
                 IndexAccessor::Field(field_name, Some(src))
             }
             Rule::tuple_accessor => {
@@ -1863,13 +1943,26 @@ fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
     assert_eq!(pair.as_rule(), Rule::expr_var);
     let span = Span::from_pair(&ctx.source, &pair);
     let pair = pair.into_inner().next().unwrap();
-    let name = parse_fullname(pair);
+    let (name, _) = parse_fullname(pair, ctx);
     expr_var(name, Some(span))
 }
 
-fn parse_fullname(pair: Pair<Rule>) -> FullName {
+/// Parse a `fullname` rule, returning both the resolved `FullName` and the
+/// span of just the trailing `name` token (not the namespace prefix). The
+/// trailing-token span lets callers target the bare name independently —
+/// e.g., for LSP rename / find-references on a pragma argument. Callers
+/// that don't need the span can simply discard it.
+fn parse_fullname(pair: Pair<Rule>, ctx: &ParseContext) -> (FullName, Option<Span>) {
     assert_eq!(pair.as_rule(), Rule::fullname);
-    parse_fullname_or_capital_fullname(pair)
+    let name_span = pair.clone().into_inner().last().and_then(|last| {
+        match last.as_rule() {
+            Rule::name | Rule::capital_name | Rule::number_name => {
+                Some(Span::from_pair(&ctx.source, &last))
+            }
+            _ => None,
+        }
+    });
+    (parse_fullname_or_capital_fullname(pair), name_span)
 }
 
 fn parse_capital_fullname(pair: Pair<Rule>) -> FullName {
@@ -2424,53 +2517,56 @@ fn parse_expr_string_lit(
 ) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_string_lit);
     let span = Span::from_pair(&ctx.source, &pair);
-    let string = pair.into_inner().next().unwrap().as_str().to_string();
-    // Resolve escape sequences.
-    let mut string = string.chars();
-    let mut out_string: Vec<char> = vec![];
+    let raw = pair.into_inner().next().unwrap().as_str();
+    let string = unescape_string_lit_inner(raw, &Some(span.clone()))?;
+    Ok(make_string_lit(string, Some(span)))
+}
+
+/// Decode escape sequences inside a `string_lit_inner` body (the characters
+/// between the surrounding double quotes).
+fn unescape_string_lit_inner(raw: &str, span: &Option<Span>) -> Result<String, Errors> {
+    let mut chars = raw.chars();
+    let mut out: Vec<char> = vec![];
     loop {
-        match string.next() {
-            None => {
-                break;
-            }
+        match chars.next() {
+            None => break,
             Some(c) => {
                 if c != '\\' {
-                    out_string.push(c);
+                    out.push(c);
                     continue;
                 }
-                let c = string.next().unwrap();
+                let c = chars.next().unwrap();
                 if c == '\"' {
-                    out_string.push('"');
+                    out.push('"');
                 } else if c == '\\' {
-                    out_string.push('\\');
+                    out.push('\\');
                 } else if c == 'n' {
-                    out_string.push('\n');
+                    out.push('\n');
                 } else if c == 'r' {
-                    out_string.push('\r');
+                    out.push('\r');
                 } else if c == 't' {
-                    out_string.push('\t');
+                    out.push('\t');
                 } else if c == 'u' {
                     let mut code: u32 = 0;
                     for i in 0..4 {
-                        let c = string.next().unwrap().to_digit(16).unwrap();
-                        code += c << 4 * (3 - i);
+                        let d = chars.next().unwrap().to_digit(16).unwrap();
+                        code += d << 4 * (3 - i);
                     }
                     let c = match char::from_u32(code) {
                         None => {
                             return Err(Errors::from_msg_srcs(
                                 format!("Invalid unicode character: u{:X}", code),
-                                &[&Some(span)],
+                                &[span],
                             ));
                         }
                         Some(c) => c,
                     };
-                    out_string.push(c);
+                    out.push(c);
                 }
             }
         }
     }
-    let string = String::from_iter(out_string.iter());
-    Ok(make_string_lit(string, Some(span)))
+    Ok(String::from_iter(out.iter()))
 }
 
 fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {

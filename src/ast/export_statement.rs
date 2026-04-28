@@ -2,21 +2,18 @@
 
 use std::sync::Arc;
 use std::usize;
-
 use inkwell::types::BasicType;
-
 use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{Type, TypeNode};
-use crate::fixstd::builtin::*;
+use crate::fixstd::builtin::{make_io_ty, make_iostate_ty, make_unit_ty, run_io};
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
-
 use crate::error::Errors;
 
 // The export statement.
@@ -26,6 +23,10 @@ pub struct ExportStatement {
     // This is the name of the Fix value in the source code, and not the name of the symbol.
     // To get the name of the instantiated Fix value, use `self.instantiated_value_expr`.
     pub value_name: FullName,
+    /// Span of the value-name token inside `FFI_EXPORT[<here>, c_name];`.
+    /// Used for LSP rename / find-references; `None` for export statements
+    /// synthesized internally without a corresponding source token.
+    pub value_name_src: Option<Span>,
     // The expression (symbol) to be exported.
     // `None` at first, and set after the fix value is instantiated to a symbol.
     pub value_expr: Option<Arc<ExprNode>>,
@@ -46,6 +47,7 @@ impl ExportStatement {
     ) -> ExportStatement {
         ExportStatement {
             value_name: fix_value_name,
+            value_name_src: None,
             function_name: c_function_name,
             src,
             function_type: None,

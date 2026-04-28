@@ -124,6 +124,7 @@ impl Program {
                     defn_src: None,
                     document: None,
                     compiler_defined_method: false,
+                    deprecation: None,
                 },
             );
 

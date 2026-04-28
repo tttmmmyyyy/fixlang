@@ -172,6 +172,26 @@ pub(super) fn find_global_value_references(
     // Walk import statements.
     collect_import_refs(program, target, true, &mut refs);
 
+    // Walk `FFI_EXPORT[...]` pragmas: include the value-name span if the
+    // pragma targets `target`.
+    for stmt in &program.export_statements {
+        if &stmt.value_name == target {
+            if let Some(span) = &stmt.value_name_src {
+                refs.push(span.clone());
+            }
+        }
+    }
+
+    // Walk `DEPRECATED[...]` pragmas: include the target-name span if the
+    // pragma targets `target`.
+    for stmt in &program.deprecation_statements {
+        if &stmt.target_path == target {
+            if let Some(span) = &stmt.target_name_src {
+                refs.push(span.clone());
+            }
+        }
+    }
+
     refs
 }
 
@@ -441,78 +461,16 @@ fn collect_assoc_type_impl_refs(
 
 // Collect variable references in a SymbolExpr.
 fn collect_symbol_expr_var_refs(expr: &SymbolExpr, target: &FullName, refs: &mut Vec<Span>) {
-    match expr {
-        SymbolExpr::Simple(typed_expr) => {
-            collect_exprnode_var_refs(&typed_expr.expr, target, refs);
-        }
-        SymbolExpr::Method(impls) => {
-            for impl_ in impls {
-                collect_exprnode_var_refs(&impl_.expr.expr, target, refs);
+    expr.walk_var_uses(&mut |var, src| {
+        if &var.name == target {
+            if let Some(span) = src {
+                refs.push(span.clone());
             }
         }
-    }
-}
-
-// Recursively collect all references to `target` FullName in an expression tree.
-fn collect_exprnode_var_refs(expr: &Arc<ExprNode>, target: &FullName, refs: &mut Vec<Span>) {
-    match &*expr.expr {
-        Expr::Var(v) => {
-            if &v.name == target {
-                if let Some(span) = &expr.source {
-                    refs.push(span.clone());
-                }
-            }
-        }
-        Expr::LLVM(_) => {}
-        Expr::App(func, args) => {
-            collect_exprnode_var_refs(func, target, refs);
-            for arg in args {
-                collect_exprnode_var_refs(arg, target, refs);
-            }
-        }
-        Expr::Lam(_, body) => {
-            collect_exprnode_var_refs(body, target, refs);
-        }
-        Expr::Let(pat, bound, val) => {
-            collect_pattern_var_refs(pat, target, refs);
-            collect_exprnode_var_refs(bound, target, refs);
-            collect_exprnode_var_refs(val, target, refs);
-        }
-        Expr::If(cond, then_expr, else_expr) => {
-            collect_exprnode_var_refs(cond, target, refs);
-            collect_exprnode_var_refs(then_expr, target, refs);
-            collect_exprnode_var_refs(else_expr, target, refs);
-        }
-        Expr::Match(cond, pat_vals) => {
-            collect_exprnode_var_refs(cond, target, refs);
-            for (pat, val) in pat_vals {
-                collect_pattern_var_refs(pat, target, refs);
-                collect_exprnode_var_refs(val, target, refs);
-            }
-        }
-        Expr::TyAnno(e, _) => {
-            collect_exprnode_var_refs(e, target, refs);
-        }
-        Expr::MakeStruct(_, fields) => {
-            for (_, _, val) in fields {
-                collect_exprnode_var_refs(val, target, refs);
-            }
-        }
-        Expr::ArrayLit(elems) => {
-            for elem in elems {
-                collect_exprnode_var_refs(elem, target, refs);
-            }
-        }
-        Expr::FFICall(_, _, _, _, args, _) => {
-            for arg in args {
-                collect_exprnode_var_refs(arg, target, refs);
-            }
-        }
-        Expr::Eval(side, main) => {
-            collect_exprnode_var_refs(side, target, refs);
-            collect_exprnode_var_refs(main, target, refs);
-        }
-    }
+    });
+    expr.walk_patterns(&mut |pat| {
+        collect_pattern_var_refs(pat, target, refs);
+    });
 }
 
 // Collect variable references in a pattern.

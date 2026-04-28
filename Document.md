@@ -2168,6 +2168,16 @@ FFI_EXPORT[fix_increment, increment]; // Defines the function `int increment(int
 
 For example, to call the `fix_increment` function from a C library, you would declare `int increment(int);` in your C source code and call `increment` where needed.
 
+The first argument may also be a `::`-separated path. The path is interpreted **relative to the surrounding namespace**: only items reachable as a child of where `FFI_EXPORT[...]` is written can be exported. Absolute paths (starting with `::`) are rejected.
+
+```
+namespace Foo {
+    bar : CInt -> CInt;
+    bar = |x| x + 1.c_int;
+}
+FFI_EXPORT[Foo::bar, bar]; // Exports `Main::Foo::bar` as the C function `bar`.
+```
+
 The signature of the exported function is automatically determined by the type of the Fix value. The following examples show how the C function signature is determined from the Fix value's type.
 
 ```
@@ -2940,6 +2950,54 @@ git = "https://github.com/example/fixlang-anotherproject"
 To use a registry file you created, add its URL or file path to the `registries` field in the [configuration file](#configuration-file).
 
 The default registry file is `https://raw.githubusercontent.com/tttmmmyyyy/fixlang-registry/refs/heads/main/registry.toml`, managed in [this repository](https://github.com/tttmmmyyyy/fixlang-registry). This default registry is implicitly added to the end of the `registries` list in the configuration file.
+
+## Deprecation
+
+Library authors can mark a global value or a trait member as **deprecated** with the `DEPRECATED[{target_path}, "{message}"];` pragma. References to a deprecated item produce a compiler warning carrying the author's message; compilation continues unless deprecation warnings are explicitly promoted to errors.
+
+```
+old_func : I64 -> I64;
+old_func = |x| x + 1;
+DEPRECATED[old_func, "Use `new_func` instead."];
+
+new_func : I64 -> I64;
+new_func = |x| x + 2;
+```
+
+`DEPRECATED[...]` may be written at:
+
+- the top level of a file,
+- inside `namespace { ... }`,
+- inside `trait { ... }`.
+
+The `target_path` is interpreted as a **path relative to the surrounding container** (top-level file, namespace, or trait body). Only items reachable as a child of that container can be deprecated. Absolute paths (starting with `::`) are rejected.
+
+```
+namespace Foo {
+    bar : I64 -> I64;
+    bar = |x| x + 1;
+    DEPRECATED[bar, "Removed in next release."];   // bare name OK
+}
+
+trait a : MyTrait {
+    old_method : a -> String;
+    DEPRECATED[old_method, "Use `new_method` instead."];   // bare name OK
+
+    new_method : a -> String;
+}
+
+// Refer to a trait member from outside the trait body using a path:
+DEPRECATED[MyTrait::old_method, "Use `new_method` instead."];
+```
+
+Two CLI flags control how deprecation diagnostics are surfaced:
+
+- `--allow-deprecated`: suppress deprecation warnings entirely.
+- `--deny-deprecated`: promote deprecation warnings to errors (compilation fails on any use of a deprecated item).
+
+The two flags are mutually exclusive.
+
+In the LSP, deprecation warnings are published with `DiagnosticSeverity.WARNING` and `DiagnosticTag.DEPRECATED`, so editors typically render uses of deprecated items with a strikethrough.
 
 ## Tests
 

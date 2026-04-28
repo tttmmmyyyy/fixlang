@@ -1016,4 +1016,48 @@ mod tests {
         );
         ctx.shutdown();
     }
+
+    /// Renaming a global value should also rewrite the name token inside
+    /// `FFI_EXPORT[...]` and `DEPRECATED[...]` pragmas. Cursor on the
+    /// declaration LHS at line 2, col 0.
+    #[test]
+    fn test_rename_pragma_names() {
+        let mut ctx = LspTestCtx::setup("rename_pragmas", &["main.fix"]);
+        let we = ctx.rename("main.fix", 2, 0, "fresh_func");
+
+        // Expected edits:
+        //   line 2: decl LHS
+        //   line 3: defn LHS
+        //   line 4: DEPRECATED target name
+        //   line 5: FFI_EXPORT value name
+        // = 4 edits, all in main.fix.
+        assert_eq!(count_edits(&we), 4, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "fresh_func");
+        ctx.shutdown();
+    }
+
+    /// Cursor on the name inside `DEPRECATED[old_func, ...]` should be a
+    /// rename target equivalent to renaming the declaration itself.
+    #[test]
+    fn test_rename_from_deprecated_pragma_name() {
+        let mut ctx = LspTestCtx::setup("rename_pragmas", &["main.fix"]);
+        // Line 4: `DEPRECATED[old_func, "Use new_func."];`
+        // Cursor on `old_func` at col 11 (after `DEPRECATED[`).
+        let we = ctx.rename("main.fix", 4, 11, "fresh_func");
+        assert_eq!(count_edits(&we), 4, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "fresh_func");
+        ctx.shutdown();
+    }
+
+    /// Same as above but cursor on the name inside `FFI_EXPORT[...]`.
+    #[test]
+    fn test_rename_from_ffi_export_pragma_name() {
+        let mut ctx = LspTestCtx::setup("rename_pragmas", &["main.fix"]);
+        // Line 5: `FFI_EXPORT[old_func, c_old_func];`
+        // Cursor on `old_func` at col 11.
+        let we = ctx.rename("main.fix", 5, 11, "fresh_func");
+        assert_eq!(count_edits(&we), 4, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "fresh_func");
+        ctx.shutdown();
+    }
 }

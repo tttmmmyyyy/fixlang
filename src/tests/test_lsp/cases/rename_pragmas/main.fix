@@ -1,0 +1,9 @@
+module Main;
+
+old_func : CInt;
+old_func = 42.c_int;
+DEPRECATED[old_func, "Use new_func."];
+FFI_EXPORT[old_func, c_old_func];
+
+main : IO ();
+main = pure();

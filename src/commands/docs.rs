@@ -1,6 +1,5 @@
 use crate::ast::program::SymbolExpr::Method;
 use std::sync::Arc;
-
 use crate::{
     ast::{
         name::{FullName, Name, NameSpace},
@@ -40,7 +39,8 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
         .set_config(&mut config)?;
 
     // Build the file and get the errors.
-    let program = elaborate_via_config(&config)?;
+    let mut program = elaborate_via_config(&config)?;
+    program.flush_warnings_to_stderr();
     info_msg("Generating documentation...");
 
     let docs_config = match &config.subcommand {

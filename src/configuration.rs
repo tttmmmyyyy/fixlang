@@ -234,6 +234,26 @@ pub struct Configuration {
     pub backtrace: bool,
     // Disable runtime checks such as array bounds check.
     pub no_runtime_check: bool,
+    /// How `DEPRECATED` warnings are handled. See `DeprecationMode`.
+    pub deprecation_mode: DeprecationMode,
+}
+
+/// How the compiler reacts to a use of a deprecated item.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DeprecationMode {
+    /// Emit a warning (default).
+    Warn,
+    /// Suppress the warning entirely.
+    Allow,
+    /// Promote the warning to an error.
+    Deny,
+}
+
+impl Default for DeprecationMode {
+    /// The compiler defaults to warning on deprecated uses; flags can override.
+    fn default() -> Self {
+        DeprecationMode::Warn
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
@@ -299,6 +319,7 @@ impl Configuration {
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
+            deprecation_mode: DeprecationMode::default(),
         })
     }
 }

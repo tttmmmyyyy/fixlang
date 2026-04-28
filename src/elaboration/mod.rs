@@ -31,6 +31,12 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Validate export statements.
     program.validate_export_statements()?;
 
+    // Identify `DEPRECATED[...]` targets and attach `DeprecationInfo` to
+    // matching global values / trait members. Run before
+    // `create_trait_member_symbols` so that trait-member deprecation
+    // propagates naturally into the per-impl `GlobalValue`s.
+    program.identify_deprecation_targets()?;
+
     // Calculate list of type constructors.
     program.calculate_type_env()?;
 
@@ -97,6 +103,12 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         let all_modules: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
         program.resolve_namespace_and_check_type_in_modules(&typechecker, &all_modules)?;
     }
+
+    // Collect deprecation diagnostics from all type-checked expressions and
+    // surface them according to `Configuration.deprecation_mode`.
+    program
+        .deferred_errors
+        .append(program.collect_deprecation_diagnostics(config));
 
     // Instantiate Main::main (or Test::test).
     match config.output_file_type {

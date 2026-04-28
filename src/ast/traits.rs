@@ -1,4 +1,5 @@
 use crate::constants::ERR_LACKING_TRAIT_IMPL;
+use crate::ast::deprecation::DeprecationInfo;
 use crate::ast::equality::{Equality, EqualityScheme};
 use crate::ast::expr::ExprNode;
 use crate::ast::kind_scope::{KindEnv, KindScope};
@@ -82,6 +83,21 @@ pub struct TraitId {
 impl TraitId {
     pub fn from_fullname(name: FullName) -> TraitId {
         TraitId { name }
+    }
+
+    /// If `member_fullname` looks like `<trait-namespace>::<TraitName>::<member>`,
+    /// split it into the corresponding `TraitId` and the bare member name.
+    /// Returns `None` only when `member_fullname` has no namespace component
+    /// (i.e. there is no trait part to extract).
+    ///
+    /// Inverse of `FullName::new(&trait_id.name.to_namespace(), &member_name)`,
+    /// which is how a trait member's `GlobalValue` is keyed in `Program`.
+    pub fn split_member_fullname(member_fullname: &FullName) -> Option<(TraitId, Name)> {
+        if member_fullname.namespace.names.is_empty() {
+            return None;
+        }
+        let trait_id = TraitId::from_fullname(member_fullname.namespace.clone().to_fullname());
+        Some((trait_id, member_fullname.name.clone()))
     }
 
     pub fn to_string(&self) -> String {
@@ -261,6 +277,9 @@ pub struct TraitMember {
     // Document of this member.
     // This field is used only If document from `decl_src` is not available.
     pub document: Option<String>,
+    /// Deprecation metadata, set during elaboration when a matching
+    /// `DEPRECATED[...]` pragma exists.
+    pub deprecation: Option<DeprecationInfo>,
 }
 
 impl TraitMember {

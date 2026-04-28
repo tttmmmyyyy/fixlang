@@ -56,7 +56,7 @@ use clap::{App, AppSettings, Arg};
 use commands::lsp::server::launch_language_server;
 use metafiles::config_file::ConfigFile;
 use configuration::{
-    Configuration, FixOptimizationLevel, LinkType, OutputFileType,
+    Configuration, DeprecationMode, FixOptimizationLevel, LinkType, OutputFileType,
     SubCommand,
 };
 use constants::{
@@ -222,6 +222,14 @@ fn main() {
             "Approve all preliminary_commands for this invocation without prompting.\n\
             Intended for CI and other non-interactive runs."
         );
+    let allow_deprecated = Arg::new("allow-deprecated")
+        .long("allow-deprecated")
+        .takes_value(false)
+        .help("Suppress warnings about uses of `DEPRECATED` items.");
+    let deny_deprecated = Arg::new("deny-deprecated")
+        .long("deny-deprecated")
+        .takes_value(false)
+        .help("Treat warnings about uses of `DEPRECATED` items as errors.");
 
     // "fix version" subcommand
     let version_subc = App::new("version").about("Prints the version of the Fix compiler.");
@@ -248,7 +256,9 @@ fn main() {
         .arg(emit_symbols.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
-        .arg(allow_preliminary_commands.clone());
+        .arg(allow_preliminary_commands.clone())
+        .arg(allow_deprecated.clone())
+        .arg(deny_deprecated.clone());
 
     // "fix run" subcommand
     let run_subc = App::new("run")
@@ -273,7 +283,9 @@ fn main() {
         .arg(program_args.clone())
         .arg(backtrace.clone())
         .arg(no_runtime_check.clone())
-        .arg(allow_preliminary_commands.clone());
+        .arg(allow_preliminary_commands.clone())
+        .arg(allow_deprecated.clone())
+        .arg(deny_deprecated.clone());
 
     // "fix test" subcommand
     let test_subc = App::new("test")
@@ -297,7 +309,9 @@ fn main() {
         .arg(emit_symbols.clone())
         .arg(program_args.clone())
         .arg(backtrace.clone())
-        .arg(allow_preliminary_commands.clone());
+        .arg(allow_preliminary_commands.clone())
+        .arg(allow_deprecated.clone())
+        .arg(deny_deprecated.clone());
 
     // "fix deps" subcommand
     let deps = App::new("deps").about("Manage dependencies.");
@@ -627,6 +641,20 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `allow_preliminary_commands`.
         if args.contains_id("allow-preliminary-commands") {
             config.allow_preliminary_commands = true;
+        }
+
+        // Set deprecation handling mode.
+        let allow_dep = args.contains_id("allow-deprecated");
+        let deny_dep = args.contains_id("deny-deprecated");
+        if allow_dep && deny_dep {
+            return Err(Errors::from_msg(
+                "`--allow-deprecated` and `--deny-deprecated` cannot be used together.".to_string(),
+            ));
+        }
+        if allow_dep {
+            config.deprecation_mode = DeprecationMode::Allow;
+        } else if deny_dep {
+            config.deprecation_mode = DeprecationMode::Deny;
         }
 
         // Set `run_program_args`.

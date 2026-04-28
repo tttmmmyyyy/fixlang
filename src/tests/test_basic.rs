@@ -9420,5 +9420,3 @@ main: IO () = (
     "#;
     test_source(source, Configuration::develop_mode());
 }
-
-

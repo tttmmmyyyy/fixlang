@@ -12,6 +12,7 @@
 - LSP: Added support for "Find All References" and "Call Hierarchy" features. You can now find all references to global values, types, traits, and associated types across your project, and navigate call hierarchies of functions.
 - LSP: Added a quick fix for missing trait implementation items. When a trait implementation is missing members or associated types, a code action is now available to insert stub implementations automatically.
 - LSP: Added support for the "Rename Symbol" feature. You can now rename local variables, global values, types, traits, type aliases, trait aliases, associated types, struct fields, and union variants across your project. Renaming a struct or union type also updates its auto-method namespace path.
+- Added the `DEPRECATED[name, "msg"];` pragma to mark a global value or trait member as deprecated; uses produce a compiler warning carrying the author's message. New CLI flags `--allow-deprecated` and `--deny-deprecated` suppress or promote the warnings. See `Document.md` / `Document-ja.md` "Deprecation".
 
 #### Std
 
@@ -27,6 +28,7 @@
 - Type variable names now allow underscores (e.g. `my_var`).
 - Changed the way the compiler checks whether the type signature given to a trait member implementation matches the one required by the trait definition. Previously, it checked for syntactic consistency, but now it allows more flexible verification of type equivalence. For example, previously when implementing `Iterator`, you had to write the type signature for `advance` using `Item`, like `MyType -> Option (MyType, Item MyType)`, but now you can write the resolved type directly instead of `Item MyType`.
 - Strengthened the well-formedness check for type schemes in the presence of associated types. Every generalized type variable of a type signature must now appear at a "fixed" position — that is, outside of any associated type application — as required by section 5.1 of "Associated Type Synonyms" (Chakravarty, Keller, Peyton Jones). This applies to both global value signatures and trait member implementations, and subsumes the previous, weaker check that only rejected trait method signatures in which the trait type variable did not appear at all.
+- The first argument of `FFI_EXPORT[...]` now accepts a `::`-separated path (e.g. `FFI_EXPORT[Foo::bar, c_bar];`), not just a bare name. The path is interpreted relative to the surrounding namespace; absolute paths starting with `::` are rejected with a friendly error. Existing `FFI_EXPORT[bare_name, c_name];` forms continue to work unchanged.
 
 #### Tool
 
