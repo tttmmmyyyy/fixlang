@@ -826,6 +826,22 @@ impl Program {
         self.add_global_value_common(name, (expr, scm), decl_src, defn_src, document, false)
     }
 
+    // Programmatically register a `DEPRECATED[...]` pragma for a global
+    // value that was added via `add_global_value` / `add_compiler_defined_method`.
+    // Used by stdlib registration code (e.g. for the auto-generated
+    // `Std::<Type>::to_<type>` casts that are deprecated in favor of the
+    // `To<Type>` trait methods).
+    pub fn add_deprecation(&mut self, target: FullName, message: String) {
+        self.deprecation_statements
+            .push(crate::ast::deprecation::DeprecationStatement {
+                target_path: target,
+                target_name_src: None,
+                origin_namespace: crate::ast::name::NameSpace::local(),
+                message,
+                src: None,
+            });
+    }
+
     // Add a compiler-defined method.
     pub fn add_compiler_defined_method(
         &mut self,

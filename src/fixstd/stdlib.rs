@@ -206,17 +206,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                target.clone(),
                 cast_between_integral_function(from.clone(), to.clone(), None),
                 None,
                 None,
                 Some(format!(
-                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
-                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
+                    "Casts a value of `{}` into a value of `{}`.",
                     from_name, to_name
                 )),
             ));
+            fix_module.add_deprecation(
+                target,
+                format!(
+                    "Use the trait member `To{}::{}` instead.",
+                    to_name,
+                    upper_camel_to_lower_snake(&to_name),
+                ),
+            );
         }
     }
     // Cast function from integer to C integers.
@@ -239,17 +247,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
             // The namespace of the conversion function is the same as the namespace of the source type.
             let namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let target = FullName::new(&namespace, &format!("to_{}", to_name_c));
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&namespace, &format!("to_{}", to_name_c)),
+                target.clone(),
                 cast_between_integral_function(from.clone(), to_type_fix, Some(to_type_c)),
                 None,
                 None,
                 Some(format!(
-                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
-                    from_name, to_name_c, to_name_c, upper_camel_to_lower_snake(&to_name_c),
+                    "Casts a value of `{}` into a value of `{}`.",
                     from_name, to_name_c
                 )),
             ));
+            fix_module.add_deprecation(
+                target,
+                format!(
+                    "Use the trait member `To{}::{}` instead.",
+                    to_name_c,
+                    upper_camel_to_lower_snake(&to_name_c),
+                ),
+            );
         }
     }
     // Cast function between floats.
@@ -258,17 +274,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                target.clone(),
                 cast_between_float_function(from.clone(), to.clone(), None),
                 None,
                 None,
                 Some(format!(
-                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
-                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
+                    "Casts a value of `{}` into a value of `{}`.",
                     from_name, to_name
                 )),
             ));
+            fix_module.add_deprecation(
+                target,
+                format!(
+                    "Use the trait member `To{}::{}` instead.",
+                    to_name,
+                    upper_camel_to_lower_snake(&to_name),
+                ),
+            );
         }
     }
     // Cast function from floats to C floats.
@@ -291,17 +315,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
             // The namespace of the conversion function is the same as the namespace of the source type.
             let namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let target = FullName::new(&namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&namespace, &format!("to_{}", to_name)),
+                target.clone(),
                 cast_between_float_function(from.clone(), to_type_fix.clone(), Some(to_type_c)),
                 None,
                 None,
                 Some(format!(
-                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
-                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
+                    "Casts a value of `{}` into a value of `{}`.",
                     from_name, to_name
                 )),
             ));
+            fix_module.add_deprecation(
+                target,
+                format!(
+                    "Use the trait member `To{}::{}` instead.",
+                    to_name,
+                    upper_camel_to_lower_snake(to_name),
+                ),
+            );
         }
     }
     // Cast from integers to floats.
@@ -310,17 +342,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         for to in float_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                target.clone(),
                 cast_int_to_float_function(from.clone(), to.clone()),
                 None,
                 None,
                 Some(format!(
-                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
-                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
+                    "Casts a value of `{}` into a value of `{}`.",
                     from_name, to_name
                 )),
             ));
+            fix_module.add_deprecation(
+                target,
+                format!(
+                    "Use the trait member `To{}::{}` instead.",
+                    to_name,
+                    upper_camel_to_lower_snake(&to_name),
+                ),
+            );
         }
     }
     // Cast from integers to C floats.
@@ -336,17 +376,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             }
             let to_type = to_type.unwrap();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                target.clone(),
                 cast_int_to_float_function(from.clone(), to_type),
                 None,
                 None,
                 Some(format!(
-                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
-                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
+                    "Casts a value of `{}` into a value of `{}`.",
                     from_name, to_name
                 )),
             ));
+            fix_module.add_deprecation(
+                target,
+                format!(
+                    "Use the trait member `To{}::{}` instead.",
+                    to_name,
+                    upper_camel_to_lower_snake(to_name),
+                ),
+            );
         }
     }
     // Cast from floats to integers.
@@ -355,17 +403,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         for to in integral_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                target.clone(),
                 cast_float_to_int_function(from.clone(), to.clone()),
                 None,
                 None,
                 Some(format!(
-                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
-                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
+                    "Casts a value of `{}` into a value of `{}`.",
                     from_name, to_name
                 )),
             ));
+            fix_module.add_deprecation(
+                target,
+                format!(
+                    "Use the trait member `To{}::{}` instead.",
+                    to_name,
+                    upper_camel_to_lower_snake(&to_name),
+                ),
+            );
         }
     }
     // Cast from floats to C integers.
@@ -381,17 +437,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             }
             let to_type = to_type.unwrap();
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
-                FullName::new(&from_namespace, &format!("to_{}", to_name)),
+                target.clone(),
                 cast_float_to_int_function(from.clone(), to_type),
                 None,
                 None,
                 Some(format!(
-                    "(Deprecated) The function `Std::{}::to_{}` has been deprecated in favor of the trait member `To{}::{}`. The old function name will remain available for the foreseeable future to maintain backward compatibility.\n\nCasts a value of `{}` into a value of `{}`.",
-                    from_name, to_name, to_name, upper_camel_to_lower_snake(&to_name),
+                    "Casts a value of `{}` into a value of `{}`.",
                     from_name, to_name
                 )),
             ));
+            fix_module.add_deprecation(
+                target,
+                format!(
+                    "Use the trait member `To{}::{}` instead.",
+                    to_name,
+                    upper_camel_to_lower_snake(to_name),
+                ),
+            );
         }
     }
     // Bit operations

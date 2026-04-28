@@ -1257,7 +1257,7 @@ namespace IO {
         let argc = *get_arg_count;
         if n >= argc { pure $ Option::none() };
         let arg_ptr = *(FFI_CALL_IO[Ptr fixruntime_get_argv(I64), n]);
-        pure $ Option::some(String::_unsafe_from_c_str_ptr(arg_ptr))
+        pure $ Option::some(String::unsafe_from_c_str_ptr(arg_ptr))
     );
 
     // Gets the number of command line arguments.
@@ -2785,27 +2785,17 @@ namespace String {
         String { _data : buf }
     );
 
-    // (Deprecated) Renamed to `unsafe_from_c_str_ptr`.
-    _unsafe_from_c_str_ptr : Ptr -> String;
-    _unsafe_from_c_str_ptr = |ptr| (
-        let len = FFI_CALL[I64 strlen(Ptr), ptr];
-        let buf_len = len + 1;
-        let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
-        let (buf, _) = buf.mutate_boxed(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
-        String { _data : buf }
-    );
-
     // Create a `String` from a pointer to a null-terminated C string.
-    // 
+    //
     // If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
-    // 
+    //
     // If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
-    // 
+    //
     // There is also an IO version of this function, `unsafe_from_c_str_ptr_io`.
-    // 
+    //
     // Since this function is not an `IO` action, the compiler does not guarantee the order of execution between this function and `IO` actions.
     // Do not use this function if you perform `IO` operations that modify the content pointed to by `ptr` or free `ptr`.
-    // 
+    //
     // For example,
     // ```
     // let str = unsafe_from_c_str_ptr(ptr);
@@ -2814,7 +2804,7 @@ namespace String {
     // may be rewritten to:
     // ```
     // FFI_CALL_IO[() free(Ptr), ptr];;
-    // let str = unsafe_from_c_str_ptr(ptr);    
+    // let str = unsafe_from_c_str_ptr(ptr);
     // ```
     // which can cause undefined behavior.
     //
@@ -2822,7 +2812,17 @@ namespace String {
     //
     // * `ptr` - The pointer to a null-terminated C string.
     unsafe_from_c_str_ptr : Ptr -> String;
-    unsafe_from_c_str_ptr = _unsafe_from_c_str_ptr;
+    unsafe_from_c_str_ptr = |ptr| (
+        let len = FFI_CALL[I64 strlen(Ptr), ptr];
+        let buf_len = len + 1;
+        let buf = Array::empty(buf_len)._unsafe_set_size(buf_len);
+        let (buf, _) = buf.mutate_boxed(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
+        String { _data : buf }
+    );
+
+    _unsafe_from_c_str_ptr : Ptr -> String;
+    _unsafe_from_c_str_ptr = unsafe_from_c_str_ptr;
+    DEPRECATED[_unsafe_from_c_str_ptr, "Use `Std::String::unsafe_from_c_str_ptr` instead."];
 
     // Create a `String` from a pointer to a null-terminated C string, via an IO action.
     // 
@@ -3010,8 +3010,6 @@ namespace String {
         Option::some $ s.@_data.@(len - 1)
     );
 
-    // (Deprecated) Renamed `Std::String::get_size` to `Std::String::@size` for brevity. The old name `Std::String::get_size` is now deprecated but will remain available for the foreseeable future to maintain backward compatibility.
-    // 
     // Gets the length of a string without counting the null-terminator.
     //
     // # Parameters
@@ -3019,6 +3017,7 @@ namespace String {
     // * `str` - The string to be converted.
     get_size : String -> I64;
     get_size = |s| s.@_data.get_size - 1; // exclude null terminator
+    DEPRECATED[get_size, "Use `Std::String::@size` instead."];
 
     // Gets the size of a string without counting the null-terminator.
     // 

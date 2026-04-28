@@ -165,3 +165,23 @@ pub fn test_deprecated_message_escape_sequences() {
     "##;
     test_source(source, Configuration::develop_mode());
 }
+
+/// Verifies that the auto-generated `Std::<Type>::to_<type>` cast
+/// functions registered programmatically by `make_std_mod` carry their
+/// `DEPRECATED` entries. Compilation succeeds (warning-only) but the
+/// `--deny-deprecated` mode would convert this to a hard error.
+#[test]
+pub fn test_stdlib_to_cast_is_deprecated() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            // `Std::I64::to_F64` is now a deprecated alias for
+            // `ToF64::to_f64`. The build succeeds with a warning.
+            let _ : F64 = 3.to_F64;
+            pure()
+        );
+    "##;
+    test_source(source, Configuration::develop_mode());
+}
