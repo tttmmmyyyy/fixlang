@@ -112,11 +112,10 @@ namespace Array {
         arr._unsafe_get_bounds_unchecked(idx)
     );
 
-    // Gets the size of an array.
-    // 
-    // # Parameters
-    // * `array` - The array to get the size from.
-    @size : Array a -> I64 = |arr| arr.get_size;
+    // Deprecated alias for `Std::Array::@size`. Kept for backward
+    // compatibility; `@size` is the canonical accessor.
+    get_size : Array a -> I64 = |arr| arr.@size;
+    DEPRECATED[get_size, "Use `Std::Array::@size` instead."];
 
     // Gets the capacity of an array.
     // 
@@ -3016,7 +3015,7 @@ namespace String {
     //
     // * `str` - The string to be converted.
     get_size : String -> I64;
-    get_size = |s| s.@_data.get_size - 1; // exclude null terminator
+    get_size = |s| s.@_data.@size - 1; // exclude null terminator
     DEPRECATED[get_size, "Use `Std::String::@size` instead."];
 
     // Gets the size of a string without counting the null-terminator.

@@ -852,6 +852,12 @@ fn value_entries(
 
         let mut doc = MarkdownSection::new(name.name.clone());
 
+        // Surface a `DEPRECATED[...]` pragma at the top of the entry, so it
+        // appears immediately under the heading and before the type line.
+        if let Some(info) = &gv.deprecation {
+            doc.add_paragraph(format!("**Deprecated**: {}", info.message));
+        }
+
         doc.add_paragraph(format!(
             "Type: `{}`",
             gv.syn_scm.as_ref().unwrap_or(&gv.scm).to_string()

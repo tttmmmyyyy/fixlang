@@ -29,7 +29,7 @@ use crate::{
     },
     configuration::Configuration,
     constants::{
-        ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_GET_SIZE_NAME, ARRAY_NAME,
+        ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME,
         ARRAY_UNSAFE_EMPTY_NAME, ARRAY_UNSAFE_FILL_NAME, ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
         ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
         ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, DESTRUCTOR_NAME, F32_NAME,
@@ -630,8 +630,11 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("../docs/std_array_get_capacity.md").to_string()),
     ));
+    // The canonical name of the array length accessor is `Array::@size`;
+    // it gets the LLVM-builtin implementation. `Array::get_size` is then
+    // a thin Fix-level alias defined in std.fix and marked deprecated.
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_GET_SIZE_NAME),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "@size"),
         array_get_size(),
         None,
         None,
