@@ -25,6 +25,12 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
 
     let mut program = elaborate_via_config(&config)?;
     program.flush_warnings_to_stderr();
+    // Surface any errors that were deferred to the diagnostic stage —
+    // most importantly, deprecation diagnostics promoted to errors by
+    // `--deny-deprecated`.
+    if program.deferred_errors.has_error() {
+        return Err(program.deferred_errors);
+    }
     let obj_files = build_object_files(program, &config)?;
 
     let mut library_search_path_opts: Vec<String> = vec![];

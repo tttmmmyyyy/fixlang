@@ -114,4 +114,128 @@ mod integration_tests {
             stderr
         );
     }
+
+    /// `--deny-deprecated` promotes the warning into a hard error and the
+    /// build fails.
+    #[test]
+    fn test_build_deny_deprecated_promotes_to_error() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("deprecated_warning_project");
+
+        let output = Command::new("fix")
+            .arg("build")
+            .arg("--deny-deprecated")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix build");
+
+        assert!(
+            !output.status.success(),
+            "fix build --deny-deprecated should fail: stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("error")
+                && stderr.contains("old_func")
+                && stderr.contains("Use `new_func` instead."),
+            "Expected deprecation error in stderr, got: {}",
+            stderr
+        );
+    }
+
+    /// `--allow-deprecated` suppresses the warning and produces a clean
+    /// build.
+    #[test]
+    fn test_build_allow_deprecated_suppresses_warning() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("deprecated_warning_project");
+
+        let output = Command::new("fix")
+            .arg("build")
+            .arg("--allow-deprecated")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix build");
+
+        assert!(
+            output.status.success(),
+            "fix build --allow-deprecated should succeed: stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("Use `new_func` instead."),
+            "Expected no deprecation warning in stderr, got: {}",
+            stderr
+        );
+    }
+
+    /// A `DEPRECATED` trait member should warn when reached through a
+    /// concrete impl: marking the trait member must propagate to each
+    /// impl's derived `GlobalValue`.
+    #[test]
+    fn test_check_emits_trait_member_deprecation_warning() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("deprecated_trait_warning_project");
+
+        let output = Command::new("fix")
+            .arg("check")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix check");
+
+        assert!(
+            output.status.success(),
+            "fix check should succeed (warning-only): stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("warning")
+                && stderr.contains("old_greet")
+                && stderr.contains("Use `greet` instead."),
+            "Expected trait-member deprecation warning in stderr, got: {}",
+            stderr
+        );
+    }
+
+    /// "Deprecated context" rule: a deprecated helper calling another
+    /// deprecated helper should not produce a warning for that internal
+    /// call. Only the use from non-deprecated code (here, `main`) warns.
+    #[test]
+    fn test_check_deprecated_context_suppresses_inner_warning() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("deprecated_context_project");
+
+        let output = Command::new("fix")
+            .arg("check")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix check");
+
+        assert!(
+            output.status.success(),
+            "fix check should succeed (warning-only): stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // `main` uses `old_a`: that call must warn.
+        assert!(
+            stderr.contains("Use `new_a` instead."),
+            "Expected warning for `old_a` from main, got: {}",
+            stderr
+        );
+        // `old_a`'s body uses `old_b`, but `old_a` is itself deprecated,
+        // so the inner call must NOT warn.
+        assert!(
+            !stderr.contains("Use `new_b` instead."),
+            "Inner call from `old_a` to `old_b` should be suppressed, got: {}",
+            stderr
+        );
+    }
 }

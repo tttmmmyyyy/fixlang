@@ -1728,9 +1728,15 @@ impl Program {
             DeprecationMode::Deny => true,
         };
 
-        for (gv_name, gv) in &self.global_values {
-            // The global value being checked itself is not the use-site;
-            // we collect uses inside its expression(s).
+        for (_gv_name, gv) in &self.global_values {
+            // Skip uses inside an item that is itself deprecated. This is the
+            // standard "deprecated context" rule shared by Rust, Java, C# and
+            // Swift: a deprecated helper calling another deprecated helper
+            // (or recursing into itself) shouldn't spam warnings — the
+            // migration burden lives at the boundary, not in the cluster.
+            if gv.deprecation.is_some() {
+                continue;
+            }
             let mut uses: Vec<(FullName, Option<Span>)> = vec![];
             gv.expr.walk_var_uses(&mut |var, src| {
                 if var.name.is_global() {
@@ -1738,11 +1744,6 @@ impl Program {
                 }
             });
             for (used_name, use_src) in uses {
-                // Skip self-reference: a deprecated function calling itself
-                // would otherwise warn on every recursive call.
-                if &used_name == gv_name {
-                    continue;
-                }
                 let target = match self.global_values.get(&used_name) {
                     Some(t) => t,
                     None => continue,

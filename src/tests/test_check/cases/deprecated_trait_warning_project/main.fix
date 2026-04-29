@@ -1,0 +1,19 @@
+module Main;
+
+trait a : Greeter {
+    old_greet : a -> String;
+    DEPRECATED[old_greet, "Use `greet` instead."];
+
+    greet : a -> String;
+}
+
+impl I64 : Greeter {
+    old_greet = |_| "hi";
+    greet = |_| "hello";
+}
+
+main : IO ();
+main = (
+    let _ = (1).old_greet;
+    pure()
+);

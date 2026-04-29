@@ -1,0 +1,6 @@
+[general]
+name = "deprecated-trait-warning-project"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

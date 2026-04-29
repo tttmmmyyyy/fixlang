@@ -1,0 +1,20 @@
+module Main;
+
+// Two deprecated functions that delegate to each other. The use of
+// `old_b` from inside `old_a`'s body should be suppressed by the
+// "deprecated context" rule (Rust/Java/C#/Swift parity), so only the
+// call from `main` produces a warning.
+
+old_a : I64 -> I64;
+old_a = |x| old_b(x);
+DEPRECATED[old_a, "Use `new_a` instead."];
+
+old_b : I64 -> I64;
+old_b = |x| x + 1;
+DEPRECATED[old_b, "Use `new_b` instead."];
+
+main : IO ();
+main = (
+    let _ = old_a(0);
+    pure()
+);

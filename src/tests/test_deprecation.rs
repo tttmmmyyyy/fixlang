@@ -166,6 +166,81 @@ pub fn test_deprecated_message_escape_sequences() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a `DEPRECATED` pragma written outside a trait body can
+/// target a member of that trait via a qualified path
+/// (`DEPRECATED[Greeter::old_greet, "..."]`). The inner-form is already
+/// covered by `test_deprecated_trait_member_inner`.
+#[test]
+pub fn test_deprecated_outer_pragma_targets_trait_member() {
+    let source = r##"
+        module Main;
+
+        trait a : Greeter {
+            old_greet : a -> String;
+            greet : a -> String;
+        }
+        DEPRECATED[Greeter::old_greet, "Use `greet` instead."];
+
+        impl I64 : Greeter {
+            old_greet = |_| "hi";
+            greet = |_| "hello";
+        }
+
+        main : IO ();
+        main = (
+            let _ = (1).old_greet;
+            pure()
+        );
+    "##;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A `DEPRECATED` pragma's path is interpreted *relative to its enclosing
+/// container*. Inside `namespace Foo { ... }`, `DEPRECATED[Bar::baz, ..]`
+/// resolves to `Foo::Bar::baz`; if no such global exists we expect a
+/// "not found" diagnostic — never a fallthrough match against an unrelated
+/// `Bar::baz` defined elsewhere.
+#[test]
+pub fn test_deprecated_namespace_container_miss_fails() {
+    let source = r##"
+        module Main;
+
+        namespace Foo {
+            DEPRECATED[Bar::baz, "Removed."];
+        }
+
+        // `Bar::baz` exists at the top level, but the pragma above sits
+        // inside `Foo`, so it must look up `Foo::Bar::baz` (which doesn't
+        // exist) — not this one.
+        namespace Bar {
+            baz : I64;
+            baz = 0;
+        }
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(source, Configuration::develop_mode(), "not found under");
+}
+
+/// `FFI_EXPORT[::Foo::bar, c_bar];` is rejected for the same reason
+/// `DEPRECATED[::Foo::bar, ..]` is: the path must be relative to the
+/// surrounding container.
+#[test]
+pub fn test_ffi_export_absolute_path_fails() {
+    let source = r##"
+        module Main;
+
+        bar : CInt -> CInt;
+        bar = |x| x;
+        FFI_EXPORT[::Main::bar, c_bar_abs];
+
+        main : IO ();
+        main = pure();
+    "##;
+    test_source_fail(source, Configuration::develop_mode(), "absolute path");
+}
+
 /// Verifies that the auto-generated `Std::<Type>::to_<type>` cast
 /// functions registered programmatically by `make_std_mod` carry their
 /// `DEPRECATED` entries. Compilation succeeds (warning-only) but the
