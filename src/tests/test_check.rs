@@ -85,4 +85,33 @@ mod integration_tests {
             stderr
         );
     }
+
+    /// `fix check` should surface `DEPRECATED[...]` warnings to stderr
+    /// even though the project compiles successfully.
+    #[test]
+    fn test_check_emits_deprecation_warning() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("deprecated_warning_project");
+
+        let output = Command::new("fix")
+            .arg("check")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix check");
+
+        assert!(
+            output.status.success(),
+            "fix check should succeed (warning-only): stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("warning")
+                && stderr.contains("old_func")
+                && stderr.contains("Use `new_func` instead."),
+            "Expected deprecation warning in stderr, got: {}",
+            stderr
+        );
+    }
 }

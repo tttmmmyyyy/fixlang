@@ -1,0 +1,14 @@
+module Main;
+
+old_func : I64 -> I64;
+old_func = |x| x + 1;
+DEPRECATED[old_func, "Use `new_func` instead."];
+
+new_func : I64 -> I64;
+new_func = |x| x + 2;
+
+main : IO ();
+main = (
+    let _ = old_func(10);
+    pure()
+);

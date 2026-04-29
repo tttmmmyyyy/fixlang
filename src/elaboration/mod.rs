@@ -93,6 +93,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         let mut errors = Errors::empty();
         errors.eat_err(program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules));
         program.deferred_errors.append(errors);
+        program
+            .deferred_errors
+            .append(program.collect_deprecation_diagnostics(config));
         return Ok(program);
     }
 
