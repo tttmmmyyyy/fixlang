@@ -3,12 +3,10 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-
 use git2::{build::CheckoutBuilder, Repository};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
-
 use crate::{
     configuration::{BuildConfigType, Configuration},
     constants::{EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH, PROJECT_FILE_PATH},

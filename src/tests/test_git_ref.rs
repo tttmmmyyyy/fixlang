@@ -7,8 +7,9 @@ mod integration_tests {
     use std::{fs, path::{Path, PathBuf}, process::Command};
     use tempfile::TempDir;
 
-    // Initialize a local upstream repo containing a minimal fix project, commit it,
-    // and create an annotated tag at the given version.
+    /// Initializes a local upstream git repo at `repo_dir` containing a minimal
+    /// fix project and creates an annotated tag named `version` on the initial
+    /// commit.
     fn create_annotated_tag_upstream(repo_dir: &Path, version: &str) {
         fs::create_dir_all(repo_dir).expect("Failed to create upstream dir");
 
@@ -53,8 +54,10 @@ mod integration_tests {
         run(&["tag", "-a", version, "-m", &format!("release {}", version)]);
     }
 
-    // Write a minimal consumer fix project that depends on `upstream_dir` via git.
-    // If `tag` is Some, the dep pins to that tag; otherwise `version` is required.
+    /// Writes a minimal consumer fix project at `consumer_dir` that depends on
+    /// `upstream_dir` via git. Exactly one of `tag` and `version` must be
+    /// `Some`: `tag` pins the dep to that tag, `version` declares a SemVer
+    /// constraint and lets resolution pick a matching tag.
     fn write_consumer_project(
         consumer_dir: &Path,
         upstream_dir: &Path,
@@ -417,20 +420,23 @@ mod integration_tests {
         );
     }
 
-    // Test: an annotated tag pinned via `tag = ...`.
-    // Regression: previously the tag-foreach path stored the tag-object OID,
-    // not the underlying commit; with `tag` set this hits resolve_pinned_ref
-    // (which already peels) but we cover it for completeness.
-    #[test]
-    fn test_git_annotated_tag_pinned() {
+    /// Builds an annotated-tag upstream and a consumer that depends on it, then
+    /// runs `fix build` in the consumer and asserts success. Returns the two
+    /// owning `TempDir`s (the caller must keep them alive for the duration of
+    /// the test) and the consumer project directory.
+    fn build_consumer_against_annotated_tag(
+        upstream_version: &str,
+        tag: Option<&str>,
+        version: Option<&str>,
+    ) -> (TempDir, TempDir, PathBuf) {
         install_fix();
 
         let upstream_tmp = TempDir::new().expect("Failed to create upstream temp dir");
-        create_annotated_tag_upstream(upstream_tmp.path(), "1.0.0");
+        create_annotated_tag_upstream(upstream_tmp.path(), upstream_version);
 
         let consumer_tmp = TempDir::new().expect("Failed to create consumer temp dir");
         let consumer_dir = consumer_tmp.path().join("consumer");
-        write_consumer_project(&consumer_dir, upstream_tmp.path(), Some("1.0.0"), None);
+        write_consumer_project(&consumer_dir, upstream_tmp.path(), tag, version);
 
         let output = Command::new("fix")
             .arg("build")
@@ -443,34 +449,25 @@ mod integration_tests {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+
+        (upstream_tmp, consumer_tmp, consumer_dir)
     }
 
-    // Test: an unpinned dep that resolves through SemVer-tag enumeration.
-    // This is the path that exercises get_versions_from_repo's tag_foreach;
-    // before the fix, the stored OID was a tag-object OID and a later
-    // find_commit failed for annotated tags.
+    /// Verifies that a dependency pinned via `tag = "<annotated tag>"` resolves
+    /// to a buildable commit and `fix build` succeeds.
+    #[test]
+    fn test_git_annotated_tag_pinned() {
+        let (_upstream_tmp, _consumer_tmp, _consumer_dir) =
+            build_consumer_against_annotated_tag("1.0.0", Some("1.0.0"), None);
+    }
+
+    /// Verifies that an unpinned dep with a SemVer constraint resolves through
+    /// annotated-tag enumeration: the tag is peeled to its underlying commit,
+    /// `fix build` succeeds, and the lockfile records the matched version.
     #[test]
     fn test_git_annotated_tag_version_resolution() {
-        install_fix();
-
-        let upstream_tmp = TempDir::new().expect("Failed to create upstream temp dir");
-        create_annotated_tag_upstream(upstream_tmp.path(), "1.0.0");
-
-        let consumer_tmp = TempDir::new().expect("Failed to create consumer temp dir");
-        let consumer_dir = consumer_tmp.path().join("consumer");
-        write_consumer_project(&consumer_dir, upstream_tmp.path(), None, Some("1.0"));
-
-        let output = Command::new("fix")
-            .arg("build")
-            .current_dir(&consumer_dir)
-            .output()
-            .expect("Failed to run fix build");
-        assert!(
-            output.status.success(),
-            "fix build failed:\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+        let (_upstream_tmp, _consumer_tmp, consumer_dir) =
+            build_consumer_against_annotated_tag("1.0.0", None, Some("1.0"));
 
         let lock_content = fs::read_to_string(consumer_dir.join(LOCK_FILE_PATH))
             .expect("Lock file not found");
