@@ -1,5 +1,5 @@
 use std::{fmt::Display, path::PathBuf};
-use colored::Colorize;
+use colored::{Color, Colorize};
 use serde_json::Value;
 use crate::misc::{Map, Set};
 use crate::{misc, parse::sourcefile::Span};
@@ -17,6 +17,17 @@ pub enum Severity {
     Error,
     /// Non-fatal diagnostic; reported but does not block compilation.
     Warning,
+}
+
+impl Severity {
+    /// Returns the colored CLI label (e.g. red bold "error") and the color
+    /// of the `^^^` underline used when rendering associated source spans.
+    pub fn label_and_underline_color(&self) -> (String, Color) {
+        match self {
+            Severity::Error => ("error".red().bold().to_string(), Color::Red),
+            Severity::Warning => ("warning".yellow().bold().to_string(), Color::Yellow),
+        }
+    }
 }
 
 pub struct Errors {
@@ -209,10 +220,7 @@ impl Error {
 
     pub fn to_string(&self) -> String {
         let mut str = String::default();
-        let label = match self.severity {
-            Severity::Error => "error".red().bold().to_string(),
-            Severity::Warning => "warning".yellow().bold().to_string(),
-        };
+        let (label, underline_color) = self.severity.label_and_underline_color();
         str += &label;
         str += ": ";
         str += &self.msg;
@@ -224,7 +232,7 @@ impl Error {
                 str += "\n";
             }
             str += "\n";
-            str += &src.to_string();
+            str += &src.to_string(underline_color);
         }
         str
     }

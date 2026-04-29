@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use colored::Colorize;
+use colored::{Color, Colorize};
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 
@@ -215,8 +215,10 @@ impl Span {
         span.end_pos().line_col()
     }
 
-    // Show source codes around this span.
-    pub fn to_string(&self) -> String {
+    // Show source codes around this span. The `underline_color` controls
+    // the color of the `^^^` markers under the span (typically red for
+    // errors and yellow for warnings).
+    pub fn to_string(&self, underline_color: Color) -> String {
         let source_string = self.input.string();
         if let Err(_e) = source_string {
             return "".to_string();
@@ -255,7 +257,8 @@ impl Span {
             let end_pos = span.end_pos().min(line_span.end_pos());
             let start_col = start_pos.line_col().1;
             let span_len = end_pos.pos() - start_pos.pos();
-            ret += &(" ".repeat(start_col - 1) + &"^".repeat(span_len).red().to_string());
+            ret += &(" ".repeat(start_col - 1)
+                + &"^".repeat(span_len).color(underline_color).to_string());
             ret += "\n";
         }
         ret
