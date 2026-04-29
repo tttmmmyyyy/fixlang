@@ -1,9 +1,13 @@
 use crate::{
     ast::{
+        expr::{expr_var, ExprNode},
         name::FullName,
+        predicate::Predicate,
         program::Program,
+        qual_pred::QualPred,
+        traits::{TraitId, TraitImpl},
         typedecl::{TypeAlias, TypeDeclValue, TypeDefn},
-        types::{type_tyapp, type_tycon, type_tyvar_star, TyCon},
+        types::{type_fun, type_tyapp, type_tycon, type_tyvar_star, Scheme, TyCon, TypeNode},
     },
     fixstd::builtin::{
         add_trait_instance_float, add_trait_instance_int, array_check_range, array_check_size,
@@ -36,7 +40,7 @@ use crate::{
         F64_NAME, FFI_NAME, IOSTATE_NAME, IO_NAME, STD_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
-    misc::upper_camel_to_lower_snake,
+    misc::{make_map, upper_camel_to_lower_snake, Map},
     parse::parser::parse_and_save_to_temporary_file,
 };
 use std::sync::Arc;
@@ -44,6 +48,29 @@ use std::sync::Arc;
 pub const FIX_NAME: &str = "fix";
 
 const STD_SOURCE: &str = include_str!("std.fix");
+
+// Body and scheme for a deprecated `Std::<From>::to_<To>` global that delegates
+// to its canonical replacement, the trait method `Std::To<To>::<method>`.
+//
+// `return_ty` is the value type as it should appear in the global's scheme:
+// the Fix type itself for Fix-target casts, or the C alias (e.g. `CInt`) for
+// FFI-target casts. The trait's own method already has type `[a : To<To>] a -> <To>`,
+// so the scheme is just `from -> return_ty` with no constraints (the constraint is
+// satisfied by an instance registered in `make_numeric_cast_traits_mod`).
+fn cast_delegation(
+    from: &Arc<TypeNode>,
+    to_name: &str,
+    return_ty: Arc<TypeNode>,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    let mut trait_method = FullName::from_strs(
+        &[STD_NAME, &format!("To{}", to_name)],
+        &upper_camel_to_lower_snake(to_name),
+    );
+    trait_method.set_absolute();
+    let body = expr_var(trait_method, None);
+    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(from.clone(), return_ty));
+    (body, scm)
+}
 
 pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std", config)?;
@@ -209,7 +236,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
                 target.clone(),
-                cast_between_integral_function(from.clone(), to.clone(), None),
+                cast_delegation(from, &to_name, to.clone()),
                 None,
                 None,
                 Some(format!(
@@ -238,19 +265,17 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             let to_type_c = FullName::from_strs(&[STD_NAME, FFI_NAME], to_name_c);
             let to_type_c = type_tycon(&Arc::new(TyCon::new(to_type_c)));
 
-            // The type in Fix, e.g., "I32".
-            let to_type_fix = make_integral_ty(&format!("{}{}", sign, size));
-            if to_type_fix.is_none() {
+            // Skip C types that have no Fix counterpart for this size on the host.
+            if make_integral_ty(&format!("{}{}", sign, size)).is_none() {
                 continue;
             }
-            let to_type_fix = to_type_fix.unwrap();
 
             // The namespace of the conversion function is the same as the namespace of the source type.
             let namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             let target = FullName::new(&namespace, &format!("to_{}", to_name_c));
             errors.eat_err(fix_module.add_global_value(
                 target.clone(),
-                cast_between_integral_function(from.clone(), to_type_fix, Some(to_type_c)),
+                cast_delegation(from, to_name_c, to_type_c),
                 None,
                 None,
                 Some(format!(
@@ -277,7 +302,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
                 target.clone(),
-                cast_between_float_function(from.clone(), to.clone(), None),
+                cast_delegation(from, &to_name, to.clone()),
                 None,
                 None,
                 Some(format!(
@@ -306,19 +331,17 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             let to_type_c = FullName::from_strs(&[STD_NAME, FFI_NAME], to_name);
             let to_type_c = type_tycon(&Arc::new(TyCon::new(to_type_c)));
 
-            // The type as is in Fix, e.g., "F32".
-            let to_type_fix = make_floating_ty(&format!("{}{}", sign, size));
-            if to_type_fix.is_none() {
+            // Skip C types that have no Fix counterpart for this size on the host.
+            if make_floating_ty(&format!("{}{}", sign, size)).is_none() {
                 continue;
             }
-            let to_type_fix = to_type_fix.unwrap();
 
             // The namespace of the conversion function is the same as the namespace of the source type.
             let namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             let target = FullName::new(&namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
                 target.clone(),
-                cast_between_float_function(from.clone(), to_type_fix.clone(), Some(to_type_c)),
+                cast_delegation(from, to_name, to_type_c),
                 None,
                 None,
                 Some(format!(
@@ -345,7 +368,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
                 target.clone(),
-                cast_int_to_float_function(from.clone(), to.clone()),
+                cast_delegation(from, &to_name, to.clone()),
                 None,
                 None,
                 Some(format!(
@@ -370,16 +393,18 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             if *sign == "I" {
                 continue;
             }
-            let to_type = make_floating_ty(&format!("{}{}", sign, size));
-            if to_type.is_none() {
+            if make_floating_ty(&format!("{}{}", sign, size)).is_none() {
                 continue;
             }
-            let to_type = to_type.unwrap();
+            let to_type_c = type_tycon(&Arc::new(TyCon::new(FullName::from_strs(
+                &[STD_NAME, FFI_NAME],
+                to_name,
+            ))));
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
                 target.clone(),
-                cast_int_to_float_function(from.clone(), to_type),
+                cast_delegation(from, to_name, to_type_c),
                 None,
                 None,
                 Some(format!(
@@ -406,7 +431,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
                 target.clone(),
-                cast_float_to_int_function(from.clone(), to.clone()),
+                cast_delegation(from, &to_name, to.clone()),
                 None,
                 None,
                 Some(format!(
@@ -431,16 +456,18 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             if *sign == "F" {
                 continue;
             }
-            let to_type = make_integral_ty(&format!("{}{}", sign, size));
-            if to_type.is_none() {
+            if make_integral_ty(&format!("{}{}", sign, size)).is_none() {
                 continue;
             }
-            let to_type = to_type.unwrap();
+            let to_type_c = type_tycon(&Arc::new(TyCon::new(FullName::from_strs(
+                &[STD_NAME, FFI_NAME],
+                to_name,
+            ))));
             let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
             let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
             errors.eat_err(fix_module.add_global_value(
                 target.clone(),
-                cast_float_to_int_function(from.clone(), to_type),
+                cast_delegation(from, to_name, to_type_c),
                 None,
                 None,
                 Some(format!(
@@ -955,24 +982,32 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
     src
 }
 
-// Create source code to define traits which convert between numeric types.
+// Build the module that defines traits which convert between numeric types.
+//
+// The trait declarations (`trait a : ToF64 { f64 : a -> F64; }` etc.) are
+// emitted as source so that they participate in the usual parsing pipeline,
+// but the per-type instances are added programmatically below: each
+// `impl <From> : To<To> { <method> = ... }` is built directly as a `TraitImpl`
+// whose body is the LLVM cast lambda returned by `cast_*_function`.
+//
+// This avoids a synthetic source line per instance, which would otherwise
+// surface as deprecation warnings (the trivial `<method> = to_<To>;` body
+// referenced the deprecated `to_<To>` global).
 pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, Errors> {
-    let mut fix_type_names = vec![];
-    for int_ty in integral_types() {
-        let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
-        fix_type_names.push(ty_name);
+    let int_types = integral_types();
+    let float_types = floating_types();
+    let c_types = config.c_type_sizes.get_c_types();
+
+    // Source: trait declarations only.
+    let mut to_type_names: Vec<String> = vec![];
+    for ty in int_types.iter().chain(float_types.iter()) {
+        to_type_names.push(ty.toplevel_tycon().unwrap().name.name.clone());
     }
-    for float_ty in floating_types() {
-        let ty_name = float_ty.toplevel_tycon().unwrap().name.name.clone();
-        fix_type_names.push(ty_name);
-    }
-    let mut type_names = fix_type_names.clone();
-    for (c_ty_name, _, _e) in config.c_type_sizes.get_c_types() {
-        type_names.push(c_ty_name.to_string());
+    for (c_ty_name, _, _) in &c_types {
+        to_type_names.push(c_ty_name.to_string());
     }
     let mut src = "module Std; \n\n".to_string();
-    for to_name in &type_names {
-        // Add trait definition.
+    for to_name in &to_type_names {
         src += &format!(
             "trait a : To{} {{ \n\
             // Casts a value into `{}` type.\n\
@@ -980,22 +1015,105 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
             }}\n",
             to_name,
             to_name,
-            upper_camel_to_lower_snake(&to_name),
+            upper_camel_to_lower_snake(to_name),
             to_name,
         );
+    }
+    let mut prog = parse_and_save_to_temporary_file(&src, "std_numeric_cast_traits", config)?;
 
-        // Add trait implementations.
-        for from_name in &fix_type_names {
-            src += &format!(
-                "impl {} : To{} {{ {} = to_{}; }}\n",
-                from_name,
-                to_name,
-                upper_camel_to_lower_snake(&to_name),
-                to_name,
-            );
+    // Programmatic impls.
+    let make_impl = |from: &Arc<TypeNode>, to_name: &str, body: Arc<ExprNode>| -> TraitImpl {
+        let trait_id = TraitId::from_fullname(FullName::from_strs(
+            &[STD_NAME],
+            &format!("To{}", to_name),
+        ));
+        let method = upper_camel_to_lower_snake(to_name);
+        TraitImpl {
+            qual_pred: QualPred {
+                pred_constraints: vec![],
+                eq_constraints: vec![],
+                kind_constraints: vec![],
+                predicate: Predicate::make(trait_id, from.clone()),
+            },
+            members: make_map([(method, body)]),
+            member_lhs_srcs: Map::default(),
+            member_sigs: Map::default(),
+            assoc_types: Map::default(),
+            define_module: STD_NAME.to_string(),
+            source: None,
+            is_user_defined: false,
+        }
+    };
+
+    // Fix → Fix: integer to integer.
+    for from in &int_types {
+        for to in &int_types {
+            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let (body, _) = cast_between_integral_function(from.clone(), to.clone(), None);
+            prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
         }
     }
-    parse_and_save_to_temporary_file(&src, "std_numeric_cast_traits", config)
+    // Fix → Fix: integer to float.
+    for from in &int_types {
+        for to in &float_types {
+            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let (body, _) = cast_int_to_float_function(from.clone(), to.clone());
+            prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
+        }
+    }
+    // Fix → Fix: float to integer.
+    for from in &float_types {
+        for to in &int_types {
+            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let (body, _) = cast_float_to_int_function(from.clone(), to.clone());
+            prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
+        }
+    }
+    // Fix → Fix: float to float.
+    for from in &float_types {
+        for to in &float_types {
+            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let (body, _) = cast_between_float_function(from.clone(), to.clone(), None);
+            prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
+        }
+    }
+    // Fix → C type. The C type name (e.g. `CInt`) is an alias for one of the
+    // Fix integral/floating types, identified by `(sign, size)`.
+    let fix_numeric_types: Vec<&Arc<TypeNode>> =
+        int_types.iter().chain(float_types.iter()).collect();
+    for from in &fix_numeric_types {
+        let from_is_int = int_types.iter().any(|t| Arc::ptr_eq(t, from));
+        for (to_name_c, sign, size) in &c_types {
+            let to_is_int = *sign != "F";
+            let to_fix = if to_is_int {
+                make_integral_ty(&format!("{}{}", sign, size))
+            } else {
+                make_floating_ty(&format!("{}{}", sign, size))
+            };
+            let Some(to_fix) = to_fix else { continue };
+            let to_alias = type_tycon(&Arc::new(TyCon::new(FullName::from_strs(
+                &[STD_NAME, FFI_NAME],
+                to_name_c,
+            ))));
+            let (body, _) = match (from_is_int, to_is_int) {
+                (true, true) => cast_between_integral_function(
+                    (*from).clone(),
+                    to_fix,
+                    Some(to_alias),
+                ),
+                (false, false) => cast_between_float_function(
+                    (*from).clone(),
+                    to_fix,
+                    Some(to_alias),
+                ),
+                (true, false) => cast_int_to_float_function((*from).clone(), to_fix),
+                (false, true) => cast_float_to_int_function((*from).clone(), to_fix),
+            };
+            prog.trait_env.add_instance(make_impl(from, to_name_c, body))?;
+        }
+    }
+
+    Ok(prog)
 }
 
 // Create module which defines traits such as ToString or Eq for tuples.

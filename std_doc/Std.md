@@ -791,7 +791,7 @@ A floating number represented by `01...1` in binary.
 
 **Deprecated**: Use the trait member `ToCChar::c_char` instead.
 
-Type: `Std::F32 -> Std::I8`
+Type: `Std::F32 -> Std::FFI::CChar`
 
 Casts a value of `F32` into a value of `CChar`.
 
@@ -815,7 +815,7 @@ Casts a value of `F32` into a value of `CFloat`.
 
 **Deprecated**: Use the trait member `ToCInt::c_int` instead.
 
-Type: `Std::F32 -> Std::I32`
+Type: `Std::F32 -> Std::FFI::CInt`
 
 Casts a value of `F32` into a value of `CInt`.
 
@@ -823,7 +823,7 @@ Casts a value of `F32` into a value of `CInt`.
 
 **Deprecated**: Use the trait member `ToCLong::c_long` instead.
 
-Type: `Std::F32 -> Std::I64`
+Type: `Std::F32 -> Std::FFI::CLong`
 
 Casts a value of `F32` into a value of `CLong`.
 
@@ -831,7 +831,7 @@ Casts a value of `F32` into a value of `CLong`.
 
 **Deprecated**: Use the trait member `ToCLongLong::c_long_long` instead.
 
-Type: `Std::F32 -> Std::I64`
+Type: `Std::F32 -> Std::FFI::CLongLong`
 
 Casts a value of `F32` into a value of `CLongLong`.
 
@@ -839,7 +839,7 @@ Casts a value of `F32` into a value of `CLongLong`.
 
 **Deprecated**: Use the trait member `ToCShort::c_short` instead.
 
-Type: `Std::F32 -> Std::I16`
+Type: `Std::F32 -> Std::FFI::CShort`
 
 Casts a value of `F32` into a value of `CShort`.
 
@@ -847,7 +847,7 @@ Casts a value of `F32` into a value of `CShort`.
 
 **Deprecated**: Use the trait member `ToCSizeT::c_size_t` instead.
 
-Type: `Std::F32 -> Std::U64`
+Type: `Std::F32 -> Std::FFI::CSizeT`
 
 Casts a value of `F32` into a value of `CSizeT`.
 
@@ -855,7 +855,7 @@ Casts a value of `F32` into a value of `CSizeT`.
 
 **Deprecated**: Use the trait member `ToCUnsignedChar::c_unsigned_char` instead.
 
-Type: `Std::F32 -> Std::U8`
+Type: `Std::F32 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `F32` into a value of `CUnsignedChar`.
 
@@ -863,7 +863,7 @@ Casts a value of `F32` into a value of `CUnsignedChar`.
 
 **Deprecated**: Use the trait member `ToCUnsignedInt::c_unsigned_int` instead.
 
-Type: `Std::F32 -> Std::U32`
+Type: `Std::F32 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `F32` into a value of `CUnsignedInt`.
 
@@ -871,7 +871,7 @@ Casts a value of `F32` into a value of `CUnsignedInt`.
 
 **Deprecated**: Use the trait member `ToCUnsignedLong::c_unsigned_long` instead.
 
-Type: `Std::F32 -> Std::U64`
+Type: `Std::F32 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `F32` into a value of `CUnsignedLong`.
 
@@ -879,7 +879,7 @@ Casts a value of `F32` into a value of `CUnsignedLong`.
 
 **Deprecated**: Use the trait member `ToCUnsignedLongLong::c_unsigned_long_long` instead.
 
-Type: `Std::F32 -> Std::U64`
+Type: `Std::F32 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `F32` into a value of `CUnsignedLongLong`.
 
@@ -887,7 +887,7 @@ Casts a value of `F32` into a value of `CUnsignedLongLong`.
 
 **Deprecated**: Use the trait member `ToCUnsignedShort::c_unsigned_short` instead.
 
-Type: `Std::F32 -> Std::U16`
+Type: `Std::F32 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `F32` into a value of `CUnsignedShort`.
 
@@ -1025,7 +1025,7 @@ A floating number represented by `01...1` in binary.
 
 **Deprecated**: Use the trait member `ToCChar::c_char` instead.
 
-Type: `Std::F64 -> Std::I8`
+Type: `Std::F64 -> Std::FFI::CChar`
 
 Casts a value of `F64` into a value of `CChar`.
 
@@ -1049,7 +1049,7 @@ Casts a value of `F64` into a value of `CFloat`.
 
 **Deprecated**: Use the trait member `ToCInt::c_int` instead.
 
-Type: `Std::F64 -> Std::I32`
+Type: `Std::F64 -> Std::FFI::CInt`
 
 Casts a value of `F64` into a value of `CInt`.
 
@@ -1057,7 +1057,7 @@ Casts a value of `F64` into a value of `CInt`.
 
 **Deprecated**: Use the trait member `ToCLong::c_long` instead.
 
-Type: `Std::F64 -> Std::I64`
+Type: `Std::F64 -> Std::FFI::CLong`
 
 Casts a value of `F64` into a value of `CLong`.
 
@@ -1065,7 +1065,7 @@ Casts a value of `F64` into a value of `CLong`.
 
 **Deprecated**: Use the trait member `ToCLongLong::c_long_long` instead.
 
-Type: `Std::F64 -> Std::I64`
+Type: `Std::F64 -> Std::FFI::CLongLong`
 
 Casts a value of `F64` into a value of `CLongLong`.
 
@@ -1073,7 +1073,7 @@ Casts a value of `F64` into a value of `CLongLong`.
 
 **Deprecated**: Use the trait member `ToCShort::c_short` instead.
 
-Type: `Std::F64 -> Std::I16`
+Type: `Std::F64 -> Std::FFI::CShort`
 
 Casts a value of `F64` into a value of `CShort`.
 
@@ -1081,7 +1081,7 @@ Casts a value of `F64` into a value of `CShort`.
 
 **Deprecated**: Use the trait member `ToCSizeT::c_size_t` instead.
 
-Type: `Std::F64 -> Std::U64`
+Type: `Std::F64 -> Std::FFI::CSizeT`
 
 Casts a value of `F64` into a value of `CSizeT`.
 
@@ -1089,7 +1089,7 @@ Casts a value of `F64` into a value of `CSizeT`.
 
 **Deprecated**: Use the trait member `ToCUnsignedChar::c_unsigned_char` instead.
 
-Type: `Std::F64 -> Std::U8`
+Type: `Std::F64 -> Std::FFI::CUnsignedChar`
 
 Casts a value of `F64` into a value of `CUnsignedChar`.
 
@@ -1097,7 +1097,7 @@ Casts a value of `F64` into a value of `CUnsignedChar`.
 
 **Deprecated**: Use the trait member `ToCUnsignedInt::c_unsigned_int` instead.
 
-Type: `Std::F64 -> Std::U32`
+Type: `Std::F64 -> Std::FFI::CUnsignedInt`
 
 Casts a value of `F64` into a value of `CUnsignedInt`.
 
@@ -1105,7 +1105,7 @@ Casts a value of `F64` into a value of `CUnsignedInt`.
 
 **Deprecated**: Use the trait member `ToCUnsignedLong::c_unsigned_long` instead.
 
-Type: `Std::F64 -> Std::U64`
+Type: `Std::F64 -> Std::FFI::CUnsignedLong`
 
 Casts a value of `F64` into a value of `CUnsignedLong`.
 
@@ -1113,7 +1113,7 @@ Casts a value of `F64` into a value of `CUnsignedLong`.
 
 **Deprecated**: Use the trait member `ToCUnsignedLongLong::c_unsigned_long_long` instead.
 
-Type: `Std::F64 -> Std::U64`
+Type: `Std::F64 -> Std::FFI::CUnsignedLongLong`
 
 Casts a value of `F64` into a value of `CUnsignedLongLong`.
 
@@ -1121,7 +1121,7 @@ Casts a value of `F64` into a value of `CUnsignedLongLong`.
 
 **Deprecated**: Use the trait member `ToCUnsignedShort::c_unsigned_short` instead.
 
-Type: `Std::F64 -> Std::U16`
+Type: `Std::F64 -> Std::FFI::CUnsignedShort`
 
 Casts a value of `F64` into a value of `CUnsignedShort`.
 
@@ -1641,7 +1641,7 @@ Casts a value of `I16` into a value of `CChar`.
 
 **Deprecated**: Use the trait member `ToCDouble::c_double` instead.
 
-Type: `Std::I16 -> Std::F64`
+Type: `Std::I16 -> Std::FFI::CDouble`
 
 Casts a value of `I16` into a value of `CDouble`.
 
@@ -1649,7 +1649,7 @@ Casts a value of `I16` into a value of `CDouble`.
 
 **Deprecated**: Use the trait member `ToCFloat::c_float` instead.
 
-Type: `Std::I16 -> Std::F32`
+Type: `Std::I16 -> Std::FFI::CFloat`
 
 Casts a value of `I16` into a value of `CFloat`.
 
@@ -1904,7 +1904,7 @@ Casts a value of `I32` into a value of `CChar`.
 
 **Deprecated**: Use the trait member `ToCDouble::c_double` instead.
 
-Type: `Std::I32 -> Std::F64`
+Type: `Std::I32 -> Std::FFI::CDouble`
 
 Casts a value of `I32` into a value of `CDouble`.
 
@@ -1912,7 +1912,7 @@ Casts a value of `I32` into a value of `CDouble`.
 
 **Deprecated**: Use the trait member `ToCFloat::c_float` instead.
 
-Type: `Std::I32 -> Std::F32`
+Type: `Std::I32 -> Std::FFI::CFloat`
 
 Casts a value of `I32` into a value of `CFloat`.
 
@@ -2167,7 +2167,7 @@ Casts a value of `I64` into a value of `CChar`.
 
 **Deprecated**: Use the trait member `ToCDouble::c_double` instead.
 
-Type: `Std::I64 -> Std::F64`
+Type: `Std::I64 -> Std::FFI::CDouble`
 
 Casts a value of `I64` into a value of `CDouble`.
 
@@ -2175,7 +2175,7 @@ Casts a value of `I64` into a value of `CDouble`.
 
 **Deprecated**: Use the trait member `ToCFloat::c_float` instead.
 
-Type: `Std::I64 -> Std::F32`
+Type: `Std::I64 -> Std::FFI::CFloat`
 
 Casts a value of `I64` into a value of `CFloat`.
 
@@ -2430,7 +2430,7 @@ Casts a value of `I8` into a value of `CChar`.
 
 **Deprecated**: Use the trait member `ToCDouble::c_double` instead.
 
-Type: `Std::I8 -> Std::F64`
+Type: `Std::I8 -> Std::FFI::CDouble`
 
 Casts a value of `I8` into a value of `CDouble`.
 
@@ -2438,7 +2438,7 @@ Casts a value of `I8` into a value of `CDouble`.
 
 **Deprecated**: Use the trait member `ToCFloat::c_float` instead.
 
-Type: `Std::I8 -> Std::F32`
+Type: `Std::I8 -> Std::FFI::CFloat`
 
 Casts a value of `I8` into a value of `CFloat`.
 
@@ -4640,7 +4640,7 @@ Casts a value of `U16` into a value of `CChar`.
 
 **Deprecated**: Use the trait member `ToCDouble::c_double` instead.
 
-Type: `Std::U16 -> Std::F64`
+Type: `Std::U16 -> Std::FFI::CDouble`
 
 Casts a value of `U16` into a value of `CDouble`.
 
@@ -4648,7 +4648,7 @@ Casts a value of `U16` into a value of `CDouble`.
 
 **Deprecated**: Use the trait member `ToCFloat::c_float` instead.
 
-Type: `Std::U16 -> Std::F32`
+Type: `Std::U16 -> Std::FFI::CFloat`
 
 Casts a value of `U16` into a value of `CFloat`.
 
@@ -4899,7 +4899,7 @@ Casts a value of `U32` into a value of `CChar`.
 
 **Deprecated**: Use the trait member `ToCDouble::c_double` instead.
 
-Type: `Std::U32 -> Std::F64`
+Type: `Std::U32 -> Std::FFI::CDouble`
 
 Casts a value of `U32` into a value of `CDouble`.
 
@@ -4907,7 +4907,7 @@ Casts a value of `U32` into a value of `CDouble`.
 
 **Deprecated**: Use the trait member `ToCFloat::c_float` instead.
 
-Type: `Std::U32 -> Std::F32`
+Type: `Std::U32 -> Std::FFI::CFloat`
 
 Casts a value of `U32` into a value of `CFloat`.
 
@@ -5158,7 +5158,7 @@ Casts a value of `U64` into a value of `CChar`.
 
 **Deprecated**: Use the trait member `ToCDouble::c_double` instead.
 
-Type: `Std::U64 -> Std::F64`
+Type: `Std::U64 -> Std::FFI::CDouble`
 
 Casts a value of `U64` into a value of `CDouble`.
 
@@ -5166,7 +5166,7 @@ Casts a value of `U64` into a value of `CDouble`.
 
 **Deprecated**: Use the trait member `ToCFloat::c_float` instead.
 
-Type: `Std::U64 -> Std::F32`
+Type: `Std::U64 -> Std::FFI::CFloat`
 
 Casts a value of `U64` into a value of `CFloat`.
 
@@ -5417,7 +5417,7 @@ Casts a value of `U8` into a value of `CChar`.
 
 **Deprecated**: Use the trait member `ToCDouble::c_double` instead.
 
-Type: `Std::U8 -> Std::F64`
+Type: `Std::U8 -> Std::FFI::CDouble`
 
 Casts a value of `U8` into a value of `CDouble`.
 
@@ -5425,7 +5425,7 @@ Casts a value of `U8` into a value of `CDouble`.
 
 **Deprecated**: Use the trait member `ToCFloat::c_float` instead.
 
-Type: `Std::U8 -> Std::F32`
+Type: `Std::U8 -> Std::FFI::CFloat`
 
 Casts a value of `U8` into a value of `CFloat`.
 
