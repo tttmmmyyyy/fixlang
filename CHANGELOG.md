@@ -49,6 +49,7 @@
 
 #### Tool
 
+- Fixed an issue where the dependency manager could not resolve a git dependency whose version came from an annotated tag. The tag-enumeration path now peels the tag object to its underlying commit, so version-range resolution against repositories that use `git tag -a` works correctly.
 - LSP: Fixed an issue where associated types were missing from completion items.
 - LSP: Fixed an issue where "unknown associated type" errors did not offer an "add import" quick fix.
 - Docs: Fixed an issue where accessor functions (`@`, `set_`, `mod_`, `act_` for struct fields; `as_`, `is_`, `mod_` for union variants) for private (underscore-prefixed) fields or variants were included in the documentation when `--with-compiler-defined-methods` was given. They are now hidden unless `--with-private` is also given.

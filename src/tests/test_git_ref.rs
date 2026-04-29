@@ -4,8 +4,100 @@
 mod integration_tests {
     use crate::constants::LOCK_FILE_PATH;
     use crate::tests::test_util::{copy_dir_recursive, install_fix};
-    use std::{fs, path::PathBuf, process::Command};
+    use std::{fs, path::{Path, PathBuf}, process::Command};
     use tempfile::TempDir;
+
+    // Initialize a local upstream repo containing a minimal fix project, commit it,
+    // and create an annotated tag at the given version.
+    fn create_annotated_tag_upstream(repo_dir: &Path, version: &str) {
+        fs::create_dir_all(repo_dir).expect("Failed to create upstream dir");
+
+        let run = |args: &[&str]| {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(repo_dir)
+                .status()
+                .unwrap_or_else(|e| panic!("Failed to run `git {:?}`: {}", args, e));
+            assert!(status.success(), "`git {:?}` failed", args);
+        };
+
+        run(&["init", "-q", "-b", "main"]);
+        // Local identity so commit succeeds regardless of the env's git config.
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "Test"]);
+
+        let proj_toml = format!(
+            "[general]\n\
+             name = \"annotated-mock\"\n\
+             version = \"{}\"\n\
+             fix_version = \"*\"\n\
+             \n\
+             [build]\n\
+             files = [\"lib.fix\"]\n",
+            version
+        );
+        fs::write(repo_dir.join("fixproj.toml"), proj_toml)
+            .expect("Failed to write fixproj.toml");
+        fs::write(
+            repo_dir.join("lib.fix"),
+            "module AnnotatedMock;\n\
+             \n\
+             annotated_mock_value : I64;\n\
+             annotated_mock_value = 42;\n",
+        )
+        .expect("Failed to write lib.fix");
+
+        run(&["add", "fixproj.toml", "lib.fix"]);
+        run(&["commit", "-q", "-m", "init"]);
+        // -a creates an annotated tag (a tag object) rather than a lightweight tag.
+        run(&["tag", "-a", version, "-m", &format!("release {}", version)]);
+    }
+
+    // Write a minimal consumer fix project that depends on `upstream_dir` via git.
+    // If `tag` is Some, the dep pins to that tag; otherwise `version` is required.
+    fn write_consumer_project(
+        consumer_dir: &Path,
+        upstream_dir: &Path,
+        tag: Option<&str>,
+        version: Option<&str>,
+    ) {
+        fs::create_dir_all(consumer_dir).expect("Failed to create consumer dir");
+        let url = upstream_dir.to_string_lossy().replace('\\', "/");
+        let dep_line = match (tag, version) {
+            (Some(t), None) => format!("git = {{ url = \"{}\", tag = \"{}\" }}", url, t),
+            (None, Some(v)) => format!(
+                "version = \"{}\"\ngit = {{ url = \"{}\" }}",
+                v, url
+            ),
+            _ => panic!("write_consumer_project: pass exactly one of tag/version"),
+        };
+        let proj_toml = format!(
+            "[general]\n\
+             name = \"consumer\"\n\
+             version = \"0.1.0\"\n\
+             fix_version = \"*\"\n\
+             \n\
+             [build]\n\
+             files = [\"main.fix\"]\n\
+             \n\
+             [[dependencies]]\n\
+             name = \"annotated-mock\"\n\
+             {}\n",
+            dep_line
+        );
+        fs::write(consumer_dir.join("fixproj.toml"), proj_toml)
+            .expect("Failed to write consumer fixproj.toml");
+        fs::write(
+            consumer_dir.join("main.fix"),
+            "module Main;\n\
+             \n\
+             import AnnotatedMock;\n\
+             \n\
+             main : IO ();\n\
+             main = println(AnnotatedMock::annotated_mock_value.to_string);\n",
+        )
+        .expect("Failed to write main.fix");
+    }
 
     // Get the path to the git_ref_tests directory.
     fn get_git_ref_test_dir() -> PathBuf {
@@ -322,6 +414,70 @@ mod integration_tests {
         assert!(
             lock_content.contains("version = \"1.1.0\""),
             "Lock file should show version 1.1.0 (Root's pin)"
+        );
+    }
+
+    // Test: an annotated tag pinned via `tag = ...`.
+    // Regression: previously the tag-foreach path stored the tag-object OID,
+    // not the underlying commit; with `tag` set this hits resolve_pinned_ref
+    // (which already peels) but we cover it for completeness.
+    #[test]
+    fn test_git_annotated_tag_pinned() {
+        install_fix();
+
+        let upstream_tmp = TempDir::new().expect("Failed to create upstream temp dir");
+        create_annotated_tag_upstream(upstream_tmp.path(), "1.0.0");
+
+        let consumer_tmp = TempDir::new().expect("Failed to create consumer temp dir");
+        let consumer_dir = consumer_tmp.path().join("consumer");
+        write_consumer_project(&consumer_dir, upstream_tmp.path(), Some("1.0.0"), None);
+
+        let output = Command::new("fix")
+            .arg("build")
+            .current_dir(&consumer_dir)
+            .output()
+            .expect("Failed to run fix build");
+        assert!(
+            output.status.success(),
+            "fix build failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    // Test: an unpinned dep that resolves through SemVer-tag enumeration.
+    // This is the path that exercises get_versions_from_repo's tag_foreach;
+    // before the fix, the stored OID was a tag-object OID and a later
+    // find_commit failed for annotated tags.
+    #[test]
+    fn test_git_annotated_tag_version_resolution() {
+        install_fix();
+
+        let upstream_tmp = TempDir::new().expect("Failed to create upstream temp dir");
+        create_annotated_tag_upstream(upstream_tmp.path(), "1.0.0");
+
+        let consumer_tmp = TempDir::new().expect("Failed to create consumer temp dir");
+        let consumer_dir = consumer_tmp.path().join("consumer");
+        write_consumer_project(&consumer_dir, upstream_tmp.path(), None, Some("1.0"));
+
+        let output = Command::new("fix")
+            .arg("build")
+            .current_dir(&consumer_dir)
+            .output()
+            .expect("Failed to run fix build");
+        assert!(
+            output.status.success(),
+            "fix build failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let lock_content = fs::read_to_string(consumer_dir.join(LOCK_FILE_PATH))
+            .expect("Lock file not found");
+        assert!(
+            lock_content.contains("version = \"1.0.0\""),
+            "Lock file should show resolved version 1.0.0:\n{}",
+            lock_content
         );
     }
 }

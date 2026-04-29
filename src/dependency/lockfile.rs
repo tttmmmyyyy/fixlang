@@ -580,9 +580,22 @@ pub fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Err
             return true; // Continue.
         }
         let version = parsed.unwrap();
+
+        // Peel the OID to a commit. For annotated tags `oid` points to a tag
+        // object, not the commit, so a later `find_commit` would fail; for
+        // lightweight tags `oid` is already a commit OID and peel returns it
+        // unchanged.
+        let commit_oid = match repo
+            .find_object(oid, None)
+            .and_then(|obj| obj.peel_to_commit())
+        {
+            Ok(commit) => commit.id(),
+            Err(_) => return true, // Skip tags that don't resolve to a commit.
+        };
+
         versions.push(VersionInfo {
             version,
-            rev: oid,
+            rev: commit_oid,
             tagged: true,
         });
 
