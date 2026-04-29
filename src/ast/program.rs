@@ -4,7 +4,7 @@ use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType
 use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
-use crate::ast::name::{FullName, Name};
+use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
@@ -826,17 +826,15 @@ impl Program {
         self.add_global_value_common(name, (expr, scm), decl_src, defn_src, document, false)
     }
 
-    // Programmatically register a `DEPRECATED[...]` pragma for a global
-    // value that was added via `add_global_value` / `add_compiler_defined_method`.
-    // Used by stdlib registration code (e.g. for the auto-generated
-    // `Std::<Type>::to_<type>` casts that are deprecated in favor of the
-    // `To<Type>` trait methods).
+    /// Programmatically register a `DEPRECATED[...]` pragma for a global
+    /// value, attaching the given user-facing message to `target`. The pragma
+    /// is processed during elaboration just like a source-level pragma.
     pub fn add_deprecation(&mut self, target: FullName, message: String) {
         self.deprecation_statements
-            .push(crate::ast::deprecation::DeprecationStatement {
+            .push(DeprecationStatement {
                 target_path: target,
                 target_name_src: None,
-                origin_namespace: crate::ast::name::NameSpace::local(),
+                origin_namespace: NameSpace::local(),
                 message,
                 src: None,
             });

@@ -72,6 +72,39 @@ fn cast_delegation(
     (body, scm)
 }
 
+// Register a deprecated `Std::<From>::to_<To>` cast: it gets a body that
+// delegates to the `To<To>` trait method and a `DEPRECATED[...]` entry
+// pointing users at that trait method.
+fn register_deprecated_cast(
+    fix_module: &mut Program,
+    errors: &mut Errors,
+    from: &Arc<TypeNode>,
+    from_name: &str,
+    to_name: &str,
+    return_ty: Arc<TypeNode>,
+) {
+    let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+    let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
+    errors.eat_err(fix_module.add_global_value(
+        target.clone(),
+        cast_delegation(from, to_name, return_ty),
+        None,
+        None,
+        Some(format!(
+            "Casts a value of `{}` into a value of `{}`.",
+            from_name, to_name
+        )),
+    ));
+    fix_module.add_deprecation(
+        target,
+        format!(
+            "Use the trait member `To{}::{}` instead.",
+            to_name,
+            upper_camel_to_lower_snake(to_name),
+        ),
+    );
+}
+
 pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std", config)?;
 
@@ -227,261 +260,52 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     // Cast functions
 
-    // Cast function between integers.
-    for from in integral_types {
+    // Helper: build the C-alias `TypeNode` for a (sign, size) when the host
+    // has a matching Fix counterpart, or `None` to skip.
+    let c_alias_ty = |to_name_c: &str, sign: &str, size: usize| -> Option<Arc<TypeNode>> {
+        let has_fix_counterpart = if sign == "F" {
+            make_floating_ty(&format!("{}{}", sign, size)).is_some()
+        } else {
+            make_integral_ty(&format!("{}{}", sign, size)).is_some()
+        };
+        if !has_fix_counterpart {
+            return None;
+        }
+        Some(type_tycon(&Arc::new(TyCon::new(FullName::from_strs(
+            &[STD_NAME, FFI_NAME],
+            to_name_c,
+        )))))
+    };
+
+    // Fix → Fix: integer/float to integer/float.
+    for from in integral_types.iter().chain(float_types.iter()) {
         let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for to in integral_types {
+        for to in integral_types.iter().chain(float_types.iter()) {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
-            errors.eat_err(fix_module.add_global_value(
-                target.clone(),
-                cast_delegation(from, &to_name, to.clone()),
-                None,
-                None,
-                Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name
-                )),
-            ));
-            fix_module.add_deprecation(
-                target,
-                format!(
-                    "Use the trait member `To{}::{}` instead.",
-                    to_name,
-                    upper_camel_to_lower_snake(&to_name),
-                ),
+            register_deprecated_cast(
+                &mut fix_module,
+                &mut errors,
+                from,
+                &from_name,
+                &to_name,
+                to.clone(),
             );
         }
     }
-    // Cast function from integer to C integers.
-    for from in integral_types {
+    // Fix → C alias: integer/float to any C numeric type.
+    for from in integral_types.iter().chain(float_types.iter()) {
         let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for (to_name_c, sign, size) in &c_types {
-            if *sign == "F" {
+            let Some(to_type_c) = c_alias_ty(to_name_c, sign, *size) else {
                 continue;
-            }
-            // The type as is in C, e.g., "CInt".
-            let to_type_c = FullName::from_strs(&[STD_NAME, FFI_NAME], to_name_c);
-            let to_type_c = type_tycon(&Arc::new(TyCon::new(to_type_c)));
-
-            // Skip C types that have no Fix counterpart for this size on the host.
-            if make_integral_ty(&format!("{}{}", sign, size)).is_none() {
-                continue;
-            }
-
-            // The namespace of the conversion function is the same as the namespace of the source type.
-            let namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            let target = FullName::new(&namespace, &format!("to_{}", to_name_c));
-            errors.eat_err(fix_module.add_global_value(
-                target.clone(),
-                cast_delegation(from, to_name_c, to_type_c),
-                None,
-                None,
-                Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name_c
-                )),
-            ));
-            fix_module.add_deprecation(
-                target,
-                format!(
-                    "Use the trait member `To{}::{}` instead.",
-                    to_name_c,
-                    upper_camel_to_lower_snake(&to_name_c),
-                ),
-            );
-        }
-    }
-    // Cast function between floats.
-    for from in float_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for to in float_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
-            errors.eat_err(fix_module.add_global_value(
-                target.clone(),
-                cast_delegation(from, &to_name, to.clone()),
-                None,
-                None,
-                Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name
-                )),
-            ));
-            fix_module.add_deprecation(
-                target,
-                format!(
-                    "Use the trait member `To{}::{}` instead.",
-                    to_name,
-                    upper_camel_to_lower_snake(&to_name),
-                ),
-            );
-        }
-    }
-    // Cast function from floats to C floats.
-    for from in float_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for (to_name, sign, size) in &c_types {
-            if *sign == "I" {
-                continue;
-            }
-            // The type as is in C, e.g., "CFloat".
-            let to_type_c = FullName::from_strs(&[STD_NAME, FFI_NAME], to_name);
-            let to_type_c = type_tycon(&Arc::new(TyCon::new(to_type_c)));
-
-            // Skip C types that have no Fix counterpart for this size on the host.
-            if make_floating_ty(&format!("{}{}", sign, size)).is_none() {
-                continue;
-            }
-
-            // The namespace of the conversion function is the same as the namespace of the source type.
-            let namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            let target = FullName::new(&namespace, &format!("to_{}", to_name));
-            errors.eat_err(fix_module.add_global_value(
-                target.clone(),
-                cast_delegation(from, to_name, to_type_c),
-                None,
-                None,
-                Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name
-                )),
-            ));
-            fix_module.add_deprecation(
-                target,
-                format!(
-                    "Use the trait member `To{}::{}` instead.",
-                    to_name,
-                    upper_camel_to_lower_snake(to_name),
-                ),
-            );
-        }
-    }
-    // Cast from integers to floats.
-    for from in integral_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for to in float_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
-            errors.eat_err(fix_module.add_global_value(
-                target.clone(),
-                cast_delegation(from, &to_name, to.clone()),
-                None,
-                None,
-                Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name
-                )),
-            ));
-            fix_module.add_deprecation(
-                target,
-                format!(
-                    "Use the trait member `To{}::{}` instead.",
-                    to_name,
-                    upper_camel_to_lower_snake(&to_name),
-                ),
-            );
-        }
-    }
-    // Cast from integers to C floats.
-    for from in integral_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for (to_name, sign, size) in &c_types {
-            if *sign == "I" {
-                continue;
-            }
-            if make_floating_ty(&format!("{}{}", sign, size)).is_none() {
-                continue;
-            }
-            let to_type_c = type_tycon(&Arc::new(TyCon::new(FullName::from_strs(
-                &[STD_NAME, FFI_NAME],
-                to_name,
-            ))));
-            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
-            errors.eat_err(fix_module.add_global_value(
-                target.clone(),
-                cast_delegation(from, to_name, to_type_c),
-                None,
-                None,
-                Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name
-                )),
-            ));
-            fix_module.add_deprecation(
-                target,
-                format!(
-                    "Use the trait member `To{}::{}` instead.",
-                    to_name,
-                    upper_camel_to_lower_snake(to_name),
-                ),
-            );
-        }
-    }
-    // Cast from floats to integers.
-    for from in float_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for to in integral_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
-            errors.eat_err(fix_module.add_global_value(
-                target.clone(),
-                cast_delegation(from, &to_name, to.clone()),
-                None,
-                None,
-                Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name
-                )),
-            ));
-            fix_module.add_deprecation(
-                target,
-                format!(
-                    "Use the trait member `To{}::{}` instead.",
-                    to_name,
-                    upper_camel_to_lower_snake(&to_name),
-                ),
-            );
-        }
-    }
-    // Cast from floats to C integers.
-    for from in float_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for (to_name, sign, size) in &c_types {
-            if *sign == "F" {
-                continue;
-            }
-            if make_integral_ty(&format!("{}{}", sign, size)).is_none() {
-                continue;
-            }
-            let to_type_c = type_tycon(&Arc::new(TyCon::new(FullName::from_strs(
-                &[STD_NAME, FFI_NAME],
-                to_name,
-            ))));
-            let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
-            let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
-            errors.eat_err(fix_module.add_global_value(
-                target.clone(),
-                cast_delegation(from, to_name, to_type_c),
-                None,
-                None,
-                Some(format!(
-                    "Casts a value of `{}` into a value of `{}`.",
-                    from_name, to_name
-                )),
-            ));
-            fix_module.add_deprecation(
-                target,
-                format!(
-                    "Use the trait member `To{}::{}` instead.",
-                    to_name,
-                    upper_camel_to_lower_snake(to_name),
-                ),
+            };
+            register_deprecated_cast(
+                &mut fix_module,
+                &mut errors,
+                from,
+                &from_name,
+                to_name_c,
+                to_type_c,
             );
         }
     }
@@ -1045,44 +869,48 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
         }
     };
 
-    // Fix → Fix: integer to integer.
-    for from in &int_types {
-        for to in &int_types {
+    // Build the cast body for `from -> to`, dispatched on the (int/float)
+    // shapes of both ends. `to_alias` is the C alias type when present
+    // (Fix → C target); for Fix → Fix targets it is `None`.
+    let cast_body =
+        |from: &Arc<TypeNode>,
+         from_is_int: bool,
+         to_fix: Arc<TypeNode>,
+         to_is_int: bool,
+         to_alias: Option<Arc<TypeNode>>|
+         -> Arc<ExprNode> {
+            let (body, _) = match (from_is_int, to_is_int) {
+                (true, true) => cast_between_integral_function(from.clone(), to_fix, to_alias),
+                (false, false) => cast_between_float_function(from.clone(), to_fix, to_alias),
+                (true, false) => cast_int_to_float_function(from.clone(), to_fix),
+                (false, true) => cast_float_to_int_function(from.clone(), to_fix),
+            };
+            body
+        };
+
+    // Fix → Fix: every (int|float) → (int|float) combination.
+    for (from, from_is_int) in int_types
+        .iter()
+        .map(|t| (t, true))
+        .chain(float_types.iter().map(|t| (t, false)))
+    {
+        for (to, to_is_int) in int_types
+            .iter()
+            .map(|t| (t, true))
+            .chain(float_types.iter().map(|t| (t, false)))
+        {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let (body, _) = cast_between_integral_function(from.clone(), to.clone(), None);
-            prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
-        }
-    }
-    // Fix → Fix: integer to float.
-    for from in &int_types {
-        for to in &float_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let (body, _) = cast_int_to_float_function(from.clone(), to.clone());
-            prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
-        }
-    }
-    // Fix → Fix: float to integer.
-    for from in &float_types {
-        for to in &int_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let (body, _) = cast_float_to_int_function(from.clone(), to.clone());
-            prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
-        }
-    }
-    // Fix → Fix: float to float.
-    for from in &float_types {
-        for to in &float_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let (body, _) = cast_between_float_function(from.clone(), to.clone(), None);
+            let body = cast_body(from, from_is_int, to.clone(), to_is_int, None);
             prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
         }
     }
     // Fix → C type. The C type name (e.g. `CInt`) is an alias for one of the
     // Fix integral/floating types, identified by `(sign, size)`.
-    let fix_numeric_types: Vec<&Arc<TypeNode>> =
-        int_types.iter().chain(float_types.iter()).collect();
-    for from in &fix_numeric_types {
-        let from_is_int = int_types.iter().any(|t| Arc::ptr_eq(t, from));
+    for (from, from_is_int) in int_types
+        .iter()
+        .map(|t| (t, true))
+        .chain(float_types.iter().map(|t| (t, false)))
+    {
         for (to_name_c, sign, size) in &c_types {
             let to_is_int = *sign != "F";
             let to_fix = if to_is_int {
@@ -1095,20 +923,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
                 &[STD_NAME, FFI_NAME],
                 to_name_c,
             ))));
-            let (body, _) = match (from_is_int, to_is_int) {
-                (true, true) => cast_between_integral_function(
-                    (*from).clone(),
-                    to_fix,
-                    Some(to_alias),
-                ),
-                (false, false) => cast_between_float_function(
-                    (*from).clone(),
-                    to_fix,
-                    Some(to_alias),
-                ),
-                (true, false) => cast_int_to_float_function((*from).clone(), to_fix),
-                (false, true) => cast_float_to_int_function((*from).clone(), to_fix),
-            };
+            let body = cast_body(from, from_is_int, to_fix, to_is_int, Some(to_alias));
             prog.trait_env.add_instance(make_impl(from, to_name_c, body))?;
         }
     }

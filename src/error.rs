@@ -45,10 +45,10 @@ impl Errors {
         Errors { errs: vec![] }
     }
 
-    // Whether this collection contains any item with `Severity::Error`.
-    //
-    // Items with `Severity::Warning` are not counted; a collection that
-    // holds only warnings is treated as a successful compilation.
+    /// Whether this collection contains any item with `Severity::Error`.
+    ///
+    /// Items with `Severity::Warning` are not counted; a collection that
+    /// holds only warnings is treated as a successful compilation.
     pub fn has_error(&self) -> bool {
         self.errs.iter().any(|e| e.severity == Severity::Error)
     }
