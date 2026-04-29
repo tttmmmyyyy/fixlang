@@ -47,6 +47,4 @@ pub struct DeprecationStatement {
 pub struct DeprecationInfo {
     /// The user-provided deprecation message.
     pub message: String,
-    /// The span of the originating `DEPRECATED[...]` pragma, if known.
-    pub statement_src: Option<Span>,
 }

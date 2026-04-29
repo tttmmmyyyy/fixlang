@@ -1762,12 +1762,6 @@ impl Program {
                     Error::warning_from_msg_srcs(msg, &[&use_src])
                 };
                 err.code = Some(WARN_DEPRECATED);
-                if let Some(decl_src) = &target.decl_src {
-                    err.add_src("Declared here:".to_string(), decl_src.clone());
-                }
-                if let Some(stmt_src) = &info.statement_src {
-                    err.add_src("Deprecation declared here:".to_string(), stmt_src.clone());
-                }
                 diagnostics.append(Errors::from_err(err));
             }
         }
@@ -1812,7 +1806,6 @@ impl Program {
 
             let info = DeprecationInfo {
                 message: stmt.message.clone(),
-                statement_src: stmt.src.clone(),
             };
 
             // Try direct global value lookup.
