@@ -1,0 +1,15 @@
+module DepWithDeprecated;
+
+old_helper : I64 -> I64;
+old_helper = |x| x + 1;
+DEPRECATED[old_helper, "Use `new_helper` instead."];
+
+new_helper : I64 -> I64;
+new_helper = |x| x + 2;
+
+// Public entry that the root project calls. Internally it still uses
+// `old_helper`, which is deprecated — but because that use lives in this
+// dependency (not the consuming project) it must not produce a warning
+// when the root project is type-checked.
+safe_entry : I64 -> I64;
+safe_entry = |x| old_helper(x) + new_helper(x);

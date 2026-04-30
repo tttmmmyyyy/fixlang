@@ -1,0 +1,6 @@
+[general]
+name = "dep-with-deprecated"
+version = "0.1.0"
+
+[build]
+files = ["lib.fix"]

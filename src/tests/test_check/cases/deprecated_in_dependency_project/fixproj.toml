@@ -1,0 +1,10 @@
+[general]
+name = "deprecated-in-dependency-project"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
+
+[[dependencies]]
+name = "dep-with-deprecated"
+path = "./dep"

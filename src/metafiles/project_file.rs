@@ -525,10 +525,20 @@ impl ProjectFile {
             mode = BuildConfigType::Build;
         }
 
-        // Append source files.
-        config
-            .source_files
-            .append(&mut self.get_files(mode));
+        // Append source files. Root-project files go through
+        // `add_user_source_file` so they also land in
+        // `root_source_files`, which scopes deprecation diagnostics to
+        // user code (mirroring rustc/swiftc: a deprecated use inside a
+        // dependency is the dependency's problem, not the user's).
+        // Dependent-project files are pushed to `source_files` only.
+        let files = self.get_files(mode);
+        if is_dependent_proj {
+            config.source_files.extend(files);
+        } else {
+            for file in files {
+                config.add_user_source_file(file);
+            }
+        }
 
         // Append object files.
         config.object_files.append(

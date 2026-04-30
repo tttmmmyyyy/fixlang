@@ -1,0 +1,12 @@
+module Main;
+
+import DepWithDeprecated;
+
+main : IO ();
+main = (
+    // Only call the non-deprecated entry point. The dependency itself
+    // internally uses a deprecated symbol, but that use should not
+    // surface a warning to this project.
+    let _ = safe_entry(7);
+    pure()
+);

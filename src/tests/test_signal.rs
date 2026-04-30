@@ -21,7 +21,7 @@ mod tests {
             Err(e) => panic!("Failed to save temporary source: {}", e),
         };
         let mut config = Configuration::develop_mode();
-        config.source_files.push(src.file_path);
+        config.add_user_source_file(src.file_path);
         let res = panic_if_err(run(config, false));
         let output = res.expect("Failed to run the program");
 

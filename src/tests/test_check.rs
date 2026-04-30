@@ -203,6 +203,41 @@ mod integration_tests {
         );
     }
 
+    /// Deprecation diagnostics must scope to the *root* project. When a
+    /// dependency internally calls one of its own deprecated symbols, that
+    /// is the dependency author's problem, not the consumer's — `fix check`
+    /// on the root project must succeed and emit no deprecation warning.
+    /// Mirrors how rustc/swiftc/javac/etc. only flag deprecated uses in
+    /// the unit currently being compiled.
+    #[test]
+    fn test_check_does_not_warn_on_dependency_internal_deprecated_use() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("deprecated_in_dependency_project");
+
+        let output = Command::new("fix")
+            .arg("check")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix check");
+
+        assert!(
+            output.status.success(),
+            "fix check should succeed: stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // The resolver prints the dep's project name (`dep-with-deprecated`)
+        // to stderr, so we can't search for the literal word "deprecated"
+        // here — assert on the symbol name and message text instead.
+        assert!(
+            !stderr.contains("old_helper") && !stderr.contains("Use `new_helper` instead."),
+            "Did not expect a deprecation warning for a use that lives \
+             inside a dependency, got: {}",
+            stderr
+        );
+    }
+
     /// "Deprecated context" rule: a deprecated helper calling another
     /// deprecated helper should not produce a warning for that internal
     /// call. Only the use from non-deprecated code (here, `main`) warns.

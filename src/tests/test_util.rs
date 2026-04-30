@@ -65,7 +65,7 @@ fn run_source(
 ) -> Result<Result<Output, io::Error>, Errors> {
     const MAIN_RUN: &str = "main_run";
     let src = save_temporary_source(source, MAIN_RUN)?;
-    config.source_files.push(src.file_path);
+    config.add_user_source_file(src.file_path);
     run(config, false)
 }
 
@@ -133,14 +133,14 @@ pub fn test_files_in_directory(path: &Path) {
                 if file.extension().is_none() || file.extension().unwrap() != "fix" {
                     continue;
                 }
-                config.source_files.push(file);
+                config.add_user_source_file(file);
             }
         } else {
             // For each file which has extention "fix" in "tests" directory, run it as Fix program.
             if path.extension().is_none() || path.extension().unwrap() != "fix" {
                 continue;
             }
-            config.source_files.push(path.clone());
+            config.add_user_source_file(path.clone());
         }
         println!("[{}]:", path.to_string_lossy().to_string());
         let res = run(config, false);

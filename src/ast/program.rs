@@ -1717,6 +1717,13 @@ impl Program {
     /// with `DEPRECATED[...]` and emit warnings (or errors, if
     /// `Configuration.deprecation_mode == Deny`). Returns the collected
     /// diagnostics; the caller decides whether to surface or merge them.
+    ///
+    /// Diagnostics are scoped to the user's own code via
+    /// `Configuration.root_source_files`: only uses whose source span
+    /// lives in one of those files are reported. Uses inside dependencies
+    /// or the embedded stdlib are silently skipped, matching
+    /// rustc/swiftc/javac/etc. — a deprecated use the user can't edit
+    /// shouldn't surface as a warning.
     pub fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
         let mut diagnostics = Errors::empty();
         // Exhaustive match: a new `DeprecationMode` variant must be handled here.
@@ -1725,6 +1732,16 @@ impl Program {
             DeprecationMode::Warn => false,
             DeprecationMode::Deny => true,
         };
+
+        // Canonicalize the user-code file set once so per-use comparisons
+        // are simple `HashSet` lookups. Paths that fail to canonicalize
+        // (e.g. they no longer exist) are dropped; a missing file just
+        // won't match any use site, which is the safe direction.
+        let user_files: Set<PathBuf> = config
+            .root_source_files
+            .iter()
+            .filter_map(|p| to_absolute_path(p).ok())
+            .collect();
 
         for (_gv_name, gv) in &self.global_values {
             // Skip uses inside an item that is itself deprecated. This is the
@@ -1750,6 +1767,21 @@ impl Program {
                     Some(i) => i,
                     None => continue,
                 };
+                // Without a span we can't tell which file the use lives
+                // in, so we drop it: a use without a source location is
+                // synthetic (compiler-generated wrappers, builtin bridges)
+                // and not something the user can act on.
+                let span = match &use_src {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let abs = match to_absolute_path(&span.input.file_path) {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
+                if !user_files.contains(&abs) {
+                    continue;
+                }
                 let msg = format!(
                     "`{}` is deprecated: {}",
                     used_name.to_string(),

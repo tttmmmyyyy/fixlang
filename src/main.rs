@@ -542,10 +542,15 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     }
 
     fn set_config_from_args(config: &mut Configuration, args: &ArgMatches) -> Result<(), Errors> {
-        // Set `source_files`.
-        config
-            .source_files
-            .append(&mut read_source_files_options(args)?);
+        // Files passed via `--source` are user code — append to both
+        // `source_files` and `root_source_files`. Note that this runs
+        // *after* the root `set_config` in `create_config`, so inside a
+        // project directory `--source foo.fix` adds `foo.fix` on top of
+        // whatever `fixproj.toml` already declared, rather than replacing
+        // it.
+        for file in read_source_files_options(args)? {
+            config.add_user_source_file(file);
+        }
 
         // Set `object_files`.
         config
