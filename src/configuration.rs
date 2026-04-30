@@ -174,15 +174,15 @@ pub struct DocsConfig {
 pub struct Configuration {
     // Source files.
     pub source_files: Vec<PathBuf>,
-    // The subset of `source_files` that is user-authored: the root
-    // project's own files, files passed via `--source`, and files pushed
-    // by unit-test entry points. Excludes files contributed by
-    // dependencies. Used to scope deprecation warnings to user code,
-    // mirroring how Rust/Swift/Kotlin/etc. only flag deprecated uses in
-    // the crate or module currently being compiled.
-    //
-    // Maintain this in lockstep with `source_files` via
-    // `add_user_source_file` whenever you're adding user code.
+    /// The subset of `source_files` that is user-authored: the root
+    /// project's own files, files passed via `--source`, and files pushed
+    /// by unit-test entry points. Excludes files contributed by
+    /// dependencies. Used to scope deprecation warnings to user code,
+    /// mirroring how Rust/Swift/Kotlin/etc. only flag deprecated uses in
+    /// the crate or module currently being compiled.
+    ///
+    /// Maintain this in lockstep with `source_files` via
+    /// `add_user_source_file` whenever you're adding user code.
     pub root_source_files: Vec<PathBuf>,
     // Object files to be linked.
     pub object_files: Vec<PathBuf>,
@@ -405,14 +405,14 @@ impl Configuration {
             .push((name.to_string(), LinkType::Dynamic));
     }
 
-    // Register a user-authored source file: the root project's own files,
-    // a path passed via `--source`, or a file pushed by a unit-test entry
-    // point. The file lands in `source_files` (so it is parsed alongside
-    // dependencies) and additionally in `root_source_files`, which scopes
-    // deprecation diagnostics to user code.
-    //
-    // Files contributed by *dependencies* must NOT use this — push them
-    // into `source_files` directly, leaving `root_source_files` alone.
+    /// Register a user-authored source file: the root project's own files,
+    /// a path passed via `--source`, or a file pushed by a unit-test entry
+    /// point. The file lands in `source_files` (so it is parsed alongside
+    /// dependencies) and additionally in `root_source_files`, which scopes
+    /// deprecation diagnostics to user code.
+    ///
+    /// Files contributed by *dependencies* must NOT use this — push them
+    /// into `source_files` directly, leaving `root_source_files` alone.
     pub fn add_user_source_file(&mut self, path: PathBuf) {
         self.source_files.push(path.clone());
         self.root_source_files.push(path);
