@@ -311,6 +311,91 @@ commands_preview = [["echo", "hello"]]
         assert!(stderr_str(&out).contains("require approval"));
     }
 
+    // ---------- fix docs is exempt from the approval flow ----------
+    // `fix docs` only reads source code to emit Markdown -- it never builds object
+    // files, so dependencies' preliminary_commands (typically `make lib.o` and the
+    // like) are irrelevant to it. The approval flow must therefore be skipped, even
+    // when stdin is non-interactive and the trust store is empty. Otherwise CI
+    // pipelines that call `fix docs` would be forced to set
+    // `--allow-preliminary-commands`, and the fixlang-docpage-generator workflow
+    // would break the moment any documented dependency declares a preliminary
+    // command.
+    #[test]
+    fn fix_docs_does_not_require_preliminary_approval_for_root() {
+        let env = Env::new();
+        write_project(
+            &env.proj,
+            &fixproj_with_preliminary(
+                "docs-root-prelim",
+                &["[\"echo\", \"should-not-run\"]"],
+            ),
+        );
+        let out = run_fix(&env, &["docs", "-o", "out"], None, false);
+        assert!(
+            out.status.success(),
+            "fix docs should succeed without preliminary-command approval; stderr: {}",
+            stderr_str(&out)
+        );
+        let err = stderr_str(&out);
+        assert!(
+            !err.contains("require approval"),
+            "fix docs must not surface the approval gate; stderr: {}",
+            err
+        );
+        // The trust store must be untouched -- `fix docs` should not even consult
+        // it, much less write to it.
+        assert!(env.trust_file_contents().is_none());
+    }
+
+    #[test]
+    fn fix_docs_does_not_require_preliminary_approval_for_git_dep() {
+        let env = Env::new();
+        let dep_root = TempDir::new().unwrap();
+        let (dep_repo, _) = make_git_dep_repo(
+            dep_root.path(),
+            "docsdep",
+            "[general]\nname = \"docsdep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+             [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [[\"echo\", \"dep-prelim\"]]\n",
+            &[],
+        );
+        let dep_url = format!("file://{}", dep_repo.to_string_lossy());
+
+        write_project(
+            &env.proj,
+            &format!(
+                "[general]\nname = \"docs-with-gitdep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"main.fix\"]\n\n\
+                 [[dependencies]]\nname = \"docsdep\"\ngit = {{ url = \"{url}\" }}\n",
+                url = dep_url
+            ),
+        );
+
+        // `fix docs` requires the lock file to already exist, mirroring how the
+        // fixlang-docpage-generator runs `fix deps install` before `fix docs`.
+        let setup = run_fix(&env, &["deps", "update"], None, false);
+        assert!(
+            setup.status.success(),
+            "setup `fix deps update` failed: {}",
+            stderr_str(&setup)
+        );
+
+        let out = run_fix(&env, &["docs", "-o", "out"], None, false);
+        assert!(
+            out.status.success(),
+            "fix docs should succeed even when a git dep declares preliminary_commands; \
+             stderr: {}",
+            stderr_str(&out)
+        );
+        let err = stderr_str(&out);
+        assert!(
+            !err.contains("require approval"),
+            "fix docs must not surface the approval gate for dep preliminary_commands; \
+             stderr: {}",
+            err
+        );
+        assert!(env.trust_file_contents().is_none());
+    }
+
     // ---------- (P) Corrupt trust file → warn and re-prompt ----------
     #[test]
     fn case_p_corrupt_trust_file_warns_and_reprompts() {
