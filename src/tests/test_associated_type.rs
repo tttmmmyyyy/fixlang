@@ -264,7 +264,7 @@ main = (
 }
 
 #[test]
-pub fn test_associated_type_in_type_sign_lacking_assumption() {
+pub fn test_associated_type_in_type_sign_missing_assumption() {
     let source = r#"
 module Main;
 

@@ -1,4 +1,4 @@
-use crate::constants::ERR_LACKING_TRAIT_IMPL;
+use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::ast::deprecation::DeprecationInfo;
 use crate::ast::equality::{Equality, EqualityScheme};
 use crate::ast::expr::ExprNode;
@@ -60,7 +60,7 @@ impl MissingTraitImplInfo {
                 }
             })
             .collect();
-        format!("Lacking implementation of {}.", names.join(", "))
+        format!("Missing implementation of {}.", names.join(", "))
     }
 
     // Serialize to a serde_json::Value for use as diagnostic data.
@@ -1063,7 +1063,7 @@ impl TraitEnv {
                 impl_type: impl_.impl_type(),
             };
             let mut err = Error::from_msg_srcs(info.error_message(), &[&impl_.source]);
-            err.code = Some(ERR_LACKING_TRAIT_IMPL);
+            err.code = Some(ERR_MISSING_TRAIT_IMPL);
             err.data = Some(info.to_json());
             return Err(Errors::from_err(err));
         }

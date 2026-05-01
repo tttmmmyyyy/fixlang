@@ -245,7 +245,7 @@ pub fn chars_allowed_in_identifiers() -> String {
 pub const ERR_UNKNOWN_NAME: &str = "unknown-name";
 pub const ERR_AMBIGUOUS_NAME: &str = "ambiguous-name";
 pub const ERR_NO_VALUE_MATCH: &str = "no-value-match";
-pub const ERR_LACKING_TRAIT_IMPL: &str = "lacking-trait-impl";
+pub const ERR_MISSING_TRAIT_IMPL: &str = "missing-trait-impl";
 
 // Formatting
 pub const FORMAT_LINE_LIMIT: usize = 100;

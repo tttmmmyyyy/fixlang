@@ -183,7 +183,7 @@ mod tests {
     /// Test that quick fix suggests inserting stub implementations for missing trait members
     /// and associated types.
     #[test]
-    fn test_quickfix_lacking_trait_impl() {
+    fn test_quickfix_missing_trait_impl() {
         let mut ctx = LspQuickFixCtx::setup("quickfix_trait_impl", &["main.fix"]);
 
         // The project has an incomplete impl, so we should get diagnostics.
@@ -193,19 +193,19 @@ mod tests {
             "Project should have diagnostics for incomplete trait impl."
         );
 
-        // Find the "lacking-trait-impl" diagnostic.
-        let lacking_diag = diagnostics
+        // Find the "missing-trait-impl" diagnostic.
+        let missing_diag = diagnostics
             .iter()
             .find(|d| {
                 d.get("code")
                     .and_then(|c| c.as_str())
-                    .map(|c| c == "lacking-trait-impl")
+                    .map(|c| c == "missing-trait-impl")
                     .unwrap_or(false)
             })
-            .expect("Should have a 'lacking-trait-impl' diagnostic");
+            .expect("Should have a 'missing-trait-impl' diagnostic");
 
         // Get the range of the diagnostic.
-        let range = lacking_diag.get("range").unwrap().clone();
+        let range = missing_diag.get("range").unwrap().clone();
         let start = range.get("start").unwrap();
         let end = range.get("end").unwrap();
         let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
@@ -216,7 +216,7 @@ mod tests {
         // Request code actions with the real diagnostic.
         let actions = ctx.code_actions(
             "main.fix",
-            vec![lacking_diag.clone()],
+            vec![missing_diag.clone()],
             start_line,
             start_col,
             end_line,

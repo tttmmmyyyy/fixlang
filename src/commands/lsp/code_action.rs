@@ -4,7 +4,7 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::program::Program;
 use crate::ast::traits::{MissingTraitImplInfo, MissingTraitImplItem};
 use crate::ast::types::{type_assocty, type_tyvar_star, AssocType};
-use crate::constants::{ERR_LACKING_TRAIT_IMPL, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME};
+use crate::constants::{ERR_MISSING_TRAIT_IMPL, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME};
 use crate::misc::{generate_fresh_varnames, Map, Set};
 use lsp_types::{
     CodeAction, CodeActionKind, CodeActionParams, NumberOrString, Position, Range, TextEdit, Uri,
@@ -26,8 +26,8 @@ pub(super) fn handle_code_action(
             if let Some(program) = program {
                 handle_unknown_name(diag, params, program, uri_to_content, &mut actions);
             }
-        } else if diag.code == Some(NumberOrString::String(ERR_LACKING_TRAIT_IMPL.to_string())) {
-            handle_lacking_trait_impl(diag, params, uri_to_content, &mut actions);
+        } else if diag.code == Some(NumberOrString::String(ERR_MISSING_TRAIT_IMPL.to_string())) {
+            handle_missing_trait_impl(diag, params, uri_to_content, &mut actions);
         }
     }
     send_response(id, Ok::<_, ()>(actions));
@@ -112,7 +112,7 @@ fn handle_unknown_name(
     }
 }
 
-fn handle_lacking_trait_impl(
+fn handle_missing_trait_impl(
     diag: &lsp_types::Diagnostic,
     params: &CodeActionParams,
     uri_to_content: &mut Map<Uri, LatestContent>,

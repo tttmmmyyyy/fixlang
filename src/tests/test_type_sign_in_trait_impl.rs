@@ -338,7 +338,7 @@ main : IO () = (
 }
 
 #[test]
-pub fn test_type_sign_in_trait_impl_lacking_impl() {
+pub fn test_type_sign_in_trait_impl_missing_impl() {
     let source = r#"
 module Main;
 
@@ -360,7 +360,7 @@ main : IO () = (
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        "Lacking implementation of member `mymap`.",
+        "Missing implementation of member `mymap`.",
     );
 }
 
