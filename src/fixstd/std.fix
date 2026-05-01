@@ -4179,11 +4179,8 @@ namespace Debug {
     // * `lazy_value`
     consumed_time_while_lazy : Lazy a -> (a, F64);
     consumed_time_while_lazy = |l| (
-        let s = FFI_CALL[I64 fixruntime_clock()];
-        let r = l();
-        let t = FFI_CALL[I64 fixruntime_clock()];
-        let t = FFI_CALL[F64 fixruntime_clocks_to_sec(I64), t - s];
-        (r, t)
+        let io = IO::from_runner $ |ios| (ios, l());
+        consumed_time_while_io(io).unsafe_perform
     );
 
     // Prints a string to stderr and flushes.
