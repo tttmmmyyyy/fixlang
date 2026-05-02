@@ -98,8 +98,7 @@ fn visit(
 fn report_hole(node: &Arc<ExprNode>, tc: &TypeCheckContext) -> Errors {
     // When the hole's type was resolved by elaboration, include it.
     // When it wasn't (typically because typecheck failed earlier and
-    // never substituted this node's type), drop the type clause —
-    // saying nothing is more honest than printing `?`.
+    // never substituted this node's type), drop the type clause.
     let (msg, free_tvs) = match node.type_.as_ref() {
         Some(ty) => {
             let mut free = vec![];

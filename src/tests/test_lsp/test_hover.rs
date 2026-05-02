@@ -143,6 +143,96 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// The hole-bearing source must produce a `missing-expression`
+    /// diagnostic via `textDocument/publishDiagnostics`. The LSP
+    /// surface is what end users (IDE plugins) consume, so we verify
+    /// the wire format directly.
+    #[test]
+    fn test_hole_publishes_diagnostic() {
+        let ctx = LspTestCtx::setup("hover_with_hole", &["main.fix"]);
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        let hole_diag = diagnostics.iter().find(|d| {
+            d.get("code")
+                .and_then(|c| c.as_str())
+                .map(|c| c == "missing-expression")
+                .unwrap_or(false)
+        });
+        assert!(
+            hole_diag.is_some(),
+            "Expected a 'missing-expression' diagnostic on the hole-bearing main.fix. Got: {:?}",
+            diagnostics
+        );
+        let hole_diag = hole_diag.unwrap();
+
+        // Severity should be Error (1 in LSP protocol).
+        let severity = hole_diag
+            .get("severity")
+            .and_then(|s| s.as_u64())
+            .expect("diagnostic should have a severity");
+        assert_eq!(
+            severity, 1,
+            "ERR_HOLE should have Error severity (1). Got: {}",
+            severity
+        );
+
+        // Message should mention the inferred type.
+        let message = hole_diag
+            .get("message")
+            .and_then(|m| m.as_str())
+            .expect("diagnostic should have a message");
+        assert!(
+            message.contains("Expected expression of type"),
+            "diagnostic message should match the ERR_HOLE template. Got: {:?}",
+            message
+        );
+
+        ctx.shutdown();
+    }
+
+    /// goto-definition on a local variable inside a hole-bearing
+    /// expression must still resolve to the binder. This guards
+    /// against a regression where ERR_HOLE rejection might also throw
+    /// away the typed expression and break other LSP features.
+    #[test]
+    fn test_goto_definition_works_around_hole() {
+        let mut ctx = LspTestCtx::setup("hover_with_hole", &["main.fix"]);
+
+        // Source line 8 (1-based 9):
+        //   Iterator::range(0, n).fold(1, |i, acc| )
+        //
+        // Goto-definition on the second `n` (the use inside the
+        // `range(0, n)` call). Should jump to the lambda parameter
+        // `n` on line 7 (1-based 8): `fact : I64 -> I64 = |n| (`.
+        // Char positions are 0-based.
+        let uri = ctx.file_uri("main.fix");
+        let id = ctx
+            .client
+            .send_request(
+                "textDocument/definition",
+                json!({
+                    "textDocument": { "uri": uri },
+                    "position": { "line": 8, "character": 23 }
+                }),
+            )
+            .expect("Failed to send definition request");
+        ctx.client.wait_for_server(Duration::from_secs(5));
+        let response = ctx
+            .client
+            .get_response(id)
+            .expect("Should receive a definition response");
+        let result = response
+            .get("result")
+            .cloned()
+            .expect("Response should have a result field");
+        assert!(
+            !result.is_null(),
+            "goto-definition on local `n` near the hole should resolve, but got null"
+        );
+
+        ctx.shutdown();
+    }
+
     /// Hover on or near the hole position itself should NOT leak the
     /// internal `Std::#hole` name. The user has no way to spell `#hole`
     /// in their own code (the parser's `name` rule rejects `#`), so

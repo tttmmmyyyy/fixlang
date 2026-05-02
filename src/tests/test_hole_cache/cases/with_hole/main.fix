@@ -1,0 +1,8 @@
+module Main;
+
+// Single hole-bearing global. The cache file naming pattern includes
+// the value name, so we can specifically check that
+// `Main::hole_val` does not get a cache entry.
+hole_val : I64 = ;
+
+main : IO () = pure();

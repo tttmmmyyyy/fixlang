@@ -93,6 +93,35 @@ pub fn test_source(source: &str, config: Configuration) {
     }
 }
 
+// Verify that compilation fails and that the error message does NOT
+// contain `excluded_errmsg`. Used to confirm a genuine error is not
+// silently swallowed by some permissive feature (e.g. that the hole
+// feature does not accept code it was never meant to).
+pub fn test_source_fail_excludes(source: &str, config: Configuration, excluded_errmsg: &str) {
+    let res = run_source(source, config);
+    let errmsg = match res {
+        Err(errs) => errs.to_string(),
+        Ok(run_output) => match run_output {
+            Err(e) => e.to_string(),
+            Ok(output) => {
+                let code = output.status.code();
+                if let Some(code) = code {
+                    if code == 0 {
+                        panic_with_msg("The source code was expected to fail, but succeeded.");
+                    }
+                }
+                String::from_utf8_lossy(&output.stderr).to_string()
+            }
+        },
+    };
+    assert!(
+        !errmsg.contains(excluded_errmsg),
+        "Error message unexpectedly contained excluded text.\nShould not include:\n{}\n\nActual message:\n{}",
+        excluded_errmsg,
+        errmsg
+    );
+}
+
 pub fn test_source_fail(source: &str, config: Configuration, included_errmsg: &str) {
     let res = run_source(source, config);
     let errmsg = match res {
