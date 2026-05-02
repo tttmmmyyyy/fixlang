@@ -28,8 +28,9 @@ use crate::{
         mark_threaded_function, multiply_trait_instance_float, multiply_trait_instance_int,
         negate_trait_instance_float, negate_trait_instance_int, not_trait_instance_bool,
         quiet_nan_value, remainder_trait_instance_int, set_array, shift_function,
-        subtract_trait_instance_float, subtract_trait_instance_int, undefined_internal_function,
-        unsafe_set_size_array, with_retained_function, BitOperationType,
+        hole_function, subtract_trait_instance_float, subtract_trait_instance_int,
+        undefined_internal_function, unsafe_set_size_array, with_retained_function,
+        BitOperationType,
     },
     configuration::Configuration,
     constants::{
@@ -37,7 +38,7 @@ use crate::{
         ARRAY_UNSAFE_EMPTY_NAME, ARRAY_UNSAFE_FILL_NAME, ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
         ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
         ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, DESTRUCTOR_NAME, F32_NAME,
-        F64_NAME, FFI_NAME, IOSTATE_NAME, IO_NAME, STD_NAME, WITH_RETAINED_NAME,
+        F64_NAME, FFI_NAME, HOLE_NAME, IOSTATE_NAME, IO_NAME, STD_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
     misc::{make_map, upper_camel_to_lower_snake, Map},
@@ -518,6 +519,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         None,
         Some(include_str!("../docs/std_undefined_internal.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME], HOLE_NAME),
+        hole_function(),
+        None,
+        None,
+        None,
     ));
     errors.eat_err(fix_module.add_global_value(
         make_with_retained_name(),

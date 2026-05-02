@@ -4120,6 +4120,58 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMHoleBody {}
+
+impl InlineLLVMHoleBody {
+    pub fn name(&self) -> String {
+        "#hole".to_string()
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // Holes are caught by a post-elaboration pass and reported as
+        // ERR_HOLE before code generation, so this should be unreachable.
+        // Be defensive in case `--no-runtime-check` or some other flag
+        // bypasses the diagnostic: emit an `unreachable` instruction so
+        // the LLVM module remains well-formed.
+        gc.builder().build_unreachable().unwrap();
+        let current_func = gc
+            .builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+        let unreachable_bb = gc
+            .context
+            .append_basic_block(current_func, "unreachable_bb");
+        gc.builder().position_at_end(unreachable_bb);
+        Object::undef(ty.clone(), gc)
+    }
+}
+
+// `Std::#hole : a` — placeholder generated when the parser accepts an
+// empty expression position (e.g. `let x = 10; ` with no body).
+// Type-checks at any type via the generic `a`. A post-pass scans for
+// references to this name and emits ERR_HOLE.
+pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const A_NAME: &str = "a";
+    let expr = expr_llvm(
+        LLVMGenerator::HoleFunctionBody(InlineLLVMHoleBody {}),
+        type_tyvar_star(A_NAME),
+        None,
+    );
+    let scm = Scheme::generalize(&[], vec![], vec![], type_tyvar_star(A_NAME));
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMWithRetainedFunctionBody {
     f_name: FullName,
     x_name: FullName,

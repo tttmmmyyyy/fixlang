@@ -80,29 +80,37 @@ expr_lit = { expr_number_lit | expr_bool_lit | expr_string_lit | expr_array_lit 
 
 expr_var = { fullname }
 
-expr_let = { (keyword_let ~ sep+ ~ pattern_nounion ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep*)+ ~ sep* ~ expr }
+// Zero-width sentinel: matches anywhere using positive lookahead, never
+// consumes input. Lets `expr_hole = { expr | hole }` accept an empty
+// expression at the indicated position via PEG prioritized choice
+// (real `expr` is tried first; `hole` only fires when `expr` fails).
+hole = { &(ANY | EOI) }
+
+expr_hole = { expr | hole }
+
+expr_let = { (keyword_let ~ sep+ ~ pattern_nounion ~ sep* ~ eq_of_let ~ sep* ~ expr ~ sep* ~ in_of_let ~ sep*)+ ~ sep* ~ expr_hole }
 
 match_arrow = { "=>" }
 
-expr_match = { 
+expr_match = {
     "match" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~
-    (pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr) ~ sep* ~ 
-    (comma_ ~ sep* ~ pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr ~ sep*)* ~
+    (pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr_hole) ~ sep* ~
+    (comma_ ~ sep* ~ pattern_case ~ sep* ~ match_arrow ~ sep* ~ expr_hole ~ sep*)* ~
     (comma_ ~ sep*)? ~
     "}"
 }
 
-expr_eval = { "eval" ~ sep+ ~ expr ~ sep* ~ semicolon ~ sep* ~ expr }
+expr_eval = { "eval" ~ sep+ ~ expr ~ sep* ~ semicolon ~ sep* ~ expr_hole }
 
 else_of_if = { semicolon | "else" }
 
 else_of_if_with_space = { semicolon | ("else" ~ sep) }
 
-expr_if = { "if" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" ~ sep* ~ ((else_of_if ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}") | (else_of_if_with_space ~ sep* ~ expr)) }
+expr_if = { "if" ~ sep+ ~ expr ~ sep* ~ "{" ~ sep* ~ expr_hole ~ sep* ~ "}" ~ sep* ~ ((else_of_if ~ sep* ~ "{" ~ sep* ~ expr_hole ~ sep* ~ "}") | (else_of_if_with_space ~ sep* ~ expr_hole)) }
 
-expr_lam = { "|" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ sep* ~ "|" ~ sep* ~ expr }
+expr_lam = { "|" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ sep* ~ "|" ~ sep* ~ expr_hole }
 
-expr_do = { "do" ~ sep* ~ "{" ~ sep* ~ expr ~ sep* ~ "}" }
+expr_do = { "do" ~ sep* ~ "{" ~ sep* ~ expr_hole ~ sep* ~ "}" }
 
 // This pattern will be parsed as one of 
 // - the unit value i.e., `()`
@@ -179,7 +187,7 @@ expr_type_annotation = { expr_rtl_app ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 // "and_then" syntax
 operator_and_then = { ";;" }
-expr_and_then_sequence = { expr_type_annotation ~ (sep* ~ operator_and_then ~ sep* ~ expr)* }
+expr_and_then_sequence = { expr_type_annotation ~ (sep* ~ operator_and_then ~ sep* ~ expr_hole)* }
 
 expr = { expr_and_then_sequence }
 
@@ -279,19 +287,19 @@ trait_impl = { "impl" ~ sep+ ~ predicate_qualified ~ sep* ~ "{" ~ (sep* ~ trait_
 
 trait_member_impl = { trait_member_value_impl | trait_member_type_impl | trait_member_value_type_sign }
 
-trait_member_value_impl = { trait_member_value_name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
+trait_member_value_impl = { trait_member_value_name ~ sep* ~ "=" ~ sep* ~ expr_hole ~ sep* ~ semicolon }
 
-trait_member_value_type_sign = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr ~ sep*)? ~ semicolon }
+trait_member_value_type_sign = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr_hole ~ sep*)? ~ semicolon }
 
 trait_member_type_impl = { "type" ~ sep+ ~ type_expr ~ sep* ~ "=" ~ sep* ~ type_expr ~ sep* ~ semicolon }
 
 // === Trait aliases ===
 trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ semicolon }
 
-// === Global names === 
-global_name_type_sign = { name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr ~ sep*)? ~ semicolon }
+// === Global names ===
+global_name_type_sign = { name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr_hole ~ sep*)? ~ semicolon }
 
-global_name_defn = { name ~ sep* ~ "=" ~ sep* ~ expr ~ sep* ~ semicolon }
+global_name_defn = { name ~ sep* ~ "=" ~ sep* ~ expr_hole ~ sep* ~ semicolon }
 
 // === Import statements === 
 import_statement = { "import" ~ sep+ ~ importee ~ sep* ~ semicolon }

@@ -1653,6 +1653,20 @@ pub fn expr_var(name: FullName, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Var(var_var(name))).into_expr_node(src)
 }
 
+// Make a placeholder expression for an empty position the parser
+// accepted via the `expr_hole` rule. The result is `Expr::Var` referring
+// to the internal builtin `Std::#hole : a`. A post-elaboration pass
+// scans for these and emits ERR_HOLE.
+//
+// `src` should be the span of the empty source region (typically
+// computed from the surrounding tokens), so the diagnostic can underline
+// a meaningful range rather than the zero-width hole match itself.
+pub fn expr_hole(src: Option<Span>) -> Arc<ExprNode> {
+    let mut name = FullName::from_strs(&[crate::constants::STD_NAME], crate::constants::HOLE_NAME);
+    name.global_to_absolute();
+    expr_var(name, src)
+}
+
 pub fn expr_if(
     cond: Arc<ExprNode>,
     then_expr: Arc<ExprNode>,

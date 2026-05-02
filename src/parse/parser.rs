@@ -8,7 +8,7 @@ use crate::ast::{
     export_statement::ExportStatement,
     expr::{
         expr_abs, expr_abs_param_src, expr_app, expr_array_lit, expr_eval,
-        expr_ffi_call, expr_if, expr_let, expr_make_struct, expr_make_struct_with_spans,
+        expr_ffi_call, expr_hole, expr_if, expr_let, expr_make_struct, expr_make_struct_with_spans,
         expr_match, expr_tyanno, expr_var, AppSourceCodeOrderType, ExprNode, Var,
         var_local, var_var,
     },
@@ -823,7 +823,7 @@ fn parse_trait_member_value_impl(
     let name_pair = pairs.next().unwrap();
     let name_span = Span::from_pair(&ctx.source, &name_pair);
     let method_name = name_pair.as_str().to_string();
-    let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+    let expr = parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?;
     Ok((method_name, expr, name_span))
 }
 
@@ -839,8 +839,8 @@ fn parse_trait_member_value_type_sign(
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx)?;
     let mut opt_expr = None;
     if let Some(pair) = pairs.peek() {
-        if pair.as_rule() == Rule::expr {
-            opt_expr = Some(parse_expr_with_new_do(pairs.next().unwrap(), ctx)?);
+        if pair.as_rule() == Rule::expr_hole {
+            opt_expr = Some(parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?);
         }
     }
     Ok((method_name, qual_type, opt_expr, name_span))
@@ -958,8 +958,8 @@ fn parse_global_value_decl(
     // Parse expression (if exists).
     let mut gvd = None;
     if let Some(pair) = pairs.peek() {
-        if pair.as_rule() == Rule::expr {
-            let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+        if pair.as_rule() == Rule::expr_hole {
+            let expr = parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?;
             gvd = Some(GlobalValueDefn {
                 name: name.clone(),
                 expr,
@@ -988,7 +988,7 @@ fn parse_global_name_defn(
     let name_pair = pairs.next().unwrap();
     let name_src = Span::from_pair(&ctx.source, &name_pair);
     let name = name_pair.as_str().to_string();
-    let expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+    let expr = parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?;
     Ok(GlobalValueDefn {
         name: FullName::new(&ctx.namespace, &name),
         expr: expr,
@@ -1280,20 +1280,37 @@ fn parse_expr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>,
     parse_expr_and_then_sequence(pair, ctx)
 }
 
-fn parse_expr_with_new_do(
+// Parse an `expr_hole` pair (which contains either an inner `expr` or a
+// zero-width `hole`). For the hole case, returns `expr_hole(Some(span))`
+// where `span` is the zero-width span of the `hole` pair itself. The
+// post-elaboration ERR_HOLE pass and any error renderer are responsible
+// for widening that point to a visible underline (e.g. 1 character at
+// the start position).
+fn parse_expr_or_hole(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
 ) -> Result<Arc<ExprNode>, Errors> {
-    assert_eq!(pair.as_rule(), Rule::expr);
+    assert_eq!(pair.as_rule(), Rule::expr_hole);
+    let inner = pair.into_inner().next().unwrap();
+    match inner.as_rule() {
+        Rule::expr => parse_expr(inner, ctx),
+        Rule::hole => Ok(expr_hole(Some(Span::from_pair(&ctx.source, &inner)))),
+        _ => unreachable!(),
+    }
+}
 
-    // Here use new DoContext.
+// Same as `parse_expr_or_hole` but pushes/pops a fresh `DoContext` for
+// the parsed sub-expression, so monadic-bind operators (`*`) inside the
+// sub-expression do not leak into the surrounding context. The hole
+// case has no `*` operators, so `expand_binds` is a no-op for it.
+fn parse_expr_or_hole_with_new_do(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Arc<ExprNode>, Errors> {
     let old_doctx = std::mem::replace(&mut ctx.do_context, DoContext::default());
-    let expr = parse_expr(pair, ctx)?;
+    let expr = parse_expr_or_hole(pair, ctx)?;
     let expr = ctx.do_context.expand_binds(expr);
-
-    // Restore old DoContext.
     ctx.do_context = old_doctx;
-
     Ok(expr)
 }
 
@@ -1326,7 +1343,8 @@ fn parse_expr_and_then_sequence(
         let expr = if exprs.len() == 0 {
             parse_expr_type_annotation(pair, ctx)?
         } else {
-            parse_expr_with_new_do(pair, ctx)?
+            // Right operand of `;;` is `expr_hole`.
+            parse_expr_or_hole_with_new_do(pair, ctx)?
         };
         exprs.push(expr);
         if pairs.peek().is_some() {
@@ -2044,9 +2062,8 @@ fn parse_expr_let_recursively(
 ) -> Result<Arc<ExprNode>, Errors> {
     let pair = pairs.next().unwrap();
     if pair.as_rule() != Rule::keyword_let {
-        // `pair` is `{value}`.
-        let val = parse_expr(pair, ctx)?;
-        Ok(val)
+        // `pair` is `{value}` (an `expr_hole`).
+        parse_expr_or_hole(pair, ctx)
     } else {
         // `pair` is `let` keyword.
         assert_eq!(pair.as_rule(), Rule::keyword_let);
@@ -2083,7 +2100,7 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     let mut pairs = pair.into_inner();
     let sub = parse_expr(pairs.next().unwrap(), ctx)?;
     pairs.next().unwrap(); // Skip `Rule::semicolon`.
-    let main = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+    let main = parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?;
     Ok(expr_eval(sub, main, Some(span)))
 }
 
@@ -2095,7 +2112,7 @@ fn parse_expr_lam(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
         pats.push(pat);
     }
-    let mut expr = parse_expr_with_new_do(pairs.next().unwrap(), ctx)?;
+    let mut expr = parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?;
     let mut pat_body_span = expr.source.clone();
     let var = var_local(PARAM_NAME);
     for pat in pats.iter().rev() {
@@ -2125,8 +2142,8 @@ fn parse_expr_if(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNod
     let else_val = pairs.next().unwrap();
     Ok(expr_if(
         parse_expr(cond, ctx)?,
-        parse_expr_with_new_do(then_val, ctx)?,
-        parse_expr_with_new_do(else_val, ctx)?,
+        parse_expr_or_hole_with_new_do(then_val, ctx)?,
+        parse_expr_or_hole_with_new_do(else_val, ctx)?,
         Some(span),
     ))
 }
@@ -2144,7 +2161,7 @@ fn parse_expr_match(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
         let pair = pairs.next().unwrap();
         assert_eq!(pair.as_rule(), Rule::match_arrow); // Skip `=>`.
         let pair = pairs.next().unwrap();
-        let expr = parse_expr_with_new_do(pair, ctx)?; // Parse value expression.
+        let expr = parse_expr_or_hole_with_new_do(pair, ctx)?; // Parse value expression.
         if pairs.peek().is_some() {
             // Skip `,` if exists.
             let pair = pairs.next().unwrap();
@@ -2165,7 +2182,7 @@ fn parse_expr_match(expr: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
 fn parse_expr_do(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert!(pair.as_rule() == Rule::expr_do);
     let pair = pair.into_inner().next().unwrap();
-    parse_expr_with_new_do(pair, ctx)
+    parse_expr_or_hole_with_new_do(pair, ctx)
 }
 
 fn parse_expr_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
