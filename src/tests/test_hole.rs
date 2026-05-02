@@ -15,7 +15,7 @@ use crate::{
 // Convenience: every hole-rejecting test expects the post-pass to emit
 // the same prefix; use this constant so the message wording lives in
 // one place.
-const HOLE_ERR_PREFIX: &str = "Missing expression of type";
+const HOLE_ERR_PREFIX: &str = "Expected expression";
 
 // Note on test split:
 // - `test_source_fail(..., HOLE_ERR_PREFIX)` runs through elaboration

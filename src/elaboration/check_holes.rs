@@ -95,15 +95,14 @@ fn visit(expr: &Arc<ExprNode>, hole_name: &FullName, errors: &mut Errors) {
 }
 
 fn report_hole(node: &Arc<ExprNode>) -> Errors {
-    let ty_str = match node.type_.as_ref() {
-        Some(ty) => ty.to_string(),
-        // Defensive: a hole reaching this pass without a fixed type
-        // would mean type inference left it indeterminate, which
-        // shouldn't happen for `Std::#hole : a` (it unifies with any
-        // type). Render it as `?` so the diagnostic still surfaces.
-        None => "?".to_string(),
+    // When the hole's type was resolved by elaboration, include it.
+    // When it wasn't (typically because typecheck failed earlier and
+    // never substituted this node's type), drop the type clause —
+    // saying nothing is more honest than printing `?`.
+    let msg = match node.type_.as_ref() {
+        Some(ty) => format!("Expected expression of type `{}`.", ty.to_string()),
+        None => "Expected expression.".to_string(),
     };
-    let msg = format!("Missing expression of type `{}`.", ty_str);
     let mut err = Error::from_msg_srcs(msg, &[&node.source]);
     err.code = Some(ERR_HOLE);
     Errors::from_err(err)
