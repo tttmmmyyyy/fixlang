@@ -3044,8 +3044,7 @@ The language server requires [the project file](#project-file) to recognize the 
 
 Each time you save a file, the language server will attempt to diagnose the Fix program.
 The information obtained in the latest successful diagnostics is used to comletion, hover or go-to-definition, etc.
-So to update the information, you need to write correct Fix code and save the file. 
-[`Std::undefined`](/std_doc/Std.md#undefined-----a) will be useful to do so.
+So to update the information, you need to write correct Fix code and save the file.
 
 ### Specifying parameter list in the documentation comment as a hint to the language server
 
