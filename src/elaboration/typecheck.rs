@@ -1252,7 +1252,7 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    fn create_tyvar_location_messages(
+    pub fn create_tyvar_location_messages(
         &self,
         tvs: &[Arc<TyVar>],
         ref_no: Option<usize>,
@@ -1443,7 +1443,7 @@ impl TypeCheckContext {
         let src = expr.source.clone();
 
         // Layer 1: holes.
-        let hole_errors = check_holes::collect_hole_errors(&expr);
+        let hole_errors = check_holes::collect_hole_errors(&expr, self);
         if hole_errors.has_diagnostics() {
             return Ok((expr, hole_errors));
         }
