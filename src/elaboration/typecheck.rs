@@ -28,6 +28,7 @@ use crate::{
 use crate::ast::import;
 use crate::misc::{collect_results, insert_to_map_vec, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
+use super::check_holes;
 use super::typecheckcache::TypeCheckCache;
 
 #[derive(Clone)]
@@ -1398,8 +1399,41 @@ impl TypeCheckContext {
         // Check if the type of `expr` is unifiable to the specified type.
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
 
-        // Check if all type variables are fixed.
+        // The next three steps — substitute, hole check, fixed-types
+        // check — are sequenced this way for two reasons:
+        //
+        // 1. Holes are a more fundamental error than "the type of this
+        //    expression is indeterminate" — and crucially, a hole can
+        //    itself be the *cause* of the indeterminate type, since
+        //    `Std::#hole : a` introduces a free type variable that
+        //    nothing later constrains. Surfacing the cannot-infer
+        //    error in that situation just buries the real issue. So
+        //    when both would fire we report the holes alone and skip
+        //    the fixed-types check.
+        //
+        // 2. Even when we are about to bail with a hole error, we want
+        //    LSP / hover on the rest of the expression to show the
+        //    most accurate types we can. Substitution must therefore
+        //    run first so that every node's `type_` is materialised
+        //    before we report. (Note: when this function returns Err
+        //    the substituted expression is dropped by the caller; this
+        //    only helps callers that look at it before propagation.)
+
+        // Step 1: apply the type substitution to every node and
+        // pattern. Does not yet check that all types are fixed.
         let expr = self.fix_types(expr)?;
+
+        // Step 2: surface ERR_HOLE for every `Std::#hole` reference and
+        // short-circuit if any are present (see reason 1 above).
+        let hole_errors = check_holes::collect_hole_errors(&expr);
+        if hole_errors.has_diagnostics() {
+            return Err(hole_errors);
+        }
+
+        // Step 3: verify that every node's type is concrete (no
+        // unsolved free type variables). Surfaces the innermost
+        // failure, mirroring the previous combined `fix_types`.
+        self.check_types_are_fixed(&expr)?;
 
         // Check all predicates and equalities are satisfied.
         let reduction_res = UnifOrOtherErr::extract_others(self.reduce_predicates())?;
@@ -1743,13 +1777,8 @@ impl TypeCheckContext {
         pat: Arc<PatternNode>,
     ) -> Result<Arc<PatternNode>, Errors> {
         let ty = self.substitute_and_reduce_type(pat.info.type_.as_ref().unwrap())?;
-
-        let errs = self.check_is_type_fixed("pattern", &pat.info.source, &ty);
-        // To raise an error of this kind in the deepest node of the AST, we do not return here.
-
         let pat = pat.set_type(ty);
-
-        let pat = match &pat.pattern {
+        Ok(match &pat.pattern {
             Pattern::Var(_var, _anno_ty) => {
                 // Currently, type annotation is not used in the following processes, so there is no need to finish type annotation.
                 pat
@@ -1766,13 +1795,7 @@ impl TypeCheckContext {
                 }
                 pat.set_struct_field_to_pat(field_to_pat)
             }
-        };
-
-        if let Some(errs) = errs {
-            return Err(errs);
-        }
-
-        Ok(pat)
+        })
     }
 
     fn check_is_type_fixed(
@@ -1802,14 +1825,16 @@ impl TypeCheckContext {
         errs
     }
 
+    // Apply the type substitution to every node's `type_` field and to
+    // every pattern type. Does not check whether the resulting types are
+    // fixed (free of unsolved type variables); see
+    // `check_types_are_fixed` for that. Splitting substitution from the
+    // fixed-type check lets us run other passes (e.g. hole detection) on
+    // the substituted AST in between.
     pub fn fix_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ty = self.substitute_and_reduce_type(expr.type_.as_ref().unwrap())?;
-
-        let errs = self.check_is_type_fixed("expression", &expr.source, &ty);
-        // To raise an error of this kind in the deepest node of the AST, we do not return here if some error found.
-
         let expr = expr.set_type(ty);
-        let res = Ok(match &*expr.expr {
+        Ok(match &*expr.expr {
             Expr::Var(_) => expr,
             Expr::LLVM(_) => expr,
             Expr::App(fun, args) => {
@@ -1866,12 +1891,88 @@ impl TypeCheckContext {
                 let main = self.fix_types(main.clone())?;
                 expr.set_eval_side(side).set_eval_main(main)
             }
-        });
+        })
+    }
 
-        if let Some(errs) = errs {
+    // Verify that every node and pattern in `expr` has a type with no
+    // unsolved free type variables. Walks depth-first and surfaces the
+    // innermost failure, matching the behaviour of the previous combined
+    // `fix_types` (where the `?` in recursive calls naturally surfaced
+    // the deepest error).
+    pub fn check_types_are_fixed(&self, expr: &Arc<ExprNode>) -> Result<(), Errors> {
+        match &*expr.expr {
+            Expr::Var(_) | Expr::LLVM(_) => {}
+            Expr::App(fun, args) => {
+                for arg in args {
+                    self.check_types_are_fixed(arg)?;
+                }
+                self.check_types_are_fixed(fun)?;
+            }
+            Expr::Lam(_, body) => self.check_types_are_fixed(body)?,
+            Expr::Let(pat, val, body) => {
+                self.check_pattern_types_are_fixed(pat)?;
+                self.check_types_are_fixed(val)?;
+                self.check_types_are_fixed(body)?;
+            }
+            Expr::If(cond, then_e, else_e) => {
+                self.check_types_are_fixed(cond)?;
+                self.check_types_are_fixed(then_e)?;
+                self.check_types_are_fixed(else_e)?;
+            }
+            Expr::Match(cond, arms) => {
+                self.check_types_are_fixed(cond)?;
+                for (pat, val) in arms {
+                    self.check_pattern_types_are_fixed(pat)?;
+                    self.check_types_are_fixed(val)?;
+                }
+            }
+            Expr::TyAnno(e, _) => self.check_types_are_fixed(e)?,
+            Expr::MakeStruct(_, fields) => {
+                for (_, _, fe) in fields {
+                    self.check_types_are_fixed(fe)?;
+                }
+            }
+            Expr::ArrayLit(elems) => {
+                for e in elems {
+                    self.check_types_are_fixed(e)?;
+                }
+            }
+            Expr::FFICall(_, _, _, _, args, _) => {
+                for a in args {
+                    self.check_types_are_fixed(a)?;
+                }
+            }
+            Expr::Eval(side, main) => {
+                self.check_types_are_fixed(side)?;
+                self.check_types_are_fixed(main)?;
+            }
+        }
+        if let Some(errs) =
+            self.check_is_type_fixed("expression", &expr.source, expr.type_.as_ref().unwrap())
+        {
             return Err(errs);
         }
-        res
+        Ok(())
+    }
+
+    fn check_pattern_types_are_fixed(&self, pat: &Arc<PatternNode>) -> Result<(), Errors> {
+        match &pat.pattern {
+            Pattern::Var(_, _) => {}
+            Pattern::Union(_, _, subpat) => self.check_pattern_types_are_fixed(subpat)?,
+            Pattern::Struct(_, fields) => {
+                for (_, _, subpat) in fields {
+                    self.check_pattern_types_are_fixed(subpat)?;
+                }
+            }
+        }
+        if let Some(errs) = self.check_is_type_fixed(
+            "pattern",
+            &pat.info.source,
+            pat.info.type_.as_ref().unwrap(),
+        ) {
+            return Err(errs);
+        }
+        Ok(())
     }
 }
 

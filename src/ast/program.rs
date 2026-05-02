@@ -1354,6 +1354,10 @@ impl Program {
             tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
         }
         let expr = tc.fix_types(te.expr.clone())?;
+        // `fix_types` no longer checks that all type variables are
+        // fixed; do that here so instantiation never proceeds with an
+        // indeterminate type.
+        tc.check_types_are_fixed(&expr)?;
         let expr = remove_opaque_wrapper_func(expr);
         let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
         sym.expr = Some(self.instantiate_expr(&expr)?);

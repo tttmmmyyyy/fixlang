@@ -1,36 +1,28 @@
-// Post-elaboration scan that turns each surviving `Std::#hole`
+// Walks a type-checked expression and turns each `Std::#hole`
 // reference into an `ERR_HOLE` diagnostic.
 //
 // The parser substitutes `Std::#hole` for any expression position that
 // was left empty (see `expr_hole` / `parse_expr_or_hole` in
 // `parse/parser.rs`). `Std::#hole` is registered as the polymorphic
-// builtin `Std::#hole : a`, so type inference completes; this pass
-// then walks every type-checked global value and reports each hole
-// occurrence with the type the surrounding context expected.
+// builtin `Std::#hole : a`, so type inference completes; this pass is
+// invoked from `check_type` after `fix_types` has applied the type
+// substitution to every node, so each hole's type reflects whatever
+// the surrounding context expected.
 
 use std::sync::Arc;
 
 use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::name::FullName;
-use crate::ast::program::{Program, SymbolExpr};
 use crate::constants::{ERR_HOLE, HOLE_NAME, STD_NAME};
 use crate::error::{Error, Errors};
 
-pub fn collect_hole_diagnostics(program: &Program) -> Errors {
+// Collect ERR_HOLE diagnostics for every hole reference in `expr`.
+// `expr` is expected to have already passed through `fix_types`, so
+// each hole's `type_` carries the substituted expected type.
+pub fn collect_hole_errors(expr: &Arc<ExprNode>) -> Errors {
     let hole_name = absolute_hole_name();
     let mut errors = Errors::empty();
-    for (_name, gv) in program.global_values.iter() {
-        match &gv.expr {
-            SymbolExpr::Simple(te) => {
-                visit(&te.expr, &hole_name, &mut errors);
-            }
-            SymbolExpr::Method(impls) => {
-                for impl_ in impls {
-                    visit(&impl_.expr.expr, &hole_name, &mut errors);
-                }
-            }
-        }
-    }
+    visit(expr, &hole_name, &mut errors);
     errors
 }
 

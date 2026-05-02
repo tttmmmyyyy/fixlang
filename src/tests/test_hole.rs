@@ -1,31 +1,17 @@
 // Acceptance tests for the `expr_hole` grammar / `Std::#hole` builtin
-// and the post-elaboration ERR_HOLE pass.
+// and the in-elaboration ERR_HOLE pass.
 //
-// Each program contains at least one hole. Elaboration completes (the
-// hole types as `a` and unifies with the expected type at each call
-// site), then the post-pass emits "Missing expression of type `T`."
-// for every hole occurrence and the build/check fails. We assert that
-// the expected error text reaches the user.
+// Each program contains at least one hole. Elaboration types each hole
+// as `Std::#hole : a` (which unifies with whatever the surrounding
+// context expected); `check_type` then walks the substituted AST,
+// finds every hole, and emits "Expected expression [of type `T`]."
+// We verify the expected text reaches the user.
 
-use crate::{
-    configuration::Configuration,
-    tests::test_util::{assert_parse_succeeds, test_source_fail},
-};
+use crate::{configuration::Configuration, tests::test_util::test_source_fail};
 
-// Convenience: every hole-rejecting test expects the post-pass to emit
-// the same prefix; use this constant so the message wording lives in
-// one place.
+// Convenience: every hole-rejecting test expects the same prefix; use
+// this constant so the message wording lives in one place.
 const HOLE_ERR_PREFIX: &str = "Expected expression";
-
-// Note on test split:
-// - `test_source_fail(..., HOLE_ERR_PREFIX)` runs through elaboration
-//   and verifies the ERR_HOLE message reaches stderr.
-// - `assert_parse_succeeds(...)` runs the full parse + Program-level
-//   validation but does not require ERR_HOLE specifically. Used for
-//   cases that elaborate to a non-hole error inherited from existing
-//   Fix behaviour (e.g. indeterminate type variable from a polymorphic
-//   let bound) — there the existing error fires before our post-pass
-//   runs, so we only check the parse path here.
 
 // ----- A group: holes inside expressions -------------------------------
 
@@ -353,19 +339,20 @@ pub fn hole_trait_member_value_type_sign() {
 
 #[test]
 pub fn hole_nested_let_let() {
-    // Inner let's body is a hole, so the inner let has type `a` (a free
-    // type variable), making `x : a`. Fix's pattern type checker
-    // rejects "Cannot infer the type of this pattern" — the exact same
-    // error fires for the hole-free analogue
-    // `(let x = (let y = 10; undefined("")); undefined(""))`. So this
-    // is a pre-existing Fix limitation, not a hole bug. The parser
-    // itself accepts the form, which is what we cover here.
+    // Inner let's body is a hole, so the inner let has type `a` (a
+    // free type variable), making `x : a`. The hole-free analogue
+    // `(let x = (let y = 10; undefined("")); undefined(""))` would
+    // trip Fix's "Cannot infer the type of this pattern" check, but
+    // here check_type's hole pass fires first and short-circuits the
+    // fixed-types check (since the holes are the likely cause of the
+    // indeterminacy). We therefore expect ERR_HOLE rather than the
+    // cannot-infer message.
     let source = r#"
         module Main;
         hole_val : I64 = (let x = (let y = 10; ); );
         main : IO () = pure();
     "#;
-    assert_parse_succeeds(source);
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]

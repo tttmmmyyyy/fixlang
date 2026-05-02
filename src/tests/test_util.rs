@@ -69,26 +69,6 @@ fn run_source(
     run(config, false)
 }
 
-// Verify that the parser accepts `source` (no syntax errors). This goes
-// through the full `parse_source_file` path, which runs not only pest
-// parsing but also Program-level structural validations such as
-// "global value `X` lacks its type signature". Use this when those
-// downstream validations are part of what you want to assert.
-pub fn assert_parse_succeeds(source: &str) {
-    use crate::parse::parser::parse_and_save_to_temporary_file;
-    use rand::Rng;
-    let id: u64 = rand::thread_rng().gen();
-    let file_name = format!("parse_only_{:016x}", id);
-    let config = Configuration::develop_mode();
-    if let Err(errs) = parse_and_save_to_temporary_file(source, &file_name, &config) {
-        panic_with_msg(&format!(
-            "Parse was expected to succeed but failed:\n{}\n\nSource:\n{}",
-            errs.to_string(),
-            source
-        ));
-    }
-}
-
 
 pub fn test_source(source: &str, config: Configuration) {
     let res = run_source(source, config);
