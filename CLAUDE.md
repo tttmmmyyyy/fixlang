@@ -36,6 +36,8 @@ This project implements the Fix programming language compiler and related tools 
 
 - **Failing tests**: Do NOT add `#[ignore]` to tests to bypass failures. Leaving failing tests in place and committing them is acceptable; hiding them with `#[ignore]` is not.
 
+- **Dead-code warnings**: Do NOT add `#[allow(dead_code)]` to silence the "never used" warning on items that will eventually be used in production code (e.g. a constant or function added in one step of a multi-step rollout that will be consumed in a later step). The warning is the reminder that the follow-up work is still pending; suppressing it loses that signal. Leave the warning in place and let the next step resolve it.
+
 ## Reference Documentation
 
 - **Fix Language Sample Code**: Refer to `src/fix/std.fix` for extensive examples of Fix language code.
