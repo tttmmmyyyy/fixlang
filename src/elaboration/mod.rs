@@ -1,3 +1,4 @@
+pub mod check_holes;
 pub mod desugar_opaque;
 pub mod name_resolution;
 pub mod typecheck;
@@ -96,6 +97,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         program
             .deferred_errors
             .append(program.collect_deprecation_diagnostics(config));
+        program
+            .deferred_errors
+            .append(check_holes::collect_hole_diagnostics(&program));
         return Ok(program);
     }
 
@@ -112,6 +116,11 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     program
         .deferred_errors
         .append(program.collect_deprecation_diagnostics(config));
+
+    // Surface ERR_HOLE for every `Std::#hole` reference left in the program.
+    program
+        .deferred_errors
+        .append(check_holes::collect_hole_diagnostics(&program));
 
     // Instantiate Main::main (or Test::test).
     match config.output_file_type {

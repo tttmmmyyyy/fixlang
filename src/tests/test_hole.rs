@@ -1,36 +1,31 @@
-// Acceptance tests for the `expr_hole` grammar / `Std::#hole` builtin.
+// Acceptance tests for the `expr_hole` grammar / `Std::#hole` builtin
+// and the post-elaboration ERR_HOLE pass.
 //
-// At this point in the rollout we only verify that the parser accepts
-// holes in the supported positions and that elaboration completes (the
+// Each program contains at least one hole. Elaboration completes (the
 // hole types as `a` and unifies with the expected type at each call
-// site). The post-elaboration pass that emits `ERR_HOLE` is a follow-up
-// step; until then, holes silently elaborate to a `Var(Std::#hole)`
-// which would emit an `unreachable` instruction at codegen.
-//
-// Each test program defines hole-bearing globals but `main` never reads
-// them, so the unreachable instruction is never executed at runtime and
-// the binary exits cleanly.
+// site), then the post-pass emits "Missing expression of type `T`."
+// for every hole occurrence and the build/check fails. We assert that
+// the expected error text reaches the user.
 
 use crate::{
     configuration::Configuration,
-    tests::test_util::{assert_parse_succeeds, test_source},
+    tests::test_util::{assert_parse_succeeds, test_source_fail},
 };
 
+// Convenience: every hole-rejecting test expects the post-pass to emit
+// the same prefix; use this constant so the message wording lives in
+// one place.
+const HOLE_ERR_PREFIX: &str = "Missing expression of type";
+
 // Note on test split:
-// - `test_source(...)` builds and runs the binary; used when the source
-//   should successfully type-check end-to-end. Holes elaborate to a
-//   `Var(Std::#hole)` that codegens to an `unreachable` instruction;
-//   `main` never reads the hole-bearing globals so the unreachable is
-//   not executed.
+// - `test_source_fail(..., HOLE_ERR_PREFIX)` runs through elaboration
+//   and verifies the ERR_HOLE message reaches stderr.
 // - `assert_parse_succeeds(...)` runs the full parse + Program-level
-//   validation. Used for cases that parse fine but trip an existing
-//   Fix elaboration check downstream (e.g. indeterminate type variable
-//   from a polymorphic let bound) — those errors are unrelated to
-//   holes.
-//
-// Step 2 (post-elaboration ERR_HOLE pass) will revisit these and
-// migrate them to `test_source_fail` checking for the hole-specific
-// error message.
+//   validation but does not require ERR_HOLE specifically. Used for
+//   cases that elaborate to a non-hole error inherited from existing
+//   Fix behaviour (e.g. indeterminate type variable from a polymorphic
+//   let bound) — there the existing error fires before our post-pass
+//   runs, so we only check the parse path here.
 
 // ----- A group: holes inside expressions -------------------------------
 
@@ -41,7 +36,7 @@ pub fn hole_in_let_paren() {
         hole_val : I64 = (let x = 10; );
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -51,7 +46,7 @@ pub fn hole_in_let_bare() {
         hole_val : I64 = let x = 10; ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -61,7 +56,7 @@ pub fn hole_in_eval_paren() {
         hole_val : I64 = (eval 1; );
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -71,7 +66,7 @@ pub fn hole_in_eval_bare() {
         hole_val : I64 = eval 1; ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -81,7 +76,7 @@ pub fn hole_in_lam_paren() {
         hole_val : I64 -> I64 = (|x| );
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -91,7 +86,7 @@ pub fn hole_in_lam_bare() {
         hole_val : I64 -> I64 = |x| ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -101,7 +96,7 @@ pub fn hole_in_and_then_paren() {
         hole_val : IO () = (println("hi") ;; );
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -111,7 +106,7 @@ pub fn hole_in_and_then_bare() {
         hole_val : IO () = println("hi") ;; ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 // ----- if -------------------------------------------------------------
@@ -123,7 +118,7 @@ pub fn hole_in_if_then_block() {
         hole_val : I64 = if true { } else { 1 };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -133,7 +128,7 @@ pub fn hole_in_if_else_block() {
         hole_val : I64 = if true { 1 } else { };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -143,7 +138,7 @@ pub fn hole_in_if_else_word() {
         hole_val : I64 = if true { 1 } else ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -154,7 +149,7 @@ pub fn hole_in_if_else_semi_block() {
         hole_val : I64 = if true { 1 }; { };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -166,7 +161,7 @@ pub fn hole_in_if_else_semi_expr() {
         hole_val : I64 = if true { 1 }; ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -177,7 +172,7 @@ pub fn hole_in_if_then_semi() {
         hole_val : I64 = if true { }; { 1 };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 // ----- match ----------------------------------------------------------
@@ -192,7 +187,7 @@ pub fn hole_in_match_first() {
         hole_val : I64 = match opt { none() => , some(x) => x };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -203,7 +198,7 @@ pub fn hole_in_match_last() {
         hole_val : I64 = match opt { none() => 0, some(x) => };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -214,7 +209,7 @@ pub fn hole_in_match_last_trailing_comma() {
         hole_val : I64 = match opt { none() => 0, some(x) => , };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -225,7 +220,7 @@ pub fn hole_in_match_all() {
         hole_val : I64 = match opt { none() => , some(x) => };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -239,7 +234,7 @@ pub fn hole_in_match_only() {
         hole_val : I64 = match s { only(_) => };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 // ----- do -------------------------------------------------------------
@@ -251,7 +246,7 @@ pub fn hole_in_do() {
         hole_val : IO () = do { };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 // ----- monadic bind (`*`) interaction ---------------------------------
@@ -266,7 +261,7 @@ pub fn hole_in_let_after_bind_paren() {
         hole_val : IO () = (let s = *some_io; );
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -277,7 +272,7 @@ pub fn hole_in_let_after_bind_bare() {
         hole_val : IO () = let s = *some_io; ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -288,7 +283,7 @@ pub fn hole_in_do_after_bind() {
         hole_val : IO () = do { let s = *some_io; };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 // ----- B group: top-level definition rhs ------------------------------
@@ -305,7 +300,7 @@ pub fn hole_global_defn_with_separate_sign() {
         hole_val = ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 
@@ -317,7 +312,7 @@ pub fn hole_global_with_sign() {
         hole_val : I64 = ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -334,7 +329,7 @@ pub fn hole_trait_member_value_impl() {
         }
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -351,7 +346,7 @@ pub fn hole_trait_member_value_type_sign() {
         }
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 // ----- Nested / combined --------------------------------------------
@@ -380,7 +375,7 @@ pub fn hole_nested_if_let() {
         hole_val : I64 = if true { let x = 10; } else { 1 };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -391,7 +386,7 @@ pub fn hole_nested_match_let() {
         hole_val : I64 = match opt { none() => let y = 10; , some(x) => x };
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -401,7 +396,7 @@ pub fn hole_nested_lam_lam() {
         hole_val : I64 -> I64 -> I64 = |x| |y| ;
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 // ----- Whitespace / comment edges -----------------------------------
@@ -413,7 +408,7 @@ pub fn hole_with_block_comment() {
         hole_val : I64 = (let x = 10; /* todo */ );
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -424,7 +419,7 @@ pub fn hole_with_line_comment() {
         );
         main : IO () = pure();
     "#;
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 #[test]
@@ -437,7 +432,7 @@ pub fn hole_with_many_newlines() {
         );
         main : IO () = pure();
     ";
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
 // ----- EOF boundary --------------------------------------------------
@@ -449,5 +444,5 @@ pub fn hole_at_end_of_file() {
     // `&(ANY | EOI)` lookahead in the `hole` rule has to use its `EOI`
     // branch.
     let source = "module Main;\nmain : IO () = pure();\nhole_val : I64 = (let x = 10; );";
-    test_source(source, Configuration::develop_mode());
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
