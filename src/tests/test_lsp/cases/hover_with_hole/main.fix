@@ -1,0 +1,12 @@
+module Main;
+
+// `fold` constrains the lambda to (I64, I64) -> I64. Even though the
+// lambda body is a hole and the value will be rejected with ERR_HOLE,
+// the LSP must still be able to display the inferred types of `i` and
+// `acc` on hover — that is the whole point of accepting holes during
+// elaboration.
+fact : I64 -> I64 = |n| (
+    Iterator::range(0, n).fold(1, |i, acc| )
+);
+
+main : IO () = pure();

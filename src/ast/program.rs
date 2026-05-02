@@ -1024,6 +1024,18 @@ impl Program {
     // - `def_mod` : The module where the expression is defined. Note that if `te` is a trait method implementation, this may differ from `name.module()`.
     // - `nrctx` : The name resolution context. Pass one created by `program.create_name_resolution_context(define_module)`.
     // - `ver_hash` : A hash value of source codes `te` depends on. This is used to detect or invalidate the cache file. Pass one created by `program.module_dependency_hash(define_module)`.
+    // Returns:
+    // - `Ok((te, errors))`: namespace resolution and substitution
+    //   completed; `te` is the typed expression. `errors` may still
+    //   carry tolerated diagnostics from `check_type` (holes,
+    //   cannot-infer, unsatisfied predicates, disjoint equalities).
+    //   The caller should always save `te` (so the LSP can hover on
+    //   it) and propagate `errors`. The cache is only written when
+    //   `errors` is empty.
+    // - `Err(errs)`: a hard failure happened before substitution
+    //   completed (e.g. resolve_namespace, resolve_type_aliases, or
+    //   the substitution itself blew up). No useful typed expression
+    //   to propagate.
     fn resolve_namespace_and_check_type_sub(
         mut te: TypedExpr,
         req_scm: &Arc<Scheme>,
@@ -1032,13 +1044,13 @@ impl Program {
         nrctx: &mut NameResolutionContext,
         ver_hash: &str,
         mut tc: TypeCheckContext,
-    ) -> Result<TypedExpr, Errors> {
+    ) -> Result<(TypedExpr, Errors), Errors> {
         // Load type-checking cache file.
         let cache = tc.cache.load_cache(val_name, req_scm, ver_hash);
         if cache.is_some() {
             // If cache is available,
             te = cache.unwrap();
-            return Ok(te);
+            return Ok((te, Errors::empty()));
         }
 
         // Perform namespace inference.
@@ -1049,18 +1061,24 @@ impl Program {
 
         // Perform type-checking.
         tc.current_module = Some(def_mod.clone());
-        te.expr = tc.check_type(te.expr.clone(), req_scm.clone())?;
+        let (typed_expr, check_errors) = tc.check_type(te.expr.clone(), req_scm.clone())?;
+        te.expr = typed_expr;
         // Fill in the concrete rhs for opaque type resolutions set up during desugaring.
         tc.fill_opaque_concrete_types(&mut te.opaque_types);
         te.equalities = tc.local_assumed_eqs;
 
-        // Save the result to cache file.
-        tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
+        // Save the result to cache file only when there are no
+        // tolerated errors. Otherwise the cached typed expression
+        // would mask the diagnostics on the next run (cache load
+        // bypasses check_type entirely).
+        if !check_errors.has_diagnostics() {
+            tc.cache.save_cache(&te, val_name, req_scm, ver_hash);
+        }
 
         // Add names required to be imported found in type-checking to NameResolutionContext's import_required.
         nrctx.add_import_required(tc.import_required);
 
-        Ok(te)
+        Ok((te, check_errors))
     }
 
     // Create NameResolutionEnv used for symbols defined in the specified module.
@@ -1121,9 +1139,15 @@ impl Program {
     ) -> Result<(), Errors> {
         let nrenv = self.create_name_resolution_env();
 
+        // The typed expression and any tolerated diagnostics
+        // (`errors`) are returned together so the caller can save the
+        // typed expression for the LSP even when the value didn't
+        // type-check cleanly. See `check_type` for the rules on what
+        // counts as "tolerated".
         struct CheckTaskOutput {
             te: TypedExpr,
             import_required: Map<Name, Vec<FullName>>,
+            errors: Errors,
         }
         struct CheckTask {
             val_name: FullName,
@@ -1147,7 +1171,7 @@ impl Program {
                     let tc = tc.clone();
                     let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
                         // Perform type-checking.
-                        let te = Program::resolve_namespace_and_check_type_sub(
+                        let (te, errors) = Program::resolve_namespace_and_check_type_sub(
                             te,
                             &scm,
                             &val_name_clone,
@@ -1159,6 +1183,7 @@ impl Program {
                         let output = CheckTaskOutput {
                             te,
                             import_required: nrctx.import_required,
+                            errors,
                         };
                         Ok(output)
                     });
@@ -1209,7 +1234,7 @@ impl Program {
                                 ));
                             }
                             // Perform type-checking.
-                            let te = Program::resolve_namespace_and_check_type_sub(
+                            let (te, errors) = Program::resolve_namespace_and_check_type_sub(
                                 te,
                                 &scm,
                                 &val_name_clone,
@@ -1221,6 +1246,7 @@ impl Program {
                             let output = CheckTaskOutput {
                                 te,
                                 import_required: nrctx.import_required,
+                                errors,
                             };
                             Ok(output)
                         });
@@ -1292,6 +1318,10 @@ impl Program {
                 continue;
             }
             let mut output = result.output.ok().unwrap();
+            // Carry tolerated diagnostics (holes, cannot-infer, etc.)
+            // forward, but still install the typed expression below so
+            // the LSP can hover on its sub-expressions.
+            errors.append(output.errors);
             for (k, mut v) in output.te.opaque_types.drain() {
                 self.opaque_types.entry(k).or_default().append(&mut v);
             }

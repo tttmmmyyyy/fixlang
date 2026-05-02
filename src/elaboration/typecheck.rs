@@ -1361,11 +1361,22 @@ impl TypeCheckContext {
 
     // Check if an expression matches the expected type scheme.
     // Returns the given expression with each subexpression annotated with inferred types.
+    // Returns:
+    // - `Ok((expr, errors))`: substitution finished and `expr` is the
+    //   fully substituted typed expression. `errors` may still contain
+    //   tolerated diagnostics (holes, cannot-infer, unsatisfiable
+    //   predicates, disjoint equalities). Callers should propagate
+    //   `errors` but may also use `expr` (e.g. save it to the program
+    //   so the LSP can hover on its sub-expressions).
+    // - `Err(errs)`: a hard failure before substitution completed
+    //   (type mismatch in `unify_type_of_expr`, failure of
+    //   `substitute_and_reduce_type` inside `fix_types`, or scheme
+    //   instantiation failure). No typed expression to return.
     pub fn check_type(
         &mut self,
         expr: Arc<ExprNode>,
         expect_scm: Arc<Scheme>,
-    ) -> Result<Arc<ExprNode>, Errors> {
+    ) -> Result<(Arc<ExprNode>, Errors), Errors> {
         self.assert_freshness();
 
         fn make_error(
@@ -1396,62 +1407,73 @@ impl TypeCheckContext {
         }
         let specified_ty = specified_ty.ok().unwrap();
 
-        // Check if the type of `expr` is unifiable to the specified type.
+        // Hard step 1: unify. Failure here is a real type mismatch and
+        // there is no useful typed expression to keep.
         let expr = self.unify_type_of_expr(&expr, specified_ty.clone())?;
 
-        // The next three steps — substitute, hole check, fixed-types
-        // check — are sequenced this way for two reasons:
-        //
-        // 1. Holes are a more fundamental error than "the type of this
-        //    expression is indeterminate" — and crucially, a hole can
-        //    itself be the *cause* of the indeterminate type, since
-        //    `Std::#hole : a` introduces a free type variable that
-        //    nothing later constrains. Surfacing the cannot-infer
-        //    error in that situation just buries the real issue. So
-        //    when both would fire we report the holes alone and skip
-        //    the fixed-types check.
-        //
-        // 2. Even when we are about to bail with a hole error, we want
-        //    LSP / hover on the rest of the expression to show the
-        //    most accurate types we can. Substitution must therefore
-        //    run first so that every node's `type_` is materialised
-        //    before we report. (Note: when this function returns Err
-        //    the substituted expression is dropped by the caller; this
-        //    only helps callers that look at it before propagation.)
-
-        // Step 1: apply the type substitution to every node and
-        // pattern. Does not yet check that all types are fixed.
+        // Hard step 2: substitute every node's type. This walks the
+        // tree but does not check that types are fully determined.
+        // Failure means substitute_and_reduce_type itself failed (e.g.
+        // an associated-type reduction blew up), which is rare and
+        // again leaves no usable typed expression.
         let expr = self.fix_types(expr)?;
 
-        // Step 2: surface ERR_HOLE for every `Std::#hole` reference and
-        // short-circuit if any are present (see reason 1 above).
+        // From here on we have a fully substituted typed expression.
+        // Tolerated diagnostics are collected as a cascade — each
+        // layer is reported only if every earlier layer was clean,
+        // since later diagnostics are usually consequences of earlier
+        // ones and showing both is just noise. We always return the
+        // typed expression so callers can hand it to the LSP.
+        //
+        // Order (see also doc on `check_types_are_fixed`):
+        //   hole > cannot-infer > predicate > equality
+        //
+        // - hole > cannot-infer: a hole introduces `Std::#hole : a`
+        //   which is the most common source of indeterminate types.
+        // - cannot-infer > predicate / equality: an unresolved type
+        //   variable usually leaves predicates and equalities
+        //   unsolved.
+        // - predicate > equality: an unsatisfied trait constraint
+        //   often leaves an associated type unable to be reduced,
+        //   which then surfaces as a disjoint equality.
+
+        // Pre-extract the source span so the error-construction
+        // helpers below can borrow it independently of `expr` (which
+        // each early-return consumes).
+        let src = expr.source.clone();
+
+        // Layer 1: holes.
         let hole_errors = check_holes::collect_hole_errors(&expr);
         if hole_errors.has_diagnostics() {
-            return Err(hole_errors);
+            return Ok((expr, hole_errors));
         }
 
-        // Step 3: verify that every node's type is concrete (no
-        // unsolved free type variables). Surfaces the innermost
-        // failure, mirroring the previous combined `fix_types`.
-        self.check_types_are_fixed(&expr)?;
+        // Layer 2: cannot-infer.
+        if let Err(e) = self.check_types_are_fixed(&expr) {
+            return Ok((expr, e));
+        }
 
-        // Check all predicates and equalities are satisfied.
-        let reduction_res = UnifOrOtherErr::extract_others(self.reduce_predicates())?;
-        if let Err(e) = reduction_res {
-            return Err(Errors::from_err(make_error(self, e, &expr.source)));
+        // Layer 3: predicates. `reduce_predicates` itself can fail
+        // with a non-unification diagnostic; treat that as a hard
+        // failure (return `Err` from `check_type`, not just a
+        // tolerated error).
+        if let Err(e) = UnifOrOtherErr::extract_others(self.reduce_predicates())? {
+            return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
         if self.predicates.len() > 0 {
             let pred = &self.predicates[0];
             let e = UnificationErr::Unsatisfiable(pred.clone());
-            return Err(Errors::from_err(make_error(self, e, &expr.source)));
+            return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
+
+        // Layer 4: equalities.
         if self.equalities.len() > 0 {
             let eq = &self.equalities[0];
             let e = UnificationErr::Disjoint(eq.lhs(), eq.value.clone());
-            return Err(Errors::from_err(make_error(self, e, &expr.source)));
+            return Ok((expr, Errors::from_err(make_error(self, e, &src))));
         }
 
-        Ok(expr)
+        Ok((expr, Errors::empty()))
     }
 
     fn add_substitution(&mut self, subst: &Substitution) -> Result<(), UnifOrOtherErr> {
