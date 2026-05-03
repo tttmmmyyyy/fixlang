@@ -10,7 +10,7 @@
 
 use crate::{
     configuration::Configuration,
-    tests::test_util::{test_source_fail, test_source_fail_excludes},
+    tests::test_util::{run_source_assert_failed, test_source_fail, test_source_fail_excludes},
 };
 
 const HOLE_ERR_MARKER: &str = "Expected expression of type";
@@ -49,7 +49,7 @@ fn multiple_holes_in_distinct_values_all_reported() {
         c : I64 = ;
         main : IO () = pure();
     "#;
-    let stderr = run_and_get_stderr(source);
+    let stderr = run_source_assert_failed(source, Configuration::develop_mode());
     let n = stderr.matches(HOLE_ERR_MARKER).count();
     assert_eq!(
         n, 3,
@@ -66,7 +66,7 @@ fn multiple_holes_in_one_value_all_reported() {
         f : I64 = if true { } else { };
         main : IO () = pure();
     "#;
-    let stderr = run_and_get_stderr(source);
+    let stderr = run_source_assert_failed(source, Configuration::develop_mode());
     let n = stderr.matches(HOLE_ERR_MARKER).count();
     assert_eq!(
         n, 2,
@@ -75,19 +75,3 @@ fn multiple_holes_in_one_value_all_reported() {
     );
 }
 
-// ----- helper ------------------------------------------------------
-
-fn run_and_get_stderr(source: &str) -> String {
-    use crate::misc::save_temporary_source;
-    let mut config = Configuration::develop_mode();
-    let src = match save_temporary_source(source, "main_run") {
-        Ok(s) => s,
-        Err(errs) => return errs.to_string(),
-    };
-    config.add_user_source_file(src.file_path);
-    match crate::commands::run::run(config, false) {
-        Err(errs) => errs.to_string(),
-        Ok(Err(e)) => e.to_string(),
-        Ok(Ok(output)) => String::from_utf8_lossy(&output.stderr).to_string(),
-    }
-}

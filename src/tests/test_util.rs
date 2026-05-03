@@ -107,27 +107,38 @@ pub fn assert_grammar_rejects(source: &str) {
     }
 }
 
+// Run `source` and return the user-visible diagnostic text. Asserts
+// that compilation/execution did not succeed; panics if it did.
+//
+// "User-visible diagnostic text" is one of:
+//   - the rendered `Errors` if the elaborator returned `Err`;
+//   - the `io::Error` string if the child process couldn't even
+//     spawn;
+//   - the captured stderr from the child process otherwise.
+//
+// Used as a primitive by `test_source_fail*` and by tests that need
+// to inspect the diagnostic text directly (e.g. counting how many
+// diagnostics were emitted).
+pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
+    let res = run_source(source, config);
+    match res {
+        Err(errs) => errs.to_string(),
+        Ok(Err(e)) => e.to_string(),
+        Ok(Ok(output)) => {
+            if output.status.code() == Some(0) {
+                panic_with_msg("The source code was expected to fail, but succeeded.");
+            }
+            String::from_utf8_lossy(&output.stderr).to_string()
+        }
+    }
+}
+
 // Verify that compilation fails and that the error message does NOT
 // contain `excluded_errmsg`. Used to confirm a genuine error is not
 // silently swallowed by some permissive feature (e.g. that the hole
 // feature does not accept code it was never meant to).
 pub fn test_source_fail_excludes(source: &str, config: Configuration, excluded_errmsg: &str) {
-    let res = run_source(source, config);
-    let errmsg = match res {
-        Err(errs) => errs.to_string(),
-        Ok(run_output) => match run_output {
-            Err(e) => e.to_string(),
-            Ok(output) => {
-                let code = output.status.code();
-                if let Some(code) = code {
-                    if code == 0 {
-                        panic_with_msg("The source code was expected to fail, but succeeded.");
-                    }
-                }
-                String::from_utf8_lossy(&output.stderr).to_string()
-            }
-        },
-    };
+    let errmsg = run_source_assert_failed(source, config);
     assert!(
         !errmsg.contains(excluded_errmsg),
         "Error message unexpectedly contained excluded text.\nShould not include:\n{}\n\nActual message:\n{}",
@@ -137,23 +148,8 @@ pub fn test_source_fail_excludes(source: &str, config: Configuration, excluded_e
 }
 
 pub fn test_source_fail(source: &str, config: Configuration, included_errmsg: &str) {
-    let res = run_source(source, config);
-    let errmsg = match res {
-        Err(errs) => errs.to_string(),
-        Ok(run_output) => match run_output {
-            Err(e) => e.to_string(),
-            Ok(output) => {
-                let code = output.status.code();
-                if let Some(code) = code {
-                    if code == 0 {
-                        panic_with_msg("The source code was expected to fail, but succeeded.");
-                    }
-                }
-                String::from_utf8_lossy(&output.stderr).to_string()
-            }
-        },
-    };
-    assert!(errmsg.contains(included_errmsg), 
+    let errmsg = run_source_assert_failed(source, config);
+    assert!(errmsg.contains(included_errmsg),
         "Error message did not contain expected text.\nExpected to include:\n{}\n\nActual message:\n{}", included_errmsg, errmsg);
 }
 
