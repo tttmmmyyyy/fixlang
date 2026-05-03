@@ -193,19 +193,13 @@ Project specifics:
 **Apply** when an existing helper is a near-identical match.
 **Report only** when an existing version diverges enough that merging would change behavior.
 
-#### 2. Extract a function on the second copy (no speculation)
+#### 2. Extract a function on the second copy
 
 This convention is specifically about **function extraction** (関数化), not about introducing traits, generics, or other heavier abstractions.
 
 When the diff contains two or more blocks of code with the same intent — same shape, same purpose, differing only in variable names or values — extract a shared function. The threshold is **two, not three**: don't wait for a third copy to appear, because two copies will already start drifting apart.
 
-The two users must exist in the code *today*. Don't introduce a function for a single caller "in case it's useful later" — that's speculation, not extraction.
-
-**Apply**:
-- Two near-identical blocks with the same intent → extract a function, replace both call sites.
-- A function or method introduced by the diff with only one caller in the entire codebase (`grep` to confirm) → inline it back.
-
-For **traits, generics, or other forms of abstraction** introduced with only one impl / one instantiation today: the same "concrete user must already exist" test applies, but these introduce richer machinery — flag them for the user to decide rather than auto-inlining.
+**Apply**: Two near-identical blocks with the same intent → extract a function, replace both call sites.
 
 #### 3. Single responsibility per function
 
