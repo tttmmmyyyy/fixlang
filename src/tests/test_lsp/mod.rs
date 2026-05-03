@@ -6,6 +6,7 @@ pub mod test_goto_definition;
 pub mod test_hover;
 pub mod test_references;
 pub mod test_rename;
+pub mod test_workspace_symbol;
 
 // LSP Integration Tests
 // Tests for automatic lock file management in language server mode

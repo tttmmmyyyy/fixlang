@@ -5,6 +5,7 @@ use super::goto_definition;
 use super::hover;
 use super::references;
 use super::rename;
+use super::workspace_symbol;
 use super::util::{get_current_dir, path_to_uri, span_to_location, span_to_range, uri_to_path};
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
@@ -20,17 +21,18 @@ use crate::write_log;
 use crate::configuration::{Configuration, DiagnosticsConfig};
 use lsp_types::{
     CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
-    CallHierarchyServerCapability, CompletionItem,
-    CompletionOptions, CompletionParams, DiagnosticSeverity, DiagnosticTag,
-    DidChangeTextDocumentParams,
+    CallHierarchyServerCapability, CodeActionParams, CodeActionProviderCapability, CompletionItem,
+    CompletionOptions, CompletionParams, Diagnostic, DiagnosticRelatedInformation,
+    DiagnosticSeverity, DiagnosticTag, DidChangeTextDocumentParams,
     DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
     GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, OneOf, PositionEncodingKind,
-    ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, ReferenceParams, RenameOptions,
-    RenameParams, SaveOptions, ServerCapabilities, TextDocumentPositionParams,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    TextDocumentSyncSaveOptions, Uri, WorkDoneProgressBegin, WorkDoneProgressCreateParams,
-    WorkDoneProgressEnd, WorkDoneProgressOptions,
+    InitializeResult, InitializedParams, NumberOrString, OneOf, Position, PositionEncodingKind,
+    ProgressParams, ProgressParamsValue, ProgressToken, PublishDiagnosticsParams, Range,
+    ReferenceParams, RenameOptions, RenameParams, SaveOptions, ServerCapabilities,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgress,
+    WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
+    WorkDoneProgressOptions, WorkspaceSymbolParams,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -108,6 +110,14 @@ pub struct PendingDocumentSymbolRequest {
     params: DocumentSymbolParams,
 }
 
+/// A `workspace/symbol` request that is waiting for diagnostics to become available.
+pub struct PendingWorkspaceSymbolRequest {
+    /// The LSP request id used to correlate the eventual response.
+    id: u32,
+    /// The original request parameters, replayed once diagnostics are ready.
+    params: WorkspaceSymbolParams,
+}
+
 // The latest content of each file (which may not have been saved to disk yet) and its associated information
 pub struct LatestContent {
     // The path.
@@ -176,6 +186,10 @@ pub fn launch_language_server() {
     let mut pending_document_symbol_requests: VecDeque<PendingDocumentSymbolRequest> =
         VecDeque::new();
 
+    // The pending workspace symbol requests.
+    let mut pending_workspace_symbol_requests: VecDeque<PendingWorkspaceSymbolRequest> =
+        VecDeque::new();
+
     loop {
         // If new diagnostics are available, send store it to `last_diag`.
         while let Ok(res) = diag_res_recv.try_recv() {
@@ -186,6 +200,11 @@ pub fn launch_language_server() {
             while let Some(req) = pending_document_symbol_requests.pop_front() {
                 let program = &last_diag.as_ref().unwrap().program;
                 document_symbol::handle_document_symbol(req.id, &req.params, program);
+            }
+            // If there are pending workspace symbol requests, process them.
+            while let Some(req) = pending_workspace_symbol_requests.pop_front() {
+                let diag = last_diag.as_ref().unwrap();
+                workspace_symbol::handle_workspace_symbol(req.id, &req.params, diag);
             }
         }
 
@@ -426,12 +445,30 @@ pub fn launch_language_server() {
                 }
                 let program = &last_diag.as_ref().unwrap().program;
                 document_symbol::handle_document_symbol(id.unwrap(), &params.unwrap(), program);
+            } else if method == "workspace/symbol" {
+                let id = parse_id(&message, method);
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<WorkspaceSymbolParams> = parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                if last_diag.is_none() {
+                    pending_workspace_symbol_requests.push_back(PendingWorkspaceSymbolRequest {
+                        id: id.unwrap(),
+                        params: params.unwrap(),
+                    });
+                    continue;
+                }
+                let diag = last_diag.as_ref().unwrap();
+                workspace_symbol::handle_workspace_symbol(id.unwrap(), &params.unwrap(), diag);
             } else if method == "textDocument/codeAction" {
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
                 }
-                let params: Option<lsp_types::CodeActionParams> =
+                let params: Option<CodeActionParams> =
                     parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
@@ -659,14 +696,14 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
                 completion_item: None,
             }),
             signature_help_provider: None,
-            definition_provider: Some(lsp_types::OneOf::Left(true)),
+            definition_provider: Some(OneOf::Left(true)),
             type_definition_provider: None,
             implementation_provider: None,
-            references_provider: Some(lsp_types::OneOf::Left(true)),
+            references_provider: Some(OneOf::Left(true)),
             document_highlight_provider: None,
-            document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
-            workspace_symbol_provider: None,
-            code_action_provider: Some(lsp_types::CodeActionProviderCapability::Simple(true)),
+            document_symbol_provider: Some(OneOf::Left(true)),
+            workspace_symbol_provider: Some(OneOf::Left(true)),
+            code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
             code_lens_provider: None,
             document_formatting_provider: None,
             document_range_formatting_provider: None,
@@ -743,7 +780,7 @@ fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>) {
 // Handle "textDocument/didOpen" method.
 fn handle_textdocument_did_open(
     params: &DidOpenTextDocumentParams,
-    uri_to_latest_content: &mut Map<lsp_types::Uri, LatestContent>,
+    uri_to_latest_content: &mut Map<Uri, LatestContent>,
 ) {
     // Store the content of the file into the maps.
     let path = uri_to_path(&params.text_document.uri);
@@ -756,7 +793,7 @@ fn handle_textdocument_did_open(
 // Handle "textDocument/didChange" method.
 fn handle_textdocument_did_change(
     params: &DidChangeTextDocumentParams,
-    uri_to_latest_content: &mut Map<lsp_types::Uri, LatestContent>,
+    uri_to_latest_content: &mut Map<Uri, LatestContent>,
 ) {
     // Store the content of the file into `uri_to_content`.
     if let Some(change) = params.content_changes.last() {
@@ -772,7 +809,7 @@ fn handle_textdocument_did_change(
 fn handle_textdocument_did_save(
     diag_send: Sender<DiagnosticsMessage>,
     params: &DidSaveTextDocumentParams,
-    uri_to_latest_content: &mut Map<lsp_types::Uri, LatestContent>,
+    uri_to_latest_content: &mut Map<Uri, LatestContent>,
 ) {
     // Store the content of the file into maps.
     if let Some(text) = &params.text {
@@ -897,7 +934,7 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
         let uri = uri.unwrap();
 
         // Send the empty diagnostics notification for each file.
-        let params = lsp_types::PublishDiagnosticsParams {
+        let params = PublishDiagnosticsParams {
             uri,
             diagnostics: vec![],
             version: None,
@@ -922,15 +959,15 @@ fn send_diagnostics_error_message(msg: String) {
     let cdir_uri = cdir_uri.unwrap();
 
     // Send the diagnostics notification for each file.
-    let params = lsp_types::PublishDiagnosticsParams {
+    let params = PublishDiagnosticsParams {
         uri: cdir_uri,
-        diagnostics: vec![lsp_types::Diagnostic {
-            range: lsp_types::Range {
-                start: lsp_types::Position {
+        diagnostics: vec![Diagnostic {
+            range: Range {
+                start: Position {
                     line: 0,
                     character: 0,
                 },
-                end: lsp_types::Position {
+                end: Position {
                     line: 0,
                     character: 0,
                 },
@@ -950,7 +987,7 @@ fn send_diagnostics_error_message(msg: String) {
 }
 
 // Convert an `Error` into a diagnostic message.
-fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
+fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
     // Show error at the first span in `err`.
     let range = err
         .srcs
@@ -969,7 +1006,7 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
         let location = location.unwrap();
 
         // Create related informations.
-        let related = lsp_types::DiagnosticRelatedInformation {
+        let related = DiagnosticRelatedInformation {
             location,
             message: if msg.len() > 0 {
                 msg.to_string()
@@ -994,12 +1031,12 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> lsp_types::Diagnostic {
     } else {
         None
     };
-    lsp_types::Diagnostic {
+    Diagnostic {
         range,
         severity: Some(severity),
         code: err
             .code
-            .map(|c| lsp_types::NumberOrString::String(c.to_string())),
+            .map(|c| NumberOrString::String(c.to_string())),
         code_description: None,
         source: None,
         message: err.msg.clone(),
@@ -1106,7 +1143,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
 // Create work done progress.
 pub fn send_work_done_progress_create(token: &str, id: u32) {
     let progress = WorkDoneProgressCreateParams {
-        token: lsp_types::ProgressToken::String(token.to_string()),
+        token: ProgressToken::String(token.to_string()),
     };
     send_request(
         id,
@@ -1124,8 +1161,8 @@ pub fn send_work_done_progress_begin(token: &str, title: &str) {
         percentage: None,
     };
     let params = ProgressParams {
-        token: lsp_types::ProgressToken::String(token.to_string()),
-        value: ProgressParamsValue::WorkDone(lsp_types::WorkDoneProgress::Begin(begin)),
+        token: ProgressToken::String(token.to_string()),
+        value: ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(begin)),
     };
     send_notification("$/progress".to_string(), Some(params));
 }
@@ -1134,8 +1171,8 @@ pub fn send_work_done_progress_begin(token: &str, title: &str) {
 pub fn send_work_done_progress_end(token: &str) {
     let end = WorkDoneProgressEnd { message: None };
     let params = ProgressParams {
-        token: lsp_types::ProgressToken::String(token.to_string()),
-        value: ProgressParamsValue::WorkDone(lsp_types::WorkDoneProgress::End(end)),
+        token: ProgressToken::String(token.to_string()),
+        value: ProgressParamsValue::WorkDone(WorkDoneProgress::End(end)),
     };
     send_notification("$/progress".to_string(), Some(params));
 }

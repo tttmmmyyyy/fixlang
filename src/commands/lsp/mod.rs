@@ -8,3 +8,4 @@ pub mod references;
 pub mod rename;
 pub mod server;
 pub mod util;
+pub mod workspace_symbol;
