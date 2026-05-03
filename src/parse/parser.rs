@@ -251,6 +251,15 @@ pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String
     }
 }
 
+// Run only the pest-level parse against the grammar. Returns Ok if the
+// grammar accepts `source`, regardless of any later Program-build
+// validation. Test-only — used by acceptance / rejection assertions
+// that should not depend on later semantic checks.
+#[cfg(test)]
+pub fn check_grammar_accepts(source: &str) -> Result<(), pest::error::Error<Rule>> {
+    FixParser::parse(Rule::file, source).map(|_| ())
+}
+
 pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<Program, Errors> {
     let source_cloned = source.clone();
     let source_code = source.string()?;

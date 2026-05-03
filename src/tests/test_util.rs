@@ -93,6 +93,20 @@ pub fn test_source(source: &str, config: Configuration) {
     }
 }
 
+// Verify that the pest grammar rejects `source` (parse-level
+// rejection). Use this for negative tests that want to assert "the
+// parser rejects this construct" without going through later
+// elaboration / typecheck stages.
+pub fn assert_grammar_rejects(source: &str) {
+    use crate::parse::parser::check_grammar_accepts;
+    if check_grammar_accepts(source).is_ok() {
+        panic_with_msg(&format!(
+            "Grammar was expected to reject the source but accepted it.\nSource:\n{}",
+            source
+        ));
+    }
+}
+
 // Verify that compilation fails and that the error message does NOT
 // contain `excluded_errmsg`. Used to confirm a genuine error is not
 // silently swallowed by some permissive feature (e.g. that the hole
