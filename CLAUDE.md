@@ -17,6 +17,7 @@ This project implements the Fix programming language compiler and related tools 
 - **When modifying Fix grammar or standard library**:
   - Add unit tests that compile and execute Fix code.
   - These tests verify that Fix language features work correctly.
+  - **Always reference the thing under test from `main`**: When writing a test that checks whether some Fix code compiles, do NOT just declare/define the global value or trait member you want to verify. The test must actually use it from `main` — call the function, evaluate the value (using `eval` if direct calling is awkward), or otherwise reference it. Otherwise the symbol may be skipped by the compiler and a broken definition will not produce an error.
   
 - **When modifying `fix` command behavior**:
   - Do NOT write unit tests unless explicitly instructed.
