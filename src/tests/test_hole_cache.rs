@@ -1,16 +1,17 @@
-// Cache integrity tests for the hole feature.
-//
-// `resolve_namespace_and_check_type_sub` skips `cache.save_cache(...)`
-// whenever `check_type` produced any tolerated error (holes,
-// cannot-infer, unsatisfied predicates, disjoint equalities). Without
-// this, the cache would memoise a typed expression for a value that
-// should be reporting an error — so the next `fix check` would see
-// the cache hit, return early, and never re-emit the diagnostic.
-//
-// These tests exercise that contract end-to-end via the `fix` binary:
-// run `fix check`, confirm ERR_HOLE fires, then poke at the on-disk
-// cache directory to confirm no entry was written for the offending
-// value.
+//! Cache integrity tests for the hole feature.
+//!
+//! `resolve_namespace_and_check_type_sub` skips `cache.save_cache(...)`
+//! whenever `check_type` produced any tolerated error (holes,
+//! cannot-infer, unsatisfied predicates, disjoint equalities).
+//! Without this, the cache would memoise a typed expression for a
+//! value that should be reporting an error — so the next `fix check`
+//! would see the cache hit, return early, and never re-emit the
+//! diagnostic.
+//!
+//! These tests exercise that contract end-to-end via the `fix`
+//! binary: run `fix check`, confirm ERR_HOLE fires, then poke at the
+//! on-disk cache directory to confirm no entry was written for the
+//! offending value.
 
 #[cfg(test)]
 mod integration_tests {
@@ -20,12 +21,17 @@ mod integration_tests {
     use std::process::Command;
     use tempfile::TempDir;
 
+    /// Absolute path to the `cases/` directory shipped alongside this
+    /// test file.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_hole_cache/cases");
         path
     }
 
+    /// Copy the case named `case_name` into a fresh temp directory and
+    /// return the temp dir handle (kept alive by the caller) plus the
+    /// absolute path of the copied project.
     fn setup_test_env(case_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let src = get_test_cases_dir().join(case_name);
@@ -34,6 +40,8 @@ mod integration_tests {
         (temp_dir, dst)
     }
 
+    /// Run `fix check` in `project_dir` and return the full process
+    /// output.
     fn run_check(project_dir: &Path) -> std::process::Output {
         Command::new("fix")
             .arg("check")
@@ -70,6 +78,9 @@ mod integration_tests {
             .any(|name| name.starts_with(value_prefix))
     }
 
+    /// A hole-bearing value must not have a typecheck cache file
+    /// written for it, even though `fix check` runs to completion and
+    /// emits ERR_HOLE.
     #[test]
     fn hole_value_is_not_cached() {
         install_fix();
@@ -100,6 +111,9 @@ mod integration_tests {
         );
     }
 
+    /// Re-running `fix check` on the same hole-bearing source must
+    /// continue to report ERR_HOLE — i.e. the cache from the first
+    /// run cannot mask the diagnostic on the second.
     #[test]
     fn hole_diagnostic_persists_across_runs() {
         install_fix();
@@ -129,6 +143,9 @@ mod integration_tests {
         );
     }
 
+    /// Once the user fills in the hole, `fix check` succeeds and a
+    /// cache file appears for the now-clean value (i.e. the cache
+    /// suppression is gated on having errors, not permanent).
     #[test]
     fn fixed_value_is_cached_after_edit() {
         install_fix();

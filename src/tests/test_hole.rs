@@ -1,20 +1,21 @@
-// Acceptance tests for the `expr_hole` grammar / `Std::#hole` builtin
-// and the in-elaboration ERR_HOLE pass.
-//
-// Each program contains at least one hole. Elaboration types each hole
-// as `Std::#hole : a` (which unifies with whatever the surrounding
-// context expected); `check_type` then walks the substituted AST,
-// finds every hole, and emits "Expected expression [of type `T`]."
-// We verify the expected text reaches the user.
+//! Acceptance tests for the `expr_hole` grammar / `Std::#hole`
+//! builtin and the in-elaboration ERR_HOLE pass.
+//!
+//! Each program contains at least one hole. Elaboration types each
+//! hole as `Std::#hole : a` (which unifies with whatever the
+//! surrounding context expected); `check_type` then walks the
+//! substituted AST, finds every hole, and emits "Expected expression
+//! [of type `T`]." We verify the expected text reaches the user.
 
 use crate::{configuration::Configuration, tests::test_util::test_source_fail};
 
-// Convenience: every hole-rejecting test expects the same prefix; use
-// this constant so the message wording lives in one place.
+/// Convenience: every hole-rejecting test expects the same prefix; use
+/// this constant so the message wording lives in one place.
 const HOLE_ERR_PREFIX: &str = "Expected expression";
 
 // ----- A group: holes inside expressions -------------------------------
 
+/// ERR_HOLE fires for an empty expression after a `let ... ;` inside parens.
 #[test]
 pub fn hole_in_let_paren() {
     let source = r#"
@@ -25,6 +26,7 @@ pub fn hole_in_let_paren() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for an empty expression after a `let ... ;` without parens.
 #[test]
 pub fn hole_in_let_bare() {
     let source = r#"
@@ -35,6 +37,7 @@ pub fn hole_in_let_bare() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when the body of an `eval` is empty (parenthesised).
 #[test]
 pub fn hole_in_eval_paren() {
     let source = r#"
@@ -45,6 +48,7 @@ pub fn hole_in_eval_paren() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when the body of an `eval` is empty (bare).
 #[test]
 pub fn hole_in_eval_bare() {
     let source = r#"
@@ -55,6 +59,7 @@ pub fn hole_in_eval_bare() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when a lambda body is empty (parenthesised).
 #[test]
 pub fn hole_in_lam_paren() {
     let source = r#"
@@ -65,6 +70,7 @@ pub fn hole_in_lam_paren() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when a lambda body is empty (bare).
 #[test]
 pub fn hole_in_lam_bare() {
     let source = r#"
@@ -75,6 +81,7 @@ pub fn hole_in_lam_bare() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when the right operand of `;;` is empty (parenthesised).
 #[test]
 pub fn hole_in_and_then_paren() {
     let source = r#"
@@ -85,6 +92,7 @@ pub fn hole_in_and_then_paren() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when the right operand of `;;` is empty (bare).
 #[test]
 pub fn hole_in_and_then_bare() {
     let source = r#"
@@ -97,6 +105,7 @@ pub fn hole_in_and_then_bare() {
 
 // ----- if -------------------------------------------------------------
 
+/// ERR_HOLE fires when an `if`'s then-branch block is empty.
 #[test]
 pub fn hole_in_if_then_block() {
     let source = r#"
@@ -107,6 +116,7 @@ pub fn hole_in_if_then_block() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when an `if`'s else-branch block is empty.
 #[test]
 pub fn hole_in_if_else_block() {
     let source = r#"
@@ -117,6 +127,7 @@ pub fn hole_in_if_else_block() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when the `else <expr>` form has no expression.
 #[test]
 pub fn hole_in_if_else_word() {
     let source = r#"
@@ -127,9 +138,9 @@ pub fn hole_in_if_else_word() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for the `;` form of `else_of_if` (`;` then a `{ ... }` block).
 #[test]
 pub fn hole_in_if_else_semi_block() {
-    // Semicolon form of `else_of_if` (not `_with_space`): `;` then `{ ... }`.
     let source = r#"
         module Main;
         hole_val : I64 = if true { 1 }; { };
@@ -138,10 +149,10 @@ pub fn hole_in_if_else_semi_block() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for the `;` form of `else_of_if_with_space` with an
+/// empty trailing expression (the global `;` closes the def).
 #[test]
 pub fn hole_in_if_else_semi_expr() {
-    // Semicolon form of `else_of_if_with_space`: `;` then expression
-    // (here, an empty expression — the global `;` closes the def).
     let source = r#"
         module Main;
         hole_val : I64 = if true { 1 }; ;
@@ -150,9 +161,9 @@ pub fn hole_in_if_else_semi_expr() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when the then-branch is empty and the else uses the `;` form.
 #[test]
 pub fn hole_in_if_then_semi() {
-    // Empty then-branch with `;` form of else.
     let source = r#"
         module Main;
         hole_val : I64 = if true { }; { 1 };
@@ -165,6 +176,8 @@ pub fn hole_in_if_then_semi() {
 
 // `match` in Fix dispatches on union variants. Use `Option a` from Std
 // (defined as `union { none: (), some: a }`) for exhaustiveness.
+
+/// ERR_HOLE fires for an empty rhs in a `match`'s first arm.
 #[test]
 pub fn hole_in_match_first() {
     let source = r#"
@@ -176,6 +189,7 @@ pub fn hole_in_match_first() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for an empty rhs in a `match`'s last arm.
 #[test]
 pub fn hole_in_match_last() {
     let source = r#"
@@ -187,6 +201,7 @@ pub fn hole_in_match_last() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for an empty rhs in a `match`'s last arm followed by a trailing comma.
 #[test]
 pub fn hole_in_match_last_trailing_comma() {
     let source = r#"
@@ -198,6 +213,7 @@ pub fn hole_in_match_last_trailing_comma() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for every empty arm rhs (here, all of them).
 #[test]
 pub fn hole_in_match_all() {
     let source = r#"
@@ -209,10 +225,10 @@ pub fn hole_in_match_all() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires when a single-arm `match` has an empty rhs.
+/// (Single-variant union is required to satisfy exhaustiveness.)
 #[test]
 pub fn hole_in_match_only() {
-    // Single-arm match needs a single-variant union to satisfy the
-    // exhaustiveness check.
     let source = r#"
         module Main;
         type Single = union { only: () };
@@ -225,6 +241,7 @@ pub fn hole_in_match_only() {
 
 // ----- do -------------------------------------------------------------
 
+/// ERR_HOLE fires when a `do { ... }` block contains no expression.
 #[test]
 pub fn hole_in_do() {
     let source = r#"
@@ -237,10 +254,11 @@ pub fn hole_in_do() {
 
 // ----- monadic bind (`*`) interaction ---------------------------------
 
+/// ERR_HOLE survives the `*`-desugaring rewrite: with `*some_io`
+/// expanded to a `>>=` chain, the chain's innermost value (the empty
+/// let body, parenthesised) is still recognised as a hole.
 #[test]
 pub fn hole_in_let_after_bind_paren() {
-    // `*some_io` desugars to a >>= chain wrapping the let body. The body
-    // is hole, which becomes the innermost value of the chain.
     let source = r#"
         module Main;
         some_io : IO String = pure("hi");
@@ -250,6 +268,8 @@ pub fn hole_in_let_after_bind_paren() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE survives the `*`-desugaring rewrite (bare form of the
+/// previous test).
 #[test]
 pub fn hole_in_let_after_bind_bare() {
     let source = r#"
@@ -261,6 +281,7 @@ pub fn hole_in_let_after_bind_bare() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE survives `*`-desugaring inside a `do` block.
 #[test]
 pub fn hole_in_do_after_bind() {
     let source = r#"
@@ -274,12 +295,11 @@ pub fn hole_in_do_after_bind() {
 
 // ----- B group: top-level definition rhs ------------------------------
 
+/// ERR_HOLE fires for the `global_name_defn` parse path
+/// (`name = expr_hole ;`) when the type is given via a separate
+/// `global_name_type_sign`.
 #[test]
 pub fn hole_global_defn_with_separate_sign() {
-    // Exercises the `global_name_defn` parser path (`name = expr_hole ;`)
-    // by giving the type via a separate `global_name_type_sign` (no
-    // rhs). The combined `name : T = ;` form below exercises the hole
-    // path inside `global_name_type_sign` itself.
     let source = r#"
         module Main;
         hole_val : I64;
@@ -290,9 +310,10 @@ pub fn hole_global_defn_with_separate_sign() {
 }
 
 
+/// ERR_HOLE fires for the rhs hole of `global_name_type_sign`
+/// (combined `value : T = ;` form).
 #[test]
 pub fn hole_global_with_sign() {
-    // `value : T = ;` — rhs of `global_name_type_sign` is a hole.
     let source = r#"
         module Main;
         hole_val : I64 = ;
@@ -301,10 +322,10 @@ pub fn hole_global_with_sign() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for an empty rhs in `trait_member_value_impl`
+/// (`name = ;` inside `impl ... { ... }`).
 #[test]
 pub fn hole_trait_member_value_impl() {
-    // `name = ;` inside `impl ... { ... }` — rhs of
-    // `trait_member_value_impl` is a hole.
     let source = r#"
         module Main;
         trait a : MyTrait {
@@ -318,10 +339,10 @@ pub fn hole_trait_member_value_impl() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for an empty rhs in `trait_member_value_type_sign`
+/// (`name : T = ;` inside `impl ... { ... }`).
 #[test]
 pub fn hole_trait_member_value_type_sign() {
-    // `name : T = ;` inside `impl ... { ... }` — rhs of
-    // `trait_member_value_type_sign` is a hole.
     let source = r#"
         module Main;
         trait a : MyTrait {
@@ -337,16 +358,11 @@ pub fn hole_trait_member_value_type_sign() {
 
 // ----- Nested / combined --------------------------------------------
 
+/// ERR_HOLE wins over the cannot-infer diagnostic when a nested let
+/// has an empty body that leaves the outer pattern's type
+/// indeterminate. The hole pass short-circuits the fixed-types check.
 #[test]
 pub fn hole_nested_let_let() {
-    // Inner let's body is a hole, so the inner let has type `a` (a
-    // free type variable), making `x : a`. The hole-free analogue
-    // `(let x = (let y = 10; undefined("")); undefined(""))` would
-    // trip Fix's "Cannot infer the type of this pattern" check, but
-    // here check_type's hole pass fires first and short-circuits the
-    // fixed-types check (since the holes are the likely cause of the
-    // indeterminacy). We therefore expect ERR_HOLE rather than the
-    // cannot-infer message.
     let source = r#"
         module Main;
         hole_val : I64 = (let x = (let y = 10; ); );
@@ -355,6 +371,7 @@ pub fn hole_nested_let_let() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for an empty let body nested inside an `if`.
 #[test]
 pub fn hole_nested_if_let() {
     let source = r#"
@@ -365,6 +382,7 @@ pub fn hole_nested_if_let() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for an empty let body nested inside a `match` arm.
 #[test]
 pub fn hole_nested_match_let() {
     let source = r#"
@@ -376,6 +394,8 @@ pub fn hole_nested_match_let() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE fires for the body of the inner lambda in a curried
+/// `|x| |y|` form when the inner body is empty.
 #[test]
 pub fn hole_nested_lam_lam() {
     let source = r#"
@@ -388,6 +408,7 @@ pub fn hole_nested_lam_lam() {
 
 // ----- Whitespace / comment edges -----------------------------------
 
+/// ERR_HOLE still fires when the hole position is occupied only by a block comment.
 #[test]
 pub fn hole_with_block_comment() {
     let source = r#"
@@ -398,6 +419,7 @@ pub fn hole_with_block_comment() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE still fires when the hole position is occupied only by a line comment.
 #[test]
 pub fn hole_with_line_comment() {
     let source = r#"
@@ -409,6 +431,7 @@ pub fn hole_with_line_comment() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
+/// ERR_HOLE still fires when the hole position is occupied only by blank lines.
 #[test]
 pub fn hole_with_many_newlines() {
     let source = "
@@ -424,12 +447,11 @@ pub fn hole_with_many_newlines() {
 
 // ----- EOF boundary --------------------------------------------------
 
+/// Exercises the `EOI` branch of the `&(ANY | EOI)` lookahead in the
+/// `hole` rule: the hole-bearing global is the last item in the file,
+/// so nothing follows the closing `;` but whitespace and EOF.
 #[test]
 pub fn hole_at_end_of_file() {
-    // The hole-bearing global is the last thing in the file. The closing
-    // `;` of the global is followed only by whitespace and EOF, so the
-    // `&(ANY | EOI)` lookahead in the `hole` rule has to use its `EOI`
-    // branch.
     let source = "module Main;\nmain : IO () = pure();\nhole_val : I64 = (let x = 10; );";
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }

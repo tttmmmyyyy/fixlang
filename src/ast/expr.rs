@@ -3,7 +3,7 @@ use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::types::{TyCon, TypeNode, type_fun};
-use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT};
+use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT, HOLE_NAME, STD_NAME};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::misc::{collect_results, Set};
@@ -1653,18 +1653,22 @@ pub fn expr_var(name: FullName, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Var(var_var(name))).into_expr_node(src)
 }
 
-// Make a placeholder expression for an empty position the parser
-// accepted via the `expr_hole` rule. The result is `Expr::Var` referring
-// to the internal builtin `Std::#hole : a`. A post-elaboration pass
-// scans for these and emits ERR_HOLE.
-//
-// `src` should be the span of the empty source region (typically
-// computed from the surrounding tokens), so the diagnostic can underline
-// a meaningful range rather than the zero-width hole match itself.
-pub fn expr_hole(src: Option<Span>) -> Arc<ExprNode> {
-    let mut name = FullName::from_strs(&[crate::constants::STD_NAME], crate::constants::HOLE_NAME);
+/// The absolute `FullName` of the internal `Std::#hole` builtin.
+pub fn hole_full_name() -> FullName {
+    let mut name = FullName::from_strs(&[STD_NAME], HOLE_NAME);
     name.global_to_absolute();
-    expr_var(name, src)
+    name
+}
+
+/// Make a placeholder expression for an empty position. The result is
+/// an `Expr::Var` referring to the internal builtin `Std::#hole : a`.
+///
+/// # Arguments
+/// * `src` — the span of the empty source region. Used by the
+///   ERR_HOLE diagnostic to underline a meaningful range rather than
+///   a zero-width point.
+pub fn expr_hole(src: Option<Span>) -> Arc<ExprNode> {
+    expr_var(hole_full_name(), src)
 }
 
 pub fn expr_if(

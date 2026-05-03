@@ -251,12 +251,12 @@ pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String
     }
 }
 
-// Run only the pest-level parse against the grammar. Returns Ok if the
-// grammar accepts `source`, regardless of any later Program-build
-// validation. Test-only — used by acceptance / rejection assertions
-// that should not depend on later semantic checks.
+/// Run only the pest-level parse against the grammar. Returns `Ok`
+/// if the grammar accepts `source`, regardless of any later
+/// `Program`-build validation. Test-only — for acceptance / rejection
+/// assertions that should not depend on later semantic checks.
 #[cfg(test)]
-pub fn check_grammar_accepts(source: &str) -> Result<(), pest::error::Error<Rule>> {
+pub fn check_grammar_accepts(source: &str) -> Result<(), Error<Rule>> {
     FixParser::parse(Rule::file, source).map(|_| ())
 }
 
@@ -1289,12 +1289,12 @@ fn parse_expr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>,
     parse_expr_and_then_sequence(pair, ctx)
 }
 
-// Parse an `expr_hole` pair (which contains either an inner `expr` or a
-// zero-width `hole`). For the hole case, returns `expr_hole(Some(span))`
-// where `span` is the zero-width span of the `hole` pair itself. The
-// post-elaboration ERR_HOLE pass and any error renderer are responsible
-// for widening that point to a visible underline (e.g. 1 character at
-// the start position).
+/// Parse an `expr_hole` pair (which contains either an inner `expr`
+/// or a zero-width `hole`). For the hole case, returns
+/// `expr_hole(Some(span))` where `span` is the zero-width span of the
+/// `hole` pair itself; downstream code is responsible for widening
+/// that point to a visible underline (e.g. 1 character at the start
+/// position).
 fn parse_expr_or_hole(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -1308,10 +1308,11 @@ fn parse_expr_or_hole(
     }
 }
 
-// Same as `parse_expr_or_hole` but pushes/pops a fresh `DoContext` for
-// the parsed sub-expression, so monadic-bind operators (`*`) inside the
-// sub-expression do not leak into the surrounding context. The hole
-// case has no `*` operators, so `expand_binds` is a no-op for it.
+/// Same as `parse_expr_or_hole` but pushes/pops a fresh `DoContext`
+/// for the parsed sub-expression, so monadic-bind operators (`*`)
+/// inside the sub-expression do not leak into the surrounding
+/// context. The hole case has no `*` operators, so `expand_binds` is
+/// a no-op for it.
 fn parse_expr_or_hole_with_new_do(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,

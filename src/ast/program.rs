@@ -1012,30 +1012,33 @@ impl Program {
         errors.to_result()
     }
 
-    // This function performs the following tasks:
-    // - Resolve namespace of type and traits in the expression.
-    // - Resolve type aliases in the expression.
-    // - Perform typechecking.
-    //
-    // Parameters:
-    // - `te` : The expression to be namespace-resolved and type-checked.
-    // - `req_scm` : The type scheme that the expression should have.
-    // - `val_name` : The name of the expression, e.g., `Std::ToString::to_string`.
-    // - `def_mod` : The module where the expression is defined. Note that if `te` is a trait method implementation, this may differ from `name.module()`.
-    // - `nrctx` : The name resolution context. Pass one created by `program.create_name_resolution_context(define_module)`.
-    // - `ver_hash` : A hash value of source codes `te` depends on. This is used to detect or invalidate the cache file. Pass one created by `program.module_dependency_hash(define_module)`.
-    // Returns:
-    // - `Ok((te, errors))`: namespace resolution and substitution
-    //   completed; `te` is the typed expression. `errors` may still
-    //   carry tolerated diagnostics from `check_type` (holes,
-    //   cannot-infer, unsatisfied predicates, disjoint equalities).
-    //   The caller should always save `te` (so the LSP can hover on
-    //   it) and propagate `errors`. The cache is only written when
-    //   `errors` is empty.
-    // - `Err(errs)`: a hard failure happened before substitution
-    //   completed (e.g. resolve_namespace, resolve_type_aliases, or
-    //   the substitution itself blew up). No useful typed expression
-    //   to propagate.
+    /// Resolve namespaces, resolve type aliases, and run the type
+    /// checker for a single value's expression.
+    ///
+    /// # Arguments
+    /// * `te` — the expression to be namespace-resolved and type-checked.
+    /// * `req_scm` — the type scheme that the expression should have.
+    /// * `val_name` — the name of the expression, e.g., `Std::ToString::to_string`.
+    /// * `def_mod` — the module where the expression is defined. For a
+    ///   trait method implementation this may differ from `val_name.module()`.
+    /// * `nrctx` — the name resolution context. Pass one created by
+    ///   `program.create_name_resolution_context(define_module)`.
+    /// * `ver_hash` — hash of the source code `te` depends on, used
+    ///   to detect or invalidate the cache file. Pass one created by
+    ///   `program.module_dependency_hash(define_module)`.
+    ///
+    /// # Returns
+    /// * `Ok((te, errors))` — namespace resolution and substitution
+    ///   completed; `te` is the typed expression. `errors` may still
+    ///   carry tolerated diagnostics from `check_type` (holes,
+    ///   cannot-infer, unsatisfied predicates, disjoint equalities).
+    ///   The caller should always save `te` (so the LSP can hover on
+    ///   it) and propagate `errors`. The cache is only written when
+    ///   `errors` is empty.
+    /// * `Err(errs)` — a hard failure happened before substitution
+    ///   completed (e.g. resolve_namespace, resolve_type_aliases, or
+    ///   the substitution itself blew up). No useful typed expression
+    ///   to propagate.
     fn resolve_namespace_and_check_type_sub(
         mut te: TypedExpr,
         req_scm: &Arc<Scheme>,
@@ -1384,9 +1387,9 @@ impl Program {
             tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
         }
         let expr = tc.fix_types(te.expr.clone())?;
-        // `fix_types` no longer checks that all type variables are
-        // fixed; do that here so instantiation never proceeds with an
-        // indeterminate type.
+        // Reject indeterminate types here so instantiation never
+        // proceeds with one (`fix_types` only substitutes; it does not
+        // verify that every type variable was solved).
         tc.check_types_are_fixed(&expr)?;
         let expr = remove_opaque_wrapper_func(expr);
         let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);

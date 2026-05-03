@@ -1,7 +1,8 @@
-// LSP integration tests for `textDocument/hover`. Right now the focus
-// is on hover behaviour around expressions that contain `Std::#hole`
-// placeholders: even when ERR_HOLE rejects the value, hover on the
-// surrounding local variables should still show their inferred types.
+//! LSP integration tests for `textDocument/hover`. The current focus
+//! is on hover behaviour around expressions that contain
+//! `Std::#hole` placeholders: even when ERR_HOLE rejects the value,
+//! hover on the surrounding local variables should still show their
+//! inferred types.
 
 #[cfg(test)]
 mod tests {
@@ -14,12 +15,16 @@ mod tests {
     };
     use tempfile::TempDir;
 
+    /// Absolute path to the LSP `cases/` directory.
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_lsp/cases");
         path
     }
 
+    /// Copy the named test project into a fresh temp directory and
+    /// return both the temp dir handle (to keep it alive) and the
+    /// canonicalised path of the copied project.
     fn setup_test_env(project_name: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_cases_dir().join(project_name);
@@ -31,6 +36,9 @@ mod tests {
         (temp_dir, test_case_dst)
     }
 
+    /// Per-test LSP harness: owns the running language server, the
+    /// temp directory holding the copied project, and the project
+    /// path itself.
     struct LspTestCtx {
         client: LspClient,
         project_dir: PathBuf,
@@ -38,6 +46,9 @@ mod tests {
     }
 
     impl LspTestCtx {
+        /// Spin up an LSP server for `project_name`, open the listed
+        /// files, and wait for diagnostics on the last one before
+        /// returning.
         fn setup(project_name: &str, files: &[&str]) -> Self {
             install_fix();
             let (temp_dir, project_dir) = setup_test_env(project_name);
@@ -59,6 +70,7 @@ mod tests {
             }
         }
 
+        /// Build a `file://` URI for `file` relative to the project root.
         fn file_uri(&self, file: &str) -> String {
             format!("file://{}", self.project_dir.join(file).display())
         }
@@ -88,6 +100,8 @@ mod tests {
                 .expect("Response should have a result field")
         }
 
+        /// Cleanly shut down the LSP server and join its reader
+        /// thread; panics if either step fails.
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))
@@ -98,9 +112,10 @@ mod tests {
         }
     }
 
+    /// Extract the markdown text from a Hover JSON value
+    /// (`hover.contents` is a `MarkupContent { kind, value }`).
     fn hover_text(hover: &Value) -> Option<String> {
         let contents = hover.get("contents")?;
-        // hover.contents is `MarkupContent { kind, value }`.
         contents
             .get("value")
             .and_then(|v| v.as_str())

@@ -6,7 +6,7 @@ use std::{
     sync::Once,
 };
 use crate::{
-    commands::run::run, configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, error::{Errors, panic_if_err, panic_with_msg}, misc::save_temporary_source 
+    commands::run::run, configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, error::{Errors, panic_if_err, panic_with_msg}, misc::save_temporary_source, parse::parser::check_grammar_accepts
 };
 
 static INSTALL_FIX: Once = Once::new();
@@ -69,7 +69,6 @@ fn run_source(
     run(config, false)
 }
 
-
 pub fn test_source(source: &str, config: Configuration) {
     let res = run_source(source, config);
     let res = panic_if_err(res);
@@ -93,12 +92,11 @@ pub fn test_source(source: &str, config: Configuration) {
     }
 }
 
-// Verify that the pest grammar rejects `source` (parse-level
-// rejection). Use this for negative tests that want to assert "the
-// parser rejects this construct" without going through later
-// elaboration / typecheck stages.
+/// Verify that the pest grammar rejects `source` (parse-level
+/// rejection). Use this for negative tests that want to assert "the
+/// parser rejects this construct" without going through later
+/// elaboration / typecheck stages.
 pub fn assert_grammar_rejects(source: &str) {
-    use crate::parse::parser::check_grammar_accepts;
     if check_grammar_accepts(source).is_ok() {
         panic_with_msg(&format!(
             "Grammar was expected to reject the source but accepted it.\nSource:\n{}",
@@ -107,18 +105,14 @@ pub fn assert_grammar_rejects(source: &str) {
     }
 }
 
-// Run `source` and return the user-visible diagnostic text. Asserts
-// that compilation/execution did not succeed; panics if it did.
-//
-// "User-visible diagnostic text" is one of:
-//   - the rendered `Errors` if the elaborator returned `Err`;
-//   - the `io::Error` string if the child process couldn't even
-//     spawn;
-//   - the captured stderr from the child process otherwise.
-//
-// Used as a primitive by `test_source_fail*` and by tests that need
-// to inspect the diagnostic text directly (e.g. counting how many
-// diagnostics were emitted).
+/// Run `source` and return the user-visible diagnostic text. Asserts
+/// that compilation/execution did not succeed; panics if it did.
+///
+/// "User-visible diagnostic text" is one of:
+///   - the rendered `Errors` if the elaborator returned `Err`;
+///   - the `io::Error` string if the child process couldn't even
+///     spawn;
+///   - the captured stderr from the child process otherwise.
 pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
     let res = run_source(source, config);
     match res {
@@ -133,10 +127,10 @@ pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
     }
 }
 
-// Verify that compilation fails and that the error message does NOT
-// contain `excluded_errmsg`. Used to confirm a genuine error is not
-// silently swallowed by some permissive feature (e.g. that the hole
-// feature does not accept code it was never meant to).
+/// Verify that compilation fails and that the error message does NOT
+/// contain `excluded_errmsg`. Used to confirm a genuine error is not
+/// silently swallowed by some permissive feature (e.g. that the hole
+/// feature does not accept code it was never meant to).
 pub fn test_source_fail_excludes(source: &str, config: Configuration, excluded_errmsg: &str) {
     let errmsg = run_source_assert_failed(source, config);
     assert!(

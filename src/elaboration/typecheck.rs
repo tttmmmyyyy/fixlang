@@ -1359,19 +1359,20 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // Check if an expression matches the expected type scheme.
-    // Returns the given expression with each subexpression annotated with inferred types.
-    // Returns:
-    // - `Ok((expr, errors))`: substitution finished and `expr` is the
-    //   fully substituted typed expression. `errors` may still contain
-    //   tolerated diagnostics (holes, cannot-infer, unsatisfiable
-    //   predicates, disjoint equalities). Callers should propagate
-    //   `errors` but may also use `expr` (e.g. save it to the program
-    //   so the LSP can hover on its sub-expressions).
-    // - `Err(errs)`: a hard failure before substitution completed
-    //   (type mismatch in `unify_type_of_expr`, failure of
-    //   `substitute_and_reduce_type` inside `fix_types`, or scheme
-    //   instantiation failure). No typed expression to return.
+    /// Check that `expr` matches `expect_scm` and return the
+    /// expression annotated with inferred types on every subnode.
+    ///
+    /// # Returns
+    /// * `Ok((expr, errors))` — substitution finished and `expr` is
+    ///   the fully substituted typed expression. `errors` may still
+    ///   contain tolerated diagnostics (holes, cannot-infer,
+    ///   unsatisfiable predicates, disjoint equalities). Callers
+    ///   should propagate `errors` but may also use `expr` (e.g. save
+    ///   it so the LSP can hover on its sub-expressions).
+    /// * `Err(errs)` — a hard failure before substitution completed
+    ///   (type mismatch in `unify_type_of_expr`, failure of
+    ///   `substitute_and_reduce_type` inside `fix_types`, or scheme
+    ///   instantiation failure). No typed expression to return.
     pub fn check_type(
         &mut self,
         expr: Arc<ExprNode>,
@@ -1847,12 +1848,12 @@ impl TypeCheckContext {
         errs
     }
 
-    // Apply the type substitution to every node's `type_` field and to
-    // every pattern type. Does not check whether the resulting types are
-    // fixed (free of unsolved type variables); see
-    // `check_types_are_fixed` for that. Splitting substitution from the
-    // fixed-type check lets us run other passes (e.g. hole detection) on
-    // the substituted AST in between.
+    /// Apply the type substitution to every node's `type_` field and to
+    /// every pattern type. Does not check whether the resulting types
+    /// are fixed (free of unsolved type variables); see
+    /// `check_types_are_fixed` for that. Substitution and the
+    /// fixed-type check are kept separate so other passes (e.g. hole
+    /// detection) can run on the substituted AST in between.
     pub fn fix_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
         let ty = self.substitute_and_reduce_type(expr.type_.as_ref().unwrap())?;
         let expr = expr.set_type(ty);
@@ -1916,11 +1917,10 @@ impl TypeCheckContext {
         })
     }
 
-    // Verify that every node and pattern in `expr` has a type with no
-    // unsolved free type variables. Walks depth-first and surfaces the
-    // innermost failure, matching the behaviour of the previous combined
-    // `fix_types` (where the `?` in recursive calls naturally surfaced
-    // the deepest error).
+    /// Verify that every node and pattern in `expr` has a type with no
+    /// unsolved free type variables. Walks depth-first and surfaces
+    /// the innermost failure (errors from inner subtrees take
+    /// precedence over the failure at the root).
     pub fn check_types_are_fixed(&self, expr: &Arc<ExprNode>) -> Result<(), Errors> {
         match &*expr.expr {
             Expr::Var(_) | Expr::LLVM(_) => {}
@@ -1977,6 +1977,8 @@ impl TypeCheckContext {
         Ok(())
     }
 
+    /// Pattern-tree counterpart of `check_types_are_fixed`. Recurses
+    /// into sub-patterns, then validates the type of `pat` itself.
     fn check_pattern_types_are_fixed(&self, pat: &Arc<PatternNode>) -> Result<(), Errors> {
         match &pat.pattern {
             Pattern::Var(_, _) => {}

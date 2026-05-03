@@ -42,6 +42,11 @@ pub(super) fn handle_hover(
     send_response(id, Ok::<_, ()>(hover))
 }
 
+/// Return true when `node` refers to a compiler-internal name (one
+/// whose local name starts with `#`, e.g. `Std::#hole`). User
+/// identifiers cannot start with `#`, so this never matches anything
+/// the user wrote. Used to suppress hover content that would expose
+/// internal placeholders.
 fn is_internal_name_node(node: &EndNode) -> bool {
     match node {
         EndNode::Expr(var, _) => var.name.name.starts_with('#'),

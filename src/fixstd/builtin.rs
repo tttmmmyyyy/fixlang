@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::ast::{
     expr::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
@@ -4119,28 +4118,33 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Inline-LLVM body for the `Std::#hole` builtin. Code generation
+/// should be unreachable in practice because elaboration rejects any
+/// program containing a hole; the body still emits an `unreachable`
+/// instruction defensively so the LLVM module stays well-formed if
+/// the diagnostic is somehow bypassed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMHoleBody {}
 
 impl InlineLLVMHoleBody {
+    /// Stable identifier used as the LLVM symbol name for this body.
     pub fn name(&self) -> String {
         "#hole".to_string()
     }
 
+    /// No captured names — `#hole` is a closed nullary builtin.
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
 
+    /// Emit LLVM IR for a hole reference: an `unreachable` followed by
+    /// a fresh block that returns an undefined value of the expected
+    /// type, keeping the surrounding function well-formed.
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
-        // Holes are caught by a post-elaboration pass and reported as
-        // ERR_HOLE before code generation, so this should be unreachable.
-        // Be defensive in case `--no-runtime-check` or some other flag
-        // bypasses the diagnostic: emit an `unreachable` instruction so
-        // the LLVM module remains well-formed.
         gc.builder().build_unreachable().unwrap();
         let current_func = gc
             .builder()
@@ -4156,10 +4160,10 @@ impl InlineLLVMHoleBody {
     }
 }
 
-// `Std::#hole : a` — placeholder generated when the parser accepts an
-// empty expression position (e.g. `let x = 10; ` with no body).
-// Type-checks at any type via the generic `a`. A post-pass scans for
-// references to this name and emits ERR_HOLE.
+/// `Std::#hole : a` — placeholder generated when the parser accepts
+/// an empty expression position (e.g. `let x = 10; ` with no body).
+/// Type-checks at any type via the generic `a`. A post-pass scans for
+/// references to this name and emits ERR_HOLE.
 pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
     let expr = expr_llvm(
