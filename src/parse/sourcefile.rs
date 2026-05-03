@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -29,13 +30,13 @@ impl PartialEq for SourceFile {
 impl Eq for SourceFile {}
 
 impl PartialOrd for SourceFile {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for SourceFile {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.file_path.cmp(&other.file_path)
     }
 }
@@ -162,11 +163,11 @@ impl Span {
         }
     }
 
-    pub fn offset(&self, offset: usize) -> Self {
+    pub fn after_head_character(&self) -> Self {
         Self {
             input: self.input.clone(),
-            start: self.start + offset,
-            end: self.end + offset,
+            start: self.start + 1,
+            end: self.start + 1,
         }
     }
 
@@ -254,7 +255,7 @@ impl Span {
             let start_pos = span.start_pos().max(line_span.start_pos());
             let end_pos = span.end_pos().min(line_span.end_pos());
             let start_col = start_pos.line_col().1;
-            let span_len = end_pos.pos() - start_pos.pos();
+            let span_len = (end_pos.pos() - start_pos.pos()).max(1);
             ret += &(" ".repeat(start_col - 1)
                 + &"^".repeat(span_len).color(underline_color).to_string());
             ret += "\n";

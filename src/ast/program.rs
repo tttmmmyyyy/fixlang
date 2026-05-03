@@ -1586,9 +1586,15 @@ impl Program {
         // If the type of an expression contains indeterminate type variable after instantiation, raise an error.
         //
         // NOTE: This check is a precaution, as we are determining whether there are any indeterminate type variables during the type inference phase.
-        if !ret.type_.as_ref().unwrap().free_vars().is_empty() {
+        let ret_ty = ret.type_.as_ref().unwrap();
+        if let Some((fv_name, _)) = ret_ty.free_vars().into_iter().next() {
+            // Must stay in sync with the same message in typecheck.rs (check_is_type_fixed).
             return Err(Errors::from_msg_srcs(
-                "Cannot infer the type of this expression because it contains an indeterminate type variable. Hint: you may fix this by adding a type annotation.".to_string(),
+                format!(
+                    "Cannot infer the type of this expression: inferred as `{}`, but the type variable `{}` is unresolved.\nHint: add a type annotation to this expression.",
+                    ret_ty.to_string(),
+                    fv_name,
+                ),
                 &[&ret.source],
             ));
         }

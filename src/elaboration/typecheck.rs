@@ -1143,7 +1143,7 @@ impl TypeCheckContext {
                 let elem_src = if elems.len() > 0 {
                     elems[0].source.clone()
                 } else {
-                    ei.source.clone().map(|s| s.to_head_character().offset(1))
+                    ei.source.clone().map(|s| s.after_head_character())
                 };
                 let elem_tv = self.new_tyvar_star();
                 self.add_tyvar_source(elem_tv.name.clone(), elem_src.clone());
@@ -1266,10 +1266,14 @@ impl TypeCheckContext {
         let mut msg_srcs = vec![];
         for tv in tvs {
             if let Some(src) = self.tyvar_expr.get(&tv) {
-                let msg = if let Some(ref_no) = ref_no {
-                    format!("`{}` in ({}) is the type for:", tv, ref_no)
+                let prefix = if let Some(ref_no) = ref_no {
+                    format!("`{}` in ({})", tv, ref_no)
                 } else {
-                    format!("`{}` is the type for this expression.", tv)
+                    format!("`{}`", tv)
+                };
+                let msg = match short_span_snippet(src) {
+                    Some(snippet) => format!("{} is the type for `{}`.", prefix, snippet),
+                    None => format!("{} is the type for:", prefix),
                 };
                 msg_srcs.push((msg, src.clone()));
             }
@@ -1833,11 +1837,13 @@ impl TypeCheckContext {
             .into_iter()
             .filter(|(k, _v)| !self.fixed_tyvars.iter().any(|tv| tv.name == *k));
         if let Some((fv_name, fv)) = fvs.next() {
+            // Must stay in sync with the same message in program.rs (instantiate_expr).
             let mut err = Error::from_msg_srcs(
                 format!(
-                    "Cannot infer the type of this {} because it contains an indeterminate type variable `{}`. Hint: you may fix this by adding a type annotation.",
+                    "Cannot infer the type of this {0}: inferred as `{1}`, but the type variable `{2}` is unresolved.\nHint: add a type annotation to this {0}.",
                     src_type,
-                    fv_name
+                    ty.to_string(),
+                    fv_name,
                 ),
                 &[src],
             );
@@ -1998,6 +2004,21 @@ impl TypeCheckContext {
         }
         Ok(())
     }
+}
+
+/// Returns the trimmed source text covered by `span` if it fits on a single line and within a small character budget, suitable for inlining into a diagnostic message.
+fn short_span_snippet(span: &Span) -> Option<String> {
+    const MAX_CHARS: usize = 30;
+    let source = span.input.string().ok()?;
+    let snippet = source.get(span.start..span.end)?;
+    let trimmed = snippet.trim();
+    if trimmed.is_empty() || trimmed.contains('\n') {
+        return None;
+    }
+    if trimmed.chars().count() > MAX_CHARS {
+        return None;
+    }
+    Some(trimmed.to_string())
 }
 
 #[derive(Clone)]
