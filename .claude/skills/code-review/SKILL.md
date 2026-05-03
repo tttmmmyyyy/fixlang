@@ -25,7 +25,7 @@ This orchestrator owns scope selection. It resolves the argument into a single *
 Run these aspects in this order, each in its own subagent:
 
 1. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
-2. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, etc.).
+2. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
 3. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports introduced by step 2).
 4. **comment-style** — apply project comment conventions to whatever survived steps 2–3.
 
@@ -314,12 +314,34 @@ impl Index {
 
 **Exception** for (a): if the derivation is genuinely hot and profiling justifies caching, the cached field is allowed — but add a comment naming the invariant (e.g., `// invariant: keys == data.keys(); cached because the lookup is on the hot path`).
 
+#### 10. Fix root causes, not symptoms
+
+When the diff fixes a bug, a test failure, or a panic, check whether the change addresses the underlying cause or just suppresses the visible failure. Ad-hoc symptom patches tend to leave the broken invariant in place — the same root issue resurfaces elsewhere later, often in a harder-to-diagnose form.
+
+Smells to look for:
+
+- A `try` / `catch`, `if let Ok`, `unwrap_or`, or error swallow added around the line that was failing, without an explanation of *why* the error is benign here.
+- A special-case branch for the exact input that was failing (`if name == "foo" { return ... }`), with no statement of what makes that input categorically different.
+- A magic constant nudged until tests pass (timeout raised, threshold lowered, retry count increased) without a derivation of why the new value is correct.
+- A guard that prevents the bad state from being *observed* but leaves the bad state itself constructible (e.g., a getter that returns a default when an invariant is violated, instead of preventing the violation upstream).
+- An "early return on weird input" added at the top of a function whose real bug is that it built the weird input two frames up the stack.
+- Data being post-processed to repair what an earlier step produced wrong (e.g., trimming a stray character that the parser shouldn't have emitted).
+- Comments that admit the workaround nature of the change: `// HACK`, `// workaround for X`, `// TODO: figure out why this happens`, `// not sure why but this fixes it`.
+
+The litmus test: can the diff author state, in one sentence, what invariant was being violated and where? If the answer is "the test was failing and this makes it pass," the fix is treating a symptom.
+
+**Apply** when the root cause is visible inside the diff's surrounding code and the patch can be moved to the right place mechanically — e.g., the workaround sits at the call site but the bug is plainly in the callee a few lines above; or a swallowed error has an obvious upstream check that should have prevented it.
+
+**Flag** when fixing the root cause would require changes outside the diff's scope, or design judgment the reviewer doesn't have. In the report, name the symptom, name the suspected root cause, and say why the current patch only treats the symptom — don't silently accept it.
+
+**Exception**: a workaround for a confirmed external bug (upstream library, OS, hardware) is legitimate. Require a comment that names the external issue (link, version, ticket) and the condition for removing the workaround.
+
 ### Procedure
 
 1. Run `git diff <base>` to find changed files and hunks.
-2. For each changed `.rs` file, walk the diff hunks and check each of the nine conventions against the added/modified code.
+2. For each changed `.rs` file, walk the diff hunks and check each of the ten conventions against the added/modified code.
 3. For each violation:
-   - Identify which convention (1–9).
+   - Identify which convention (1–10).
    - If it falls in "Apply": make the edit with `Edit`.
    - If it falls in "Report only": collect it for the final report; do not edit.
 4. Run `cargo check` after edits. On failure, revert the offending edit and reclassify it as a flagged item.
