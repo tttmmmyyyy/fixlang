@@ -43,23 +43,29 @@ pub(super) fn handle_completion(
     let text_document_position = &params.text_document_position;
     let typing_text = get_typing_text(text_document_position, uri_to_content);
 
-    // Step 1 prototype: in dot-completion contexts, extract the
-    // receiver type so later steps can rank matching candidates above
-    // the rest. The result is logged for now — sort_text wiring lands
-    // in Step 2. Always silent on failure so completion still returns
-    // the legacy alphabetical list.
-    if is_dot_function(&typing_text) {
-        if let Some(receiver_ty) =
-            extract_receiver_type_for_dot_completion(text_document_position, uri_to_content)
-        {
-            write_log!(
-                "[completion] dot-context receiver type extracted: {}",
-                receiver_ty.to_string()
-            );
-        } else {
-            write_log!("[completion] dot-context receiver type extraction returned None");
+    // In dot-completion contexts, run the receiver-type extraction
+    // pipeline so we can rank candidates by how well their receiver
+    // position matches the typed receiver. On failure we silently fall
+    // back to the legacy alphabetical list; no client-visible error.
+    let dot_ranking = if is_dot_function(&typing_text) {
+        let receiver_ty =
+            extract_receiver_type_for_dot_completion(text_document_position, uri_to_content);
+        match receiver_ty {
+            Some(receiver_ty) => {
+                write_log!(
+                    "[completion] dot-context receiver type: {}",
+                    receiver_ty.to_string()
+                );
+                Some(DotRanking {
+                    receiver_type: receiver_ty,
+                    index: index::CompletionIndex::build(program),
+                })
+            }
+            None => None,
         }
-    }
+    } else {
+        None
+    };
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
@@ -126,7 +132,7 @@ pub(super) fn handle_completion(
             .clone()
             .unwrap_or(gv.scm.clone())
             .to_string_normalize();
-        let item = create_item(
+        let mut item = create_item(
             full_name,
             CompletionItemKind::FUNCTION,
             Some(scheme),
@@ -135,6 +141,10 @@ pub(super) fn handle_completion(
             &text_document_position,
             gv.deprecation.is_some(),
         );
+        if let Some(ranking) = &dot_ranking {
+            let tier = score::assign_tier(full_name, &ranking.index, &ranking.receiver_type);
+            item.sort_text = Some(score::sort_text_for(tier, full_name));
+        }
         items.push(item);
     }
     for (tycon, _kind) in program.type_env.kinds() {
@@ -144,7 +154,7 @@ pub(super) fn handle_completion(
         if !is_in_namespace(&tycon.name) {
             continue;
         }
-        let item = create_item(
+        let mut item = create_item(
             &tycon.name,
             CompletionItemKind::CLASS,
             None,
@@ -153,6 +163,13 @@ pub(super) fn handle_completion(
             &text_document_position,
             false,
         );
+        if dot_ranking.is_some() {
+            // Types can't appear after a dot in Fix, so they shouldn't
+            // outrank function candidates. Tier 3 keeps them present
+            // (the user might still want them in a misclassified
+            // context) but pushed to the bottom of the list.
+            item.sort_text = Some(score::sort_text_for(score::Tier::Three, &tycon.name));
+        }
         items.push(item);
     }
     for trait_ in program.traits_with_aliases() {
@@ -162,7 +179,7 @@ pub(super) fn handle_completion(
         if !is_in_namespace(&trait_.name) {
             continue;
         }
-        let item = create_item(
+        let mut item = create_item(
             &trait_.name,
             CompletionItemKind::INTERFACE,
             None,
@@ -171,6 +188,9 @@ pub(super) fn handle_completion(
             &text_document_position,
             false,
         );
+        if dot_ranking.is_some() {
+            item.sort_text = Some(score::sort_text_for(score::Tier::Three, &trait_.name));
+        }
         items.push(item);
     }
     for (assoc_type, _kind_info) in program.trait_env.assoc_ty_kind_info() {
@@ -180,7 +200,7 @@ pub(super) fn handle_completion(
         if !is_in_namespace(&assoc_type.name) {
             continue;
         }
-        let item = create_item(
+        let mut item = create_item(
             &assoc_type.name,
             CompletionItemKind::CLASS,
             None,
@@ -189,9 +209,20 @@ pub(super) fn handle_completion(
             &text_document_position,
             false,
         );
+        if dot_ranking.is_some() {
+            item.sort_text = Some(score::sort_text_for(score::Tier::Three, &assoc_type.name));
+        }
         items.push(item);
     }
     send_response(id, Ok::<_, ()>(items));
+}
+
+/// Bundle of the data Step 2 needs to assign tiers to candidates: the
+/// receiver type extracted from the live buffer, plus the bucket index
+/// over the snapshot's globals.
+struct DotRanking {
+    receiver_type: Arc<TypeNode>,
+    index: index::CompletionIndex,
 }
 
 /// Run the dot-completion type-extraction pipeline for a single
