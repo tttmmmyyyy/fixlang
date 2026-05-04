@@ -61,7 +61,7 @@ fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> O
 }
 
 // Convert a `lsp_types::Position` into a byte offset in a string.
-fn position_to_bytes(string: &str, position: lsp_types::Position) -> usize {
+pub(super) fn position_to_bytes(string: &str, position: lsp_types::Position) -> usize {
     let mut bytes = 0;
     let mut line = 0;
     let mut utf16_count = 0;

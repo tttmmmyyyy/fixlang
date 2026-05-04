@@ -1,18 +1,34 @@
 // LSP completion feature handlers.
 
+mod index;
+mod repair;
+mod score;
+
 use super::edit_import::create_text_edit_to_import;
 use super::server::{send_response, LatestContent};
-use super::util::{document_from_endnode, get_line_string_from_position, parameters_of_global_value};
+use super::util::{
+    document_from_endnode, get_line_string_from_position, parameters_of_global_value,
+    position_to_bytes,
+};
+use crate::ast::expr::{hole_full_name, Expr, ExprNode, Var};
 use crate::ast::name::{FullName, NameSpace};
-use crate::ast::program::{EndNode, Program};
-use crate::ast::expr::Var;
+use crate::ast::pattern::PatternNode;
+use crate::ast::program::{EndNode, Program, SymbolExpr};
+use crate::ast::types::TypeNode;
+use crate::configuration::{Configuration, DiagnosticsConfig};
 use crate::constants::chars_allowed_in_identifiers;
-use crate::misc::Map;
+use crate::dependency::lockfile::LockFileType;
+use crate::elaboration::elaborate_via_config;
+use crate::metafiles::project_file::ProjectFile;
+use crate::misc::{to_absolute_path, Map};
+use crate::parse::sourcefile::Span;
 use crate::write_log;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionItemTag,
     CompletionParams, Documentation, InsertTextFormat, TextDocumentPositionParams, Uri,
 };
+use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Handles the `textDocument/completion` LSP request: collects
 /// candidate symbols (globals, type constructors, traits, associated
@@ -26,6 +42,24 @@ pub(super) fn handle_completion(
 ) {
     let text_document_position = &params.text_document_position;
     let typing_text = get_typing_text(text_document_position, uri_to_content);
+
+    // Step 1 prototype: in dot-completion contexts, extract the
+    // receiver type so later steps can rank matching candidates above
+    // the rest. The result is logged for now — sort_text wiring lands
+    // in Step 2. Always silent on failure so completion still returns
+    // the legacy alphabetical list.
+    if is_dot_function(&typing_text) {
+        if let Some(receiver_ty) =
+            extract_receiver_type_for_dot_completion(text_document_position, uri_to_content)
+        {
+            write_log!(
+                "[completion] dot-context receiver type extracted: {}",
+                receiver_ty.to_string()
+            );
+        } else {
+            write_log!("[completion] dot-context receiver type extraction returned None");
+        }
+    }
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
@@ -158,6 +192,233 @@ pub(super) fn handle_completion(
         items.push(item);
     }
     send_response(id, Ok::<_, ()>(items));
+}
+
+/// Run the dot-completion type-extraction pipeline for a single
+/// completion request: repair the live buffer at the cursor (replacing
+/// the post-dot identifier with `?`), re-elaborate via
+/// `elaborate_via_config`, and return the receiver type read off the
+/// inserted hole's inferred curried type.
+///
+/// **Step 1 prototype**: `n = 0` is hard-coded (the receiver is the
+/// last element of the hole's curried sources), and only A0 of the
+/// repair is run. Callers must check `is_dot_function` before invoking
+/// this — non-dot contexts must not pay the elaborate cost.
+///
+/// Returns `None` (silent fallback to alphabetical-order completion)
+/// when any step fails: the path can't be resolved, the live buffer
+/// has no `<id>.<post-dot>` shape near the cursor, the elaborate fails,
+/// the hole isn't located, or the hole's type isn't a curried function.
+pub(super) fn extract_receiver_type_for_dot_completion(
+    text_document_position: &TextDocumentPositionParams,
+    uri_to_content: &Map<Uri, LatestContent>,
+) -> Option<Arc<TypeNode>> {
+    let uri = &text_document_position.text_document.uri;
+    let latest = uri_to_content.get(uri)?;
+    let live_buffer = &latest.content;
+
+    // Cursor as a byte offset into the live buffer.
+    let cursor_byte = position_to_bytes(live_buffer, text_document_position.position);
+
+    // Step A0 of the repair (post-dot identifier → `?`). Outer-source
+    // repair (A.4.2) is deferred to Step 4.
+    let repaired = repair::repair_for_completion(live_buffer, cursor_byte)?;
+
+    // Resolve to an absolute path so the override-key matches what
+    // `parse_file_path` looks up. The completion thread's cwd is the
+    // workspace root just like the diagnostics thread, so relative
+    // resolution stays consistent between the two flows.
+    let abs_path = to_absolute_path(&latest.path).ok()?;
+
+    let program = run_completion_elaborate(&abs_path, repaired.source).ok()?;
+
+    // Locate the hole node and read its inferred curried type. Step 1
+    // hard-codes `n = 0`, so the hole's type should be `Self → Ret`
+    // and the receiver is the only source argument.
+    let cursor = SourcePosLite {
+        path: abs_path,
+        byte: repaired.cursor_byte,
+    };
+    let hole = find_innermost_hole_at(&program, &cursor)?;
+    let hole_ty = hole.type_.as_ref()?;
+    decompose_hole_type_n0(hole_ty)
+}
+
+/// Extract the receiver (`Self`) type from a hole whose inferred type
+/// is `Self → Ret` (the `n = 0` case). Returns `None` if the hole
+/// type isn't a function — typically because elaborate gave the hole
+/// a fresh type variable when it couldn't be constrained from context.
+fn decompose_hole_type_n0(hole_ty: &Arc<TypeNode>) -> Option<Arc<TypeNode>> {
+    if !(hole_ty.is_funptr() || hole_ty.is_closure()) {
+        return None;
+    }
+    let srcs = hole_ty.get_lambda_srcs();
+    // For `n = 0` the receiver is the last (and typically only)
+    // curried source. Mirrors plan §A.7's `S_{m-n-1}` with `n = 0`.
+    srcs.into_iter().last()
+}
+
+/// Drive the elaborate pipeline against a configuration that swaps in
+/// `repaired_content` for `path`'s on-disk contents. Mirrors the
+/// initial setup in `run_diagnostics` — read the project file, build a
+/// `DiagnosticsConfig`, apply lockfile — then plants the live override
+/// just before invoking elaborate.
+fn run_completion_elaborate(
+    path: &PathBuf,
+    repaired_content: String,
+) -> Result<Program, crate::error::Errors> {
+    let proj_file = ProjectFile::read_root_file()?;
+    let files = proj_file.get_files(crate::configuration::BuildConfigType::Test);
+    let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
+    proj_file.set_config(&mut config)?;
+    proj_file
+        .open_or_auto_update_lock_file(LockFileType::Lsp)?
+        .set_config(&mut config)?;
+
+    let mut overrides = Map::default();
+    overrides.insert(path.clone(), repaired_content);
+    config.live_source_overrides = Arc::new(overrides);
+
+    elaborate_via_config(&config)
+}
+
+/// Path-and-byte cursor pair used to identify the hole in the
+/// re-elaborated AST. Kept as a path rather than a `SourcePos` so the
+/// caller doesn't need to construct a `SourceFile` cache that nobody
+/// reads.
+struct SourcePosLite {
+    path: PathBuf,
+    byte: usize,
+}
+
+impl SourcePosLite {
+    fn includes(&self, span: &Span) -> bool {
+        let span_path = to_absolute_path(&span.input.file_path).ok();
+        let our_path = to_absolute_path(&self.path).ok();
+        if span_path.is_none() || our_path.is_none() || span_path != our_path {
+            return false;
+        }
+        // Inclusive on both ends to match `Span::includes_pos_lsp`.
+        span.start <= self.byte && self.byte <= span.end
+    }
+}
+
+/// Find the innermost `Expr::Var(Std::#hole)` whose span contains the
+/// cursor. "Innermost" = the match with the smallest span; this picks
+/// the single hole the repair just inserted even when other holes
+/// (e.g. ones the user wrote, or future repair-loop insertions) live
+/// in nearby code.
+fn find_innermost_hole_at(
+    program: &Program,
+    cursor: &SourcePosLite,
+) -> Option<Arc<ExprNode>> {
+    let target = hole_full_name();
+    let mut best: Option<Arc<ExprNode>> = None;
+    for (_name, gv) in &program.global_values {
+        match &gv.expr {
+            SymbolExpr::Simple(te) => {
+                walk_for_hole(&te.expr, cursor, &target, &mut best);
+            }
+            SymbolExpr::Method(impls) => {
+                for m in impls {
+                    walk_for_hole(&m.expr.expr, cursor, &target, &mut best);
+                }
+            }
+        }
+    }
+    best
+}
+
+fn walk_for_hole(
+    expr: &Arc<ExprNode>,
+    cursor: &SourcePosLite,
+    target: &FullName,
+    best: &mut Option<Arc<ExprNode>>,
+) {
+    let Some(span) = expr.source.as_ref() else {
+        // Synthetic / desugared nodes don't have a span; their
+        // children might, so descend regardless.
+        recurse_for_hole(expr, cursor, target, best);
+        return;
+    };
+    if !cursor.includes(span) {
+        return;
+    }
+    if let Expr::Var(v) = &*expr.expr {
+        if v.name == *target {
+            // Choose the smallest enclosing span — innermost wins.
+            let take = match best {
+                None => true,
+                Some(prev) => {
+                    let prev_len = prev
+                        .source
+                        .as_ref()
+                        .map(|s| s.end - s.start)
+                        .unwrap_or(usize::MAX);
+                    let cur_len = span.end - span.start;
+                    cur_len <= prev_len
+                }
+            };
+            if take {
+                *best = Some(expr.clone());
+            }
+        }
+    }
+    recurse_for_hole(expr, cursor, target, best);
+}
+
+fn recurse_for_hole(
+    expr: &Arc<ExprNode>,
+    cursor: &SourcePosLite,
+    target: &FullName,
+    best: &mut Option<Arc<ExprNode>>,
+) {
+    match &*expr.expr {
+        Expr::Var(_) | Expr::LLVM(_) => {}
+        Expr::App(func, args) => {
+            walk_for_hole(func, cursor, target, best);
+            for a in args {
+                walk_for_hole(a, cursor, target, best);
+            }
+        }
+        Expr::Lam(_, body) => walk_for_hole(body, cursor, target, best),
+        Expr::Let(pat, bound, val) => {
+            let _ = pat as &Arc<PatternNode>;
+            walk_for_hole(bound, cursor, target, best);
+            walk_for_hole(val, cursor, target, best);
+        }
+        Expr::If(c, t, e) => {
+            walk_for_hole(c, cursor, target, best);
+            walk_for_hole(t, cursor, target, best);
+            walk_for_hole(e, cursor, target, best);
+        }
+        Expr::Match(c, arms) => {
+            walk_for_hole(c, cursor, target, best);
+            for (_, val) in arms {
+                walk_for_hole(val, cursor, target, best);
+            }
+        }
+        Expr::TyAnno(e, _) => walk_for_hole(e, cursor, target, best),
+        Expr::MakeStruct(_, fields) => {
+            for (_, _, e) in fields {
+                walk_for_hole(e, cursor, target, best);
+            }
+        }
+        Expr::ArrayLit(elems) => {
+            for e in elems {
+                walk_for_hole(e, cursor, target, best);
+            }
+        }
+        Expr::FFICall(_, _, _, _, args, _) => {
+            for e in args {
+                walk_for_hole(e, cursor, target, best);
+            }
+        }
+        Expr::Eval(side, main) => {
+            walk_for_hole(side, cursor, target, best);
+            walk_for_hole(main, cursor, target, best);
+        }
+    }
 }
 
 // Check if the user's typing text is in the form of a dot followed by namespaces or a function name

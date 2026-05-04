@@ -246,6 +246,13 @@ pub struct Configuration {
     pub no_runtime_check: bool,
     /// How `DEPRECATED` warnings are handled. See `DeprecationMode`.
     pub deprecation_mode: DeprecationMode,
+    /// In-memory overrides for source-file contents used during the LSP
+    /// completion flow: when `parse_file_path` is invoked for a path
+    /// present here, the supplied string is parsed instead of reading
+    /// the file from disk. This lets `handle_completion` repair the
+    /// live buffer (see `commands::lsp::completion::repair`) and
+    /// re-elaborate via `elaborate_via_config` without touching disk.
+    pub live_source_overrides: Arc<crate::misc::Map<PathBuf, String>>,
 }
 
 /// How the compiler reacts to a use of a deprecated item.
@@ -331,6 +338,7 @@ impl Configuration {
             backtrace: false,
             no_runtime_check: false,
             deprecation_mode: DeprecationMode::default(),
+            live_source_overrides: Arc::new(crate::misc::Map::default()),
         })
     }
 }

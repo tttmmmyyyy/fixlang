@@ -155,7 +155,13 @@ pub fn parse_and_save_to_temporary_file(
 }
 
 pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Program, Errors> {
-    let source = SourceFile::from_file_path(file_path);
+    // If the LSP completion flow has stashed a repaired live-buffer for
+    // this path in the configuration, parse that string instead of
+    // reading from disk. See `Configuration::live_source_overrides`.
+    let source = match config.live_source_overrides.get(&file_path) {
+        Some(content) => SourceFile::from_file_path_and_content(file_path, content.clone()),
+        None => SourceFile::from_file_path(file_path),
+    };
     parse_source_file(source, config)
 }
 
