@@ -11,13 +11,16 @@ use crate::misc::Map;
 use crate::write_log;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionItemTag,
-    Documentation, TextDocumentPositionParams, Uri,
+    CompletionParams, Documentation, TextDocumentPositionParams, Uri,
 };
 
-// Handle "textDocument/completion" method.
+/// Handles the `textDocument/completion` LSP request: collects
+/// candidate symbols (globals, type constructors, traits, associated
+/// types) visible at the cursor and replies with a list of
+/// `CompletionItem`s.
 pub(super) fn handle_completion(
     id: u32,
-    params: &lsp_types::CompletionParams,
+    params: &CompletionParams,
     program: &Program,
     uri_to_content: &Map<Uri, LatestContent>,
 ) {
@@ -29,6 +32,10 @@ pub(super) fn handle_completion(
 
     let mut items = vec![];
 
+    /// Builds a `CompletionItem` for one symbol, stashing the data
+    /// needed by `completionItem/resolve` (the `EndNode`, the typing
+    /// text, and the original cursor position) into the item's `data`
+    /// field.
     fn create_item(
         name: &FullName,
         kind: CompletionItemKind,
