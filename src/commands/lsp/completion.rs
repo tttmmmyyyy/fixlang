@@ -10,8 +10,8 @@ use crate::constants::chars_allowed_in_identifiers;
 use crate::misc::Map;
 use crate::write_log;
 use lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, Documentation,
-    TextDocumentPositionParams, Uri,
+    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionItemTag,
+    Documentation, TextDocumentPositionParams, Uri,
 };
 
 // Handle "textDocument/completion" method.
@@ -36,7 +36,15 @@ pub(super) fn handle_completion(
         end_node: &EndNode,
         typing_text: &str,
         text_document_position: &TextDocumentPositionParams,
+        deprecated: bool,
     ) -> CompletionItem {
+        // Set both `deprecated` (LSP <3.15) and `tags` (LSP >=3.15) so older
+        // and newer clients both render the strikethrough.
+        let (deprecated_field, tags_field) = if deprecated {
+            (Some(true), Some(vec![CompletionItemTag::DEPRECATED]))
+        } else {
+            (None, None)
+        };
         CompletionItem {
             label: name.to_string(),
             label_details: Some(CompletionItemLabelDetails {
@@ -46,7 +54,7 @@ pub(super) fn handle_completion(
             kind: Some(kind),
             detail,
             documentation: None,
-            deprecated: None,
+            deprecated: deprecated_field,
             preselect: None,
             sort_text: None,
             filter_text: None,
@@ -60,7 +68,7 @@ pub(super) fn handle_completion(
             data: Some(
                 serde_json::to_value((end_node, typing_text, text_document_position)).unwrap(),
             ),
-            tags: None,
+            tags: tags_field,
         }
     }
 
@@ -84,6 +92,7 @@ pub(super) fn handle_completion(
             &EndNode::Expr(Var::create(full_name.clone()), None),
             &typing_text,
             &text_document_position,
+            gv.deprecation.is_some(),
         );
         items.push(item);
     }
@@ -101,6 +110,7 @@ pub(super) fn handle_completion(
             &EndNode::Type(tycon.clone()),
             &typing_text,
             &text_document_position,
+            false,
         );
         items.push(item);
     }
@@ -118,6 +128,7 @@ pub(super) fn handle_completion(
             &EndNode::Trait(trait_.clone()),
             &typing_text,
             &text_document_position,
+            false,
         );
         items.push(item);
     }
@@ -135,6 +146,7 @@ pub(super) fn handle_completion(
             &EndNode::AssocType(assoc_type.clone()),
             &typing_text,
             &text_document_position,
+            false,
         );
         items.push(item);
     }

@@ -855,7 +855,7 @@ fn value_entries(
         // Surface a `DEPRECATED[...]` pragma at the top of the entry, so it
         // appears immediately under the heading and before the type line.
         if let Some(info) = &gv.deprecation {
-            doc.add_paragraph(format!("**Deprecated**: {}", info.message));
+            doc.add_paragraph(info.to_markdown());
         }
 
         doc.add_paragraph(format!(

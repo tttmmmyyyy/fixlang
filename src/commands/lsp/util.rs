@@ -761,6 +761,11 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
                     }
                 }
                 if let Some(gv) = program.global_values.get(full_name) {
+                    // Surface the `DEPRECATED[...]` message before the regular
+                    // doc so the warning isn't buried after a long description.
+                    if let Some(dep) = &gv.deprecation {
+                        docs += &format!("\n\n{}", dep.to_markdown());
+                    }
                     if let Some(document) = gv.get_document() {
                         docs += &format!("\n\n{}", document);
                     }

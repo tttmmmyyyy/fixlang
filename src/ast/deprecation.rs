@@ -48,3 +48,14 @@ pub struct DeprecationInfo {
     /// The user-provided deprecation message.
     pub message: String,
 }
+
+impl DeprecationInfo {
+    /// Markdown rendering of the deprecation notice. Single source of
+    /// truth for both `fix docs` (rendered into the docs site) and the
+    /// LSP hover/completion (rendered in editor tooltips). Returns one
+    /// inline paragraph so callers can drop it into either a
+    /// `MarkdownSection` or a `MarkupContent` value blob.
+    pub fn to_markdown(&self) -> String {
+        format!("**Deprecated**: {}", self.message)
+    }
+}
