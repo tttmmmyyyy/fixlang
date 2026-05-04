@@ -95,6 +95,23 @@ mod tests {
             }
         }
 
+        /// Send completionItem/resolve and return the resolved item.
+        fn resolve(&mut self, item: Value) -> Value {
+            let id = self
+                .client
+                .send_request("completionItem/resolve", item)
+                .expect("Failed to send resolve request");
+            self.client.wait_for_server(Duration::from_secs(5));
+            let response = self
+                .client
+                .get_response(id)
+                .expect("Should receive a resolve response");
+            response
+                .get("result")
+                .cloned()
+                .expect("Resolve response should have result")
+        }
+
         fn shutdown(mut self) {
             self.client
                 .shutdown(Duration::from_millis(500))
@@ -175,6 +192,88 @@ mod tests {
             "Associated type `Elem` should appear in completion candidates. Got labels: {:?}",
             labels
         );
+
+        ctx.shutdown();
+    }
+
+    /// Snapshot of the current completion *insertion* behavior. Pins down what
+    /// the server sends back for `completionItem/resolve` for the four shapes
+    /// that have so far been verified manually:
+    ///
+    ///   typing            expected insert_text   notes
+    ///   ----              --------------------   -----
+    ///   `func`            `func(x, y)`           plain identifier
+    ///   `y.func`          `func(x)`              dot-call drops last param
+    ///   `Hoge::func`      `func(x, y)`           qualified
+    ///   `y.Hoge::func`    `func(x)`              dot-call + qualified
+    ///
+    /// Note the `insert_text` is just the part the client splices in over the
+    /// completed identifier — the namespace prefix the user already typed
+    /// stays as-is on the source side. Param names `x` / `y` come from the
+    /// `# Parameters` section of the doc comment on `Hoge::func`.
+    ///
+    /// This test exists to catch regressions when we change the insertion
+    /// format (the planned `?x` snippet form will require updating the
+    /// expected strings here).
+    #[test]
+    fn test_completion_insert_text_for_function_with_two_params() {
+        let mut ctx = LspCompletionCtx::setup("completion_insert", &["main.fix"]);
+
+        // The fixture file `main.fix` contains the following lines:
+        //   13:     let _ = func;            // cursor right after `func` -> col 16
+        //   14:     let _ = y.func;          // cursor right after `func` -> col 18
+        //   15:     let _ = Hoge::func;      // cursor right after `func` -> col 22
+        //   16:     let _ = y.Hoge::func;    // cursor right after `func` -> col 24
+        let cases = [
+            (13u32, 16u32, "func(x, y)", "plain identifier"),
+            (14, 18, "func(x)", "dot-call drops last param"),
+            (15, 22, "func(x, y)", "qualified identifier"),
+            (16, 24, "func(x)", "dot-call + qualified"),
+        ];
+
+        for (line, col, expected_insert, label) in cases {
+            let items = ctx.complete("main.fix", line, col);
+
+            // Find the candidate for `Main::Hoge::func`.
+            let item = items
+                .iter()
+                .find(|it| {
+                    it.get("label").and_then(|l| l.as_str()) == Some("Main::Hoge::func")
+                })
+                .cloned()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "[{}] Expected `Main::Hoge::func` in completion candidates at \
+                         line {}, col {}. Got labels: {:?}",
+                        label,
+                        line,
+                        col,
+                        items
+                            .iter()
+                            .filter_map(|it| it.get("label").and_then(|l| l.as_str()))
+                            .collect::<Vec<_>>()
+                    )
+                });
+
+            // Resolve to fetch the final insert_text (the initial response only
+            // sets it to the bare name; resolve is what appends the `(x, y)`).
+            let resolved = ctx.resolve(item);
+            let actual_insert = resolved
+                .get("insertText")
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "[{}] Resolved item missing insertText. Got: {}",
+                        label, resolved
+                    )
+                });
+
+            assert_eq!(
+                actual_insert, expected_insert,
+                "[{}] insertText mismatch at line {}, col {}",
+                label, line, col
+            );
+        }
 
         ctx.shutdown();
     }

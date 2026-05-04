@@ -1,0 +1,19 @@
+module Main;
+
+namespace Hoge {
+    // # Parameters
+    // * `x`
+    // * `y`
+    func : I64 -> I64 -> I64;
+    func = |x, y| x + y;
+}
+
+main : IO ();
+main = (
+    let y : I64 = 0;
+    let _ = func;
+    let _ = y.func;
+    let _ = Hoge::func;
+    let _ = y.Hoge::func;
+    pure()
+);
