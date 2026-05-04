@@ -200,12 +200,12 @@ mod tests {
     /// the server sends back for `completionItem/resolve` for the four
     /// shapes that have so far been verified manually:
     ///
-    ///   typing            expected insert_text   notes
-    ///   ----              --------------------   -----
-    ///   `func`            `func(?x, ?y)`         plain identifier
-    ///   `y.func`          `func(?x)`             dot-call drops last param
-    ///   `Hoge::func`      `func(?x, ?y)`         qualified
-    ///   `y.Hoge::func`    `func(?x)`             dot-call + qualified
+    ///   typing            expected insert_text         notes
+    ///   ----              --------------------         -----
+    ///   `func`            `func(${1:?x}, ${2:?y})`     plain identifier
+    ///   `y.func`          `func(${1:?x})`              dot-call drops last param
+    ///   `Hoge::func`      `func(${1:?x}, ${2:?y})`     qualified
+    ///   `y.Hoge::func`    `func(${1:?x})`              dot-call + qualified
     ///
     /// Note the `insert_text` is just the part the client splices in over
     /// the completed identifier — the namespace prefix the user already
@@ -214,7 +214,10 @@ mod tests {
     /// `Hoge::func`. Each name is wrapped in `?` so the inserted text is
     /// a user-hole expression (`?x` / `?y`) — the source therefore
     /// elaborates with `Std::#hole` placeholders that produce ERR_HOLE
-    /// rather than "undefined name `x`" diagnostics.
+    /// rather than "undefined name `x`" diagnostics. The `${N:...}` LSP
+    /// snippet syntax additionally tells supporting clients to put the
+    /// cursor on the first hole and let Tab move it to the next one,
+    /// with each placeholder pre-selected so typing overwrites it.
     #[test]
     fn test_completion_insert_text_for_function_with_two_params() {
         let mut ctx = LspCompletionCtx::setup("completion_insert", &["main.fix"]);
@@ -225,10 +228,10 @@ mod tests {
         //   15:     let _ = Hoge::func;      // cursor right after `func` -> col 22
         //   16:     let _ = y.Hoge::func;    // cursor right after `func` -> col 24
         let cases = [
-            (13u32, 16u32, "func(?x, ?y)", "plain identifier"),
-            (14, 18, "func(?x)", "dot-call drops last param"),
-            (15, 22, "func(?x, ?y)", "qualified identifier"),
-            (16, 24, "func(?x)", "dot-call + qualified"),
+            (13u32, 16u32, "func(${1:?x}, ${2:?y})", "plain identifier"),
+            (14, 18, "func(${1:?x})", "dot-call drops last param"),
+            (15, 22, "func(${1:?x}, ${2:?y})", "qualified identifier"),
+            (16, 24, "func(${1:?x})", "dot-call + qualified"),
         ];
 
         for (line, col, expected_insert, label) in cases {
@@ -272,6 +275,18 @@ mod tests {
                 actual_insert, expected_insert,
                 "[{}] insertText mismatch at line {}, col {}",
                 label, line, col
+            );
+
+            // `insertTextFormat` must be `Snippet` (= 2) so the editor
+            // expands the `${N:?x}` tab-stops; otherwise the placeholder
+            // syntax would be inserted as literal text.
+            assert_eq!(
+                resolved.get("insertTextFormat").and_then(|v| v.as_i64()),
+                Some(2),
+                "[{}] insertTextFormat should be Snippet (2) at line {}, col {}",
+                label,
+                line,
+                col
             );
         }
 

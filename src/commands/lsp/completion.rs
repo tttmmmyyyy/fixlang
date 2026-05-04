@@ -11,7 +11,7 @@ use crate::misc::Map;
 use crate::write_log;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionItemTag,
-    CompletionParams, Documentation, TextDocumentPositionParams, Uri,
+    CompletionParams, Documentation, InsertTextFormat, TextDocumentPositionParams, Uri,
 };
 
 /// Handles the `textDocument/completion` LSP request: collects
@@ -286,20 +286,28 @@ pub(super) fn handle_completion_resolve_document(
                     }
 
                     // Append argument list to the insert text. Each parameter
-                    // is wrapped in the user-hole syntax `?<name>` so the
-                    // inserted source is e.g. `f(?x, ?y)` rather than the
-                    // bare `f(x, y)`. Two wins: (1) `x`/`y` aren't treated
-                    // as undefined identifiers, and (2) for 1-arg
-                    // functions the source becomes `f(?x)` instead of
-                    // `f()` (which Fix interprets as a unit-call and
-                    // would type-error against a non-unit parameter).
+                    // is wrapped in the user-hole syntax `?<name>` and turned
+                    // into an LSP snippet tab-stop `${N:?<name>}` so editors
+                    // that support snippets (VSCode, Neovim, Helix, …) put
+                    // the cursor on the first hole, let the user tab through
+                    // the rest, and pre-select each placeholder so typing
+                    // overwrites it. The snippet text the editor expands to
+                    // is still `?<name>`, which is a Fix hole expression —
+                    // so even if the user dismisses the snippet without
+                    // touching anything, the source type-checks (with hole
+                    // diagnostics) instead of producing "undefined name `x`"
+                    // or `f()` unit-call errors.
                     if let Some(insert_text) = &mut item.insert_text {
                         if params.len() > 0 {
-                            let holes: Vec<String> =
-                                params.iter().map(|p| format!("?{}", p)).collect();
+                            let placeholders: Vec<String> = params
+                                .iter()
+                                .enumerate()
+                                .map(|(i, p)| format!("${{{}:?{}}}", i + 1, p))
+                                .collect();
                             *insert_text += "(";
-                            *insert_text += &holes.join(", ");
+                            *insert_text += &placeholders.join(", ");
                             *insert_text += ")";
+                            item.insert_text_format = Some(InsertTextFormat::SNIPPET);
                         }
                     }
                 }
