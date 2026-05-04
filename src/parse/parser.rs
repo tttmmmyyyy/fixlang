@@ -848,7 +848,7 @@ fn parse_trait_member_value_type_sign(
     let qual_type = parse_type_qualified(pairs.next().unwrap(), ctx)?;
     let mut opt_expr = None;
     if let Some(pair) = pairs.peek() {
-        if pair.as_rule() == Rule::expr_hole {
+        if pair.as_rule() == Rule::expr_or_hole {
             opt_expr = Some(parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?);
         }
     }
@@ -967,7 +967,7 @@ fn parse_global_value_decl(
     // Parse expression (if exists).
     let mut gvd = None;
     if let Some(pair) = pairs.peek() {
-        if pair.as_rule() == Rule::expr_hole {
+        if pair.as_rule() == Rule::expr_or_hole {
             let expr = parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?;
             gvd = Some(GlobalValueDefn {
                 name: name.clone(),
@@ -1289,9 +1289,9 @@ fn parse_expr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>,
     parse_expr_and_then_sequence(pair, ctx)
 }
 
-/// Parse an `expr_hole` pair (which contains either an inner `expr`
+/// Parse an `expr_or_hole` pair (which contains either an inner `expr`
 /// or a zero-width `hole`). For the hole case, returns
-/// `expr_hole(Some(span))` where `span` is the zero-width span of the
+/// `expr_or_hole(Some(span))` where `span` is the zero-width span of the
 /// `hole` pair itself; downstream code is responsible for widening
 /// that point to a visible underline (e.g. 1 character at the start
 /// position).
@@ -1299,7 +1299,7 @@ fn parse_expr_or_hole(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
 ) -> Result<Arc<ExprNode>, Errors> {
-    assert_eq!(pair.as_rule(), Rule::expr_hole);
+    assert_eq!(pair.as_rule(), Rule::expr_or_hole);
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
         Rule::expr => parse_expr(inner, ctx),
@@ -1353,7 +1353,7 @@ fn parse_expr_and_then_sequence(
         let expr = if exprs.len() == 0 {
             parse_expr_type_annotation(pair, ctx)?
         } else {
-            // Right operand of `;;` is `expr_hole`.
+            // Right operand of `;;` is `expr_or_hole`.
             parse_expr_or_hole_with_new_do(pair, ctx)?
         };
         exprs.push(expr);
@@ -1953,6 +1953,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     let pair = pair.into_inner().next().unwrap();
     Ok(match pair.as_rule() {
         Rule::expr_lit => parse_expr_lit(pair, ctx)?,
+        Rule::expr_hole => parse_expr_hole(pair, ctx),
         Rule::expr_var => parse_expr_var(pair, ctx),
         Rule::expr_let => parse_expr_let(pair, ctx)?,
         Rule::expr_eval => parse_expr_eval(pair, ctx)?,
@@ -1965,6 +1966,16 @@ fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         Rule::expr_call_c => parse_expr_call_c(pair, ctx)?,
         _ => unreachable!(),
     })
+}
+
+/// Parse a user-written hole expression (`?` or `?label`). The label,
+/// when present, is currently retained only as source text — the AST
+/// reduces both forms to a `Std::#hole` reference (the same node the
+/// parser inserts in empty `expr_or_hole` positions).
+fn parse_expr_hole(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
+    assert_eq!(pair.as_rule(), Rule::expr_hole);
+    let span = Span::from_pair(&ctx.source, &pair);
+    expr_hole(Some(span))
 }
 
 fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
@@ -2072,7 +2083,7 @@ fn parse_expr_let_recursively(
 ) -> Result<Arc<ExprNode>, Errors> {
     let pair = pairs.next().unwrap();
     if pair.as_rule() != Rule::keyword_let {
-        // `pair` is `{value}` (an `expr_hole`).
+        // `pair` is `{value}` (an `expr_or_hole`).
         parse_expr_or_hole(pair, ctx)
     } else {
         // `pair` is `let` keyword.

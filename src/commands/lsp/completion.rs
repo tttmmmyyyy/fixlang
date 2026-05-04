@@ -278,11 +278,20 @@ pub(super) fn handle_completion_resolve_document(
                         params.pop();
                     }
 
-                    // Append argument list to the insert text.
+                    // Append argument list to the insert text. Each parameter
+                    // is wrapped in the user-hole syntax `?<name>` so the
+                    // inserted source is e.g. `f(?x, ?y)` rather than the
+                    // bare `f(x, y)`. Two wins: (1) `x`/`y` aren't treated
+                    // as undefined identifiers, and (2) for 1-arg
+                    // functions the source becomes `f(?x)` instead of
+                    // `f()` (which Fix interprets as a unit-call and
+                    // would type-error against a non-unit parameter).
                     if let Some(insert_text) = &mut item.insert_text {
                         if params.len() > 0 {
+                            let holes: Vec<String> =
+                                params.iter().map(|p| format!("?{}", p)).collect();
                             *insert_text += "(";
-                            *insert_text += &params.join(", ");
+                            *insert_text += &holes.join(", ");
                             *insert_text += ")";
                         }
                     }

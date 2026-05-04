@@ -1,4 +1,4 @@
-//! Acceptance tests for the `expr_hole` grammar / `Std::#hole`
+//! Acceptance tests for the `expr_or_hole` grammar / `Std::#hole`
 //! builtin and the in-elaboration ERR_HOLE pass.
 //!
 //! Each program contains at least one hole. Elaboration types each
@@ -296,7 +296,7 @@ pub fn hole_in_do_after_bind() {
 // ----- B group: top-level definition rhs ------------------------------
 
 /// ERR_HOLE fires for the `global_name_defn` parse path
-/// (`name = expr_hole ;`) when the type is given via a separate
+/// (`name = expr_or_hole ;`) when the type is given via a separate
 /// `global_name_type_sign`.
 #[test]
 pub fn hole_global_defn_with_separate_sign() {
@@ -453,5 +453,80 @@ pub fn hole_with_many_newlines() {
 #[test]
 pub fn hole_at_end_of_file() {
     let source = "module Main;\nmain : IO () = pure();\nhole_val : I64 = (let x = 10; );";
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
+}
+
+// ----- C group: user-written `?` / `?label` syntax --------------------
+//
+// `?` (with or without a trailing label like `?x`) is a user-writable
+// hole. It elaborates to the same `Std::#hole : a` builtin the parser
+// inserts in empty `expr_or_hole` positions, and ERR_HOLE fires the same
+// way. The label is parsed but discarded — it survives only as source
+// text the user can read.
+
+/// Bare `?` in expression position is accepted and produces ERR_HOLE.
+#[test]
+pub fn hole_user_written_anonymous() {
+    let source = r#"
+        module Main;
+        hole_val : I64 = ?;
+        main : IO () = pure();
+    "#;
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
+}
+
+/// `?label` is accepted; the label is discarded by the parser but must
+/// not break anything. ERR_HOLE still fires.
+#[test]
+pub fn hole_user_written_with_label() {
+    let source = r#"
+        module Main;
+        hole_val : I64 = ?x;
+        main : IO () = pure();
+    "#;
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
+}
+
+/// Underscore-led labels (`?_unused`) are valid identifier-shaped
+/// labels and parse the same way.
+#[test]
+pub fn hole_user_written_with_underscore_label() {
+    let source = r#"
+        module Main;
+        hole_val : I64 = ?_x;
+        main : IO () = pure();
+    "#;
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
+}
+
+/// Multiple user-written holes in a single expression each produce
+/// their own ERR_HOLE — `?x` and `?y` here become two independent
+/// holes typed by their argument position.
+#[test]
+pub fn hole_user_written_in_call() {
+    let source = r#"
+        module Main;
+        // # Parameters
+        // * `x`
+        // * `y`
+        myfn : I64 -> I64 -> I64;
+        myfn = |x, y| x + y;
+        hole_val : I64 = myfn(?x, ?y);
+        main : IO () = pure();
+    "#;
+    test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
+}
+
+/// User-written hole in dot-call receiver-method form: `(?).myfn(1)`
+/// elaborates as `myfn(1)(?)` and the receiver hole is reported.
+#[test]
+pub fn hole_user_written_as_receiver() {
+    let source = r#"
+        module Main;
+        myfn : I64 -> I64 -> I64;
+        myfn = |x, y| x + y;
+        hole_val : I64 = (?).myfn(1);
+        main : IO () = pure();
+    "#;
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }

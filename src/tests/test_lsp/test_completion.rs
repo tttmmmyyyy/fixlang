@@ -196,25 +196,25 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Snapshot of the current completion *insertion* behavior. Pins down what
-    /// the server sends back for `completionItem/resolve` for the four shapes
-    /// that have so far been verified manually:
+    /// Snapshot of the completion *insertion* behavior. Pins down what
+    /// the server sends back for `completionItem/resolve` for the four
+    /// shapes that have so far been verified manually:
     ///
     ///   typing            expected insert_text   notes
     ///   ----              --------------------   -----
-    ///   `func`            `func(x, y)`           plain identifier
-    ///   `y.func`          `func(x)`              dot-call drops last param
-    ///   `Hoge::func`      `func(x, y)`           qualified
-    ///   `y.Hoge::func`    `func(x)`              dot-call + qualified
+    ///   `func`            `func(?x, ?y)`         plain identifier
+    ///   `y.func`          `func(?x)`             dot-call drops last param
+    ///   `Hoge::func`      `func(?x, ?y)`         qualified
+    ///   `y.Hoge::func`    `func(?x)`             dot-call + qualified
     ///
-    /// Note the `insert_text` is just the part the client splices in over the
-    /// completed identifier — the namespace prefix the user already typed
-    /// stays as-is on the source side. Param names `x` / `y` come from the
-    /// `# Parameters` section of the doc comment on `Hoge::func`.
-    ///
-    /// This test exists to catch regressions when we change the insertion
-    /// format (the planned `?x` snippet form will require updating the
-    /// expected strings here).
+    /// Note the `insert_text` is just the part the client splices in over
+    /// the completed identifier — the namespace prefix the user already
+    /// typed stays as-is on the source side. Param names `x` / `y` come
+    /// from the `# Parameters` section of the doc comment on
+    /// `Hoge::func`. Each name is wrapped in `?` so the inserted text is
+    /// a user-hole expression (`?x` / `?y`) — the source therefore
+    /// elaborates with `Std::#hole` placeholders that produce ERR_HOLE
+    /// rather than "undefined name `x`" diagnostics.
     #[test]
     fn test_completion_insert_text_for_function_with_two_params() {
         let mut ctx = LspCompletionCtx::setup("completion_insert", &["main.fix"]);
@@ -225,10 +225,10 @@ mod tests {
         //   15:     let _ = Hoge::func;      // cursor right after `func` -> col 22
         //   16:     let _ = y.Hoge::func;    // cursor right after `func` -> col 24
         let cases = [
-            (13u32, 16u32, "func(x, y)", "plain identifier"),
-            (14, 18, "func(x)", "dot-call drops last param"),
-            (15, 22, "func(x, y)", "qualified identifier"),
-            (16, 24, "func(x)", "dot-call + qualified"),
+            (13u32, 16u32, "func(?x, ?y)", "plain identifier"),
+            (14, 18, "func(?x)", "dot-call drops last param"),
+            (15, 22, "func(?x, ?y)", "qualified identifier"),
+            (16, 24, "func(?x)", "dot-call + qualified"),
         ];
 
         for (line, col, expected_insert, label) in cases {

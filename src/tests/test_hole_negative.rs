@@ -69,7 +69,7 @@ pub fn no_hole_for_lone_let() {
 
 // ----- Class 2: positions we did not support in this phase ----------
 
-/// The let bound position is intentionally not covered by `expr_hole`;
+/// The let bound position is intentionally not covered by `expr_or_hole`;
 /// `let x = ; body` must remain a syntax error.
 #[test]
 pub fn no_hole_for_let_bound() {
