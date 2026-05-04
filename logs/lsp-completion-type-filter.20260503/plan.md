@@ -6,7 +6,7 @@
 
 - **Step -1** (現状回帰テスト): `completion_insert` フィクスチャと `test_completion_insert_text_for_function_with_two_params` を追加 ([commit ea1b5740](../../)).
 - **Step 0** (Grammar 拡張): `expr_hole = { "?" ~ name_char* }` を [src/parse/grammer.pest](../../src/parse/grammer.pest) に追加し `expr_nlr` の選択肢に組込済。既存の `expr_hole = { expr | hole }` は **`expr_or_hole` にリネーム済**。`parse_expr_hole` を [src/parse/parser.rs](../../src/parse/parser.rs) に追加 ([commit ec05189c](../../)).
-- **Step 0.5** (補完挿入の `?x` 化): [completion.rs:282-296](../../src/commands/lsp/completion.rs) で各パラメタを `?<name>` 形式にラップ済。テスト期待値も `func(?x, ?y)` / `func(?x)` 形式に更新済 ([commit ec05189c](../../)).
+- **Step 0.5** (補完挿入の `?x` 化): [completion.rs:282-296](../../src/commands/lsp/completion.rs) で各パラメタを LSP snippet tab-stop `${N:?<name>}` でラップ済。`insertTextFormat: Snippet` も設定するので、VSCode 等の対応エディタではカーソルが最初のホールに置かれ、Tab で次に進める ([commit ec05189c](../../) で `?x` 化、[commit f7bbd018](../../) で snippet 化)。スニペットを dismiss しても `?<name>` は Fix のホール式として有効なので、型エラーではなくホール診断だけが出る。
 - 副次的に **deprecation の completion 反映** ([commit db4b7d73](../../)): `gv.deprecation` を completion item の `deprecated` / `tags` / documentation に反映する処理を追加。`DeprecationInfo::to_markdown()` で `fix docs` と LSP の表記を統一。
 
 **残作業**: Step 1 以降 (受信者型抽出 prototype → バケットインデックス → unify 段階 → repair pre-pass → incremental elaborate)。
