@@ -19,6 +19,7 @@ use crate::configuration::{Configuration, DiagnosticsConfig};
 use crate::constants::chars_allowed_in_identifiers;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
+use crate::elaboration::typecheck::TypeCheckContext;
 use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{to_absolute_path, Map};
 use crate::parse::sourcefile::Span;
@@ -56,9 +57,20 @@ pub(super) fn handle_completion(
                     "[completion] dot-context receiver type: {}",
                     receiver_ty.to_string()
                 );
+                // Build a base typechecker over the snapshot program;
+                // `assign_tier` clones it per Tier 1 candidate so unify
+                // attempts stay independent.
+                let scratch_config = Configuration::diagnostics_mode(
+                    DiagnosticsConfig::default(),
+                )
+                .ok();
+                let tc_template = scratch_config
+                    .as_ref()
+                    .map(|cfg| program.create_typechecker(cfg));
                 Some(DotRanking {
                     receiver_type: receiver_ty,
                     index: index::CompletionIndex::build(program),
+                    tc_template,
                 })
             }
             None => None,
@@ -142,7 +154,20 @@ pub(super) fn handle_completion(
             gv.deprecation.is_some(),
         );
         if let Some(ranking) = &dot_ranking {
-            let tier = score::assign_tier(full_name, &ranking.index, &ranking.receiver_type);
+            let tier = match &ranking.tc_template {
+                Some(tc) => score::assign_tier(
+                    full_name,
+                    &ranking.index,
+                    &ranking.receiver_type,
+                    program,
+                    tc,
+                ),
+                None => score::assign_tier_no_unify(
+                    full_name,
+                    &ranking.index,
+                    &ranking.receiver_type,
+                ),
+            };
             item.sort_text = Some(score::sort_text_for(tier, full_name));
         }
         items.push(item);
@@ -217,12 +242,21 @@ pub(super) fn handle_completion(
     send_response(id, Ok::<_, ()>(items));
 }
 
-/// Bundle of the data Step 2 needs to assign tiers to candidates: the
-/// receiver type extracted from the live buffer, plus the bucket index
-/// over the snapshot's globals.
+/// Bundle of the data the dot-completion ranking flow needs: the
+/// receiver type extracted from the live buffer, the bucket index
+/// over the snapshot's globals, and a scratch `TypeCheckContext`
+/// (cloned per candidate inside `score::assign_tier`) for the Tier 1
+/// → Tier 0 unify promotion.
+///
+/// `tc_template` may be `None` if the scratch `Configuration` couldn't
+/// be built — e.g. the host environment can't satisfy
+/// `CTypeSizes::load_or_check`. In that case Step 3's unify step is
+/// silently skipped and `assign_tier_no_unify` is used, leaving the
+/// ranking at the Tier 1/2/3 level Step 2 produced.
 struct DotRanking {
     receiver_type: Arc<TypeNode>,
     index: index::CompletionIndex,
+    tc_template: Option<TypeCheckContext>,
 }
 
 /// Run the dot-completion type-extraction pipeline for a single
