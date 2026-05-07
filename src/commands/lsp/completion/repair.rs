@@ -105,62 +105,78 @@ fn decide_insertion(hint: &RepairHint) -> Option<&'static str> {
     }
 }
 
-/// A0: replace the post-dot identifier the cursor is in with a single
-/// `?` hole. Returns `None` if the cursor isn't in a
-/// `<identifier>.<post-dot>` shape.
+/// A0: locate the post-dot identifier and replace it with `?`.
+///
+/// The cursor anchor returned points at the byte immediately after
+/// the inserted `?`, regardless of where the user's actual cursor
+/// landed (in the partial id, between dot and id, before whitespace,
+/// etc.). Returns `None` if no `<receiver> . <post-dot>` shape can be
+/// found around the cursor.
+///
+/// Fix's `expr_dot_seq` allows `sep*` (whitespace including newlines)
+/// on both sides of the dot, so the search walks across whitespace in
+/// both directions:
+///
+///   - back from the cursor: any name chars (the partial id), then
+///     whitespace, then the dot we anchor on
+///   - forward from the dot: any whitespace, then the name chars that
+///     form the post-dot identifier (which might be on a later line)
 fn apply_a0(live_buffer: &str, cursor_byte: usize) -> Option<RepairOutput> {
     let cursor_byte = cursor_byte.min(live_buffer.len());
     let bytes = live_buffer.as_bytes();
 
-    // Walk back from the cursor to find the dot that introduces the
-    // post-dot identifier. Skip identifier-character bytes (the partial
-    // name the user is in the middle of typing) and stop at the dot.
-    let mut i = cursor_byte;
-    while i > 0 && is_name_char(bytes[i - 1]) {
-        i -= 1;
+    // Walk back from the cursor through name chars (any partial id
+    // the user has already typed past the dot).
+    let mut back = cursor_byte;
+    while back > 0 && is_name_char(bytes[back - 1]) {
+        back -= 1;
     }
-    if i == 0 || bytes[i - 1] != b'.' {
+    // Skip whitespace.
+    while back > 0 && is_ascii_whitespace(bytes[back - 1]) {
+        back -= 1;
+    }
+    if back == 0 || bytes[back - 1] != b'.' {
         return None;
     }
-    // `i` is now the byte right after the dot — the start of the
-    // post-dot identifier (possibly empty).
-    //
-    // Reject dots that belong to a numeric literal (e.g. `1.0`): the
-    // byte before the dot must look like the tail of a real identifier,
-    // not a digit. `_` and `@` are allowed because they're identifier
-    // continuations.
-    let dot_pos = i - 1;
+    let dot_pos = back - 1;
     if dot_pos == 0 {
         return None;
     }
+
+    // Reject the dot in a numeric literal (`1.0`): unambiguously
+    // numeric only when both sides of the dot are digits. `42.foo`,
+    // `42.<cursor>`, `42.\n  pure` are dot syntax even though the
+    // receiver happens to be a digit.
     let pre_dot = bytes[dot_pos - 1];
-    if !pre_dot.is_ascii_alphabetic()
-        && pre_dot != b'_'
-        && pre_dot != b'@'
-        && pre_dot != b')'
-        && pre_dot != b']'
-    {
+    let post_dot_byte = bytes.get(dot_pos + 1).copied();
+    if pre_dot.is_ascii_digit() && post_dot_byte.map_or(false, |b| b.is_ascii_digit()) {
         return None;
     }
 
-    // Extend the post-dot identifier through any trailing identifier
-    // characters past the cursor (e.g. `obj.foo<cursor>bar` → drop
-    // `bar` along with `foo`).
-    let mut end = cursor_byte;
-    while end < bytes.len() && is_name_char(bytes[end]) {
-        end += 1;
+    // Walk forward from the dot through whitespace, then through name
+    // chars, to find the full post-dot identifier the user wrote
+    // (possibly on a later line).
+    let mut id_start = dot_pos + 1;
+    while id_start < bytes.len() && is_ascii_whitespace(bytes[id_start]) {
+        id_start += 1;
+    }
+    let mut id_end = id_start;
+    while id_end < bytes.len() && is_name_char(bytes[id_end]) {
+        id_end += 1;
     }
 
-    // Build the repaired source: prefix + "?" + suffix.
+    // Replace [id_start..id_end] with `?`. Whitespace between the dot
+    // and the id stays in place — `obj.\n    ?` parses the same as
+    // `obj.?` and preserving the indentation keeps every other span
+    // unchanged.
     let mut out = String::with_capacity(live_buffer.len() + 1);
-    out.push_str(&live_buffer[..i]);
+    out.push_str(&live_buffer[..id_start]);
     out.push('?');
-    out.push_str(&live_buffer[end..]);
+    out.push_str(&live_buffer[id_end..]);
 
-    // Cursor lands right after the `?` we just inserted.
     Some(RepairOutput {
         source: out,
-        cursor_byte: i + 1,
+        cursor_byte: id_start + 1,
     })
 }
 
@@ -169,6 +185,15 @@ fn is_name_char(b: u8) -> bool {
     // (`@` is only valid as a name *head*, not a continuation, so it isn't
     // part of the post-dot identifier we're replacing.)
     b.is_ascii_alphanumeric() || b == b'_'
+}
+
+fn is_ascii_whitespace(b: u8) -> bool {
+    // Matches what pest's `sep` (whitespace + comments) covers as far
+    // as straight whitespace bytes go: spaces, tabs, CR, LF, vertical
+    // tab, form feed. Comments aren't handled here — they'd need a
+    // proper tokenizer; A0 just bails when the surrounding shape is
+    // unusual.
+    matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0B | 0x0C)
 }
 
 #[cfg(test)]
@@ -226,6 +251,38 @@ mod tests {
         let cursor = src.len();
         let out = apply_a0(src, cursor).unwrap();
         assert_eq!(out.source, "(f x).?");
+    }
+
+    #[test]
+    fn a0_accepts_digit_dot_when_post_dot_is_not_digit() {
+        // `42.foo` is dot syntax (`App(foo, [42])`), not a numeric
+        // literal. The earlier "reject any digit before the dot"
+        // check was too strict for receivers that happen to be
+        // integer literals.
+        let src = "    42.";
+        let cursor = src.len();
+        let out = apply_a0(src, cursor).expect("digit-before-dot is OK when no digit follows");
+        assert_eq!(out.source, "    42.?");
+    }
+
+    #[test]
+    fn a0_replaces_post_dot_id_across_newline() {
+        // Cursor right after the dot on one line; the post-dot id
+        // lives on the next line. Fix's `expr_dot_seq` allows `sep*`
+        // between the dot and the next component, so this is `42.pure`
+        // to the parser, and A0 should replace `pure` with `?`.
+        let src = "    42.\n    pure()";
+        let cursor = "    42.".len();
+        let out = apply_a0(src, cursor).expect("multi-line post-dot id");
+        assert_eq!(out.source, "    42.\n    ?()");
+        // Cursor anchor lands just after the inserted `?`.
+        assert_eq!(
+            out.source.as_bytes()[out.cursor_byte - 1],
+            b'?',
+            "cursor should land on the inserted `?`; got source = {:?}, byte = {}",
+            out.source,
+            out.cursor_byte
+        );
     }
 
     /// `let y = arr.<cursor>` at file scope — A0 makes the cursor area
