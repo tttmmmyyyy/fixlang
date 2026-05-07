@@ -266,6 +266,108 @@ pub fn check_grammar_accepts(source: &str) -> Result<(), Error<Rule>> {
     FixParser::parse(Rule::file, source).map(|_| ())
 }
 
+/// What kind of token the parser was looking for when it failed.
+/// Used by the LSP completion repair loop to decide what character
+/// to splice in to keep parsing going. Mirrors the `decide_insertion`
+/// table from plan §A.4.2.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RepairHintKind {
+    /// Pest's expected set includes a `;` (or `in`-of-let, which the
+    /// repair fills with `;` since that satisfies `in_of_let`).
+    Semicolon,
+    /// Pest expected an expression-like construct — somewhere a
+    /// hole `?` belongs.
+    Expression,
+    /// None of our recipes match; the caller should give up rather
+    /// than insert something arbitrary.
+    Unknown,
+}
+
+/// One iteration's worth of advice for the completion repair loop:
+/// where to splice a character in, and what kind of character would
+/// satisfy the parser at that point.
+pub struct RepairHint {
+    /// Byte offset (into the source string) where the insertion goes.
+    pub insert_at: usize,
+    pub kind: RepairHintKind,
+}
+
+/// Probe-parse `source` as a full Fix file. On parse failure return a
+/// `RepairHint` derived from the pest error so the LSP completion
+/// repair loop can splice a character and try again. Used only by
+/// `commands/lsp/completion/repair.rs`.
+pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint> {
+    match FixParser::parse(Rule::file, source) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(repair_hint_from_pest_error(&e)),
+    }
+}
+
+fn repair_hint_from_pest_error(e: &Error<Rule>) -> RepairHint {
+    let insert_at = match e.location {
+        pest::error::InputLocation::Pos(p) => p,
+        pest::error::InputLocation::Span((s, _)) => s,
+    };
+    let positives: &[Rule] = match &e.variant {
+        pest::error::ErrorVariant::ParsingError { positives, .. } => positives.as_slice(),
+        pest::error::ErrorVariant::CustomError { .. } => &[],
+    };
+    let kind = classify_repair_hint(positives);
+    RepairHint { insert_at, kind }
+}
+
+fn classify_repair_hint(positives: &[Rule]) -> RepairHintKind {
+    // `Rule::semicolon` is the "literal `;`" rule; `Rule::in_of_let`
+    // accepts either `in` or `;`, so an inserted `;` satisfies it too.
+    let wants_semicolon = positives
+        .iter()
+        .any(|r| matches!(r, Rule::semicolon | Rule::in_of_let));
+    if wants_semicolon {
+        return RepairHintKind::Semicolon;
+    }
+    // Any rule whose right-hand side opens with an expression position.
+    // Listing the entry-points the pest grammar actually surfaces in
+    // its `positives` set when an expression is missing — keep this in
+    // sync with `grammer.pest`.
+    let wants_expr = positives.iter().any(|r| {
+        matches!(
+            r,
+            Rule::expr
+                | Rule::expr_or_hole
+                | Rule::expr_nlr
+                | Rule::expr_app
+                | Rule::expr_index
+                | Rule::expr_dot_seq
+                | Rule::expr_bind
+                | Rule::expr_composition
+                | Rule::expr_unary
+                | Rule::expr_mul
+                | Rule::expr_plus
+                | Rule::expr_cmp
+                | Rule::expr_and
+                | Rule::expr_or
+                | Rule::expr_rtl_app
+                | Rule::expr_type_annotation
+                | Rule::expr_and_then_sequence
+                | Rule::expr_lit
+                | Rule::expr_var
+                | Rule::expr_hole
+                | Rule::expr_let
+                | Rule::expr_eval
+                | Rule::expr_if
+                | Rule::expr_match
+                | Rule::expr_do
+                | Rule::expr_lam
+                | Rule::expr_tuple
+                | Rule::expr_make_struct
+        )
+    });
+    if wants_expr {
+        return RepairHintKind::Expression;
+    }
+    RepairHintKind::Unknown
+}
+
 pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<Program, Errors> {
     let source_cloned = source.clone();
     let source_code = source.string()?;
