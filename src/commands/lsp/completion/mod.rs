@@ -281,25 +281,10 @@ pub(super) fn extract_receiver_type_for_dot_completion(
     let uri = &text_document_position.text_document.uri;
     let latest = uri_to_content.get(uri)?;
     let live_buffer = &latest.content;
-
-    // Cursor as a byte offset into the live buffer.
     let cursor_byte = position_to_bytes(live_buffer, text_document_position.position);
-
-    // Step A0 of the repair (post-dot identifier → `?`). Outer-source
-    // repair (A.4.2) is deferred to Step 4.
     let repaired = repair::repair_for_completion(live_buffer, cursor_byte)?;
-
-    // Resolve to an absolute path so the override-key matches what
-    // `parse_file_path` looks up. The completion thread's cwd is the
-    // workspace root just like the diagnostics thread, so relative
-    // resolution stays consistent between the two flows.
     let abs_path = to_absolute_path(&latest.path).ok()?;
-
     let program = run_completion_elaborate(&abs_path, repaired.source).ok()?;
-
-    // Locate the hole node and read its inferred curried type. Step 1
-    // hard-codes `n = 0`, so the hole's type should be `Self → Ret`
-    // and the receiver is the only source argument.
     let cursor = SourcePosLite {
         path: abs_path,
         byte: repaired.cursor_byte,
@@ -309,18 +294,33 @@ pub(super) fn extract_receiver_type_for_dot_completion(
     decompose_hole_type_n0(hole_ty)
 }
 
-/// Extract the receiver (`Self`) type from a hole whose inferred type
-/// is `Self → Ret` (the `n = 0` case). Returns `None` if the hole
-/// type isn't a function — typically because elaborate gave the hole
-/// a fresh type variable when it couldn't be constrained from context.
+/// Extract the receiver (`Self`) type from the hole's inferred curried
+/// type. The receiver is the **last** source in the curry chain (Fix's
+/// dot syntax applies the receiver after every explicit argument), so
+/// we walk down `cur → get_lambda_dst()` until the chain stops being
+/// a function and remember the last `Self` we saw on the way.
+///
+/// Returns `None` if the hole type isn't a function at all — typically
+/// because elaborate gave the hole a fresh type variable when nothing
+/// in the surrounding context constrained it.
 fn decompose_hole_type_n0(hole_ty: &Arc<TypeNode>) -> Option<Arc<TypeNode>> {
     if !(hole_ty.is_funptr() || hole_ty.is_closure()) {
         return None;
     }
-    let srcs = hole_ty.get_lambda_srcs();
-    // For `n = 0` the receiver is the last (and typically only)
-    // curried source. Mirrors plan §A.7's `S_{m-n-1}` with `n = 0`.
-    srcs.into_iter().last()
+    let mut cur = hole_ty.clone();
+    let mut last_src: Option<Arc<TypeNode>> = None;
+    while cur.is_funptr() || cur.is_closure() {
+        let mut srcs = cur.get_lambda_srcs();
+        // Closures expose a single source per `get_lambda_srcs` call;
+        // function-pointer types may expose more. Either way, the
+        // last entry of this curry layer overwrites the running
+        // `last_src` and we descend to the destination type.
+        if let Some(s) = srcs.pop() {
+            last_src = Some(s);
+        }
+        cur = cur.get_lambda_dst();
+    }
+    last_src
 }
 
 /// Drive the elaborate pipeline against a configuration that swaps in

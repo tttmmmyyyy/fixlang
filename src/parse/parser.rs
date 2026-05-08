@@ -158,7 +158,18 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
     // If the LSP completion flow has stashed a repaired live-buffer for
     // this path in the configuration, parse that string instead of
     // reading from disk. See `Configuration::live_source_overrides`.
-    let source = match config.live_source_overrides.get(&file_path) {
+    //
+    // The override is keyed by canonical absolute path (the LSP
+    // completion handler uses `to_absolute_path` which canonicalises),
+    // but `Configuration::source_files` from `proj_file.get_files`
+    // can be relative (e.g. `main.fix` joined to a relative
+    // `fixproj.toml`). Canonicalise here too so the lookup matches.
+    let override_key = crate::misc::to_absolute_path(&file_path).ok();
+    let override_content = override_key
+        .as_ref()
+        .and_then(|p| config.live_source_overrides.get(p))
+        .or_else(|| config.live_source_overrides.get(&file_path));
+    let source = match override_content {
         Some(content) => SourceFile::from_file_path_and_content(file_path, content.clone()),
         None => SourceFile::from_file_path(file_path),
     };

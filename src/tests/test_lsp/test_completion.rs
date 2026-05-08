@@ -410,4 +410,86 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// `42.<cursor>` in a body that mentions both `myfunc1 : U32 -> U32 -> U32`
+    /// and `myfunc2 : I64 -> I64 -> I64` — `42` is `I64` so `myfunc2` should
+    /// outrank `myfunc1` in the completion list. Verifies the dot-completion
+    /// type-aware ranking pipeline (Steps 1-4).
+    #[test]
+    fn test_completion_dot_sort_ranks_matching_receiver_above_others() {
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort", &["main.fix"]);
+
+        // Cursor right after the dot in `    42.` on line 13 (0-indexed),
+        // column 7 (= byte right after `.`).
+        // Use a polling wait — Step 1's full re-elaborate can take longer
+        // than `complete`'s hard-coded 5s sleep on a cold cache.
+        let id = ctx
+            .client
+            .send_request(
+                "textDocument/completion",
+                json!({
+                    "textDocument": { "uri": ctx.file_uri("main.fix") },
+                    "position": { "line": 13, "character": 7 }
+                }),
+            )
+            .expect("send completion");
+        let mut items: Vec<Value> = vec![];
+        let start = std::time::Instant::now();
+        loop {
+            ctx.client.wait_for_server(Duration::from_millis(500));
+            if let Some(response) = ctx.client.get_response(id) {
+                let result = response.get("result").expect("response has result");
+                items = if result.is_array() {
+                    result.as_array().unwrap().clone()
+                } else {
+                    result
+                        .get("items")
+                        .and_then(|v| v.as_array())
+                        .cloned()
+                        .unwrap_or_default()
+                };
+                break;
+            }
+            if start.elapsed() > Duration::from_secs(60) {
+                panic!("completion did not respond within 60s");
+            }
+        }
+
+        // Each item should carry a sortText derived from its tier.
+        let find_sort = |label: &str| -> String {
+            let it = items
+                .iter()
+                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
+                .unwrap_or_else(|| {
+                    panic!("expected {} in completion items; got {:?}", label, items)
+                });
+            it.get("sortText")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "expected sortText on dot-completion item {}; got {}",
+                        label, it
+                    )
+                })
+        };
+
+        let sort_myfunc1 = find_sort("Main::myfunc1");
+        let sort_myfunc2 = find_sort("Main::myfunc2");
+        assert!(
+            sort_myfunc2 < sort_myfunc1,
+            "myfunc2 (I64 receiver) should sort before myfunc1 (U32 receiver); \
+             got myfunc2={:?}, myfunc1={:?}",
+            sort_myfunc2,
+            sort_myfunc1
+        );
+        // Stronger: I64 unify should land myfunc2 in Tier 0.
+        assert!(
+            sort_myfunc2.starts_with("0_"),
+            "myfunc2 should be Tier 0 (sortText `0_…`); got {:?}",
+            sort_myfunc2
+        );
+
+        ctx.shutdown();
+    }
 }
