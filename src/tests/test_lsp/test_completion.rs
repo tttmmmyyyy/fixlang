@@ -492,4 +492,178 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// Scenario B: the on-disk file has a parse error (`42` with no
+    /// dot inside `(...)`), so the snapshot Program built at LSP
+    /// startup may be missing the user's module entirely. The user
+    /// then types `.` (live buffer becomes parseable as `42.pure()`)
+    /// and triggers completion.
+    ///
+    /// This reproduces the user's report that priority ranking
+    /// doesn't apply after a "save with parse error → close → reopen
+    /// → type the dot" round trip. We expect the test to fail before
+    /// any fix lands; once it passes the regression is closed.
+    #[test]
+    fn test_completion_dot_sort_stale_snapshot_after_dot_added() {
+        use crate::tests::test_lsp::lsp_client::LspClient;
+        use std::fs;
+
+        install_fix();
+        let (temp_dir, project_dir) = setup_test_env("completion-dot-sort-stale");
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        client
+            .initialize(&project_dir, Duration::from_secs(5))
+            .expect("Failed to initialize LSP");
+
+        // Open the parse-erroring file. didOpen sends the on-disk
+        // content; we don't save (which is what triggers diagnostics
+        // in this server) — the LSP startup `Start` message already
+        // ran diagnostics once before the open.
+        client
+            .open_document(Path::new("main.fix"))
+            .expect("open main.fix");
+        client.trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+
+        // Replay: the user types `.` after `42`, turning the line
+        // into `    42.`. didChange notifications carry the full text
+        // (the LSP capability advertised `change: 1` = full sync).
+        let abs_path = project_dir.join("main.fix");
+        let dot_added = fs::read_to_string(&abs_path)
+            .expect("read main.fix")
+            .replace("    42\n", "    42.\n");
+        let uri = format!("file://{}", abs_path.display());
+        client
+            .send_notification(
+                "textDocument/didChange",
+                json!({
+                    "textDocument": { "uri": uri, "version": 2 },
+                    "contentChanges": [ { "text": dot_added } ]
+                }),
+            )
+            .expect("send didChange");
+
+        // Trigger completion right after the inserted dot. Find the
+        // line that ends with `42.` so the test stays robust to fixture
+        // edits.
+        let line = dot_added
+            .lines()
+            .position(|l| l.trim_end().ends_with("42."))
+            .expect("find `42.` line in dot_added") as u32;
+        let col = dot_added
+            .lines()
+            .nth(line as usize)
+            .map(|l| l.find('.').unwrap() as u32 + 1)
+            .expect("find `.` column");
+
+        let id = client
+            .send_request(
+                "textDocument/completion",
+                json!({
+                    "textDocument": { "uri": uri },
+                    "position": { "line": line, "character": col }
+                }),
+            )
+            .expect("send completion");
+
+        let mut items: Vec<Value> = vec![];
+        let start = std::time::Instant::now();
+        loop {
+            client.wait_for_server(Duration::from_millis(500));
+            if let Some(response) = client.get_response(id) {
+                let result = response
+                    .get("result")
+                    .expect("response has result");
+                items = if result.is_array() {
+                    result.as_array().unwrap().clone()
+                } else {
+                    result
+                        .get("items")
+                        .and_then(|v| v.as_array())
+                        .cloned()
+                        .unwrap_or_default()
+                };
+                break;
+            }
+            if start.elapsed() > Duration::from_secs(60) {
+                let log_path = project_dir.join(".fixlang/fix.log");
+                let log_content =
+                    fs::read_to_string(&log_path).unwrap_or_else(|_| "<no log>".into());
+                let completion_log: String = log_content
+                    .lines()
+                    .filter(|l| l.contains("[completion]"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                panic!(
+                    "completion did not respond within 60s.\n\
+                     [completion] log lines:\n{}",
+                    if completion_log.is_empty() {
+                        "<none>".to_string()
+                    } else {
+                        completion_log
+                    }
+                );
+            }
+        }
+
+        let log_path = project_dir.join(".fixlang/fix.log");
+        let log_content = fs::read_to_string(&log_path).unwrap_or_default();
+        let completion_log: String = log_content
+            .lines()
+            .filter(|l| l.contains("[completion]"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        eprintln!(
+            "===== [completion] log lines (scenario B) =====\n{}\n=========================================",
+            if completion_log.is_empty() {
+                "<none>".to_string()
+            } else {
+                completion_log
+            }
+        );
+
+        let item_summary: Vec<String> = items
+            .iter()
+            .filter_map(|it| {
+                let label = it.get("label")?.as_str()?;
+                let sort = it
+                    .get("sortText")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("<none>");
+                Some(format!("{:>40}  sort={}", label, sort))
+            })
+            .filter(|s| s.contains("Main::") || s.contains("myfunc"))
+            .collect();
+        eprintln!(
+            "===== Main:: items (scenario B) =====\n{}\n=====================================",
+            item_summary.join("\n")
+        );
+
+        let _ = client.shutdown(Duration::from_millis(500));
+        let _ = client.finish();
+        drop(temp_dir);
+
+        // Assertion: myfunc2 should out-rank myfunc1 even when the
+        // snapshot Program was built from a parse-erroring source.
+        let find_sort = |label: &str| -> Option<String> {
+            items
+                .iter()
+                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
+                .and_then(|it| it.get("sortText"))
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+        match (find_sort("Main::myfunc1"), find_sort("Main::myfunc2")) {
+            (Some(s1), Some(s2)) => {
+                assert!(
+                    s2 < s1,
+                    "scenario B: myfunc2 should sort before myfunc1; got myfunc2={:?}, myfunc1={:?}",
+                    s2, s1
+                );
+            }
+            (s1, s2) => panic!(
+                "scenario B: missing sortText for Main::myfunc1 ({:?}) or Main::myfunc2 ({:?})",
+                s1, s2
+            ),
+        }
+    }
 }

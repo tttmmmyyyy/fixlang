@@ -48,36 +48,43 @@ pub(super) fn handle_completion(
     // pipeline so we can rank candidates by how well their receiver
     // position matches the typed receiver. On failure we silently fall
     // back to the legacy alphabetical list; no client-visible error.
-    let dot_ranking = if is_dot_function(&typing_text) {
-        let receiver_ty =
-            extract_receiver_type_for_dot_completion(text_document_position, uri_to_content);
-        match receiver_ty {
-            Some(receiver_ty) => {
-                write_log!(
-                    "[completion] dot-context receiver type: {}",
-                    receiver_ty.to_string()
-                );
-                // Build a base typechecker over the snapshot program;
-                // `assign_tier` clones it per Tier 1 candidate so unify
-                // attempts stay independent.
-                let scratch_config = Configuration::diagnostics_mode(
-                    DiagnosticsConfig::default(),
-                )
-                .ok();
-                let tc_template = scratch_config
-                    .as_ref()
-                    .map(|cfg| program.create_typechecker(cfg));
-                Some(DotRanking {
-                    receiver_type: receiver_ty,
-                    index: index::CompletionIndex::build(program),
-                    tc_template,
-                })
-            }
-            None => None,
-        }
+    let dot_extract = if is_dot_function(&typing_text) {
+        extract_receiver_type_and_program_for_dot_completion(
+            text_document_position,
+            uri_to_content,
+        )
     } else {
         None
     };
+    // The snapshot can be missing the user's module entirely if the
+    // last-saved file failed to parse (load_source_files drops the
+    // root project's modules in that case). In dot context the live
+    // buffer's freshly-elaborated Program is more current, so use it
+    // both to enumerate candidates and to seed the bucket index when
+    // available.
+    let active_program: &Program = dot_extract
+        .as_ref()
+        .map(|d| &d.program)
+        .unwrap_or(program);
+    let dot_ranking = dot_extract.as_ref().map(|d| {
+        write_log!(
+            "[completion] dot-context receiver type: {}",
+            d.receiver_type.to_string()
+        );
+        // Build a base typechecker over the active program; clone-
+        // per-candidate inside `assign_tier` keeps unify substitutions
+        // from leaking between candidates.
+        let scratch_config =
+            Configuration::diagnostics_mode(DiagnosticsConfig::default()).ok();
+        let tc_template = scratch_config
+            .as_ref()
+            .map(|cfg| d.program.create_typechecker(cfg));
+        DotRanking {
+            receiver_type: d.receiver_type.clone(),
+            index: index::CompletionIndex::build(&d.program),
+            tc_template,
+        }
+    });
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
@@ -131,7 +138,7 @@ pub(super) fn handle_completion(
         }
     }
 
-    for (full_name, gv) in &program.global_values {
+    for (full_name, gv) in &active_program.global_values {
         // Skip compiler-defined entities
         if full_name.to_string().contains('#') {
             continue;
@@ -159,7 +166,7 @@ pub(super) fn handle_completion(
                     full_name,
                     &ranking.index,
                     &ranking.receiver_type,
-                    program,
+                    active_program,
                     tc,
                 ),
                 None => score::assign_tier_no_unify(
@@ -172,7 +179,7 @@ pub(super) fn handle_completion(
         }
         items.push(item);
     }
-    for (tycon, _kind) in program.type_env.kinds() {
+    for (tycon, _kind) in active_program.type_env.kinds() {
         if tycon.name.to_string().contains('#') {
             continue;
         }
@@ -197,7 +204,7 @@ pub(super) fn handle_completion(
         }
         items.push(item);
     }
-    for trait_ in program.traits_with_aliases() {
+    for trait_ in active_program.traits_with_aliases() {
         if trait_.to_string().contains('#') {
             continue;
         }
@@ -218,7 +225,7 @@ pub(super) fn handle_completion(
         }
         items.push(item);
     }
-    for (assoc_type, _kind_info) in program.trait_env.assoc_ty_kind_info() {
+    for (assoc_type, _kind_info) in active_program.trait_env.assoc_ty_kind_info() {
         if assoc_type.name.to_string().contains('#') {
             continue;
         }
@@ -274,10 +281,21 @@ struct DotRanking {
 /// when any step fails: the path can't be resolved, the live buffer
 /// has no `<id>.<post-dot>` shape near the cursor, the elaborate fails,
 /// the hole isn't located, or the hole's type isn't a curried function.
-pub(super) fn extract_receiver_type_for_dot_completion(
+/// Bundle returned by the dot-completion extraction pipeline: the
+/// receiver type read off the inserted hole's curried signature, plus
+/// the fully-elaborated `Program` we produced from the repaired live
+/// buffer. The caller uses the program to enumerate candidates and to
+/// instantiate schemes for unify, so a stale or parse-erroring
+/// snapshot doesn't suppress Main:: items.
+pub(super) struct DotExtraction {
+    pub receiver_type: Arc<TypeNode>,
+    pub program: Program,
+}
+
+pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     text_document_position: &TextDocumentPositionParams,
     uri_to_content: &Map<Uri, LatestContent>,
-) -> Option<Arc<TypeNode>> {
+) -> Option<DotExtraction> {
     let uri = &text_document_position.text_document.uri;
     let latest = uri_to_content.get(uri)?;
     let live_buffer = &latest.content;
@@ -291,7 +309,11 @@ pub(super) fn extract_receiver_type_for_dot_completion(
     };
     let hole = find_innermost_hole_at(&program, &cursor)?;
     let hole_ty = hole.type_.as_ref()?;
-    decompose_hole_type_n0(hole_ty)
+    let receiver_type = decompose_hole_type_n0(hole_ty)?;
+    Some(DotExtraction {
+        receiver_type,
+        program,
+    })
 }
 
 /// Extract the receiver (`Self`) type from the hole's inferred curried

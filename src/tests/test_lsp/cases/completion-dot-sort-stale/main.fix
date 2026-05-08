@@ -1,0 +1,16 @@
+module Main;
+
+// # Parameters
+// - `x`
+// - `y`
+myfunc1 : U32 -> U32 -> U32 = |x, y| x + y;
+
+// # Parameters
+// - `x`
+// - `y`
+myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;
+
+main : IO () = (
+    42
+    pure()
+);
