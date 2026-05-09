@@ -11,9 +11,24 @@
 // Both stages run unconditionally; outer repair is a no-op when A0's
 // output already parses.
 
-use crate::parse::parser::{
-    probe_parse_for_completion_repair, RepairHint, RepairHintKind,
-};
+use crate::parse::parser::{probe_parse_for_completion_repair, RepairHintKind};
+
+/// Insertion candidates for the outer-repair loop, ranked by how
+/// often they appear in the failure modes we want to recover from.
+///
+/// The order matters: when the classified `RepairHintKind` is
+/// `Unknown` (= pest didn't surface a named token we recognise), we
+/// try each in turn and keep the first one whose parse either fully
+/// succeeds or moves the failure point forward.
+///
+/// `{};` covers the `if cond <missing>` / `match e <missing>` shape,
+/// where pest's `positives` only mention more-expression rules
+/// (`arg_list`, `operator_*`, …) instead of the literal `{` it
+/// actually wants. `}` / `)` / `]` cover the closing-bracket cases
+/// pest likewise can't surface as a positive — the inline `"}"` /
+/// `")"` / `"]"` literals in the grammar aren't pest `Rule`s, so they
+/// never appear in the positive set.
+const FALLBACK_INSERTIONS: &[&str] = &["{};", "{}", ")", "}", "]", ";", ",", "?"];
 
 /// Result of `repair_for_completion`: the rewritten source plus the
 /// adjusted byte offset that points to the hole the post-dot identifier
@@ -64,47 +79,97 @@ fn apply_outer_repair(mut source: String, mut cursor_byte: usize) -> Option<Repa
                 });
             }
             Err(hint) => {
-                // Pick the splice based on the hint, with one
-                // recovery: if the last splice was a `;` and pest now
-                // wants another `;` at an adjacent byte (the source
-                // grew by exactly one), the parser's `let` rule is
-                // greedily eating semicolons without ever finding a
-                // body. Insert `?` instead so the body slot fills and
-                // the surrounding `;` can finally close the
-                // definition.
-                let mut inserted = match decide_insertion(&hint) {
-                    Some(s) => s,
-                    None => return None,
+                // Build an ordered candidate list:
+                //   - the splice the classifier suggests (`;` or `?`),
+                //     adjusted by the let-body anti-loop heuristic;
+                //   - then the structural fallbacks for cases pest
+                //     can't surface as positives (closing brackets,
+                //     `if`/`match` bodies — see `FALLBACK_INSERTIONS`).
+                // `pick_insertion` then trial-parses each in order and
+                // keeps the first that succeeds or makes the parse
+                // failure move forward.
+                let mut primary = match hint.kind {
+                    RepairHintKind::Semicolon => Some(";"),
+                    RepairHintKind::Expression => Some("?"),
+                    RepairHintKind::Unknown => None,
                 };
-                let pos = hint.insert_at.min(source.len());
-                if let Some((prev_pos, prev_str)) = prev_insertion {
-                    if prev_str == ";" && inserted == ";" && pos == prev_pos + 1 {
-                        inserted = "?";
+                if let (Some(p), Some((prev_pos, prev_str))) = (primary, prev_insertion) {
+                    // Anti-loop: when the previous splice was `;` and
+                    // pest is asking for another `;` at the immediately
+                    // adjacent byte, the let-rule's `+` is eating
+                    // semicolons without ever finding a body. Force
+                    // `?` for one round so the body slot fills.
+                    if prev_str == ";" && p == ";" && hint.insert_at == prev_pos + 1 {
+                        primary = Some("?");
                     }
                 }
-                source.insert_str(pos, inserted);
-                // Strict `<` so that an insertion *at* the cursor
-                // sticks to its right; the cursor keeps marking the
-                // byte immediately after the A0 hole (which is the
-                // anchor the hole-finder uses).
-                if pos < cursor_byte {
-                    cursor_byte += inserted.len();
+                let mut candidates: Vec<&'static str> = Vec::new();
+                if let Some(c) = primary {
+                    candidates.push(c);
                 }
-                prev_insertion = Some((pos, inserted));
+                for c in FALLBACK_INSERTIONS {
+                    if !candidates.contains(c) {
+                        candidates.push(*c);
+                    }
+                }
+
+                let pos = hint.insert_at.min(source.len());
+                let chosen = pick_insertion(&source, pos, &candidates)?;
+                source.insert_str(pos, chosen);
+                // Strict `<` so an insertion *at* the cursor sticks to
+                // its right; the cursor keeps marking the byte right
+                // after the A0 hole (the anchor the hole-finder uses).
+                if pos < cursor_byte {
+                    cursor_byte += chosen.len();
+                }
+                prev_insertion = Some((pos, chosen));
             }
         }
     }
     None
 }
 
-/// Map a `RepairHint` to the literal string the outer-repair loop
-/// should splice in, or `None` when the hint isn't actionable.
-fn decide_insertion(hint: &RepairHint) -> Option<&'static str> {
-    match hint.kind {
-        RepairHintKind::Semicolon => Some(";"),
-        RepairHintKind::Expression => Some("?"),
-        RepairHintKind::Unknown => None,
+/// Trial-insert each candidate at `pos` and return the one whose
+/// resulting source either parses cleanly or moves the parser's
+/// failure position the furthest forward. `None` if no candidate
+/// makes progress.
+fn pick_insertion(
+    source: &str,
+    pos: usize,
+    candidates: &[&'static str],
+) -> Option<&'static str> {
+    let mut best_full: Option<&'static str> = None;
+    let mut best_progress: Option<(&'static str, usize)> = None;
+    for cand in candidates {
+        let mut trial = String::with_capacity(source.len() + cand.len());
+        trial.push_str(&source[..pos]);
+        trial.push_str(cand);
+        trial.push_str(&source[pos..]);
+        match probe_parse_for_completion_repair(&trial) {
+            Ok(()) => {
+                if best_full.is_none() {
+                    best_full = Some(*cand);
+                }
+            }
+            Err(new_hint) => {
+                // Translate the new error position back to pre-
+                // insertion source coordinates. Errors that fall
+                // inside the inserted text count as "no progress".
+                if new_hint.insert_at >= pos + cand.len() {
+                    // `np == pos` is still progress: pest accepted the
+                    // inserted text and stopped at the byte immediately
+                    // after it. The let-body recovery relies on this
+                    // (insert `;`, then on the next iteration insert
+                    // `?` to fill the body).
+                    let np = new_hint.insert_at - cand.len();
+                    if best_progress.map_or(true, |(_, p)| np > p) {
+                        best_progress = Some((*cand, np));
+                    }
+                }
+            }
+        }
     }
+    best_full.or(best_progress.map(|(c, _)| c))
 }
 
 /// A0: locate the post-dot identifier and replace it with `?`.
@@ -283,6 +348,38 @@ mod tests {
             "cursor should land on the inserted `?`; got source = {:?}, byte = {}",
             out.source,
             out.cursor_byte
+        );
+    }
+
+    /// `if 42.<cursor>\n    pure()` inside a tuple-style body. After
+    /// A0 the post-dot identifier `pure` becomes `?`, leaving an
+    /// `if cond` shape with no body braces. Pest can't surface the
+    /// missing `{` as a positive (the `"{"` literal in `expr_if`
+    /// isn't a named `Rule`), so `classify_repair_hint` returns
+    /// `Unknown` and the trial-insertion fallback in `pick_insertion`
+    /// has to try `{};` to make the parser succeed.
+    #[test]
+    fn outer_repair_handles_if_body_missing_braces() {
+        let src =
+            "module Main;\nmain : IO () = (\n    if 42.\n    pure()\n);";
+        // Cursor right after the dot (= where the user typed `.` to
+        // open dot-completion).
+        let cursor = "module Main;\nmain : IO () = (\n    if 42.".len();
+        let out = repair_for_completion(src, cursor)
+            .expect("outer repair should succeed for `if cond.<cursor>` shape");
+        // Cursor anchor still points at the `?` A0 inserted; the
+        // hole-finder relies on this.
+        assert_eq!(
+            out.source.as_bytes()[out.cursor_byte - 1],
+            b'?',
+            "cursor should land on the A0 hole; got source = {:?}, byte = {}",
+            out.source,
+            out.cursor_byte
+        );
+        assert!(
+            probe_parse_for_completion_repair(&out.source).is_ok(),
+            "repaired source should parse; got: {:?}",
+            out.source
         );
     }
 
