@@ -3,10 +3,10 @@
 // (or close-to-valid) source string that the parser can accept and a
 // hole node can be located in.
 //
-// Two-stage shape (plan §A.4):
-//   A0 — replace the post-dot identifier the cursor is in with `?`
-//   A.4.2 — pest error-driven outer-source repair loop, splicing in
-//           `;` or `?` to satisfy the surrounding grammar
+// Two stages:
+//   A0     — replace the post-dot identifier the cursor is in with `?`
+//   outer  — pest error-driven outer-source repair loop, splicing in
+//            `;` or `?` to satisfy the surrounding grammar
 //
 // Both stages run unconditionally; outer repair is a no-op when A0's
 // output already parses.
@@ -32,10 +32,6 @@ pub(super) struct RepairOutput {
 /// 2. Loop: try to parse, and on each parse error splice in a `;` /
 ///    `?` per `RepairHint`. Bounded to `MAX_ATTEMPTS` iterations to
 ///    keep pathological inputs from looping forever.
-///
-/// Returns `None` (silent fallback to alphabetical-order completion)
-/// when the cursor isn't in a `<id>.<post-dot>` shape, or the outer
-/// repair can't make progress within the iteration budget.
 pub(super) fn repair_for_completion(
     live_buffer: &str,
     cursor_byte: usize,
@@ -48,11 +44,15 @@ pub(super) fn repair_for_completion(
 }
 
 /// Bound on the number of pest-error-driven splices the outer-repair
-/// loop will attempt before giving up. Plan §A.4.2 sets it at 8 —
-/// enough to fix several layered `let ... ;` / unclosed-call shapes
-/// while still terminating quickly on hopeless inputs.
+/// loop will attempt before giving up. 8 is enough to fix several
+/// layered `let ... ;` / unclosed-call shapes while still terminating
+/// quickly on hopeless inputs.
 const MAX_ATTEMPTS: usize = 8;
 
+/// Run the pest-error-driven splice loop on `source`, advancing
+/// `cursor_byte` whenever an insertion lands before it. Returns the
+/// repaired source on success, or `None` if no progress can be made
+/// within `MAX_ATTEMPTS` iterations.
 fn apply_outer_repair(mut source: String, mut cursor_byte: usize) -> Option<RepairOutput> {
     let mut prev_insertion: Option<(usize, &'static str)> = None;
     for _ in 0..MAX_ATTEMPTS {
@@ -97,6 +97,8 @@ fn apply_outer_repair(mut source: String, mut cursor_byte: usize) -> Option<Repa
     None
 }
 
+/// Map a `RepairHint` to the literal string the outer-repair loop
+/// should splice in, or `None` when the hint isn't actionable.
 fn decide_insertion(hint: &RepairHint) -> Option<&'static str> {
     match hint.kind {
         RepairHintKind::Semicolon => Some(";"),
@@ -110,8 +112,7 @@ fn decide_insertion(hint: &RepairHint) -> Option<&'static str> {
 /// The cursor anchor returned points at the byte immediately after
 /// the inserted `?`, regardless of where the user's actual cursor
 /// landed (in the partial id, between dot and id, before whitespace,
-/// etc.). Returns `None` if no `<receiver> . <post-dot>` shape can be
-/// found around the cursor.
+/// etc.).
 ///
 /// Fix's `expr_dot_seq` allows `sep*` (whitespace including newlines)
 /// on both sides of the dot, so the search walks across whitespace in
@@ -180,19 +181,19 @@ fn apply_a0(live_buffer: &str, cursor_byte: usize) -> Option<RepairOutput> {
     })
 }
 
+/// True for bytes that pest's `name_char` rule accepts as a
+/// continuation of an identifier: ASCII letters, digits, and `_`.
+/// (`@` is only valid as a name *head*, not a continuation, so it
+/// isn't part of the post-dot identifier we're replacing.)
 fn is_name_char(b: u8) -> bool {
-    // Mirror grammer.pest's `name_char = { ASCII_ALPHA | ASCII_DIGIT | "_" }`.
-    // (`@` is only valid as a name *head*, not a continuation, so it isn't
-    // part of the post-dot identifier we're replacing.)
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
+/// True for ASCII whitespace bytes — spaces, tabs, CR, LF, vertical
+/// tab, form feed. Matches what pest's `sep` rule covers in terms of
+/// straight whitespace; comments aren't handled here, so A0 bails
+/// when the surrounding shape is unusual.
 fn is_ascii_whitespace(b: u8) -> bool {
-    // Matches what pest's `sep` (whitespace + comments) covers as far
-    // as straight whitespace bytes go: spaces, tabs, CR, LF, vertical
-    // tab, form feed. Comments aren't handled here — they'd need a
-    // proper tokenizer; A0 just bails when the surrounding shape is
-    // unusual.
     matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0B | 0x0C)
 }
 

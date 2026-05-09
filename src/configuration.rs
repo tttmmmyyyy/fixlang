@@ -11,7 +11,7 @@ use crate::preliminary_command::PreliminaryCommand;
 use crate::elaboration::typecheckcache::{self, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
-use crate::misc::{platform_valgrind_supported, warn_msg, Finally};
+use crate::misc::{platform_valgrind_supported, warn_msg, Finally, Map};
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
@@ -153,6 +153,13 @@ impl SubCommand {
 pub struct DiagnosticsConfig {
     // Target source files.
     pub files: Vec<PathBuf>,
+    /// In-memory overrides for source-file contents used during the LSP
+    /// completion flow: when `parse_file_path` is invoked for a path
+    /// present here, the supplied string is parsed instead of reading
+    /// the file from disk. This lets `handle_completion` repair the
+    /// live buffer (see `commands::lsp::completion::repair`) and
+    /// re-elaborate via `elaborate_via_config` without touching disk.
+    pub live_source_overrides: Arc<Map<PathBuf, String>>,
 }
 
 // Configuration for docs subcommand.
@@ -246,13 +253,6 @@ pub struct Configuration {
     pub no_runtime_check: bool,
     /// How `DEPRECATED` warnings are handled. See `DeprecationMode`.
     pub deprecation_mode: DeprecationMode,
-    /// In-memory overrides for source-file contents used during the LSP
-    /// completion flow: when `parse_file_path` is invoked for a path
-    /// present here, the supplied string is parsed instead of reading
-    /// the file from disk. This lets `handle_completion` repair the
-    /// live buffer (see `commands::lsp::completion::repair`) and
-    /// re-elaborate via `elaborate_via_config` without touching disk.
-    pub live_source_overrides: Arc<crate::misc::Map<PathBuf, String>>,
 }
 
 /// How the compiler reacts to a use of a deprecated item.
@@ -338,7 +338,6 @@ impl Configuration {
             backtrace: false,
             no_runtime_check: false,
             deprecation_mode: DeprecationMode::default(),
-            live_source_overrides: Arc::new(crate::misc::Map::default()),
         })
     }
 }

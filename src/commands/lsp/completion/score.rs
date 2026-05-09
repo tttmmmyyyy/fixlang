@@ -1,34 +1,38 @@
 // Tier classification for dot-completion candidates and the
 // `sort_text` they map to.
 //
-// Tiers (plan §A.2):
+// Tiers:
 //
 // | 0 | candidate's receiver position fully unifies with the receiver type |
-// | 1 | TyCon of receiver matches but unify failed / wasn't tried |
+// | 1 | TyCon of receiver matches but unify failed / wasn't tried          |
 // | 2 | candidate's receiver position is a type variable (wildcard)        |
 // | 3 | other                                                              |
-//
-// Step 2 lands Tier 1/2/3. Tier 0 (the unify-based promotion) lands in
-// Step 3.
 
 use std::sync::Arc;
-
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
 use crate::ast::types::TypeNode;
 use crate::elaboration::typecheck::{ConstraintInstantiationMode, TypeCheckContext, UnifOrOtherErr};
-
 use super::index::CompletionIndex;
 
+/// Bucket a dot-completion candidate falls into; lower values rank
+/// higher in the completion list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Tier {
+    /// Receiver position unifies with the typed receiver.
     Zero = 0,
+    /// Receiver position's head TyCon matches but unify wasn't run or
+    /// didn't succeed.
     One = 1,
+    /// Receiver position is a type variable (matches anything).
     Two = 2,
+    /// None of the above.
     Three = 3,
 }
 
 impl Tier {
+    /// Numeric value of the tier as a single digit, suitable for
+    /// embedding in `sort_text`.
     pub(super) fn as_digit(self) -> u8 {
         self as u8
     }
@@ -82,6 +86,9 @@ pub(super) fn assign_tier_no_unify(
     bucket_tier(name, index, receiver_type)
 }
 
+/// Cheap shape-only tier assignment: probe `index` for `name` against
+/// `receiver_type`'s head TyCon, returning Tier 1 / 2 / 3 without any
+/// unify work.
 fn bucket_tier(
     name: &FullName,
     index: &CompletionIndex,
@@ -106,11 +113,10 @@ fn bucket_tier(
 /// Try to unify the candidate's receiver position (the last curried
 /// source argument of its scheme) with `receiver_type`.
 ///
-/// **Step 1 scope** — `n = 0` is hard-coded: the candidate's
-/// `S_{m-1}` must unify with the typed receiver. Trait constraints
-/// from the scheme's `predicates` are added to the typechecker but
-/// their satisfiability is not enforced beyond what `unify` does
-/// automatically (per plan §A.5.3 "trait constraint は MVP では無視").
+/// `n = 0` is hard-coded: the candidate's `S_{m-1}` must unify with
+/// the typed receiver. Trait constraints from the scheme's
+/// `predicates` are added to the typechecker but their satisfiability
+/// is not enforced beyond what `unify` does automatically.
 fn try_unify_receiver(
     name: &FullName,
     receiver_type: &Arc<TypeNode>,
@@ -122,27 +128,9 @@ fn try_unify_receiver(
     let inst_ty = tc
         .instantiate_scheme(&gv.scm, ConstraintInstantiationMode::Require)
         .map_err(|_| ())?;
-    let srcs = collect_lambda_srcs_iter(&inst_ty);
-    if srcs.is_empty() {
-        return Err(());
-    }
+    let (srcs, _) = inst_ty.collect_app_src(usize::MAX);
     let recv_pos = srcs.last().ok_or(())?;
     UnifOrOtherErr::extract_others(tc.unify(recv_pos, receiver_type))
         .map_err(|_| ())?
         .map_err(|_| ())
-}
-
-/// Walk a function-typed `TypeNode` peeling off its source arguments
-/// in curry order. Stops as soon as the type ceases to be a closure
-/// or function pointer. Empty result means `ty` wasn't a function.
-fn collect_lambda_srcs_iter(ty: &Arc<TypeNode>) -> Vec<Arc<TypeNode>> {
-    let mut out = vec![];
-    let mut cur = ty.clone();
-    while cur.is_funptr() || cur.is_closure() {
-        let srcs = cur.get_lambda_srcs();
-        let dst = cur.get_lambda_dst();
-        out.extend(srcs);
-        cur = dst;
-    }
-    out
 }

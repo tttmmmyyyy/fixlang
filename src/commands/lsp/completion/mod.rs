@@ -12,14 +12,14 @@ use super::util::{
 };
 use crate::ast::expr::{hole_full_name, Expr, ExprNode, Var};
 use crate::ast::name::{FullName, NameSpace};
-use crate::ast::pattern::PatternNode;
 use crate::ast::program::{EndNode, Program, SymbolExpr};
 use crate::ast::types::TypeNode;
-use crate::configuration::{Configuration, DiagnosticsConfig};
+use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig};
 use crate::constants::chars_allowed_in_identifiers;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
 use crate::elaboration::typecheck::TypeCheckContext;
+use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{to_absolute_path, Map};
 use crate::parse::sourcefile::Span;
@@ -257,13 +257,24 @@ pub(super) fn handle_completion(
 ///
 /// `tc_template` may be `None` if the scratch `Configuration` couldn't
 /// be built — e.g. the host environment can't satisfy
-/// `CTypeSizes::load_or_check`. In that case Step 3's unify step is
-/// silently skipped and `assign_tier_no_unify` is used, leaving the
-/// ranking at the Tier 1/2/3 level Step 2 produced.
+/// `CTypeSizes::load_or_check`. In that case the unify-based promotion
+/// is silently skipped and `assign_tier_no_unify` is used, leaving the
+/// ranking at the bucket-only Tier 1/2/3 level.
 struct DotRanking {
     receiver_type: Arc<TypeNode>,
     index: index::CompletionIndex,
     tc_template: Option<TypeCheckContext>,
+}
+
+/// Bundle returned by the dot-completion extraction pipeline: the
+/// receiver type read off the inserted hole's curried signature, plus
+/// the fully-elaborated `Program` produced from the repaired live
+/// buffer. The program is used to enumerate candidates and to
+/// instantiate schemes for unify, so a stale or parse-erroring
+/// snapshot doesn't suppress Main:: items.
+pub(super) struct DotExtraction {
+    pub receiver_type: Arc<TypeNode>,
+    pub program: Program,
 }
 
 /// Run the dot-completion type-extraction pipeline for a single
@@ -272,26 +283,10 @@ struct DotRanking {
 /// `elaborate_via_config`, and return the receiver type read off the
 /// inserted hole's inferred curried type.
 ///
-/// **Step 1 prototype**: `n = 0` is hard-coded (the receiver is the
-/// last element of the hole's curried sources), and only A0 of the
-/// repair is run. Callers must check `is_dot_function` before invoking
-/// this — non-dot contexts must not pay the elaborate cost.
-///
-/// Returns `None` (silent fallback to alphabetical-order completion)
-/// when any step fails: the path can't be resolved, the live buffer
-/// has no `<id>.<post-dot>` shape near the cursor, the elaborate fails,
-/// the hole isn't located, or the hole's type isn't a curried function.
-/// Bundle returned by the dot-completion extraction pipeline: the
-/// receiver type read off the inserted hole's curried signature, plus
-/// the fully-elaborated `Program` we produced from the repaired live
-/// buffer. The caller uses the program to enumerate candidates and to
-/// instantiate schemes for unify, so a stale or parse-erroring
-/// snapshot doesn't suppress Main:: items.
-pub(super) struct DotExtraction {
-    pub receiver_type: Arc<TypeNode>,
-    pub program: Program,
-}
-
+/// `n = 0` is hard-coded: the receiver is treated as the last element
+/// of the hole's curried sources. Callers must check `is_dot_function`
+/// before invoking this — non-dot contexts must not pay the elaborate
+/// cost.
 pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     text_document_position: &TextDocumentPositionParams,
     uri_to_content: &Map<Uri, LatestContent>,
@@ -309,40 +304,12 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     };
     let hole = find_innermost_hole_at(&program, &cursor)?;
     let hole_ty = hole.type_.as_ref()?;
-    let receiver_type = decompose_hole_type_n0(hole_ty)?;
+    let (srcs, _) = hole_ty.collect_app_src(usize::MAX);
+    let receiver_type = srcs.into_iter().last()?;
     Some(DotExtraction {
         receiver_type,
         program,
     })
-}
-
-/// Extract the receiver (`Self`) type from the hole's inferred curried
-/// type. The receiver is the **last** source in the curry chain (Fix's
-/// dot syntax applies the receiver after every explicit argument), so
-/// we walk down `cur → get_lambda_dst()` until the chain stops being
-/// a function and remember the last `Self` we saw on the way.
-///
-/// Returns `None` if the hole type isn't a function at all — typically
-/// because elaborate gave the hole a fresh type variable when nothing
-/// in the surrounding context constrained it.
-fn decompose_hole_type_n0(hole_ty: &Arc<TypeNode>) -> Option<Arc<TypeNode>> {
-    if !(hole_ty.is_funptr() || hole_ty.is_closure()) {
-        return None;
-    }
-    let mut cur = hole_ty.clone();
-    let mut last_src: Option<Arc<TypeNode>> = None;
-    while cur.is_funptr() || cur.is_closure() {
-        let mut srcs = cur.get_lambda_srcs();
-        // Closures expose a single source per `get_lambda_srcs` call;
-        // function-pointer types may expose more. Either way, the
-        // last entry of this curry layer overwrites the running
-        // `last_src` and we descend to the destination type.
-        if let Some(s) = srcs.pop() {
-            last_src = Some(s);
-        }
-        cur = cur.get_lambda_dst();
-    }
-    last_src
 }
 
 /// Drive the elaborate pipeline against a configuration that swaps in
@@ -353,18 +320,20 @@ fn decompose_hole_type_n0(hole_ty: &Arc<TypeNode>) -> Option<Arc<TypeNode>> {
 fn run_completion_elaborate(
     path: &PathBuf,
     repaired_content: String,
-) -> Result<Program, crate::error::Errors> {
+) -> Result<Program, Errors> {
     let proj_file = ProjectFile::read_root_file()?;
-    let files = proj_file.get_files(crate::configuration::BuildConfigType::Test);
-    let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
+    let files = proj_file.get_files(BuildConfigType::Test);
+    let mut overrides = Map::default();
+    overrides.insert(path.clone(), repaired_content);
+    let diag_config = DiagnosticsConfig {
+        files,
+        live_source_overrides: Arc::new(overrides),
+    };
+    let mut config = Configuration::diagnostics_mode(diag_config)?;
     proj_file.set_config(&mut config)?;
     proj_file
         .open_or_auto_update_lock_file(LockFileType::Lsp)?
         .set_config(&mut config)?;
-
-    let mut overrides = Map::default();
-    overrides.insert(path.clone(), repaired_content);
-    config.live_source_overrides = Arc::new(overrides);
 
     elaborate_via_config(&config)
 }
@@ -379,6 +348,9 @@ struct SourcePosLite {
 }
 
 impl SourcePosLite {
+    /// True when `span` belongs to the same file as `self.path` and
+    /// covers `self.byte`. Inclusive on both ends, matching
+    /// `Span::includes_pos_lsp`.
     fn includes(&self, span: &Span) -> bool {
         let span_path = to_absolute_path(&span.input.file_path).ok();
         let our_path = to_absolute_path(&self.path).ok();
@@ -416,6 +388,10 @@ fn find_innermost_hole_at(
     best
 }
 
+/// Visit `expr` and update `best` if it is a `Var` reference to
+/// `target` whose span contains `cursor` and is no larger than the
+/// current best. Descends into children regardless, so deeper holes
+/// can win over outer ones.
 fn walk_for_hole(
     expr: &Arc<ExprNode>,
     cursor: &SourcePosLite,
@@ -454,6 +430,7 @@ fn walk_for_hole(
     recurse_for_hole(expr, cursor, target, best);
 }
 
+/// Walk every direct child of `expr`, calling `walk_for_hole` on each.
 fn recurse_for_hole(
     expr: &Arc<ExprNode>,
     cursor: &SourcePosLite,
@@ -469,8 +446,7 @@ fn recurse_for_hole(
             }
         }
         Expr::Lam(_, body) => walk_for_hole(body, cursor, target, best),
-        Expr::Let(pat, bound, val) => {
-            let _ = pat as &Arc<PatternNode>;
+        Expr::Let(_pat, bound, val) => {
             walk_for_hole(bound, cursor, target, best);
             walk_for_hole(val, cursor, target, best);
         }
@@ -528,19 +504,14 @@ fn is_dot_function(typing_text: &str) -> bool {
 fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
     // Example: input "let x = Std::Array:" -> "Std::Array:"
-    let mut suffix_len = 0;
     let identifer_chars = chars_allowed_in_identifiers();
-    for c in typing_text.chars().rev() {
-        if identifer_chars.contains(c) || c == ':' {
-            suffix_len += 1;
-        } else {
-            break;
-        }
-    }
-    let typing_text = typing_text.chars().collect::<Vec<_>>();
-    let namespace_part = typing_text[typing_text.len() - suffix_len..typing_text.len()]
-        .iter()
-        .collect::<String>();
+    let suffix_byte_start = typing_text
+        .char_indices()
+        .rev()
+        .find(|(_, c)| !(identifer_chars.contains(*c) || *c == ':'))
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let namespace_part = &typing_text[suffix_byte_start..];
 
     // Remove the trailing colon
     // Example: "Std::Array:" -> "Std::Array"

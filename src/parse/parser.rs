@@ -27,7 +27,7 @@ use crate::ast::{
         TyVar, TypeNode,
     },
 };
-use crate::configuration::{Configuration, DiagnosticsConfig};
+use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::{
     COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
     IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME, STD_NAME,
@@ -44,7 +44,7 @@ use crate::fixstd::builtin::{
     NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME, REMAINDER_TRAIT_REMAINDER_NAME,
     SUBTRACT_TRAIT_NAME, SUBTRACT_TRAIT_SUBTRACT_NAME,
 };
-use crate::misc::{make_map, save_temporary_source, Map};
+use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use either::Either;
 use num_bigint::BigInt;
@@ -156,19 +156,26 @@ pub fn parse_and_save_to_temporary_file(
 
 pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Program, Errors> {
     // If the LSP completion flow has stashed a repaired live-buffer for
-    // this path in the configuration, parse that string instead of
-    // reading from disk. See `Configuration::live_source_overrides`.
+    // this path in the diagnostics configuration, parse that string
+    // instead of reading from disk. See
+    // `DiagnosticsConfig::live_source_overrides`.
     //
     // The override is keyed by canonical absolute path (the LSP
     // completion handler uses `to_absolute_path` which canonicalises),
     // but `Configuration::source_files` from `proj_file.get_files`
     // can be relative (e.g. `main.fix` joined to a relative
     // `fixproj.toml`). Canonicalise here too so the lookup matches.
-    let override_key = crate::misc::to_absolute_path(&file_path).ok();
-    let override_content = override_key
-        .as_ref()
-        .and_then(|p| config.live_source_overrides.get(p))
-        .or_else(|| config.live_source_overrides.get(&file_path));
+    let overrides = match &config.subcommand {
+        SubCommand::Diagnostics(d) => Some(&d.live_source_overrides),
+        _ => None,
+    };
+    let override_key = to_absolute_path(&file_path).ok();
+    let override_content = overrides.and_then(|m| {
+        override_key
+            .as_ref()
+            .and_then(|p| m.get(p))
+            .or_else(|| m.get(&file_path))
+    });
     let source = match override_content {
         Some(content) => SourceFile::from_file_path_and_content(file_path, content.clone()),
         None => SourceFile::from_file_path(file_path),
@@ -278,9 +285,7 @@ pub fn check_grammar_accepts(source: &str) -> Result<(), Error<Rule>> {
 }
 
 /// What kind of token the parser was looking for when it failed.
-/// Used by the LSP completion repair loop to decide what character
-/// to splice in to keep parsing going. Mirrors the `decide_insertion`
-/// table from plan §A.4.2.
+/// Drives the splice decision in the LSP completion repair loop.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RepairHintKind {
     /// Pest's expected set includes a `;` (or `in`-of-let, which the
@@ -300,13 +305,13 @@ pub enum RepairHintKind {
 pub struct RepairHint {
     /// Byte offset (into the source string) where the insertion goes.
     pub insert_at: usize,
+    /// What kind of token would satisfy the parser at `insert_at`.
     pub kind: RepairHintKind,
 }
 
 /// Probe-parse `source` as a full Fix file. On parse failure return a
-/// `RepairHint` derived from the pest error so the LSP completion
-/// repair loop can splice a character and try again. Used only by
-/// `commands/lsp/completion/repair.rs`.
+/// `RepairHint` derived from the pest error so the caller can splice
+/// in a character and try again.
 pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint> {
     match FixParser::parse(Rule::file, source) {
         Ok(_) => Ok(()),
@@ -314,6 +319,8 @@ pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint>
     }
 }
 
+/// Build a `RepairHint` from a pest parse error: pull out the failure
+/// location and classify the expected-rule set.
 fn repair_hint_from_pest_error(e: &Error<Rule>) -> RepairHint {
     let insert_at = match e.location {
         pest::error::InputLocation::Pos(p) => p,
@@ -327,6 +334,9 @@ fn repair_hint_from_pest_error(e: &Error<Rule>) -> RepairHint {
     RepairHint { insert_at, kind }
 }
 
+/// Map pest's expected-rule set to a `RepairHintKind`: `Semicolon`
+/// when a `;` would satisfy the grammar, `Expression` when an
+/// expression is wanted, otherwise `Unknown`.
 fn classify_repair_hint(positives: &[Rule]) -> RepairHintKind {
     // `Rule::semicolon` is the "literal `;`" rule; `Rule::in_of_let`
     // accepts either `in` or `;`, so an inserted `;` satisfies it too.

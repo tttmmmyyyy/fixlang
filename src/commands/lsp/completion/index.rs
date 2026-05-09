@@ -1,13 +1,9 @@
 // Bucket index over the program's globals, keyed by the top-level
 // `TyCon` of the receiver position (the last curried source argument
-// of each global's scheme). Used by `score.rs` to assign Tier 1/2/3
-// cheaply: looking up "globals whose receiver could fit this TyCon"
-// is a single hashmap probe.
-//
-// See `logs/lsp-completion-type-filter.20260503/plan.md` §A.5.1.
+// of each global's scheme). Looking up "globals whose receiver could
+// fit this TyCon" is a single hashmap probe.
 
 use std::sync::Arc;
-
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
 use crate::ast::types::{TyCon, TypeNode};
@@ -65,14 +61,10 @@ impl CompletionIndex {
 /// curried source argument — or `None` if `ty` is not a function type
 /// at all.
 ///
-/// Walks `ty` as long as it's a function (closure or function pointer)
-/// to find the deepest "last source", which corresponds to the last
-/// argument applied in dot syntax (`a.f(b1, b2)` applies `f` to `b1`,
-/// then `b2`, then `a`, so the receiver lands on `f`'s last source).
+/// Fix's dot syntax `a.f(b1, b2)` applies the receiver `a` after every
+/// explicit argument, so the receiver corresponds to the **last**
+/// source across all curry layers, not just the outermost.
 fn receiver_source_type(ty: &Arc<TypeNode>) -> Option<Arc<TypeNode>> {
-    if !(ty.is_funptr() || ty.is_closure()) {
-        return None;
-    }
-    let srcs = ty.get_lambda_srcs();
+    let (srcs, _) = ty.collect_app_src(usize::MAX);
     srcs.into_iter().last()
 }

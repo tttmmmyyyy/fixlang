@@ -1119,7 +1119,10 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     }
 
     // Create the configuration.
-    let mut config = Configuration::diagnostics_mode(DiagnosticsConfig { files })?;
+    let mut config = Configuration::diagnostics_mode(DiagnosticsConfig {
+        files,
+        ..Default::default()
+    })?;
     config.type_check_cache = typecheck_cache;
 
     // Set up the configuration by the project file.
