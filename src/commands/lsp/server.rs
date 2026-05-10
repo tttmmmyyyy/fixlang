@@ -1105,7 +1105,23 @@ pub(super) fn get_file_content_at_previous_diagnostics(
 }
 
 pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<DiagnosticsResult, Errors> {
-    // TODO: maybe we should check if the file has been changed actually after previous diagnostics?
+    // Why we don't gate this on a content-changed check: the cost
+    // (~95% of the wall time) lives inside the typecheck loop, and the
+    // shared `TypeCheckCache` keys results by
+    // `(name, scheme, module_dependency_hash)`. The dep-hash folds in
+    // the source hash of every transitive dependency, so a saved file
+    // only invalidates its own module's globals plus those of every
+    // module that imports it (transitively); everything else stays a
+    // cache hit and skips the actual type inference. In effect we
+    // already only re-typecheck the changed file and its downstream
+    // dependents.
+    //
+    // What an explicit "did anything change?" gate would still buy:
+    // skipping the per-gv iteration overhead — `tc.clone()`, closure
+    // boxing, cache lookup, etc., ~30 µs per global × ~1900 globals ≈
+    // tens of ms — for the no-op-save case where nothing actually
+    // changed. Worth doing if save-without-edit becomes a common
+    // workflow, but not the primary lever for diagnostics speed.
 
     // Read the project file.
     let proj_file = ProjectFile::read_root_file()?;
