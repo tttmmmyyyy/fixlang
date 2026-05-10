@@ -4,6 +4,12 @@ mod index;
 mod repair;
 mod score;
 
+use self::index::CompletionIndex;
+use self::repair::repair_for_completion;
+use self::score::{
+    assign_tier, assign_tier_no_unify, dot_context_low_priority_sort_text, namespace_match,
+    sort_text_for,
+};
 use super::edit_import::create_text_edit_to_import;
 use super::server::{send_response, LatestContent};
 use super::util::{
@@ -84,7 +90,7 @@ pub(super) fn handle_completion(
             .map(|cfg| d.program.create_typechecker(cfg));
         DotRanking {
             receiver_type: d.receiver_type.clone(),
-            index: index::CompletionIndex::build(&d.program),
+            index: CompletionIndex::build(&d.program),
             tc_template,
         }
     });
@@ -165,20 +171,24 @@ pub(super) fn handle_completion(
         );
         if let Some(ranking) = &dot_ranking {
             let tier = match &ranking.tc_template {
-                Some(tc) => score::assign_tier(
+                Some(tc) => assign_tier(
                     full_name,
                     &ranking.index,
                     &ranking.receiver_type,
                     active_program,
                     tc,
                 ),
-                None => score::assign_tier_no_unify(
+                None => assign_tier_no_unify(
                     full_name,
                     &ranking.index,
                     &ranking.receiver_type,
                 ),
             };
-            item.sort_text = Some(score::sort_text_for(tier, full_name));
+            let ns_match = namespace_match(
+                ranking.receiver_type.toplevel_tycon().as_deref(),
+                full_name,
+            );
+            item.sort_text = Some(sort_text_for(tier, ns_match, full_name));
         }
         items.push(item);
     }
@@ -200,10 +210,8 @@ pub(super) fn handle_completion(
         );
         if dot_ranking.is_some() {
             // Types can't appear after a dot in Fix, so they shouldn't
-            // outrank function candidates. Tier 3 keeps them present
-            // (the user might still want them in a misclassified
-            // context) but pushed to the bottom of the list.
-            item.sort_text = Some(score::sort_text_for(score::Tier::Three, &tycon.name));
+            // outrank function candidates.
+            item.sort_text = Some(dot_context_low_priority_sort_text(&tycon.name));
         }
         items.push(item);
     }
@@ -224,7 +232,7 @@ pub(super) fn handle_completion(
             false,
         );
         if dot_ranking.is_some() {
-            item.sort_text = Some(score::sort_text_for(score::Tier::Three, &trait_.name));
+            item.sort_text = Some(dot_context_low_priority_sort_text(&trait_.name));
         }
         items.push(item);
     }
@@ -245,7 +253,7 @@ pub(super) fn handle_completion(
             false,
         );
         if dot_ranking.is_some() {
-            item.sort_text = Some(score::sort_text_for(score::Tier::Three, &assoc_type.name));
+            item.sort_text = Some(dot_context_low_priority_sort_text(&assoc_type.name));
         }
         items.push(item);
     }
@@ -265,7 +273,7 @@ pub(super) fn handle_completion(
 /// ranking at the bucket-only Tier 1/2/3 level.
 struct DotRanking {
     receiver_type: Arc<TypeNode>,
-    index: index::CompletionIndex,
+    index: CompletionIndex,
     tc_template: Option<TypeCheckContext>,
 }
 
@@ -299,7 +307,7 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     let latest = uri_to_content.get(uri)?;
     let live_buffer = &latest.content;
     let cursor_byte = position_to_bytes(live_buffer, text_document_position.position);
-    let repaired = repair::repair_for_completion(live_buffer, cursor_byte)?;
+    let repaired = repair_for_completion(live_buffer, cursor_byte)?;
     let abs_path = to_absolute_path(&latest.path).ok()?;
     let program = run_completion_elaborate(&abs_path, repaired.source, typecheck_cache).ok()?;
     let cursor = SourcePosLite {

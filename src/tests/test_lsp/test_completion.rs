@@ -483,10 +483,14 @@ mod tests {
             sort_myfunc2,
             sort_myfunc1
         );
-        // Stronger: I64 unify should land myfunc2 in Tier 0.
+        // Stronger: I64 unify should land myfunc2 in Tier 0. The
+        // namespace-match sub-tier is encoded as a single letter
+        // following the digit (`0a` / `0b` / `0c`); for `Main::myfunc2`
+        // with an `I64` receiver the namespace `Main` is unrelated to
+        // `Std::I64`, so the sub-tier is `c`.
         assert!(
-            sort_myfunc2.starts_with("0_"),
-            "myfunc2 should be Tier 0 (sortText `0_…`); got {:?}",
+            sort_myfunc2.starts_with('0'),
+            "myfunc2 should be Tier 0 (sortText `0…`); got {:?}",
             sort_myfunc2
         );
 

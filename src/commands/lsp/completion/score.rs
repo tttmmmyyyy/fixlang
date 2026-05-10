@@ -7,11 +7,17 @@
 // | 1 | TyCon of receiver matches but unify failed / wasn't tried          |
 // | 2 | candidate's receiver position is a type variable (wildcard)        |
 // | 3 | other                                                              |
+//
+// Within each tier, candidates are further split by namespace
+// proximity to the receiver TyCon — see `NamespaceMatch`. For a
+// receiver of type `Std::Array`, a function in `Std::Array::*` ranks
+// above one in `Std::*`, which ranks above one in an unrelated
+// namespace.
 
 use std::sync::Arc;
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
-use crate::ast::types::TypeNode;
+use crate::ast::types::{TyCon, TypeNode};
 use crate::elaboration::typecheck::{ConstraintInstantiationMode, TypeCheckContext, UnifOrOtherErr};
 use super::index::CompletionIndex;
 
@@ -38,13 +44,80 @@ impl Tier {
     }
 }
 
+/// Sub-tier within a `Tier`, derived from how close the candidate's
+/// namespace is to the receiver's TyCon. Lower variants rank higher.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum NamespaceMatch {
+    /// Candidate lives directly in the receiver TyCon's namespace —
+    /// e.g., `Std::Array::push_back` for a `Std::Array` receiver. The
+    /// strongest signal that this function is a "method" of the type.
+    InsideTyCon,
+    /// Candidate lives in the receiver TyCon's parent namespace —
+    /// e.g., `Std::push_back` for a `Std::Array` receiver. Useful for
+    /// helpers grouped alongside the type at the parent level.
+    InParent,
+    /// Neither — a function from an unrelated namespace that happens
+    /// to take this type as its receiver position.
+    Unrelated,
+}
+
+impl NamespaceMatch {
+    /// Single-letter encoding for `sort_text`. Order: `'a' < 'b' < 'c'`
+    /// matches the variant ordering above.
+    fn as_letter(self) -> char {
+        match self {
+            NamespaceMatch::InsideTyCon => 'a',
+            NamespaceMatch::InParent => 'b',
+            NamespaceMatch::Unrelated => 'c',
+        }
+    }
+}
+
+/// Classify a candidate's namespace against the receiver TyCon. The
+/// receiver TyCon's full name (`Std::Array`) plays the role of a
+/// virtual "method namespace" the user expects functions to live in.
+pub(super) fn namespace_match(
+    receiver_tc: Option<&TyCon>,
+    candidate: &FullName,
+) -> NamespaceMatch {
+    let Some(tc) = receiver_tc else {
+        return NamespaceMatch::Unrelated;
+    };
+    // Receiver TyCon as a namespace: the TyCon's own namespace path
+    // followed by the type name. e.g. for `Std::Array`,
+    // `[Std] + ["Array"] = [Std, Array]`.
+    if candidate.namespace == tc.name.to_namespace() {
+        return NamespaceMatch::InsideTyCon;
+    }
+    if candidate.namespace == tc.name.namespace {
+        return NamespaceMatch::InParent;
+    }
+    NamespaceMatch::Unrelated
+}
+
 /// Format a completion item's `sort_text` so the LSP client orders by
-/// tier first, then alphabetically by name within each tier.
+/// tier first, then by namespace match within the tier, and finally
+/// alphabetically by name.
 ///
-/// Single-digit tier is enough — strings sort lexicographically and
-/// `0_…` < `1_…` < `2_…` < `3_…` is the natural collation.
-pub(super) fn sort_text_for(tier: Tier, name: &FullName) -> String {
-    format!("{}_{}", tier.as_digit(), name.to_string())
+/// Encoding: `<tier_digit><ns_letter>_<name>` — e.g. `0a_push_back`,
+/// `0c_build`. Strings sort lexicographically; `0a_…` < `0c_…` puts
+/// in-namespace candidates above unrelated ones at the same tier.
+pub(super) fn sort_text_for(tier: Tier, ns_match: NamespaceMatch, name: &FullName) -> String {
+    format!(
+        "{}{}_{}",
+        tier.as_digit(),
+        ns_match.as_letter(),
+        name.to_string()
+    )
+}
+
+/// `sort_text` for completion items that can never satisfy a dot
+/// expression (types / traits / assoc types). They land at the bottom
+/// of the dot-context list — `Tier::Three` + `NamespaceMatch::Unrelated`
+/// — so they don't outrank function candidates but are still present
+/// when the user is working in a misclassified context.
+pub(super) fn dot_context_low_priority_sort_text(name: &FullName) -> String {
+    sort_text_for(Tier::Three, NamespaceMatch::Unrelated, name)
 }
 
 /// Assign a tier to one candidate. Walks the bucket index for the
