@@ -351,6 +351,52 @@ mod tests {
         );
     }
 
+    /// Cursor inside an `if` body that itself contains a dot
+    /// expression: `if 42.myfunc2(7) { 42.<cursor> } pure()`. A0
+    /// should fire on the inner `42.` and the surrounding
+    /// `if cond { body }` shape (no `else`, body terminated by the
+    /// outer `pure()` expression) should still let outer repair
+    /// produce a parseable program.
+    #[test]
+    fn outer_repair_handles_dot_inside_if_body_with_outer_else() {
+        let src = "module Main;\n\
+                   myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;\n\
+                   main : IO () = (\n\
+                   \x20   if 42.myfunc2(7) {\n\
+                   \x20       42.\n\
+                   \x20   }\n\
+                   \x20   pure()\n\
+                   );";
+        // Cursor right after the inner `42.` dot.
+        let prefix = "module Main;\n\
+                      myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;\n\
+                      main : IO () = (\n\
+                      \x20   if 42.myfunc2(7) {\n\
+                      \x20       42.";
+        let cursor = prefix.len();
+        match repair_for_completion(src, cursor) {
+            Some(out) => {
+                assert_eq!(
+                    out.source.as_bytes()[out.cursor_byte - 1],
+                    b'?',
+                    "cursor anchor should mark the A0 hole; source = {:?}, byte = {}",
+                    out.source,
+                    out.cursor_byte
+                );
+                assert!(
+                    probe_parse_for_completion_repair(&out.source).is_ok(),
+                    "repaired source should parse; got: {:?}",
+                    out.source
+                );
+            }
+            None => panic!(
+                "repair_for_completion returned None for nested if-body case; \
+                 src = {:?}",
+                src
+            ),
+        }
+    }
+
     /// `if 42.<cursor>\n    pure()` inside a tuple-style body. After
     /// A0 the post-dot identifier `pure` becomes `?`, leaving an
     /// `if cond` shape with no body braces. Pest can't surface the
