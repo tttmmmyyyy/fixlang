@@ -1273,7 +1273,14 @@ impl TypeCheckContext {
                 };
                 let msg = match short_span_snippet(src) {
                     Some(snippet) => format!("{} is the type for `{}`.", prefix, snippet),
-                    None => format!("{} is the type for:", prefix),
+                    // Snippet absent — the span is multi-line, too
+                    // long, or zero-width (e.g. the position between
+                    // `[` and `]` for an empty-array element). Fall
+                    // back to a self-contained sentence rather than a
+                    // dangling colon, since the source pointer
+                    // attached separately may not visually flow as a
+                    // continuation of the message text.
+                    None => format!("{} is the type for this expression.", prefix),
                 };
                 msg_srcs.push((msg, src.clone()));
             }

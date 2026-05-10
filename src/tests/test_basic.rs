@@ -8,7 +8,8 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        install_fix, test_files_in_directory, test_source, test_source_fail, test_source_with_c,
+        install_fix, test_files_in_directory, test_source, test_source_fail,
+        test_source_fail_excludes, test_source_with_c,
     },
 };
 use rand::Rng;
@@ -8668,6 +8669,36 @@ main = (
         &source,
         Configuration::develop_mode(),
         "Cannot infer the type of this expression",
+    );
+}
+
+/// `let x = [];` produces a tyvar-location message for the empty
+/// array's element type. The element source is intentionally a
+/// zero-width span between the brackets, so `short_span_snippet`
+/// returns `None` and the no-snippet fallback is used. This pins
+/// down that the fallback is a self-contained sentence and not the
+/// "...is the type for:" fragment which leaves a dangling colon
+/// when the source pointer alone has nothing to anchor.
+#[test]
+pub fn test_indeterminate_type_variable_message_for_empty_array() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let x = [];
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "is the type for this expression.",
+    );
+    test_source_fail_excludes(
+        &source,
+        Configuration::develop_mode(),
+        "is the type for:",
     );
 }
 
