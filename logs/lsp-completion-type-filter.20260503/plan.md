@@ -4,7 +4,7 @@
 
 ---
 
-## Implementation status (2026-05-04 時点)
+## Implementation status (2026-05-10 時点)
 
 完了 (コミット済み):
 
@@ -12,10 +12,17 @@
 - **Step 0** Grammar 拡張: `expr_hole = { "?" ~ name_char* }` を [src/parse/grammer.pest](../../src/parse/grammer.pest) に追加。既存 `expr_hole = { expr | hole }` は `expr_or_hole` にリネーム。`parse_expr_hole` を [src/parse/parser.rs](../../src/parse/parser.rs) に追加。`hole_user_*` テスト 5 件追加 ([commit ec05189c](../../)).
 - **Step 0.5** 補完挿入の `?x` snippet 化: [src/commands/lsp/completion.rs](../../src/commands/lsp/completion.rs) で `${N:?<name>}` を生成、`InsertTextFormat::Snippet` を設定 ([commit ec05189c](../../) → [commit f7bbd018](../../)).
 - 副次: deprecation を completion item の `deprecated` / `tags` / documentation に反映 ([commit db4b7d73](../../)).
+- **Step 1** 受信者型抽出 prototype: A0 + full re-elaborate で hole の curried 型から受信者を取り出す ([commit 13bcfc58](../../)).
+- **Step 2** CompletionIndex + Tier 1/2/3 sort_text: bucket index 構築と sort_text 付与 ([commit bcd41763](../../)).
+- **Step 3** Tier 1 → Tier 0 unify 昇格: 受信者位置を unify して具体型一致なら Tier 0 ([commit b52d880c](../../)).
+- **Step 4** Repair の周辺修復 (pest error-driven loop): 名前付き token に加え、`{};` などの構造的 fallback を試行する pick_insertion で `if`-body / 閉じブラケット欠落を救済 ([commit 4c765543](../../) → [commit bfcc83e5](../../)).
+- バグ修正: A0 numeric-literal 判定の絞り込み + 多行 dot 対応 ([commit 3d077437](../../))、override path 不一致と curry chain 1 階層しか剥かない問題 ([commit f749b8f1](../../))、parse-error snapshot で Main:: が落ちる問題に live-buffer Program を candidate 一覧にも使う ([commit 11723e0e](../../))、code-review 結果を反映 ([commit 9576b9cb](../../))、ネスト if-body の repair 単体テスト追加 ([commit 84a5cd25](../../)).
 
-`cargo test --release` 全 792 件 pass。
+`cargo test --release` 全 806 件 pass。
 
-**残作業**: Step 1 〜 Step 6。
+**残作業**: Step 5 〜 Step 7。
+
+> **Step 番号変更 (2026-05-10)**: 旧 Step 5「Incremental elaborate」を Step 6 にずらし、新 Step 5「エラー耐性 typecheck」を挿入。詳細は §A.11。
 
 ---
 
@@ -361,23 +368,28 @@ fn create_item_with_tier(...) -> CompletionItem {
 
 - A.4 repair が失敗 (`None`)
 - A.5 パースは通ったが hole ノードが見つからない
-- A.7 elaborate が失敗 (型エラー等)
-- A.7 hole の型が curried 関数型に分解できない (n+1 引数取れない)
+- A.7 elaborate が parse-time / 環境依存で失敗 (lockfile 読み込み失敗等)
+- A.7 hole の `type_` フィールドが None のまま typecheck が通った
+  - 旧来は「型エラーで上位 expr の elaborate が打ち切られて hole に届かない」が主な原因。Step 5 のエラー耐性 typecheck (A.13) を入れたあとは、hole の文脈型が完全に未拘束 (`fresh tyvar` のまま) なケースだけが残る。
+- A.7 hole の型が curried 関数型に分解できない
 
 各ポイントで **silent に fallback**。LSP 側にエラーは出さない。
 
 ## A.11 実装順序
 
-| Step | 内容 | 依存 |
-|---|---|---|
-| **1** | 受信者型抽出 prototype (n=0 固定、A0 のみ、full re-elaborate) | — |
-| **2** | CompletionIndex 構築 + Tier 1/2/3 を sort_text に反映 | Step 1 |
-| **3** | unify 段で Tier 1 → Tier 0 昇格 | Step 2 |
-| **4** | Repair の周辺修復 (A.4.2 pest error-driven loop) | Step 1 |
-| **5** | Incremental elaborate (TypeCheckCache 経路) | Step 1 |
-| **6** | テスト追加 (A.12) | Step 2 〜 5 |
+| Step | 内容 | 依存 | 性質 |
+|---|---|---|---|
+| **1** | 受信者型抽出 prototype (n=0 固定、A0 のみ、full re-elaborate) | — | 機能 |
+| **2** | CompletionIndex 構築 + Tier 1/2/3 を sort_text に反映 | Step 1 | 機能 |
+| **3** | unify 段で Tier 1 → Tier 0 昇格 | Step 2 | 機能 |
+| **4** | Repair の周辺修復 (A.4.2 pest error-driven loop) | Step 1 | 機能 |
+| **5** | エラー耐性 typecheck (A.13) | Step 1 | 機能 |
+| **6** | Incremental elaborate (TypeCheckCache 経路、A.8) | Step 1 | 性能 |
+| **7** | テスト追加 (A.12) | Step 2 〜 6 | テスト |
 
 各 Step 完了時に `cargo test --release` 全件 pass を確認。
+
+> **2026-05-10 更新**: 旧計画の Step 5 (Incremental elaborate) を Step 6 にずらし、新 Step 5 として「エラー耐性 typecheck」を追加。理由は §A.13 参照。
 
 ## A.12 テスト
 
@@ -395,8 +407,74 @@ fn create_item_with_tier(...) -> CompletionItem {
 | `test_completion_dot_sort_repair_trailing_comma` | `f(arr.<cursor>, )` で repair が `,)` を `?,)` 又は同等に補正 |
 | `test_completion_dot_sort_fallback_on_repair_fail` | repair 8 回でも通らないケースで全件アルファベット順が返る |
 | `test_completion_dot_sort_no_dot_unchanged` | ドット文脈でないときは sort_text が付かない (現状挙動維持) |
+| `test_completion_dot_sort_inside_if_body_with_bad_cond` | `if 42.myfunc2(7) { 42.<cursor> }\n    pure()` — cond が型エラー (`I64` vs `Bool`) でも内側 hole は I64 として型付けされ、myfunc2 が Tier 0。**Step 5 (エラー耐性 typecheck) 必須**。 |
 
 assert は「**期待する候補が `0_<name>` の sort_text で返る**」を中心に、全件返却も同時に確認。
+
+## A.13 エラー耐性 typecheck (Step 5)
+
+### 動機
+
+Step 1〜4 までで A0 + outer-repair が通ったあと `elaborate_via_config` を回せば、ホールの周辺がどんなに型エラーだらけでもパースは通る。しかし、Fix の typechecker は `unify_type_of_expr` の途中で `?` 演算子を介してエラーを伝播させる作りなので、**ある式の typecheck が失敗するとその式の sibling や子の elaborate が打ち切られ**、補完位置の hole が `type_ = None` のまま帰ってくる。
+
+実例 (実装中に発見、ネスト if-body の repair 単体テスト [commit 84a5cd25](../../) で repair 側は通る):
+
+```fix
+main : IO () = (
+    if 42.myfunc2(7) {  // cond は I64、Bool が期待される → 型エラー
+        42.<cursor>     // hole の文脈型は IO () であるべきだが、cond エラーで body が elaborate されない
+    }
+    pure()
+);
+```
+
+repair 後のソースは parse できるが、`unify_type_of_expr` が `expr_if` の cond で `unify(I64, Bool)` に失敗して `?` を返し、then_expr の elaborate が呼ばれない。結果 hole の `type_` フィールドが None のまま `find_innermost_hole_at` に届く。`decompose_hole_type_n0` が None を返し、A.10 のサイレント fallback が起動する。
+
+エラー耐性 typecheck はこの「**型エラーで sibling の elaborate が打ち切られる**」現象を補完専用フローでだけ抑止する。
+
+### 設計
+
+`TypeCheckContext` に `error_tolerant: bool` フィールドを追加 (`#[derive(Clone)]` 由来でクローンしても引き継がれる)。`unify_type_of_expr_inner` ([typecheck.rs:719](../../src/elaboration/typecheck.rs#L719)) の各 match arm で発生する unify 失敗を、
+
+```rust
+// 概略 (実装は arm 単位で必要)
+let res = self.unify_type_of_expr(child, expected);
+let typed_child = match res {
+    Ok(c) => c,
+    Err(e) if self.error_tolerant => {
+        self.deferred_errors.push(e); // 後で診断に出す場合のみ
+        // 既に typecheck が始まっていた `child` の AST 構造を残しつつ
+        // 型は「使えない」を表す fresh tyvar に置き換える。
+        child.clone().set_type(self.new_tyvar_star())
+    }
+    Err(e) => return Err(e),
+};
+```
+
+の形に書き換える。具体的な置き換え点は
+
+- `Expr::App` の func / args
+- `Expr::Let` の bound / val
+- `Expr::If` の cond / then_expr / else_expr
+- `Expr::Match` の cond / 各 arm の val
+- `Expr::TyAnno` の e
+- `Expr::MakeStruct` / `ArrayLit` / `FFICall` の各引数
+- `Expr::Eval` の side / main
+- `Expr::Lam` の body
+
+`unify` (両側の型を unify する側) も同じく失敗時は `error_tolerant` のとき返り値だけ swallow する選択肢があるが、両端を放置して進むと substitution が壊れるので、**unify は失敗のままで、ただし呼び出し元が `?` で抜けるかどうかをフラグで決める**、という方針。
+
+`Program::create_typechecker_for_completion(&Configuration) -> TypeCheckContext` を追加し、`error_tolerant: true` をセット。既存の `create_typechecker` は `false` のまま。
+
+### 補完フローからの呼び出し
+
+`run_completion_elaborate` は今は `elaborate_via_config(&config)` を呼んでいるだけで `error_tolerant` を立てる場所がない。Configuration に `completion_error_tolerant: bool` を追加するか、補完専用の elaborate 関数を別に切り出すかは Step 5 実装時に判断。
+
+### 注意
+
+- 補完以外の経路 (通常診断) には影響しない (`error_tolerant: false` のまま動作不変)。
+- `collect_hole_errors` ([check_holes.rs:25](../../src/elaboration/check_holes.rs#L25)) は補完経路では引き続き呼ばない (A.8 参照)。
+- 副作用として「hole の型が `fresh tyvar` (どの具体型でもない)」というケースが増える可能性がある。`decompose_hole_type_n0` は引き続き `is_funptr || is_closure` で先にチェックするので、tyvar の hole 型は素直に None を返してフォールバックする。
 
 ---
 

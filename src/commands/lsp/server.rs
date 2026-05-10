@@ -102,6 +102,15 @@ pub struct DiagnosticsResult {
     // values record the source as the AST saw it, so a comparison against
     // the current editor buffer detects drift.
     pub user_source_contents: Map<PathBuf, String>,
+    /// In-memory typecheck cache populated by the diagnostics run.
+    /// Forwarded to the completion handler so its live-buffer
+    /// re-elaborate can reuse already-typechecked globals: the live
+    /// override only changes the cursor's file's dependency hash, so
+    /// every other module's globals hit cached entries and skip
+    /// re-typechecking. Without sharing, completion would fall back
+    /// to the disk-backed `FileCache` default and pay disk I/O per
+    /// cache lookup.
+    pub typecheck_cache: SharedTypeCheckCache,
 }
 
 // Document symbol request which are waiting for diagnostics.
@@ -355,7 +364,9 @@ pub fn launch_language_server() {
                 if last_diag.is_none() {
                     continue;
                 }
-                let program = &last_diag.as_ref().unwrap().program;
+                let diag = last_diag.as_ref().unwrap();
+                let program = &diag.program;
+                let typecheck_cache = diag.typecheck_cache.clone();
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -369,6 +380,7 @@ pub fn launch_language_server() {
                     &params.unwrap(),
                     program,
                     &uri_to_latest_content,
+                    typecheck_cache,
                 );
             } else if method == "completionItem/resolve" {
                 if last_diag.is_none() {
@@ -1123,7 +1135,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
         files,
         ..Default::default()
     })?;
-    config.type_check_cache = typecheck_cache;
+    config.type_check_cache = typecheck_cache.clone();
 
     // Set up the configuration by the project file.
     proj_file.set_config(&mut config)?;
@@ -1140,6 +1152,7 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     Ok(DiagnosticsResult {
         program,
         user_source_contents,
+        typecheck_cache,
     })
 }
 

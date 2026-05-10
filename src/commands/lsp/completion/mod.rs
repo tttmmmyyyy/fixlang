@@ -19,6 +19,7 @@ use crate::constants::chars_allowed_in_identifiers;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
 use crate::elaboration::typecheck::TypeCheckContext;
+use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{to_absolute_path, Map};
@@ -40,6 +41,7 @@ pub(super) fn handle_completion(
     params: &CompletionParams,
     program: &Program,
     uri_to_content: &Map<Uri, LatestContent>,
+    typecheck_cache: SharedTypeCheckCache,
 ) {
     let text_document_position = &params.text_document_position;
     let typing_text = get_typing_text(text_document_position, uri_to_content);
@@ -52,6 +54,7 @@ pub(super) fn handle_completion(
         extract_receiver_type_and_program_for_dot_completion(
             text_document_position,
             uri_to_content,
+            typecheck_cache,
         )
     } else {
         None
@@ -290,6 +293,7 @@ pub(super) struct DotExtraction {
 pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     text_document_position: &TextDocumentPositionParams,
     uri_to_content: &Map<Uri, LatestContent>,
+    typecheck_cache: SharedTypeCheckCache,
 ) -> Option<DotExtraction> {
     let uri = &text_document_position.text_document.uri;
     let latest = uri_to_content.get(uri)?;
@@ -297,7 +301,7 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     let cursor_byte = position_to_bytes(live_buffer, text_document_position.position);
     let repaired = repair::repair_for_completion(live_buffer, cursor_byte)?;
     let abs_path = to_absolute_path(&latest.path).ok()?;
-    let program = run_completion_elaborate(&abs_path, repaired.source).ok()?;
+    let program = run_completion_elaborate(&abs_path, repaired.source, typecheck_cache).ok()?;
     let cursor = SourcePosLite {
         path: abs_path,
         byte: repaired.cursor_byte,
@@ -317,9 +321,16 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
 /// initial setup in `run_diagnostics` — read the project file, build a
 /// `DiagnosticsConfig`, apply lockfile — then plants the live override
 /// just before invoking elaborate.
+///
+/// `typecheck_cache` is the diagnostics thread's in-memory cache,
+/// shared in so unchanged modules' globals hit cached entries instead
+/// of paying disk I/O via the default `FileCache`. Only the cursor's
+/// file's dependency hash changes per request (the live override only
+/// touches that one path), so every other module is a cache hit.
 fn run_completion_elaborate(
     path: &PathBuf,
     repaired_content: String,
+    typecheck_cache: SharedTypeCheckCache,
 ) -> Result<Program, Errors> {
     let proj_file = ProjectFile::read_root_file()?;
     let files = proj_file.get_files(BuildConfigType::Test);
@@ -330,6 +341,7 @@ fn run_completion_elaborate(
         live_source_overrides: Arc::new(overrides),
     };
     let mut config = Configuration::diagnostics_mode(diag_config)?;
+    config.type_check_cache = typecheck_cache;
     proj_file.set_config(&mut config)?;
     proj_file
         .open_or_auto_update_lock_file(LockFileType::Lsp)?
