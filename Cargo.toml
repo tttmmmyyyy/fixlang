@@ -39,6 +39,17 @@ atty = "0.2.14"
 mimalloc = "0.1.48"
 stacker = "0.1"
 
+[lib]
+name = "fixlang"
+path = "src/lib.rs"
+
 [[bin]]
 name = "fix"
 path = "src/main.rs"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "typecheck"
+harness = false

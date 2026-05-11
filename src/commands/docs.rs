@@ -29,7 +29,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     proj_file.set_config(&mut config)?;
 
     let mode: BuildConfigType = match &config.subcommand {
-        crate::SubCommand::Docs(docs_config) => docs_config.mode,
+        crate::configuration::SubCommand::Docs(docs_config) => docs_config.mode,
         _ => unreachable!(),
     };
 
@@ -44,7 +44,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     info_msg("Generating documentation...");
 
     let docs_config = match &config.subcommand {
-        crate::SubCommand::Docs(docs_config) => docs_config,
+        crate::configuration::SubCommand::Docs(docs_config) => docs_config,
         _ => unreachable!(),
     };
 
