@@ -1283,18 +1283,26 @@ impl Program {
             }
             results
         } else {
-            // Run tasks in parallel.
+            // Run tasks in parallel via a shared work queue: every
+            // worker thread pops the next task from the same Vec until
+            // it is empty. This is the work-stealing pattern in spirit
+            // — an idle worker immediately picks up whatever is left
+            // instead of waiting on its own statically-assigned shard.
+            //
+            // Per-gv typecheck cost is highly uneven (cache hits cost
+            // ~30 μs, misses ~300 ms), so static sharding leaves cores
+            // idle whenever the misses cluster on one shard.
+            let queue = std::sync::Arc::new(std::sync::Mutex::new(tasks));
             let mut threads = vec![];
-            let tasks_per_thread = tasks.len() / tc.num_worker_threads;
-            for i in (0..tc.num_worker_threads).rev() {
-                let mut tasks = if i == 0 {
-                    std::mem::take(&mut tasks)
-                } else {
-                    tasks.split_off(tasks.len() - tasks_per_thread)
-                };
+            for _ in 0..tc.num_worker_threads {
+                let queue = queue.clone();
                 let thread = std::thread::spawn(move || {
                     let mut results = vec![];
-                    while let Some(task) = tasks.pop() {
+                    loop {
+                        let task = match queue.lock().unwrap().pop() {
+                            Some(task) => task,
+                            None => break,
+                        };
                         let output = (task.task)();
                         results.push(CheckResult {
                             val_name: task.val_name,
