@@ -1503,33 +1503,37 @@ impl TypeCheckContext {
         // `unify` may be recursively call this function again.
         // To avoid infinite loop, we use `unify` only when the equality can be simplified.
 
-        let eq_org = eq.to_string();
-        let lhs_org = eq.lhs().to_string();
-        let rhs_org = eq.value.to_string();
+        // Structural change-detection. `substitute_equality` and the
+        // reductions below only ever touch `eq.args` / `eq.value`, so
+        // comparing those before/after is equivalent to the previous
+        // `to_string()` comparison and avoids per-call type rendering.
+        let args_before = eq.args.clone();
+        let value_before = eq.value.clone();
 
         // If the equality can be simplified by substitution, call unify.
         self.substitute_equality(&mut eq);
-        if eq.to_string() != eq_org {
-            self.unify(&eq.lhs(), &eq.value)?;
-            return Ok(());
+        if eq.args != args_before || eq.value != value_before {
+            return self.unify(&eq.lhs(), &eq.value);
         }
 
+        // From here on `eq.args` is stable, so cache the lhs once.
+        let lhs = eq.lhs();
+
         // If the lhs of the equality is reducible, call unify.
-        let red_lhs = self.reduce_type_by_equality(eq.lhs())?;
-        if red_lhs.to_string() != lhs_org {
-            self.unify(&red_lhs, &eq.value)?;
-            return Ok(());
+        let red_lhs = self.reduce_type_by_equality(lhs.clone())?;
+        if red_lhs != lhs {
+            return self.unify(&red_lhs, &eq.value);
         }
 
         // If the rhs of the equality is reducible, call unify.
+        let rhs_before = eq.value.clone();
         eq.value = self.reduce_type_by_equality(eq.value.clone())?;
-        if eq.value.to_string() != rhs_org {
-            self.unify(&eq.lhs(), &eq.value)?;
-            return Ok(());
+        if eq.value != rhs_before {
+            return self.unify(&lhs, &eq.value);
         }
 
         // Avoid adding trivial equality.
-        if eq.lhs().to_string() == eq.value.to_string() {
+        if lhs == eq.value {
             return Ok(());
         }
 
@@ -1605,7 +1609,10 @@ impl TypeCheckContext {
         let mut ty1 = self.substitute_and_reduce_type(ty1)?;
         let mut ty2 = self.substitute_and_reduce_type(ty2)?;
 
-        if ty1.to_string() == ty2.to_string() {
+        // `TypeNode::PartialEq` is structural and ignores source spans.
+        // The `Arc::ptr_eq` fast path catches the common case where
+        // `substitute_and_reduce_type` returned the same Arc unchanged.
+        if Arc::ptr_eq(&ty1, &ty2) || ty1 == ty2 {
             return Ok(());
         }
 
