@@ -19,7 +19,10 @@ use crate::{
             TypeNode,
         },
     },
-    constants::{ERR_AMBIGUOUS_NAME, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME, WRAP_OPAQUE_TYVAR_PREFIX},
+    constants::{
+        ERR_AMBIGUOUS_NAME, ERR_MISSING_STRUCT_FIELD, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
+        WRAP_OPAQUE_TYVAR_PREFIX,
+    },
     error::{Error, Errors},
     elaboration::name_resolution::NameResolutionContext,
     fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
@@ -1093,13 +1096,33 @@ impl TypeCheckContext {
                     Set::from_iter(field_names.iter().cloned());
                 let field_names_in_expression: Set<Name> =
                     Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
-                for f in &field_names_in_struct_defn {
-                    if !field_names_in_expression.contains(f) {
-                        return Err(Errors::from_msg_srcs(
-                            format!("Missing field `{}` of struct `{}`.", f, tc.to_string()),
-                            &[&ei.source],
-                        ));
-                    }
+                // Collect every missing field in struct-definition order and
+                // report them in a single error whose `data` payload carries
+                // the full list of missing names.
+                let missing: Vec<Name> = field_names
+                    .iter()
+                    .filter(|f| !field_names_in_expression.contains(*f))
+                    .cloned()
+                    .collect();
+                if !missing.is_empty() {
+                    let msg = if missing.len() == 1 {
+                        format!(
+                            "Missing field `{}` of struct `{}`.",
+                            missing[0],
+                            tc.to_string()
+                        )
+                    } else {
+                        let list = missing
+                            .iter()
+                            .map(|n| format!("`{}`", n))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        format!("Missing fields {} of struct `{}`.", list, tc.to_string())
+                    };
+                    let mut err = Error::from_msg_srcs(msg, &[&ei.source]);
+                    err.code = Some(ERR_MISSING_STRUCT_FIELD);
+                    err.data = Some(serde_json::json!(missing));
+                    return Err(Errors::from_err(err));
                 }
                 for f in &field_names_in_expression {
                     if !field_names_in_struct_defn.contains(f) {

@@ -246,6 +246,7 @@ pub const ERR_UNKNOWN_NAME: &str = "unknown-name";
 pub const ERR_AMBIGUOUS_NAME: &str = "ambiguous-name";
 pub const ERR_NO_VALUE_MATCH: &str = "no-value-match";
 pub const ERR_MISSING_TRAIT_IMPL: &str = "missing-trait-impl";
+pub const ERR_MISSING_STRUCT_FIELD: &str = "missing-struct-field";
 /// Diagnostic code emitted for each `Std::#hole` reference left in the
 /// program after elaboration.
 pub const ERR_HOLE: &str = "missing-expression";

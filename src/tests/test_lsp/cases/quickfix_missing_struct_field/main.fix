@@ -1,0 +1,12 @@
+module Main;
+
+type Vector3 = unbox struct { x: F64, y: F64, z: F64 };
+
+make_v : Vector3;
+make_v = Vector3 { x: 1.0, y: 2.0 };
+
+main : IO ();
+main = (
+    eval make_v;
+    pure()
+);
