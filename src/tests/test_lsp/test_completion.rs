@@ -670,4 +670,96 @@ mod tests {
             ),
         }
     }
+
+    /// Reproduces the user-report: `let n = range(50, 101).<cursor>`
+    /// with the cursor right after the dot at end of line. We expect
+    /// some `Std::Iterator::*` method (e.g. `fold`) to be ranked
+    /// strictly above an alphabetically-earlier candidate like
+    /// `Std::Add::add` — i.e. the dot-completion ranker must classify
+    /// the receiver as a `RangeIterator`-like type and place Iterator
+    /// methods in a lower-numbered tier.
+    #[test]
+    fn test_completion_dot_sort_iterator_at_end_of_line() {
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort-iterator", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: main : IO () = (
+        //   3:     let n = range(50, 101).
+        //   4:     pure()
+        //   5: );
+        //
+        // The `.` is at column 26 (4 spaces + "let n = range(50, 101)" =
+        // 22 chars + `.` = 27 chars total; the dot is the 27th char,
+        // so byte-after-dot is column 27).
+        let items = ctx.complete("main.fix", 3, 27);
+
+        // Dump the [completion] log lines so we can see what the
+        // dot-context extractor actually observed as the receiver
+        // type (it logs `dot-context receiver type: <ty>`).
+        let log_path = ctx.project_dir.join(".fixlang/fix.log");
+        if let Ok(log_content) = std::fs::read_to_string(&log_path) {
+            let completion_log: String = log_content
+                .lines()
+                .filter(|l| l.contains("[completion]"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            eprintln!(
+                "===== [completion] log lines =====\n{}\n==================================",
+                if completion_log.is_empty() {
+                    "<none>".to_string()
+                } else {
+                    completion_log
+                }
+            );
+        } else {
+            eprintln!("===== [completion] log =====\n<no log file at {}>\n=============================", log_path.display());
+        }
+
+        let dump_top: Vec<String> = items
+            .iter()
+            .filter_map(|it| {
+                let label = it.get("label")?.as_str()?;
+                let sort = it
+                    .get("sortText")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("<none>");
+                Some(format!("{:>50}  sort={}", label, sort))
+            })
+            .take(20)
+            .collect();
+        eprintln!(
+            "===== first 20 completion items =====\n{}\n=====================================",
+            dump_top.join("\n")
+        );
+
+        let find_sort = |label: &str| -> Option<String> {
+            items
+                .iter()
+                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
+                .and_then(|it| it.get("sortText"))
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+
+        let sort_fold = find_sort("Std::Iterator::fold");
+        let sort_add = find_sort("Std::Add::add");
+        eprintln!(
+            "Std::Iterator::fold sort = {:?}, Std::Add::add sort = {:?}",
+            sort_fold, sort_add
+        );
+
+        let s_fold = sort_fold.expect("Std::Iterator::fold should be a candidate");
+        let s_add = sort_add.expect("Std::Add::add should be a candidate");
+        assert!(
+            s_fold < s_add,
+            "Std::Iterator::fold should rank above Std::Add::add for a RangeIterator receiver; \
+             got fold={:?}, add={:?}",
+            s_fold,
+            s_add
+        );
+
+        ctx.shutdown();
+    }
 }

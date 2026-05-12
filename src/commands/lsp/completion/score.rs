@@ -121,10 +121,19 @@ pub(super) fn dot_context_low_priority_sort_text(name: &FullName) -> String {
 }
 
 /// Assign a tier to one candidate. Walks the bucket index for the
-/// cheap shape match (Tier 1/2/3); for candidates already in the
-/// receiver-tycon bucket, additionally tries to unify the candidate's
-/// receiver position with `receiver_type` and promotes to Tier 0 on
-/// success.
+/// cheap shape match (Tier 1/2/3); for candidates in either the
+/// receiver-tycon bucket (Tier 1) or the wildcard bucket (Tier 2),
+/// additionally tries to unify the candidate's receiver position with
+/// `receiver_type` *and* check that its trait constraints stay
+/// satisfiable. A successful probe promotes the candidate to Tier 0.
+///
+/// Promoting Tier 2 candidates matters when the receiver is, e.g.,
+/// an opaque iterator type returned by `Std::Iterator::range`: the
+/// iterator methods all have a tyvar receiver constrained by
+/// `Iterator`, so they sit in the wildcard bucket, but they should
+/// still rank above unrelated trait methods (`Add::add`,
+/// `ToString::to_string`, …) whose constraints (`Add a`, `ToString a`)
+/// don't hold for the iterator.
 ///
 /// `tc_template` is a typechecker created from the snapshot `program`;
 /// it gets cloned per unify attempt so substitutions accumulated by
@@ -137,13 +146,13 @@ pub(super) fn assign_tier(
     tc_template: &TypeCheckContext,
 ) -> Tier {
     let bucket_tier = bucket_tier(name, index, receiver_type);
-    if bucket_tier != Tier::One {
-        return bucket_tier;
+    if bucket_tier == Tier::Three {
+        return Tier::Three;
     }
     if try_unify_receiver(name, receiver_type, program, tc_template).is_ok() {
         Tier::Zero
     } else {
-        Tier::One
+        bucket_tier
     }
 }
 
@@ -184,12 +193,17 @@ fn bucket_tier(
 }
 
 /// Try to unify the candidate's receiver position (the last curried
-/// source argument of its scheme) with `receiver_type`.
+/// source argument of its scheme) with `receiver_type`, and verify
+/// that the candidate's trait constraints stay satisfiable under that
+/// binding.
 ///
 /// `n = 0` is hard-coded: the candidate's `S_{m-1}` must unify with
-/// the typed receiver. Trait constraints from the scheme's
-/// `predicates` are added to the typechecker but their satisfiability
-/// is not enforced beyond what `unify` does automatically.
+/// the typed receiver. After unification, `reduce_predicates` is run
+/// so that constraints like `[a : Add] a -> a -> a` fail when no
+/// `Add` instance exists for the concrete receiver — otherwise every
+/// trait method would pass the probe (since their tyvar receiver
+/// unifies with anything) and Tier 0 would lose discriminating
+/// power.
 fn try_unify_receiver(
     name: &FullName,
     receiver_type: &Arc<TypeNode>,
@@ -203,7 +217,16 @@ fn try_unify_receiver(
         .map_err(|_| ())?;
     let (srcs, _) = inst_ty.collect_app_src(usize::MAX);
     let recv_pos = srcs.last().ok_or(())?;
-    UnifOrOtherErr::extract_others(tc.unify(recv_pos, receiver_type))
-        .map_err(|_| ())?
-        .map_err(|_| ())
+    /// Collapses the two-level `Result<Result<T, UnificationErr>, Errors>`
+    /// returned by `extract_others` down to `Result<(), ()>`: any failure
+    /// (unification mismatch or unsatisfiable predicate) means the
+    /// candidate doesn't fit the receiver.
+    fn flatten<T>(r: Result<T, UnifOrOtherErr>) -> Result<(), ()> {
+        UnifOrOtherErr::extract_others(r)
+            .map_err(|_| ())?
+            .map(|_| ())
+            .map_err(|_| ())
+    }
+    flatten(tc.unify(recv_pos, receiver_type))?;
+    flatten(tc.reduce_predicates())
 }

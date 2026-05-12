@@ -1721,9 +1721,9 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    // Reduce predicates stored in `self.predicates` as long as possible.
-    // If a predicates is unsatisfiable, return Err.
-    fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
+    /// Reduces predicates stored in `self.predicates` as long as possible.
+    /// If a predicate is unsatisfiable, returns `Err`.
+    pub(crate) fn reduce_predicates(&mut self) -> Result<(), UnifOrOtherErr> {
         let mut irr_preds = vec![];
         let mut skip: Set<String> = Set::default();
         while let Some(pred) = self.predicates.pop() {

@@ -1,0 +1,6 @@
+module Main;
+
+main : IO () = (
+    let n = range(50, 101).
+    pure()
+);
