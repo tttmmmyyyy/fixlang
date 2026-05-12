@@ -171,7 +171,7 @@ For trait members, "outside its own declaration lines" means: outside both the `
 
 ## Aspect: code-quality
 
-Walk the Rust code changed against the base ref, check it against the nine conventions below, apply the safe fixes inline, and surface the riskier ones for the user to decide.
+Walk the Rust code changed against the base ref, check it against the eleven conventions below, apply the safe fixes inline, and surface the riskier ones for the user to decide.
 
 ### Out of Scope
 
@@ -184,14 +184,14 @@ Walk the Rust code changed against the base ref, check it against the nine conve
 
 #### 1. DRY: don't repeat logic; reuse existing utilities
 
-If the diff introduces logic that already exists elsewhere — in `crate::misc`, in a sibling module, or as a method on the type being passed in — replace the duplicate with a call to the existing helper.
+If the diff introduces logic that already exists elsewhere in the project, replace the duplicate with a call to the existing helper.
 
-Project specifics:
-- Use `Set` / `Map` from `crate::misc`, not `std::collections::HashSet` / `HashMap`.
-- Before writing a new helper, grep `src/` (especially `src/misc.rs` and the module the new code lives in) for similar patterns.
+This project is a compiler bundled with a sizable toolchain — LSP server, package manager, documentation generator, build runner. That breadth alone makes it overwhelmingly likely that "generic" supporting logic — file/path handling, name and span arithmetic, source-text scanning, dependency graph traversal, version comparison, manifest parsing, AST/type walks, identifier formatting, and so on — is already implemented somewhere in `src/`. Before writing such logic, **reason from the project's feature set first**: ask "is this the kind of helper a compiler / LSP / package manager / doc generator would plausibly already have?" When the answer is yes (it usually is), search the entire `src/` tree to confirm before adding a new one. Do not confine the search to the new code's neighborhood — helpers cross subsystem boundaries freely, and a routine written for one feature is often exactly what another wants.
 
-**Apply** when an existing helper is a near-identical match.
-**Report only** when an existing version diverges enough that merging would change behavior.
+If your reasoning suggested the helper should exist but the search comes up empty, **add it where it ought to live, not where you happen to need it.** For example, if the diff inlines `s.start <= pos && pos <= s.end` for a `Span`, and you were expecting `Span` to expose an `includes` (or similarly named) method, add the method on `Span` rather than leaving the arithmetic at the call site. The very reasoning that made you go looking — "this is the kind of thing `Span` would expose" — applies just as strongly to *placing* the new helper as to *finding* an existing one. Inlining at the use site forfeits the benefit and guarantees the next caller will re-derive the same expression.
+
+**Apply** when an existing helper is a near-identical match, or when no helper exists but its proper home is unambiguous (a method on the obvious receiver type, a constructor on the obvious factory, etc.).
+**Report only** when an existing version diverges enough that merging would change behavior, or when no helper exists and the right home is a judgment call.
 
 #### 2. Extract a function on the second copy
 
@@ -330,12 +330,20 @@ The litmus test: can the diff author state, in one sentence, what invariant was 
 
 **Exception**: a workaround for a confirmed external bug (upstream library, OS, hardware) is legitimate. Require a comment that names the external issue (link, version, ticket) and the condition for removing the workaround.
 
+#### 11. Use the project's canonical types over their standard-library counterparts
+
+Where the project provides its own version of a common type, use it instead of the standard-library one. These are mechanical substitutions, not stylistic preferences — they exist so that the rest of the codebase can rely on a single consistent type.
+
+- Use `Set` / `Map` from `crate::misc`, not `std::collections::HashSet` / `std::collections::HashMap`.
+
+**Apply** unconditionally.
+
 ### Procedure
 
 1. Run `git diff <base>` to find changed files and hunks.
-2. For each changed `.rs` file, walk the diff hunks and check each of the ten conventions against the added/modified code.
+2. For each changed `.rs` file, walk the diff hunks and check each of the eleven conventions against the added/modified code.
 3. For each violation:
-   - Identify which convention (1–10).
+   - Identify which convention (1–11).
    - If it falls in "Apply": make the edit with `Edit`.
    - If it falls in "Report only": collect it for the final report; do not edit.
 4. Run `cargo check` after edits. On failure, revert the offending edit and reclassify it as a flagged item.
