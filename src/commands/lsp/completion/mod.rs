@@ -20,7 +20,7 @@ use crate::ast::expr::{hole_full_name, Expr, ExprNode, Var};
 use crate::ast::name::{FullName, NameSpace};
 use crate::ast::program::{EndNode, Program, SymbolExpr};
 use crate::ast::types::TypeNode;
-use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig};
+use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::chars_allowed_in_identifiers;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
@@ -355,10 +355,8 @@ fn run_completion_elaborate(
     // the live buffer doesn't parse, or the cursor isn't inside any
     // body, fall back to typing every gv in the target file (slower
     // but correct).
-    let mut probe_config = Configuration::diagnostics_mode(DiagnosticsConfig::default())?;
-    proj_file.set_config(&mut probe_config)?;
-    let target_symbols = find_enclosing_gv(path, &repaired_content, cursor_byte, &probe_config)
-        .map(|name| vec![name]);
+    let target_symbols =
+        find_enclosing_gv(path, &repaired_content, cursor_byte).map(|name| vec![name]);
 
     let mut overrides = Map::default();
     overrides.insert(path.clone(), repaired_content);
@@ -381,19 +379,17 @@ fn run_completion_elaborate(
 ///
 /// Performs a one-shot parse of the live buffer (no typecheck) and
 /// walks the parsed `global_values`, returning the `FullName` of the
-/// first definition whose body span covers `cursor_byte`. Used by
-/// `run_completion_elaborate` to narrow the subsequent typecheck
-/// pass to just that gv; returning `None` triggers the file-wide
-/// fallback.
-fn find_enclosing_gv(
-    abs_path: &PathBuf,
-    content: &str,
-    cursor_byte: usize,
-    config: &Configuration,
-) -> Option<FullName> {
+/// first definition whose body span covers `cursor_byte`.
+fn find_enclosing_gv(abs_path: &PathBuf, content: &str, cursor_byte: usize) -> Option<FullName> {
+    // `parse_source_file` requires a `Configuration` so that
+    // `parse_module` can inject FFI type aliases sized by
+    // `c_type_sizes`. That injection does not affect the discovered
+    // global-value names or source spans, so any successfully-built
+    // configuration is fine here.
+    let config = Configuration::release_mode(SubCommand::Build).ok()?;
     let source_file =
         SourceFile::from_file_path_and_content(abs_path.clone(), content.to_string());
-    let program = parse_source_file(source_file, config).ok()?;
+    let program = parse_source_file(source_file, &config).ok()?;
     let covers = |span: Option<&Span>| span.map(|s| s.includes_byte(cursor_byte)).unwrap_or(false);
     for (name, gv) in program.global_values.iter() {
         let hit = match &gv.expr {

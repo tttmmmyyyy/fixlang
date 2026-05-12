@@ -13,7 +13,7 @@ use crate::{
         UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
     },
     elaboration::elaborate_via_config,
-    configuration::{BuildConfigType, Configuration, DocsConfig},
+    configuration::{BuildConfigType, Configuration, DocsConfig, SubCommand},
     dependency::lockfile::LockFileType,
     error::Errors,
     misc::{info_msg, to_absolute_path},
@@ -29,7 +29,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     proj_file.set_config(&mut config)?;
 
     let mode: BuildConfigType = match &config.subcommand {
-        crate::configuration::SubCommand::Docs(docs_config) => docs_config.mode,
+        SubCommand::Docs(docs_config) => docs_config.mode,
         _ => unreachable!(),
     };
 
@@ -44,7 +44,7 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     info_msg("Generating documentation...");
 
     let docs_config = match &config.subcommand {
-        crate::configuration::SubCommand::Docs(docs_config) => docs_config,
+        SubCommand::Docs(docs_config) => docs_config,
         _ => unreachable!(),
     };
 

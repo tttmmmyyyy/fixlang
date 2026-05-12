@@ -15,14 +15,15 @@
 // Run with `cargo bench`. Filter with e.g. `cargo bench std_only`.
 
 use std::sync::Arc;
-
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-
 use fixlang::configuration::{Configuration, OutputFileType, SubCommand};
 use fixlang::elaboration::elaborate_via_config;
 use fixlang::elaboration::typecheckcache::MemoryCache;
 use fixlang::misc::save_temporary_source;
 
+/// Build a release-mode `Configuration` whose single user source file
+/// is `source` saved to a temp path, with a fresh in-memory typecheck
+/// cache and the output stopping after typecheck.
 fn build_config(source: &str, name_hint: &str) -> Configuration {
     let saved = match save_temporary_source(source, name_hint) {
         Ok(s) => s,
@@ -62,9 +63,7 @@ fn synthetic_source(n: usize) -> String {
 
     // A handful of polymorphic helpers that use ToString.
     let g_count = (n / 10).max(2);
-    s.push_str(&format!(
-        "g0 : [a : ToString] a -> String;\ng0 = |v| v.to_string;\n"
-    ));
+    s.push_str("g0 : [a : ToString] a -> String;\ng0 = |v| v.to_string;\n");
     for i in 1..g_count {
         s.push_str(&format!(
             "g{i} : [a : ToString] a -> String;\ng{i} = |v| g{prev}(v) + \"!\";\n",
@@ -98,6 +97,8 @@ fn synthetic_source(n: usize) -> String {
     s
 }
 
+/// Baseline scenario: a minimal `Main.fix` on top of `std.fix` with
+/// no user globals, measuring fixed typecheck overhead.
 fn bench_std_only(c: &mut Criterion) {
     let source = "module Main;\nmain : IO ();\nmain = pure();\n";
     let mut group = c.benchmark_group("typecheck");
@@ -113,6 +114,8 @@ fn bench_std_only(c: &mut Criterion) {
     group.finish();
 }
 
+/// Small-project scenario: a synthetic `Main.fix` with ~30 user
+/// globals, throughput reported per global.
 fn bench_small_project(c: &mut Criterion) {
     let source = synthetic_source(30);
     let mut group = c.benchmark_group("typecheck");
@@ -129,6 +132,8 @@ fn bench_small_project(c: &mut Criterion) {
     group.finish();
 }
 
+/// Medium-project scenario: a synthetic `Main.fix` with ~300 user
+/// globals, throughput reported per global.
 fn bench_medium_project(c: &mut Criterion) {
     let source = synthetic_source(300);
     let mut group = c.benchmark_group("typecheck");

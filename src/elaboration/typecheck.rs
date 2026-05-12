@@ -1505,8 +1505,8 @@ impl TypeCheckContext {
 
         // Structural change-detection. `substitute_equality` and the
         // reductions below only ever touch `eq.args` / `eq.value`, so
-        // comparing those before/after is equivalent to the previous
-        // `to_string()` comparison and avoids per-call type rendering.
+        // a structural compare on those fields is sufficient and
+        // avoids per-call type rendering.
         let args_before = eq.args.clone();
         let value_before = eq.value.clone();
 

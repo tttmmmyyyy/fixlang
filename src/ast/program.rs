@@ -35,7 +35,8 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use std::{sync::Arc, vec};
+use std::sync::{Arc, Mutex};
+use std::vec;
 
 #[derive(Clone)]
 pub struct TypeEnv {
@@ -1095,6 +1096,13 @@ impl Program {
         ))
     }
 
+    /// Resolve namespaces in, and typecheck the bodies of, global
+    /// values declared in `modules`.
+    ///
+    /// # Arguments
+    /// * `target_symbols` — when `Some`, restrict checking to globals
+    ///   whose name is in the slice; when `None`, check every global
+    ///   declared in `modules`.
     pub fn resolve_namespace_and_check_type_in_modules(
         &mut self,
         tc: &TypeCheckContext,
@@ -1103,7 +1111,7 @@ impl Program {
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
-        let target_set: Option<crate::misc::Set<&FullName>> =
+        let target_set: Option<Set<&FullName>> =
             target_symbols.map(|s| s.iter().collect());
 
         // Names of global values to be checked.
@@ -1293,15 +1301,15 @@ impl Program {
             results
         } else {
             // Run tasks in parallel via a shared work queue: every
-            // worker thread pops the next task from the same Vec until
-            // it is empty. This is the work-stealing pattern in spirit
-            // — an idle worker immediately picks up whatever is left
-            // instead of waiting on its own statically-assigned shard.
+            // worker thread pops the next task from the same `Vec`
+            // until it is empty, so an idle worker immediately picks
+            // up whatever is left.
             //
             // Per-gv typecheck cost is highly uneven (cache hits cost
-            // ~30 μs, misses ~300 ms), so static sharding leaves cores
-            // idle whenever the misses cluster on one shard.
-            let queue = std::sync::Arc::new(std::sync::Mutex::new(tasks));
+            // ~30 μs, misses ~300 ms), so a static per-thread shard
+            // would leave cores idle whenever the misses cluster on
+            // one shard.
+            let queue = Arc::new(Mutex::new(tasks));
             let mut threads = vec![];
             for _ in 0..tc.num_worker_threads {
                 let queue = queue.clone();
