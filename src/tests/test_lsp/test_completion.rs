@@ -760,6 +760,21 @@ mod tests {
             s_add
         );
 
+        // No candidate label should contain `?` — those name the
+        // opaque tycons introduced by opaque-tyvar desugar
+        // (e.g. `Std::Iterator::range::?it`) and aren't anything
+        // the user can write.
+        let opaque_leaks: Vec<String> = items
+            .iter()
+            .filter_map(|it| it.get("label").and_then(|l| l.as_str()).map(String::from))
+            .filter(|l| l.contains('?'))
+            .collect();
+        assert!(
+            opaque_leaks.is_empty(),
+            "completion list contains opaque-tycon labels: {:?}",
+            opaque_leaks
+        );
+
         ctx.shutdown();
     }
 }

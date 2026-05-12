@@ -149,8 +149,7 @@ pub(super) fn handle_completion(
     }
 
     for (full_name, gv) in &active_program.global_values {
-        // Skip compiler-defined entities
-        if full_name.to_string().contains('#') {
+        if is_internal_name(&full_name.to_string()) {
             continue;
         }
         if !is_in_namespace(full_name) {
@@ -194,7 +193,7 @@ pub(super) fn handle_completion(
         items.push(item);
     }
     for (tycon, _kind) in active_program.type_env.kinds() {
-        if tycon.name.to_string().contains('#') {
+        if is_internal_name(&tycon.name.to_string()) {
             continue;
         }
         if !is_in_namespace(&tycon.name) {
@@ -217,7 +216,7 @@ pub(super) fn handle_completion(
         items.push(item);
     }
     for trait_ in active_program.traits_with_aliases() {
-        if trait_.to_string().contains('#') {
+        if is_internal_name(&trait_.to_string()) {
             continue;
         }
         if !is_in_namespace(&trait_.name) {
@@ -238,7 +237,7 @@ pub(super) fn handle_completion(
         items.push(item);
     }
     for (assoc_type, _kind_info) in active_program.trait_env.assoc_ty_kind_info() {
-        if assoc_type.name.to_string().contains('#') {
+        if is_internal_name(&assoc_type.name.to_string()) {
             continue;
         }
         if !is_in_namespace(&assoc_type.name) {
@@ -276,6 +275,16 @@ struct DotRanking {
     receiver_type: Arc<TypeNode>,
     index: CompletionIndex,
     tc_template: Option<TypeCheckContext>,
+}
+
+/// True for names that refer to compiler-internal entities and
+/// shouldn't appear in user-facing completion. `#` marks
+/// compiler-defined values/types (`Std::#hole`, …); `?` marks
+/// opaque type variables turned into TyCons by opaque desugar
+/// (`Std::Iterator::range::?it`, …). Neither character is legal in
+/// a user-written identifier, so plain substring checks suffice.
+fn is_internal_name(rendered: &str) -> bool {
+    rendered.contains('#') || rendered.contains('?')
 }
 
 /// Bundle returned by the dot-completion extraction pipeline: the
