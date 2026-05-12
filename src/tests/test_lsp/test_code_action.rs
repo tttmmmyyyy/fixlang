@@ -5,13 +5,24 @@
 #[cfg(test)]
 mod tests {
     use super::super::lsp_client::LspClient;
+    use crate::edit::edit_util::apply_text_edits;
     use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use lsp_types::TextEdit;
     use serde_json::{json, Value};
     use std::{
+        fs,
         path::{Path, PathBuf},
         time::Duration,
     };
     use tempfile::TempDir;
+
+    /// Parse a list of LSP `TextEdit` JSON values into `lsp_types::TextEdit`s.
+    fn parse_text_edits(edits: &[Value]) -> Vec<TextEdit> {
+        edits
+            .iter()
+            .map(|e| serde_json::from_value(e.clone()).expect("Failed to parse TextEdit"))
+            .collect()
+    }
 
     fn get_test_cases_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -281,8 +292,8 @@ mod tests {
             new_text
         );
         assert!(
-            new_text.contains("::Std::undefined(\"unimplemented\")"),
-            "Member stubs should use ::Std::undefined. Got: {:?}",
+            new_text.contains("= ?;"),
+            "Member stubs should use a `?` hole. Got: {:?}",
             new_text
         );
         assert!(
@@ -299,6 +310,120 @@ mod tests {
             new_text.contains("show_it : Main::MyData -> Std::String"),
             "Member show_it should have the correct type. Got: {:?}",
             new_text
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Test that quick fix suggests inserting `name: ?` placeholders for
+    /// missing fields of a struct literal.
+    #[test]
+    fn test_quickfix_missing_struct_field() {
+        let mut ctx =
+            LspQuickFixCtx::setup("quickfix_missing_struct_field", &["main.fix"]);
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        let missing_diag = diagnostics
+            .iter()
+            .find(|d| {
+                d.get("code")
+                    .and_then(|c| c.as_str())
+                    .map(|c| c == "missing-struct-field")
+                    .unwrap_or(false)
+            })
+            .expect("Should have a 'missing-struct-field' diagnostic");
+
+        let range = missing_diag.get("range").unwrap().clone();
+        let start = range.get("start").unwrap();
+        let end = range.get("end").unwrap();
+        let start_line = start.get("line").unwrap().as_u64().unwrap() as u32;
+        let start_col = start.get("character").unwrap().as_u64().unwrap() as u32;
+        let end_line = end.get("line").unwrap().as_u64().unwrap() as u32;
+        let end_col = end.get("character").unwrap().as_u64().unwrap() as u32;
+
+        let actions = ctx.code_actions(
+            "main.fix",
+            vec![missing_diag.clone()],
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        );
+
+        let action = actions
+            .iter()
+            .find(|a| {
+                a.get("title")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t.contains("missing field") && t.contains("`z`"))
+                    .unwrap_or(false)
+            })
+            .expect("Should find an 'Add missing field `z`' action");
+
+        let edit = action.get("edit").expect("Action should have edit");
+        let changes = edit.get("changes").expect("Edit should have changes");
+        let uri = ctx.file_uri("main.fix");
+        let file_edits = changes
+            .get(&uri)
+            .expect("Should have edits for main.fix")
+            .as_array()
+            .expect("Edits should be an array");
+        assert_eq!(file_edits.len(), 1, "Should have exactly one text edit");
+        let new_text = file_edits[0]
+            .get("newText")
+            .and_then(|t| t.as_str())
+            .expect("Edit should have newText");
+        // The struct literal `Vector3 { x: 1.0, y: 2.0 }` has `y: 2.0` as
+        // its last field with no trailing comma, so the quick fix should
+        // insert `, z: ?` just before `}`.
+        assert_eq!(
+            new_text, ", z: ?",
+            "Insertion should be a comma-separated placeholder. Got: {:?}",
+            new_text
+        );
+
+        // Apply the edits to the file on disk, then re-trigger diagnostics
+        // and verify that:
+        //   - the `missing-struct-field` diagnostic is gone (the struct
+        //     literal type-checks now), and
+        //   - a `missing-expression` diagnostic appears at the inserted `?`
+        //     (the only remaining issue is the unresolved hole).
+        let main_path = ctx.project_dir.join("main.fix");
+        let original = fs::read_to_string(&main_path).expect("Failed to read main.fix");
+        let parsed_edits = parse_text_edits(file_edits);
+        let updated = apply_text_edits(&original, &parsed_edits);
+        assert!(
+            updated.contains("Vector3 { x: 1.0, y: 2.0, z: ? }"),
+            "Updated source should contain the patched literal. Got: {}",
+            updated
+        );
+        fs::write(&main_path, &updated).expect("Failed to write main.fix");
+        ctx.client
+            .change_document(Path::new("main.fix"))
+            .expect("Failed to send didChange");
+        ctx.client
+            .trigger_and_wait_for_diagnostics(Path::new("main.fix"));
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        assert!(
+            !diagnostics.iter().any(|d| d
+                .get("code")
+                .and_then(|c| c.as_str())
+                .map(|c| c == "missing-struct-field")
+                .unwrap_or(false)),
+            "missing-struct-field diagnostic should be gone after applying the quick fix. Got: {:?}",
+            diagnostics
+        );
+        let hole_diag = diagnostics.iter().find(|d| {
+            d.get("code")
+                .and_then(|c| c.as_str())
+                .map(|c| c == "missing-expression")
+                .unwrap_or(false)
+        });
+        assert!(
+            hole_diag.is_some(),
+            "Expected a `missing-expression` diagnostic for the inserted `?`. Got: {:?}",
+            diagnostics
         );
 
         ctx.shutdown();
