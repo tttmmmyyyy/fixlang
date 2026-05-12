@@ -1099,12 +1099,21 @@ impl Program {
         &mut self,
         tc: &TypeCheckContext,
         modules: &[Name],
+        target_symbols: Option<&[FullName]>,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
+
+        let target_set: Option<crate::misc::Set<&FullName>> =
+            target_symbols.map(|s| s.iter().collect());
 
         // Names of global values to be checked.
         let mut checked_names: Vec<FullName> = vec![];
         for (name, gv) in self.global_values.iter() {
+            if let Some(set) = target_set.as_ref() {
+                if !set.contains(name) {
+                    continue;
+                }
+            }
             match gv.expr {
                 SymbolExpr::Simple(_) => {
                     // Check simple values only if they are in `modules`.

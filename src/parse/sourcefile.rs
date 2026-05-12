@@ -328,6 +328,15 @@ impl Span {
         Ok(ret)
     }
 
+    /// Check if `byte` falls within `[self.start, self.end]` (inclusive
+    /// on both ends, matching `includes_pos_lsp`'s end-inclusion rule).
+    /// Skips the file-path comparison that `includes_pos_lsp` does, for
+    /// callers that have already established the span and byte refer to
+    /// the same source.
+    pub fn includes_byte(&self, byte: usize) -> bool {
+        self.start <= byte && byte <= self.end
+    }
+
     // Check if the position is included in the span.
     //
     // This is intended for LSP (Language Server Protocol) usage.

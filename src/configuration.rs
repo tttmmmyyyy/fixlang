@@ -160,6 +160,16 @@ pub struct DiagnosticsConfig {
     /// live buffer (see `commands::lsp::completion::repair`) and
     /// re-elaborate via `elaborate_via_config` without touching disk.
     pub live_source_overrides: Arc<Map<PathBuf, String>>,
+    /// Restrict type-checking to this specific set of global value
+    /// names. `None` keeps the default (every global declared in the
+    /// target files). The LSP completion path uses `Some(vec![gv])`
+    /// for the single global the cursor sits in, so a re-elaborate
+    /// only pays for that one body.
+    ///
+    /// Pre-typecheck stages (parse, kind/scheme elaboration,
+    /// `create_trait_member_symbols`, …) still run for every module
+    /// because the cursor's gv may reference the schemes of others.
+    pub target_symbols: Option<Vec<crate::ast::name::FullName>>,
 }
 
 // Configuration for docs subcommand.

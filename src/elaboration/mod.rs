@@ -92,7 +92,11 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         let _sw = StopWatch::new("typecheck", config.show_build_times);
         let modules = program.modules_from_files(&diag_config.files)?;
         let mut errors = Errors::empty();
-        errors.eat_err(program.resolve_namespace_and_check_type_in_modules(&typechecker, &modules));
+        errors.eat_err(program.resolve_namespace_and_check_type_in_modules(
+            &typechecker,
+            &modules,
+            diag_config.target_symbols.as_deref(),
+        ));
         program.deferred_errors.append(errors);
         program
             .deferred_errors
@@ -105,7 +109,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     {
         let _sw = StopWatch::new("typecheck", config.show_build_times);
         let all_modules: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
-        program.resolve_namespace_and_check_type_in_modules(&typechecker, &all_modules)?;
+        program.resolve_namespace_and_check_type_in_modules(&typechecker, &all_modules, None)?;
     }
 
     // Collect deprecation diagnostics from all type-checked expressions and

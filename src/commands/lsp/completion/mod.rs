@@ -29,7 +29,8 @@ use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{to_absolute_path, Map};
-use crate::parse::sourcefile::Span;
+use crate::parse::parser::parse_source_file;
+use crate::parse::sourcefile::{SourceFile, Span};
 use crate::write_log;
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionItemTag,
@@ -309,7 +310,13 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     let cursor_byte = position_to_bytes(live_buffer, text_document_position.position);
     let repaired = repair_for_completion(live_buffer, cursor_byte)?;
     let abs_path = to_absolute_path(&latest.path).ok()?;
-    let program = run_completion_elaborate(&abs_path, repaired.source, typecheck_cache).ok()?;
+    let program = run_completion_elaborate(
+        &abs_path,
+        repaired.source,
+        typecheck_cache,
+        repaired.cursor_byte,
+    )
+    .ok()?;
     let cursor = SourcePosLite {
         path: abs_path,
         byte: repaired.cursor_byte,
@@ -339,14 +346,26 @@ fn run_completion_elaborate(
     path: &PathBuf,
     repaired_content: String,
     typecheck_cache: SharedTypeCheckCache,
+    cursor_byte: usize,
 ) -> Result<Program, Errors> {
     let proj_file = ProjectFile::read_root_file()?;
     let files = proj_file.get_files(BuildConfigType::Test);
+
+    // Restrict the typecheck pass to the gv the cursor sits in. If
+    // the live buffer doesn't parse, or the cursor isn't inside any
+    // body, fall back to typing every gv in the target file (slower
+    // but correct).
+    let mut probe_config = Configuration::diagnostics_mode(DiagnosticsConfig::default())?;
+    proj_file.set_config(&mut probe_config)?;
+    let target_symbols = find_enclosing_gv(path, &repaired_content, cursor_byte, &probe_config)
+        .map(|name| vec![name]);
+
     let mut overrides = Map::default();
     overrides.insert(path.clone(), repaired_content);
     let diag_config = DiagnosticsConfig {
         files,
         live_source_overrides: Arc::new(overrides),
+        target_symbols,
     };
     let mut config = Configuration::diagnostics_mode(diag_config)?;
     config.type_check_cache = typecheck_cache;
@@ -356,6 +375,36 @@ fn run_completion_elaborate(
         .set_config(&mut config)?;
 
     elaborate_via_config(&config)
+}
+
+/// Locate the global value whose body contains the cursor.
+///
+/// Performs a one-shot parse of the live buffer (no typecheck) and
+/// walks the parsed `global_values`, returning the `FullName` of the
+/// first definition whose body span covers `cursor_byte`. Used by
+/// `run_completion_elaborate` to narrow the subsequent typecheck
+/// pass to just that gv; returning `None` triggers the file-wide
+/// fallback.
+fn find_enclosing_gv(
+    abs_path: &PathBuf,
+    content: &str,
+    cursor_byte: usize,
+    config: &Configuration,
+) -> Option<FullName> {
+    let source_file =
+        SourceFile::from_file_path_and_content(abs_path.clone(), content.to_string());
+    let program = parse_source_file(source_file, config).ok()?;
+    let covers = |span: Option<&Span>| span.map(|s| s.includes_byte(cursor_byte)).unwrap_or(false);
+    for (name, gv) in program.global_values.iter() {
+        let hit = match &gv.expr {
+            SymbolExpr::Simple(e) => covers(e.expr.source.as_ref()),
+            SymbolExpr::Method(impls) => impls.iter().any(|m| covers(m.expr.expr.source.as_ref())),
+        };
+        if hit {
+            return Some(name.clone());
+        }
+    }
+    None
 }
 
 /// Path-and-byte cursor pair used to identify the hole in the
@@ -377,8 +426,7 @@ impl SourcePosLite {
         if span_path.is_none() || our_path.is_none() || span_path != our_path {
             return false;
         }
-        // Inclusive on both ends to match `Span::includes_pos_lsp`.
-        span.start <= self.byte && self.byte <= span.end
+        span.includes_byte(self.byte)
     }
 }
 
