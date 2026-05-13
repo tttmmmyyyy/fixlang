@@ -169,6 +169,13 @@ pub struct DiagnosticsConfig {
     /// every module because a checked body may reference others'
     /// schemes.
     pub target_symbols: Option<Vec<FullName>>,
+    /// Type-check in error-tolerant mode: when elaboration of a
+    /// sub-expression fails, the typechecker substitutes a fresh
+    /// placeholder type for that node and continues with its
+    /// siblings. Used by the LSP completion path so that one type
+    /// error elsewhere in the body (e.g. an `if` condition) does
+    /// not blank out the cursor's inferred type.
+    pub error_tolerant: bool,
 }
 
 // Configuration for docs subcommand.

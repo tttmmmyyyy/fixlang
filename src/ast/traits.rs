@@ -950,6 +950,7 @@ impl TraitEnv {
             Map::default(),
             Arc::new(typecheckcache::FileCache::new()),
             0,
+            false,
         );
         // Validate trait implementations.
         for (trait_id, impls) in &self.impls {

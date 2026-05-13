@@ -15,7 +15,7 @@ use crate::fixstd::builtin::{
     struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
     union_new,
 };
-use crate::configuration::{Configuration, DeprecationMode};
+use crate::configuration::{Configuration, DeprecationMode, SubCommand};
 use crate::constants::{
     DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME, MAIN_MODULE_NAME, STD_NAME,
     STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL,
@@ -2715,7 +2715,12 @@ impl Program {
     }
 
     pub fn create_typechecker(&self, config: &Configuration) -> TypeCheckContext {
-        // Create typeckecker.
+        // Error tolerance is opt-in via the diagnostics-mode config;
+        // every other subcommand stays strict.
+        let error_tolerant = matches!(
+            &config.subcommand,
+            SubCommand::Diagnostics(d) if d.error_tolerant
+        );
         let mut typechecker = TypeCheckContext::new(
             self.trait_env.clone(),
             self.type_env(),
@@ -2723,6 +2728,7 @@ impl Program {
             self.mod_to_import_stmts.clone(),
             config.type_check_cache.clone(),
             config.num_worker_thread,
+            error_tolerant,
         );
 
         // Register type declarations of global symbols to typechecker.

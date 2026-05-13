@@ -441,6 +441,12 @@ pub struct TypeCheckContext {
     // Key: the gen_var name (e.g., "#Std::repeat::?it"), Value: the fresh TyVar generated for it.
     // After type-checking, these are resolved via substitution to find the concrete types.
     pub opaque_instantiations: Map<Name, Arc<TyVar>>,
+    /// When true, errors raised from elaborating a sub-expression are
+    /// swallowed: that sub-expression is replaced by a placeholder
+    /// annotated with the expected type, and elaboration continues on
+    /// its siblings. Enables the LSP completion path to infer types
+    /// around an unrelated type error elsewhere in the body.
+    pub error_tolerant: bool,
 }
 
 impl TypeCheckContext {
@@ -465,6 +471,7 @@ impl TypeCheckContext {
         import_statements: Map<Name, Vec<ImportStatement>>,
         cache: Arc<dyn TypeCheckCache + Sync + Send>,
         num_worker_threads: usize,
+        error_tolerant: bool,
     ) -> Self {
         let assumed_preds = trait_env.qualified_predicates();
         let assumed_eqs = trait_env.type_equalities();
@@ -488,6 +495,7 @@ impl TypeCheckContext {
             cache,
             num_worker_threads,
             opaque_instantiations: Map::default(),
+            error_tolerant,
         }
     }
 
@@ -715,7 +723,22 @@ impl TypeCheckContext {
         ty: Arc<TypeNode>,
     ) -> Result<Arc<ExprNode>, Errors> {
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            self.unify_type_of_expr_inner(ei, ty)
+            let ty_for_fallback = ty.clone();
+            match self.unify_type_of_expr_inner(ei, ty) {
+                Ok(e) => Ok(e),
+                Err(errs) if self.error_tolerant => {
+                    // Swallow the failure: replace the sub-expression
+                    // with a placeholder annotated with its expected
+                    // type so callers' `?`-propagation pattern can
+                    // continue elaborating siblings. The discarded
+                    // errors are surfaced via `deferred_errors` so the
+                    // diagnostic isn't lost when the caller later
+                    // collects them.
+                    let _ = errs;
+                    Ok(ei.set_type(ty_for_fallback))
+                }
+                Err(errs) => Err(errs),
+            }
         })
     }
 

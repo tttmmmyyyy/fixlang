@@ -1,0 +1,10 @@
+module Main;
+
+myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;
+
+main : IO () = (
+    if 42.myfunc2(7) {
+        42.
+    }
+    pure()
+);

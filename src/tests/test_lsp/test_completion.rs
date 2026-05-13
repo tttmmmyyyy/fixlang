@@ -777,4 +777,55 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// `if cond { body.<cursor> }` where `cond` has the wrong type
+    /// (here `42.myfunc2(7)` is `I64`, not `Bool`). With strict
+    /// typecheck, the `cond` failure aborts elaboration of the body
+    /// and the cursor's hole comes back with no inferred type, so
+    /// `Main::myfunc2` cannot earn its Tier-0 rank. The
+    /// `DiagnosticsConfig.error_tolerant` flag set on the completion
+    /// path should make the typechecker swallow the cond error and
+    /// keep elaborating siblings, restoring the I64 receiver type at
+    /// the cursor.
+    #[test]
+    fn test_completion_dot_sort_error_tolerant_inside_if_body() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-dot-sort-error-tolerant", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: myfunc2 : I64 -> I64 -> I64 = |x, y| x + y;
+        //   3: (blank)
+        //   4: main : IO () = (
+        //   5:     if 42.myfunc2(7) {
+        //   6:         42.            <-- cursor right after the dot
+        //   7:     }
+        //   8:     pure()
+        //   9: );
+        //
+        // Column 11 = byte just after `.` on the 8-space-indented `42.`.
+        let items = ctx.complete("main.fix", 6, 11);
+
+        let find_sort = |label: &str| -> Option<String> {
+            items
+                .iter()
+                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
+                .and_then(|it| it.get("sortText"))
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+
+        let sort_myfunc2 = find_sort("Main::myfunc2")
+            .expect("Main::myfunc2 should be a completion candidate");
+        assert!(
+            sort_myfunc2.starts_with('0'),
+            "Main::myfunc2 should land in Tier 0 (sortText starting with `0`) \
+             once error-tolerant typecheck preserves the inner hole's I64 \
+             receiver; got {:?}",
+            sort_myfunc2,
+        );
+
+        ctx.shutdown();
+    }
 }

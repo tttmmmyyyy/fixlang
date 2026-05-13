@@ -373,6 +373,7 @@ fn run_completion_elaborate(
         files,
         live_source_overrides: Arc::new(overrides),
         target_symbols,
+        error_tolerant: true,
     };
     let mut config = Configuration::diagnostics_mode(diag_config)?;
     config.type_check_cache = typecheck_cache;
