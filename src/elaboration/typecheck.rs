@@ -444,8 +444,8 @@ pub struct TypeCheckContext {
     /// When true, errors raised from elaborating a sub-expression are
     /// swallowed: that sub-expression is replaced by a placeholder
     /// annotated with the expected type, and elaboration continues on
-    /// its siblings. Enables the LSP completion path to infer types
-    /// around an unrelated type error elsewhere in the body.
+    /// its siblings, so types can still be inferred around an
+    /// unrelated type error elsewhere in the body.
     pub error_tolerant: bool,
 }
 
@@ -463,7 +463,8 @@ impl TypeCheckContext {
         println!("import_required size = {}", self.import_required.len());
     }
 
-    // Create instance.
+    /// Builds a fresh `TypeCheckContext` seeded with the given
+    /// trait/type environment and worker pool size.
     pub fn new(
         trait_env: TraitEnv,
         type_env: TypeEnv,
@@ -727,13 +728,9 @@ impl TypeCheckContext {
             match self.unify_type_of_expr_inner(ei, ty) {
                 Ok(e) => Ok(e),
                 Err(errs) if self.error_tolerant => {
-                    // Swallow the failure: replace the sub-expression
-                    // with a placeholder annotated with its expected
-                    // type so callers' `?`-propagation pattern can
-                    // continue elaborating siblings. The discarded
-                    // errors are surfaced via `deferred_errors` so the
-                    // diagnostic isn't lost when the caller later
-                    // collects them.
+                    // Swallow the failure and substitute a placeholder
+                    // annotated with the expected type, so enclosing
+                    // elaboration can keep going on sibling nodes.
                     let _ = errs;
                     Ok(ei.set_type(ty_for_fallback))
                 }

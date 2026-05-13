@@ -30,6 +30,16 @@ mod tests {
         (temp_dir, test_case_dst)
     }
 
+    /// Look up the `sortText` of the completion item whose `label` is `label`.
+    fn find_sort_text(items: &[Value], label: &str) -> Option<String> {
+        items
+            .iter()
+            .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
+            .and_then(|it| it.get("sortText"))
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    }
+
     struct LspCompletionCtx {
         client: LspClient,
         project_dir: PathBuf,
@@ -807,16 +817,7 @@ mod tests {
         // Column 11 = byte just after `.` on the 8-space-indented `42.`.
         let items = ctx.complete("main.fix", 6, 11);
 
-        let find_sort = |label: &str| -> Option<String> {
-            items
-                .iter()
-                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
-                .and_then(|it| it.get("sortText"))
-                .and_then(|v| v.as_str())
-                .map(String::from)
-        };
-
-        let sort_myfunc2 = find_sort("Main::myfunc2")
+        let sort_myfunc2 = find_sort_text(&items, "Main::myfunc2")
             .expect("Main::myfunc2 should be a completion candidate");
         assert!(
             sort_myfunc2.starts_with('0'),
@@ -853,16 +854,7 @@ mod tests {
         // Column 16 = byte just after `.` on `    let _ = arr.`.
         let items = ctx.complete("main.fix", 11, 16);
 
-        let find_sort = |label: &str| -> Option<String> {
-            items
-                .iter()
-                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
-                .and_then(|it| it.get("sortText"))
-                .and_then(|v| v.as_str())
-                .map(String::from)
-        };
-
-        let sort_push_back = find_sort("Std::Array::push_back")
+        let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
             .expect("Std::Array::push_back should be a candidate");
         assert!(
             sort_push_back.starts_with("0a"),
@@ -898,16 +890,7 @@ mod tests {
         // Column 14 = byte just after `.` on `    let _ = p.`.
         let items = ctx.complete("main.fix", 7, 14);
 
-        let find_sort = |label: &str| -> Option<String> {
-            items
-                .iter()
-                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
-                .and_then(|it| it.get("sortText"))
-                .and_then(|v| v.as_str())
-                .map(String::from)
-        };
-
-        let sort_at_x = find_sort("Main::Point::@x")
+        let sort_at_x = find_sort_text(&items, "Main::Point::@x")
             .expect("Main::Point::@x should be a candidate");
         assert!(
             sort_at_x.starts_with("0a"),
@@ -931,16 +914,7 @@ mod tests {
         // Same fixture / cursor as `test_completion_dot_sort_array_method`.
         let items = ctx.complete("main.fix", 11, 16);
 
-        let find_sort = |label: &str| -> Option<String> {
-            items
-                .iter()
-                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
-                .and_then(|it| it.get("sortText"))
-                .and_then(|v| v.as_str())
-                .map(String::from)
-        };
-
-        let sort_specific = find_sort("Main::string_specific")
+        let sort_specific = find_sort_text(&items, "Main::string_specific")
             .expect("Main::string_specific should be a candidate");
         assert!(
             sort_specific.starts_with('1'),
