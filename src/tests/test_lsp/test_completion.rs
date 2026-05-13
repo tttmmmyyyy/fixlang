@@ -828,4 +828,162 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// `let arr = [1,2,3]; arr.<cursor>` — methods in `Std::Array::*`
+    /// whose receiver position unifies with `Array I64` should land
+    /// in Tier 0 sub-tier `a` (InsideTyCon), out-ranking unrelated
+    /// candidates.
+    #[test]
+    fn test_completion_dot_sort_array_method() {
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort-array", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2-4: doc comment
+        //   5-6: string_specific definition (used by the sibling test)
+        //   7: (blank)
+        //   8: main : IO ();
+        //   9: main = (
+        //  10:     let arr = [1, 2, 3];
+        //  11:     let _ = arr.   <-- cursor right after the dot
+        //  12:     pure()
+        //  13: );
+        //
+        // Column 16 = byte just after `.` on `    let _ = arr.`.
+        let items = ctx.complete("main.fix", 11, 16);
+
+        let find_sort = |label: &str| -> Option<String> {
+            items
+                .iter()
+                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
+                .and_then(|it| it.get("sortText"))
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+
+        let sort_push_back = find_sort("Std::Array::push_back")
+            .expect("Std::Array::push_back should be a candidate");
+        assert!(
+            sort_push_back.starts_with("0a"),
+            "Std::Array::push_back should land in Tier 0, sub-tier `a` \
+             (InsideTyCon) for an Array I64 receiver; got {:?}",
+            sort_push_back,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// `let p = Point {...}; p.<cursor>` — the auto-generated field
+    /// accessor `@x` should land in Tier 0 for a `Main::Point`
+    /// receiver, since `Main::Point::@x : Point -> I64` has the
+    /// matching head TyCon at the receiver position and lives
+    /// directly under the receiver's namespace (sub-tier `a`).
+    #[test]
+    fn test_completion_dot_sort_struct_field() {
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort-struct", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: type Point = unbox struct { x : I64, y : I64 };
+        //   3: (blank)
+        //   4: main : IO ();
+        //   5: main = (
+        //   6:     let p = Point { x: 1, y: 2 };
+        //   7:     let _ = p.    <-- cursor right after the dot
+        //   8:     pure()
+        //   9: );
+        //
+        // Column 14 = byte just after `.` on `    let _ = p.`.
+        let items = ctx.complete("main.fix", 7, 14);
+
+        let find_sort = |label: &str| -> Option<String> {
+            items
+                .iter()
+                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
+                .and_then(|it| it.get("sortText"))
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+
+        let sort_at_x = find_sort("Main::Point::@x")
+            .expect("Main::Point::@x should be a candidate");
+        assert!(
+            sort_at_x.starts_with("0a"),
+            "Main::Point::@x should be Tier 0 sub-tier `a` for a Point \
+             receiver; got {:?}",
+            sort_at_x,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// For an `Array I64` receiver, a function whose receiver position
+    /// is `Array String` (e.g. `Std::String::join`) should NOT be
+    /// promoted to Tier 0. The bucket index puts it in the Array
+    /// TyCon bucket (so it starts at Tier 1), but `Array String` and
+    /// `Array I64` don't unify, so it must stay at Tier 1.
+    #[test]
+    fn test_completion_dot_sort_unify_filters_wrong_typearg() {
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort-array", &["main.fix"]);
+
+        // Same fixture / cursor as `test_completion_dot_sort_array_method`.
+        let items = ctx.complete("main.fix", 11, 16);
+
+        let find_sort = |label: &str| -> Option<String> {
+            items
+                .iter()
+                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some(label))
+                .and_then(|it| it.get("sortText"))
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+
+        let sort_specific = find_sort("Main::string_specific")
+            .expect("Main::string_specific should be a candidate");
+        assert!(
+            sort_specific.starts_with('1'),
+            "Main::string_specific takes `Array String`, so for an Array I64 \
+             receiver it must stay at Tier 1 (bucket match, unify fails); \
+             got {:?}",
+            sort_specific,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Completion at a position that is NOT in dot context must NOT
+    /// attach `sortText` — the ranker is dot-completion-specific, and
+    /// keeping the field unset preserves the LSP client's default
+    /// alphabetical ordering everywhere else.
+    #[test]
+    fn test_completion_dot_sort_no_dot_unchanged() {
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort", &["main.fix"]);
+
+        // Line 11 of the `completion-dot-sort` fixture is the blank
+        // line between `myfunc2`'s definition and `main`'s
+        // declaration — a non-dot context.
+        let items = ctx.complete("main.fix", 11, 0);
+
+        assert!(
+            !items.is_empty(),
+            "non-dot completion should still return candidates"
+        );
+        let with_sort: Vec<String> = items
+            .iter()
+            .filter_map(|it| {
+                let sort = it.get("sortText").and_then(|v| v.as_str())?;
+                let label = it.get("label").and_then(|v| v.as_str())?;
+                Some(format!("{} (sortText={})", label, sort))
+            })
+            .collect();
+        assert!(
+            with_sort.is_empty(),
+            "non-dot completion items should have no sortText; saw: {:?}",
+            with_sort,
+        );
+
+        ctx.shutdown();
+    }
 }

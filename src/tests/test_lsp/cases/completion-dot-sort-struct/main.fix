@@ -1,0 +1,10 @@
+module Main;
+
+type Point = unbox struct { x : I64, y : I64 };
+
+main : IO ();
+main = (
+    let p = Point { x: 1, y: 2 };
+    let _ = p.
+    pure()
+);

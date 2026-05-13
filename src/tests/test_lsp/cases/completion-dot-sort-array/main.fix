@@ -1,0 +1,14 @@
+module Main;
+
+// Receiver position is `Array String`; for an `Array I64` receiver
+// the bucket matches the `Array` TyCon but the unify step fails, so
+// this function must stay at Tier 1.
+string_specific : Array String -> I64;
+string_specific = |arr| arr.get_size;
+
+main : IO ();
+main = (
+    let arr = [1, 2, 3];
+    let _ = arr.
+    pure()
+);
