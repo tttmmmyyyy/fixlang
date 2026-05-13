@@ -1,0 +1,6 @@
+module GMP.Q;
+
+type MPQ = unbox struct { num : I64, den : I64 };
+
+mpq : I64 -> I64 -> MPQ;
+mpq = |num, den| MPQ { num: num, den: den };

@@ -133,7 +133,15 @@ pub(super) fn handle_completion(
             deprecated: deprecated_field,
             preselect: None,
             sort_text: None,
-            filter_text: None,
+            // Filter by the bare name, not the rendered label
+            // (which includes the namespace). The label keeps the full
+            // qualified path for display; the bare-name filter makes
+            // typing `mpq` match `GMP.Q::mpq` with a top-tier fuzzy
+            // score. Namespace-prefix typing is unaffected because the
+            // `:` trigger character re-fires completion, after which
+            // `is_in_namespace` server-side has already restricted the
+            // candidate set to the typed namespace's members.
+            filter_text: Some(name.name.clone()),
             insert_text: Some(name.name.clone()),
             insert_text_format: None,
             insert_text_mode: None,

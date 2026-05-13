@@ -1,0 +1,9 @@
+module Main;
+
+import GMP.Q;
+
+main : IO ();
+main = (
+    let q = mpq(1, 2);
+    pure()
+);

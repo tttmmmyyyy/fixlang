@@ -927,6 +927,48 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// When the user types a bare identifier (`mpq`) in a non-dot
+    /// context after `import GMP.Q;`, the `GMP.Q::mpq` global must
+    /// (a) appear in the completion response and (b) carry a
+    /// `filterText` equal to its bare name (`"mpq"`) so the LSP client
+    /// matches the typed text directly against the function name
+    /// rather than fuzzy-matching the full qualified label and
+    /// scoring the trailing-name match down behind same-prefix
+    /// neighbours like `GMP.Q::MPQ::*`.
+    #[test]
+    fn test_completion_dotted_module_bare_name() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-dotted-module", &["lib.fix", "main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: import GMP.Q;
+        //   3: (blank)
+        //   4: main : IO ();
+        //   5: main = (
+        //   6:     let q = mpq(1, 2);   <-- cursor at end of "mpq" (col 15)
+        //   7:     pure()
+        //   8: );
+        let items = ctx.complete("main.fix", 6, 15);
+
+        let mpq_item = items
+            .iter()
+            .find(|it| it.get("label").and_then(|l| l.as_str()) == Some("GMP.Q::mpq"))
+            .expect("GMP.Q::mpq should appear in the completion response");
+
+        let filter_text = mpq_item.get("filterText").and_then(|v| v.as_str());
+        assert_eq!(
+            filter_text,
+            Some("mpq"),
+            "GMP.Q::mpq's filterText should be the bare name `mpq`, not the \
+             full qualified label; got {:?}",
+            filter_text,
+        );
+
+        ctx.shutdown();
+    }
+
     /// Completion at a position that is NOT in dot context must NOT
     /// attach `sortText` — the ranker is dot-completion-specific, and
     /// keeping the field unset preserves the LSP client's default
