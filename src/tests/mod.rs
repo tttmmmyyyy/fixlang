@@ -1,3 +1,4 @@
+mod test_abs_path_dep_hash;
 mod test_array_bounds_check;
 mod test_assert;
 mod test_associated_type;

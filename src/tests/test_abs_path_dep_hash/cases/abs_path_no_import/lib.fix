@@ -1,0 +1,4 @@
+module Lib;
+
+message : String;
+message = "first";
