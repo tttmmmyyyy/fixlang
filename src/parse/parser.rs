@@ -1976,8 +1976,16 @@ fn construct_expr_index(
                     INDEXABLE_TRAIT_ACT_NAME,
                 );
                 act_at_index.set_absolute();
+                // The synthetic `Indexable::act_at_index` Var is pure
+                // desugaring glue, but if we gave it a source span equal
+                // to the index expression's span, `find_node_at` for
+                // hover/rename/refs at the index position would land on
+                // this synthetic Std reference instead of the user-written
+                // expression inside the brackets. Leaving its source as
+                // None lets `find_node_at` skip it and recurse into
+                // `index_expr` where the user actually clicked.
                 let act_func = expr_app(
-                    expr_var(act_at_index, index.source.clone()),
+                    expr_var(act_at_index, None),
                     vec![index_expr],
                     index.source.clone(),
                 );

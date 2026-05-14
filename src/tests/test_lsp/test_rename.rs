@@ -1060,4 +1060,52 @@ mod tests {
         assert_all_edits_have_new_text(&we, "fresh_func");
         ctx.shutdown();
     }
+
+    // =======================================================================
+    // rename_index_syntax fixture (0-indexed):
+    //
+    // main.fix:
+    //  10:     let n = 2;        col 8 = binder `n`
+    //  11:     arr[n].iget       col 8 = `n` use inside `[n]`
+    //
+    // `arr[n]` is desugared in the parser to a call through the
+    // synthetic `Std::Indexable::act_at_index` function. The synthetic
+    // Var must not steal the cursor at `n` away from the user-written
+    // local — otherwise prepareRename would mistakenly classify the
+    // click as targeting a Std symbol.
+    // =======================================================================
+
+    /// Clicking on a local inside index syntax must resolve to the
+    /// local, not the synthetic `Indexable::act_at_index`. Both
+    /// prepareRename and rename should treat it as a regular rename.
+    #[test]
+    fn test_rename_local_inside_index_syntax() {
+        let mut ctx = LspTestCtx::setup("rename_index_syntax", &["main.fix"]);
+        // Cursor on the `n` use inside `arr[n]` at line 11, col 8.
+        let prep = ctx.prepare_rename("main.fix", 11, 8);
+        assert!(
+            prep.get("defaultBehavior")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            "expected defaultBehavior=true on `n` inside [n], got: {:?}",
+            prep
+        );
+        let we = ctx.rename("main.fix", 11, 8, "idx");
+        // Binder on line 10 + use on line 11 = 2 edits.
+        assert_eq!(count_edits(&we), 2, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "idx");
+        ctx.shutdown();
+    }
+
+    /// Renaming from the binder side must also propagate to the use
+    /// site that lives inside index syntax.
+    #[test]
+    fn test_rename_local_with_index_syntax_use_from_binder() {
+        let mut ctx = LspTestCtx::setup("rename_index_syntax", &["main.fix"]);
+        // Cursor on the binder `n` at line 10, col 8.
+        let we = ctx.rename("main.fix", 10, 8, "idx");
+        assert_eq!(count_edits(&we), 2, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "idx");
+        ctx.shutdown();
+    }
 }

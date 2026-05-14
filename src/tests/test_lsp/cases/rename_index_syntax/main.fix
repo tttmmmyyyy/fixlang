@@ -1,0 +1,16 @@
+module Main;
+
+// Renaming a local through index syntax. The cursor lands on the `n`
+// inside `arr[n]`, which is desugared to a call through the synthetic
+// `Std::Indexable::act_at_index` function — `find_node_at` must skip
+// that glue and resolve the cursor to the user-written `n` so that the
+// rename actually targets the local.
+sample : I64;
+sample = (
+    let arr = [0, 1, 2, 3];
+    let n = 2;
+    arr[n].iget
+);
+
+main : IO ();
+main = pure();
