@@ -1,0 +1,4 @@
+module Lib;
+
+helper : I64 -> I64;
+helper = |x| x + 1;

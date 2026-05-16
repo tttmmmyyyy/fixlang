@@ -79,14 +79,13 @@ mod integration_tests {
         run_check(&project_dir)
     }
 
-    /// Bug reproduction. `Main` references `Lib::message` only via
-    /// the absolute path `::Lib::message`, with no `import Lib;`. The
-    /// dependency-hash bug means editing `lib.fix` doesn't invalidate
-    /// `Main`'s typecheck cache, so the post-edit type mismatch
-    /// between `println` (`String -> IO ()`) and the now-`I64`
-    /// `::Lib::message` is silently masked. This test expects the
-    /// second `fix check` to fail with a type error; until the bug is
-    /// fixed it will succeed instead.
+    /// `Main` references `Lib::message` only via the absolute path
+    /// `::Lib::message`, with no `import Lib;`. After editing `lib.fix`
+    /// so `Lib::message`'s type changes (`String` → `I64`), the second
+    /// `fix check` must report a type error in `Main::main` —
+    /// `println` expects `String` but the new `Lib::message` is `I64`.
+    /// If the dependency hash misses the absolute-path edge, the stale
+    /// typecheck cache for `Main::main` would mask the change.
     #[test]
     fn abs_path_no_import_propagates_lib_type_change() {
         let second = run_lib_type_change_scenario("abs_path_no_import");
@@ -115,6 +114,67 @@ mod integration_tests {
              harness is broken.\nstdout: {}\nstderr: {}",
             String::from_utf8_lossy(&second.stdout),
             String::from_utf8_lossy(&second.stderr),
+        );
+    }
+
+    /// An absolute path naming a module that isn't linked must produce
+    /// a "Cannot find module" error pointing at the module token in
+    /// the user's expression — not a span-less error from the
+    /// parser-synthesised implicit import, and not a fallthrough
+    /// "Unknown name" that hides the real cause.
+    #[test]
+    fn missing_module_via_absolute_path_reports_at_module_token() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("abs_path_missing_module");
+
+        let output = run_check(&project_dir);
+        assert!(
+            !output.status.success(),
+            "`fix check` should fail when an absolute path names an unknown module.\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Cannot find module `NoSuchModule`"),
+            "stderr should report the missing module by name. Got:\n{}",
+            stderr,
+        );
+        assert!(
+            stderr.contains("in \"main.fix\""),
+            "stderr should attribute the error to the user's source file, not nowhere. Got:\n{}",
+            stderr,
+        );
+    }
+
+    /// An absolute path naming an existing module but a missing value
+    /// (`::Lib::messag` — `message` typoed) must produce a span-bearing
+    /// "Cannot find value named `Lib::messag`" error from
+    /// `validate_import_statements`. The synthesised implicit import
+    /// carries the source span of the leaf-name token, so the error
+    /// points at the user's typo rather than nowhere.
+    #[test]
+    fn value_typo_via_absolute_path_reports_unknown_name_with_span() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("abs_path_value_typo");
+
+        let output = run_check(&project_dir);
+        assert!(
+            !output.status.success(),
+            "`fix check` should fail on a typoed value name via absolute path.\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Cannot find value named `Lib::messag`"),
+            "stderr should report the typoed value by qualified name. Got:\n{}",
+            stderr,
+        );
+        assert!(
+            stderr.contains("in \"main.fix\""),
+            "stderr should attribute the error to the user's source file, not nowhere. Got:\n{}",
+            stderr,
         );
     }
 }

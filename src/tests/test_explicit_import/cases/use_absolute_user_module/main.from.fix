@@ -1,0 +1,4 @@
+module Main;
+
+main : ::Std::IO ();
+main = ::Std::IO::println(::Lib::message);

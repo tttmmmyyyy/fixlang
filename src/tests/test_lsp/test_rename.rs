@@ -258,6 +258,34 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// Verifies that renaming a global value referenced via an absolute
+    /// path (`::Lib::helper`) from a file with no `import Lib;` rewrites
+    /// the call-site occurrence, while the parser-synthesised implicit
+    /// `import Lib::helper;` (whose tree nodes have no source span) stays
+    /// invisible to the import-rewriting pass.
+    #[test]
+    fn test_rename_global_from_absolute_path() {
+        let mut ctx = LspTestCtx::setup("rename_absolute_path", &["lib.fix", "main.fix"]);
+        // Cursor on `helper` in `helper : I64 -> I64;` (line 2, col 0) in
+        // lib.fix.
+        let we = ctx.rename("lib.fix", 2, 0, "boost");
+
+        // Expected edits:
+        //   lib.fix : decl + def = 2
+        //   main.fix: 1 absolute-path use in `use_helper` body = 1
+        // Total: 3
+        assert_eq!(count_edits(&we), 3, "WorkspaceEdit: {:?}", we);
+
+        let per_file = changes_per_file(&we);
+        assert_eq!(
+            per_file,
+            vec![("lib.fix".to_string(), 2), ("main.fix".to_string(), 1)]
+        );
+
+        assert_all_edits_have_new_text(&we, "boost");
+        ctx.shutdown();
+    }
+
     /// RB-5: rename a local let-bound variable.
     #[test]
     fn test_rename_local_let() {
@@ -684,7 +712,7 @@ mod tests {
             .expect("Failed to send didChange");
         // Give the server a moment to process the notification (no
         // diagnostic re-run is triggered, so the AST stays stale).
-        ctx.client.wait_for_server(std::time::Duration::from_millis(300));
+        ctx.client.wait_for_server(Duration::from_millis(300));
 
         let resp = ctx.rename_raw("lib.fix", 3, 5, "Counter");
         let msg = resp
@@ -717,7 +745,7 @@ mod tests {
                 }),
             )
             .expect("Failed to send didChange");
-        ctx.client.wait_for_server(std::time::Duration::from_millis(300));
+        ctx.client.wait_for_server(Duration::from_millis(300));
 
         let resp = ctx.prepare_rename_raw("lib.fix", 3, 5);
         let msg = resp

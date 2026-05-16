@@ -1,0 +1,7 @@
+module Main;
+
+use_helper : I64 -> I64;
+use_helper = |a| ::Lib::helper(a) + 2;
+
+main : IO ();
+main = pure();
