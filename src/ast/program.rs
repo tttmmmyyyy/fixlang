@@ -716,14 +716,14 @@ impl Program {
         }
     }
 
-    // Materialize implicit imports for every absolute-path `FullName`
-    // (`::Mod::Ns::name`, value or type position) the parser collected.
-    // Each becomes an `ImportStatement { implicit: true, ... }` carrying
-    // the span of each path token, mirroring the shape a user-written
-    // `import Mod::Ns::name;` would produce. Downstream stages — name
-    // resolution, `importing_module_graph` for typecheck / object cache
-    // keys, `validate_import_statements`, etc. — then see the dependency
-    // without the user having to write the import.
+    /// Materialize implicit imports for every absolute-path `FullName`
+    /// (`::Mod::Ns::name`, value or type position) the parser collected
+    /// in `abs_path_uses`. Each becomes an
+    /// `ImportStatement { implicit: true, ... }` carrying the span of
+    /// each path token, mirroring the shape a user-written
+    /// `import Mod::Ns::name;` would produce — so the rest of the
+    /// pipeline sees the dependency without the user having to write
+    /// the import.
     pub fn inject_abs_path_implicit_imports(
         &mut self,
         current_module: &Name,
@@ -734,11 +734,10 @@ impl Program {
                 // Self-imports are already added unconditionally.
                 continue;
             }
-            let existing = self
-                .mod_to_import_stmts
-                .get(current_module)
-                .map(|v| v.as_slice())
-                .unwrap_or(&[]);
+            // `current_module`'s entry is established by
+            // `Program::single_module` (implicit self/std imports), so
+            // a missing entry would be a bug, not a normal path.
+            let existing = self.mod_to_import_stmts.get(current_module).unwrap();
             if is_accessible(existing, &abs_path) {
                 continue;
             }

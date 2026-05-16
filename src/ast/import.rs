@@ -12,19 +12,18 @@ pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {
 #[derive(Clone)]
 pub struct ImportStatement {
     pub importer: Name,
-    // `module.0` is the imported module's name; `module.1` is the
-    // source span of the token that referred to it — the `Mod` in an
-    // `import Mod;` line for user-written imports, or the `Mod` in
-    // `::Mod::name` for the parser's per-absolute-path implicit
-    // imports. `None` for implicit `Std` / self-imports, where no
-    // source token exists.
+    /// `module.0` is the imported module's name; `module.1` is the
+    /// source span of the token that referred to it — the `Mod` in an
+    /// `import Mod;` line for user-written imports, or the `Mod` in
+    /// `::Mod::name` for per-absolute-path implicit imports. `None`
+    /// for implicit `Std` / self-imports, where no source token
+    /// exists.
     pub module: (Name, Option<Span>),
     pub items: Vec<ImportTreeNode>,
     pub hiding: Vec<ImportTreeNode>,
-    // Span of the whole `import ...;` statement, used by the LSP
-    // import-rewriting passes to erase/replace user-written imports.
-    // `None` for any compiler-synthesised import (no statement exists
-    // in source); see `module.1` for those imports' provenance.
+    /// Span of the whole `import ...;` statement in source. `None`
+    /// for any compiler-synthesised import (no statement exists in
+    /// source); see `module.1` for those imports' provenance.
     pub source: Option<Span>,
     // Is this import statement is added implicitly by compiler?
     // The module itself and `Std` module are imported implicitly.
@@ -104,20 +103,20 @@ impl ImportStatement {
         Self::import_to_use_with_spans(importer, name, &[])
     }
 
-    // Like `import_to_use`, but attach a source span to each
-    // component of the synthesized import. `path_spans` aligns
-    // 1:1 with `name`'s full path: `[module_span, ns1_span, ...,
-    // leaf_span]`. The first span (if any) becomes `module.1`; the
-    // rest flow into the per-`ImportTreeNode` `Option<Span>` slots,
-    // mirroring the shape a user-written
-    // `import Mod::Ns::name;` produces. A shorter (or empty) slice
-    // leaves the trailing nodes' spans as `None`.
+    /// Like `import_to_use`, but attach a source span to each
+    /// component of the synthesized import. `path_spans` aligns
+    /// 1:1 with `name`'s full path: `[module_span, ns1_span, ...,
+    /// leaf_span]`. The first span (if any) becomes `module.1`; the
+    /// rest flow into the per-`ImportTreeNode` `Option<Span>` slots,
+    /// mirroring the shape a user-written
+    /// `import Mod::Ns::name;` produces. A shorter (or empty) slice
+    /// leaves the trailing nodes' spans as `None`.
     pub fn import_to_use_with_spans(
         importer: Name,
         name: FullName,
         path_spans: &[Span],
     ) -> ImportStatement {
-        let module_span = path_spans.get(0).cloned();
+        let module_span = path_spans.first().cloned();
         let item_spans = path_spans.get(1..).unwrap_or(&[]);
         let module = name.module();
         let mut names = name.to_namespace().names.clone();
@@ -329,12 +328,12 @@ impl ImportTreeNode {
         Self::from_names_with_spans(names, &[])
     }
 
-    // Like `from_names`, but `spans[i]` becomes the `Option<Span>`
-    // slot of the `ImportTreeNode` corresponding to `names[i]`.
-    // A shorter (or empty) `spans` slice leaves the remaining nodes
-    // with `None` spans.
+    /// Like `from_names`, but `spans[i]` becomes the `Option<Span>`
+    /// slot of the `ImportTreeNode` corresponding to `names[i]`.
+    /// A shorter (or empty) `spans` slice leaves the remaining nodes
+    /// with `None` spans.
     fn from_names_with_spans(names: &[Name], spans: &[Span]) -> ImportTreeNode {
-        let head_span = spans.get(0).cloned();
+        let head_span = spans.first().cloned();
         let tail_spans = spans.get(1..).unwrap_or(&[]);
         if names.is_empty() {
             return ImportTreeNode::Any(head_span);

@@ -71,17 +71,18 @@ struct ParseContext {
     namespace: NameSpace,
     // Configuration.
     config: Configuration,
-    // Every absolute-path `FullName` (value or type position) parsed
-    // from this source, paired with a `Vec<Span>` covering each token
-    // of the path in order: `[module_span, ns1_span, ..., leaf_span]`.
-    // Used at the end of `parse_module` to inject implicit imports so
-    // module dependency tracking picks up modules reached only via
-    // absolute paths. The spans flow onto the synthesized import as
-    // `module.1` (for the module token) and into the `Option<Span>`
-    // slot of each `ImportTreeNode` (NameSpace / Symbol / TypeOrTrait)
-    // — the same shape a user-written `import Mod::Ns::hoge;` produces
-    // — so downstream diagnostics and LSP queries can locate any
-    // component of the absolute path.
+    /// Every absolute-path `FullName` (value or type position) parsed
+    /// from this source, paired with a `Vec<Span>` covering each token
+    /// of the path in order: `[module_span, ns1_span, ..., leaf_span]`.
+    /// Drained when the module finishes parsing to synthesize implicit
+    /// imports for each absolute path, so module dependency tracking
+    /// picks up modules reached only via absolute paths. The spans
+    /// flow onto the synthesized import as `module.1` (for the module
+    /// token) and into the `Option<Span>` slot of each
+    /// `ImportTreeNode` (NameSpace / Symbol / TypeOrTrait) — the same
+    /// shape a user-written `import Mod::Ns::hoge;` produces — so
+    /// diagnostics and LSP queries can locate any component of the
+    /// absolute path.
     abs_path_uses: Vec<(FullName, Vec<Span>)>,
 }
 
