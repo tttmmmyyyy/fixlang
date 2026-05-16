@@ -2030,7 +2030,21 @@ impl TypeCheckContext {
         &mut self,
         pat: Arc<PatternNode>,
     ) -> Result<Arc<PatternNode>, Errors> {
-        let ty = self.substitute_and_reduce_type(pat.info.type_.as_ref().unwrap())?;
+        let raw_ty = pat
+            .info
+            .type_
+            .as_ref()
+            .expect("fix_types_for_pattern: every pattern should be typed");
+        let ty = match self.substitute_and_reduce_type(raw_ty) {
+            Ok(t) => t,
+            Err(e) => {
+                if !self.error_tolerant {
+                    return Err(e);
+                }
+                // Same rationale as in `fix_types`.
+                raw_ty.clone()
+            }
+        };
         let pat = pat.set_type(ty);
         Ok(match &pat.pattern {
             Pattern::Var(_var, _anno_ty) => {
@@ -2088,7 +2102,27 @@ impl TypeCheckContext {
     /// fixed-type check are kept separate so other passes (e.g. hole
     /// detection) can run on the substituted AST in between.
     pub fn fix_types(&mut self, expr: Arc<ExprNode>) -> Result<Arc<ExprNode>, Errors> {
-        let ty = self.substitute_and_reduce_type(expr.type_.as_ref().unwrap())?;
+        let raw_ty = expr
+            .type_
+            .as_ref()
+            .expect("fix_types: every node should be typed by unify_type_of_expr");
+        let ty = match self.substitute_and_reduce_type(raw_ty) {
+            Ok(t) => t,
+            Err(e) => {
+                if !self.error_tolerant {
+                    return Err(e);
+                }
+                // Associated-type reduction can fail when the
+                // accumulated substitution / equality state is
+                // inconsistent — a normal consequence of the
+                // tolerant elaborator stitching together partially
+                // failed sub-expressions. Use the un-reduced type so
+                // the walk continues and downstream consumers (LSP
+                // dot completion, hover) can still read whatever
+                // type info survived.
+                raw_ty.clone()
+            }
+        };
         let expr = expr.set_type(ty);
         Ok(match &*expr.expr {
             Expr::Var(_) => expr,
