@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     fs::File,
     io::{Read, Write},
+    panic::RefUnwindSafe,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -14,7 +15,16 @@ use crate::{
 pub type SharedTypeCheckCache = Arc<dyn TypeCheckCache + Send + Sync>;
 
 // A trait for objects which manage caching of typechecked expressions.
-pub trait TypeCheckCache {
+//
+// `RefUnwindSafe` is a supertrait so that `Arc<dyn TypeCheckCache + Send + Sync>`
+// satisfies `UnwindSafe`. The diagnostics thread captures one such `Arc` and
+// runs the captured closure under `catch_unwind`; without this bound the
+// closure isn't unwind-safe and the caller has to wrap it in
+// `AssertUnwindSafe`. Both built-in impls (`FileCache`, `MemoryCache`) are
+// `RefUnwindSafe` for free — `FileCache` is empty and `MemoryCache`'s only
+// field is a `Mutex`, whose poisoning protocol makes it unconditionally
+// `RefUnwindSafe`.
+pub trait TypeCheckCache: RefUnwindSafe {
     // Saves a typechecked expression to the cache.
     fn save_cache(
         &self,

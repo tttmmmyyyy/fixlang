@@ -759,9 +759,9 @@ fn handle_initialized(
 ) {
     // Launch the diagnostics thread.
     std::thread::spawn(move || {
-        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let res = std::panic::catch_unwind(move || {
             diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache);
-        }));
+        });
         if res.is_err() {
             // If a panic occurs in the diagnostics thread,
             send_diagnostics_error_message(
