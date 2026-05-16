@@ -519,11 +519,13 @@ impl TypeCheckContext {
     }
 
     /// Run `validate_pattern` then `get_typed` on `pat`, returning the
-    /// typed pattern and its variable bindings. Used by `Let` and
-    /// `Match` arms to get a single combined `Result` so the call site
-    /// can choose between propagating the error (strict mode) and
-    /// substituting a fresh-tyvar pattern (`error_tolerant` mode).
-    fn elaborate_let_pattern(
+    /// typed pattern and its variable bindings. Used by both `Let`
+    /// and `Match` arms — i.e. every site where a pattern introduces
+    /// new binders into the surrounding scope — to combine the two
+    /// fallible steps into one `Result` so the call site can choose
+    /// between propagating the error (strict mode) and substituting
+    /// a fresh-tyvar pattern (`error_tolerant` mode).
+    fn elaborate_pattern_binding(
         &mut self,
         pat: &Arc<PatternNode>,
     ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
@@ -1027,7 +1029,7 @@ impl TypeCheckContext {
                 // `val` and `body` so any nested cursor inside them
                 // gets a useful type — fall back to a fresh-tyvar
                 // pattern with no variable bindings.
-                let (pat, var_ty) = match self.elaborate_let_pattern(pat) {
+                let (pat, var_ty) = match self.elaborate_pattern_binding(pat) {
                     Ok(p) => p,
                     Err(e) => {
                         if !self.error_tolerant {
@@ -1119,7 +1121,7 @@ impl TypeCheckContext {
                     // mismatches in `error_tolerant` mode; the only
                     // remaining failure path here is `validate_pattern`
                     // (struct field validity etc.).
-                    let (pat, var_ty) = match self.elaborate_let_pattern(&pat) {
+                    let (pat, var_ty) = match self.elaborate_pattern_binding(&pat) {
                         Ok(p) => p,
                         Err(e) => {
                             if !self.error_tolerant {
