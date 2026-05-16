@@ -338,12 +338,34 @@ Where the project provides its own version of a common type, use it instead of t
 
 **Apply** unconditionally.
 
+#### 12. Extract named steps for readability
+
+Conventions 1 and 2 catch *duplication* (same code in two places). This one catches *cohesion*: a block of code that is conceptually one named step embedded inside a larger function, even though it only appears once. Extracting it into a helper lets the caller read as a sequence of named steps and keeps a single abstraction level per function.
+
+The risk this rule has to actively avoid is **function fragmentation** — chopping every 3-line block into its own helper so the reader has to chase a chain of one-line functions to follow the flow. The mechanical gates below exist to ban that outcome.
+
+**Apply** when *all* of the following hold:
+
+- The block is at least **5 statements** long, and is self-contained — no shared mutable state with the surrounding code aside from clearly enumerable inputs/outputs (no taking arbitrary local borrows out of a partly-built data structure mid-construction).
+- You can name what the block *produces* in 2–4 words, describing the WHAT (e.g. `parse_constraints`, `inject_abs_path_implicit_imports`), not the WHERE or HOW (`step_one`, `do_the_loop`, `helper_for_main`).
+- The block has **≤3 inputs** (parameters / closed-over values) and **≤1 conceptual output** (return value, or mutation of one named receiver). A long parameter list signals the block isn't actually cohesive.
+- The block doesn't have to interleave with surrounding code via `?` propagation in a way that the extracted version can't preserve. (A pure-Rust extraction has to keep error behavior identical.)
+
+**Skip** when:
+
+- The block is short enough that naming it is more overhead than reading it.
+- The only name you can come up with restates the function name plus a number (`process_step_1`, `helper_part_2`, `do_remaining_work`). The missing intuitive name usually means the surrounding function's seam is in the wrong place — flag for redesign rather than carve out filler.
+- The block reads naturally as part of its surrounding flow (e.g., the loop body of a top-level `for` whose entire purpose is that loop).
+- Extraction would force passing 4+ parameters or returning a tuple of more than 2 unrelated values.
+
+**Flag instead of applying** when extraction looks beneficial but you can't satisfy all the Apply conditions — especially when a good name doesn't come to mind. Surface the location and your proposed name in the report; let the author decide whether the seam belongs there.
+
 ### Procedure
 
 1. Run `git diff <base>` to find changed files and hunks.
-2. For each changed `.rs` file, walk the diff hunks and check each of the eleven conventions against the added/modified code.
+2. For each changed `.rs` file, walk the diff hunks and check each of the twelve conventions against the added/modified code.
 3. For each violation:
-   - Identify which convention (1–11).
+   - Identify which convention (1–12).
    - If it falls in "Apply": make the edit with `Edit`.
    - If it falls in "Report only": collect it for the final report; do not edit.
 4. Run `cargo check` after edits. On failure, revert the offending edit and reclassify it as a flagged item.
