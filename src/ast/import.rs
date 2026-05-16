@@ -12,9 +12,19 @@ pub fn is_accessible(stmts: &[ImportStatement], name: &FullName) -> bool {
 #[derive(Clone)]
 pub struct ImportStatement {
     pub importer: Name,
+    // `module.0` is the imported module's name; `module.1` is the
+    // source span of the token that referred to it — the `Mod` in an
+    // `import Mod;` line for user-written imports, or the `Mod` in
+    // `::Mod::name` for the parser's per-absolute-path implicit
+    // imports. `None` for implicit `Std` / self-imports, where no
+    // source token exists.
     pub module: (Name, Option<Span>),
     pub items: Vec<ImportTreeNode>,
     pub hiding: Vec<ImportTreeNode>,
+    // Span of the whole `import ...;` statement, used by the LSP
+    // import-rewriting passes to erase/replace user-written imports.
+    // `None` for any compiler-synthesised import (no statement exists
+    // in source); see `module.1` for those imports' provenance.
     pub source: Option<Span>,
     // Is this import statement is added implicitly by compiler?
     // The module itself and `Std` module are imported implicitly.
@@ -91,13 +101,31 @@ impl ImportStatement {
     }
 
     pub fn import_to_use(importer: Name, name: FullName) -> ImportStatement {
+        Self::import_to_use_with_spans(importer, name, &[])
+    }
+
+    // Like `import_to_use`, but attach a source span to each
+    // component of the synthesized import. `path_spans` aligns
+    // 1:1 with `name`'s full path: `[module_span, ns1_span, ...,
+    // leaf_span]`. The first span (if any) becomes `module.1`; the
+    // rest flow into the per-`ImportTreeNode` `Option<Span>` slots,
+    // mirroring the shape a user-written
+    // `import Mod::Ns::name;` produces. A shorter (or empty) slice
+    // leaves the trailing nodes' spans as `None`.
+    pub fn import_to_use_with_spans(
+        importer: Name,
+        name: FullName,
+        path_spans: &[Span],
+    ) -> ImportStatement {
+        let module_span = path_spans.get(0).cloned();
+        let item_spans = path_spans.get(1..).unwrap_or(&[]);
         let module = name.module();
         let mut names = name.to_namespace().names.clone();
         let names = names.split_off(1);
         ImportStatement {
             importer,
-            module: (module, None),
-            items: vec![ImportTreeNode::from_names(&names)],
+            module: (module, module_span),
+            items: vec![ImportTreeNode::from_names_with_spans(&names, item_spans)],
             hiding: vec![],
             source: None,
             implicit: false,
@@ -298,23 +326,33 @@ impl ImportTreeNode {
 
     // From a list of names, for example ["A", "B", "f"], create `Namespace("A", [Namespace("B", [Symbol("f")])])`.
     fn from_names(names: &[Name]) -> ImportTreeNode {
-        if names.len() == 0 {
-            return ImportTreeNode::Any(None);
+        Self::from_names_with_spans(names, &[])
+    }
+
+    // Like `from_names`, but `spans[i]` becomes the `Option<Span>`
+    // slot of the `ImportTreeNode` corresponding to `names[i]`.
+    // A shorter (or empty) `spans` slice leaves the remaining nodes
+    // with `None` spans.
+    fn from_names_with_spans(names: &[Name], spans: &[Span]) -> ImportTreeNode {
+        let head_span = spans.get(0).cloned();
+        let tail_spans = spans.get(1..).unwrap_or(&[]);
+        if names.is_empty() {
+            return ImportTreeNode::Any(head_span);
         }
         if names.len() == 1 {
             let name = &names[0];
             // If the first letter of `name` is lowercase, create a symbol node.
             if name.chars().next().unwrap().is_lowercase() {
-                return ImportTreeNode::Symbol(name.clone(), None);
+                return ImportTreeNode::Symbol(name.clone(), head_span);
             }
             // If the first letter of `name` is uppercase, create a type or trait node.
-            return ImportTreeNode::TypeOrTrait(name.clone(), None);
+            return ImportTreeNode::TypeOrTrait(name.clone(), head_span);
         }
         let namespace = &names[0];
         ImportTreeNode::NameSpace(
             namespace.clone(),
-            vec![ImportTreeNode::from_names(&names[1..])],
-            None,
+            vec![ImportTreeNode::from_names_with_spans(&names[1..], tail_spans)],
+            head_span,
         )
     }
 

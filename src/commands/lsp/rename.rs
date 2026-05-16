@@ -379,6 +379,12 @@ fn collect_type_rename_edits(
     let mut rebuild_edits: Vec<(Span, String)> = vec![];
     for stmts in program.mod_to_import_stmts.values() {
         for stmt in stmts {
+            if stmt.implicit {
+                // Parser-synthesized implicit imports aren't in the
+                // user's source — skip so rename never tries to
+                // rewrite them.
+                continue;
+            }
             collect_import_edits_for_type(
                 program,
                 &auto_ns,

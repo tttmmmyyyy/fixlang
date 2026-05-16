@@ -52,7 +52,11 @@ use pest::error::Error;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use std::path::PathBuf;
-use std::{cmp::min, mem::swap, sync::Arc};
+use std::{
+    cmp::min,
+    mem::{replace, swap, take},
+    sync::Arc,
+};
 
 struct ParseContext {
     // The list of sizes of tuples used in this module.
@@ -67,6 +71,18 @@ struct ParseContext {
     namespace: NameSpace,
     // Configuration.
     config: Configuration,
+    // Every absolute-path `FullName` (value or type position) parsed
+    // from this source, paired with a `Vec<Span>` covering each token
+    // of the path in order: `[module_span, ns1_span, ..., leaf_span]`.
+    // Used at the end of `parse_module` to inject implicit imports so
+    // module dependency tracking picks up modules reached only via
+    // absolute paths. The spans flow onto the synthesized import as
+    // `module.1` (for the module token) and into the `Option<Span>`
+    // slot of each `ImportTreeNode` (NameSpace / Symbol / TypeOrTrait)
+    // — the same shape a user-written `import Mod::Ns::hoge;` produces
+    // — so downstream diagnostics and LSP queries can locate any
+    // component of the absolute path.
+    abs_path_uses: Vec<(FullName, Vec<Span>)>,
 }
 
 impl ParseContext {
@@ -78,6 +94,7 @@ impl ParseContext {
             module_name: "".to_string(),
             namespace: NameSpace::local(),
             config: config.clone(),
+            abs_path_uses: vec![],
         }
     }
 }
@@ -507,8 +524,10 @@ fn parse_module(
     errors.eat_err(fix_mod.add_traits(trait_infos, trait_impls, trait_aliases));
     errors.eat_err(fix_mod.add_import_statements(import_statements));
     fix_mod.used_tuple_sizes.append(&mut ctx.tuple_sizes);
-    fix_mod.export_statements = std::mem::replace(&mut export_statements, vec![]);
-    fix_mod.deprecation_statements = std::mem::replace(&mut deprecation_statements, vec![]);
+    fix_mod.export_statements = replace(&mut export_statements, vec![]);
+    fix_mod.deprecation_statements = replace(&mut deprecation_statements, vec![]);
+
+    fix_mod.inject_abs_path_implicit_imports(&ctx.module_name, take(&mut ctx.abs_path_uses));
 
     errors.to_result().map(|_| fix_mod)
 }
@@ -1227,10 +1246,10 @@ fn parse_predicate(pair: Pair<Rule>, ctx: &mut ParseContext) -> Predicate {
     pred
 }
 
-fn parse_trait_fullname(pair: Pair<Rule>, _ctx: &mut ParseContext) -> TraitId {
+fn parse_trait_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> TraitId {
     assert_eq!(pair.as_rule(), Rule::trait_fullname);
     let mut pairs = pair.into_inner();
-    let fullname = parse_capital_fullname(pairs.next().unwrap());
+    let fullname = parse_capital_fullname(pairs.next().unwrap(), ctx);
     TraitId { name: fullname }
 }
 
@@ -1446,7 +1465,7 @@ fn parse_expr_or_hole_with_new_do(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
 ) -> Result<Arc<ExprNode>, Errors> {
-    let old_doctx = std::mem::replace(&mut ctx.do_context, DoContext::default());
+    let old_doctx = replace(&mut ctx.do_context, DoContext::default());
     let expr = parse_expr_or_hole(pair, ctx)?;
     let expr = ctx.do_context.expand_binds(expr);
     ctx.do_context = old_doctx;
@@ -2035,7 +2054,7 @@ fn parse_index_syntax(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexS
             }
             Rule::tuple_accessor => {
                 let pair = pair.into_inner().next().unwrap();
-                let field_name = parse_number_fullname(pair);
+                let field_name = parse_number_fullname(pair, ctx);
                 IndexAccessor::Field(field_name, Some(src))
             }
             _ => unreachable!(),
@@ -2128,7 +2147,7 @@ fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
 /// trailing-token span lets callers target the bare name independently —
 /// e.g., for LSP rename / find-references on a pragma argument. Callers
 /// that don't need the span can simply discard it.
-fn parse_fullname(pair: Pair<Rule>, ctx: &ParseContext) -> (FullName, Option<Span>) {
+fn parse_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> (FullName, Option<Span>) {
     assert_eq!(pair.as_rule(), Rule::fullname);
     let name_span = pair.clone().into_inner().last().and_then(|last| {
         match last.as_rule() {
@@ -2138,20 +2157,20 @@ fn parse_fullname(pair: Pair<Rule>, ctx: &ParseContext) -> (FullName, Option<Spa
             _ => None,
         }
     });
-    (parse_fullname_or_capital_fullname(pair), name_span)
+    (parse_fullname_or_capital_fullname(pair, ctx), name_span)
 }
 
-fn parse_capital_fullname(pair: Pair<Rule>) -> FullName {
+fn parse_capital_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> FullName {
     assert_eq!(pair.as_rule(), Rule::capital_fullname);
-    parse_fullname_or_capital_fullname(pair)
+    parse_fullname_or_capital_fullname(pair, ctx)
 }
 
-fn parse_number_fullname(pair: Pair<Rule>) -> FullName {
+fn parse_number_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> FullName {
     assert_eq!(pair.as_rule(), Rule::number_fullname);
-    parse_fullname_or_capital_fullname(pair)
+    parse_fullname_or_capital_fullname(pair, ctx)
 }
 
-fn parse_fullname_or_capital_fullname(pair: Pair<Rule>) -> FullName {
+fn parse_fullname_or_capital_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> FullName {
     assert!(
         pair.as_rule() == Rule::fullname
             || pair.as_rule() == Rule::capital_fullname
@@ -2159,8 +2178,18 @@ fn parse_fullname_or_capital_fullname(pair: Pair<Rule>) -> FullName {
     );
     let mut pairs = pair.into_inner();
     let mut fullname = FullName::local("");
+    // For an absolute path `::A::B::...::name`, the source spans of
+    // each path token in order: `[A_span, B_span, ..., name_span]`.
+    // Collected only when the path is absolute; threaded onto the
+    // synthesized implicit import so each component (module name,
+    // intermediate namespaces, leaf) ends up at the same `Span` slot
+    // a user-written `import A::B::...::name;` would populate.
+    let mut path_spans: Vec<Span> = Vec::new();
     while let Some(pair) = pairs.next() {
         if pair.as_rule() == Rule::namespace_item {
+            if fullname.namespace.is_absolute {
+                path_spans.push(Span::from_pair(&ctx.source, &pair));
+            }
             fullname.namespace.names.push(pair.as_str().to_string());
         } else if pair.as_rule() == Rule::double_colon {
             if fullname.namespace.names.is_empty() {
@@ -2173,9 +2202,16 @@ fn parse_fullname_or_capital_fullname(pair: Pair<Rule>) -> FullName {
                     || pair.as_rule() == Rule::capital_name
                     || pair.as_rule() == Rule::number_name
             );
+            if fullname.namespace.is_absolute {
+                path_spans.push(Span::from_pair(&ctx.source, &pair));
+            }
             fullname.name = pair.as_str().to_string();
             break;
         }
+    }
+    if fullname.is_absolute() && !fullname.namespace.names.is_empty() {
+        debug_assert_eq!(path_spans.len(), fullname.namespace.names.len() + 1);
+        ctx.abs_path_uses.push((fullname.clone(), path_spans));
     }
     fullname
 }
@@ -2239,7 +2275,7 @@ fn parse_expr_let_recursively(
 
         // Parse the rest of the expression recursively.
         // Here we create a new DoContext.
-        let old_doctx = std::mem::replace(&mut ctx.do_context, DoContext::default());
+        let old_doctx = replace(&mut ctx.do_context, DoContext::default());
         let value = parse_expr_let_recursively(pairs, ctx)?;
         let value = ctx.do_context.expand_binds(value);
         ctx.do_context = old_doctx; // Restore old DoContext.
@@ -2385,7 +2421,7 @@ fn parse_expr_make_struct(
     let mut pairs = pair.into_inner();
     let tycon_pair = pairs.next().unwrap();
     let tycon_span = Span::from_pair(&ctx.source, &tycon_pair);
-    let tycon = parse_tycon(tycon_pair);
+    let tycon = parse_tycon(tycon_pair, ctx);
     let mut fields = vec![];
     while pairs.peek().is_some() {
         let name_pair = pairs.next().unwrap();
@@ -2862,12 +2898,12 @@ fn parse_type_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
 fn parse_type_tycon(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     assert_eq!(pair.as_rule(), Rule::type_tycon);
     let span = Span::from_pair(&ctx.source, &pair);
-    type_tycon(&parse_tycon(pair)).set_source(Some(span))
+    type_tycon(&parse_tycon(pair, ctx)).set_source(Some(span))
 }
 
-fn parse_tycon(pair: Pair<Rule>) -> Arc<TyCon> {
+fn parse_tycon(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::type_tycon);
-    tycon(parse_capital_fullname(pair.into_inner().next().unwrap()))
+    tycon(parse_capital_fullname(pair.into_inner().next().unwrap(), ctx))
 }
 
 fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
@@ -2961,7 +2997,7 @@ fn parse_pattern_struct(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Pattern
     let mut pairs = pair.clone().into_inner();
     let tycon_pair = pairs.next().unwrap();
     let tycon_span = Span::from_pair(&ctx.source, &tycon_pair);
-    let tycon = parse_tycon(tycon_pair);
+    let tycon = parse_tycon(tycon_pair, ctx);
     let mut field_to_pats = Vec::default();
     while pairs.peek().is_some() {
         let name_pair = pairs.next().unwrap();

@@ -1073,6 +1073,12 @@ fn collect_field_import_occs(
 
     for (_importer, stmts) in &program.mod_to_import_stmts {
         for stmt in stmts {
+            if stmt.implicit {
+                // Parser-synthesized implicit imports (`Std`,
+                // self-import, per-absolute-path) aren't user-written
+                // and must not appear in user-facing references.
+                continue;
+            }
             if stmt.module.0 != target_module {
                 continue;
             }
@@ -1164,6 +1170,11 @@ fn collect_import_refs(
 
     for (_importer, stmts) in &program.mod_to_import_stmts {
         for stmt in stmts {
+            if stmt.implicit {
+                // Parser-synthesized implicit imports aren't user-written
+                // and must not appear in user-facing references.
+                continue;
+            }
             if stmt.module.0 != target_module {
                 continue;
             }

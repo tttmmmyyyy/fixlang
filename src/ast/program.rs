@@ -2,7 +2,7 @@ use crate::ast::deprecation::{DeprecationInfo, DeprecationStatement};
 use crate::ast::equality::Equality;
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
 use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
-use crate::ast::import::{ImportItem, ImportStatement};
+use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
@@ -34,8 +34,10 @@ use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
+use std::mem::replace;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::vec;
 
 #[derive(Clone)]
@@ -642,7 +644,7 @@ impl Program {
         // Make elements of used_tuple_sizes unique.
         self.used_tuple_sizes.sort();
         self.used_tuple_sizes.dedup();
-        let used_tuple_sizes = std::mem::replace(&mut self.used_tuple_sizes, vec![]);
+        let used_tuple_sizes = replace(&mut self.used_tuple_sizes, vec![]);
         for tuple_size in &used_tuple_sizes {
             self.add_tuple_defn(*tuple_size);
         }
@@ -693,7 +695,7 @@ impl Program {
                 .mod_to_import_stmts
                 .get_mut(&import_statement.importer)
                 .unwrap();
-            *stmts = std::mem::replace(stmts, vec![])
+            *stmts = replace(stmts, vec![])
                 .into_iter()
                 .filter(|stmt| !(stmt.module.0 == STD_NAME && stmt.implicit))
                 .collect();
@@ -711,6 +713,42 @@ impl Program {
         } else {
             self.mod_to_import_stmts
                 .insert(importer.clone(), vec![import_statement]);
+        }
+    }
+
+    // Materialize implicit imports for every absolute-path `FullName`
+    // (`::Mod::Ns::name`, value or type position) the parser collected.
+    // Each becomes an `ImportStatement { implicit: true, ... }` carrying
+    // the span of each path token, mirroring the shape a user-written
+    // `import Mod::Ns::name;` would produce. Downstream stages — name
+    // resolution, `importing_module_graph` for typecheck / object cache
+    // keys, `validate_import_statements`, etc. — then see the dependency
+    // without the user having to write the import.
+    pub fn inject_abs_path_implicit_imports(
+        &mut self,
+        current_module: &Name,
+        abs_path_uses: Vec<(FullName, Vec<Span>)>,
+    ) {
+        for (abs_path, path_spans) in abs_path_uses {
+            if abs_path.module() == *current_module {
+                // Self-imports are already added unconditionally.
+                continue;
+            }
+            let existing = self
+                .mod_to_import_stmts
+                .get(current_module)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
+            if is_accessible(existing, &abs_path) {
+                continue;
+            }
+            let mut stmt = ImportStatement::import_to_use_with_spans(
+                current_module.clone(),
+                abs_path,
+                &path_spans,
+            );
+            stmt.implicit = true;
+            self.add_import_statement_no_verify(stmt);
         }
     }
 
@@ -1313,7 +1351,7 @@ impl Program {
             let mut threads = vec![];
             for _ in 0..tc.num_worker_threads {
                 let queue = queue.clone();
-                let thread = std::thread::spawn(move || {
+                let thread = thread::spawn(move || {
                     let mut results = vec![];
                     loop {
                         let task = match queue.lock().unwrap().pop() {
@@ -1457,7 +1495,7 @@ impl Program {
     // In this function, `ExportStatement`s are updated.
     pub fn instantiate_exported_values(&mut self, tc: &TypeCheckContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        let mut export_stmts = std::mem::replace(&mut self.export_statements, vec![]);
+        let mut export_stmts = replace(&mut self.export_statements, vec![]);
         for stmt in &mut export_stmts {
             errors.eat_err_or(
                 self.instantiate_exported_value(&stmt.value_name, None, &stmt.src, tc),
@@ -2466,9 +2504,14 @@ impl Program {
                 continue;
             }
 
+            // `module.1` carries the span of the `Mod` token wherever
+            // the user wrote it — inside an `import Mod;` line for
+            // user imports, or inside a `::Mod::name` expression for
+            // the parser-synthesised per-absolute-path imports — so a
+            // single field gives us a good error location for both.
             return Err(Errors::from_msg_srcs(
                 format!("Cannot find module `{}`.", module),
-                &[&import_stmt.source],
+                &[&import_stmt.module.1],
             ));
         }
     }
@@ -2477,11 +2520,9 @@ impl Program {
     pub fn importing_module_graph(&self) -> (Graph<Name>, Map<Name, usize>) {
         let (mut graph, elem_to_idx) = Graph::from_set(self.linked_mods());
         for (importer, stmts) in &self.mod_to_import_stmts {
+            let importer_idx = *elem_to_idx.get(importer).unwrap();
             for stmt in stmts {
-                graph.connect_idx(
-                    *elem_to_idx.get(importer).unwrap(),
-                    *elem_to_idx.get(&stmt.module.0).unwrap(),
-                );
+                graph.connect_idx(importer_idx, *elem_to_idx.get(&stmt.module.0).unwrap());
             }
         }
         (graph, elem_to_idx)
