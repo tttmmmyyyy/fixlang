@@ -1419,10 +1419,20 @@ impl TypeCheckContext {
 
     // Validate pattern and raise error if invalid,
     fn validate_pattern(&mut self, pat: &PatternNode) -> Result<(), Errors> {
+        // In `error_tolerant` mode every gate below is downgraded to a
+        // no-op so a single bad sub-check doesn't bail out of the whole
+        // walk — siblings still get a chance to validate, and the
+        // tolerant variants of `pattern.rs::get_typed` cope with any
+        // structural slip that validation would otherwise have caught.
+        let tolerate = self.error_tolerant;
         match &pat.pattern {
             Pattern::Var(_, opt_ty) => {
                 if let Some(anno_ty) = opt_ty {
-                    self.validate_type_annotation(anno_ty)?;
+                    if let Err(e) = self.validate_type_annotation(anno_ty) {
+                        if !tolerate {
+                            return Err(e);
+                        }
+                    }
                 }
             }
             Pattern::Struct(tc, pats) => {
@@ -1432,14 +1442,14 @@ impl TypeCheckContext {
                     .iter()
                     .map(|(name, _, _)| name.clone())
                     .collect::<Set<_>>();
-                if fields_pat.len() < pats.len() {
+                if fields_pat.len() < pats.len() && !tolerate {
                     return Err(Errors::from_msg_srcs(
                         "Duplicate field in struct pattern.".to_string(),
                         &[&pat.info.source],
                     ));
                 }
                 for f in fields_pat {
-                    if !fields_str.contains(&f) {
+                    if !fields_str.contains(&f) && !tolerate {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Unknown field `{}` for struct `{}`.",
@@ -1451,14 +1461,22 @@ impl TypeCheckContext {
                     }
                 }
                 for (_, _, p) in pats {
-                    self.validate_pattern(p)?;
+                    if let Err(e) = self.validate_pattern(p) {
+                        if !tolerate {
+                            return Err(e);
+                        }
+                    }
                 }
             }
             Pattern::Union(_, _, subpat) => {
-                self.validate_pattern(subpat)?;
+                if let Err(e) = self.validate_pattern(subpat) {
+                    if !tolerate {
+                        return Err(e);
+                    }
+                }
             }
         }
-        if pat.pattern.has_duplicate_vars() {
+        if pat.pattern.has_duplicate_vars() && !tolerate {
             return Err(Errors::from_msg_srcs(
                 "Duplicate name defined by pattern.".to_string(),
                 &[&pat.info.source],

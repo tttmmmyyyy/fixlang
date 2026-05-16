@@ -3,7 +3,7 @@ use crate::ast::expr::Var;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::typedecl::Field;
-use crate::ast::types::{TyCon, TyConInfo, TypeNode, type_from_tyvar};
+use crate::ast::types::{TyCon, TyConInfo, TypeNode};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::error::Errors;
@@ -115,12 +115,24 @@ impl PatternNode {
             Pattern::Var(v, ty) => {
                 let var_name = v.name.clone();
                 let ty = if ty.is_none() {
-                    let tv = typechcker.new_tyvar_star();
-                    typechcker.add_tyvar_source(tv.name.clone(), self.info.source.clone());
-                    type_from_tyvar(tv)
+                    typechcker.fresh_ty_with_src(&self.info.source)
                 } else {
                     let ty = ty.as_ref().unwrap();
-                    typechcker.validate_type_annotation(ty)?
+                    match typechcker.validate_type_annotation(ty) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            if !typechcker.error_tolerant {
+                                return Err(e);
+                            }
+                            // The annotation is ill-formed (e.g.
+                            // references an unknown type). In
+                            // error_tolerant mode we still want this
+                            // binder to participate in scope so the
+                            // body can reference `var_name`; fall back
+                            // to a fresh tyvar.
+                            typechcker.fresh_ty_with_src(&self.info.source)
+                        }
+                    }
                 };
                 let mut var_to_ty = Map::default();
                 var_to_ty.insert(var_name, ty.clone());
@@ -142,12 +154,35 @@ impl PatternNode {
                     .collect::<Map<_, _>>();
                 let mut field_to_pat = field_to_pat.clone();
                 for (field_name, _, pat) in &mut field_to_pat {
-                    let (typed_pat, var_ty) = pat.get_typed(typechcker)?;
+                    // Type each sub-pattern. In `error_tolerant` mode
+                    // a failure here (bad annotation, sub-pattern
+                    // type mismatch, …) substitutes a fresh-tyvar
+                    // typed sub-pattern with no bindings, so the
+                    // sibling fields are still walked.
+                    let (typed_pat, var_ty) = match pat.get_typed(typechcker) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            if !typechcker.error_tolerant {
+                                return Err(e);
+                            }
+                            let pat_ty = typechcker.fresh_ty_with_src(&pat.info.source);
+                            (pat.set_type(pat_ty), Map::default())
+                        }
+                    };
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
+                    // Unknown field name (filtered by
+                    // `validate_pattern` in strict mode, but tolerated
+                    // there in `error_tolerant` mode): skip the unify
+                    // — the struct definition has no field type to
+                    // match against.
+                    let Some(field_ty) = field_name_to_ty.get(field_name) else {
+                        debug_assert!(typechcker.error_tolerant);
+                        continue;
+                    };
                     let unify_res = UnifOrOtherErr::extract_others(typechcker.unify(
                         &pat.info.type_.as_ref().unwrap(),
-                        field_name_to_ty.get(field_name).unwrap(),
+                        field_ty,
                     ))?;
                     if unify_res.is_err() && !typechcker.error_tolerant {
                         return Err(Errors::from_msg_srcs(
@@ -178,8 +213,21 @@ impl PatternNode {
                 let union_ty = tc.get_struct_union_value_type(typechcker);
                 let variant_ty = union_ty.field_types(&typechcker.type_env)[variant_idx].clone();
 
-                // Infer the type of the subpattern.
-                let (subpat, var_ty) = subpat.get_typed(typechcker)?;
+                // Infer the type of the subpattern. In
+                // `error_tolerant` mode, a failure becomes a
+                // fresh-tyvar typed sub-pattern with no bindings — the
+                // surrounding union pattern still gets `union_ty`
+                // assigned, so the match arm can proceed.
+                let (subpat, var_ty) = match subpat.get_typed(typechcker) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        if !typechcker.error_tolerant {
+                            return Err(e);
+                        }
+                        let pat_ty = typechcker.fresh_ty_with_src(&subpat.info.source);
+                        (subpat.set_type(pat_ty), Map::default())
+                    }
+                };
 
                 // Unify the type of the subpattern with the type of the variant.
                 let unify_res = UnifOrOtherErr::extract_others(
