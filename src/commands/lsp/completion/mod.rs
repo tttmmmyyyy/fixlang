@@ -46,7 +46,7 @@ use std::sync::Arc;
 pub(super) fn handle_completion(
     id: u32,
     params: &CompletionParams,
-    program: &Program,
+    program: Option<&Program>,
     uri_to_content: &Map<Uri, LatestContent>,
     typecheck_cache: SharedTypeCheckCache,
 ) {
@@ -66,16 +66,24 @@ pub(super) fn handle_completion(
     } else {
         None
     };
-    // The snapshot can be missing the user's module entirely if the
-    // last-saved file failed to parse (load_source_files drops the
-    // root project's modules in that case). In dot context the live
-    // buffer's freshly-elaborated Program is more current, so use it
-    // both to enumerate candidates and to seed the bucket index when
-    // available.
-    let active_program: &Program = dot_extract
+    // The snapshot can be missing entirely when the last-saved file
+    // failed to parse: `run_diagnostics` propagates that as `Err` and
+    // the diagnostics thread never publishes a `DiagnosticsResult`, so
+    // `last_diag` stays `None` in the server loop. In that state we
+    // still need to reply — silently dropping the request makes the
+    // client wait forever (looks like a server crash). The dot-context
+    // pipeline does its own `error_tolerant` elaborate over the live
+    // buffer, so it can still produce candidates; for non-dot contexts
+    // without a snapshot we reply with an empty list and let the next
+    // diagnostics run restore the full list.
+    let Some(active_program) = dot_extract
         .as_ref()
         .map(|d| &d.program)
-        .unwrap_or(program);
+        .or(program)
+    else {
+        send_response(id, Ok::<_, ()>(Vec::<CompletionItem>::new()));
+        return;
+    };
     let dot_ranking = dot_extract.as_ref().map(|d| {
         write_log!(
             "[completion] dot-context receiver type: {}",

@@ -102,15 +102,6 @@ pub struct DiagnosticsResult {
     // values record the source as the AST saw it, so a comparison against
     // the current editor buffer detects drift.
     pub user_source_contents: Map<PathBuf, String>,
-    /// In-memory typecheck cache populated by the diagnostics run.
-    /// Forwarded to the completion handler so its live-buffer
-    /// re-elaborate can reuse already-typechecked globals: the live
-    /// override only changes the cursor's file's dependency hash, so
-    /// every other module's globals hit cached entries and skip
-    /// re-typechecking. Without sharing, completion would fall back
-    /// to the disk-backed `FileCache` default and pay disk I/O per
-    /// cache lookup.
-    pub typecheck_cache: SharedTypeCheckCache,
 }
 
 // Document symbol request which are waiting for diagnostics.
@@ -184,6 +175,15 @@ pub fn launch_language_server() {
 
     // Prepare a channel to response from the diagnostics thread.
     let (diag_res_send, diag_res_recv) = mpsc::channel::<DiagnosticsResult>();
+
+    // Session-scoped typecheck cache, shared between the diagnostics
+    // thread and the feature handlers (completion, …). Lifted out of
+    // `diagnostics_thread` so that feature requests arriving before
+    // the first successful diagnostics run — or while the saved
+    // buffer doesn't parse and `last_diag` therefore stays `None` —
+    // can still drive their own elaborate without paying disk I/O
+    // for every cache lookup.
+    let typecheck_cache: SharedTypeCheckCache = Arc::new(typecheckcache::MemoryCache::new());
 
     // The last diagnostics result.
     let mut last_diag: Option<DiagnosticsResult> = None;
@@ -325,6 +325,7 @@ pub fn launch_language_server() {
                     diag_req_send.clone(),
                     diag_req_recv.take().unwrap(),
                     diag_res_send.clone(),
+                    typecheck_cache.clone(),
                 );
             } else if method == "shutdown" {
                 let id = parse_id(&message, method);
@@ -361,12 +362,16 @@ pub fn launch_language_server() {
                     &mut uri_to_latest_content,
                 );
             } else if method == "textDocument/completion" {
-                if last_diag.is_none() {
-                    continue;
-                }
-                let diag = last_diag.as_ref().unwrap();
-                let program = &diag.program;
-                let typecheck_cache = diag.typecheck_cache.clone();
+                // Don't gate on `last_diag.is_some()` — the dot-context
+                // completion pipeline runs its own `error_tolerant`
+                // elaborate over the live buffer, so it can produce
+                // candidates even when the saved file fails to parse
+                // and the diagnostics thread therefore never sends a
+                // `DiagnosticsResult`. Silently dropping the request
+                // in that state makes the client wait forever (looks
+                // like the LSP crashed). Pass `None` for the snapshot
+                // program and let `handle_completion` fall back to the
+                // dot-extract program (or reply empty).
                 let id = parse_id(&message, method);
                 if id.is_none() {
                     continue;
@@ -378,9 +383,9 @@ pub fn launch_language_server() {
                 completion::handle_completion(
                     id.unwrap(),
                     &params.unwrap(),
-                    program,
+                    last_diag.as_ref().map(|d| &d.program),
                     &uri_to_latest_content,
-                    typecheck_cache,
+                    typecheck_cache.clone(),
                 );
             } else if method == "completionItem/resolve" {
                 if last_diag.is_none() {
@@ -750,12 +755,13 @@ fn handle_initialized(
     diag_req_send: Sender<DiagnosticsMessage>,
     diag_req_recv: Receiver<DiagnosticsMessage>,
     diag_res_send: Sender<DiagnosticsResult>,
+    typecheck_cache: SharedTypeCheckCache,
 ) {
     // Launch the diagnostics thread.
-    std::thread::spawn(|| {
-        let res = std::panic::catch_unwind(|| {
-            diagnostics_thread(diag_req_recv, diag_res_send);
-        });
+    std::thread::spawn(move || {
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache);
+        }));
         if res.is_err() {
             // If a panic occurs in the diagnostics thread,
             send_diagnostics_error_message(
@@ -850,9 +856,12 @@ fn handle_textdocument_did_save(
 
 
 // The entry point of the diagnostics thread.
-fn diagnostics_thread(req_recv: Receiver<DiagnosticsMessage>, res_send: Sender<DiagnosticsResult>) {
+fn diagnostics_thread(
+    req_recv: Receiver<DiagnosticsMessage>,
+    res_send: Sender<DiagnosticsResult>,
+    typecheck_cache: SharedTypeCheckCache,
+) {
     let mut prev_err_paths = Set::default();
-    let typecheck_cache = Arc::new(typecheckcache::MemoryCache::new());
 
     loop {
         // Wait for a message.
@@ -1168,7 +1177,6 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     Ok(DiagnosticsResult {
         program,
         user_source_contents,
-        typecheck_cache,
     })
 }
 
