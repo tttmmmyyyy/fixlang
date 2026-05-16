@@ -149,7 +149,7 @@ impl PatternNode {
                         &pat.info.type_.as_ref().unwrap(),
                         field_name_to_ty.get(field_name).unwrap(),
                     ))?;
-                    if unify_res.is_err() {
+                    if unify_res.is_err() && !typechcker.error_tolerant {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Inappropriate pattern `{}` for a value of field `{}` of struct `{}`.",
@@ -160,6 +160,10 @@ impl PatternNode {
                             &[&pat.info.source],
                         ));
                     }
+                    // In error_tolerant mode the unify mismatch is
+                    // swallowed; the sub-pattern keeps its inferred
+                    // type so the body that references its bindings
+                    // can still be elaborated.
                 }
                 Ok((
                     self.set_type(ty).set_struct_field_to_pat(field_to_pat),
@@ -181,7 +185,7 @@ impl PatternNode {
                 let unify_res = UnifOrOtherErr::extract_others(
                     typechcker.unify(&subpat.info.type_.as_ref().unwrap(), &variant_ty),
                 )?;
-                if unify_res.is_err() {
+                if unify_res.is_err() && !typechcker.error_tolerant {
                     return Err(Errors::from_msg_srcs(
                         format!(
                             "Inappropriate pattern `{}` for a value of variant `{}` of union `{}`.",
@@ -192,6 +196,10 @@ impl PatternNode {
                         &[&subpat.info.source],
                     ));
                 }
+                // In error_tolerant mode the unify mismatch is
+                // swallowed; the sub-pattern keeps its inferred type
+                // so the body that references its bindings can still
+                // be elaborated.
 
                 // Return the typed pattern.
                 Ok((self.set_type(union_ty).set_union_pat(subpat), var_ty))

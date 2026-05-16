@@ -507,6 +507,63 @@ impl TypeCheckContext {
         }
     }
 
+    /// Fresh type variable wrapped as `TypeNode`, with `src` registered
+    /// as its source span. Used by the `error_tolerant` fallback paths
+    /// in `unify_type_of_expr_inner` to give each child of a failed
+    /// elaboration an unconstrained-but-typed placeholder so the child
+    /// can still be elaborated against `self`.
+    pub fn fresh_ty_with_src(&mut self, src: &Option<Span>) -> Arc<TypeNode> {
+        let tv = self.new_tyvar_star();
+        self.add_tyvar_source(tv.name.clone(), src.clone());
+        type_from_tyvar(tv)
+    }
+
+    /// Run `validate_pattern` then `get_typed` on `pat`, returning the
+    /// typed pattern and its variable bindings. Used by `Let` and
+    /// `Match` arms to get a single combined `Result` so the call site
+    /// can choose between propagating the error (strict mode) and
+    /// substituting a fresh-tyvar pattern (`error_tolerant` mode).
+    fn elaborate_let_pattern(
+        &mut self,
+        pat: &Arc<PatternNode>,
+    ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
+        self.validate_pattern(pat)?;
+        pat.get_typed(self)
+    }
+
+    /// Resolve the matched value's TyCon for a `Match` arm with a
+    /// union pattern. Returns the `(TyCon, TyConInfo)` pair required
+    /// by `Pattern::validate_variant_name`. Fails if `cond_ty` isn't
+    /// resolvable to a concrete tycon yet, or if it resolves to a
+    /// non-union type.
+    fn resolve_match_cond_tycon(
+        &mut self,
+        cond: &Arc<ExprNode>,
+        cond_ty: &Arc<TypeNode>,
+        pat: &Arc<PatternNode>,
+    ) -> Result<(Arc<TyCon>, TyConInfo), Errors> {
+        let cond_ty = self.substitute_and_reduce_type(cond_ty)?;
+        let Some(cond_tycon) = cond_ty.toplevel_tycon() else {
+            return Err(Errors::from_msg_srcs(
+                "The type of the matched value must be known at this point. Add type annotation to it."
+                    .to_string(),
+                &[&cond.source],
+            ));
+        };
+        let cond_ti = self.type_env.tycons.get(&cond_tycon).unwrap().clone();
+        if cond_ti.variant != TyConVariant::Union {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "The matched value has non-union type `{}`, but it is matched on a variant pattern `{}`.",
+                    cond_ty.to_string_normalize(),
+                    pat.pattern.to_string()
+                ),
+                &[&cond.source, &pat.info.source],
+            ));
+        }
+        Ok((cond_tycon, cond_ti))
+    }
+
     // Set the source locations of two unified type variables to the same one.
     pub fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let mut src = None;
@@ -946,8 +1003,15 @@ impl TypeCheckContext {
 
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
                 if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &fun_ty))? {
-                    let err = self.create_type_mismatch_error(&ty, &fun_ty, &e, &ei.source);
-                    return Err(Errors::from_err(err));
+                    if !self.error_tolerant {
+                        let err = self.create_type_mismatch_error(&ty, &fun_ty, &e, &ei.source);
+                        return Err(Errors::from_err(err));
+                    }
+                    // In error_tolerant mode, continue elaborating the
+                    // body even when the lambda's function type cannot
+                    // be reconciled with the expected type — `body_ty`
+                    // is still a fresh tyvar, so the body gets a
+                    // best-effort type.
                 }
                 assert!(arg.name.is_local());
                 self.scope.push(&arg.name.name, Scheme::from_type(arg_ty));
@@ -956,8 +1020,23 @@ impl TypeCheckContext {
                 Ok(ei.set_lam_body(body))
             }
             Expr::Let(pat, val, body) => {
-                self.validate_pattern(pat)?;
-                let (pat, var_ty) = pat.get_typed(self)?;
+                // `validate_pattern` / `get_typed` may fail on a
+                // malformed pattern (unknown struct field, duplicate
+                // variable, sub-pattern type mismatch). In
+                // `error_tolerant` mode we still want to elaborate
+                // `val` and `body` so any nested cursor inside them
+                // gets a useful type — fall back to a fresh-tyvar
+                // pattern with no variable bindings.
+                let (pat, var_ty) = match self.elaborate_let_pattern(pat) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        if !self.error_tolerant {
+                            return Err(e);
+                        }
+                        let pat_ty = self.fresh_ty_with_src(&pat.info.source);
+                        (pat.set_type(pat_ty), Map::default())
+                    }
+                };
                 let val = self.unify_type_of_expr(val, pat.info.type_.as_ref().unwrap().clone())?;
                 for (var_name, var_ty) in &var_ty {
                     assert!(var_name.is_local());
@@ -979,64 +1058,88 @@ impl TypeCheckContext {
 
                 let mut cond_tc_info: Option<(Arc<TyCon>, TyConInfo)> = None;
 
-                // Validate each cases.
+                // Elaborate each arm. In `error_tolerant` mode every
+                // per-arm validation (unreachable-after-otherwise,
+                // pattern shape, variant name, pattern/cond type
+                // mismatch) is swallowed so the typed `(pat, val)`
+                // pair is still appended to `new_pat_vals` — the LSP
+                // needs the value's typed subtree to drive dot
+                // completion even when the surrounding match is
+                // structurally broken.
                 let mut new_pat_vals = vec![];
                 let mut otherwise: Option<Arc<PatternNode>> = None;
                 for (pat, val) in pat_vals {
-                    if let Some(otherwise) = otherwise {
-                        return Err(Errors::from_msg_srcs(
-                            format!(
-                                "Pattern after `{}` is unreachable.",
-                                otherwise.pattern.to_string()
-                            ),
-                            &[&pat.info.source],
-                        ));
+                    if let Some(otherwise) = &otherwise {
+                        if !self.error_tolerant {
+                            return Err(Errors::from_msg_srcs(
+                                format!(
+                                    "Pattern after `{}` is unreachable.",
+                                    otherwise.pattern.to_string()
+                                ),
+                                &[&pat.info.source],
+                            ));
+                        }
                     }
 
-                    self.validate_pattern(pat)?;
                     let pat = if pat.is_union() {
-                        // Check if the union variant name is valid.
-
-                        // Find the type constructor of the union variant.
-                        if cond_tc_info.is_none() {
-                            let cond_ty = self.substitute_and_reduce_type(&cond_ty)?;
-                            let cond_tycon = cond_ty.toplevel_tycon();
-                            if cond_tycon.is_none() {
-                                return Err(Errors::from_msg_srcs(
-                                    "The type of the matched value must be known at this point. Add type annotation to it."
-                                        .to_string(),
-                                    &[&cond.source],
-                                ));
+                        // Determine the cond's TyCon on the first
+                        // union arm so `validate_variant_name` knows
+                        // which union to check against. Failure is
+                        // tolerated; we fall through to `get_typed`
+                        // which can still type sub-patterns from the
+                        // variant's signature.
+                        let validated = if cond_tc_info.is_none() {
+                            self.resolve_match_cond_tycon(&cond, &cond_ty, pat)
+                                .and_then(|info| {
+                                    cond_tc_info = Some(info);
+                                    let (tycon, ti) = cond_tc_info.as_ref().unwrap();
+                                    pat.validate_variant_name(tycon, ti)
+                                })
+                        } else {
+                            let (tycon, ti) = cond_tc_info.as_ref().unwrap();
+                            pat.validate_variant_name(tycon, ti)
+                        };
+                        match validated {
+                            Ok(p) => p,
+                            Err(e) => {
+                                if !self.error_tolerant {
+                                    return Err(e);
+                                }
+                                pat.clone()
                             }
-                            let cond_tycon = cond_tycon.unwrap();
-                            let cond_ti = self.type_env.tycons.get(&cond_tycon).unwrap().clone();
-                            if cond_ti.variant != TyConVariant::Union {
-                                return Err(Errors::from_msg_srcs(
-                                    format!("The matched value has non-union type `{}`, but it is matched on a variant pattern `{}`.", cond_ty.to_string_normalize(), pat.pattern.to_string()),
-                                    &[&cond.source, &pat.info.source],
-                                ));
-                            }
-                            cond_tc_info = Some((cond_tycon.clone(), cond_ti.clone()));
                         }
-                        let (cond_tycon, cond_ti) = cond_tc_info.as_ref().unwrap();
-                        pat.validate_variant_name(cond_tycon, cond_ti)?
                     } else {
                         // `pat` is not a union pattern, so we can use it as is.
                         otherwise = Some(pat.clone());
                         pat.clone()
                     };
 
-                    // Check if the type of the pattern matches the type of the condition.
-                    let (pat, var_ty) = pat.get_typed(self)?;
+                    // Type the pattern, then unify with cond.
+                    // `get_typed` is itself tolerant of sub-pattern
+                    // mismatches in `error_tolerant` mode; the only
+                    // remaining failure path here is `validate_pattern`
+                    // (struct field validity etc.).
+                    let (pat, var_ty) = match self.elaborate_let_pattern(&pat) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            if !self.error_tolerant {
+                                return Err(e);
+                            }
+                            let pat_ty = self.fresh_ty_with_src(&pat.info.source);
+                            (pat.set_type(pat_ty), Map::default())
+                        }
+                    };
                     let pat_ty = pat.info.type_.as_ref().unwrap().clone();
                     if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
-                        let err = self.create_type_mismatch_error(
-                            &pat_ty,
-                            &cond_ty,
-                            &e,
-                            &pat.info.source,
-                        );
-                        return Err(Errors::from_err(err));
+                        if !self.error_tolerant {
+                            let err = self.create_type_mismatch_error(
+                                &pat_ty,
+                                &cond_ty,
+                                &e,
+                                &pat.info.source,
+                            );
+                            return Err(Errors::from_err(err));
+                        }
                     }
 
                     // Check if the type of the value matches the whole type.
@@ -1052,18 +1155,31 @@ impl TypeCheckContext {
                     new_pat_vals.push((pat, val));
                 }
 
+                // Build the typed Match before the exhaustiveness
+                // check so the typed tree survives even when the
+                // check is swallowed in `error_tolerant` mode.
+                let typed = ei.set_match_cond(cond).set_match_pat_vals(new_pat_vals);
+
                 // If there is at least one union pattern, check if the match cases are exhaustive.
                 if let Some((cond_tycon, cond_ti)) = cond_tc_info {
-                    let pats = new_pat_vals.iter().map(|(pat, _)| pat.clone());
-                    Pattern::validate_match_cases_exhaustiveness(
+                    let pats = match &*typed.expr {
+                        Expr::Match(_, pvs) => {
+                            pvs.iter().map(|(pat, _)| pat.clone()).collect::<Vec<_>>()
+                        }
+                        _ => unreachable!(),
+                    };
+                    let res = Pattern::validate_match_cases_exhaustiveness(
                         &cond_tycon,
                         &cond_ti,
-                        &ei.source,
-                        pats,
-                    )?;
+                        &typed.source,
+                        pats.into_iter(),
+                    );
+                    if !self.error_tolerant {
+                        res?;
+                    }
                 }
 
-                Ok(ei.set_match_cond(cond).set_match_pat_vals(new_pat_vals))
+                Ok(typed)
             }
             Expr::If(cond, then_expr, else_expr) => {
                 let cond = self.unify_type_of_expr(cond, make_bool_ty())?;
@@ -1076,110 +1192,153 @@ impl TypeCheckContext {
             }
             Expr::TyAnno(e, anno_ty) => {
                 let anno_ty = self.validate_type_annotation(&anno_ty)?;
-                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &anno_ty))? {
-                    let err = self.create_type_mismatch_error(&ty, &anno_ty, &e, &ei.source);
-                    return Err(Errors::from_err(err));
-                }
-                let e = self.unify_type_of_expr(e, ty.clone())?;
+                let child_ty = if let Err(unif_err) =
+                    UnifOrOtherErr::extract_others(self.unify(&ty, &anno_ty))?
+                {
+                    if !self.error_tolerant {
+                        let err = self.create_type_mismatch_error(&ty, &anno_ty, &unif_err, &ei.source);
+                        return Err(Errors::from_err(err));
+                    }
+                    // Annotation conflicts with the expected type.
+                    // Honour the annotation when typing the child so
+                    // the child's elaboration still benefits from it.
+                    anno_ty.clone()
+                } else {
+                    ty.clone()
+                };
+                let e = self.unify_type_of_expr(e, child_ty)?;
                 Ok(ei.set_tyanno_expr(e))
             }
             Expr::MakeStruct(tc, fields) => {
-                // `tc` should be a struct.
+                let strict = !self.error_tolerant;
+
+                // Strict-mode structural validation: in `error_tolerant`
+                // mode every gate below is downgraded to "still type
+                // each provided field expression, possibly against a
+                // fresh tyvar". The user's saved struct literal may
+                // be syntactically incomplete (missing/unknown fields,
+                // wrong type name) while the cursor sits inside one of
+                // its field expressions — the LSP needs that
+                // expression typed to drive dot completion.
                 let tycon_info = self.type_env.tycons.get(&tc);
-                if tycon_info.is_none() {
-                    return Err(Errors::from_msg_srcs(
-                        format!("Unknown type name `{}`.", tc.to_string()),
-                        &[&ei.source],
-                    ));
-                }
-                let tycon_info = tycon_info.unwrap();
-                if tycon_info.variant != TyConVariant::Struct {
-                    return Err(Errors::from_msg_srcs(
-                        format!("Type `{}` is not a struct.", tc.to_string()),
-                        &[&ei.source],
-                    ));
-                }
-
-                // Get list of field names.
-                let ti = self.type_env.tycons.get(tc);
-                if ti.is_none() {
-                    return Err(Errors::from_msg_srcs(
-                        format!("Unknown type name `{}`.", tc.to_string()),
-                        &[&ei.source],
-                    ));
-                }
-                let ti = ti.unwrap();
-                let field_names = ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
-
-                // Validate fields.
-                let field_names_in_struct_defn: Set<Name> =
-                    Set::from_iter(field_names.iter().cloned());
-                let field_names_in_expression: Set<Name> =
-                    Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
-                // Collect every missing field in struct-definition order and
-                // report them in a single error whose `data` payload carries
-                // the full list of missing names.
-                let missing: Vec<Name> = field_names
-                    .iter()
-                    .filter(|f| !field_names_in_expression.contains(*f))
-                    .cloned()
-                    .collect();
-                if !missing.is_empty() {
-                    let msg = if missing.len() == 1 {
-                        format!(
-                            "Missing field `{}` of struct `{}`.",
-                            missing[0],
-                            tc.to_string()
-                        )
-                    } else {
-                        let list = missing
-                            .iter()
-                            .map(|n| format!("`{}`", n))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        format!("Missing fields {} of struct `{}`.", list, tc.to_string())
-                    };
-                    let mut err = Error::from_msg_srcs(msg, &[&ei.source]);
-                    err.code = Some(ERR_MISSING_STRUCT_FIELD);
-                    err.data = Some(serde_json::json!(missing));
-                    return Err(Errors::from_err(err));
-                }
-                for f in &field_names_in_expression {
-                    if !field_names_in_struct_defn.contains(f) {
-                        return Err(Errors::from_msg_srcs(
-                            format!("Unknown field `{}` for struct `{}`.", f, tc.to_string()),
-                            &[&ei.source],
-                        ));
+                let tycon_info = match tycon_info {
+                    Some(info) if info.variant == TyConVariant::Struct => Some(info.clone()),
+                    Some(_) => {
+                        if strict {
+                            return Err(Errors::from_msg_srcs(
+                                format!("Type `{}` is not a struct.", tc.to_string()),
+                                &[&ei.source],
+                            ));
+                        }
+                        None
                     }
-                }
+                    None => {
+                        if strict {
+                            return Err(Errors::from_msg_srcs(
+                                format!("Unknown type name `{}`.", tc.to_string()),
+                                &[&ei.source],
+                            ));
+                        }
+                        None
+                    }
+                };
 
-                // Get field types.
-                let struct_ty = tc.get_struct_union_value_type(self);
-                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &struct_ty))? {
-                    let err = self.create_type_mismatch_error(&ty, &struct_ty, &e, &ei.source);
-                    return Err(Errors::from_err(err));
-                }
-                let field_tys = struct_ty.field_types(&self.type_env);
-                assert_eq!(field_tys.len(), fields.len());
-
-                // Reorder fields as ordering of fields in struct definition.
-                let fields: Map<Name, (Option<Span>, Arc<ExprNode>)> = Map::from_iter(
-                    fields
+                // Strict path: original elaboration (validate + reorder + type).
+                if let Some(ti) = tycon_info.as_ref().filter(|_| strict) {
+                    let field_names =
+                        ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+                    let field_names_in_struct_defn: Set<Name> =
+                        Set::from_iter(field_names.iter().cloned());
+                    let field_names_in_expression: Set<Name> =
+                        Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
+                    let missing: Vec<Name> = field_names
                         .iter()
-                        .map(|(n, s, e)| (n.clone(), (s.clone(), e.clone()))),
-                );
-                let mut fields = field_names
-                    .iter()
-                    .map(|name| {
-                        let (name_src, e) = fields[name].clone();
-                        (name.clone(), name_src, e)
-                    })
-                    .collect::<Vec<_>>();
+                        .filter(|f| !field_names_in_expression.contains(*f))
+                        .cloned()
+                        .collect();
+                    if !missing.is_empty() {
+                        let msg = if missing.len() == 1 {
+                            format!(
+                                "Missing field `{}` of struct `{}`.",
+                                missing[0],
+                                tc.to_string()
+                            )
+                        } else {
+                            let list = missing
+                                .iter()
+                                .map(|n| format!("`{}`", n))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            format!("Missing fields {} of struct `{}`.", list, tc.to_string())
+                        };
+                        let mut err = Error::from_msg_srcs(msg, &[&ei.source]);
+                        err.code = Some(ERR_MISSING_STRUCT_FIELD);
+                        err.data = Some(serde_json::json!(missing));
+                        return Err(Errors::from_err(err));
+                    }
+                    for f in &field_names_in_expression {
+                        if !field_names_in_struct_defn.contains(f) {
+                            return Err(Errors::from_msg_srcs(
+                                format!("Unknown field `{}` for struct `{}`.", f, tc.to_string()),
+                                &[&ei.source],
+                            ));
+                        }
+                    }
+                    let struct_ty = tc.get_struct_union_value_type(self);
+                    if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &struct_ty))? {
+                        let err =
+                            self.create_type_mismatch_error(&ty, &struct_ty, &e, &ei.source);
+                        return Err(Errors::from_err(err));
+                    }
+                    let field_tys = struct_ty.field_types(&self.type_env);
+                    assert_eq!(field_tys.len(), fields.len());
 
-                for (field_ty, (_, _, field_expr)) in field_tys.iter().zip(fields.iter_mut()) {
-                    *field_expr = self.unify_type_of_expr(field_expr, field_ty.clone())?;
+                    let fields_map: Map<Name, (Option<Span>, Arc<ExprNode>)> = Map::from_iter(
+                        fields.iter().map(|(n, s, e)| (n.clone(), (s.clone(), e.clone()))),
+                    );
+                    let mut fields = field_names
+                        .iter()
+                        .map(|name| {
+                            let (name_src, e) = fields_map[name].clone();
+                            (name.clone(), name_src, e)
+                        })
+                        .collect::<Vec<_>>();
+                    for (field_ty, (_, _, field_expr)) in field_tys.iter().zip(fields.iter_mut())
+                    {
+                        *field_expr = self.unify_type_of_expr(field_expr, field_ty.clone())?;
+                    }
+                    return Ok(ei.set_make_struct_fields(fields));
                 }
-                Ok(ei.set_make_struct_fields(fields))
+
+                // Tolerant path: type each provided field expression
+                // best-effort. Use the struct's declared type for known
+                // fields, fresh tyvar otherwise. Field order, missing
+                // and extra fields are not validated — the resulting
+                // typed `MakeStruct` may be ill-formed structurally
+                // but every field expression carries its inferred type.
+                let known_field_tys: Option<Map<Name, Arc<TypeNode>>> = tycon_info.map(|_| {
+                    let struct_ty = tc.get_struct_union_value_type(self);
+                    let _ = UnifOrOtherErr::extract_others(self.unify(&ty, &struct_ty));
+                    let field_tys = struct_ty.field_types(&self.type_env);
+                    self.type_env
+                        .tycons
+                        .get(&tc)
+                        .unwrap()
+                        .fields
+                        .iter()
+                        .zip(field_tys.iter())
+                        .map(|(f, ft)| (f.name.clone(), ft.clone()))
+                        .collect()
+                });
+                let mut new_fields = fields.clone();
+                for (name, _name_src, field_expr) in new_fields.iter_mut() {
+                    let field_ty = known_field_tys
+                        .as_ref()
+                        .and_then(|m| m.get(name).cloned())
+                        .unwrap_or_else(|| self.fresh_ty_with_src(&field_expr.source));
+                    *field_expr = self.unify_type_of_expr(field_expr, field_ty)?;
+                }
+                Ok(ei.set_make_struct_fields(new_fields))
             }
             Expr::ArrayLit(elems) => {
                 // Prepare type of element.
@@ -1194,8 +1353,13 @@ impl TypeCheckContext {
 
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
                 if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&array_ty, &ty))? {
-                    let err = self.create_type_mismatch_error(&ty, &array_ty, &e, &ei.source);
-                    return Err(Errors::from_err(err));
+                    if !self.error_tolerant {
+                        let err = self.create_type_mismatch_error(&ty, &array_ty, &e, &ei.source);
+                        return Err(Errors::from_err(err));
+                    }
+                    // Expected type isn't an array; type each element
+                    // against the fresh `elem_ty` anyway so subtrees
+                    // still get their inferred type.
                 }
                 let mut ei = ei.clone();
                 for (i, e) in elems.iter().enumerate() {
@@ -1212,8 +1376,14 @@ impl TypeCheckContext {
                     ret_ty
                 };
                 if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &ret_ty))? {
-                    let err = self.create_type_mismatch_error(&ty, &ret_ty, &e, &ei.source);
-                    return Err(Errors::from_err(err));
+                    if !self.error_tolerant {
+                        let err = self.create_type_mismatch_error(&ty, &ret_ty, &e, &ei.source);
+                        return Err(Errors::from_err(err));
+                    }
+                    // Expected return type doesn't match the FFI
+                    // signature; type each argument against the
+                    // declared parameter type anyway so subtrees keep
+                    // their inferred type.
                 }
                 let mut ei = ei.clone();
                 for (i, e) in args.iter().enumerate() {
