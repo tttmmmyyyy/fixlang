@@ -1662,6 +1662,28 @@ impl TypeCheckContext {
         //   often leaves an associated type unable to be reduced,
         //   which then surfaces as a disjoint equality.
 
+        // In `error_tolerant` mode (LSP completion's live-buffer
+        // elaborate) every diagnostic layer below is skipped:
+        //
+        // - Holes are intentional in completion (the cursor itself
+        //   resolves to `Std::#hole`), so reporting them is noise.
+        // - Unresolved tyvars are expected: the tolerant cases in
+        //   `unify_type_of_expr_inner` fall back to fresh tyvars
+        //   when a child can't be constrained.
+        // - Predicate / equality residue is likewise expected: the
+        //   tolerant path may have accumulated inconsistent
+        //   constraints from partially failed sub-expressions, and
+        //   surfacing them as diagnostics confuses the LSP without
+        //   helping the user.
+        //
+        // The tolerant path's only invariant is "every node has an
+        // inferred type" (see Section 1 of the refactor plan);
+        // `check_all_typed` walks the tree to catch regressions.
+        if self.error_tolerant {
+            self.check_all_typed(&expr)?;
+            return Ok((expr, Errors::empty()));
+        }
+
         // Pre-extract the source span so the error-construction
         // helpers below can borrow it independently of `expr` (which
         // each early-return consumes).
@@ -2262,6 +2284,91 @@ impl TypeCheckContext {
             pat.info.type_.as_ref().unwrap(),
         ) {
             return Err(errs);
+        }
+        Ok(())
+    }
+
+    /// `error_tolerant`-mode counterpart of `check_types_are_fixed`:
+    /// verify the weaker invariant that every node and pattern in
+    /// `expr` carries an inferred `type_` (it may still contain
+    /// unresolved tyvars). Used in `check_type`'s tolerant path to
+    /// surface elaborator bugs early — a `None` here would have
+    /// panicked in `fix_types` under the pre-refactor codepath.
+    fn check_all_typed(&self, expr: &Arc<ExprNode>) -> Result<(), Errors> {
+        if expr.type_.is_none() {
+            return Err(Errors::from_msg_srcs(
+                "Internal error: error_tolerant elaborate left an expression node without an inferred type."
+                    .to_string(),
+                &[&expr.source],
+            ));
+        }
+        match &*expr.expr {
+            Expr::Var(_) | Expr::LLVM(_) => {}
+            Expr::App(fun, args) => {
+                for arg in args {
+                    self.check_all_typed(arg)?;
+                }
+                self.check_all_typed(fun)?;
+            }
+            Expr::Lam(_, body) => self.check_all_typed(body)?,
+            Expr::Let(pat, val, body) => {
+                self.check_all_pattern_typed(pat)?;
+                self.check_all_typed(val)?;
+                self.check_all_typed(body)?;
+            }
+            Expr::If(cond, then_e, else_e) => {
+                self.check_all_typed(cond)?;
+                self.check_all_typed(then_e)?;
+                self.check_all_typed(else_e)?;
+            }
+            Expr::Match(cond, arms) => {
+                self.check_all_typed(cond)?;
+                for (pat, val) in arms {
+                    self.check_all_pattern_typed(pat)?;
+                    self.check_all_typed(val)?;
+                }
+            }
+            Expr::TyAnno(e, _) => self.check_all_typed(e)?,
+            Expr::MakeStruct(_, fields) => {
+                for (_, _, fe) in fields {
+                    self.check_all_typed(fe)?;
+                }
+            }
+            Expr::ArrayLit(elems) => {
+                for e in elems {
+                    self.check_all_typed(e)?;
+                }
+            }
+            Expr::FFICall(_, _, _, _, args, _) => {
+                for a in args {
+                    self.check_all_typed(a)?;
+                }
+            }
+            Expr::Eval(side, main) => {
+                self.check_all_typed(side)?;
+                self.check_all_typed(main)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Pattern-tree counterpart of `check_all_typed`.
+    fn check_all_pattern_typed(&self, pat: &Arc<PatternNode>) -> Result<(), Errors> {
+        if pat.info.type_.is_none() {
+            return Err(Errors::from_msg_srcs(
+                "Internal error: error_tolerant elaborate left a pattern node without an inferred type."
+                    .to_string(),
+                &[&pat.info.source],
+            ));
+        }
+        match &pat.pattern {
+            Pattern::Var(_, _) => {}
+            Pattern::Union(_, _, subpat) => self.check_all_pattern_typed(subpat)?,
+            Pattern::Struct(_, fields) => {
+                for (_, _, subpat) in fields {
+                    self.check_all_pattern_typed(subpat)?;
+                }
+            }
         }
         Ok(())
     }
