@@ -969,6 +969,81 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// Regression: `(a, a).<cursor>` inside a non-exhaustive `match`
+    /// arm. Before the `error_tolerant` typecheck refactor this
+    /// scenario panicked in `fix_types` (the Match's exhaustiveness
+    /// check failed, the fallback returned an untyped child tree, and
+    /// `fix_types` unwrap-panicked on the child's `type_`). The panic
+    /// killed the LSP process — the completion request never came
+    /// back and the editor saw a hung server.
+    ///
+    /// This test asserts only "the server stays up and replies".
+    /// `test_completion_dot_after_tuple_infers_tuple_receiver` checks
+    /// the stronger property that the receiver type was actually
+    /// recovered from the partially-typed subtree.
+    #[test]
+    fn test_completion_dot_after_tuple_no_crash() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-dot-after-tuple", &["main.fix"]);
+
+        // main.fix line 6 (0-indexed): "    some(a) => (a, a)."
+        // length 22, cursor at column 22 = byte just after the `.`.
+        let items = ctx.complete("main.fix", 6, 22);
+
+        assert!(
+            !items.is_empty(),
+            "completion response must include candidates even when \
+             the surrounding match is structurally broken",
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Stronger version of the regression above. With the
+    /// `error_tolerant` typecheck refactor in place, every sub-node
+    /// of the failed Match still carries an inferred type, so the
+    /// dot-completion pipeline can read off `(I64, I64)` as the
+    /// receiver. Tuple field accessors should land in Tier 0;
+    /// unrelated methods on different TyCons (e.g. `Iterator::fold`)
+    /// should not.
+    ///
+    /// If this assertion regresses, it's the signal that the
+    /// tolerant elaborator started discarding typed sub-trees again
+    /// (or `fix_types` truncated the substituted types) — a fresh
+    /// tyvar at the receiver would put every method into the
+    /// catch-all Tier 2/3, not Tier 0.
+    #[test]
+    fn test_completion_dot_after_tuple_infers_tuple_receiver() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-dot-after-tuple", &["main.fix"]);
+
+        let items = ctx.complete("main.fix", 6, 22);
+
+        let sort_at_0 = find_sort_text(&items, "Std::Tuple2::@0")
+            .expect("Std::Tuple2::@0 should appear in the completion list");
+        assert!(
+            sort_at_0.starts_with('0'),
+            "Std::Tuple2::@0 should land in Tier 0 for a tuple receiver; got {:?}",
+            sort_at_0,
+        );
+
+        // `Std::Iterator::fold` is a typical receiver-of-different-TyCon
+        // method that, if the receiver were merely a fresh tyvar (the
+        // pre-refactor fallback shape), would still bucket-match and
+        // could be wrongly promoted. After the refactor, the receiver
+        // is `(I64, I64)`, which doesn't unify with `Iterator i`, so
+        // `fold` must stay out of Tier 0.
+        let sort_fold = find_sort_text(&items, "Std::Iterator::fold")
+            .expect("Std::Iterator::fold should appear in the completion list");
+        assert!(
+            !sort_fold.starts_with('0'),
+            "Std::Iterator::fold must NOT be Tier 0 for a tuple receiver; got {:?}",
+            sort_fold,
+        );
+
+        ctx.shutdown();
+    }
+
     /// Completion at a position that is NOT in dot context must NOT
     /// attach `sortText` — the ranker is dot-completion-specific, and
     /// keeping the field unset preserves the LSP client's default

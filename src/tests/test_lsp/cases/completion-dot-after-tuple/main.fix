@@ -1,0 +1,8 @@
+module Main;
+
+main : IO () = ( pure() );
+
+f : Std::Option I64 -> (I64, I64);
+f = |opt| match opt {
+    some(a) => (a, a).
+};
