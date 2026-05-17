@@ -701,6 +701,57 @@ impl TypeCheckContext {
             .collect())
     }
 
+    /// Type `expr` against `ty` with `var_ty`'s bindings pushed onto
+    /// the scope for the duration of that call, then pop the
+    /// bindings whether or not elaboration succeeded. Used by
+    /// `Let`'s body and `Match`'s arm value: both bind pattern
+    /// variables before typing the body / arm value and need the
+    /// bindings out of scope again immediately after.
+    fn unify_type_of_expr_with_scope(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        ty: Arc<TypeNode>,
+        var_ty: &Map<FullName, Arc<TypeNode>>,
+    ) -> Result<Arc<ExprNode>, Errors> {
+        for (var_name, vt) in var_ty {
+            assert!(var_name.is_local());
+            self.scope
+                .push(&var_name.name, Scheme::from_type(vt.clone()));
+        }
+        let result = self.unify_type_of_expr(expr, ty);
+        for (var_name, _) in var_ty {
+            self.scope.pop(&var_name.name);
+        }
+        result
+    }
+
+    /// Run `Pattern::validate_match_cases_exhaustiveness` on the
+    /// arms of a typed `Match` when at least one arm was a union
+    /// variant (signalled by `cond_tc_info.is_some()`). In
+    /// `error_tolerant` mode a non-exhaustive match is swallowed
+    /// so the typed tree still surfaces to downstream LSP consumers.
+    fn validate_match_exhaustiveness_if_needed(
+        &self,
+        typed: &Arc<ExprNode>,
+        cond_tc_info: Option<(Arc<TyCon>, TyConInfo)>,
+    ) -> Result<(), Errors> {
+        let Some((cond_tycon, cond_ti)) = cond_tc_info else {
+            return Ok(());
+        };
+        let pats = typed.get_match_pat_vals().into_iter().map(|(pat, _)| pat);
+        let res = Pattern::validate_match_cases_exhaustiveness(
+            &cond_tycon,
+            &cond_ti,
+            &typed.source,
+            pats,
+        );
+        if self.error_tolerant {
+            Ok(())
+        } else {
+            res
+        }
+    }
+
     /// Validate a union-variant pattern for a `Match` arm: on the
     /// first union arm of the match, resolve the cond's TyCon and
     /// populate `cond_tc_info` so later arms can skip that step.
@@ -1209,15 +1260,7 @@ impl TypeCheckContext {
                 let elab = self.elaborate_pattern_binding(pat);
                 let (pat, var_ty) = self.tolerate_pattern_typed(elab, pat)?;
                 let val = self.unify_type_of_expr(val, pat.info.type_.as_ref().unwrap().clone())?;
-                for (var_name, var_ty) in &var_ty {
-                    assert!(var_name.is_local());
-                    self.scope
-                        .push(&var_name.name, Scheme::from_type(var_ty.clone()));
-                }
-                let body = self.unify_type_of_expr(body, ty)?;
-                for (name, _) in var_ty {
-                    self.scope.pop(&name.name);
-                }
+                let body = self.unify_type_of_expr_with_scope(body, ty, &var_ty)?;
                 Ok(ei.set_let_pat(pat).set_let_bound(val).set_let_value(body))
             }
             Expr::Match(cond, pat_vals) => {
@@ -1275,16 +1318,9 @@ impl TypeCheckContext {
                     let pat_ty = pat.info.type_.as_ref().unwrap().clone();
                     self.unify_or_tolerated_mismatch(&pat_ty, &cond_ty, &pat.info.source)?;
 
-                    // Check if the type of the value matches the whole type.
-                    for (var_name, var_ty) in &var_ty {
-                        assert!(var_name.is_local());
-                        self.scope
-                            .push(&var_name.name, Scheme::from_type(var_ty.clone()));
-                    }
-                    let val = self.unify_type_of_expr(val, ty.clone())?;
-                    for (var_name, _) in var_ty {
-                        self.scope.pop(&var_name.name);
-                    }
+                    // Type the arm's value with the pattern's
+                    // bindings in scope.
+                    let val = self.unify_type_of_expr_with_scope(val, ty.clone(), &var_ty)?;
                     new_pat_vals.push((pat, val));
                 }
 
@@ -1292,21 +1328,7 @@ impl TypeCheckContext {
                 // check so the typed tree survives even when the
                 // check is swallowed in `error_tolerant` mode.
                 let typed = ei.set_match_cond(cond).set_match_pat_vals(new_pat_vals);
-
-                // If there is at least one union pattern, check if the match cases are exhaustive.
-                if let Some((cond_tycon, cond_ti)) = cond_tc_info {
-                    let pats = typed.get_match_pat_vals().into_iter().map(|(pat, _)| pat);
-                    let res = Pattern::validate_match_cases_exhaustiveness(
-                        &cond_tycon,
-                        &cond_ti,
-                        &typed.source,
-                        pats,
-                    );
-                    if !self.error_tolerant {
-                        res?;
-                    }
-                }
-
+                self.validate_match_exhaustiveness_if_needed(&typed, cond_tc_info)?;
                 Ok(typed)
             }
             Expr::If(cond, then_expr, else_expr) => {
