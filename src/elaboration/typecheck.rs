@@ -598,6 +598,24 @@ impl TypeCheckContext {
         }))
     }
 
+    /// Validate a union-variant pattern for a `Match` arm: on the
+    /// first union arm of the match, resolve the cond's TyCon and
+    /// populate `cond_tc_info` so later arms can skip that step.
+    /// Then check that `pat`'s variant name belongs to that union.
+    fn validate_union_arm(
+        &mut self,
+        cond: &Arc<ExprNode>,
+        cond_ty: &Arc<TypeNode>,
+        pat: &Arc<PatternNode>,
+        cond_tc_info: &mut Option<(Arc<TyCon>, TyConInfo)>,
+    ) -> Result<Arc<PatternNode>, Errors> {
+        if cond_tc_info.is_none() {
+            *cond_tc_info = Some(self.resolve_match_cond_tycon(cond, cond_ty, pat)?);
+        }
+        let (tycon, ti) = cond_tc_info.as_ref().unwrap();
+        pat.validate_variant_name(tycon, ti)
+    }
+
     /// Resolve the matched value's TyCon for a `Match` arm with a
     /// union pattern. Returns the `(TyCon, TyConInfo)` pair required
     /// by `Pattern::validate_variant_name`. Fails if `cond_ty` isn't
@@ -1132,32 +1150,12 @@ impl TypeCheckContext {
                     }
 
                     let pat = if pat.is_union() {
-                        // Determine the cond's TyCon on the first
-                        // union arm so `validate_variant_name` knows
-                        // which union to check against. Failure is
-                        // tolerated; we fall through to `get_typed`
-                        // which can still type sub-patterns from the
-                        // variant's signature.
-                        let validated = if cond_tc_info.is_none() {
-                            self.resolve_match_cond_tycon(&cond, &cond_ty, pat)
-                                .and_then(|info| {
-                                    cond_tc_info = Some(info);
-                                    let (tycon, ti) = cond_tc_info.as_ref().unwrap();
-                                    pat.validate_variant_name(tycon, ti)
-                                })
-                        } else {
-                            let (tycon, ti) = cond_tc_info.as_ref().unwrap();
-                            pat.validate_variant_name(tycon, ti)
-                        };
-                        match validated {
-                            Ok(p) => p,
-                            Err(e) => {
-                                if !self.error_tolerant {
-                                    return Err(e);
-                                }
-                                pat.clone()
-                            }
-                        }
+                        // Failure is tolerated; we fall through to
+                        // `get_typed` below which can still type
+                        // sub-patterns from the variant's signature.
+                        let validated =
+                            self.validate_union_arm(&cond, &cond_ty, pat, &mut cond_tc_info);
+                        self.tolerate(validated)?.unwrap_or_else(|| pat.clone())
                     } else {
                         // `pat` is not a union pattern, so we can use it as is.
                         otherwise = Some(pat.clone());
