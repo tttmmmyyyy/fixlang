@@ -537,6 +537,39 @@ impl TypeCheckContext {
         }
     }
 
+    /// Unify `expected` and `found`, surfacing a type-mismatch error
+    /// pointed at `source` on failure. In `error_tolerant` mode a
+    /// unification mismatch is swallowed (`Ok(())`) so the caller can
+    /// keep elaborating siblings; non-unification errors (e.g. an
+    /// associated-type reduction failure) always propagate.
+    ///
+    /// Replaces the recurring
+    ///
+    /// ```ignore
+    /// if let Err(e) = UnifOrOtherErr::extract_others(self.unify(...))? {
+    ///     if !self.error_tolerant {
+    ///         let err = self.create_type_mismatch_error(...);
+    ///         return Err(Errors::from_err(err));
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// shape that shows up in every per-case unify check.
+    fn unify_or_tolerated_mismatch(
+        &mut self,
+        expected: &Arc<TypeNode>,
+        found: &Arc<TypeNode>,
+        source: &Option<Span>,
+    ) -> Result<(), Errors> {
+        if let Err(e) = UnifOrOtherErr::extract_others(self.unify(expected, found))? {
+            if !self.error_tolerant {
+                let err = self.create_type_mismatch_error(expected, found, &e, source);
+                return Err(Errors::from_err(err));
+            }
+        }
+        Ok(())
+    }
+
     /// Validate `pat` and infer its type, returning the typed pattern
     /// and the variable bindings it introduces. Combines the two
     /// fallible steps into one `Result` so the caller can choose
@@ -1001,10 +1034,7 @@ impl TypeCheckContext {
                 }
             }
             Expr::LLVM(lit) => {
-                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &lit.generic_ty))? {
-                    let err = self.create_type_mismatch_error(&ty, &lit.generic_ty, &e, &ei.source);
-                    return Err(Errors::from_err(err));
-                }
+                self.unify_or_tolerated_mismatch(&ty, &lit.generic_ty, &ei.source)?;
                 Ok(ei.clone())
             }
             Expr::App(fun, args) => {
@@ -1036,17 +1066,11 @@ impl TypeCheckContext {
                 let body_ty = type_from_tyvar(body_tv);
 
                 let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
-                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &fun_ty))? {
-                    if !self.error_tolerant {
-                        let err = self.create_type_mismatch_error(&ty, &fun_ty, &e, &ei.source);
-                        return Err(Errors::from_err(err));
-                    }
-                    // In error_tolerant mode, continue elaborating the
-                    // body even when the lambda's function type cannot
-                    // be reconciled with the expected type — `body_ty`
-                    // is still a fresh tyvar, so the body gets a
-                    // best-effort type.
-                }
+                // In `error_tolerant` mode, swallowing the mismatch
+                // lets us continue typing the body against `body_ty`
+                // (a fresh tyvar), so the body still gets a
+                // best-effort type.
+                self.unify_or_tolerated_mismatch(&ty, &fun_ty, &ei.source)?;
                 assert!(arg.name.is_local());
                 self.scope.push(&arg.name.name, Scheme::from_type(arg_ty));
                 let body = self.unify_type_of_expr(body, body_ty)?;
@@ -1148,17 +1172,7 @@ impl TypeCheckContext {
                     let elab = self.elaborate_pattern_binding(&pat);
                     let (pat, var_ty) = self.tolerate_pattern_typed(elab, &pat)?;
                     let pat_ty = pat.info.type_.as_ref().unwrap().clone();
-                    if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
-                        if !self.error_tolerant {
-                            let err = self.create_type_mismatch_error(
-                                &pat_ty,
-                                &cond_ty,
-                                &e,
-                                &pat.info.source,
-                            );
-                            return Err(Errors::from_err(err));
-                        }
-                    }
+                    self.unify_or_tolerated_mismatch(&pat_ty, &cond_ty, &pat.info.source)?;
 
                     // Check if the type of the value matches the whole type.
                     for (var_name, var_ty) in &var_ty {
@@ -1298,11 +1312,7 @@ impl TypeCheckContext {
                         }
                     }
                     let struct_ty = tc.get_struct_union_value_type(self);
-                    if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &struct_ty))? {
-                        let err =
-                            self.create_type_mismatch_error(&ty, &struct_ty, &e, &ei.source);
-                        return Err(Errors::from_err(err));
-                    }
+                    self.unify_or_tolerated_mismatch(&ty, &struct_ty, &ei.source)?;
                     let field_tys = struct_ty.field_types(&self.type_env);
                     assert_eq!(field_tys.len(), fields.len());
 
@@ -1377,15 +1387,12 @@ impl TypeCheckContext {
                 let elem_ty = type_from_tyvar(elem_tv);
 
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
-                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&array_ty, &ty))? {
-                    if !self.error_tolerant {
-                        let err = self.create_type_mismatch_error(&ty, &array_ty, &e, &ei.source);
-                        return Err(Errors::from_err(err));
-                    }
-                    // Expected type isn't an array; type each element
-                    // against the fresh `elem_ty` anyway so subtrees
-                    // still get their inferred type.
-                }
+                // In `error_tolerant` mode, swallowing the mismatch
+                // lets us continue typing each element against the
+                // fresh `elem_ty`, so subtrees still get an inferred
+                // type even when the outer expected type isn't an
+                // array.
+                self.unify_or_tolerated_mismatch(&ty, &array_ty, &ei.source)?;
                 let mut ei = ei.clone();
                 for (i, e) in elems.iter().enumerate() {
                     let e = self.unify_type_of_expr(e, elem_ty.clone())?;
@@ -1400,16 +1407,12 @@ impl TypeCheckContext {
                 } else {
                     ret_ty
                 };
-                if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&ty, &ret_ty))? {
-                    if !self.error_tolerant {
-                        let err = self.create_type_mismatch_error(&ty, &ret_ty, &e, &ei.source);
-                        return Err(Errors::from_err(err));
-                    }
-                    // Expected return type doesn't match the FFI
-                    // signature; type each argument against the
-                    // declared parameter type anyway so subtrees keep
-                    // their inferred type.
-                }
+                // In `error_tolerant` mode, swallowing the mismatch
+                // lets us continue typing each argument against the
+                // declared parameter type, so subtrees keep their
+                // inferred type even when the outer expected return
+                // type doesn't match the FFI signature.
+                self.unify_or_tolerated_mismatch(&ty, &ret_ty, &ei.source)?;
                 let mut ei = ei.clone();
                 for (i, e) in args.iter().enumerate() {
                     let param_ty = if i < param_tys.len() {
