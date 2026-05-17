@@ -1311,21 +1311,31 @@ impl TypeCheckContext {
                     let field_tys = struct_ty.field_types(&self.type_env);
                     assert_eq!(field_tys.len(), fields.len());
 
-                    let fields_map: Map<Name, (Option<Span>, Arc<ExprNode>)> = Map::from_iter(
-                        fields.iter().map(|(n, s, e)| (n.clone(), (s.clone(), e.clone()))),
-                    );
-                    let mut fields = field_names
+                    // Elaborate field expressions in source order, to
+                    // match the convention used in `Expr::App` (where
+                    // `XDotF` types the receiver before the function
+                    // and the default order types the function before
+                    // the argument — both following source order). The
+                    // typed `MakeStruct` output, however, must carry
+                    // fields in struct-definition order so
+                    // `generator.rs::eval_make_struct` can use
+                    // `fields[i]` as the field slot index; place each
+                    // typed result at its definition-order slot.
+                    let name_to_idx: Map<Name, usize> = field_names
                         .iter()
-                        .map(|name| {
-                            let (name_src, e) = fields_map[name].clone();
-                            (name.clone(), name_src, e)
-                        })
-                        .collect::<Vec<_>>();
-                    for (field_ty, (_, _, field_expr)) in field_tys.iter().zip(fields.iter_mut())
-                    {
-                        *field_expr = self.unify_type_of_expr(field_expr, field_ty.clone())?;
+                        .enumerate()
+                        .map(|(i, n)| (n.clone(), i))
+                        .collect();
+                    let mut typed_slots: Vec<Option<(Name, Option<Span>, Arc<ExprNode>)>> =
+                        (0..fields.len()).map(|_| None).collect();
+                    for (name, src, expr) in fields {
+                        let idx = name_to_idx[name];
+                        let typed = self.unify_type_of_expr(expr, field_tys[idx].clone())?;
+                        typed_slots[idx] = Some((name.clone(), src.clone(), typed));
                     }
-                    return Ok(ei.set_make_struct_fields(fields));
+                    let final_fields: Vec<_> =
+                        typed_slots.into_iter().map(|s| s.unwrap()).collect();
+                    return Ok(ei.set_make_struct_fields(final_fields));
                 }
 
                 // Tolerant path: type each provided field expression
