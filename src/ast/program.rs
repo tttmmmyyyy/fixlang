@@ -1455,6 +1455,11 @@ impl Program {
         tc.check_types_are_fixed(&expr)?;
         let expr = remove_opaque_wrapper_func(expr);
         let expr = resolve_opaque_tycon_in_expr(&expr, &self.opaque_types);
+        // Reduce associated types newly exposed by opaque-tycon resolution:
+        // an opaque rhs may carry an `AssocTy` whose arguments only become
+        // concrete here (e.g. `Item it` with `it := RangeIterator` becomes
+        // `Item RangeIterator`, reducible to `I64` via the trait instance).
+        let expr = tc.fix_types(expr)?;
         sym.expr = Some(self.instantiate_expr(&expr)?);
         Ok(())
     }

@@ -1059,3 +1059,27 @@ pub fn test_opaque_regression_unknown_name_undefined_internal() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that an `AssocTy` exposed by opaque-tycon resolution at
+/// instantiation is reduced before optimization, so composing two
+/// opaque-returning functions does not leave an unresolved `Item T`
+/// in the program.
+#[test]
+pub fn test_opaque_regression_assoc_ty_in_resolved_rhs() {
+    let source = r#"
+        module Main;
+
+        wrap : [it : Iterator, ?out : Iterator, Item ?out = Item it] it -> ?out;
+        wrap = |it| Iterator::generate(it, |_| Option::none());
+
+        vals : [?it : Iterator, Item ?it = I64] ?it = Iterator::range(0, 10).wrap;
+
+        main : IO ();
+        main = (
+            let arr = vals.to_array;
+            assert_eq(|_|"empty wrapped iter", arr, []);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
