@@ -1180,17 +1180,12 @@ impl TypeCheckContext {
 
                 // If there is at least one union pattern, check if the match cases are exhaustive.
                 if let Some((cond_tycon, cond_ti)) = cond_tc_info {
-                    let pats = match &*typed.expr {
-                        Expr::Match(_, pvs) => {
-                            pvs.iter().map(|(pat, _)| pat.clone()).collect::<Vec<_>>()
-                        }
-                        _ => unreachable!(),
-                    };
+                    let pats = typed.get_match_pat_vals().into_iter().map(|(pat, _)| pat);
                     let res = Pattern::validate_match_cases_exhaustiveness(
                         &cond_tycon,
                         &cond_ti,
                         &typed.source,
-                        pats.into_iter(),
+                        pats,
                     );
                     if !self.error_tolerant {
                         res?;
