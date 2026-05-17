@@ -542,19 +542,6 @@ impl TypeCheckContext {
     /// unification mismatch is swallowed (`Ok(())`) so the caller can
     /// keep elaborating siblings; non-unification errors (e.g. an
     /// associated-type reduction failure) always propagate.
-    ///
-    /// Replaces the recurring
-    ///
-    /// ```ignore
-    /// if let Err(e) = UnifOrOtherErr::extract_others(self.unify(...))? {
-    ///     if !self.error_tolerant {
-    ///         let err = self.create_type_mismatch_error(...);
-    ///         return Err(Errors::from_err(err));
-    ///     }
-    /// }
-    /// ```
-    ///
-    /// shape that shows up in every per-case unify check.
     fn unify_or_tolerated_mismatch(
         &mut self,
         expected: &Arc<TypeNode>,
@@ -677,9 +664,9 @@ impl TypeCheckContext {
     /// Unify the outer expected type with the constructed struct
     /// type, then return a `name -> field type` map the caller can
     /// look each provided field expression up in. Returns an empty
-    /// map when the tycon isn't resolved (tolerant-mode degrade
-    /// path), so the caller's per-name lookup falls back to fresh
-    /// tyvars uniformly via `unwrap_or_else`.
+    /// map when `tycon_info` is `None` (the tolerant-mode degrade
+    /// path), so the caller falls back to fresh tyvars for every
+    /// field.
     fn compute_make_struct_field_tys(
         &mut self,
         tc: &Arc<TyCon>,
@@ -703,10 +690,7 @@ impl TypeCheckContext {
 
     /// Type `expr` against `ty` with `var_ty`'s bindings pushed onto
     /// the scope for the duration of that call, then pop the
-    /// bindings whether or not elaboration succeeded. Used by
-    /// `Let`'s body and `Match`'s arm value: both bind pattern
-    /// variables before typing the body / arm value and need the
-    /// bindings out of scope again immediately after.
+    /// bindings whether or not elaboration succeeded.
     fn unify_type_of_expr_with_scope(
         &mut self,
         expr: &Arc<ExprNode>,
