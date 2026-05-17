@@ -518,6 +518,26 @@ impl TypeCheckContext {
         type_from_tyvar(tv)
     }
 
+    /// In `error_tolerant` mode, swallow a soft `Err` so the caller can
+    /// substitute a fallback value. Returns:
+    ///
+    /// - `Ok(Some(v))` — the original success;
+    /// - `Ok(None)` — strict-mode behaviour would have returned `Err`,
+    ///   but tolerant mode chooses to continue;
+    /// - `Err(e)` — strict mode, re-raised for the caller's `?`.
+    ///
+    /// Use with `?.unwrap_or_else(|| <fallback>)` to keep the call site
+    /// compact. The receiver is `&self` (only reads `error_tolerant`),
+    /// so a `&mut self` fallback closure can still borrow `self` after
+    /// the call.
+    pub fn tolerate<T>(&self, res: Result<T, Errors>) -> Result<Option<T>, Errors> {
+        match res {
+            Ok(v) => Ok(Some(v)),
+            Err(_) if self.error_tolerant => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Run `validate_pattern` then `get_typed` on `pat`, returning the
     /// typed pattern and its variable bindings. Used by both `Let`
     /// and `Match` arms — i.e. every site where a pattern introduces
@@ -1029,16 +1049,11 @@ impl TypeCheckContext {
                 // `val` and `body` so any nested cursor inside them
                 // gets a useful type — fall back to a fresh-tyvar
                 // pattern with no variable bindings.
-                let (pat, var_ty) = match self.elaborate_pattern_binding(pat) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        if !self.error_tolerant {
-                            return Err(e);
-                        }
-                        let pat_ty = self.fresh_ty_with_src(&pat.info.source);
-                        (pat.set_type(pat_ty), Map::default())
-                    }
-                };
+                let elab = self.elaborate_pattern_binding(pat);
+                let (pat, var_ty) = self.tolerate(elab)?.unwrap_or_else(|| {
+                    let pat_ty = self.fresh_ty_with_src(&pat.info.source);
+                    (pat.set_type(pat_ty), Map::default())
+                });
                 let val = self.unify_type_of_expr(val, pat.info.type_.as_ref().unwrap().clone())?;
                 for (var_name, var_ty) in &var_ty {
                     assert!(var_name.is_local());
@@ -1121,16 +1136,11 @@ impl TypeCheckContext {
                     // mismatches in `error_tolerant` mode; the only
                     // remaining failure path here is `validate_pattern`
                     // (struct field validity etc.).
-                    let (pat, var_ty) = match self.elaborate_pattern_binding(&pat) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            if !self.error_tolerant {
-                                return Err(e);
-                            }
-                            let pat_ty = self.fresh_ty_with_src(&pat.info.source);
-                            (pat.set_type(pat_ty), Map::default())
-                        }
-                    };
+                    let elab = self.elaborate_pattern_binding(&pat);
+                    let (pat, var_ty) = self.tolerate(elab)?.unwrap_or_else(|| {
+                        let pat_ty = self.fresh_ty_with_src(&pat.info.source);
+                        (pat.set_type(pat_ty), Map::default())
+                    });
                     let pat_ty = pat.info.type_.as_ref().unwrap().clone();
                     if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
                         if !self.error_tolerant {
@@ -2077,16 +2087,9 @@ impl TypeCheckContext {
             .type_
             .as_ref()
             .expect("fix_types_for_pattern: every pattern should be typed");
-        let ty = match self.substitute_and_reduce_type(raw_ty) {
-            Ok(t) => t,
-            Err(e) => {
-                if !self.error_tolerant {
-                    return Err(e);
-                }
-                // Same rationale as in `fix_types`.
-                raw_ty.clone()
-            }
-        };
+        // Same rationale as in `fix_types`.
+        let reduced = self.substitute_and_reduce_type(raw_ty);
+        let ty = self.tolerate(reduced)?.unwrap_or_else(|| raw_ty.clone());
         let pat = pat.set_type(ty);
         Ok(match &pat.pattern {
             Pattern::Var(_var, _anno_ty) => {
@@ -2148,23 +2151,14 @@ impl TypeCheckContext {
             .type_
             .as_ref()
             .expect("fix_types: every node should be typed by unify_type_of_expr");
-        let ty = match self.substitute_and_reduce_type(raw_ty) {
-            Ok(t) => t,
-            Err(e) => {
-                if !self.error_tolerant {
-                    return Err(e);
-                }
-                // Associated-type reduction can fail when the
-                // accumulated substitution / equality state is
-                // inconsistent — a normal consequence of the
-                // tolerant elaborator stitching together partially
-                // failed sub-expressions. Use the un-reduced type so
-                // the walk continues and downstream consumers (LSP
-                // dot completion, hover) can still read whatever
-                // type info survived.
-                raw_ty.clone()
-            }
-        };
+        // Associated-type reduction can fail when the accumulated
+        // substitution / equality state is inconsistent — a normal
+        // consequence of the tolerant elaborator stitching together
+        // partially failed sub-expressions. Fall back to the
+        // un-reduced type so downstream consumers (LSP dot completion,
+        // hover) can still read whatever type info survived.
+        let reduced = self.substitute_and_reduce_type(raw_ty);
+        let ty = self.tolerate(reduced)?.unwrap_or_else(|| raw_ty.clone());
         let expr = expr.set_type(ty);
         Ok(match &*expr.expr {
             Expr::Var(_) => expr,

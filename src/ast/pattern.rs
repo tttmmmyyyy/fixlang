@@ -117,22 +117,15 @@ impl PatternNode {
                 let ty = if ty.is_none() {
                     typechcker.fresh_ty_with_src(&self.info.source)
                 } else {
-                    let ty = ty.as_ref().unwrap();
-                    match typechcker.validate_type_annotation(ty) {
-                        Ok(t) => t,
-                        Err(e) => {
-                            if !typechcker.error_tolerant {
-                                return Err(e);
-                            }
-                            // The annotation is ill-formed (e.g.
-                            // references an unknown type). In
-                            // error_tolerant mode we still want this
-                            // binder to participate in scope so the
-                            // body can reference `var_name`; fall back
-                            // to a fresh tyvar.
-                            typechcker.fresh_ty_with_src(&self.info.source)
-                        }
-                    }
+                    // If the annotation is ill-formed (e.g. references
+                    // an unknown type), `error_tolerant` mode still
+                    // wants this binder to participate in scope so the
+                    // body can reference `var_name`; fall back to a
+                    // fresh tyvar.
+                    let validated = typechcker.validate_type_annotation(ty.as_ref().unwrap());
+                    typechcker
+                        .tolerate(validated)?
+                        .unwrap_or_else(|| typechcker.fresh_ty_with_src(&self.info.source))
                 };
                 let mut var_to_ty = Map::default();
                 var_to_ty.insert(var_name, ty.clone());
@@ -159,16 +152,11 @@ impl PatternNode {
                     // type mismatch, …) substitutes a fresh-tyvar
                     // typed sub-pattern with no bindings, so the
                     // sibling fields are still walked.
-                    let (typed_pat, var_ty) = match pat.get_typed(typechcker) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            if !typechcker.error_tolerant {
-                                return Err(e);
-                            }
-                            let pat_ty = typechcker.fresh_ty_with_src(&pat.info.source);
-                            (pat.set_type(pat_ty), Map::default())
-                        }
-                    };
+                    let typed = pat.get_typed(typechcker);
+                    let (typed_pat, var_ty) = typechcker.tolerate(typed)?.unwrap_or_else(|| {
+                        let pat_ty = typechcker.fresh_ty_with_src(&pat.info.source);
+                        (pat.set_type(pat_ty), Map::default())
+                    });
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
                     // Unknown field name (filtered by
@@ -218,16 +206,11 @@ impl PatternNode {
                 // fresh-tyvar typed sub-pattern with no bindings — the
                 // surrounding union pattern still gets `union_ty`
                 // assigned, so the match arm can proceed.
-                let (subpat, var_ty) = match subpat.get_typed(typechcker) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        if !typechcker.error_tolerant {
-                            return Err(e);
-                        }
-                        let pat_ty = typechcker.fresh_ty_with_src(&subpat.info.source);
-                        (subpat.set_type(pat_ty), Map::default())
-                    }
-                };
+                let typed = subpat.get_typed(typechcker);
+                let (subpat, var_ty) = typechcker.tolerate(typed)?.unwrap_or_else(|| {
+                    let pat_ty = typechcker.fresh_ty_with_src(&subpat.info.source);
+                    (subpat.set_type(pat_ty), Map::default())
+                });
 
                 // Unify the type of the subpattern with the type of the variant.
                 let unify_res = UnifOrOtherErr::extract_others(
