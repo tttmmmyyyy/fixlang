@@ -177,8 +177,8 @@ pub fn launch_language_server() {
     let (diag_res_send, diag_res_recv) = mpsc::channel::<DiagnosticsResult>();
 
     // Session-scoped typecheck cache, shared between the diagnostics
-    // thread and the feature handlers (completion, …). Lifted out of
-    // `diagnostics_thread` so that feature requests arriving before
+    // thread and the feature handlers. Owned here (rather than inside
+    // `diagnostics_thread`) so that feature requests arriving before
     // the first successful diagnostics run — or while the saved
     // buffer doesn't parse and `last_diag` therefore stays `None` —
     // can still drive their own elaborate without paying disk I/O
@@ -749,7 +749,8 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
     send_response(id, Ok::<_, ()>(result))
 }
 
-// Handle "initialized" method.
+/// Handle the LSP `initialized` notification: spawn the diagnostics
+/// thread and prime it with an initial `Start` message.
 fn handle_initialized(
     _params: &InitializedParams,
     diag_req_send: Sender<DiagnosticsMessage>,
@@ -855,7 +856,10 @@ fn handle_textdocument_did_save(
 
 
 
-// The entry point of the diagnostics thread.
+/// Entry point of the diagnostics thread: consume `DiagnosticsMessage`s
+/// off `req_recv`, re-run elaboration, and ship each `DiagnosticsResult`
+/// back through `res_send`. The shared `typecheck_cache` is reused
+/// across runs (and shared with the main thread's feature handlers).
 fn diagnostics_thread(
     req_recv: Receiver<DiagnosticsMessage>,
     res_send: Sender<DiagnosticsResult>,

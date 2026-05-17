@@ -508,10 +508,9 @@ impl TypeCheckContext {
     }
 
     /// Fresh type variable wrapped as `TypeNode`, with `src` registered
-    /// as its source span. Used by the `error_tolerant` fallback paths
-    /// in `unify_type_of_expr_inner` to give each child of a failed
-    /// elaboration an unconstrained-but-typed placeholder so the child
-    /// can still be elaborated against `self`.
+    /// as its source span. Useful as an unconstrained-but-typed
+    /// placeholder when a child of an elaboration cannot be given a
+    /// more specific type.
     pub fn fresh_ty_with_src(&mut self, src: &Option<Span>) -> Arc<TypeNode> {
         let tv = self.new_tyvar_star();
         self.add_tyvar_source(tv.name.clone(), src.clone());
@@ -538,11 +537,9 @@ impl TypeCheckContext {
         }
     }
 
-    /// Run `validate_pattern` then `get_typed` on `pat`, returning the
-    /// typed pattern and its variable bindings. Used by both `Let`
-    /// and `Match` arms — i.e. every site where a pattern introduces
-    /// new binders into the surrounding scope — to combine the two
-    /// fallible steps into one `Result` so the call site can choose
+    /// Validate `pat` and infer its type, returning the typed pattern
+    /// and the variable bindings it introduces. Combines the two
+    /// fallible steps into one `Result` so the caller can choose
     /// between propagating the error (strict mode) and substituting
     /// a fresh-tyvar pattern (`error_tolerant` mode).
     fn elaborate_pattern_binding(
@@ -551,6 +548,21 @@ impl TypeCheckContext {
     ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
         self.validate_pattern(pat)?;
         pat.get_typed(self)
+    }
+
+    /// Combine `tolerate` with the canonical fresh-tyvar fallback for a
+    /// failed pattern elaboration: on `Err` in `error_tolerant` mode,
+    /// substitute a typed-but-empty-binding pattern so the surrounding
+    /// walk can continue.
+    pub fn tolerate_pattern_typed(
+        &mut self,
+        res: Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors>,
+        pat: &Arc<PatternNode>,
+    ) -> Result<(Arc<PatternNode>, Map<FullName, Arc<TypeNode>>), Errors> {
+        Ok(self.tolerate(res)?.unwrap_or_else(|| {
+            let pat_ty = self.fresh_ty_with_src(&pat.info.source);
+            (pat.set_type(pat_ty), Map::default())
+        }))
     }
 
     /// Resolve the matched value's TyCon for a `Match` arm with a
@@ -1050,10 +1062,7 @@ impl TypeCheckContext {
                 // gets a useful type — fall back to a fresh-tyvar
                 // pattern with no variable bindings.
                 let elab = self.elaborate_pattern_binding(pat);
-                let (pat, var_ty) = self.tolerate(elab)?.unwrap_or_else(|| {
-                    let pat_ty = self.fresh_ty_with_src(&pat.info.source);
-                    (pat.set_type(pat_ty), Map::default())
-                });
+                let (pat, var_ty) = self.tolerate_pattern_typed(elab, pat)?;
                 let val = self.unify_type_of_expr(val, pat.info.type_.as_ref().unwrap().clone())?;
                 for (var_name, var_ty) in &var_ty {
                     assert!(var_name.is_local());
@@ -1137,10 +1146,7 @@ impl TypeCheckContext {
                     // remaining failure path here is `validate_pattern`
                     // (struct field validity etc.).
                     let elab = self.elaborate_pattern_binding(&pat);
-                    let (pat, var_ty) = self.tolerate(elab)?.unwrap_or_else(|| {
-                        let pat_ty = self.fresh_ty_with_src(&pat.info.source);
-                        (pat.set_type(pat_ty), Map::default())
-                    });
+                    let (pat, var_ty) = self.tolerate_pattern_typed(elab, &pat)?;
                     let pat_ty = pat.info.type_.as_ref().unwrap().clone();
                     if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&cond_ty, &pat_ty))? {
                         if !self.error_tolerant {
@@ -1328,20 +1334,22 @@ impl TypeCheckContext {
                 // and extra fields are not validated — the resulting
                 // typed `MakeStruct` may be ill-formed structurally
                 // but every field expression carries its inferred type.
-                let known_field_tys: Option<Map<Name, Arc<TypeNode>>> = tycon_info.map(|_| {
+                let known_field_tys: Option<Map<Name, Arc<TypeNode>>> = if let Some(ti) =
+                    tycon_info
+                {
                     let struct_ty = tc.get_struct_union_value_type(self);
                     let _ = UnifOrOtherErr::extract_others(self.unify(&ty, &struct_ty));
                     let field_tys = struct_ty.field_types(&self.type_env);
-                    self.type_env
-                        .tycons
-                        .get(&tc)
-                        .unwrap()
-                        .fields
-                        .iter()
-                        .zip(field_tys.iter())
-                        .map(|(f, ft)| (f.name.clone(), ft.clone()))
-                        .collect()
-                });
+                    Some(
+                        ti.fields
+                            .iter()
+                            .zip(field_tys.iter())
+                            .map(|(f, ft)| (f.name.clone(), ft.clone()))
+                            .collect(),
+                    )
+                } else {
+                    None
+                };
                 let mut new_fields = fields.clone();
                 for (name, _name_src, field_expr) in new_fields.iter_mut() {
                     let field_ty = known_field_tys
@@ -1707,8 +1715,8 @@ impl TypeCheckContext {
         //   helping the user.
         //
         // The tolerant path's only invariant is "every node has an
-        // inferred type" (see Section 1 of the refactor plan);
-        // `check_all_typed` walks the tree to catch regressions.
+        // inferred type"; `check_all_typed` walks the tree to catch
+        // regressions.
         if self.error_tolerant {
             self.check_all_typed(&expr)?;
             return Ok((expr, Errors::empty()));
@@ -2305,9 +2313,9 @@ impl TypeCheckContext {
     /// `error_tolerant`-mode counterpart of `check_types_are_fixed`:
     /// verify the weaker invariant that every node and pattern in
     /// `expr` carries an inferred `type_` (it may still contain
-    /// unresolved tyvars). Used in `check_type`'s tolerant path to
-    /// surface elaborator bugs early — a `None` here would have
-    /// panicked in `fix_types` under the pre-refactor codepath.
+    /// unresolved tyvars). Surfaces elaborator bugs that would
+    /// otherwise crash downstream consumers expecting every node to
+    /// be typed.
     fn check_all_typed(&self, expr: &Arc<ExprNode>) -> Result<(), Errors> {
         if expr.type_.is_none() {
             return Err(Errors::from_msg_srcs(

@@ -153,10 +153,7 @@ impl PatternNode {
                     // typed sub-pattern with no bindings, so the
                     // sibling fields are still walked.
                     let typed = pat.get_typed(typechcker);
-                    let (typed_pat, var_ty) = typechcker.tolerate(typed)?.unwrap_or_else(|| {
-                        let pat_ty = typechcker.fresh_ty_with_src(&pat.info.source);
-                        (pat.set_type(pat_ty), Map::default())
-                    });
+                    let (typed_pat, var_ty) = typechcker.tolerate_pattern_typed(typed, pat)?;
                     *pat = typed_pat;
                     var_to_ty.extend(var_ty);
                     // Unknown field name (filtered by
@@ -207,10 +204,7 @@ impl PatternNode {
                 // surrounding union pattern still gets `union_ty`
                 // assigned, so the match arm can proceed.
                 let typed = subpat.get_typed(typechcker);
-                let (subpat, var_ty) = typechcker.tolerate(typed)?.unwrap_or_else(|| {
-                    let pat_ty = typechcker.fresh_ty_with_src(&subpat.info.source);
-                    (subpat.set_type(pat_ty), Map::default())
-                });
+                let (subpat, var_ty) = typechcker.tolerate_pattern_typed(typed, subpat)?;
 
                 // Unify the type of the subpattern with the type of the variant.
                 let unify_res = UnifOrOtherErr::extract_others(

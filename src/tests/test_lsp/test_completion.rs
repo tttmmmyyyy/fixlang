@@ -970,12 +970,11 @@ mod tests {
     }
 
     /// Regression: `(a, a).<cursor>` inside a non-exhaustive `match`
-    /// arm. Before the `error_tolerant` typecheck refactor this
-    /// scenario panicked in `fix_types` (the Match's exhaustiveness
-    /// check failed, the fallback returned an untyped child tree, and
-    /// `fix_types` unwrap-panicked on the child's `type_`). The panic
-    /// killed the LSP process — the completion request never came
-    /// back and the editor saw a hung server.
+    /// arm. The scenario can crash the elaborator if the Match's
+    /// failed exhaustiveness check leaves the child subtree untyped
+    /// and `fix_types` then unwrap-panics on the missing `type_`; a
+    /// panic in the LSP process leaves the editor hung on the
+    /// completion request.
     ///
     /// This test asserts only "the server stays up and replies".
     /// `test_completion_dot_after_tuple_infers_tuple_receiver` checks
@@ -999,19 +998,18 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Stronger version of the regression above. With the
-    /// `error_tolerant` typecheck refactor in place, every sub-node
-    /// of the failed Match still carries an inferred type, so the
+    /// Stronger version of the regression above: when dot completion
+    /// fires at `(a, a).<cursor>` inside a structurally broken Match
+    /// arm, every sub-node still carries an inferred type, so the
     /// dot-completion pipeline can read off `(I64, I64)` as the
     /// receiver. Tuple field accessors should land in Tier 0;
     /// unrelated methods on different TyCons (e.g. `Iterator::fold`)
     /// should not.
     ///
-    /// If this assertion regresses, it's the signal that the
-    /// tolerant elaborator started discarding typed sub-trees again
-    /// (or `fix_types` truncated the substituted types) — a fresh
-    /// tyvar at the receiver would put every method into the
-    /// catch-all Tier 2/3, not Tier 0.
+    /// A regression here signals that the tolerant elaborator is
+    /// discarding typed sub-trees (or `fix_types` is truncating the
+    /// substituted types) — a fresh tyvar at the receiver would put
+    /// every method into the catch-all Tier 2/3, not Tier 0.
     #[test]
     fn test_completion_dot_after_tuple_infers_tuple_receiver() {
         let mut ctx =

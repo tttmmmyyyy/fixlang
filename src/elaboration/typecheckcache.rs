@@ -6,7 +6,6 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-
 use crate::{
     ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
     constants::TYPE_CHECK_CACHE_PATH, elaboration::touch_directory, misc::warn_msg,
