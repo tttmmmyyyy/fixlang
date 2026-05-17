@@ -598,6 +598,109 @@ impl TypeCheckContext {
         }))
     }
 
+    /// Resolve `tc` to its struct definition for `Expr::MakeStruct`
+    /// elaboration. In strict mode, an unknown or non-struct tycon
+    /// is an error; in tolerant mode it degrades to `None`, letting
+    /// the caller type each field expression against a fresh tyvar.
+    fn resolve_struct_tycon(
+        &self,
+        tc: &Arc<TyCon>,
+        source: &Option<Span>,
+        strict: bool,
+    ) -> Result<Option<TyConInfo>, Errors> {
+        match self.type_env.tycons.get(tc) {
+            Some(ti) if ti.variant == TyConVariant::Struct => Ok(Some(ti.clone())),
+            Some(_) if strict => Err(Errors::from_msg_srcs(
+                format!("Type `{}` is not a struct.", tc.to_string()),
+                &[source],
+            )),
+            None if strict => Err(Errors::from_msg_srcs(
+                format!("Unknown type name `{}`.", tc.to_string()),
+                &[source],
+            )),
+            _ => Ok(None),
+        }
+    }
+
+    /// Reject `Expr::MakeStruct` literals that omit a declared field
+    /// or supply one the struct doesn't have. Strict mode only —
+    /// tolerant mode skips this check so the user can keep typing
+    /// inside a partially written struct literal.
+    fn validate_make_struct_field_set(
+        &self,
+        ti: &TyConInfo,
+        tc: &Arc<TyCon>,
+        fields: &[(Name, Option<Span>, Arc<ExprNode>)],
+        source: &Option<Span>,
+    ) -> Result<(), Errors> {
+        let field_names: Vec<Name> = ti.fields.iter().map(|f| f.name.clone()).collect();
+        let field_names_in_struct_defn: Set<Name> =
+            Set::from_iter(field_names.iter().cloned());
+        let field_names_in_expression: Set<Name> =
+            Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
+        let missing: Vec<Name> = field_names
+            .iter()
+            .filter(|f| !field_names_in_expression.contains(*f))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            let msg = if missing.len() == 1 {
+                format!(
+                    "Missing field `{}` of struct `{}`.",
+                    missing[0],
+                    tc.to_string()
+                )
+            } else {
+                let list = missing
+                    .iter()
+                    .map(|n| format!("`{}`", n))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("Missing fields {} of struct `{}`.", list, tc.to_string())
+            };
+            let mut err = Error::from_msg_srcs(msg, &[source]);
+            err.code = Some(ERR_MISSING_STRUCT_FIELD);
+            err.data = Some(serde_json::json!(missing));
+            return Err(Errors::from_err(err));
+        }
+        for f in &field_names_in_expression {
+            if !field_names_in_struct_defn.contains(f) {
+                return Err(Errors::from_msg_srcs(
+                    format!("Unknown field `{}` for struct `{}`.", f, tc.to_string()),
+                    &[source],
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Unify the outer expected type with the constructed struct
+    /// type, then return a `name -> field type` map the caller can
+    /// look each provided field expression up in. Returns an empty
+    /// map when the tycon isn't resolved (tolerant-mode degrade
+    /// path), so the caller's per-name lookup falls back to fresh
+    /// tyvars uniformly via `unwrap_or_else`.
+    fn compute_make_struct_field_tys(
+        &mut self,
+        tc: &Arc<TyCon>,
+        tycon_info: Option<&TyConInfo>,
+        expected_ty: &Arc<TypeNode>,
+        source: &Option<Span>,
+    ) -> Result<Map<Name, Arc<TypeNode>>, Errors> {
+        let Some(ti) = tycon_info else {
+            return Ok(Map::default());
+        };
+        let struct_ty = tc.get_struct_union_value_type(self);
+        self.unify_or_tolerated_mismatch(expected_ty, &struct_ty, source)?;
+        let field_tys = struct_ty.field_types(&self.type_env);
+        Ok(ti
+            .fields
+            .iter()
+            .zip(field_tys.iter())
+            .map(|(f, ft)| (f.name.clone(), ft.clone()))
+            .collect())
+    }
+
     /// Validate a union-variant pattern for a `Match` arm: on the
     /// first union arm of the match, resolve the cond's TyCon and
     /// populate `cond_tc_info` so later arms can skip that step.
@@ -1229,141 +1332,60 @@ impl TypeCheckContext {
             Expr::MakeStruct(tc, fields) => {
                 let strict = !self.error_tolerant;
 
-                // Strict-mode structural validation: in `error_tolerant`
-                // mode every gate below is downgraded to "still type
-                // each provided field expression, possibly against a
-                // fresh tyvar". The user's saved struct literal may
-                // be syntactically incomplete (missing/unknown fields,
-                // wrong type name) while the cursor sits inside one of
-                // its field expressions — the LSP needs that
-                // expression typed to drive dot completion.
-                let tycon_info = self.type_env.tycons.get(&tc);
-                let tycon_info = match tycon_info {
-                    Some(info) if info.variant == TyConVariant::Struct => Some(info.clone()),
-                    Some(_) => {
-                        if strict {
-                            return Err(Errors::from_msg_srcs(
-                                format!("Type `{}` is not a struct.", tc.to_string()),
-                                &[&ei.source],
-                            ));
-                        }
-                        None
-                    }
-                    None => {
-                        if strict {
-                            return Err(Errors::from_msg_srcs(
-                                format!("Unknown type name `{}`.", tc.to_string()),
-                                &[&ei.source],
-                            ));
-                        }
-                        None
-                    }
-                };
+                // 1. Resolve `tc` to its struct definition. Strict
+                // mode errors out on unknown / non-struct names;
+                // tolerant degrades to `None` so we can still type
+                // each field expression against a fresh tyvar.
+                let tycon_info = self.resolve_struct_tycon(tc, &ei.source, strict)?;
 
-                // Strict path: original elaboration (validate + reorder + type).
-                if let Some(ti) = tycon_info.as_ref().filter(|_| strict) {
-                    let field_names =
-                        ti.fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
-                    let field_names_in_struct_defn: Set<Name> =
-                        Set::from_iter(field_names.iter().cloned());
-                    let field_names_in_expression: Set<Name> =
-                        Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
-                    let missing: Vec<Name> = field_names
-                        .iter()
-                        .filter(|f| !field_names_in_expression.contains(*f))
-                        .cloned()
-                        .collect();
-                    if !missing.is_empty() {
-                        let msg = if missing.len() == 1 {
-                            format!(
-                                "Missing field `{}` of struct `{}`.",
-                                missing[0],
-                                tc.to_string()
-                            )
-                        } else {
-                            let list = missing
-                                .iter()
-                                .map(|n| format!("`{}`", n))
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            format!("Missing fields {} of struct `{}`.", list, tc.to_string())
-                        };
-                        let mut err = Error::from_msg_srcs(msg, &[&ei.source]);
-                        err.code = Some(ERR_MISSING_STRUCT_FIELD);
-                        err.data = Some(serde_json::json!(missing));
-                        return Err(Errors::from_err(err));
+                // 2. Strict-only: reject missing or unknown fields
+                // with a rich diagnostic. Tolerant accepts the
+                // literal as-is so the user can keep typing inside a
+                // partially written struct literal.
+                if strict {
+                    if let Some(ti) = tycon_info.as_ref() {
+                        self.validate_make_struct_field_set(ti, tc, fields, &ei.source)?;
                     }
-                    for f in &field_names_in_expression {
-                        if !field_names_in_struct_defn.contains(f) {
-                            return Err(Errors::from_msg_srcs(
-                                format!("Unknown field `{}` for struct `{}`.", f, tc.to_string()),
-                                &[&ei.source],
-                            ));
-                        }
-                    }
-                    let struct_ty = tc.get_struct_union_value_type(self);
-                    self.unify_or_tolerated_mismatch(&ty, &struct_ty, &ei.source)?;
-                    let field_tys = struct_ty.field_types(&self.type_env);
-                    assert_eq!(field_tys.len(), fields.len());
-
-                    // Elaborate field expressions in source order, to
-                    // match the convention used in `Expr::App` (where
-                    // `XDotF` types the receiver before the function
-                    // and the default order types the function before
-                    // the argument — both following source order). The
-                    // typed `MakeStruct` output, however, must carry
-                    // fields in struct-definition order so
-                    // `generator.rs::eval_make_struct` can use
-                    // `fields[i]` as the field slot index; place each
-                    // typed result at its definition-order slot.
-                    let name_to_idx: Map<Name, usize> = field_names
-                        .iter()
-                        .enumerate()
-                        .map(|(i, n)| (n.clone(), i))
-                        .collect();
-                    let mut typed_slots: Vec<Option<(Name, Option<Span>, Arc<ExprNode>)>> =
-                        (0..fields.len()).map(|_| None).collect();
-                    for (name, src, expr) in fields {
-                        let idx = name_to_idx[name];
-                        let typed = self.unify_type_of_expr(expr, field_tys[idx].clone())?;
-                        typed_slots[idx] = Some((name.clone(), src.clone(), typed));
-                    }
-                    let final_fields: Vec<_> =
-                        typed_slots.into_iter().map(|s| s.unwrap()).collect();
-                    return Ok(ei.set_make_struct_fields(final_fields));
                 }
 
-                // Tolerant path: type each provided field expression
-                // best-effort. Use the struct's declared type for known
-                // fields, fresh tyvar otherwise. Field order, missing
-                // and extra fields are not validated — the resulting
-                // typed `MakeStruct` may be ill-formed structurally
-                // but every field expression carries its inferred type.
-                let known_field_tys: Option<Map<Name, Arc<TypeNode>>> = if let Some(ti) =
-                    tycon_info
-                {
-                    let struct_ty = tc.get_struct_union_value_type(self);
-                    let _ = UnifOrOtherErr::extract_others(self.unify(&ty, &struct_ty));
-                    let field_tys = struct_ty.field_types(&self.type_env);
-                    Some(
-                        ti.fields
-                            .iter()
-                            .zip(field_tys.iter())
-                            .map(|(f, ft)| (f.name.clone(), ft.clone()))
-                            .collect(),
-                    )
-                } else {
-                    None
-                };
-                let mut new_fields = fields.clone();
-                for (name, _name_src, field_expr) in new_fields.iter_mut() {
+                // 3. Compute the `name -> expected field type` map
+                // (after unifying the outer expected type with the
+                // constructed struct type). An empty map when the
+                // tycon didn't resolve, signalling step 4 to use
+                // fresh tyvars throughout.
+                let known_field_tys = self.compute_make_struct_field_tys(
+                    tc,
+                    tycon_info.as_ref(),
+                    &ty,
+                    &ei.source,
+                )?;
+
+                // 4. Type each provided field expression in source
+                // order — matching the `Expr::App` convention that
+                // sub-expression side effects happen in the order
+                // the user wrote them. Unknown field names fall back
+                // to a fresh tyvar.
+                let mut typed_fields = fields.clone();
+                for (name, _, field_expr) in typed_fields.iter_mut() {
                     let field_ty = known_field_tys
-                        .as_ref()
-                        .and_then(|m| m.get(name).cloned())
+                        .get(name)
+                        .cloned()
                         .unwrap_or_else(|| self.fresh_ty_with_src(&field_expr.source));
                     *field_expr = self.unify_type_of_expr(field_expr, field_ty)?;
                 }
-                Ok(ei.set_make_struct_fields(new_fields))
+
+                // 5. Strict-only: reorder to struct-definition order
+                // for codegen (see `reorder_make_struct_fields_to_def_order`).
+                // Tolerant keeps source order — the resulting typed
+                // tree may be structurally ill-formed for codegen,
+                // but tolerant elaborates aren't fed to codegen.
+                if strict {
+                    if let Some(ti) = tycon_info.as_ref() {
+                        typed_fields = reorder_make_struct_fields_to_def_order(ti, typed_fields);
+                    }
+                }
+
+                Ok(ei.set_make_struct_fields(typed_fields))
             }
             Expr::ArrayLit(elems) => {
                 // Prepare type of element.
@@ -2392,6 +2414,34 @@ impl TypeCheckContext {
         }
         Ok(())
     }
+}
+
+/// Reorder a `MakeStruct`'s typed fields into struct-definition
+/// order. Codegen reads field values by position
+/// (`generator.rs::eval_make_struct` uses `fields[i]` as the slot
+/// index), so the strict elaboration path must hand it the fields
+/// in the order they appear in the struct declaration even when the
+/// user wrote them in a different order.
+///
+/// Requires every name in `fields` to exist in `ti.fields`; the
+/// strict path guarantees that via `validate_make_struct_field_set`.
+fn reorder_make_struct_fields_to_def_order(
+    ti: &TyConInfo,
+    fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>,
+) -> Vec<(Name, Option<Span>, Arc<ExprNode>)> {
+    let name_to_idx: Map<Name, usize> = ti
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.name.clone(), i))
+        .collect();
+    let mut slots: Vec<Option<(Name, Option<Span>, Arc<ExprNode>)>> =
+        (0..fields.len()).map(|_| None).collect();
+    for f in fields {
+        let idx = name_to_idx[&f.0];
+        slots[idx] = Some(f);
+    }
+    slots.into_iter().map(|s| s.unwrap()).collect()
 }
 
 /// Returns the trimmed source text covered by `span` if it fits on a single line and within a small character budget, suitable for inlining into a diagnostic message.
