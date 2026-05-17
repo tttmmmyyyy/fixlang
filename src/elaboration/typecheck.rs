@@ -1219,21 +1219,13 @@ impl TypeCheckContext {
             }
             Expr::TyAnno(e, anno_ty) => {
                 let anno_ty = self.validate_type_annotation(&anno_ty)?;
-                let child_ty = if let Err(unif_err) =
-                    UnifOrOtherErr::extract_others(self.unify(&ty, &anno_ty))?
-                {
-                    if !self.error_tolerant {
-                        let err = self.create_type_mismatch_error(&ty, &anno_ty, &unif_err, &ei.source);
-                        return Err(Errors::from_err(err));
-                    }
-                    // Annotation conflicts with the expected type.
-                    // Honour the annotation when typing the child so
-                    // the child's elaboration still benefits from it.
-                    anno_ty.clone()
-                } else {
-                    ty.clone()
-                };
-                let e = self.unify_type_of_expr(e, child_ty)?;
+                // After a successful unify, `ty` and `anno_ty` are
+                // substitution-equivalent, so either could be the
+                // child's expected type. After a tolerated mismatch
+                // they diverge — honour `anno_ty` (the user's stated
+                // intent) for the child either way.
+                self.unify_or_tolerated_mismatch(&ty, &anno_ty, &ei.source)?;
+                let e = self.unify_type_of_expr(e, anno_ty)?;
                 Ok(ei.set_tyanno_expr(e))
             }
             Expr::MakeStruct(tc, fields) => {
