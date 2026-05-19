@@ -101,7 +101,7 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --release --target ${{ matrix.job.target }}
+          args: --release --locked --target ${{ matrix.job.target }}
 
       # Rename built binary
       - name: Rename artifacts
