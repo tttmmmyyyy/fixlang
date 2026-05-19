@@ -133,12 +133,7 @@ impl Program {
             gv.scm = new_scm;
             match &mut gv.expr {
                 SymbolExpr::Simple(te) => {
-                    let original_expr = te.expr.clone();
-                    te.expr = expr_app(
-                        expr_var(wrap_name.clone(), None),
-                        vec![original_expr],
-                        None,
-                    );
+                    te.expr = wrap_with_opaque(&wrap_name, te.expr.clone());
                     te.opaque_types = build_opaque_resolutions(
                         opaque_infos,
                         &Substitution::default(),
@@ -167,12 +162,7 @@ impl Program {
                         );
                         impl_.scm_via_defn =
                             rewrite_impl_scheme(&impl_.scm_via_defn, &scm, opaque_infos);
-                        let original_expr = impl_.expr.expr.clone();
-                        impl_.expr.expr = expr_app(
-                            expr_var(wrap_name.clone(), None),
-                            vec![original_expr],
-                            None,
-                        );
+                        impl_.expr.expr = wrap_with_opaque(&wrap_name, impl_.expr.expr.clone());
                         impl_.expr.opaque_types = build_opaque_resolutions(
                             opaque_infos,
                             &defn_to_impl,
@@ -478,6 +468,16 @@ fn build_wrap_scheme(
     let wrap_ty = type_fun(domain_ty, codomain_ty);
 
     Scheme::new_arc(wrap_gen_vars, vec![], wrap_preds, wrap_eqs, wrap_ty)
+}
+
+/// Wrap an expression in a `#wrap_opaque(...)` application.
+///
+/// The wrapper App inherits the inner expression's source span so that type
+/// errors raised while type-checking the body are attributed to the
+/// user-written expression rather than appearing without a location.
+fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
+    let src = inner.source.clone();
+    expr_app(expr_var(wrap_name.clone(), None), vec![inner], src)
 }
 
 // Build a placeholder expression for the #wrap_opaque body.

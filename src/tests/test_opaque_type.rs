@@ -1,5 +1,5 @@
 use crate::configuration::Configuration;
-use crate::tests::test_util::{test_source, test_source_fail};
+use crate::tests::test_util::{run_source_assert_failed, test_source, test_source_fail};
 
 // ============================================================
 // 1-1. Basic use case tests
@@ -1057,6 +1057,36 @@ pub fn test_opaque_regression_unknown_name_undefined_internal() {
         main = pure();
     "#;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies that when a global value with an opaque-return-type signature
+/// has a body that violates its scheme's constraints, the resulting
+/// "X is required ... but cannot be deduced" error cites the source span
+/// of the user-written body rather than appearing without a location.
+#[test]
+pub fn test_opaque_error_carries_source_location() {
+    let source = r#"
+        module Main;
+
+        pairs : [it : Iterator, ?out : Iterator, Item ?out = (Item it, Item it)] it -> ?out;
+        pairs = |it| ();
+
+        main : IO ();
+        main = pure();
+    "#;
+    let errmsg = run_source_assert_failed(source, Configuration::develop_mode());
+    assert!(
+        errmsg.contains("is required in the type inference"),
+        "Expected the predicate-not-deduced error, got: {}",
+        errmsg
+    );
+    // The body `|it| ()` must be cited; the rendered span output
+    // contains the line marker `pairs = |it| ()`.
+    assert!(
+        errmsg.contains("pairs = |it| ()"),
+        "Error did not include the source location of the offending body, got: {}",
+        errmsg
+    );
 }
 
 /// Verifies that an `AssocTy` exposed by opaque-tycon resolution at
