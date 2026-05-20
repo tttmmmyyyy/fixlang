@@ -254,7 +254,7 @@ which may be a costly operation.
 
 ##### Parameters
 
-* `array` - The array to get the capacity from.
+* `array` - The array to get the capacity of.
 
 #### @size
 
@@ -377,15 +377,12 @@ Creates an array by a mapping function.
 
 #### get_capacity
 
+**Deprecated**: Use `Std::Array::@capacity` instead.
+
 Type: `Std::Array a -> Std::I64`
 
-(Deprecated) Renamed `Std::Array::get_capacity` to `Std::Array::@capacity` for brevity. The old name `Std::Array::get_capacity` is now deprecated but will remain available for the foreseeable future to maintain backward compatibility.
-
-Gets the capacity of an array.
-
-##### Parameters
-
-* `array` - The array to get the capacity of.
+Deprecated alias for `Std::Array::@capacity`. Kept for backward
+compatibility; `@capacity` is the canonical accessor.
 
 #### get_first
 

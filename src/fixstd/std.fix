@@ -117,16 +117,10 @@ namespace Array {
     get_size : Array a -> I64 = |arr| arr.@size;
     DEPRECATED[get_size, "Use `Std::Array::@size` instead."];
 
-    // Gets the capacity of an array.
-    // 
-    // The capacity of an array is the number of elements that can be stored in the currently allocated memory region.
-    // Up to this number of elements, you can add elements without additional memory allocation.
-    // If you try to add more elements than this number, the array will automatically reallocate memory,
-    // which may be a costly operation.
-    // 
-    // # Parameters
-    // * `array` - The array to get the capacity from.
-    @capacity : Array a -> I64 = |arr| arr.get_capacity;
+    // Deprecated alias for `Std::Array::@capacity`. Kept for backward
+    // compatibility; `@capacity` is the canonical accessor.
+    get_capacity : Array a -> I64 = |arr| arr.@capacity;
+    DEPRECATED[get_capacity, "Use `Std::Array::@capacity` instead."];
 
     // Creates an empty array with specified capacity.
     // 

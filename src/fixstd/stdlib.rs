@@ -475,8 +475,11 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("../docs/std_array_set.md").to_string()),
     ));
+    // The canonical name of the array capacity accessor is `Array::@capacity`;
+    // it gets the LLVM-builtin implementation. `Array::get_capacity` is then
+    // a thin Fix-level alias defined in std.fix and marked deprecated.
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "get_capacity"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "@capacity"),
         array_get_capacity(),
         None,
         None,
@@ -499,6 +502,10 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("../docs/std_array_get_ptr.md").to_string()),
     ));
+    fix_module.add_deprecation(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_get_ptr"),
+        "Use `Std::FFI::borrow_boxed` instead.".to_string(),
+    );
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], ARRAY_UNSAFE_EMPTY_NAME),
         array_unsafe_empty(),
