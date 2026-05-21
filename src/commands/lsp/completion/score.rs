@@ -96,17 +96,27 @@ pub(super) fn namespace_match(
 }
 
 /// Format a completion item's `sort_text` so the LSP client orders by
-/// tier first, then by namespace match within the tier, and finally
-/// alphabetically by name.
+/// tier first, then by namespace match within the tier, then by
+/// deprecation status, and finally alphabetically by name.
 ///
-/// Encoding: `<tier_digit><ns_letter>_<name>` — e.g. `0a_push_back`,
-/// `0c_build`. Strings sort lexicographically; `0a_…` < `0c_…` puts
-/// in-namespace candidates above unrelated ones at the same tier.
-pub(super) fn sort_text_for(tier: Tier, ns_match: NamespaceMatch, name: &FullName) -> String {
+/// Encoding: `<tier_digit><ns_letter><dep_digit>_<name>` — e.g.
+/// `0a0_push_back`, `0a1_old_push_back`, `0c0_build`. Strings sort
+/// lexicographically; `0a0_…` < `0a1_…` keeps the non-deprecated
+/// candidate above its deprecated sibling at the same tier+ns_match.
+/// Deprecation is a sub-tier inside (tier, ns_match), so a deprecated
+/// receiver-matching method still outranks an unrelated live method —
+/// the user's type signal dominates over the discouragement signal.
+pub(super) fn sort_text_for(
+    tier: Tier,
+    ns_match: NamespaceMatch,
+    deprecated: bool,
+    name: &FullName,
+) -> String {
     format!(
-        "{}{}_{}",
+        "{}{}{}_{}",
         tier.as_digit(),
         ns_match.as_letter(),
+        if deprecated { '1' } else { '0' },
         name.to_string()
     )
 }
@@ -117,7 +127,7 @@ pub(super) fn sort_text_for(tier: Tier, ns_match: NamespaceMatch, name: &FullNam
 /// — so they don't outrank function candidates but are still present
 /// when the user is working in a misclassified context.
 pub(super) fn dot_context_low_priority_sort_text(name: &FullName) -> String {
-    sort_text_for(Tier::Three, NamespaceMatch::Unrelated, name)
+    sort_text_for(Tier::Three, NamespaceMatch::Unrelated, false, name)
 }
 
 /// Assign a tier to one candidate. Walks the bucket index for the

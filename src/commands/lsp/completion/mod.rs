@@ -176,6 +176,7 @@ pub(super) fn handle_completion(
             .clone()
             .unwrap_or(gv.scm.clone())
             .to_string_normalize();
+        let deprecated = gv.deprecation.is_some();
         let mut item = create_item(
             full_name,
             CompletionItemKind::FUNCTION,
@@ -183,7 +184,7 @@ pub(super) fn handle_completion(
             &EndNode::Expr(Var::create(full_name.clone()), None),
             &typing_text,
             &text_document_position,
-            gv.deprecation.is_some(),
+            deprecated,
         );
         if let Some(ranking) = &dot_ranking {
             let tier = match &ranking.tc_template {
@@ -204,7 +205,16 @@ pub(super) fn handle_completion(
                 ranking.receiver_type.toplevel_tycon().as_deref(),
                 full_name,
             );
-            item.sort_text = Some(sort_text_for(tier, ns_match, full_name));
+            item.sort_text = Some(sort_text_for(tier, ns_match, deprecated, full_name));
+        } else if deprecated {
+            // Non-dot context. Live items keep `sort_text = None` so the
+            // client's default (label-based, possibly fuzzy) ordering
+            // applies. Deprecated items get a `~` prefix on their sort
+            // key — `~` (0x7E) is greater than every character that can
+            // appear in a Fix identifier or namespace separator, so
+            // deprecated items always sort below every live item whose
+            // sort key is its label.
+            item.sort_text = Some(format!("~{}", full_name.to_string()));
         }
         items.push(item);
     }
