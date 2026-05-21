@@ -9,7 +9,7 @@ mod tests {
     use serde_json::{json, Value};
     use std::{
         path::{Path, PathBuf},
-        time::Duration,
+        time::{Duration, Instant},
     };
     use tempfile::TempDir;
 
@@ -38,6 +38,39 @@ mod tests {
             .and_then(|it| it.get("sortText"))
             .and_then(|v| v.as_str())
             .map(String::from)
+    }
+
+    /// Poll an in-flight `textDocument/completion` request until the
+    /// server replies or `timeout` elapses. Returns the completion items
+    /// (the response's `result` may be either an array or a
+    /// `CompletionList` — both shapes are unwrapped); returns `None`
+    /// when the timeout expires so the caller can format its own
+    /// diagnostic.
+    fn collect_completion_items(
+        client: &mut LspClient,
+        request_id: u32,
+        timeout: Duration,
+    ) -> Option<Vec<Value>> {
+        let start = Instant::now();
+        loop {
+            client.wait_for_server(Duration::from_millis(500));
+            if let Some(response) = client.get_response(request_id) {
+                let result = response.get("result").expect("response has result");
+                let items = if result.is_array() {
+                    result.as_array().unwrap().clone()
+                } else {
+                    result
+                        .get("items")
+                        .and_then(|v| v.as_array())
+                        .cloned()
+                        .unwrap_or_default()
+                };
+                return Some(items);
+            }
+            if start.elapsed() > timeout {
+                return None;
+            }
+        }
     }
 
     struct LspCompletionCtx {
@@ -103,6 +136,33 @@ mod tests {
                     .cloned()
                     .unwrap_or_default()
             }
+        }
+
+        /// Send textDocument/completion and poll for the response with
+        /// the given timeout. Use this in dot-completion tests where
+        /// the server's first-time re-elaborate can take longer than
+        /// `complete`'s hard-coded 5s wait on a cold cache.
+        fn complete_with_timeout(
+            &mut self,
+            file: &str,
+            line: u32,
+            col: u32,
+            timeout: Duration,
+        ) -> Vec<Value> {
+            let uri = self.file_uri(file);
+            let id = self
+                .client
+                .send_request(
+                    "textDocument/completion",
+                    json!({
+                        "textDocument": { "uri": uri },
+                        "position": { "line": line, "character": col }
+                    }),
+                )
+                .expect("Failed to send completion request");
+            collect_completion_items(&mut self.client, id, timeout).unwrap_or_else(|| {
+                panic!("completion did not respond within {:?}", timeout)
+            })
         }
 
         /// Send completionItem/resolve and return the resolved item.
@@ -433,37 +493,7 @@ mod tests {
         // column 7 (= byte right after `.`).
         // Use a polling wait — Step 1's full re-elaborate can take longer
         // than `complete`'s hard-coded 5s sleep on a cold cache.
-        let id = ctx
-            .client
-            .send_request(
-                "textDocument/completion",
-                json!({
-                    "textDocument": { "uri": ctx.file_uri("main.fix") },
-                    "position": { "line": 13, "character": 7 }
-                }),
-            )
-            .expect("send completion");
-        let mut items: Vec<Value> = vec![];
-        let start = std::time::Instant::now();
-        loop {
-            ctx.client.wait_for_server(Duration::from_millis(500));
-            if let Some(response) = ctx.client.get_response(id) {
-                let result = response.get("result").expect("response has result");
-                items = if result.is_array() {
-                    result.as_array().unwrap().clone()
-                } else {
-                    result
-                        .get("items")
-                        .and_then(|v| v.as_array())
-                        .cloned()
-                        .unwrap_or_default()
-                };
-                break;
-            }
-            if start.elapsed() > Duration::from_secs(60) {
-                panic!("completion did not respond within 60s");
-            }
-        }
+        let items = ctx.complete_with_timeout("main.fix", 13, 7, Duration::from_secs(60));
 
         // Each item should carry a sortText derived from its tier.
         let find_sort = |label: &str| -> String {
@@ -579,26 +609,8 @@ mod tests {
             )
             .expect("send completion");
 
-        let mut items: Vec<Value> = vec![];
-        let start = std::time::Instant::now();
-        loop {
-            client.wait_for_server(Duration::from_millis(500));
-            if let Some(response) = client.get_response(id) {
-                let result = response
-                    .get("result")
-                    .expect("response has result");
-                items = if result.is_array() {
-                    result.as_array().unwrap().clone()
-                } else {
-                    result
-                        .get("items")
-                        .and_then(|v| v.as_array())
-                        .cloned()
-                        .unwrap_or_default()
-                };
-                break;
-            }
-            if start.elapsed() > Duration::from_secs(60) {
+        let items = collect_completion_items(&mut client, id, Duration::from_secs(60))
+            .unwrap_or_else(|| {
                 let log_path = project_dir.join(".fixlang/fix.log");
                 let log_content =
                     fs::read_to_string(&log_path).unwrap_or_else(|_| "<no log>".into());
@@ -616,8 +628,7 @@ mod tests {
                         completion_log
                     }
                 );
-            }
-        }
+            });
 
         let log_path = project_dir.join(".fixlang/fix.log");
         let log_content = fs::read_to_string(&log_path).unwrap_or_default();
@@ -1043,9 +1054,12 @@ mod tests {
     }
 
     /// Completion at a position that is NOT in dot context must NOT
-    /// attach `sortText` — the ranker is dot-completion-specific, and
-    /// keeping the field unset preserves the LSP client's default
-    /// alphabetical ordering everywhere else.
+    /// attach `sortText` to non-deprecated items — the dot-context
+    /// ranker is type-specific and irrelevant here, and keeping the
+    /// field unset preserves the LSP client's default alphabetical
+    /// ordering for live symbols. Deprecated items are the one
+    /// exception: they get a `~`-prefixed sortText so they drop below
+    /// live siblings.
     #[test]
     fn test_completion_dot_sort_no_dot_unchanged() {
         let mut ctx = LspCompletionCtx::setup("completion-dot-sort", &["main.fix"]);
@@ -1059,18 +1073,158 @@ mod tests {
             !items.is_empty(),
             "non-dot completion should still return candidates"
         );
-        let with_sort: Vec<String> = items
+        // Non-deprecated items must not have sortText; deprecated
+        // items (e.g. `Std::I16::to_I64`) must have a `~`-prefixed
+        // sortText. We classify by inspecting `deprecated`/`tags` on
+        // each item and require the two columns agree.
+        let mismatched: Vec<String> = items
             .iter()
             .filter_map(|it| {
-                let sort = it.get("sortText").and_then(|v| v.as_str())?;
                 let label = it.get("label").and_then(|v| v.as_str())?;
-                Some(format!("{} (sortText={})", label, sort))
+                let sort = it.get("sortText").and_then(|v| v.as_str());
+                let deprecated_flag = it
+                    .get("deprecated")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let tag_flag = it
+                    .get("tags")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().any(|t| t.as_i64() == Some(1)))
+                    .unwrap_or(false);
+                let is_deprecated = deprecated_flag || tag_flag;
+                match (is_deprecated, sort) {
+                    (false, Some(s)) => {
+                        Some(format!("live `{}` should have no sortText, got {:?}", label, s))
+                    }
+                    (true, None) => Some(format!(
+                        "deprecated `{}` should have a `~`-prefixed sortText, got none",
+                        label
+                    )),
+                    (true, Some(s)) if !s.starts_with('~') => Some(format!(
+                        "deprecated `{}` sortText must start with `~`, got {:?}",
+                        label, s
+                    )),
+                    _ => None,
+                }
             })
             .collect();
         assert!(
-            with_sort.is_empty(),
-            "non-dot completion items should have no sortText; saw: {:?}",
-            with_sort,
+            mismatched.is_empty(),
+            "non-dot completion sortText shape mismatch: {:#?}",
+            mismatched,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Deprecated symbols must rank lower than non-deprecated ones in
+    /// non-dot context. Live items keep `sortText = None` (the LSP
+    /// client falls back to `label`); deprecated items get a sortText
+    /// prefixed with `~` (0x7E), which is greater than every character
+    /// that can appear in a Fix identifier or `::` separator, so a
+    /// deprecated item's sort key always sorts after a live item's
+    /// label.
+    #[test]
+    fn test_completion_deprecated_ranks_lower_in_non_dot_context() {
+        let mut ctx = LspCompletionCtx::setup("completion_deprecated", &["main.fix"]);
+
+        // Position is irrelevant for "list everything"; line 0, col 0
+        // is a non-dot context, so live items must have no sortText
+        // and the deprecated one must have a `~`-prefixed sortText.
+        let items = ctx.complete("main.fix", 0, 0);
+
+        let new_sort = find_sort_text(&items, "Main::Hoge::new_func");
+        assert_eq!(
+            new_sort, None,
+            "non-deprecated `Main::Hoge::new_func` should have no \
+             sortText in non-dot context; got {:?}",
+            new_sort,
+        );
+
+        let old_sort = find_sort_text(&items, "Main::Hoge::old_func")
+            .expect("deprecated `Main::Hoge::old_func` should have a sortText");
+        assert!(
+            old_sort.starts_with('~'),
+            "deprecated `Main::Hoge::old_func` sortText should start \
+             with `~` so it ranks below every live item; got {:?}",
+            old_sort,
+        );
+
+        // Effective sort-key comparison: live falls back to label.
+        // `~Main::Hoge::old_func` > `Main::Hoge::new_func` because
+        // '~' > 'M' lexicographically.
+        let new_key = "Main::Hoge::new_func".to_string();
+        assert!(
+            new_key < old_sort,
+            "live new_func effective sort key {:?} must be less than \
+             deprecated old_func sortText {:?}",
+            new_key,
+            old_sort,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Within the dot-completion tier system, a deprecated candidate
+    /// must rank below a live candidate that shares its (tier,
+    /// ns_match) bucket. The fixture defines two functions with the
+    /// same receiver type (`I64 -> I64`) at the same namespace level,
+    /// one of which is `DEPRECATED`. At `42.<cursor>` both land in
+    /// Tier 0 sub-tier `c` (Unrelated to `Std::I64`); the encoding
+    /// adds a third sub-position for deprecation (`0` for live, `1`
+    /// for deprecated), so the live one's sortText sorts strictly
+    /// before the deprecated one's.
+    #[test]
+    fn test_completion_dot_sort_deprecated_ranks_below_live_at_same_tier() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-dot-sort-deprecated", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: live_func : I64 -> I64;
+        //   3: live_func = |x| x + 1;
+        //   4: (blank)
+        //   5: old_func : I64 -> I64;
+        //   6: old_func = |x| x + 1;
+        //   7: DEPRECATED[old_func, "Use `live_func` instead."];
+        //   8: (blank)
+        //   9: main : IO () = (
+        //  10:     42.
+        //  11:     pure()
+        //  12: );
+        //
+        // Column 7 = byte just after `.` on `    42.`.
+        // Use a polling wait because the dot-context elaborate can
+        // take longer than `complete`'s hard-coded 5s sleep on a cold
+        // cache.
+        let items = ctx.complete_with_timeout("main.fix", 10, 7, Duration::from_secs(60));
+
+        let sort_live = find_sort_text(&items, "Main::live_func")
+            .expect("Main::live_func should be a completion candidate");
+        let sort_old = find_sort_text(&items, "Main::old_func")
+            .expect("Main::old_func should be a completion candidate");
+
+        // Both should land at Tier 0 (I64 receiver matches both).
+        assert!(
+            sort_live.starts_with('0'),
+            "Main::live_func should be Tier 0 for an I64 receiver; got {:?}",
+            sort_live,
+        );
+        assert!(
+            sort_old.starts_with('0'),
+            "Main::old_func should be Tier 0 for an I64 receiver (deprecation \
+             is a sub-tier, not a tier penalty); got {:?}",
+            sort_old,
+        );
+
+        // Live ranks above deprecated within the same (tier, ns_match).
+        assert!(
+            sort_live < sort_old,
+            "live `Main::live_func` sortText ({:?}) must be less than \
+             deprecated `Main::old_func` sortText ({:?})",
+            sort_live,
+            sort_old,
         );
 
         ctx.shutdown();
