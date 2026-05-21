@@ -1,9 +1,6 @@
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
-#[allow(unused_imports)]
-#[macro_use]
-extern crate serial_test;
 extern crate build_time;
 extern crate chrono;
 extern crate colored;

@@ -1,8 +1,5 @@
 #[macro_use]
 extern crate pest_derive;
-#[allow(unused_imports)]
-#[macro_use]
-extern crate serial_test;
 
 pub mod ast;
 pub mod build;
