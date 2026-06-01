@@ -2463,6 +2463,7 @@ namespace Iterator {
     // # Parameters
     //
     // * `pred` - The predicate function to be applied to each element of the iterator.
+    // * `iter` - The iterator to be checked.
     check_all : [it : Iterator, Item it = a] (a -> Bool) -> it -> Bool;
     check_all = |pred, iter| (
         match iter.advance {
@@ -2476,6 +2477,7 @@ namespace Iterator {
     // # Parameters
     // 
     // * `pred` - The predicate function to be applied to each element of the iterator.
+    // * `iter` - The iterator to be checked.
     check_any : [it : Iterator, Item it = a] (a -> Bool) -> it -> Bool;
     check_any = |pred, iter| (
         match iter.advance {
