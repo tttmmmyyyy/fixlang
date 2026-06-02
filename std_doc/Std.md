@@ -3211,6 +3211,7 @@ Check if all elements of an iterator satisfy a given predicate.
 ##### Parameters
 
 * `pred` - The predicate function to be applied to each element of the iterator.
+* `iter` - The iterator to be checked.
 
 #### check_any
 
@@ -3221,6 +3222,7 @@ Check if any element of an iterator satisfies a given predicate.
 ##### Parameters
 
 * `pred` - The predicate function to be applied to each element of the iterator.
+* `iter` - The iterator to be checked.
 
 #### collect_m
 
