@@ -13,8 +13,8 @@ use self::score::{
 use super::edit_import::create_text_edit_to_import;
 use super::server::{send_response, LatestContent};
 use super::util::{
-    document_from_endnode, get_line_string_from_position, parameters_of_global_value,
-    position_to_bytes,
+    document_from_endnode, get_line_string_from_position, is_cursor_in_comment,
+    parameters_of_global_value, position_to_bytes,
 };
 use crate::ast::expr::{hole_full_name, Expr, ExprNode, Var};
 use crate::ast::name::{FullName, NameSpace};
@@ -51,6 +51,14 @@ pub(super) fn handle_completion(
     typecheck_cache: SharedTypeCheckCache,
 ) {
     let text_document_position = &params.text_document_position;
+
+    // Don't offer completions while the cursor is inside a comment
+    // (`//` or `/* */`): the user is writing prose, not code.
+    if is_cursor_in_comment(uri_to_content, text_document_position) {
+        send_response(id, Ok::<_, ()>(Vec::<CompletionItem>::new()));
+        return;
+    }
+
     let typing_text = get_typing_text(text_document_position, uri_to_content);
 
     // In dot-completion contexts, run the receiver-type extraction

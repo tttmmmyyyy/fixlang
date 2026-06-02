@@ -4,7 +4,7 @@ use super::server::{get_file_content_at_previous_diagnostics, LatestContent};
 use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::PatternNode;
-use crate::ast::program::{Program, SymbolExpr};
+use crate::ast::program::{EndNode, Program, SymbolExpr};
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::TyCon;
@@ -12,17 +12,17 @@ use crate::commands::docs::MarkdownSection;
 use crate::constants::chars_allowed_in_identifiers;
 use crate::misc::{char_pos_to_utf16_pos, to_absolute_path, utf16_pos_to_utf8_byte_pos, Map};
 use crate::write_log;
-use crate::ast::program::EndNode;
 use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
 use std::sync::Arc;
 use difference::diff;
-use lsp_types::MarkupContent;
-use lsp_types::TextDocumentPositionParams;
+use lsp_types::{
+    Location, MarkupContent, MarkupKind, Position, Range, TextDocumentPositionParams, Uri,
+};
 use std::path::{Component, PathBuf};
 use std::str::FromStr;
 
 // Convert a `lsp_types::Uri` into a `PathBuf`.
-pub(super) fn uri_to_path(uri: &lsp_types::Uri) -> PathBuf {
+pub(super) fn uri_to_path(uri: &Uri) -> PathBuf {
     PathBuf::from(
         urlencoding::decode(&uri.path().to_string())
             .ok()
@@ -61,7 +61,7 @@ fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> O
 }
 
 // Convert a `lsp_types::Position` into a byte offset in a string.
-pub(super) fn position_to_bytes(string: &str, position: lsp_types::Position) -> usize {
+pub(super) fn position_to_bytes(string: &str, position: Position) -> usize {
     let mut bytes = 0;
     let mut line = 0;
     let mut utf16_count = 0;
@@ -81,13 +81,105 @@ pub(super) fn position_to_bytes(string: &str, position: lsp_types::Position) -> 
     bytes
 }
 
+// Returns true when the cursor of `text_position` sits inside a comment
+// (`//` line comment or `/* */` block comment) in the latest content of
+// the file. If the content for the uri is unavailable, returns false.
+pub(super) fn is_cursor_in_comment(
+    uri_to_content: &Map<Uri, LatestContent>,
+    text_position: &TextDocumentPositionParams,
+) -> bool {
+    let uri = &text_position.text_document.uri;
+    let Some(latest_content) = uri_to_content.get(uri) else {
+        return false;
+    };
+    let content = &latest_content.content;
+    let cursor = position_to_bytes(content, text_position.position);
+    is_byte_in_comment(content, cursor)
+}
+
+// Returns true when byte offset `cursor` in `content` falls inside a
+// `//` line comment or `/* */` block comment.
+//
+// The bytes preceding the cursor are scanned with a small lexer state
+// machine. String (`"..."`) and char (`'...'`) literals are tracked so
+// that comment markers appearing inside them are not mistaken for the
+// start of a comment (e.g. the `//` in `"http://..."`). Backslash escapes
+// inside those literals are skipped. All the markers involved (`/`, `*`,
+// `"`, `'`, `\`, `\n`) are ASCII, so a byte scan never splits a
+// multi-byte UTF-8 character.
+fn is_byte_in_comment(content: &str, cursor: usize) -> bool {
+    #[derive(PartialEq)]
+    enum State {
+        Normal,
+        LineComment,
+        BlockComment,
+        Str,
+        Char,
+    }
+    let bytes = content.as_bytes();
+    let cursor = cursor.min(bytes.len());
+    let mut state = State::Normal;
+    let mut i = 0;
+    while i < cursor {
+        let b = bytes[i];
+        let next = bytes.get(i + 1).copied();
+        match state {
+            State::Normal => {
+                if b == b'/' && next == Some(b'/') {
+                    state = State::LineComment;
+                    i += 2;
+                    continue;
+                } else if b == b'/' && next == Some(b'*') {
+                    state = State::BlockComment;
+                    i += 2;
+                    continue;
+                } else if b == b'"' {
+                    state = State::Str;
+                } else if b == b'\'' {
+                    state = State::Char;
+                }
+            }
+            State::LineComment => {
+                if b == b'\n' {
+                    state = State::Normal;
+                }
+            }
+            State::BlockComment => {
+                if b == b'*' && next == Some(b'/') {
+                    state = State::Normal;
+                    i += 2;
+                    continue;
+                }
+            }
+            State::Str => {
+                if b == b'\\' {
+                    i += 2;
+                    continue;
+                } else if b == b'"' {
+                    state = State::Normal;
+                }
+            }
+            State::Char => {
+                if b == b'\\' {
+                    i += 2;
+                    continue;
+                } else if b == b'\'' {
+                    state = State::Normal;
+                }
+            }
+        }
+        i += 1;
+    }
+    state == State::LineComment || state == State::BlockComment
+}
+
 // Translate an LSP cursor position into a `SourcePos` anchored to the
 // diagnostics-time snapshot of the source file (which is what the AST was
 // elaborated from).
 pub(super) fn resolve_source_pos(
     text_position: &TextDocumentPositionParams,
     program: &Program,
-    uri_to_content: &Map<lsp_types::Uri, LatestContent>,
+    uri_to_content: &Map<Uri, LatestContent>,
 ) -> Option<SourcePos> {
     let uri = &text_position.text_document.uri;
     if !uri_to_content.contains_key(uri) {
@@ -110,7 +202,7 @@ pub(super) fn resolve_source_pos(
     let pos_in_latest = text_position.position;
     let line_in_saved =
         calculate_corresponding_line(&latest_content.content, &saved_content, pos_in_latest.line)?;
-    let pos_in_saved = lsp_types::Position {
+    let pos_in_saved = Position {
         line: line_in_saved,
         character: pos_in_latest.character,
     };
@@ -449,7 +541,7 @@ pub(super) fn get_current_dir() -> Option<PathBuf> {
 }
 
 // Convert a `Span` into an LSP `Range`.
-pub(super) fn span_to_range(span: &Span) -> lsp_types::Range {
+pub(super) fn span_to_range(span: &Span) -> Range {
     fn pair_to_zero_indexed((x, y): (usize, usize)) -> (usize, usize) {
         (x - 1, y - 1)
     }
@@ -468,12 +560,12 @@ pub(super) fn span_to_range(span: &Span) -> lsp_types::Range {
         (start_column, end_column)
     };
 
-    lsp_types::Range {
-        start: lsp_types::Position {
+    Range {
+        start: Position {
             line: start_line as u32,
             character: start_utf16_col as u32,
         },
-        end: lsp_types::Position {
+        end: Position {
             line: end_line as u32,
             character: end_utf16_col as u32,
         },
@@ -482,10 +574,10 @@ pub(super) fn span_to_range(span: &Span) -> lsp_types::Range {
 
 // Convert a `Span` into an `lsp_types::Location` using `cdir` as the base directory.
 // Returns `None` if the path cannot be converted to a URI.
-pub(super) fn span_to_location(span: &Span, cdir: &PathBuf) -> Option<lsp_types::Location> {
+pub(super) fn span_to_location(span: &Span, cdir: &PathBuf) -> Option<Location> {
     let uri = path_to_uri(&cdir.join(&span.input.file_path));
     match uri {
-        Ok(uri) => Some(lsp_types::Location {
+        Ok(uri) => Some(Location {
             uri,
             range: span_to_range(span),
         }),
@@ -498,7 +590,7 @@ pub(super) fn span_to_location(span: &Span, cdir: &PathBuf) -> Option<lsp_types:
 
 // Convert a collection of `Span`s into `lsp_types::Location`s using `cdir` as the base directory.
 // Spans that cannot be converted are silently dropped (with a log message).
-pub(super) fn spans_to_locations(spans: Vec<Span>, cdir: &PathBuf) -> Vec<lsp_types::Location> {
+pub(super) fn spans_to_locations(spans: Vec<Span>, cdir: &PathBuf) -> Vec<Location> {
     spans
         .into_iter()
         .filter_map(|span| span_to_location(&span, cdir))
@@ -506,7 +598,7 @@ pub(super) fn spans_to_locations(spans: Vec<Span>, cdir: &PathBuf) -> Vec<lsp_ty
 }
 
 // Convert a file path into an LSP URI.
-pub(super) fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
+pub(super) fn path_to_uri(path: &PathBuf) -> Result<Uri, String> {
     // URI-encode each component of the path.
     let path = to_absolute_path(path).map_err(|_| {
         format!(
@@ -538,7 +630,7 @@ pub(super) fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
         }
     }
     let path = "file:///".to_string() + components.join("/").as_str();
-    let uri = lsp_types::Uri::from_str(&path);
+    let uri = Uri::from_str(&path);
     if uri.is_err() {
         return Err(format!("Failed to convert a path into Uri: {:?}", path));
     }
@@ -549,7 +641,7 @@ pub(super) fn path_to_uri(path: &PathBuf) -> Result<lsp_types::Uri, String> {
 // `uri_to_content` is a map to get the source string from the uri of the source file.
 // The returned byte position is converted from the UTF-16 code unit position in the text_position.
 pub(super) fn get_line_string_from_position(
-    uri_to_content: &Map<lsp_types::Uri, LatestContent>,
+    uri_to_content: &Map<Uri, LatestContent>,
     text_position: &TextDocumentPositionParams,
 ) -> Option<(String, usize)> {
     // Get the latest file content.
@@ -867,7 +959,7 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
         }
     }
     let content = MarkupContent {
-        kind: lsp_types::MarkupKind::Markdown,
+        kind: MarkupKind::Markdown,
         value: docs,
     };
     content

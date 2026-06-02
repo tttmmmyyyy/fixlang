@@ -1,0 +1,9 @@
+module Main;
+
+myfunc : I64 -> I64 = |x| x + 1;
+
+// myfunc comment line
+main : IO () = (
+    let _ = myfunc /* block myfunc */ ;
+    pure()
+);

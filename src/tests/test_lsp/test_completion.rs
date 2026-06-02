@@ -1229,4 +1229,67 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// While the cursor is inside a comment (`//` line comment or
+    /// `/* */` block comment) the server must return *no* completion
+    /// candidates — the user is writing prose, not code. A position in
+    /// ordinary code on the same fixture must still return candidates,
+    /// proving the suppression is scoped to comments and didn't disable
+    /// completion outright.
+    #[test]
+    fn test_completion_suppressed_inside_comments() {
+        let mut ctx = LspCompletionCtx::setup("completion-in-comment", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: myfunc : I64 -> I64 = |x| x + 1;
+        //   3: (blank)
+        //   4: // myfunc comment line
+        //   5: main : IO () = (
+        //   6:     let _ = myfunc /* block myfunc */ ;
+        //   7:     pure()
+        //   8: );
+
+        // Inside the `//` line comment (col 10 is within the word
+        // "comment" after `// myfunc `).
+        let in_line_comment = ctx.complete("main.fix", 4, 10);
+        assert!(
+            in_line_comment.is_empty(),
+            "completion inside a `//` line comment must be empty; got {:?}",
+            in_line_comment
+                .iter()
+                .filter_map(|it| it.get("label").and_then(|l| l.as_str()))
+                .collect::<Vec<_>>(),
+        );
+
+        // Inside the `/* */` block comment (col 30 is within the word
+        // "myfunc" sitting inside the block comment).
+        let in_block_comment = ctx.complete("main.fix", 6, 30);
+        assert!(
+            in_block_comment.is_empty(),
+            "completion inside a `/* */` block comment must be empty; got {:?}",
+            in_block_comment
+                .iter()
+                .filter_map(|it| it.get("label").and_then(|l| l.as_str()))
+                .collect::<Vec<_>>(),
+        );
+
+        // Ordinary code on the same line: cursor right after the
+        // `myfunc` identifier (col 18, just before the space preceding
+        // the block comment). Suppression must not reach here.
+        let in_code = ctx.complete("main.fix", 6, 18);
+        let labels: Vec<String> = in_code
+            .iter()
+            .filter_map(|it| it.get("label").and_then(|l| l.as_str()).map(String::from))
+            .collect();
+        assert!(
+            labels.iter().any(|l| l == "Main::myfunc"),
+            "completion in ordinary code must still return candidates \
+             (expected `Main::myfunc`); got {:?}",
+            labels,
+        );
+
+        ctx.shutdown();
+    }
 }
