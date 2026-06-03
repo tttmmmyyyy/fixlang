@@ -45,7 +45,7 @@ pub fn test_memory_leak() {
         main : IO ();
         main = (
             println("");;
-            FFI_CALL_IO[Ptr malloc(CInt), 128.c_int];;
+            FFI_CALL_IO[Ptr malloc(CSizeT), 128.c_size_t];;
             pure()
         );
     "#;
