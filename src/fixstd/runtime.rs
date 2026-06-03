@@ -1,7 +1,7 @@
+use inkwell::attributes::{Attribute, AttributeLoc};
 use inkwell::module::Linkage;
 use inkwell::values::BasicValue;
 use inkwell::AddressSpace;
-
 use crate::constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV};
 use crate::generator::Generator;
 
@@ -16,6 +16,13 @@ pub const RUNTIME_PTR_ADD_OFFSET: &str = "fixruntime_ptr_add_offset";
 pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
 pub const RUNTIME_GET_ARGV: &str = "fixruntime_get_argv";
+/// libc `malloc`, declared with a 64-bit size parameter.
+///
+/// We declare it ourselves rather than using inkwell's `build_malloc` /
+/// `build_array_malloc`, because those wrap LLVM's `CallInst::CreateMalloc`
+/// which declares `malloc` with an i32 size parameter and truncates the size
+/// before the call, breaking allocations >= 4 GiB.
+pub const RUNTIME_MALLOC: &str = "malloc";
 
 pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     build_abort_function(gc, mode);
@@ -31,6 +38,7 @@ pub fn build_runtime<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     }
     build_get_argc_function(gc, mode);
     build_get_argv_function(gc, mode);
+    build_malloc_function(gc, mode);
 }
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
@@ -386,4 +394,36 @@ fn build_get_argv_function<'c, 'm, 'b>(gc: &mut Generator<'c, 'm>, mode: BuildMo
     gc.builder().build_return(Some(&argv)).unwrap();
 
     return;
+}
+
+/// Declares `malloc` in the module with signature `ptr (i64)`, plus the
+/// LLVM attributes needed for correct codegen around allocator calls.
+fn build_malloc_function<'c, 'm, 'b>(gc: &Generator<'c, 'm>, mode: BuildMode) {
+    if mode != BuildMode::Declare {
+        return;
+    }
+    if let Some(_func) = gc.module.get_function(RUNTIME_MALLOC) {
+        return;
+    }
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    let i64_ty = gc.context.i64_type();
+    let fn_ty = ptr_ty.fn_type(&[i64_ty.into()], false);
+    let func = gc.module.add_function(RUNTIME_MALLOC, fn_ty, None);
+    // The returned pointer does not alias any other pointer visible to the
+    // caller, so mark it `noalias`.
+    let noalias_kind = Attribute::get_named_enum_kind_id("noalias");
+    let noalias = gc.context.create_enum_attribute(noalias_kind, 0);
+    func.add_attribute(AttributeLoc::Return, noalias);
+    // Mark the function as `nobuiltin` so LLVM does NOT auto-infer the full
+    // set of allocator attributes (`allockind`, `allocsize`,
+    // `memory(inaccessiblemem: readwrite)`, ...) via TargetLibraryInfo. Those
+    // attributes enable an aggressive CSE on loads around the malloc call
+    // that, in refcount-state-checking inner loops, ends up spilling a
+    // working register. Measured impact: removing this attribute regresses
+    // cp_lib_prime_list by +5.9% and cp_lib_lsegtree by +3.0% in wall clock
+    // (hyperfine, 30 runs each), with no benchmark in the speedtest suite
+    // measurably benefiting from builtin recognition.
+    let nobuiltin_kind = Attribute::get_named_enum_kind_id("nobuiltin");
+    let nobuiltin = gc.context.create_enum_attribute(nobuiltin_kind, 0);
+    func.add_attribute(AttributeLoc::Function, nobuiltin);
 }

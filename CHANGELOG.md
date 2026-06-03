@@ -47,6 +47,7 @@
 #### Language
 
 - Fixed a compiler error that occurred when writing a namespace-qualified impl type (e.g., `Main::MyType`) in an associated type implementation line, such as `type MyElem Main::MyType = ...;`.
+- Fixed an issue where allocating more than 4 GiB of memory at once caused incorrect behavior.
 
 #### Tool
 

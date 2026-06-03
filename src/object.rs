@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::ast::name::Name;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
@@ -17,7 +16,7 @@ use crate::fixstd::builtin::{
     make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty,
     make_u8_ty,
 };
-use crate::fixstd::runtime::{RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_NEGATIVE_ARRAY_SIZE};
+use crate::fixstd::runtime::{RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE};
 use crate::generator::{Generator, Object};
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
@@ -1389,15 +1388,36 @@ pub fn create_obj<'c, 'm>(
     let object_type = ty.get_object_type(capture, gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
 
-    // Allocate object
+    // Allocate object.
+    //
+    // We bypass inkwell's `build_malloc` / `build_array_malloc` because they
+    // declare `@malloc` with an i32 size parameter and truncate the size, which
+    // breaks allocations >= 4 GiB. Instead we call our own `@malloc(i64)`
+    // declaration registered in `runtime.rs`.
+    let malloc_fn = gc
+        .module
+        .get_function(RUNTIME_MALLOC)
+        .expect("malloc is not declared");
+    /// Emits a call to `malloc(sizeof)` and returns the resulting pointer
+    /// as a `BasicValueEnum`.
+    fn call_malloc<'c, 'm>(
+        gc: &Generator<'c, 'm>,
+        malloc_fn: FunctionValue<'c>,
+        sizeof: IntValue<'c>,
+        name: &str,
+    ) -> BasicValueEnum<'c> {
+        gc.builder()
+            .build_call(malloc_fn, &[sizeof.into()], name)
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+    }
     let obj = if ty.is_array() {
         // When the object is array,
         let sizeof = object_type.size_of(gc, array_capacity);
-        let ptr = gc
-            .builder()
-            .build_array_malloc(gc.context.i8_type(), sizeof, "malloc_array@create_obj")
-            .unwrap();
-        Object::new(ptr.as_basic_value_enum(), ty.clone(), gc)
+        let ptr = call_malloc(gc, malloc_fn, sizeof, "malloc_array@create_obj");
+        Object::new(ptr, ty.clone(), gc)
     } else {
         if object_type.is_unbox {
             // When the object is unboxed (not a funptr),
@@ -1408,11 +1428,9 @@ pub fn create_obj<'c, 'm>(
             )
         } else {
             // When the object is boxed,
-            let ptr = gc
-                .builder()
-                .build_malloc(struct_type, "malloc@create_obj")
-                .unwrap();
-            Object::new(ptr.as_basic_value_enum(), ty.clone(), gc)
+            let sizeof = struct_type.size_of().unwrap();
+            let ptr = call_malloc(gc, malloc_fn, sizeof, "malloc@create_obj");
+            Object::new(ptr, ty.clone(), gc)
         }
     };
 
