@@ -1,5 +1,5 @@
 use crate::{ast::name::Name, constants::TEMPORARY_SRC_PATH, error::Errors, parse::sourcefile::SourceFile};
-use atty::Stream;
+use std::io::IsTerminal;
 use colored::Colorize;
 use std::{
     env, fs,
@@ -245,7 +245,7 @@ impl Drop for Finally {
 }
 
 pub fn disable_colored_no_tty() {
-    if !atty::is(Stream::Stderr) {
+    if !std::io::stderr().is_terminal() {
         colored::control::set_override(false);
     }
 }
