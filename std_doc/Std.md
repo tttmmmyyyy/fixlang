@@ -3837,6 +3837,14 @@ Trait member of `Std::Not`
 
 Logical NOT of a value. An expression `!x` is translated to `not(x)`.
 
+### namespace Std::One
+
+#### one
+
+Type: `[a : Std::One] a`
+
+Trait member of `Std::One`
+
 ### namespace Std::Option
 
 #### as_some_or
@@ -6506,6 +6514,12 @@ Multiplies a value by another value. An expression `x * y` is translated to `mul
 * `lhs`
 * `rhs`
 
+#### trait `Multiplicative = Std::Mul + Std::One`
+
+Kind: `*`
+
+The trait (alias) for types that support multiplication and have unit element.
+
 #### trait `a : Neg`
 
 Trait for prefix operator `-`.
@@ -6525,6 +6539,12 @@ Trait for prefix operator `!`.
 Type: `a -> a`
 
 Logical NOT of a value. An expression `!x` is translated to `not(x)`.
+
+#### trait `a : One`
+
+##### method `one`
+
+Type: `a`
 
 #### trait `a : Rem`
 
@@ -6854,6 +6874,8 @@ The empty array with zero capacity.
 
 ### impl `Std::F32 : Std::Neg`
 
+### impl `Std::F32 : Std::One`
+
 ### impl `Std::F32 : Std::Sub`
 
 ### impl `Std::F32 : Std::ToBytes`
@@ -6925,6 +6947,8 @@ The empty array with zero capacity.
 ### impl `Std::F64 : Std::Mul`
 
 ### impl `Std::F64 : Std::Neg`
+
+### impl `Std::F64 : Std::One`
 
 ### impl `Std::F64 : Std::Sub`
 
@@ -7000,6 +7024,8 @@ The empty array with zero capacity.
 
 ### impl `Std::I16 : Std::Neg`
 
+### impl `Std::I16 : Std::One`
+
 ### impl `Std::I16 : Std::Rem`
 
 ### impl `Std::I16 : Std::Sub`
@@ -7073,6 +7099,8 @@ The empty array with zero capacity.
 ### impl `Std::I32 : Std::Mul`
 
 ### impl `Std::I32 : Std::Neg`
+
+### impl `Std::I32 : Std::One`
 
 ### impl `Std::I32 : Std::Rem`
 
@@ -7148,6 +7176,8 @@ The empty array with zero capacity.
 
 ### impl `Std::I64 : Std::Neg`
 
+### impl `Std::I64 : Std::One`
+
 ### impl `Std::I64 : Std::Rem`
 
 ### impl `Std::I64 : Std::Sub`
@@ -7221,6 +7251,8 @@ The empty array with zero capacity.
 ### impl `Std::I8 : Std::Mul`
 
 ### impl `Std::I8 : Std::Neg`
+
+### impl `Std::I8 : Std::One`
 
 ### impl `Std::I8 : Std::Rem`
 
@@ -7428,6 +7460,8 @@ The empty string.
 
 ### impl `Std::U16 : Std::Neg`
 
+### impl `Std::U16 : Std::One`
+
 ### impl `Std::U16 : Std::Rem`
 
 ### impl `Std::U16 : Std::Sub`
@@ -7501,6 +7535,8 @@ The empty string.
 ### impl `Std::U32 : Std::Mul`
 
 ### impl `Std::U32 : Std::Neg`
+
+### impl `Std::U32 : Std::One`
 
 ### impl `Std::U32 : Std::Rem`
 
@@ -7576,6 +7612,8 @@ The empty string.
 
 ### impl `Std::U64 : Std::Neg`
 
+### impl `Std::U64 : Std::One`
+
 ### impl `Std::U64 : Std::Rem`
 
 ### impl `Std::U64 : Std::Sub`
@@ -7649,6 +7687,8 @@ The empty string.
 ### impl `Std::U8 : Std::Mul`
 
 ### impl `Std::U8 : Std::Neg`
+
+### impl `Std::U8 : Std::One`
 
 ### impl `Std::U8 : Std::Rem`
 

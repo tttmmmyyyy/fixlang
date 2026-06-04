@@ -3359,6 +3359,9 @@ namespace I8 {
 impl I8 : Zero {
     zero = 0_I8;
 }
+impl I8 : One {
+    one = 1_I8;
+}
 
 namespace U8 {
     maximum : U8;
@@ -3369,6 +3372,9 @@ namespace U8 {
 }
 impl U8 : Zero {
     zero = 0_U8;
+}
+impl U8 : One {
+    one = 1_U8;
 }
 
 namespace I16 {
@@ -3381,6 +3387,9 @@ namespace I16 {
 impl I16 : Zero {
     zero = 0_I16;
 }
+impl I16 : One {
+    one = 1_I16;
+}
 
 namespace U16 {
     maximum : U16;
@@ -3391,6 +3400,9 @@ namespace U16 {
 }
 impl U16 : Zero {
     zero = 0_U16;
+}
+impl U16 : One {
+    one = 1_U16;
 }
 
 namespace I32 {
@@ -3403,6 +3415,9 @@ namespace I32 {
 impl I32 : Zero {
     zero = 0_I32;
 }
+impl I32 : One {
+    one = 1_I32;
+}
 
 namespace U32 {
     maximum : U32;
@@ -3413,6 +3428,9 @@ namespace U32 {
 }
 impl U32 : Zero {
     zero = 0_U32;
+}
+impl U32 : One {
+    one = 1_U32;
 }
 
 namespace I64 {
@@ -3425,6 +3443,9 @@ namespace I64 {
 impl I64 : Zero {
     zero = 0_I64;
 }
+impl I64 : One {
+    one = 1_I64;
+}
 
 namespace U64 {
     maximum : U64;
@@ -3436,13 +3457,22 @@ namespace U64 {
 impl U64 : Zero {
     zero = 0_U64;
 }
+impl U64 : One {
+    one = 1_U64;
+}
 
 impl F32 : Zero {
     zero = 0.0_F32;
 }
+impl F32 : One {
+    one = 1.0_F32;
+}
 
 impl F64 : Zero {
     zero = 0.0_F64;
+}
+impl F64 : One {
+    one = 1.0_F64;
 }
 
 // Traits
@@ -3549,6 +3579,9 @@ trait a : Rem {
 
 // The trait (alias) for types that support addition and have zero element.
 trait Additive = Add + Zero;
+
+// The trait (alias) for types that support multiplication and have unit element.
+trait Multiplicative = Mul + One;
 
 trait a : FromBytes {
     // Converts a byte array into a value by parsing it.
@@ -3664,6 +3697,10 @@ trait a : ToString {
 
 trait a : Zero {
     zero : a;
+}
+
+trait a : One {
+    one : a;
 }
 
 // Abs

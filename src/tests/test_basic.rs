@@ -3961,6 +3961,42 @@ pub fn test_trait_alias() {
 }
 
 #[test]
+pub fn test_one_and_multiplicative() {
+    let source = r#"
+        module Main;
+
+        my_product : [a : Multiplicative] Array a -> a;
+        my_product = |arr| (
+            loop((0, One::one), |(i, acc)| (
+                if i == arr.@size { break $ acc };
+                continue $ (i + 1, acc * arr.@(i))
+            ))
+        );
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"I8",  (One::one : I8),  1_I8);;
+            assert_eq(|_|"U8",  (One::one : U8),  1_U8);;
+            assert_eq(|_|"I16", (One::one : I16), 1_I16);;
+            assert_eq(|_|"U16", (One::one : U16), 1_U16);;
+            assert_eq(|_|"I32", (One::one : I32), 1_I32);;
+            assert_eq(|_|"U32", (One::one : U32), 1_U32);;
+            assert_eq(|_|"I64", (One::one : I64), 1);;
+            assert_eq(|_|"U64", (One::one : U64), 1_U64);;
+            assert_eq(|_|"F32", (One::one : F32), 1.0_F32);;
+            assert_eq(|_|"F64", (One::one : F64), 1.0_F64);;
+
+            assert_eq(|_|"prod I64", [1, 2, 3, 4, 5].my_product, 120);;
+            assert_eq(|_|"prod empty", ([] : Array I64).my_product, 1);;
+            assert_eq(|_|"prod F64", [1.5_F64, 2.0_F64, 4.0_F64].my_product, 12.0_F64);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_trait_alias_kind_mismatch() {
     let source = r#"
         module Main; 

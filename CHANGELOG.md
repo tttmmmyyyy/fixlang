@@ -20,6 +20,7 @@
 - Add `Std::String::contains` function to check if a string contains a given substring.
 - Add `Std::StringBytesIterator` type and `Std::String::to_iter_bytes` function to iterate over the bytes of a string.
 - Add `Std::Iterator::get_last` function to get the last element of an iterator.
+- Add `Std::One` trait (with member `one : a`) and `Std::Multiplicative` trait alias (`Mul + One`), mirroring the existing `Zero` / `Additive` pair. `One` is implemented for `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, and `F64`.
 
 ### Changed
 
