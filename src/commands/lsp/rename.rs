@@ -8,6 +8,7 @@
 // auto-generated accessors clicked directly.
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
 use lsp_types::{
     PrepareRenameResponse, RenameParams, TextDocumentPositionParams, TextEdit, Uri,
@@ -236,10 +237,7 @@ pub(super) fn handle_rename(
                     .collect()
             }
         }
-        EndNode::Trait(trait_id) => find_trait_references(program, trait_id, true)
-            .into_iter()
-            .map(|s| (s, new_name.clone()))
-            .collect(),
+        EndNode::Trait(trait_id) => collect_trait_rename_edits(program, trait_id, new_name),
         EndNode::AssocType(assoc_type) => {
             find_assoc_type_references(program, assoc_type, true)
                 .into_iter()
@@ -334,6 +332,42 @@ fn build_workspace_edit(edits: Vec<(Span, String)>, cdir: &PathBuf) -> Workspace
         document_changes: None,
         change_annotations: None,
     }
+}
+
+// =====================================================================
+// Collect every edit needed to rename trait `trait_id` to `new_name`:
+//   - bare-name occurrences (declaration, impl headers, predicates,
+//     imports), and
+//   - the trait-name component of every inline qualified reference to
+//     one of its methods (e.g. `PrimeProvider::create`). Without this
+//     second pass the rewritten program would still refer to the trait
+//     by its old name at those callsites and fail to compile.
+// =====================================================================
+fn collect_trait_rename_edits(
+    program: &Program,
+    trait_id: &TraitId,
+    new_name: &Name,
+) -> Vec<(Span, String)> {
+    let mut edits: Vec<(Span, String)> = find_trait_references(program, trait_id, true)
+        .into_iter()
+        .map(|s| (s, new_name.clone()))
+        .collect();
+
+    // Walk every global value's expression for Var refs whose resolved
+    // name is `<trait_ns>::<trait_name>::<member>` and rewrite the
+    // trait-name component in the Var's source span.
+    let trait_old_name = &trait_id.name.name;
+    for (_n, gv) in &program.global_values {
+        collect_inline_qualified_trait_edits(
+            program,
+            &gv.expr,
+            trait_id,
+            trait_old_name,
+            new_name,
+            &mut edits,
+        );
+    }
+    edits
 }
 
 // =====================================================================
@@ -744,24 +778,86 @@ fn collect_inline_qualified_edits(
     new_name: &Name,
     edits: &mut Vec<(Span, String)>,
 ) {
+    // Only rewrite Vars that resolve to a compiler-defined method
+    // sitting in the type's auto-namespace. Skipping the
+    // `compiler_defined_method` check would also rewrite
+    // qualified references to helper functions the user wrote
+    // under `namespace Point { ... }`, breaking calls like
+    // `MinCostFlowGraph::create(...)` after the type is renamed.
+    let predicate = |name: &FullName| -> bool {
+        if name.namespace.names != auto_ns {
+            return false;
+        }
+        program
+            .global_values
+            .get(name)
+            .map(|gv| gv.compiler_defined_method)
+            .unwrap_or(false)
+    };
+    walk_symbol_expr_for_inline_qualified(expr, &predicate, type_old, new_name, edits);
+}
+
+// Walk every Var node in `expr` and emit an edit when it is a
+// qualified reference to a member of the trait identified by
+// `trait_id`. The Var's source covers the user-written qualified name
+// (e.g. `PrimeProvider::create`); we rewrite just the trait-name
+// component, keeping `::create` intact.
+fn collect_inline_qualified_trait_edits(
+    program: &Program,
+    expr: &SymbolExpr,
+    trait_id: &TraitId,
+    trait_old: &Name,
+    new_name: &Name,
+    edits: &mut Vec<(Span, String)>,
+) {
+    let predicate =
+        |name: &FullName| -> bool { is_method_of_trait(program, trait_id, name) };
+    walk_symbol_expr_for_inline_qualified(expr, &predicate, trait_old, new_name, edits);
+}
+
+// True iff `member_fullname` is the resolved name of a trait method
+// belonging to `trait_id`. Reuses the same convention the codebase uses
+// elsewhere: a trait method's `GlobalValue` is keyed under the namespace
+// `<trait_ns>::<trait_name>` with the bare member name as its leaf.
+fn is_method_of_trait(
+    program: &Program,
+    trait_id: &TraitId,
+    member_fullname: &FullName,
+) -> bool {
+    let Some((owner_trait, member_name)) = TraitId::split_member_fullname(member_fullname) else {
+        return false;
+    };
+    if &owner_trait != trait_id {
+        return false;
+    }
+    program
+        .trait_env
+        .traits
+        .get(trait_id)
+        .map(|td| td.members.iter().any(|m| m.name == member_name))
+        .unwrap_or(false)
+}
+
+// Traverse the expression(s) inside `expr`, and for every `Var` whose
+// resolved `FullName` satisfies `pick`, rewrite the `old_name`
+// component of the Var's source span to `new_name`.
+fn walk_symbol_expr_for_inline_qualified(
+    expr: &SymbolExpr,
+    pick: &impl Fn(&FullName) -> bool,
+    old_name: &Name,
+    new_name: &Name,
+    edits: &mut Vec<(Span, String)>,
+) {
     match expr {
         SymbolExpr::Simple(typed_expr) => {
-            walk_expr_for_inline_qualified(
-                program,
-                &typed_expr.expr,
-                auto_ns,
-                type_old,
-                new_name,
-                edits,
-            );
+            walk_expr_for_inline_qualified(&typed_expr.expr, pick, old_name, new_name, edits);
         }
         SymbolExpr::Method(impls) => {
             for impl_ in impls {
                 walk_expr_for_inline_qualified(
-                    program,
                     &impl_.expr.expr,
-                    auto_ns,
-                    type_old,
+                    pick,
+                    old_name,
                     new_name,
                     edits,
                 );
@@ -770,87 +866,73 @@ fn collect_inline_qualified_edits(
     }
 }
 
-// Recursive walker for `collect_inline_qualified_edits` over an
-// expression tree.
+// Recursive walker over an expression tree: for every `Var` whose
+// resolved `FullName` satisfies `pick`, rewrite the `old_name`
+// component of the Var's source span to `new_name`.
 fn walk_expr_for_inline_qualified(
-    program: &Program,
     expr: &Arc<ExprNode>,
-    auto_ns: &[Name],
-    type_old: &Name,
+    pick: &impl Fn(&FullName) -> bool,
+    old_name: &Name,
     new_name: &Name,
     edits: &mut Vec<(Span, String)>,
 ) {
     match &*expr.expr {
         Expr::Var(v) => {
-            // Only rewrite Vars that resolve to a compiler-defined method
-            // sitting in the type's auto-namespace. Skipping the
-            // `compiler_defined_method` check would also rewrite
-            // qualified references to helper functions the user wrote
-            // under `namespace Point { ... }`, breaking calls like
-            // `MinCostFlowGraph::create(...)` after the type is renamed.
-            if v.name.namespace.names == auto_ns {
-                let is_auto = program
-                    .global_values
-                    .get(&v.name)
-                    .map(|gv| gv.compiler_defined_method)
-                    .unwrap_or(false);
-                if is_auto {
-                    if let Some(span) = &expr.source {
-                        if let Some(edit) =
-                            extract_inline_qualified_edit(span, type_old, new_name)
-                        {
-                            edits.push(edit);
-                        }
+            if pick(&v.name) {
+                if let Some(span) = &expr.source {
+                    if let Some(edit) = extract_inline_qualified_edit(span, old_name, new_name)
+                    {
+                        edits.push(edit);
                     }
                 }
             }
         }
         Expr::LLVM(_) => {}
         Expr::App(func, args) => {
-            walk_expr_for_inline_qualified(program, func, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(func, pick, old_name, new_name, edits);
             for a in args {
-                walk_expr_for_inline_qualified(program, a, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(a, pick, old_name, new_name, edits);
             }
         }
         Expr::Lam(_, body) => {
-            walk_expr_for_inline_qualified(program, body, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(body, pick, old_name, new_name, edits);
         }
         Expr::Let(_pat, bound, val) => {
-            walk_expr_for_inline_qualified(program, bound, auto_ns, type_old, new_name, edits);
-            walk_expr_for_inline_qualified(program, val, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(bound, pick, old_name, new_name, edits);
+            walk_expr_for_inline_qualified(val, pick, old_name, new_name, edits);
         }
         Expr::If(c, t, e) => {
-            walk_expr_for_inline_qualified(program, c, auto_ns, type_old, new_name, edits);
-            walk_expr_for_inline_qualified(program, t, auto_ns, type_old, new_name, edits);
-            walk_expr_for_inline_qualified(program, e, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(c, pick, old_name, new_name, edits);
+            walk_expr_for_inline_qualified(t, pick, old_name, new_name, edits);
+            walk_expr_for_inline_qualified(e, pick, old_name, new_name, edits);
         }
         Expr::Match(c, pat_vals) => {
-            walk_expr_for_inline_qualified(program, c, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(c, pick, old_name, new_name, edits);
             for (_p, v) in pat_vals {
-                walk_expr_for_inline_qualified(program, v, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(v, pick, old_name, new_name, edits);
             }
         }
         Expr::TyAnno(e, _) => {
-            walk_expr_for_inline_qualified(program, e, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(e, pick, old_name, new_name, edits);
         }
         Expr::MakeStruct(_, fields) => {
             for (_, _, val) in fields {
-                walk_expr_for_inline_qualified(program, val, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(val, pick, old_name, new_name, edits);
             }
         }
         Expr::ArrayLit(elems) => {
             for e in elems {
-                walk_expr_for_inline_qualified(program, e, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(e, pick, old_name, new_name, edits);
             }
         }
         Expr::FFICall(_, _, _, _, args, _) => {
             for a in args {
-                walk_expr_for_inline_qualified(program, a, auto_ns, type_old, new_name, edits);
+                walk_expr_for_inline_qualified(a, pick, old_name, new_name, edits);
             }
         }
         Expr::Eval(side, main) => {
-            walk_expr_for_inline_qualified(program, side, auto_ns, type_old, new_name, edits);
-            walk_expr_for_inline_qualified(program, main, auto_ns, type_old, new_name, edits);
+            walk_expr_for_inline_qualified(side, pick, old_name, new_name, edits);
+            walk_expr_for_inline_qualified(main, pick, old_name, new_name, edits);
         }
     }
 }
@@ -932,7 +1014,7 @@ fn check_buffer_in_sync(
             buf.as_str()
         } else {
             // No editor buffer — read from disk.
-            current_owned = std::fs::read_to_string(path).unwrap_or_default();
+            current_owned = fs::read_to_string(path).unwrap_or_default();
             current_owned.as_str()
         };
 

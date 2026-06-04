@@ -1,0 +1,31 @@
+module Main;
+
+type P1 = struct {};
+
+impl P1 : PrimeProvider {
+    create : P1 = P1 {};
+    value : P1 -> I64 = |_| 7;
+}
+
+namespace ZP {
+    type ZN p = struct { v : I64, prime : p };
+
+    trait p : PrimeProvider {
+        create : p;
+        value : p -> I64;
+    }
+
+    make : [p : PrimeProvider] I64 -> ZN p;
+    make = |x| (
+        let pp = PrimeProvider::create;
+        let _ = pp.value;
+        ZN { v : x, prime : pp }
+    );
+}
+
+impl [p : PrimeProvider] ZN p : Eq {
+    eq = |a, b| a.@v == b.@v;
+}
+
+main : IO ();
+main = pure();

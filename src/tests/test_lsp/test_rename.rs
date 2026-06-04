@@ -1136,4 +1136,42 @@ mod tests {
         assert_all_edits_have_new_text(&we, "idx");
         ctx.shutdown();
     }
+
+    // =======================================================================
+    // rename_trait_constraint fixture (0-indexed), main.fix:
+    //
+    //   4: impl P1 : PrimeProvider {                  col 9
+    //  12:     trait p : PrimeProvider {              col 15 (decl)
+    //  17:     make : [p : PrimeProvider] I64 -> ZN p; col 15
+    //  19:         let pp = PrimeProvider::create;    col 17
+    //  25: impl [p : PrimeProvider] ZN p : Eq {       col 13
+    //
+    // The trait is declared inside `namespace ZP { ... }` so its full
+    // name is `ZP::PrimeProvider`, but every use site writes just the
+    // bare `PrimeProvider`. Renaming must rewrite every occurrence:
+    // declaration + impl-for + 2 constraints + 1 qualified-call = 5.
+    // =======================================================================
+
+    /// Renaming a trait used both as an impl target and as a constraint
+    /// in another impl's predicate list / a global value's scheme must
+    /// rewrite every occurrence — including when the trait is declared
+    /// inside a `namespace` block, and including qualified calls to
+    /// trait methods like `PrimeProvider::create`.
+    #[test]
+    fn test_rename_trait_used_in_constraints() {
+        let mut ctx = LspTestCtx::setup("rename_trait_constraint", &["main.fix"]);
+        // Cursor on `PrimeProvider` in the trait declaration (line 12, col 15).
+        let we = ctx.rename("main.fix", 12, 15, "NumberProvider");
+
+        // Expected edits, all in main.fix:
+        //   line 4: `impl P1 : PrimeProvider`
+        //   line 12: trait decl
+        //   line 17: `make : [p : PrimeProvider] ...`
+        //   line 19: `PrimeProvider::create` qualified call
+        //   line 25: `impl [p : PrimeProvider] ZN p : Eq`
+        // = 5 edits.
+        assert_eq!(count_edits(&we), 5, "WorkspaceEdit: {:?}", we);
+        assert_all_edits_have_new_text(&we, "NumberProvider");
+        ctx.shutdown();
+    }
 }
