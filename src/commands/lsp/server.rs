@@ -220,11 +220,24 @@ pub fn launch_language_server() {
         // Read a line to get the content length.
         let mut content_length = String::new();
         let res = stdin.read_line(&mut content_length);
-        if res.is_err() {
-            let mut msg = "Failed to read a line: \n".to_string();
-            msg.push_str(&format!("{:?}", res.unwrap_err()));
-            write_log!("{}", msg);
-            continue;
+        match res {
+            // `read_line` returns `Ok(0)` when stdin has reached EOF, which
+            // happens when the parent editor process dies and closes the pipe.
+            // EOF is permanent: every subsequent read returns `Ok(0)`
+            // immediately without blocking, so without this branch the loop
+            // would spin at 100% CPU forever. Terminate the server instead,
+            // just as we do on the `exit` notification.
+            Ok(0) => {
+                write_log!("stdin reached EOF. Exiting the language server.");
+                break;
+            }
+            Ok(_) => {}
+            Err(e) => {
+                let mut msg = "Failed to read a line: \n".to_string();
+                msg.push_str(&format!("{:?}", e));
+                write_log!("{}", msg);
+                continue;
+            }
         }
         if content_length.trim().is_empty() {
             continue;
@@ -909,7 +922,7 @@ fn diagnostics_thread(
             }
             Err(errs) => errs,
         };
-        prev_err_paths = send_diagnostics_notification(errs, std::mem::take(&mut prev_err_paths));
+        prev_err_paths = send_diagnostics_notification(errs, mem::take(&mut prev_err_paths));
     }
 }
 
