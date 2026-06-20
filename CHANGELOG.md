@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+#### Tool
+
+- LSP: Added support for the "Semantic Tokens" feature, providing editor syntax highlighting from the language server without a separate TextMate / tree-sitter grammar. A lexical layer colors tokens even while the buffer is syntactically broken; once the file type-checks, an AST overlay refines identifiers (locals, globals, struct / union / trait names, type parameters, union variants, fields), merged line by line so an edit only affects the edited line.
+
 ## [1.3.0] - 2026-06-19
 
 ### Added

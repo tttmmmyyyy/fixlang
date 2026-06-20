@@ -14,7 +14,7 @@ use crate::misc::{char_pos_to_utf16_pos, to_absolute_path, utf16_pos_to_utf8_byt
 use crate::write_log;
 use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
 use std::sync::Arc;
-use difference::diff;
+use difference::{diff, Difference};
 use lsp_types::{
     Location, MarkupContent, MarkupKind, Position, Range, TextDocumentPositionParams, Uri,
 };
@@ -31,33 +31,41 @@ pub(super) fn uri_to_path(uri: &Uri) -> PathBuf {
     )
 }
 
-// Given two versions of a file content, find the line in `content1` that corresponds to
-// `line0` in `content0`.
-fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> Option<u32> {
+/// Map each line of `content0` to the corresponding line in `content1`, or
+/// `None` if that line was changed or removed. Index `i` of the result is line
+/// `i` of `content0`. Built from a single line-granularity diff.
+pub(super) fn corresponding_line_map(content0: &str, content1: &str) -> Vec<Option<u32>> {
     let (_, diffs) = diff(content0, content1, "\n");
-    let mut line_cnt_0 = -1;
-    let mut line_cnt_1 = -1;
+    let mut map: Vec<Option<u32>> = vec![];
+    let mut line_cnt_1: i64 = -1;
     for diff in diffs {
         match diff {
-            difference::Difference::Same(s) => {
-                let lines = s.split("\n").count();
-                for _ in 0..lines {
-                    line_cnt_0 += 1;
+            Difference::Same(s) => {
+                for _ in 0..s.split("\n").count() {
                     line_cnt_1 += 1;
-                    if line_cnt_0 == line0 as i32 {
-                        return Some(line_cnt_1 as u32);
-                    }
+                    map.push(Some(line_cnt_1 as u32));
                 }
             }
-            difference::Difference::Add(s) => {
-                line_cnt_1 += s.split("\n").count() as i32;
+            Difference::Add(s) => {
+                line_cnt_1 += s.split("\n").count() as i64;
             }
-            difference::Difference::Rem(s) => {
-                line_cnt_0 += s.split("\n").count() as i32;
+            Difference::Rem(s) => {
+                for _ in 0..s.split("\n").count() {
+                    map.push(None);
+                }
             }
         }
     }
-    None
+    map
+}
+
+/// Given two versions of a file content, find the line in `content1` that
+/// corresponds to `line0` in `content0`.
+fn calculate_corresponding_line(content0: &str, content1: &str, line0: u32) -> Option<u32> {
+    corresponding_line_map(content0, content1)
+        .get(line0 as usize)
+        .copied()
+        .flatten()
 }
 
 // Convert a `lsp_types::Position` into a byte offset in a string.

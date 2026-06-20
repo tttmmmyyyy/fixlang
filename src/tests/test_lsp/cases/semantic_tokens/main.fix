@@ -1,0 +1,28 @@
+module Main;
+
+// a record type
+type Point = struct { x : I64, y : I64 };
+
+// a sum type
+type Shape = union { dot : (), seg : I64 };
+
+// a trait
+trait a : Sizer {
+    size : a -> I64;
+}
+
+impl Point : Sizer {
+    size = |p| p.@x + p.@y;
+}
+
+// a generic function (type variables a, b)
+pair : a -> b -> (a, b);
+pair = |x, y| (x, y);
+
+main : IO ();
+main = (
+    let p = Point { x: 1, y: 2 };
+    let s = Shape::seg(3);
+    let n = p.size;
+    println("done")
+);

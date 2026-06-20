@@ -6,6 +6,7 @@ pub mod test_goto_definition;
 pub mod test_hover;
 pub mod test_references;
 pub mod test_rename;
+pub mod test_semantic_tokens;
 pub mod test_stdin_eof;
 pub mod test_workspace_symbol;
 

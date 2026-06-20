@@ -1,6 +1,8 @@
+/// The pest parser for the Fix grammar (`parse/grammer.pest`); its `Rule` enum
+/// and `parse` method drive both the full parser and the LSP lexer.
 #[derive(Parser)]
 #[grammar = "parse/grammer.pest"]
-struct FixParser;
+pub(crate) struct FixParser;
 
 use crate::ast::{
     deprecation::DeprecationStatement,
