@@ -8,7 +8,7 @@ use self::index::CompletionIndex;
 use self::repair::repair_for_completion;
 use self::score::{
     assign_tier, assign_tier_no_unify, dot_context_low_priority_sort_text, namespace_match,
-    sort_text_for,
+    sort_text_for, PredMemo, Tier,
 };
 use super::edit_import::create_text_edit_to_import;
 use super::server::{send_response, LatestContent};
@@ -172,13 +172,41 @@ pub(super) fn handle_completion(
         }
     }
 
-    for (full_name, gv) in &active_program.global_values {
-        if is_internal_name(&full_name.to_string()) {
-            continue;
+    // Collect the visible global-value candidates once. This is also the
+    // order they're sent in; the client re-sorts by `sortText`, so the
+    // order only needs to be stable, not meaningful.
+    let global_candidates: Vec<(&FullName, _)> = active_program
+        .global_values
+        .iter()
+        .filter(|(full_name, _)| {
+            !is_internal_name(&full_name.to_string()) && is_in_namespace(full_name)
+        })
+        .collect();
+
+    // In a dot context the per-candidate tier needs a unify probe
+    // (`assign_tier` → `try_unify_receiver` → `reduce_predicates`) that
+    // dominates the request's latency. Each probe clones the shared
+    // `TypeCheckContext` and is otherwise independent, so compute the
+    // tiers across worker threads. `None` outside dot contexts, where no
+    // tier is assigned at all.
+    let global_tiers: Option<Vec<Tier>> = dot_ranking.as_ref().map(|ranking| {
+        let names: Vec<&FullName> = global_candidates.iter().map(|(n, _)| *n).collect();
+        match &ranking.tc_template {
+            Some(tc) => {
+                // One memo per request, shared across all candidates (and
+                // worker threads) so identical constraint sets are probed
+                // only once.
+                let memo = PredMemo::default();
+                tiers_in_parallel(&names, ranking, active_program, tc, &memo)
+            }
+            None => names
+                .iter()
+                .map(|&n| assign_tier_no_unify(n, &ranking.index, &ranking.receiver_type))
+                .collect(),
         }
-        if !is_in_namespace(full_name) {
-            continue;
-        }
+    });
+
+    for (idx, (full_name, gv)) in global_candidates.iter().copied().enumerate() {
         let scheme = gv
             .syn_scm
             .clone()
@@ -195,20 +223,9 @@ pub(super) fn handle_completion(
             deprecated,
         );
         if let Some(ranking) = &dot_ranking {
-            let tier = match &ranking.tc_template {
-                Some(tc) => assign_tier(
-                    full_name,
-                    &ranking.index,
-                    &ranking.receiver_type,
-                    active_program,
-                    tc,
-                ),
-                None => assign_tier_no_unify(
-                    full_name,
-                    &ranking.index,
-                    &ranking.receiver_type,
-                ),
-            };
+            // `global_tiers` is `Some` whenever `dot_ranking` is, and is
+            // indexed in lockstep with `global_candidates`.
+            let tier = global_tiers.as_ref().unwrap()[idx];
             let ns_match = namespace_match(
                 ranking.receiver_type.toplevel_tycon().as_deref(),
                 full_name,
@@ -292,6 +309,64 @@ pub(super) fn handle_completion(
         items.push(item);
     }
     send_response(id, Ok::<_, ()>(items));
+}
+
+/// Compute the dot-completion `Tier` for each candidate name, spreading
+/// the work across worker threads. Each candidate's tier comes from an
+/// independent unify probe (`assign_tier`, which clones `tc`), so there
+/// is no shared mutable state and the probes parallelize cleanly. The
+/// returned tiers are in the same order as `names`.
+fn tiers_in_parallel(
+    names: &[&FullName],
+    ranking: &DotRanking,
+    program: &Program,
+    tc: &TypeCheckContext,
+    memo: &PredMemo,
+) -> Vec<Tier> {
+    let n = names.len();
+    // Below this many candidates the thread setup costs more than just
+    // running the probes sequentially.
+    const PARALLEL_THRESHOLD: usize = 64;
+    let workers = num_cpus::get();
+    let tier_of = |name: &FullName| {
+        assign_tier(
+            name,
+            &ranking.index,
+            &ranking.receiver_type,
+            program,
+            tc,
+            memo,
+        )
+    };
+    if workers <= 1 || n < PARALLEL_THRESHOLD {
+        return names.iter().map(|&name| tier_of(name)).collect();
+    }
+
+    // Even chunks; the last chunk absorbs the remainder. `scope`
+    // guarantees every worker finishes before the borrowed
+    // `names`/`ranking`/`program`/`tc`/`memo` go out of scope, so plain
+    // shared references suffice (no `Arc`/clone needed to hand them to
+    // threads); the memo is a `Mutex`, so the workers share one cache.
+    let chunk_size = n.div_ceil(workers);
+    let mut tiers = Vec::with_capacity(n);
+    std::thread::scope(|s| {
+        let handles: Vec<_> = names
+            .chunks(chunk_size)
+            .map(|chunk| {
+                let tier_of = &tier_of;
+                s.spawn(move || {
+                    chunk
+                        .iter()
+                        .map(|&name| tier_of(name))
+                        .collect::<Vec<Tier>>()
+                })
+            })
+            .collect();
+        for h in handles {
+            tiers.extend(h.join().expect("completion ranking worker thread panicked"));
+        }
+    });
+    tiers
 }
 
 /// Bundle of the data the dot-completion ranking flow needs: the
@@ -431,8 +506,7 @@ fn find_enclosing_gv(abs_path: &PathBuf, content: &str, cursor_byte: usize) -> O
     // global-value names or source spans, so any successfully-built
     // configuration is fine here.
     let config = Configuration::release_mode(SubCommand::Build).ok()?;
-    let source_file =
-        SourceFile::from_file_path_and_content(abs_path.clone(), content.to_string());
+    let source_file = SourceFile::from_file_path_and_content(abs_path.clone(), content.to_string());
     let program = parse_source_file(source_file, &config).ok()?;
     let covers = |span: Option<&Span>| span.map(|s| s.includes_byte(cursor_byte)).unwrap_or(false);
     for (name, gv) in program.global_values.iter() {
@@ -475,10 +549,7 @@ impl SourcePosLite {
 /// the single hole the repair just inserted even when other holes
 /// (e.g. ones the user wrote, or future repair-loop insertions) live
 /// in nearby code.
-fn find_innermost_hole_at(
-    program: &Program,
-    cursor: &SourcePosLite,
-) -> Option<Arc<ExprNode>> {
+fn find_innermost_hole_at(program: &Program, cursor: &SourcePosLite) -> Option<Arc<ExprNode>> {
     let target = hole_full_name();
     let mut best: Option<Arc<ExprNode>> = None;
     for (_name, gv) in &program.global_values {

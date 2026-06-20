@@ -1,4 +1,5 @@
 // LSP integration tests module
+pub mod bench_completion;
 pub mod lsp_client;
 pub mod test_code_action;
 pub mod test_completion;
@@ -292,7 +293,7 @@ mod tests {
 
         // Get all diagnostics (dependency resolution errors may not be tied to main.fix)
         let all_diagnostics = client.get_all_diagnostics();
-        
+
         // Verify that diagnostic errors are present somewhere
         // When dependency resolution fails, the error should be visible to the user
         let total_diagnostics: usize = all_diagnostics.values().map(|v| v.len()).sum();

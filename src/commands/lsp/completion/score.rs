@@ -14,12 +14,22 @@
 // above one in `Std::*`, which ranks above one in an unrelated
 // namespace.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
 use crate::ast::types::{TyCon, TypeNode};
 use crate::elaboration::typecheck::{ConstraintInstantiationMode, TypeCheckContext, UnifOrOtherErr};
+use crate::misc::Map;
 use super::index::CompletionIndex;
+
+/// Request-scoped cache for the `reduce_predicates` verdict of the
+/// per-candidate unify probe (see `try_unify_receiver`). Keyed by the
+/// candidate's substituted constraint set: candidates that bind to the
+/// same constraints under the (fixed-per-request) receiver share a
+/// verdict, so the expensive instance search runs once instead of once
+/// per candidate. Wrapped in a `Mutex` because the ranking loop runs
+/// the probes across worker threads.
+pub(super) type PredMemo = Mutex<Map<String, bool>>;
 
 /// Bucket a dot-completion candidate falls into; lower values rank
 /// higher in the completion list.
@@ -154,12 +164,13 @@ pub(super) fn assign_tier(
     receiver_type: &Arc<TypeNode>,
     program: &Program,
     tc_template: &TypeCheckContext,
+    memo: &PredMemo,
 ) -> Tier {
     let bucket_tier = bucket_tier(name, index, receiver_type);
     if bucket_tier == Tier::Three {
         return Tier::Three;
     }
-    if try_unify_receiver(name, receiver_type, program, tc_template).is_ok() {
+    if try_unify_receiver(name, receiver_type, program, tc_template, memo).is_ok() {
         Tier::Zero
     } else {
         bucket_tier
@@ -219,6 +230,7 @@ fn try_unify_receiver(
     receiver_type: &Arc<TypeNode>,
     program: &Program,
     tc_template: &TypeCheckContext,
+    memo: &PredMemo,
 ) -> Result<(), ()> {
     let gv = program.global_values.get(name).ok_or(())?;
     let mut tc = tc_template.clone();
@@ -238,5 +250,53 @@ fn try_unify_receiver(
             .map_err(|_| ())
     }
     flatten(tc.unify(recv_pos, receiver_type))?;
-    flatten(tc.reduce_predicates())
+
+    // The remaining `reduce_predicates` call — checking that the
+    // candidate's trait constraints hold for the bound receiver — is the
+    // dominant cost (it searches trait instances, cloning the context per
+    // non-matching instance). Its verdict depends only on the substituted
+    // predicates plus the instance environment, which is identical across
+    // candidates within this request. So memoize the verdict keyed by the
+    // substituted predicate set and reuse it for sibling candidates that
+    // share the same constraints.
+    //
+    // Only memoize when no associated-type equalities are in play: with
+    // equalities the verdict can also depend on accumulated equality
+    // state that the key doesn't capture, so fall back to a real reduce.
+    let memo_key = if tc.equalities.is_empty() {
+        Some(predicates_key(&tc))
+    } else {
+        None
+    };
+    if let Some(key) = &memo_key {
+        if let Some(verdict) = memo.lock().unwrap().get(key).copied() {
+            return if verdict { Ok(()) } else { Err(()) };
+        }
+    }
+    let verdict = flatten(tc.reduce_predicates());
+    if let Some(key) = memo_key {
+        memo.lock().unwrap().insert(key, verdict.is_ok());
+    }
+    verdict
+}
+
+/// Canonical key for the memo: the candidate's predicates with the
+/// accumulated substitution applied (so the receiver tyvar is replaced by
+/// the concrete receiver type), rendered and sorted so the order in which
+/// they were collected doesn't matter. Fresh type-variable names are
+/// deterministic across candidates (each probe starts from a clone of the
+/// same template, so `new_tyvar_name` hands out the same `#aN` names), so
+/// structurally identical constraint sets produce identical keys.
+fn predicates_key(tc: &TypeCheckContext) -> String {
+    let mut parts: Vec<String> = tc
+        .predicates
+        .iter()
+        .map(|p| {
+            let mut p = p.clone();
+            tc.substitute_predicate(&mut p);
+            p.to_string()
+        })
+        .collect();
+    parts.sort();
+    parts.join(";")
 }

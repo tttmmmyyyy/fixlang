@@ -43,6 +43,7 @@ This project implements the Fix programming language compiler and related tools 
 
 - **When a round of modifications is complete**, add an entry describing the change to `CHANGELOG.md`.
   - Add it under the `## [Unreleased]` section at the top, in the appropriate category (`### Added` / `### Changed`) and subcategory (`#### Language` / `#### Tool` / `#### Std`), following the style of existing entries.
+  - **Performance improvements that do not change observable behavior do NOT need a changelog entry.** The changelog documents user-visible changes (new/changed/fixed behavior), not internal speedups.
 
 ## Reference Documentation
 

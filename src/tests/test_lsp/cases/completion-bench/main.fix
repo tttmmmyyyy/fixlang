@@ -1,0 +1,11 @@
+module Main;
+
+compute : I64 -> I64 = |n| n + 1;
+
+main : IO () = (
+    let arr = [1, 2, 3];
+    let sz = arr.get_size;
+    let n = 42.compute;
+    let _ = sz + n;
+    pure()
+);
