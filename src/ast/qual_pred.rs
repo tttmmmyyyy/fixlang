@@ -5,8 +5,8 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::KindSignature;
 use crate::ast::types::TyVar;
-use crate::error::Errors;
 use crate::elaboration::name_resolution::NameResolutionContext;
+use crate::error::Errors;
 use crate::parse::sourcefile::SourcePos;
 
 // Qualified predicate. Statement such as "[a : Eq] Array a : Eq".

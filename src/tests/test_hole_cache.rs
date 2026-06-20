@@ -59,11 +59,7 @@ mod integration_tests {
         }
         fs::read_dir(&cache_dir)
             .expect("Failed to read cache directory")
-            .filter_map(|entry| {
-                entry
-                    .ok()
-                    .and_then(|e| e.file_name().into_string().ok())
-            })
+            .filter_map(|entry| entry.ok().and_then(|e| e.file_name().into_string().ok()))
             .collect()
     }
 

@@ -22,7 +22,10 @@ use crate::{
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
     constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
     error::{panic_with_msg, Errors},
-    fixstd::{builtin::run_io_or_ios_runner, runtime::{self, BuildMode}},
+    fixstd::{
+        builtin::run_io_or_ios_runner,
+        runtime::{self, BuildMode},
+    },
     generator::Generator,
     misc::{info_msg, warn_msg},
     optimization,

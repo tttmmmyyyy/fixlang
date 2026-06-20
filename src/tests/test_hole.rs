@@ -309,7 +309,6 @@ pub fn hole_global_defn_with_separate_sign() {
     test_source_fail(source, Configuration::develop_mode(), HOLE_ERR_PREFIX);
 }
 
-
 /// ERR_HOLE fires for the rhs hole of `global_name_type_sign`
 /// (combined `value : T = ;` form).
 #[test]

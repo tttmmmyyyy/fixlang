@@ -319,8 +319,7 @@ mod tests {
     /// missing fields of a struct literal.
     #[test]
     fn test_quickfix_missing_struct_field() {
-        let mut ctx =
-            LspQuickFixCtx::setup("quickfix_missing_struct_field", &["main.fix"]);
+        let mut ctx = LspQuickFixCtx::setup("quickfix_missing_struct_field", &["main.fix"]);
 
         let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
         let missing_diag = diagnostics

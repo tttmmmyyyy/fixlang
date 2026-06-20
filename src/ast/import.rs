@@ -350,7 +350,10 @@ impl ImportTreeNode {
         let namespace = &names[0];
         ImportTreeNode::NameSpace(
             namespace.clone(),
-            vec![ImportTreeNode::from_names_with_spans(&names[1..], tail_spans)],
+            vec![ImportTreeNode::from_names_with_spans(
+                &names[1..],
+                tail_spans,
+            )],
             head_span,
         )
     }

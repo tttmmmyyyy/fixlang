@@ -1,9 +1,15 @@
 use crate::{
+    configuration::BuildConfigType,
     configuration::{Configuration, FixOptimizationLevel, LinkType, OutputFileType},
     constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
+    constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST},
+    dependency::lockfile::{get_lock_file_path, DependecyLockFile, LockFileType, ProjectSource},
+    error::Errors,
+    metafiles::config_file::ConfigFile,
+    metafiles::registry_file::RegistryFile,
+    misc::{info_msg, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
-    metafiles::config_file::ConfigFile, configuration::BuildConfigType, constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST}, dependency::lockfile::{DependecyLockFile, LockFileType, ProjectSource, get_lock_file_path}, error::Errors, misc::{Set, info_msg, to_absolute_path, warn_msg}, metafiles::registry_file::RegistryFile
 };
 use reqwest::Url;
 use semver::{Version, VersionReq};
@@ -88,7 +94,7 @@ pub struct ProjectFileBuildTest {
     dynamic_links: Option<Vec<String>>,
     library_paths: Option<Vec<PathBuf>>,
     #[serde(default)]
-    ld_flags: Vec<String>,    
+    ld_flags: Vec<String>,
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
 
@@ -150,9 +156,9 @@ impl ProjectFileDependencyGit {
     /// Returns a human-readable description of the pinned ref.
     pub fn ref_description(&self) -> String {
         if let Some(rev) = &self.rev {
-            format!("rev \"{}\"" , rev)
+            format!("rev \"{}\"", rev)
         } else if let Some(tag) = &self.tag {
-            format!("tag \"{}\"" , tag)
+            format!("tag \"{}\"", tag)
         } else {
             "no ref".to_string()
         }
@@ -243,11 +249,11 @@ impl ProjectFile {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
         let mut pf = ProjectFile::read_file(&proj_file_path)?;
         pf.role = ProjectFileRole::Root;
-        pf.source = Some(ProjectOrigin::Local(
-            to_absolute_path(pf.path.parent().expect(
-                "ProjectFile::path always points to fixproj.toml inside a directory",
-            ))?,
-        ));
+        pf.source = Some(ProjectOrigin::Local(to_absolute_path(
+            pf.path
+                .parent()
+                .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
+        )?));
         Ok(pf)
     }
 
@@ -316,7 +322,7 @@ impl ProjectFile {
             }
             BuildConfigType::Build => self.dependencies.clone(),
         };
-        
+
         // Sort the dependencies by name.
         deps.sort_by(|a, b| a.name.cmp(&b.name));
 
@@ -364,9 +370,7 @@ impl ProjectFile {
         Self::validate_project_name(&dep.name, Some(span.clone()))?;
 
         // Either of `path` or `git` should be specified.
-        if (dep.path.is_none() && dep.git.is_none())
-            || (dep.path.is_some() && dep.git.is_some())
-        {
+        if (dep.path.is_none() && dep.git.is_none()) || (dep.path.is_some() && dep.git.is_some()) {
             return Err(Errors::from_msg_srcs(
                 "Either of `path` or `git` should be specified in a dependency.".to_string(),
                 &[&Some(span.clone())],
@@ -387,8 +391,7 @@ impl ProjectFile {
         if let Some(git) = &dep.git {
             if git.rev.is_some() && git.tag.is_some() {
                 return Err(Errors::from_msg_srcs(
-                    "Only one of `rev` or `tag` can be specified in a git dependency."
-                        .to_string(),
+                    "Only one of `rev` or `tag` can be specified in a git dependency.".to_string(),
                     &[&Some(span)],
                 ));
             }
@@ -483,7 +486,7 @@ impl ProjectFile {
         }
         files
     }
-    
+
     // Get the version requirement for the Fix compiler.
     pub fn fix_version(&self) -> VersionReq {
         match &self.general.fix_version {
@@ -494,7 +497,10 @@ impl ProjectFile {
 
     // Check if the project file is compatible with the current version of Fix.
     pub fn is_fix_version_compatible(&self) -> Result<(), Errors> {
-        if self.fix_version().matches(&Version::parse(env!("CARGO_PKG_VERSION")).unwrap()) {
+        if self
+            .fix_version()
+            .matches(&Version::parse(env!("CARGO_PKG_VERSION")).unwrap())
+        {
             Ok(())
         } else {
             Err(Errors::from_msg(format!(
@@ -662,7 +668,11 @@ impl ProjectFile {
         }
 
         // Set preliminary commands.
-        let work_dir = to_absolute_path(self.path.parent().expect("ProjectFile::path always points to fixproj.toml inside a directory"))?;
+        let work_dir = to_absolute_path(
+            self.path
+                .parent()
+                .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
+        )?;
         let project_name = self.general.name.clone();
         for command in &self.build.preliminary_commands {
             config.preliminary_commands.push(PreliminaryCommand {
@@ -772,7 +782,9 @@ impl ProjectFile {
         }
 
         // Set disable_cpu_features.
-        config.disable_cpu_features_regex.append(&mut self.build.disable_cpu_features.clone());
+        config
+            .disable_cpu_features_regex
+            .append(&mut self.build.disable_cpu_features.clone());
         if mode == BuildConfigType::Test {
             config.disable_cpu_features_regex.append(
                 &mut self
@@ -796,7 +808,10 @@ impl ProjectFile {
     // If the project has no dependencies, return an empty lock file.
     pub fn open_lock_file(&self, mode: LockFileType) -> Result<DependecyLockFile, Errors> {
         // If there are no dependencies, the lock file is not necessary.
-        if self.get_dependencies(mode.to_build_config_type()).is_empty() {
+        if self
+            .get_dependencies(mode.to_build_config_type())
+            .is_empty()
+        {
             return Ok(DependecyLockFile::default());
         }
 
@@ -820,7 +835,8 @@ impl ProjectFile {
                 e, msg_try_fix_deps_update
             ))
         })?;
-        if lock_file.proj_file_hash != self.calculate_dependencies_hash(mode.to_build_config_type()) {
+        if lock_file.proj_file_hash != self.calculate_dependencies_hash(mode.to_build_config_type())
+        {
             return Err(Errors::from_msg(format!(
                 "The lock file is not up to date. {}",
                 msg_try_fix_deps_update
@@ -831,18 +847,19 @@ impl ProjectFile {
 
     // Helper method to save lock file to disk.
     fn save_lock_file(lock_file: &DependecyLockFile, mode: LockFileType) -> Result<(), Errors> {
-        let content = toml::to_string(lock_file).map_err(|e| {
-            Errors::from_msg(format!("Failed to serialize lock file: {:?}", e))
-        })?;
+        let content = toml::to_string(lock_file)
+            .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
         let lock_file_path = get_lock_file_path(mode);
-        std::fs::write(lock_file_path, content).map_err(|e| {
-            Errors::from_msg(format!("Failed to write lock file: {:?}", e))
-        })?;
+        std::fs::write(lock_file_path, content)
+            .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
         Ok(())
     }
 
     // Open the lock file or create a new one if it does not exist.
-    pub fn open_or_create_lock_file(&self, mode: LockFileType) -> Result<DependecyLockFile, Errors> {
+    pub fn open_or_create_lock_file(
+        &self,
+        mode: LockFileType,
+    ) -> Result<DependecyLockFile, Errors> {
         Ok(match self.open_lock_file(mode) {
             Ok(lock_file) => lock_file,
             Err(_) => {
@@ -856,13 +873,16 @@ impl ProjectFile {
     // Open the lock file, or automatically create/update it if it does not exist or is invalid, and install the dependencies.
     // This method is designed for LSP to automatically manage lock files without user intervention.
     // Returns error without panicking, allowing LSP to report diagnostics to the user.
-    pub fn open_or_auto_update_lock_file(&self, mode: LockFileType) -> Result<DependecyLockFile, Errors> {
+    pub fn open_or_auto_update_lock_file(
+        &self,
+        mode: LockFileType,
+    ) -> Result<DependecyLockFile, Errors> {
         // Try to open existing lock file.
         match self.open_lock_file(mode) {
             Ok(lock_file) => Ok(lock_file),
             Err(_) => {
                 // If the lock file does not exist or is invalid, automatically create/update it.
-                
+
                 // Ensure the parent directory exists (e.g., .fixlang/ for LSP lock file).
                 let lock_file_path = get_lock_file_path(mode);
                 if let Some(parent) = Path::new(lock_file_path).parent() {
@@ -870,16 +890,16 @@ impl ProjectFile {
                         Errors::from_msg(format!("Failed to create directory: {:?}", e))
                     })?;
                 }
-                
+
                 // Create the lock file.
                 let lock_file = DependecyLockFile::create(self, mode.to_build_config_type())?;
-                
+
                 // Save the lock file.
                 Self::save_lock_file(&lock_file, mode)?;
-                
+
                 // Install the dependencies.
                 lock_file.install()?;
-                
+
                 Ok(lock_file)
             }
         }
@@ -887,7 +907,8 @@ impl ProjectFile {
 
     // Open the lock file, create a new one if it does not exist, and install the dependencies.
     pub fn open_or_create_lock_file_and_install(&self, mode: LockFileType) -> Result<(), Errors> {
-        self.open_or_create_lock_file(mode).and_then(|lf| lf.install())
+        self.open_or_create_lock_file(mode)
+            .and_then(|lf| lf.install())
     }
 
     // Update configuration by adding source files, linking libraries, ... as required by dependencies.
@@ -897,7 +918,8 @@ impl ProjectFile {
         mode: BuildConfigType,
     ) -> Result<(), Errors> {
         // Update the lock file if necessary.
-        let lock_file = self.open_or_create_lock_file(LockFileType::from_build_config_type(mode))?;
+        let lock_file =
+            self.open_or_create_lock_file(LockFileType::from_build_config_type(mode))?;
 
         // Install the dependencies.
         lock_file.install()?;
@@ -919,14 +941,22 @@ impl ProjectFile {
         if path.is_absolute() {
             return path.to_path_buf();
         } else {
-            return self.path.parent().expect("ProjectFile::path always points to fixproj.toml inside a directory").join(path);
+            return self
+                .path
+                .parent()
+                .expect("ProjectFile::path always points to fixproj.toml inside a directory")
+                .join(path);
         }
     }
 
     // Get the source of a dependent project.
     pub fn get_dependency_source(&self, name: &ProjectName) -> ProjectSource {
         // Search in both dependencies and test_dependencies
-        for dep in self.dependencies.iter().chain(self.test_dependencies.iter()) {
+        for dep in self
+            .dependencies
+            .iter()
+            .chain(self.test_dependencies.iter())
+        {
             if &dep.name != name {
                 continue;
             }
@@ -957,7 +987,7 @@ impl ProjectFile {
 
         // Replace `{PLACEHOLDER_PROJECT_NAME}` to `proj_name`.
         let content = content.replace("{PLACEHOLDER_PROJECT_NAME}", &proj_name);
-        
+
         // Replace `{PLACEHOLDER_FIX_VERSION}` to the current version of Fix.
         let content = content.replace("{PLACEHOLDER_FIX_VERSION}", env!("CARGO_PKG_VERSION"));
 
@@ -976,10 +1006,7 @@ impl ProjectFile {
         }
         let main_fix_content = include_str!("../docs/main_template.fix");
         std::fs::write(SAMPLE_MAIN_FILE_PATH, main_fix_content).map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to create file \"main.fix\": {:?}.",
-                e
-            ))
+            Errors::from_msg(format!("Failed to create file \"main.fix\": {:?}.", e))
         })?;
 
         // Create sample "test.fix" file in the current directory.
@@ -990,10 +1017,7 @@ impl ProjectFile {
         }
         let test_fix_content = include_str!("../docs/test_template.fix");
         std::fs::write(SAMPLE_TEST_FILE_PATH, test_fix_content).map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to create file \"test.fix\": {:?}.",
-                e
-            ))
+            Errors::from_msg(format!("Failed to create file \"test.fix\": {:?}.", e))
         })?;
 
         Ok(())
@@ -1173,7 +1197,7 @@ impl ProjectFile {
     }
 
     // Retrieve the registry file at the specified location.
-    // 
+    //
     // - `loc`: The location of the registry file, which is a url or a file path.
     pub fn retrieve_registry_file(loc: &str) -> Result<RegistryFile, Errors> {
         let reg_file_content = if Url::parse(loc).is_ok() {
@@ -1193,10 +1217,7 @@ impl ProjectFile {
         } else {
             // The location is a file path.
             std::fs::read_to_string(loc).map_err(|e| {
-                Errors::from_msg(format!(
-                    "Failed to read registry file \"{}\": {:?}",
-                    loc, e
-                ))
+                Errors::from_msg(format!("Failed to read registry file \"{}\": {:?}", loc, e))
             })?
         };
         let reg_file = toml::from_str::<RegistryFile>(&reg_file_content).map_err(|e| {

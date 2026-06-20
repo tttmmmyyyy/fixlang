@@ -1,9 +1,7 @@
 #[cfg(unix)]
 mod tests {
     use crate::{
-        commands::run::run,
-        configuration::Configuration,
-        error::panic_if_err,
+        commands::run::run, configuration::Configuration, error::panic_if_err,
         misc::save_temporary_source,
     };
     use std::os::unix::process::ExitStatusExt;

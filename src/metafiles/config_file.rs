@@ -1,6 +1,9 @@
 use serde::Deserialize;
 
-use crate::{constants::{DEFAULT_REGISTRY, FIX_CONFIG_FILE_NAME}, error::Errors};
+use crate::{
+    constants::{DEFAULT_REGISTRY, FIX_CONFIG_FILE_NAME},
+    error::Errors,
+};
 
 // `.fixconfig.toml` file structure
 #[derive(Deserialize)]

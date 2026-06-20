@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use super::check_holes;
+use super::typecheckcache::TypeCheckCache;
+use crate::ast::import;
+use crate::misc::{collect_results, insert_to_map_vec, make_map, Map, Set};
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
@@ -9,30 +12,26 @@ use crate::{
         pattern::{Pattern, PatternNode},
         predicate::Predicate,
         program::{ModuleInfo, TypeEnv},
-        types::OpaqueTyConResolution,
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
+        types::OpaqueTyConResolution,
         types::{
-            kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
-            type_tycon, AssocType, Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
-            TypeNode,
+            kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp, type_tycon, AssocType,
+            Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
         },
     },
     constants::{
         ERR_AMBIGUOUS_NAME, ERR_MISSING_STRUCT_FIELD, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
         WRAP_OPAQUE_TYVAR_PREFIX,
     },
-    error::{Error, Errors},
     elaboration::name_resolution::NameResolutionContext,
+    error::{Error, Errors},
     fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
     parse::sourcefile::Span,
 };
-use crate::ast::import;
-use crate::misc::{collect_results, insert_to_map_vec, make_map, Map, Set};
 use serde::{Deserialize, Serialize};
-use super::check_holes;
-use super::typecheckcache::TypeCheckCache;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Scope<T> {
@@ -366,7 +365,8 @@ impl Substitution {
                     }
                     let mut ret = Self::default();
                     for i in 0..args1.len() {
-                        match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)? {
+                        match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)?
+                        {
                             Some(s) => {
                                 if !ret.merge(&s) {
                                     return Ok(None);
@@ -621,8 +621,7 @@ impl TypeCheckContext {
         source: &Option<Span>,
     ) -> Result<(), Errors> {
         let field_names: Vec<Name> = ti.fields.iter().map(|f| f.name.clone()).collect();
-        let field_names_in_struct_defn: Set<Name> =
-            Set::from_iter(field_names.iter().cloned());
+        let field_names_in_struct_defn: Set<Name> = Set::from_iter(field_names.iter().cloned());
         let field_names_in_expression: Set<Name> =
             Set::from_iter(fields.iter().map(|(name, _, _)| name.clone()));
         let missing: Vec<Name> = field_names
@@ -867,7 +866,8 @@ impl TypeCheckContext {
         for (k, v) in instantiations {
             let fullname_str = k.strip_prefix(WRAP_OPAQUE_TYVAR_PREFIX).unwrap();
             let opaque_tycon_name = FullName::parse(fullname_str).unwrap();
-            let rhs = self.substitute_and_reduce_type(&type_from_tyvar(v))
+            let rhs = self
+                .substitute_and_reduce_type(&type_from_tyvar(v))
                 .unwrap_or_else(|_| panic!("failed to reduce opaque type rhs"));
             if let Some(resolutions) = opaque_types.get_mut(&opaque_tycon_name) {
                 for resolution in resolutions {
@@ -905,8 +905,10 @@ impl TypeCheckContext {
                 let mut sub = Substitution::default();
                 for tv in &scheme.gen_vars {
                     let new_tv = self.new_tyvar_by(tv);
-                    let merge_ok =
-                        sub.merge(&Substitution::single(&tv.name, type_from_tyvar(new_tv.clone())));
+                    let merge_ok = sub.merge(&Substitution::single(
+                        &tv.name,
+                        type_from_tyvar(new_tv.clone()),
+                    ));
                     assert!(merge_ok);
                     // Record opaque-type gen_vars (prefixed with WRAP_OPAQUE_TYVAR_PREFIX)
                     // so their concrete types can be extracted after type-checking.
@@ -916,7 +918,8 @@ impl TypeCheckContext {
                             "Duplicate opaque type variable name: {}",
                             tv.name
                         );
-                        self.opaque_instantiations.insert(tv.name.clone(), new_tv.clone());
+                        self.opaque_instantiations
+                            .insert(tv.name.clone(), new_tv.clone());
                     }
                 }
                 let ty = sub.substitute_type(&scheme.ty);
@@ -1359,12 +1362,8 @@ impl TypeCheckContext {
                 // constructed struct type). An empty map when the
                 // tycon didn't resolve, signalling step 4 to use
                 // fresh tyvars throughout.
-                let known_field_tys = self.compute_make_struct_field_tys(
-                    tc,
-                    tycon_info.as_ref(),
-                    &ty,
-                    &ei.source,
-                )?;
+                let known_field_tys =
+                    self.compute_make_struct_field_tys(tc, tycon_info.as_ref(), &ty, &ei.source)?;
 
                 // 4. Type each provided field expression in source
                 // order — matching the `Expr::App` convention that

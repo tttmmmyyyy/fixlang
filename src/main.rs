@@ -24,7 +24,6 @@ extern crate urlencoding;
 mod ast;
 mod build;
 mod commands;
-mod metafiles;
 mod configuration;
 mod constants;
 mod dependency;
@@ -35,15 +34,16 @@ mod error;
 mod fixstd;
 mod generator;
 mod graph;
+mod metafiles;
 mod misc;
 mod object;
 mod optimization;
 mod parse;
 mod preliminary_command;
 mod printer;
-mod tool;
 #[cfg(test)]
 mod tests;
+mod tool;
 
 use crate::error::Errors;
 use crate::misc::disable_colored_no_tty;
@@ -51,10 +51,8 @@ use clap::ArgMatches;
 use clap::PossibleValue;
 use clap::{App, AppSettings, Arg};
 use commands::lsp::server::launch_language_server;
-use metafiles::config_file::ConfigFile;
 use configuration::{
-    Configuration, DeprecationMode, FixOptimizationLevel, LinkType, OutputFileType,
-    SubCommand,
+    Configuration, DeprecationMode, FixOptimizationLevel, LinkType, OutputFileType, SubCommand,
 };
 use constants::{
     DEFAULT_COMPILATION_UNIT_MAX_SIZE, DEFAULT_COMPILATION_UNIT_MAX_SIZE_STR, DEFAULT_REGISTRY,
@@ -63,12 +61,13 @@ use constants::{
 };
 use error::panic_if_err;
 use git_version::git_version;
+use metafiles::config_file::ConfigFile;
 use metafiles::project_file::ProjectFile;
+use mimalloc::MiMalloc;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process;
 use std::vec::Vec;
-use mimalloc::MiMalloc;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -217,7 +216,7 @@ fn main() {
         .long("allow-preliminary-commands")
         .help(
             "Approve all preliminary_commands for this invocation without prompting.\n\
-            Intended for CI and other non-interactive runs."
+            Intended for CI and other non-interactive runs.",
         );
     let allow_deprecated = Arg::new("allow-deprecated")
         .long("allow-deprecated")

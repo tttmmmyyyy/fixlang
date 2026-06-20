@@ -1,9 +1,9 @@
 use crate::build::build_object_files::build_object_files;
+use crate::configuration::{Configuration, LinkType, OutputFileType};
+use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
 use crate::misc::info_msg;
-use crate::configuration::{Configuration, LinkType, OutputFileType};
-use crate::constants::INTERMEDIATE_PATH;
 use build_time::build_time_utc;
 use rand::Rng;
 use std::fs;

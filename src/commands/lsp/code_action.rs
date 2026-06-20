@@ -218,11 +218,10 @@ fn handle_missing_struct_field(
     if diag.data.is_none() {
         return;
     }
-    let missing: Vec<String> =
-        match serde_json::from_value(diag.data.as_ref().unwrap().clone()) {
-            Ok(v) => v,
-            Err(_) => return,
-        };
+    let missing: Vec<String> = match serde_json::from_value(diag.data.as_ref().unwrap().clone()) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
     if missing.is_empty() {
         return;
     }
@@ -276,7 +275,10 @@ fn handle_missing_struct_field(
             character: insert_col as u32,
         };
         edits.push(TextEdit {
-            range: Range { start: pos, end: pos },
+            range: Range {
+                start: pos,
+                end: pos,
+            },
             new_text,
         });
     } else {
@@ -290,8 +292,7 @@ fn handle_missing_struct_field(
             body.push_str(&format!("{}: ?,\n", name));
         }
 
-        let need_trailing_comma =
-            matches!(last_nonws, Some((_, _, c)) if c != '{' && c != ',');
+        let need_trailing_comma = matches!(last_nonws, Some((_, _, c)) if c != '{' && c != ',');
         if need_trailing_comma {
             if let Some((lline, lcol, _)) = last_nonws {
                 let pos = Position {
@@ -299,7 +300,10 @@ fn handle_missing_struct_field(
                     character: lcol as u32,
                 };
                 edits.push(TextEdit {
-                    range: Range { start: pos, end: pos },
+                    range: Range {
+                        start: pos,
+                        end: pos,
+                    },
                     new_text: ",".to_string(),
                 });
             }
@@ -312,7 +316,10 @@ fn handle_missing_struct_field(
             character: 0,
         };
         edits.push(TextEdit {
-            range: Range { start: pos, end: pos },
+            range: Range {
+                start: pos,
+                end: pos,
+            },
             new_text: body,
         });
     }
@@ -428,7 +435,9 @@ fn quickfix_stub_text(info: &MissingTraitImplInfo, impl_indent: usize) -> String
             MissingTraitImplItem::Member(m) => {
                 stub_lines.push(format!(
                     "{}{} : {} = ?;",
-                    member_indent, m.name.name, m.ty.to_string()
+                    member_indent,
+                    m.name.name,
+                    m.ty.to_string()
                 ));
             }
             MissingTraitImplItem::AssocType(_) => {}

@@ -34,13 +34,14 @@ let x = {expr1} in {expr0}
 
 use std::sync::Arc;
 
-use crate::{
-    ast::{
-        expr::{expr_app_typed, expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var, Expr, ExprNode},
-        pattern::PatternNode,
-        program::{Program, Symbol},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+use crate::ast::{
+    expr::{
+        expr_app_typed, expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var,
+        var_var, Expr, ExprNode,
     },
+    pattern::PatternNode,
+    program::{Program, Symbol},
+    traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
 };
 
 use super::rename::generate_new_names;

@@ -1,12 +1,17 @@
+use crate::{
+    commands::run::run,
+    configuration::Configuration,
+    constants::COMPILER_TEST_WORKING_PATH,
+    error::{panic_if_err, panic_with_msg, Errors},
+    misc::save_temporary_source,
+    parse::parser::check_grammar_accepts,
+};
 use std::{
-    fs::{self, File, remove_file},
+    fs::{self, remove_file, File},
     io::{self, Write},
     path::{Path, PathBuf},
     process::{Command, Output},
     sync::Once,
-};
-use crate::{
-    commands::run::run, configuration::Configuration, constants::COMPILER_TEST_WORKING_PATH, error::{Errors, panic_if_err, panic_with_msg}, misc::save_temporary_source, parse::parser::check_grammar_accepts
 };
 
 static INSTALL_FIX: Once = Once::new();
@@ -22,12 +27,12 @@ pub fn install_fix() {
             .arg("--release")
             .output()
             .expect("Failed to run cargo build --release");
-        
+
         if !output.status.success() {
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
             panic!("Failed to build fix in release mode");
         }
-        
+
         // Copy the built binary to ~/.cargo/bin/ using a temporary file to avoid "Text file busy"
         let release_binary = PathBuf::from("target/release/fix");
         let cargo_bin = dirs::home_dir()
@@ -36,11 +41,11 @@ pub fn install_fix() {
         let _ = fs::create_dir_all(&cargo_bin);
         let dest = cargo_bin.join("fix");
         let temp_dest = cargo_bin.join(".fix.tmp");
-        
+
         // Copy to temporary file first
         fs::copy(&release_binary, &temp_dest)
             .expect("Failed to copy fix binary to temporary location");
-        
+
         // Make it executable on Unix
         #[cfg(unix)]
         {
@@ -49,13 +54,11 @@ pub fn install_fix() {
                 .expect("Failed to get metadata")
                 .permissions();
             perms.set_mode(0o755);
-            fs::set_permissions(&temp_dest, perms)
-                .expect("Failed to set permissions");
+            fs::set_permissions(&temp_dest, perms).expect("Failed to set permissions");
         }
-        
+
         // Atomically rename to final destination (replaces even if file is in use)
-        fs::rename(&temp_dest, &dest)
-            .expect("Failed to move fix binary to ~/.cargo/bin/fix");
+        fs::rename(&temp_dest, &dest).expect("Failed to move fix binary to ~/.cargo/bin/fix");
     });
 }
 
@@ -83,9 +86,7 @@ pub fn test_source(source: &str, config: Configuration) {
     }
     let code = match output.status.code() {
         Some(code) => code,
-        None => {
-            panic_with_msg("The process was terminated by signal.")
-        },
+        None => panic_with_msg("The process was terminated by signal."),
     };
     if code != 0 {
         panic_with_msg(&format!("The program exited with non-zero code: {}", code));

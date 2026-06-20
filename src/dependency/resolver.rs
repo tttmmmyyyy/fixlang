@@ -1,7 +1,8 @@
 // This module implements an algorithm of dependency resolution.
 
 use crate::{
-    configuration::BuildConfigType, error::Errors, misc::info_msg, metafiles::project_file::ProjectFile,
+    configuration::BuildConfigType, error::Errors, metafiles::project_file::ProjectFile,
+    misc::info_msg,
 };
 use semver::{Version, VersionReq};
 

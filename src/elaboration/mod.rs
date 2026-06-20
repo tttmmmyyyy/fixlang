@@ -4,12 +4,12 @@ pub mod name_resolution;
 pub mod typecheck;
 pub mod typecheckcache;
 
+use crate::ast::program::Program;
+use crate::configuration::{Configuration, OutputFileType, SubCommand};
 use crate::error::Errors;
 use crate::fixstd::stdlib::{make_std_mod, make_tuple_traits_mod};
 use crate::parse::parser::parse_file_path;
 use crate::tool::stopwatch::StopWatch;
-use crate::configuration::{Configuration, OutputFileType, SubCommand};
-use crate::ast::program::Program;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;

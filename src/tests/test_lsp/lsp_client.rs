@@ -47,8 +47,7 @@ pub struct LspClient {
 fn process_message(message: Value, shared: &SharedState) {
     /// Handle a `textDocument/publishDiagnostics` notification.
     fn process_publish_diagnostics(message: &Value, shared: &SharedState) {
-        if message.get("method").and_then(|m| m.as_str())
-            != Some("textDocument/publishDiagnostics")
+        if message.get("method").and_then(|m| m.as_str()) != Some("textDocument/publishDiagnostics")
         {
             return;
         }
@@ -288,7 +287,13 @@ impl LspClient {
     /// Get all currently available response IDs (for debugging)
     #[allow(dead_code)]
     pub fn get_response_ids(&self) -> Vec<u32> {
-        self.shared.responses.lock().unwrap().keys().cloned().collect()
+        self.shared
+            .responses
+            .lock()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect()
     }
 
     /// Return the number of `$/progress` end notifications received so far.

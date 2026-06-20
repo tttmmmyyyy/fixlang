@@ -10,7 +10,7 @@ and select the appropriate one according to the call site.
 NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
 */
 
-use std::{sync::Arc, usize};
+use super::rename::rename_lam_param_avoiding;
 use crate::{
     ast::{
         expr::{collect_app, expr_abs, expr_app, expr_let_typed, expr_var, Expr, ExprNode, Var},
@@ -23,7 +23,7 @@ use crate::{
     misc::Set,
     optimization::eta_expansion,
 };
-use super::rename::rename_lam_param_avoiding;
+use std::{sync::Arc, usize};
 
 pub fn run(fix_mod: &mut Program) {
     // First, define uncurried version of global symbols.

@@ -9,10 +9,9 @@ use crate::ast::{
     equality::Equality,
     export_statement::ExportStatement,
     expr::{
-        expr_abs, expr_abs_param_src, expr_app, expr_array_lit, expr_eval,
-        expr_ffi_call, expr_hole, expr_if, expr_let, expr_make_struct, expr_make_struct_with_spans,
-        expr_match, expr_tyanno, expr_var, AppSourceCodeOrderType, ExprNode, Var,
-        var_local, var_var,
+        expr_abs, expr_abs_param_src, expr_app, expr_array_lit, expr_eval, expr_ffi_call,
+        expr_hole, expr_if, expr_let, expr_make_struct, expr_make_struct_with_spans, expr_match,
+        expr_tyanno, expr_var, var_local, var_var, AppSourceCodeOrderType, ExprNode, Var,
     },
     import::{ImportStatement, ImportTreeNode},
     name::{FullName, Name, NameSpace},
@@ -21,12 +20,14 @@ use crate::ast::{
     program::{GlobalValueDecl, GlobalValueDefn, ModuleInfo, Program},
     qual_pred::QualPred,
     qual_type::QualType,
-    traits::{AssocTypeDefn, AssocTypeImpl, KindSignature, TraitAlias, TraitDefn, TraitId, TraitImpl, TraitMember},
+    traits::{
+        AssocTypeDefn, AssocTypeImpl, KindSignature, TraitAlias, TraitDefn, TraitId, TraitImpl,
+        TraitMember,
+    },
     typedecl::{Field, Struct, TypeAlias, TypeDeclValue, TypeDefn, Union},
     types::{
-        kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, AssocType,
-        type_fun_with_arrow_src, type_tyapp, type_tycon, type_tyvar_star, Kind, Scheme, TyCon,
-        TyVar, TypeNode,
+        kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, type_fun_with_arrow_src,
+        type_tyapp, type_tycon, type_tyvar_star, AssocType, Kind, Scheme, TyCon, TyVar, TypeNode,
     },
 };
 use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
@@ -282,12 +283,11 @@ pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String
     let probe = format!("{} ", s);
     match FixParser::parse(rule, &probe) {
         Ok(mut pairs) => {
-            let pair = pairs.next().ok_or_else(|| "empty parse result".to_string())?;
+            let pair = pairs
+                .next()
+                .ok_or_else(|| "empty parse result".to_string())?;
             if pair.as_str() != s {
-                return Err(format!(
-                    "`{}` is not a valid identifier in this context",
-                    s
-                ));
+                return Err(format!("`{}` is not a valid identifier in this context", s));
             }
             Ok(())
         }
@@ -725,7 +725,9 @@ fn parse_trait_defn(
     // so that pragmas like `DEPRECATED[member, ...]` resolve their relative
     // path against `<ctx.namespace>::<trait>`.
     let bak_namespace = ctx.namespace.clone();
-    ctx.namespace = ctx.namespace.append(NameSpace::new(vec![trait_name.clone()]));
+    ctx.namespace = ctx
+        .namespace
+        .append(NameSpace::new(vec![trait_name.clone()]));
     let mut methods: Vec<TraitMember> = vec![];
     let mut type_syns: Map<Name, AssocTypeDefn> = Map::default();
     let mut body_errors = Errors::empty();
@@ -815,7 +817,7 @@ fn parse_trait_member_value_defn(
         qual_ty: qual_type,
         syn_qual_ty: None,
         decl_src: Some(method_name_span),
-        document: None, // Document can be obtained from `source`
+        document: None,    // Document can be obtained from `source`
         deprecation: None, // Set later in elaboration if a `DEPRECATED[...]` pragma matches.
     })
 }
@@ -848,8 +850,11 @@ fn parse_trait_member_type_defn(
     };
     let assoc_type_defn = parse_type(pairs.next().unwrap(), ctx);
     // Validate form of `assoc_type_defn`
-    let head =
-        assoc_type_defn.validate_as_associated_type_impl_defn(impl_type, &Some(span.clone()), false)?;
+    let head = assoc_type_defn.validate_as_associated_type_impl_defn(
+        impl_type,
+        &Some(span.clone()),
+        false,
+    )?;
     let (assoc_type_name, assoc_type_name_src, assoc_type_params) =
         (head.name, head.name_src, head.params);
     let kind_applied = if let Some(pair) = pairs.next() {
@@ -883,24 +888,39 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitImp
     let mut assoc_types: Map<Name, AssocTypeImpl> = Map::default();
     for pair in pairs {
         match parse_trait_member_impl(pair, &impl_type, ctx)? {
-            TraitMemberImpl::Value { name, expr, name_span } => {
+            TraitMemberImpl::Value {
+                name,
+                expr,
+                name_span,
+            } => {
                 if value_impls.contains_key(&name) {
                     return Err(Errors::from_msg_srcs(
                         format!("Duplicate implementation of member `{}`.", name),
                         &[&Some(span)],
                     ));
                 }
-                value_lhs_srcs.entry(name.clone()).or_default().push(name_span);
+                value_lhs_srcs
+                    .entry(name.clone())
+                    .or_default()
+                    .push(name_span);
                 value_impls.insert(name, expr);
             }
-            TraitMemberImpl::TypeSig { name, type_sign, opt_expr, name_span } => {
+            TraitMemberImpl::TypeSig {
+                name,
+                type_sign,
+                opt_expr,
+                name_span,
+            } => {
                 if value_type_sigs.contains_key(&name) {
                     return Err(Errors::from_msg_srcs(
                         format!("Duplicate the type signature of member `{}`.", name),
                         &[&Some(span)],
                     ));
                 }
-                value_lhs_srcs.entry(name.clone()).or_default().push(name_span);
+                value_lhs_srcs
+                    .entry(name.clone())
+                    .or_default()
+                    .push(name_span);
                 value_type_sigs.insert(name.clone(), type_sign);
                 if let Some(expr) = opt_expr {
                     if value_impls.contains_key(&name) {
@@ -961,11 +981,21 @@ fn parse_trait_member_impl(
     Ok(match pair.as_rule() {
         Rule::trait_member_value_impl => {
             let (name, expr, name_span) = parse_trait_member_value_impl(pair, ctx)?;
-            TraitMemberImpl::Value { name, expr, name_span }
+            TraitMemberImpl::Value {
+                name,
+                expr,
+                name_span,
+            }
         }
         Rule::trait_member_value_type_sign => {
-            let (name, type_sign, opt_expr, name_span) = parse_trait_member_value_type_sign(pair, ctx)?;
-            TraitMemberImpl::TypeSig { name, type_sign, opt_expr, name_span }
+            let (name, type_sign, opt_expr, name_span) =
+                parse_trait_member_value_type_sign(pair, ctx)?;
+            TraitMemberImpl::TypeSig {
+                name,
+                type_sign,
+                opt_expr,
+                name_span,
+            }
         }
         Rule::trait_member_type_impl => {
             TraitMemberImpl::Type(parse_trait_member_type_impl(pair, impl_type, ctx)?)
@@ -1446,10 +1476,7 @@ fn parse_expr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>,
 /// `hole` pair itself; downstream code is responsible for widening
 /// that point to a visible underline (e.g. 1 character at the start
 /// position).
-fn parse_expr_or_hole(
-    pair: Pair<Rule>,
-    ctx: &mut ParseContext,
-) -> Result<Arc<ExprNode>, Errors> {
+fn parse_expr_or_hole(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_or_hole);
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
@@ -2152,14 +2179,16 @@ fn parse_expr_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> {
 /// that don't need the span can simply discard it.
 fn parse_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) -> (FullName, Option<Span>) {
     assert_eq!(pair.as_rule(), Rule::fullname);
-    let name_span = pair.clone().into_inner().last().and_then(|last| {
-        match last.as_rule() {
+    let name_span = pair
+        .clone()
+        .into_inner()
+        .last()
+        .and_then(|last| match last.as_rule() {
             Rule::name | Rule::capital_name | Rule::number_name => {
                 Some(Span::from_pair(&ctx.source, &last))
             }
             _ => None,
-        }
-    });
+        });
     (parse_fullname_or_capital_fullname(pair, ctx), name_span)
 }
 
@@ -2906,7 +2935,10 @@ fn parse_type_tycon(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
 
 fn parse_tycon(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
     assert_eq!(pair.as_rule(), Rule::type_tycon);
-    tycon(parse_capital_fullname(pair.into_inner().next().unwrap(), ctx))
+    tycon(parse_capital_fullname(
+        pair.into_inner().next().unwrap(),
+        ctx,
+    ))
 }
 
 fn parse_type_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {

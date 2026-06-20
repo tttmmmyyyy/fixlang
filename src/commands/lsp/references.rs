@@ -5,24 +5,24 @@ use super::util::{
     find_local_occurrences, get_current_dir, path_to_uri, resolve_source_pos, span_to_range,
     spans_to_locations,
 };
+use crate::ast::equality::Equality;
 use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::import::ImportTreeNode;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
+use crate::ast::program::EndNode;
 use crate::ast::program::{Program, SymbolExpr};
 use crate::ast::qual_pred::QualPred;
 use crate::ast::qual_type::QualType;
+use crate::ast::traits::AssocTypeImpl;
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
+use crate::ast::types::{AssocType, Scheme, TyCon, Type, TypeNode};
 use crate::constants::{
     STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_SETTER_SYMBOL,
     UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
 };
-use crate::ast::equality::Equality;
-use crate::ast::traits::AssocTypeImpl;
-use crate::ast::types::{Scheme, AssocType, Type, TyCon, TypeNode};
 use crate::misc::Map;
-use crate::ast::program::EndNode;
 use crate::parse::sourcefile::{SourcePos, Span};
 use lsp_types::{
     CallHierarchyIncomingCall, CallHierarchyIncomingCallsParams, CallHierarchyItem,
@@ -39,11 +39,8 @@ pub(super) fn handle_references(
     uri_to_content: &Map<lsp_types::Uri, LatestContent>,
 ) {
     // Resolve the cursor into a source position, then look up the AST node.
-    let Some(pos) = resolve_source_pos(
-        &params.text_document_position,
-        program,
-        uri_to_content,
-    ) else {
+    let Some(pos) = resolve_source_pos(&params.text_document_position, program, uri_to_content)
+    else {
         send_response(id, Ok::<_, ()>(None::<Vec<lsp_types::Location>>));
         return;
     };
@@ -155,7 +152,7 @@ pub(super) fn find_global_value_references(
             }
             if let Some(span) = &gv.defn_src {
                 // Avoid a duplicate entry when decl_src and defn_src point to the same location
-                // which can happen in Fix when the declaration and definition are merged, 
+                // which can happen in Fix when the declaration and definition are merged,
                 // e.g., `main : IO () = ...`.
                 if gv.decl_src.as_ref() != Some(span) {
                     refs.push(span.clone());
@@ -356,11 +353,7 @@ pub(super) fn find_assoc_type_references(
 }
 
 // Collect associated type references in a TypeNode tree.
-fn collect_typenode_assoc_type_refs(
-    ty: &Arc<TypeNode>,
-    target: &AssocType,
-    refs: &mut Vec<Span>,
-) {
+fn collect_typenode_assoc_type_refs(ty: &Arc<TypeNode>, target: &AssocType, refs: &mut Vec<Span>) {
     match &ty.ty {
         Type::TyCon(_) | Type::TyVar(_) => {}
         Type::TyApp(f, a) => {
@@ -381,11 +374,7 @@ fn collect_typenode_assoc_type_refs(
 }
 
 // Collect associated type references in an Equality.
-fn collect_equality_assoc_type_refs(
-    eq: &Equality,
-    target: &AssocType,
-    refs: &mut Vec<Span>,
-) {
+fn collect_equality_assoc_type_refs(eq: &Equality, target: &AssocType, refs: &mut Vec<Span>) {
     if &eq.assoc_type == target {
         if let Some(span) = &eq.assoc_type.src {
             refs.push(span.clone());
@@ -398,11 +387,7 @@ fn collect_equality_assoc_type_refs(
 }
 
 // Collect associated type references in a Scheme.
-fn collect_scheme_assoc_type_refs(
-    scheme: &Arc<Scheme>,
-    target: &AssocType,
-    refs: &mut Vec<Span>,
-) {
+fn collect_scheme_assoc_type_refs(scheme: &Arc<Scheme>, target: &AssocType, refs: &mut Vec<Span>) {
     collect_typenode_assoc_type_refs(&scheme.ty, target, refs);
     for pred in &scheme.predicates {
         collect_typenode_assoc_type_refs(&pred.ty, target, refs);
@@ -413,11 +398,7 @@ fn collect_scheme_assoc_type_refs(
 }
 
 // Collect associated type references in a QualType.
-fn collect_qualtype_assoc_type_refs(
-    qt: &QualType,
-    target: &AssocType,
-    refs: &mut Vec<Span>,
-) {
+fn collect_qualtype_assoc_type_refs(qt: &QualType, target: &AssocType, refs: &mut Vec<Span>) {
     collect_typenode_assoc_type_refs(&qt.ty, target, refs);
     for pred in &qt.preds {
         collect_typenode_assoc_type_refs(&pred.ty, target, refs);
@@ -428,11 +409,7 @@ fn collect_qualtype_assoc_type_refs(
 }
 
 // Collect associated type references in a QualPred.
-fn collect_qualpred_assoc_type_refs(
-    qp: &QualPred,
-    target: &AssocType,
-    refs: &mut Vec<Span>,
-) {
+fn collect_qualpred_assoc_type_refs(qp: &QualPred, target: &AssocType, refs: &mut Vec<Span>) {
     collect_typenode_assoc_type_refs(&qp.predicate.ty, target, refs);
     for pred in &qp.pred_constraints {
         collect_typenode_assoc_type_refs(&pred.ty, target, refs);
@@ -731,11 +708,7 @@ pub(super) struct FieldOccurrence {
 // `_act_x_identity` and `#punch_x` are intentionally excluded (they are
 // not user-visible). Only entries that actually exist in
 // `program.global_values` are returned.
-fn auto_methods_for(
-    program: &Program,
-    tc: &TyCon,
-    name: &Name,
-) -> Vec<(&'static str, FullName)> {
+fn auto_methods_for(program: &Program, tc: &TyCon, name: &Name) -> Vec<(&'static str, FullName)> {
     let Some(td) = program.type_defns.iter().find(|td| td.tycon() == *tc) else {
         return vec![];
     };
@@ -992,13 +965,12 @@ fn collect_exprnode_field_occs(
                     // For `act_<field>` Vars desugared from `[^field]`,
                     // the source span covers `^field` and the source-level
                     // prefix is `^` rather than `act_`.
-                    let effective_prefix = if prefix == STRUCT_ACT_SYMBOL
-                        && expr.struct_act_func_in_index_syntax
-                    {
-                        "^"
-                    } else {
-                        prefix
-                    };
+                    let effective_prefix =
+                        if prefix == STRUCT_ACT_SYMBOL && expr.struct_act_func_in_index_syntax {
+                            "^"
+                        } else {
+                            prefix
+                        };
                     occs.push(FieldOccurrence {
                         span: span.clone(),
                         prefix: effective_prefix,
@@ -1155,12 +1127,7 @@ fn walk_import_node_for_field(
 //
 // Wildcards (`Any(*)`) are not matched since they do not name `target`
 // explicitly.
-fn collect_import_refs(
-    program: &Program,
-    target: &FullName,
-    is_value: bool,
-    refs: &mut Vec<Span>,
-) {
+fn collect_import_refs(program: &Program, target: &FullName, is_value: bool, refs: &mut Vec<Span>) {
     if target.namespace.names.is_empty() {
         return;
     }
@@ -1322,10 +1289,8 @@ pub(super) fn handle_call_hierarchy_incoming(
         collect_symbol_expr_var_refs(&gv.expr, &target_name, &mut call_spans);
         if !call_spans.is_empty() {
             if let Some(caller_item) = create_call_hierarchy_item(caller_name, program) {
-                let from_ranges: Vec<lsp_types::Range> = call_spans
-                    .iter()
-                    .map(|span| span_to_range(span))
-                    .collect();
+                let from_ranges: Vec<lsp_types::Range> =
+                    call_spans.iter().map(|span| span_to_range(span)).collect();
                 incoming_calls.push(CallHierarchyIncomingCall {
                     from: caller_item,
                     from_ranges,
@@ -1379,10 +1344,8 @@ pub(super) fn handle_call_hierarchy_outgoing(
             continue;
         }
         if let Some(callee_item) = create_call_hierarchy_item(callee_name, program) {
-            let from_ranges: Vec<lsp_types::Range> = call_spans
-                .iter()
-                .map(|span| span_to_range(span))
-                .collect();
+            let from_ranges: Vec<lsp_types::Range> =
+                call_spans.iter().map(|span| span_to_range(span)).collect();
             outgoing_calls.push(CallHierarchyOutgoingCall {
                 to: callee_item,
                 from_ranges,
@@ -1442,10 +1405,7 @@ fn collect_symbol_expr_called_globals(expr: &SymbolExpr) -> Map<FullName, Vec<Sp
 }
 
 // Recursively collect all global function names referenced in an expression tree.
-fn collect_exprnode_called_globals(
-    expr: &Arc<ExprNode>,
-    result: &mut Map<FullName, Vec<Span>>,
-) {
+fn collect_exprnode_called_globals(expr: &Arc<ExprNode>, result: &mut Map<FullName, Vec<Span>>) {
     match &*expr.expr {
         Expr::Var(v) => {
             if v.name.is_global() {

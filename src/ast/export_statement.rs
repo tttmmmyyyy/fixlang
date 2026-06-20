@@ -1,20 +1,20 @@
 // Export syntax: `FFI_EXPORT[fix_value_name, c_functio_name];`
 
-use std::sync::Arc;
-use std::usize;
-use inkwell::types::BasicType;
 use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
 use crate::ast::types::{Type, TypeNode};
+use crate::error::Errors;
 use crate::fixstd::builtin::{make_io_ty, make_iostate_ty, make_unit_ty, run_io};
 use crate::generator::Generator;
 use crate::generator::Object;
 use crate::object::create_obj;
 use crate::object::ObjectFieldType;
 use crate::parse::sourcefile::Span;
-use crate::error::Errors;
+use inkwell::types::BasicType;
+use std::sync::Arc;
+use std::usize;
 
 // The export statement.
 #[derive(Clone)]

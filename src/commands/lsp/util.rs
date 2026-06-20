@@ -11,15 +11,15 @@ use crate::ast::types::TyCon;
 use crate::commands::docs::MarkdownSection;
 use crate::constants::chars_allowed_in_identifiers;
 use crate::misc::{char_pos_to_utf16_pos, to_absolute_path, utf16_pos_to_utf8_byte_pos, Map};
-use crate::write_log;
 use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
-use std::sync::Arc;
+use crate::write_log;
 use difference::{diff, Difference};
 use lsp_types::{
     Location, MarkupContent, MarkupKind, Position, Range, TextDocumentPositionParams, Uri,
 };
 use std::path::{Component, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 
 // Convert a `lsp_types::Uri` into a `PathBuf`.
 pub(super) fn uri_to_path(uri: &Uri) -> PathBuf {
@@ -295,7 +295,11 @@ fn find_enclosing_binder(
 
     // Look up the innermost binding for `target` that is currently in scope.
     let lookup = |stack: &Vec<(FullName, Span)>| -> Option<Span> {
-        stack.iter().rev().find(|(n, _)| n == target).map(|(_, s)| s.clone())
+        stack
+            .iter()
+            .rev()
+            .find(|(n, _)| n == target)
+            .map(|(_, s)| s.clone())
     };
 
     match &*expr.expr {
@@ -320,7 +324,9 @@ fn find_enclosing_binder(
             let body_span = body.source.clone();
             let pushed = args.len();
             for v in args {
-                let span = body_span.clone().unwrap_or_else(|| expr.source.clone().unwrap());
+                let span = body_span
+                    .clone()
+                    .unwrap_or_else(|| expr.source.clone().unwrap());
                 stack.push((v.name.clone(), span));
             }
             let res = find_enclosing_binder(body, pos, target, stack);
@@ -448,7 +454,11 @@ fn collect_uses_of_binding(
     out: &mut Vec<Span>,
 ) {
     let current_binder = |stack: &Vec<(FullName, Span)>| -> Option<Span> {
-        stack.iter().rev().find(|(n, _)| n == target).map(|(_, s)| s.clone())
+        stack
+            .iter()
+            .rev()
+            .find(|(n, _)| n == target)
+            .map(|(_, s)| s.clone())
     };
 
     match &*expr.expr {
@@ -476,7 +486,9 @@ fn collect_uses_of_binding(
             let body_span = body.source.clone();
             let pushed = args.len();
             for v in args {
-                let span = body_span.clone().unwrap_or_else(|| expr.source.clone().unwrap());
+                let span = body_span
+                    .clone()
+                    .unwrap_or_else(|| expr.source.clone().unwrap());
                 stack.push((v.name.clone(), span));
             }
             collect_uses_of_binding(body, target, def_span, stack, out);
@@ -560,8 +572,7 @@ pub(super) fn span_to_range(span: &Span) -> Range {
     // Convert character-based column positions to UTF-16 code unit positions
     let source_string = span.input.string();
     let (start_utf16_col, end_utf16_col) = if let Ok(source_string) = source_string {
-        let start_utf16 =
-            char_pos_to_utf16_pos(&source_string, start_line, start_column);
+        let start_utf16 = char_pos_to_utf16_pos(&source_string, start_line, start_column);
         let end_utf16 = char_pos_to_utf16_pos(&source_string, end_line, end_column);
         (start_utf16, end_utf16)
     } else {
@@ -668,16 +679,16 @@ pub(super) fn get_line_string_from_position(
     let line_str = latest_content.lines().nth(line).unwrap_or("").to_string();
 
     // Convert UTF-16 code unit position to byte position
-    let byte_pos = utf16_pos_to_utf8_byte_pos(
-        &line_str,
-        text_position.position.character as usize,
-    );
+    let byte_pos = utf16_pos_to_utf8_byte_pos(&line_str, text_position.position.character as usize);
 
     Some((line_str, byte_pos))
 }
 
 // Get the parameters of a global value from its documentation.
-pub(super) fn parameters_of_global_value(full_name: &FullName, program: &Program) -> Option<Vec<String>> {
+pub(super) fn parameters_of_global_value(
+    full_name: &FullName,
+    program: &Program,
+) -> Option<Vec<String>> {
     // Get the document of the global value, which is a markdown string.
     let opt_gv = program.global_values.get(full_name);
     if opt_gv.is_none() {

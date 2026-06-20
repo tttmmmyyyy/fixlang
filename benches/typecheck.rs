@@ -14,12 +14,12 @@
 //
 // Run with `cargo bench`. Filter with e.g. `cargo bench std_only`.
 
-use std::sync::Arc;
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use fixlang::configuration::{Configuration, OutputFileType, SubCommand};
 use fixlang::elaboration::elaborate_via_config;
 use fixlang::elaboration::typecheckcache::MemoryCache;
 use fixlang::misc::save_temporary_source;
+use std::sync::Arc;
 
 /// Build a release-mode `Configuration` whose single user source file
 /// is `source` saved to a temp path, with a fresh in-memory typecheck
@@ -150,5 +150,10 @@ fn bench_medium_project(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_std_only, bench_small_project, bench_medium_project);
+criterion_group!(
+    benches,
+    bench_std_only,
+    bench_small_project,
+    bench_medium_project
+);
 criterion_main!(benches);

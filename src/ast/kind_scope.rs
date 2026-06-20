@@ -4,7 +4,7 @@ use crate::ast::equality::Equality;
 use crate::ast::name::Name;
 use crate::ast::predicate::Predicate;
 use crate::ast::traits::{AssocTypeKindInfo, KindSignature, TraitId};
-use crate::ast::types::{Kind, AssocType, TyCon, Type, TypeNode};
+use crate::ast::types::{AssocType, Kind, TyCon, Type, TypeNode};
 use crate::misc::Map;
 
 // Kind environment.

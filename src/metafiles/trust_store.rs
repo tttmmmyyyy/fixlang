@@ -2,9 +2,7 @@
 // Stored as `~/.fixtrust.toml`. See `logs/.../spec.md` for the user-visible specification.
 
 use crate::{
-    error::Errors,
-    metafiles::project_file::ProjectOrigin,
-    misc::warn_msg,
+    error::Errors, metafiles::project_file::ProjectOrigin, misc::warn_msg,
     preliminary_command::PreliminaryCommandMode,
 };
 use serde::{Deserialize, Serialize};
@@ -116,9 +114,8 @@ impl TrustStore {
     // then rename onto the destination. Returns the path that was written on success.
     pub fn save(&self) -> Result<PathBuf, Errors> {
         let path = default_path()?;
-        let content = toml::to_string_pretty(self).map_err(|e| {
-            Errors::from_msg(format!("Failed to serialize trust store: {}", e))
-        })?;
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| Errors::from_msg(format!("Failed to serialize trust store: {}", e)))?;
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() && !parent.exists() {
                 std::fs::create_dir_all(parent).map_err(|e| {

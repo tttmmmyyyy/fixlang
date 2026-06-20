@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::ast::{
     expr::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
@@ -26,7 +25,7 @@ use crate::constants::{
     CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
     FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    IDENTITY_NAME, IO_NAME, IOSTATE_NAME, LAZY_NAME, PTR_NAME, STD_NAME, STRING_NAME,
+    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, STD_NAME, STRING_NAME,
     STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
     STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
@@ -42,6 +41,7 @@ use inkwell::values::{BasicValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 // Implement built-in functions, types, etc.
 
@@ -3489,10 +3489,7 @@ fn make_struct_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, str: Object<'c>) -> Ob
 // Make struct / union object unique.
 // If it is (unboxed or) unique, do nothing.
 // If it is shared, clone the object.
-fn make_struct_union_unique<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
-    mut obj: Object<'c>,
-) -> Object<'c> {
+fn make_struct_union_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, mut obj: Object<'c>) -> Object<'c> {
     assert!(obj.ty.is_union(gc.type_env()) || obj.ty.is_struct(gc.type_env()));
 
     let is_unbox = obj.ty.is_unbox(gc.type_env());
@@ -5162,10 +5159,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 // Run either an IO or an IOState runner based on the type of the given value.
-pub fn run_io_or_ios_runner<'b, 'm, 'c>(
-    gc: &mut Generator<'c, 'm>,
-    io: &Object<'c>,
-) -> Object<'c> {
+pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
         run_io(gc, io)
     } else {

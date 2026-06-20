@@ -27,14 +27,14 @@ use crate::{
         program::{Program, Symbol},
         types::{tycon, type_tyapp, type_tycon, TyCon, Type::TyApp, TypeNode},
     },
-    fixstd::builtin::make_tuple_name_abs,
     configuration::Configuration,
     constants::{
         ARRAY_NAME, BUILTIN_ACT_NAME, CONST_NAME, IDENTITY_NAME, STD_NAME, STRUCT_ACT_SYMBOL,
     },
-    error::Errors,
-    misc::info_msg,
     elaboration::typecheck::TypeCheckContext,
+    error::Errors,
+    fixstd::builtin::make_tuple_name_abs,
+    misc::info_msg,
 };
 
 pub fn run(prg: &mut Program, config: &Configuration) {

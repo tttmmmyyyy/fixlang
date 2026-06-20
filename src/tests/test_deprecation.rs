@@ -126,7 +126,11 @@ pub fn test_deprecated_duplicate_fails() {
         main : IO ();
         main = pure();
     "##;
-    test_source_fail(source, Configuration::develop_mode(), "Multiple `DEPRECATED`");
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "Multiple `DEPRECATED`",
+    );
 }
 
 /// Verifies that `FFI_EXPORT` accepts a qualified path (e.g. `Foo::bar`)

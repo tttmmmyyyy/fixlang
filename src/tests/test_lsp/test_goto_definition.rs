@@ -99,8 +99,8 @@ mod tests {
 
     /// Read the substring of `file` covered by an LSP range.
     fn read_text_at_range(file: &Path, range: &Value) -> String {
-        let content = std::fs::read_to_string(file)
-            .expect(&format!("Failed to read file: {:?}", file));
+        let content =
+            std::fs::read_to_string(file).expect(&format!("Failed to read file: {:?}", file));
         let lines: Vec<&str> = content.lines().collect();
         let sl = range["start"]["line"].as_u64().unwrap() as usize;
         let sc = range["start"]["character"].as_u64().unwrap() as usize;
@@ -130,11 +130,7 @@ mod tests {
         col: u32,
         expected_text: &str,
     ) {
-        assert!(
-            result.is_object(),
-            "Expected a Location, got {:?}",
-            result
-        );
+        assert!(result.is_object(), "Expected a Location, got {:?}", result);
         let uri = result["uri"].as_str().expect("Location should have uri");
         let expected_uri = ctx.file_uri(file);
         assert_eq!(

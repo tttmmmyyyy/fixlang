@@ -158,7 +158,9 @@ mod tests {
         );
         // Trait implementation
         assert!(
-            names.iter().any(|n| n.starts_with("impl ") && n.contains("MyData")),
+            names
+                .iter()
+                .any(|n| n.starts_with("impl ") && n.contains("MyData")),
             "Trait impl for MyData missing. Got: {:?}",
             names
         );

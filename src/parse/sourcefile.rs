@@ -1,12 +1,12 @@
+use crate::{elaboration::read_file, error::Errors, misc::to_absolute_path, parse::parser::Rule};
+use colored::{Color, Colorize};
+use pest::iterators::Pair;
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use colored::{Color, Colorize};
-use pest::iterators::Pair;
-use serde::{Deserialize, Serialize};
-use crate::{error::Errors, misc::to_absolute_path, parse::parser::Rule, elaboration::read_file};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
@@ -264,7 +264,7 @@ impl Span {
     }
 
     // Get the document of the entity defined at this span.
-    // More specifically, this function returns the content of the consecutive comment lines 
+    // More specifically, this function returns the content of the consecutive comment lines
     // just before the start of the span.
     pub fn get_document(&self) -> Result<String, Errors> {
         // Get a line from the reversed iterator.

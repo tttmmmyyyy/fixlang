@@ -1,8 +1,8 @@
-use std::{fmt::Display, path::PathBuf};
-use colored::{Color, Colorize};
-use serde_json::Value;
 use crate::misc::{Map, Set};
 use crate::{misc, parse::sourcefile::Span};
+use colored::{Color, Colorize};
+use serde_json::Value;
+use std::{fmt::Display, path::PathBuf};
 
 /// Diagnostic code for "use of a deprecated item".
 pub const WARN_DEPRECATED: &'static str = "deprecated";

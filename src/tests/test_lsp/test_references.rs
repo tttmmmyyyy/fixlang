@@ -271,12 +271,10 @@ mod tests {
 
     fn assert_has_ref_in_file(locations: &[Value], file_name: &str) {
         assert!(
-            locations
-                .iter()
-                .any(|loc| loc
-                    .get("uri")
-                    .and_then(|u| u.as_str())
-                    .map_or(false, |u| u.contains(file_name))),
+            locations.iter().any(|loc| loc
+                .get("uri")
+                .and_then(|u| u.as_str())
+                .map_or(false, |u| u.contains(file_name))),
             "Should have a reference in {}. Locations: {:?}",
             file_name,
             locations

@@ -1,14 +1,12 @@
-use std::sync::Arc;
 use crate::ast::name::Name;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
-    ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
-    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DYNAMIC_OBJ_CAP_IDX,
-    DYNAMIC_OBJ_TRAVARSER_IDX, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED,
-    DW_ATE_UNSIGNED, REFCNT_STATE_LOCAL, STD_NAME,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    TraverserWorkType, UNION_DATA_IDX, UNION_TAG_IDX,
+    TraverserWorkType, ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
+    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT,
+    DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX,
+    REFCNT_STATE_LOCAL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
+    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
@@ -16,18 +14,21 @@ use crate::fixstd::builtin::{
     make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty,
     make_u8_ty,
 };
-use crate::fixstd::runtime::{RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE};
+use crate::fixstd::runtime::{
+    RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
+};
 use crate::generator::{Generator, Object};
 use inkwell::context::Context;
 use inkwell::types::{BasicTypeEnum, FunctionType, IntType, StructType};
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue};
-use inkwell::{AddressSpace, IntPredicate};
 use inkwell::{
     basic_block::BasicBlock,
     debug_info::{AsDIScope, DIType, DebugInfoBuilder},
     module::Linkage,
     types::{BasicMetadataTypeEnum, BasicType},
 };
+use inkwell::{AddressSpace, IntPredicate};
+use std::sync::Arc;
 
 #[derive(Eq, PartialEq, Clone)]
 pub enum ObjectFieldType {
@@ -786,10 +787,7 @@ impl ObjectFieldType {
         ObjectFieldType::retain_release_mark_union(gc, union, None);
     }
 
-    pub fn get_union_tag<'c, 'm>(
-        gc: &mut Generator<'c, 'm>,
-        union: &Object<'c>,
-    ) -> IntValue<'c> {
+    pub fn get_union_tag<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> IntValue<'c> {
         let is_unbox = union.is_unbox(gc.type_env());
         let union_tag_idx = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX } + UNION_TAG_IDX;
         union.extract_field(gc, union_tag_idx).into_int_value()
@@ -805,10 +803,7 @@ impl ObjectFieldType {
         union.insert_field(gc, union_tag_idx, tag)
     }
 
-    pub fn get_union_buf_idx<'c, 'm>(
-        gc: &mut Generator<'c, 'm>,
-        union: &Object<'c>,
-    ) -> u32 {
+    pub fn get_union_buf_idx<'c, 'm>(gc: &mut Generator<'c, 'm>, union: &Object<'c>) -> u32 {
         let is_unbox = union.is_unbox(gc.type_env());
         let offset = if is_unbox { 0 } else { BOXED_TYPE_DATA_IDX };
         offset + UNION_DATA_IDX
@@ -1710,10 +1705,7 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
     }
 }
 
-pub fn ty_to_debug_struct_ty<'c, 'm>(
-    ty: Arc<TypeNode>,
-    gc: &mut Generator<'c, 'm>,
-) -> DIType<'c> {
+pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
     let is_primitive = !ty.is_closure()

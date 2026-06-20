@@ -1,6 +1,8 @@
-use crate::{ast::name::Name, constants::TEMPORARY_SRC_PATH, error::Errors, parse::sourcefile::SourceFile};
-use std::io::IsTerminal;
+use crate::{
+    ast::name::Name, constants::TEMPORARY_SRC_PATH, error::Errors, parse::sourcefile::SourceFile,
+};
 use colored::Colorize;
+use std::io::IsTerminal;
 use std::{
     env, fs,
     hash::Hash,

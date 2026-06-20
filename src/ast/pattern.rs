@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::ast::expr::Var;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, TypeEnv};
@@ -11,6 +10,7 @@ use crate::fixstd::builtin::get_tuple_n;
 use crate::misc::{make_set, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PatternNode {
@@ -165,10 +165,9 @@ impl PatternNode {
                         debug_assert!(typechcker.error_tolerant);
                         continue;
                     };
-                    let unify_res = UnifOrOtherErr::extract_others(typechcker.unify(
-                        &pat.info.type_.as_ref().unwrap(),
-                        field_ty,
-                    ))?;
+                    let unify_res = UnifOrOtherErr::extract_others(
+                        typechcker.unify(&pat.info.type_.as_ref().unwrap(), field_ty),
+                    )?;
                     if unify_res.is_err() && !typechcker.error_tolerant {
                         return Err(Errors::from_msg_srcs(
                             format!(
@@ -282,10 +281,7 @@ impl PatternNode {
                 for (name, name_src, pat) in field_to_pat {
                     if let Some(ns) = name_src {
                         if ns.includes_pos_lsp(pos) {
-                            return Some(EndNode::Field(
-                                tc.as_ref().clone(),
-                                name.clone(),
-                            ));
+                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
                         }
                     }
                     let res = pat.find_node_at_pos(pos);
@@ -394,8 +390,7 @@ impl PatternNode {
                 let mut new_variant_name = variant_name.clone();
                 new_variant_name.global_to_absolute();
                 let new_subpat = subpat.global_to_absolute();
-                node.pattern =
-                    Pattern::Union(new_variant_name, variant_src.clone(), new_subpat);
+                node.pattern = Pattern::Union(new_variant_name, variant_src.clone(), new_subpat);
             }
         }
         Arc::new(node)

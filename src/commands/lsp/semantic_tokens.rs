@@ -70,15 +70,15 @@ const T_INTERFACE: u32 = 14;
 pub(super) fn legend() -> SemanticTokensLegend {
     SemanticTokensLegend {
         token_types: vec![
-            SemanticTokenType::NAMESPACE,   // 0
-            SemanticTokenType::TYPE,        // 1
-            SemanticTokenType::VARIABLE,    // 2
-            SemanticTokenType::KEYWORD,     // 3
-            SemanticTokenType::NUMBER,      // 4
-            SemanticTokenType::STRING,      // 5
-            SemanticTokenType::COMMENT,     // 6
-            SemanticTokenType::OPERATOR,    // 7
-            SemanticTokenType::FUNCTION,    // 8
+            SemanticTokenType::NAMESPACE,      // 0
+            SemanticTokenType::TYPE,           // 1
+            SemanticTokenType::VARIABLE,       // 2
+            SemanticTokenType::KEYWORD,        // 3
+            SemanticTokenType::NUMBER,         // 4
+            SemanticTokenType::STRING,         // 5
+            SemanticTokenType::COMMENT,        // 6
+            SemanticTokenType::OPERATOR,       // 7
+            SemanticTokenType::FUNCTION,       // 8
             SemanticTokenType::ENUM_MEMBER,    // 9 (boolean literals, union variants)
             SemanticTokenType::PROPERTY,       // 10 (field accessors)
             SemanticTokenType::TYPE_PARAMETER, // 11
@@ -188,7 +188,11 @@ fn pieces_to_tokens(mut pieces: Vec<Piece>) -> Vec<SemanticToken> {
 /// the overlay wins (e.g. a struct name colored `struct` rather than the base
 /// `type`). This keeps the rich coloring on every untouched line while the user
 /// edits, instead of dropping the whole file to the base layer.
-fn merge_overlay(base: Vec<Piece>, overlay_snapshot: Vec<Piece>, line_map: &[Option<u32>]) -> Vec<Piece> {
+fn merge_overlay(
+    base: Vec<Piece>,
+    overlay_snapshot: Vec<Piece>,
+    line_map: &[Option<u32>],
+) -> Vec<Piece> {
     let mut by_pos: Map<(u32, u32), (u32, u32)> = Map::default();
     for (line, col, len, ty) in base {
         by_pos.insert((line, col), (len, ty));
@@ -203,7 +207,6 @@ fn merge_overlay(base: Vec<Piece>, overlay_snapshot: Vec<Piece>, line_map: &[Opt
         .map(|((line, col), (len, ty))| (line, col, len, ty))
         .collect()
 }
-
 
 /// The byte offset at which each line of `content` begins (index `i` is line
 /// `i`, 0-based).
@@ -713,15 +716,39 @@ mod tests {
     #[test]
     fn legend_has_expected_order() {
         let legend = legend();
-        assert_eq!(legend.token_types[T_NAMESPACE as usize], SemanticTokenType::NAMESPACE);
+        assert_eq!(
+            legend.token_types[T_NAMESPACE as usize],
+            SemanticTokenType::NAMESPACE
+        );
         assert_eq!(legend.token_types[T_TYPE as usize], SemanticTokenType::TYPE);
-        assert_eq!(legend.token_types[T_VARIABLE as usize], SemanticTokenType::VARIABLE);
-        assert_eq!(legend.token_types[T_KEYWORD as usize], SemanticTokenType::KEYWORD);
-        assert_eq!(legend.token_types[T_NUMBER as usize], SemanticTokenType::NUMBER);
-        assert_eq!(legend.token_types[T_STRING as usize], SemanticTokenType::STRING);
-        assert_eq!(legend.token_types[T_COMMENT as usize], SemanticTokenType::COMMENT);
-        assert_eq!(legend.token_types[T_OPERATOR as usize], SemanticTokenType::OPERATOR);
-        assert_eq!(legend.token_types[T_FUNCTION as usize], SemanticTokenType::FUNCTION);
+        assert_eq!(
+            legend.token_types[T_VARIABLE as usize],
+            SemanticTokenType::VARIABLE
+        );
+        assert_eq!(
+            legend.token_types[T_KEYWORD as usize],
+            SemanticTokenType::KEYWORD
+        );
+        assert_eq!(
+            legend.token_types[T_NUMBER as usize],
+            SemanticTokenType::NUMBER
+        );
+        assert_eq!(
+            legend.token_types[T_STRING as usize],
+            SemanticTokenType::STRING
+        );
+        assert_eq!(
+            legend.token_types[T_COMMENT as usize],
+            SemanticTokenType::COMMENT
+        );
+        assert_eq!(
+            legend.token_types[T_OPERATOR as usize],
+            SemanticTokenType::OPERATOR
+        );
+        assert_eq!(
+            legend.token_types[T_FUNCTION as usize],
+            SemanticTokenType::FUNCTION
+        );
         assert_eq!(
             legend.token_types[T_ENUM_MEMBER as usize],
             SemanticTokenType::ENUM_MEMBER
@@ -734,7 +761,10 @@ mod tests {
             legend.token_types[T_TYPE_PARAMETER as usize],
             SemanticTokenType::TYPE_PARAMETER
         );
-        assert_eq!(legend.token_types[T_STRUCT as usize], SemanticTokenType::STRUCT);
+        assert_eq!(
+            legend.token_types[T_STRUCT as usize],
+            SemanticTokenType::STRUCT
+        );
         assert_eq!(legend.token_types[T_ENUM as usize], SemanticTokenType::ENUM);
         assert_eq!(
             legend.token_types[T_INTERFACE as usize],
@@ -780,7 +810,10 @@ mod tests {
         // Lowercase identifiers get no base token (the AST overlay colors them).
         assert_eq!(compute_semantic_tokens("foo bar"), vec![]);
         // `let x` only colors the keyword; `x` is left to the overlay.
-        assert_eq!(compute_semantic_tokens("let x"), vec![tok(0, 0, 3, T_KEYWORD)]);
+        assert_eq!(
+            compute_semantic_tokens("let x"),
+            vec![tok(0, 0, 3, T_KEYWORD)]
+        );
     }
 
     /// Verifies that in `Std::Array` the qualifier is a namespace, `::` an

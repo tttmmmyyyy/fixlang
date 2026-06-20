@@ -8,12 +8,12 @@
 //! node, so each hole's type reflects whatever the surrounding
 //! context expected.
 
-use std::sync::Arc;
 use crate::ast::expr::{hole_full_name, Expr, ExprNode};
 use crate::ast::name::FullName;
 use crate::constants::ERR_HOLE;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::error::{Error, Errors};
+use std::sync::Arc;
 
 /// Collect ERR_HOLE diagnostics for every hole reference in `expr`.
 ///
@@ -31,12 +31,7 @@ pub fn collect_hole_errors(expr: &Arc<ExprNode>, tc: &TypeCheckContext) -> Error
 
 /// Recursively walk `expr` and append an ERR_HOLE diagnostic to
 /// `errors` for every `Var` node whose name equals `hole_name`.
-fn visit(
-    expr: &Arc<ExprNode>,
-    hole_name: &FullName,
-    tc: &TypeCheckContext,
-    errors: &mut Errors,
-) {
+fn visit(expr: &Arc<ExprNode>, hole_name: &FullName, tc: &TypeCheckContext, errors: &mut Errors) {
     if let Expr::Var(v) = &*expr.expr {
         if v.name == *hole_name {
             errors.append(report_hole(expr, tc));

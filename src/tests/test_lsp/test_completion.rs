@@ -160,9 +160,8 @@ mod tests {
                     }),
                 )
                 .expect("Failed to send completion request");
-            collect_completion_items(&mut self.client, id, timeout).unwrap_or_else(|| {
-                panic!("completion did not respond within {:?}", timeout)
-            })
+            collect_completion_items(&mut self.client, id, timeout)
+                .unwrap_or_else(|| panic!("completion did not respond within {:?}", timeout))
         }
 
         /// Send completionItem/resolve and return the resolved item.
@@ -310,9 +309,7 @@ mod tests {
             // Find the candidate for `Main::Hoge::func`.
             let item = items
                 .iter()
-                .find(|it| {
-                    it.get("label").and_then(|l| l.as_str()) == Some("Main::Hoge::func")
-                })
+                .find(|it| it.get("label").and_then(|l| l.as_str()) == Some("Main::Hoge::func"))
                 .cloned()
                 .unwrap_or_else(|| {
                     panic!(
@@ -384,9 +381,7 @@ mod tests {
 
         let deprecated_item = items
             .iter()
-            .find(|it| {
-                it.get("label").and_then(|l| l.as_str()) == Some("Main::Hoge::old_func")
-            })
+            .find(|it| it.get("label").and_then(|l| l.as_str()) == Some("Main::Hoge::old_func"))
             .unwrap_or_else(|| {
                 panic!(
                     "Expected `Main::Hoge::old_func` in completion candidates. \
@@ -735,7 +730,10 @@ mod tests {
                 }
             );
         } else {
-            eprintln!("===== [completion] log =====\n<no log file at {}>\n=============================", log_path.display());
+            eprintln!(
+                "===== [completion] log =====\n<no log file at {}>\n=============================",
+                log_path.display()
+            );
         }
 
         let dump_top: Vec<String> = items
@@ -810,8 +808,7 @@ mod tests {
     /// the cursor.
     #[test]
     fn test_completion_dot_sort_error_tolerant_inside_if_body() {
-        let mut ctx =
-            LspCompletionCtx::setup("completion-dot-sort-error-tolerant", &["main.fix"]);
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort-error-tolerant", &["main.fix"]);
 
         // main.fix layout (0-indexed):
         //   0: module Main;
@@ -948,8 +945,7 @@ mod tests {
     /// neighbours like `GMP.Q::MPQ::*`.
     #[test]
     fn test_completion_dotted_module_bare_name() {
-        let mut ctx =
-            LspCompletionCtx::setup("completion-dotted-module", &["lib.fix", "main.fix"]);
+        let mut ctx = LspCompletionCtx::setup("completion-dotted-module", &["lib.fix", "main.fix"]);
 
         // main.fix layout (0-indexed):
         //   0: module Main;
@@ -993,8 +989,7 @@ mod tests {
     /// recovered from the partially-typed subtree.
     #[test]
     fn test_completion_dot_after_tuple_no_crash() {
-        let mut ctx =
-            LspCompletionCtx::setup("completion-dot-after-tuple", &["main.fix"]);
+        let mut ctx = LspCompletionCtx::setup("completion-dot-after-tuple", &["main.fix"]);
 
         // main.fix line 6 (0-indexed): "    some(a) => (a, a)."
         // length 22, cursor at column 22 = byte just after the `.`.
@@ -1023,8 +1018,7 @@ mod tests {
     /// every method into the catch-all Tier 2/3, not Tier 0.
     #[test]
     fn test_completion_dot_after_tuple_infers_tuple_receiver() {
-        let mut ctx =
-            LspCompletionCtx::setup("completion-dot-after-tuple", &["main.fix"]);
+        let mut ctx = LspCompletionCtx::setup("completion-dot-after-tuple", &["main.fix"]);
 
         let items = ctx.complete("main.fix", 6, 22);
 
@@ -1093,9 +1087,10 @@ mod tests {
                     .unwrap_or(false);
                 let is_deprecated = deprecated_flag || tag_flag;
                 match (is_deprecated, sort) {
-                    (false, Some(s)) => {
-                        Some(format!("live `{}` should have no sortText, got {:?}", label, s))
-                    }
+                    (false, Some(s)) => Some(format!(
+                        "live `{}` should have no sortText, got {:?}",
+                        label, s
+                    )),
                     (true, None) => Some(format!(
                         "deprecated `{}` should have a `~`-prefixed sortText, got none",
                         label
@@ -1176,8 +1171,7 @@ mod tests {
     /// before the deprecated one's.
     #[test]
     fn test_completion_dot_sort_deprecated_ranks_below_live_at_same_tier() {
-        let mut ctx =
-            LspCompletionCtx::setup("completion-dot-sort-deprecated", &["main.fix"]);
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort-deprecated", &["main.fix"]);
 
         // main.fix layout (0-indexed):
         //   0: module Main;

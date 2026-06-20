@@ -1,7 +1,7 @@
-use crate::metafiles::config_file::ConfigFile;
 use crate::configuration::BuildConfigType;
 use crate::dependency::lockfile::{DependecyLockFile, LockFileType};
 use crate::error::{panic_if_err, Errors};
+use crate::metafiles::config_file::ConfigFile;
 use crate::metafiles::project_file::ProjectFile;
 use clap::ArgMatches;
 

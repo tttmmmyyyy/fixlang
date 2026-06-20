@@ -149,7 +149,11 @@ mod tests {
         workspace_edit
             .get("changes")
             .and_then(|c| c.as_object())
-            .map(|m| m.values().map(|v| v.as_array().map_or(0, |a| a.len())).sum())
+            .map(|m| {
+                m.values()
+                    .map(|v| v.as_array().map_or(0, |a| a.len()))
+                    .sum()
+            })
             .unwrap_or(0)
     }
 
@@ -222,7 +226,10 @@ mod tests {
         assert_eq!(count_edits(&we), 6, "WorkspaceEdit: {:?}", we);
 
         let per_file = changes_per_file(&we);
-        assert_eq!(per_file, vec![("lib.fix".to_string(), 4), ("main.fix".to_string(), 2)]);
+        assert_eq!(
+            per_file,
+            vec![("lib.fix".to_string(), 4), ("main.fix".to_string(), 2)]
+        );
 
         assert_all_edits_have_new_text(&we, "boost");
         ctx.shutdown();
@@ -789,8 +796,7 @@ mod tests {
     /// qualified Var references are all rewritten.
     #[test]
     fn test_rename_struct_type_phase_d() {
-        let mut ctx =
-            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let mut ctx = LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
         let we = ctx.rename("lib.fix", 2, 5, "Pixel");
 
         let per_file = changes_per_file(&we);
@@ -829,8 +835,7 @@ mod tests {
     /// `Point` is a user-written namespace name, independent of the type.
     #[test]
     fn test_rename_struct_type_skips_user_namespace_block() {
-        let mut ctx =
-            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let mut ctx = LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
         let we = ctx.rename("lib.fix", 2, 5, "Pixel");
 
         // Verify no edit lands on line 7 col 10 (the `namespace Point {`
@@ -855,8 +860,7 @@ mod tests {
     /// We verify by reading the post-edit text at the reported range.
     #[test]
     fn test_rename_struct_type_inline_qualified_var() {
-        let mut ctx =
-            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let mut ctx = LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
         let we = ctx.rename("lib.fix", 2, 5, "Pixel");
 
         // Find an edit on main.fix line 9 (qualified_get's body) that
@@ -896,8 +900,7 @@ mod tests {
     /// `^` is skipped during sub-span extraction.
     #[test]
     fn test_rename_struct_type_inline_index_syntax() {
-        let mut ctx =
-            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let mut ctx = LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
         let we = ctx.rename("lib.fix", 2, 5, "Pixel");
 
         // Look for an edit on main.fix line 13 covering 5 chars
@@ -933,8 +936,7 @@ mod tests {
     /// RD-5: prepareRename returns defaultBehavior on a struct type.
     #[test]
     fn test_prepare_rename_struct_type_phase_d() {
-        let mut ctx =
-            LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
+        let mut ctx = LspTestCtx::setup("rename_struct_type", &["lib.fix", "main.fix"]);
         let result = ctx.prepare_rename("lib.fix", 2, 5);
         assert!(
             result
@@ -954,10 +956,7 @@ mod tests {
     /// with the type.
     #[test]
     fn test_rename_struct_type_skips_user_helper_qualified_call() {
-        let mut ctx = LspTestCtx::setup(
-            "rename_user_helper_qualified",
-            &["lib.fix", "main.fix"],
-        );
+        let mut ctx = LspTestCtx::setup("rename_user_helper_qualified", &["lib.fix", "main.fix"]);
         let we = ctx.rename("lib.fix", 2, 5, "MCFGraph");
 
         // Inspect every edit: any change inside main.fix's body must
@@ -1001,8 +1000,7 @@ mod tests {
     /// half) and `Point::` (for the user-defined half).
     #[test]
     fn test_rename_struct_type_mixed_import_split() {
-        let mut ctx =
-            LspTestCtx::setup("rename_mixed_import", &["lib.fix", "main.fix"]);
+        let mut ctx = LspTestCtx::setup("rename_mixed_import", &["lib.fix", "main.fix"]);
         let we = ctx.rename("lib.fix", 2, 5, "Pixel");
 
         // Find the rebuilt import edit on main.fix line 6 (the import

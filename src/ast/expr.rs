@@ -2,15 +2,15 @@ use crate::ast::inline_llvm::{InlineLLVM, LLVMGenerator};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::program::{EndNode, TypeEnv};
-use crate::ast::types::{TyCon, TypeNode, type_fun};
+use crate::ast::types::{type_fun, TyCon, TypeNode};
 use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT, HOLE_NAME, STD_NAME};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::misc::{collect_results, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
-use serde::{Deserialize, Serialize};
 use core::panic;
+use serde::{Deserialize, Serialize};
 use std::{
     sync::{Arc, Mutex},
     vec,
@@ -680,7 +680,10 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_make_struct_fields(&self, fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>) -> Arc<Self> {
+    pub fn set_make_struct_fields(
+        &self,
+        fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>,
+    ) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::MakeStruct(tc, _) => {
@@ -1391,7 +1394,7 @@ pub enum Expr {
     Match(Arc<ExprNode>, Vec<(Arc<PatternNode>, Arc<ExprNode>)>),
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
     ArrayLit(Vec<Arc<ExprNode>>),
-    // Struct construction. 
+    // Struct construction.
     // Each entry is (field name, optional source span
     // of just that field name, field value).
     MakeStruct(Arc<TyCon>, Vec<(Name, Option<Span>, Arc<ExprNode>)>),
@@ -1729,10 +1732,7 @@ pub fn expr_tyanno(expr: Arc<ExprNode>, ty: Arc<TypeNode>, src: Option<Span>) ->
 
 // Construct a MakeStruct from `(field name, field value)` pairs, with no
 // per-field-name source spans (the entries get `None` spans).
-pub fn expr_make_struct(
-    tc: Arc<TyCon>,
-    fields: Vec<(Name, Arc<ExprNode>)>,
-) -> Arc<ExprNode> {
+pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> Arc<ExprNode> {
     let fields = fields.into_iter().map(|(n, e)| (n, None, e)).collect();
     Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
 }

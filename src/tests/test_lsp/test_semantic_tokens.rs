@@ -119,7 +119,11 @@ mod tests {
                 .and_then(|d| d.as_array())
                 .expect("Response should have result.data");
             let nums: Vec<u64> = data.iter().filter_map(|v| v.as_u64()).collect();
-            assert_eq!(nums.len() % 5, 0, "token data length must be a multiple of 5");
+            assert_eq!(
+                nums.len() % 5,
+                0,
+                "token data length must be a multiple of 5"
+            );
             nums.chunks_exact(5).map(|c| c[3]).collect()
         }
 
@@ -158,7 +162,9 @@ mod tests {
             self.client
                 .shutdown(Duration::from_millis(500))
                 .expect("Failed to shutdown LSP");
-            self.client.finish().expect("Reader thread should not error");
+            self.client
+                .finish()
+                .expect("Reader thread should not error");
         }
     }
 
@@ -172,17 +178,17 @@ mod tests {
         let types = ctx.token_types_with_overlay("main.fix");
 
         let want = [
-            (T_VARIABLE, "local variable"),     // p, s, n, x, y
-            (T_FUNCTION, "global function"),    // println, size, pair
-            (T_STRUCT, "struct type"),          // Point
-            (T_ENUM, "union type"),             // Shape
-            (T_INTERFACE, "trait"),             // Sizer
-            (T_TYPE_PARAMETER, "type variable"),// a, b in `pair`
-            (T_ENUM_MEMBER, "union variant"),   // dot, seg
-            (T_PROPERTY, "field accessor"),     // @x, @y
-            (T_KEYWORD, "keyword"),             // let, type, trait, ...
-            (T_TYPE, "built-in type"),          // I64
-            (T_STRING, "string"),               // "done"
+            (T_VARIABLE, "local variable"),      // p, s, n, x, y
+            (T_FUNCTION, "global function"),     // println, size, pair
+            (T_STRUCT, "struct type"),           // Point
+            (T_ENUM, "union type"),              // Shape
+            (T_INTERFACE, "trait"),              // Sizer
+            (T_TYPE_PARAMETER, "type variable"), // a, b in `pair`
+            (T_ENUM_MEMBER, "union variant"),    // dot, seg
+            (T_PROPERTY, "field accessor"),      // @x, @y
+            (T_KEYWORD, "keyword"),              // let, type, trait, ...
+            (T_TYPE, "built-in type"),           // I64
+            (T_STRING, "string"),                // "done"
             (T_COMMENT, "comment"),
         ];
         for (t, label) in want {
@@ -245,8 +251,8 @@ mod tests {
 
         // Edit a single body line; the type/trait/struct definitions on other
         // lines are untouched.
-        let original = std::fs::read_to_string(ctx.project_dir.join("main.fix"))
-            .expect("read main.fix");
+        let original =
+            std::fs::read_to_string(ctx.project_dir.join("main.fix")).expect("read main.fix");
         let edited = original.replace("let n = p.size;", "let n = p.size; // tweak");
         assert_ne!(original, edited, "the edit should change the buffer");
         ctx.change_text("main.fix", &edited);

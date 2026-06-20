@@ -1,4 +1,3 @@
-use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::ast::deprecation::DeprecationInfo;
 use crate::ast::equality::{Equality, EqualityScheme};
 use crate::ast::expr::ExprNode;
@@ -8,14 +7,20 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
-use crate::ast::types::{is_opaque_tyvar, type_from_tyvar, type_tyvar, Kind, Scheme, AssocType, TyVar, TypeNode};
-use crate::fixstd::builtin::make_boxed_trait;
-use crate::misc::{generate_fresh_varnames, insert_to_map_vec, Map, Set};
+use crate::ast::types::{
+    is_opaque_tyvar, type_from_tyvar, type_tyvar, AssocType, Kind, Scheme, TyVar, TypeNode,
+};
+use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
-use crate::parse::sourcefile::{SourcePos, Span};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext, UnifOrOtherErr};
 use crate::elaboration::typecheckcache;
-use crate::{ast::collect_annotation_tyvars::collect_annotation_tyvars, error::{Error, Errors}};
+use crate::fixstd::builtin::make_boxed_trait;
+use crate::misc::{generate_fresh_varnames, insert_to_map_vec, Map, Set};
+use crate::parse::sourcefile::{SourcePos, Span};
+use crate::{
+    ast::collect_annotation_tyvars::collect_annotation_tyvars,
+    error::{Error, Errors},
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

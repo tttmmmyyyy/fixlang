@@ -104,11 +104,7 @@ mod tests {
         )
     }
 
-    fn fixproj_with_build_and_test(
-        name: &str,
-        build_cmds: &[&str],
-        test_cmds: &[&str],
-    ) -> String {
+    fn fixproj_with_build_and_test(name: &str, build_cmds: &[&str], test_cmds: &[&str]) -> String {
         let joined_build = build_cmds
             .iter()
             .map(|c| format!("  {},", c))
@@ -156,7 +152,12 @@ mod tests {
             &env.proj,
             &fixproj_with_preliminary("b-test", &["[\"echo\", \"hello\"]"]),
         );
-        let out = run_fix(&env, &["build", "--allow-preliminary-commands"], None, false);
+        let out = run_fix(
+            &env,
+            &["build", "--allow-preliminary-commands"],
+            None,
+            false,
+        );
         assert!(out.status.success(), "stderr: {}", stderr_str(&out));
         // No trust file should have been created.
         assert!(env.trust_file_contents().is_none());
@@ -325,10 +326,7 @@ commands_preview = [["echo", "hello"]]
         let env = Env::new();
         write_project(
             &env.proj,
-            &fixproj_with_preliminary(
-                "docs-root-prelim",
-                &["[\"echo\", \"should-not-run\"]"],
-            ),
+            &fixproj_with_preliminary("docs-root-prelim", &["[\"echo\", \"should-not-run\"]"]),
         );
         let out = run_fix(&env, &["docs", "-o", "out"], None, false);
         assert!(
@@ -410,7 +408,11 @@ commands_preview = [["echo", "hello"]]
         let out = run_fix(&env, &["build"], None, false);
         assert!(!out.status.success());
         let err = stderr_str(&out);
-        assert!(err.contains("Failed to parse trust store"), "stderr: {}", err);
+        assert!(
+            err.contains("Failed to parse trust store"),
+            "stderr: {}",
+            err
+        );
         assert!(err.contains("require approval"), "stderr: {}", err);
     }
 

@@ -46,7 +46,6 @@ let m = LLVM<arr.Array::@(j)>;
 and the cost for retaining and releasing an array is saved.
 */
 
-use std::sync::Arc;
 use crate::{
     ast::{
         expr::ExprNode,
@@ -57,6 +56,7 @@ use crate::{
     misc::{Map, Set},
     optimization::rename::{rename_free_name, substitute_free_name},
 };
+use std::sync::Arc;
 
 pub fn create_global_lambda_to_arity_map(prg: &Program) -> Map<FullName, usize> {
     let mut global_lambda_to_arity: Map<FullName, usize> = Map::default();
@@ -101,11 +101,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_var(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -117,11 +113,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_llvm(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -133,11 +125,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_app(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -149,11 +137,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_lam(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -165,11 +149,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_let(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Check if the expression is of the form `let x = {e0} in {e1}`.
         let x = expr.get_let_pat();
         if !x.is_var() {
@@ -242,11 +222,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_if(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -258,11 +234,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_match(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Check if the expression is of the form `match x { y -> {expr} }`.
         let cond = expr.get_match_cond();
         if !cond.is_var() {
@@ -356,11 +328,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_eval(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }
@@ -416,11 +384,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_var(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var = expr.get_var();
 
         // If the target name is shadowed, do nothing
@@ -444,11 +408,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_llvm(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let llvm = expr.get_llvm();
 
         if !self.shadowed.contains(&self.target_name) {
@@ -497,11 +457,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_app(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Check if the applied function is the target name
         if !self.shadowed.contains(&self.target_name) {
             let func = expr.get_app_func();
@@ -548,11 +504,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::Return
     }
 
-    fn end_visit_lam(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -599,11 +551,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::Return
     }
 
-    fn end_visit_let(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -629,11 +577,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_if(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -687,11 +631,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::Return
     }
 
-    fn end_visit_match(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -832,11 +772,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_eval(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
+    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

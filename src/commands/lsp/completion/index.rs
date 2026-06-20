@@ -3,11 +3,11 @@
 // of each global's scheme). Looking up "globals whose receiver could
 // fit this TyCon" is a single hashmap probe.
 
-use std::sync::Arc;
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
 use crate::ast::types::{TyCon, TypeNode};
 use crate::misc::{Map, Set};
+use std::sync::Arc;
 
 /// Buckets: the FullName of every global value whose receiver
 /// position can plausibly be `tc`, indexed by `tc`. Globals whose

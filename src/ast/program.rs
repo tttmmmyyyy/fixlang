@@ -8,12 +8,9 @@ use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
-use crate::ast::types::{is_opaque_tyvar, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, AssocType, TyCon, TyConInfo, TyConVariant, TypeNode};
-use crate::fixstd::builtin::{
-    boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
-    struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
-    struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
-    union_new,
+use crate::ast::types::{
+    is_opaque_tyvar, AssocType, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, TyCon, TyConInfo,
+    TyConVariant, TypeNode,
 };
 use crate::configuration::{Configuration, DeprecationMode, SubCommand};
 use crate::constants::{
@@ -23,14 +20,22 @@ use crate::constants::{
     STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
     TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
 };
+use crate::elaboration::desugar_opaque::{
+    remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
+};
+use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
+use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::error::{panic_if_err, Error, Errors, WARN_DEPRECATED};
+use crate::fixstd::builtin::{
+    boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
+    struct_act_const, struct_act_identity, struct_act_tuple2, struct_get, struct_mod,
+    struct_plug_in, struct_punch, struct_set, tuple_defn, union_as, union_is, union_mod_function,
+    union_new,
+};
 use crate::graph::Graph;
 use crate::misc::{collect_results, to_absolute_path, Map, Set};
-use crate::elaboration::desugar_opaque::{remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type};
-use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
-use crate::printer::Text;
 use crate::parse::sourcefile::{SourcePos, Span};
-use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
+use crate::printer::Text;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
@@ -177,7 +182,7 @@ impl Symbol {
 pub struct GlobalValueDecl {
     pub name: FullName,
     pub ty: Arc<Scheme>,
-    // This is the left hand side of the declaration of this value, 
+    // This is the left hand side of the declaration of this value,
     // e.g., `main` in `main : IO ()`.
     pub src: Option<Span>,
 }
@@ -187,7 +192,7 @@ pub struct GlobalValueDecl {
 pub struct GlobalValueDefn {
     pub name: FullName,
     pub expr: Arc<ExprNode>,
-    // This is the left hand side of the definition of this value, 
+    // This is the left hand side of the definition of this value,
     // e.g., `main` in `main = println("Hello World")`.
     pub src: Option<Span>,
 }
@@ -202,16 +207,16 @@ pub struct GlobalValue {
     // The expression or implementation of this value.
     pub expr: SymbolExpr,
     // Source code where this value is declared.
-    // 
-    // This is the left hand side of the declaration of this value, 
+    //
+    // This is the left hand side of the declaration of this value,
     // e.g., `main` in `main : IO ()`.
     //
-    // For trait methods, this is the source code for the trait method definition (declaration), 
+    // For trait methods, this is the source code for the trait method definition (declaration),
     // not the implementation.
     pub decl_src: Option<Span>,
     // The source code position of the left hand side of the definition of this value.
     // For example, if there is a definition `main = println("Hello World")`, this is the position of `main`.
-    // If the definition is written together with the declaration, e.g., `main : IO () = println("Hello World")`, 
+    // If the definition is written together with the declaration, e.g., `main : IO () = println("Hello World")`,
     // this is the same as `decl_src`.
     // For trait members, this is also the same as `decl_src`.
     pub defn_src: Option<Span>,
@@ -868,14 +873,13 @@ impl Program {
     /// value, attaching the given user-facing message to `target`. The pragma
     /// is processed during elaboration just like a source-level pragma.
     pub fn add_deprecation(&mut self, target: FullName, message: String) {
-        self.deprecation_statements
-            .push(DeprecationStatement {
-                target_path: target,
-                target_name_src: None,
-                origin_namespace: NameSpace::local(),
-                message,
-                src: None,
-            });
+        self.deprecation_statements.push(DeprecationStatement {
+            target_path: target,
+            target_name_src: None,
+            origin_namespace: NameSpace::local(),
+            message,
+            src: None,
+        });
     }
 
     // Add a compiler-defined method.
@@ -1148,8 +1152,7 @@ impl Program {
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
-        let target_set: Option<Set<&FullName>> =
-            target_symbols.map(|s| s.iter().collect());
+        let target_set: Option<Set<&FullName>> = target_symbols.map(|s| s.iter().collect());
 
         // Names of global values to be checked.
         let mut checked_names: Vec<FullName> = vec![];
@@ -1443,7 +1446,8 @@ impl Program {
         // Specialize the typed expression to `sym.ty` and resolve opaque types.
         let mut tc = tc.clone();
         tc.assert_freshness();
-        let expr_ty = resolve_opaque_type_in_type(te.expr.type_.as_ref().unwrap(), &self.opaque_types);
+        let expr_ty =
+            resolve_opaque_type_in_type(te.expr.type_.as_ref().unwrap(), &self.opaque_types);
         tc.unify(&expr_ty, &sym.ty).ok().unwrap();
         for eq in &te.equalities {
             tc.unify(&eq.lhs(), &eq.value).ok().unwrap();
@@ -1719,7 +1723,11 @@ impl Program {
                         let scm = trait_impl.member_scheme(&member.name, trait_);
                         let scm_via_defn = trait_impl.member_scheme_by_defn(&member.name, trait_);
                         let expr = trait_impl.member_expr(&member.name);
-                        let lhs_srcs = trait_impl.member_lhs_srcs.get(&member.name).cloned().unwrap_or_default();
+                        let lhs_srcs = trait_impl
+                            .member_lhs_srcs
+                            .get(&member.name)
+                            .cloned()
+                            .unwrap_or_default();
                         member_impls.push(TraitMemberImpl {
                             scm,
                             scm_via_defn,
@@ -2663,10 +2671,7 @@ impl Program {
         for stmt in &self.export_statements {
             if let Some(span) = &stmt.value_name_src {
                 if span.includes_pos_lsp(pos) {
-                    return Some(EndNode::Expr(
-                        Var::create(stmt.value_name.clone()),
-                        None,
-                    ));
+                    return Some(EndNode::Expr(Var::create(stmt.value_name.clone()), None));
                 }
             }
         }
@@ -2674,10 +2679,7 @@ impl Program {
         for stmt in &self.deprecation_statements {
             if let Some(span) = &stmt.target_name_src {
                 if span.includes_pos_lsp(pos) {
-                    return Some(EndNode::Expr(
-                        Var::create(stmt.target_path.clone()),
-                        None,
-                    ));
+                    return Some(EndNode::Expr(Var::create(stmt.target_path.clone()), None));
                 }
             }
         }
@@ -2807,4 +2809,3 @@ pub enum EndNode {
     // definition or on a Pattern::Union variant-name use.
     Variant(TyCon, Name),
 }
-

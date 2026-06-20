@@ -253,7 +253,11 @@ pub fn test_opaque_in_impl_annotation() {
         main : IO ();
         main = pure();
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "Unknown type variable `?it`");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Unknown type variable `?it`",
+    );
 }
 
 // ============================================================
@@ -289,7 +293,11 @@ pub fn test_opaque_in_impl_annotation_with_sig() {
         main : IO ();
         main = pure();
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "Unknown type variable `?iter`");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Unknown type variable `?iter`",
+    );
 }
 
 // ============================================================
@@ -585,7 +593,11 @@ pub fn test_opaque_in_type_defn() {
         main : IO ();
         main = pure();
     "#;
-    test_source_fail(&source, Configuration::develop_mode(), "is not allowed in a type definition");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "is not allowed in a type definition",
+    );
 }
 
 #[test]
@@ -601,7 +613,11 @@ pub fn test_opaque_in_trait_defn() {
         main : IO ();
         main = pure();
     "#;
-    test_source_fail(&source, Configuration::develop_mode(), "is not allowed in a trait definition");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "is not allowed in a trait definition",
+    );
 }
 
 #[test]
@@ -650,7 +666,11 @@ pub fn test_opaque_equality_non_tyvar_formal_param() {
         main : IO ();
         main = pure();
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "must be type variables");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "must be type variables",
+    );
 }
 
 #[test]
@@ -674,7 +694,11 @@ pub fn test_opaque_equality_formal_param_in_ty_body() {
         main : IO ();
         main = pure();
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "must not appear elsewhere in the type signature");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "must not appear elsewhere in the type signature",
+    );
 }
 
 // ============================================================
@@ -755,8 +779,6 @@ pub fn test_opaque_trait_not_satisfied_at_use_site() {
     "#;
     test_source_fail(&source, Configuration::develop_mode(), "");
 }
-
-
 
 // ============================================================
 // 2-5. Opaque type on equality RHS
@@ -978,7 +1000,11 @@ pub fn test_opaque_impl_trait_constraint_not_satisfied_global() {
         main : IO ();
         main = pure();
     "#;
-    test_source_fail(&source, Configuration::develop_mode(), "String : Std::Iterator");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "String : Std::Iterator",
+    );
 }
 
 #[test]
@@ -1015,7 +1041,11 @@ pub fn test_opaque_impl_trait_constraint_not_satisfied_method() {
         main : IO ();
         main = pure();
     "#;
-    test_source_fail(&source, Configuration::develop_mode(), "String : Std::Iterator");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "String : Std::Iterator",
+    );
 }
 
 #[test]
@@ -1112,4 +1142,3 @@ pub fn test_opaque_regression_assoc_ty_in_resolved_rhs() {
     "#;
     test_source(&source, Configuration::develop_mode());
 }
-

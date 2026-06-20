@@ -4,7 +4,11 @@
 mod integration_tests {
     use crate::constants::LOCK_FILE_PATH;
     use crate::tests::test_util::{copy_dir_recursive, install_fix};
-    use std::{fs, path::{Path, PathBuf}, process::Command};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        process::Command,
+    };
     use tempfile::TempDir;
 
     /// Initializes a local upstream git repo at `repo_dir` containing a minimal
@@ -37,8 +41,7 @@ mod integration_tests {
              files = [\"lib.fix\"]\n",
             version
         );
-        fs::write(repo_dir.join("fixproj.toml"), proj_toml)
-            .expect("Failed to write fixproj.toml");
+        fs::write(repo_dir.join("fixproj.toml"), proj_toml).expect("Failed to write fixproj.toml");
         fs::write(
             repo_dir.join("lib.fix"),
             "module AnnotatedMock;\n\
@@ -68,10 +71,7 @@ mod integration_tests {
         let url = upstream_dir.to_string_lossy().replace('\\', "/");
         let dep_line = match (tag, version) {
             (Some(t), None) => format!("git = {{ url = \"{}\", tag = \"{}\" }}", url, t),
-            (None, Some(v)) => format!(
-                "version = \"{}\"\ngit = {{ url = \"{}\" }}",
-                v, url
-            ),
+            (None, Some(v)) => format!("version = \"{}\"\ngit = {{ url = \"{}\" }}", v, url),
             _ => panic!("write_consumer_project: pass exactly one of tag/version"),
         };
         let proj_toml = format!(
@@ -469,8 +469,8 @@ mod integration_tests {
         let (_upstream_tmp, _consumer_tmp, consumer_dir) =
             build_consumer_against_annotated_tag("1.0.0", None, Some("1.0"));
 
-        let lock_content = fs::read_to_string(consumer_dir.join(LOCK_FILE_PATH))
-            .expect("Lock file not found");
+        let lock_content =
+            fs::read_to_string(consumer_dir.join(LOCK_FILE_PATH)).expect("Lock file not found");
         assert!(
             lock_content.contains("version = \"1.0.0\""),
             "Lock file should show resolved version 1.0.0:\n{}",

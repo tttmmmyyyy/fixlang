@@ -286,10 +286,7 @@ fn read_choice() -> Choice {
 // the trust store immediately. A `No` answer aborts the whole build without prompting
 // for any remaining projects. Trust-store write failures are downgraded to a warning so
 // the build can still proceed as a one-time approval.
-fn prompt_and_record(
-    pending: &[Classified],
-    trust_store: &mut TrustStore,
-) -> Result<(), Errors> {
+fn prompt_and_record(pending: &[Classified], trust_store: &mut TrustStore) -> Result<(), Errors> {
     // Regroup pending entries by source so we issue one prompt per project.
     let by_source = group_classified_by_source(pending);
     // Resolve the trust-store path once so the prompt can show it to the user as part
@@ -302,7 +299,9 @@ fn prompt_and_record(
         // Header line that sets the context for every per-project prompt.
         eprintln!(
             "{}",
-            prompt_style("The following project requests your approval to run preliminary commands:")
+            prompt_style(
+                "The following project requests your approval to run preliminary commands:"
+            )
         );
         display_prompt_block(sg, &trust_path);
         match read_choice() {
@@ -509,9 +508,7 @@ fn display_non_interactive_error(pending: &[Classified]) {
     }
     eprintln!("To approve:");
     eprintln!("  - Run fix in an interactive terminal and answer the prompt.");
-    eprintln!(
-        "  - Or pass --allow-preliminary-commands to bypass for this invocation only."
-    );
+    eprintln!("  - Or pass --allow-preliminary-commands to bypass for this invocation only.");
 }
 
 // Render the full prompt block for a single project's pending approval, including the

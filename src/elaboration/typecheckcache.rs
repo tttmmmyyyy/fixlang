@@ -1,3 +1,7 @@
+use crate::{
+    ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
+    constants::TYPE_CHECK_CACHE_PATH, elaboration::touch_directory, misc::warn_msg,
+};
 use std::{
     collections::{BTreeMap, VecDeque},
     fs::File,
@@ -5,10 +9,6 @@ use std::{
     panic::RefUnwindSafe,
     path::PathBuf,
     sync::{Arc, Mutex},
-};
-use crate::{
-    ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
-    constants::TYPE_CHECK_CACHE_PATH, elaboration::touch_directory, misc::warn_msg,
 };
 
 pub type SharedTypeCheckCache = Arc<dyn TypeCheckCache + Send + Sync>;

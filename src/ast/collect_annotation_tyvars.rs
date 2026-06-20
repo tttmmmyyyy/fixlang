@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::{
     ast::{
         expr::{Expr, ExprNode},
@@ -8,6 +7,7 @@ use crate::{
     },
     parse::sourcefile::Span,
 };
+use std::sync::Arc;
 
 // Collect type variables used in type annotations within the expr.
 pub fn collect_annotation_tyvars(expr: &Arc<ExprNode>) -> Vec<(Arc<TyVar>, Option<Span>)> {

@@ -60,10 +60,7 @@ pub enum LexTokenKind {
 /// Shared by the lexer and the semantic-tokens overlay so they agree on what
 /// the base layer already colors as a property.
 pub fn is_accessor_name(s: &str) -> bool {
-    s.starts_with('@')
-        || s.starts_with("set_")
-        || s.starts_with("mod_")
-        || s.starts_with("act_")
+    s.starts_with('@') || s.starts_with("set_") || s.starts_with("mod_") || s.starts_with("act_")
 }
 
 /// One lexical token: a half-open byte range `[start, end)` into the source
@@ -324,10 +321,7 @@ mod tests {
         // token; splitting per line for the LSP happens in the encoder.
         assert_eq!(
             lex("/* a\n b */x"),
-            vec![
-                (Comment, "/* a\n b */".into()),
-                (Variable, "x".into()),
-            ]
+            vec![(Comment, "/* a\n b */".into()), (Variable, "x".into()),]
         );
     }
 
@@ -369,17 +363,11 @@ mod tests {
         // Index-syntax field / tuple accessors.
         assert_eq!(
             lex("arr[^field]"),
-            vec![
-                (Variable, "arr".into()),
-                (Property, "^field".into()),
-            ]
+            vec![(Variable, "arr".into()), (Property, "^field".into()),]
         );
         assert_eq!(
             lex("t[^0]"),
-            vec![
-                (Variable, "t".into()),
-                (Property, "^0".into()),
-            ]
+            vec![(Variable, "t".into()), (Property, "^0".into()),]
         );
         // A plain identifier that merely contains, but does not start with, an
         // accessor prefix stays a variable.
@@ -403,7 +391,10 @@ mod tests {
     /// input rather than failing.
     #[test]
     fn unterminated_block_comment_is_tolerated() {
-        assert_eq!(lex("/* never closed"), vec![(Comment, "/* never closed".into())]);
+        assert_eq!(
+            lex("/* never closed"),
+            vec![(Comment, "/* never closed".into())]
+        );
     }
 
     /// Verifies that mid-edit garbage never panics and always yields ordered,
@@ -445,8 +436,10 @@ mod tests {
         // tokens after them are sliced correctly.
         let src = "x = \"漢字\" + y";
         let toks = lex_tokens(src);
-        let rendered: Vec<(LexTokenKind, &str)> =
-            toks.iter().map(|t| (t.kind, &src[t.start..t.end])).collect();
+        let rendered: Vec<(LexTokenKind, &str)> = toks
+            .iter()
+            .map(|t| (t.kind, &src[t.start..t.end]))
+            .collect();
         assert_eq!(
             rendered,
             vec![

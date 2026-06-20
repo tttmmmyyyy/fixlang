@@ -15,10 +15,6 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::type_tycon;
 use crate::ast::types::TyCon;
 use crate::ast::types::TypeNode;
-use crate::fixstd::builtin::make_dynamic_object_ty;
-use crate::fixstd::builtin::make_iostate_ty;
-use crate::fixstd::builtin::make_tuple_ty;
-use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::configuration::Configuration;
 use crate::constants::pthread_once_init_flag_type;
 use crate::constants::pthread_once_init_flag_value;
@@ -40,6 +36,13 @@ use crate::constants::REFCNT_STATE_THREADED;
 use crate::constants::TRAVERSER_WORK_RELEASE;
 use crate::error::panic_with_msg;
 use crate::error::panic_with_msg_src;
+use crate::fixstd::builtin::make_dynamic_object_ty;
+use crate::fixstd::builtin::make_iostate_ty;
+use crate::fixstd::builtin::make_tuple_ty;
+use crate::fixstd::builtin::run_io_or_ios_runner;
+use crate::fixstd::runtime::RUNTIME_ABORT;
+use crate::fixstd::runtime::RUNTIME_EPRINTLN;
+use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
 use crate::misc::Set;
@@ -55,9 +58,6 @@ use crate::object::traverser_work_type;
 use crate::object::ty_to_debug_embedded_ty;
 use crate::object::ty_to_object_ty;
 use crate::object::ObjectFieldType;
-use crate::fixstd::runtime::RUNTIME_ABORT;
-use crate::fixstd::runtime::RUNTIME_EPRINTLN;
-use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::parse::sourcefile::SourceFile;
 use crate::parse::sourcefile::Span;
 use either::Either;
@@ -234,11 +234,7 @@ impl<'c> Object<'c> {
     }
 
     // Get the pointer to the field of an boxed object.
-    pub fn gep_boxed<'m>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        field_idx: u32,
-    ) -> PointerValue<'c> {
+    pub fn gep_boxed<'m>(&self, gc: &mut Generator<'c, 'm>, field_idx: u32) -> PointerValue<'c> {
         assert!(self.ty.is_box(gc.type_env()));
         let struct_ty = self.struct_ty(gc);
         let ptr = self.value.into_pointer_value();
@@ -337,10 +333,7 @@ impl<'c> Object<'c> {
     }
 
     // Get the pointer to traverser function from a dynamic object.
-    pub fn extract_trav_from_dynamic<'m>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-    ) -> PointerValue<'c> {
+    pub fn extract_trav_from_dynamic<'m>(&self, gc: &mut Generator<'c, 'm>) -> PointerValue<'c> {
         assert!(self.ty.is_dynamic());
         self.extract_field(gc, DYNAMIC_OBJ_TRAVARSER_IDX)
             .into_pointer_value()
@@ -357,11 +350,7 @@ impl<'c> Object<'c> {
 
     // Get the pointer to the field of an boxed object.
     // Can be used only for boxed objects.
-    pub fn ptr_to_field<'m>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        field_idx: u32,
-    ) -> PointerValue<'c> {
+    pub fn ptr_to_field<'m>(&self, gc: &mut Generator<'c, 'm>, field_idx: u32) -> PointerValue<'c> {
         assert!(self.is_box(&gc.type_env));
         let ty = self.struct_ty(gc);
         self.ptr_to_field_as(gc, ty, field_idx)
@@ -1693,8 +1682,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             Expr::TyAnno(e, _) => self.eval_expr(e.clone(), tail),
             Expr::MakeStruct(_, fields) => {
                 let struct_ty = expr.type_.clone().unwrap();
-                let fields_pairs: Vec<(Name, Arc<ExprNode>)> =
-                    fields.iter().map(|(n, _, e)| (n.clone(), e.clone())).collect();
+                let fields_pairs: Vec<(Name, Arc<ExprNode>)> = fields
+                    .iter()
+                    .map(|(n, _, e)| (n.clone(), e.clone()))
+                    .collect();
                 self.eval_make_struct(fields_pairs, struct_ty, tail)
             }
             Expr::ArrayLit(elems) => self.eval_array_lit(elems, expr.type_.clone().unwrap(), tail),
@@ -1845,7 +1836,11 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Create debug info subprogram.
-    pub fn create_debug_subprogram<'a>(&'a self, fn_name: &str, span: Option<Span>) -> DISubprogram<'a> {
+    pub fn create_debug_subprogram<'a>(
+        &'a self,
+        fn_name: &str,
+        span: Option<Span>,
+    ) -> DISubprogram<'a> {
         let (di_builder, di_compile_unit) = self.debug_info.as_ref().unwrap();
         let line_no = if let Some(span) = span.as_ref() {
             span.start_line_no()

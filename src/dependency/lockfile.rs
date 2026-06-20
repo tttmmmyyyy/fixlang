@@ -1,21 +1,26 @@
+use crate::{
+    configuration::{BuildConfigType, Configuration},
+    constants::{
+        EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH,
+        PROJECT_FILE_PATH,
+    },
+    dependency::resolver::{self, Dependency, Package, PackageName},
+    error::Errors,
+    metafiles::project_file::{
+        ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName, ProjectOrigin,
+    },
+    misc::info_msg,
+    misc::{to_absolute_path, warn_msg},
+};
 use core::panic;
+use git2::{build::CheckoutBuilder, Repository};
+use semver::Version;
+use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use git2::{build::CheckoutBuilder, Repository};
-use semver::Version;
-use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
-use crate::{
-    configuration::{BuildConfigType, Configuration},
-    constants::{EXTERNAL_PROJ_INSTALL_PATH, LOCK_FILE_LSP_PATH, LOCK_FILE_PATH, LOCK_FILE_TEST_PATH, PROJECT_FILE_PATH},
-    dependency::resolver::{self, Dependency, Package, PackageName},
-    error::Errors,
-    misc::info_msg,
-    misc::{to_absolute_path, warn_msg},
-    metafiles::project_file::{ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName, ProjectOrigin},
-};
 
 #[derive(Clone, Copy)]
 pub enum LockFileType {
@@ -509,8 +514,7 @@ impl ProjectInfo {
         checkout_opts.force();
         repo.checkout_tree(&commit.into_object(), Some(&mut checkout_opts))
             .map_err(|e| Errors::from_msg_err("Failed to checkout commit", e))?;
-        let proj_file =
-            ProjectFile::read_file(&repo.workdir().unwrap().join(PROJECT_FILE_PATH))?;
+        let proj_file = ProjectFile::read_file(&repo.workdir().unwrap().join(PROJECT_FILE_PATH))?;
 
         let version = proj_file.general.version();
 
@@ -527,10 +531,7 @@ impl ProjectInfo {
 }
 
 // Resolve a rev or tag specification to a git OID.
-fn resolve_git_ref(
-    repo: &Repository,
-    git: &ProjectFileDependencyGit,
-) -> Result<git2::Oid, Errors> {
+fn resolve_git_ref(repo: &Repository, git: &ProjectFileDependencyGit) -> Result<git2::Oid, Errors> {
     if let Some(rev) = &git.rev {
         let obj = repo
             .revparse_single(rev)
@@ -538,14 +539,11 @@ fn resolve_git_ref(
         Ok(obj.id())
     } else if let Some(tag) = &git.tag {
         let refname = format!("refs/tags/{}", tag);
-        let reference = repo.find_reference(&refname).map_err(|e| {
-            Errors::from_msg(format!("Failed to find tag \"{}\": {}", tag, e))
-        })?;
+        let reference = repo
+            .find_reference(&refname)
+            .map_err(|e| Errors::from_msg(format!("Failed to find tag \"{}\": {}", tag, e)))?;
         let obj = reference.peel_to_commit().map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to peel tag \"{}\" to commit: {}",
-                tag, e
-            ))
+            Errors::from_msg(format!("Failed to peel tag \"{}\" to commit: {}", tag, e))
         })?;
         Ok(obj.id())
     } else {

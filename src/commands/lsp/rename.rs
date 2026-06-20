@@ -7,16 +7,8 @@
 // check, refusal of symbols defined outside the project, and refusal of
 // auto-generated accessors clicked directly.
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::PathBuf;
-use lsp_types::{
-    PrepareRenameResponse, RenameParams, TextDocumentPositionParams, TextEdit, Uri,
-    WorkspaceEdit,
-};
-use serde::Serialize;
 use super::references::{
-    find_assoc_type_references, find_global_value_references, find_field_occurrences,
+    find_assoc_type_references, find_field_occurrences, find_global_value_references,
     find_trait_references, find_type_references,
 };
 use super::server::{send_response, DiagnosticsResult, LatestContent};
@@ -31,10 +23,15 @@ use crate::ast::traits::TraitId;
 use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::TyCon;
 use crate::misc::{to_absolute_path, Map};
-use crate::parse::parser::{
-    parse_namespace_items_in_fullname, validate_token_str, TokenCategory,
-};
+use crate::parse::parser::{parse_namespace_items_in_fullname, validate_token_str, TokenCategory};
 use crate::parse::sourcefile::{SourcePos, Span};
+use lsp_types::{
+    PrepareRenameResponse, RenameParams, TextDocumentPositionParams, TextEdit, Uri, WorkspaceEdit,
+};
+use serde::Serialize;
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 // LSP `ResponseError` shape: `{ code, message }`.
@@ -153,9 +150,9 @@ pub(super) fn handle_rename(
     if !rename_target_supported(&node) {
         send_response(
             id,
-            Err::<(), _>(ResponseError::invalid_request(
-                rename_unsupported_message(&node),
-            )),
+            Err::<(), _>(ResponseError::invalid_request(rename_unsupported_message(
+                &node,
+            ))),
         );
         return;
     }
@@ -205,10 +202,7 @@ pub(super) fn handle_rename(
                 };
                 let mut spans = vec![occ.definition];
                 spans.extend(occ.uses);
-                spans
-                    .into_iter()
-                    .map(|s| (s, new_name.clone()))
-                    .collect()
+                spans.into_iter().map(|s| (s, new_name.clone())).collect()
             } else {
                 find_global_value_references(program, name, true)
                     .into_iter()
@@ -238,12 +232,10 @@ pub(super) fn handle_rename(
             }
         }
         EndNode::Trait(trait_id) => collect_trait_rename_edits(program, trait_id, new_name),
-        EndNode::AssocType(assoc_type) => {
-            find_assoc_type_references(program, assoc_type, true)
-                .into_iter()
-                .map(|s| (s, new_name.clone()))
-                .collect()
-        }
+        EndNode::AssocType(assoc_type) => find_assoc_type_references(program, assoc_type, true)
+            .into_iter()
+            .map(|s| (s, new_name.clone()))
+            .collect(),
         EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
             find_field_occurrences(program, tc, name, true)
                 .into_iter()
@@ -320,7 +312,10 @@ fn build_workspace_edit(edits: Vec<(Span, String)>, cdir: &PathBuf) -> Workspace
             Err(_) => continue,
         };
         let range = span_to_range(&span);
-        by_uri.entry(uri).or_default().push(TextEdit { range, new_text });
+        by_uri
+            .entry(uri)
+            .or_default()
+            .push(TextEdit { range, new_text });
     }
     // Deduplicate (range, new_text) pairs per URI.
     for edits in by_uri.values_mut() {
@@ -433,14 +428,7 @@ fn collect_type_rename_edits(
 
     // (C) inline qualified Var references (`Point::@x`, `[^Point::x]`).
     for (_n, gv) in &program.global_values {
-        collect_inline_qualified_edits(
-            program,
-            &gv.expr,
-            &auto_ns,
-            type_old,
-            new_name,
-            &mut edits,
-        );
+        collect_inline_qualified_edits(program, &gv.expr, &auto_ns, type_old, new_name, &mut edits);
     }
 
     // Drop any individual edit whose span is fully contained in a
@@ -450,9 +438,9 @@ fn collect_type_rename_edits(
     let mut filtered: Vec<(Span, String)> = edits
         .into_iter()
         .filter(|(s, _)| {
-            !rebuild_spans
-                .iter()
-                .any(|rb| rb.input.file_path == s.input.file_path && rb.start <= s.start && s.end <= rb.end)
+            !rebuild_spans.iter().any(|rb| {
+                rb.input.file_path == s.input.file_path && rb.start <= s.start && s.end <= rb.end
+            })
         })
         .collect();
     filtered.extend(rebuild_edits);
@@ -491,12 +479,8 @@ fn collect_import_edits_for_type(
     rebuilt_stmt_spans: &mut Vec<(Span, String)>,
 ) {
     let module = &stmt.module.0;
-    let stmt_classifications = scan_import_tree_for_type(
-        program,
-        auto_ns,
-        &[module.clone()],
-        &stmt.items,
-    );
+    let stmt_classifications =
+        scan_import_tree_for_type(program, auto_ns, &[module.clone()], &stmt.items);
     let stmt_classifications_hiding =
         scan_import_tree_for_type(program, auto_ns, &[module.clone()], &stmt.hiding);
     let any_mixed = stmt_classifications
@@ -528,7 +512,10 @@ fn collect_import_edits_for_type(
         }
     } else {
         // Emit individual NameSpace name-span edits for all-auto nodes.
-        for c in stmt_classifications.iter().chain(stmt_classifications_hiding.iter()) {
+        for c in stmt_classifications
+            .iter()
+            .chain(stmt_classifications_hiding.iter())
+        {
             if c.classification == NamespaceClassification::AllAuto {
                 if let Some(span) = &c.name_span {
                     edits.push((span.clone(), type_new.clone()));
@@ -693,7 +680,11 @@ fn classify_child(
                 .get(&full)
                 .map(|gv| gv.compiler_defined_method)
                 .unwrap_or(false);
-            if is_auto { (true, false) } else { (false, true) }
+            if is_auto {
+                (true, false)
+            } else {
+                (false, true)
+            }
         }
         // Nested types or namespaces inside the auto-namespace are unusual
         // — be conservative and treat them as user items so they're not
@@ -810,8 +801,7 @@ fn collect_inline_qualified_trait_edits(
     new_name: &Name,
     edits: &mut Vec<(Span, String)>,
 ) {
-    let predicate =
-        |name: &FullName| -> bool { is_method_of_trait(program, trait_id, name) };
+    let predicate = |name: &FullName| -> bool { is_method_of_trait(program, trait_id, name) };
     walk_symbol_expr_for_inline_qualified(expr, &predicate, trait_old, new_name, edits);
 }
 
@@ -819,11 +809,7 @@ fn collect_inline_qualified_trait_edits(
 // belonging to `trait_id`. Reuses the same convention the codebase uses
 // elsewhere: a trait method's `GlobalValue` is keyed under the namespace
 // `<trait_ns>::<trait_name>` with the bare member name as its leaf.
-fn is_method_of_trait(
-    program: &Program,
-    trait_id: &TraitId,
-    member_fullname: &FullName,
-) -> bool {
+fn is_method_of_trait(program: &Program, trait_id: &TraitId, member_fullname: &FullName) -> bool {
     let Some((owner_trait, member_name)) = TraitId::split_member_fullname(member_fullname) else {
         return false;
     };
@@ -854,13 +840,7 @@ fn walk_symbol_expr_for_inline_qualified(
         }
         SymbolExpr::Method(impls) => {
             for impl_ in impls {
-                walk_expr_for_inline_qualified(
-                    &impl_.expr.expr,
-                    pick,
-                    old_name,
-                    new_name,
-                    edits,
-                );
+                walk_expr_for_inline_qualified(&impl_.expr.expr, pick, old_name, new_name, edits);
             }
         }
     }
@@ -880,8 +860,7 @@ fn walk_expr_for_inline_qualified(
         Expr::Var(v) => {
             if pick(&v.name) {
                 if let Some(span) = &expr.source {
-                    if let Some(edit) = extract_inline_qualified_edit(span, old_name, new_name)
-                    {
+                    if let Some(edit) = extract_inline_qualified_edit(span, old_name, new_name) {
                         edits.push(edit);
                     }
                 }
@@ -1150,4 +1129,3 @@ fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Optio
         EndNode::Module(_) => None,
     }
 }
-

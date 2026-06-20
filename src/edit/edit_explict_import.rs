@@ -4,14 +4,16 @@
 use crate::ast::import::ImportStatement;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::Program;
-use crate::commands::lsp::edit_import::{create_text_edit_to_insert_imports, create_text_edits_to_erase_imports};
+use crate::commands::lsp::edit_import::{
+    create_text_edit_to_insert_imports, create_text_edits_to_erase_imports,
+};
 use crate::commands::lsp::server::run_diagnostics;
 use crate::configuration::BuildConfigType;
 use crate::edit::edit_util::apply_text_edits;
-use crate::error::Errors;
-use crate::misc::{info_msg, to_absolute_path};
-use crate::metafiles::project_file::ProjectFile;
 use crate::elaboration::typecheckcache::MemoryCache;
+use crate::error::Errors;
+use crate::metafiles::project_file::ProjectFile;
+use crate::misc::{info_msg, to_absolute_path};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;

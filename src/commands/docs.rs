@@ -1,5 +1,4 @@
 use crate::ast::program::SymbolExpr::Method;
-use std::sync::Arc;
 use crate::{
     ast::{
         name::{FullName, Name, NameSpace},
@@ -8,18 +7,19 @@ use crate::{
         typedecl::Field,
         types::{kind_star, Kind, TyCon, TyConVariant, TyVar},
     },
+    configuration::{BuildConfigType, Configuration, DocsConfig, SubCommand},
     constants::{
         STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_SETTER_SYMBOL,
         UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
     },
-    elaboration::elaborate_via_config,
-    configuration::{BuildConfigType, Configuration, DocsConfig, SubCommand},
     dependency::lockfile::LockFileType,
+    elaboration::elaborate_via_config,
     error::Errors,
-    misc::{info_msg, to_absolute_path},
     metafiles::project_file::ProjectFile,
+    misc::{info_msg, to_absolute_path},
     parse::sourcefile::Span,
 };
+use std::sync::Arc;
 
 pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> {
     info_msg("Loading source files...");

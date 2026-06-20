@@ -10,9 +10,7 @@ use super::util::{get_current_dir, span_to_location};
 use crate::ast::types::{TyConInfo, TyConVariant};
 use crate::misc::to_absolute_path;
 use crate::parse::sourcefile::Span;
-use lsp_types::{
-    SymbolInformation, SymbolKind, WorkspaceSymbolParams, WorkspaceSymbolResponse,
-};
+use lsp_types::{SymbolInformation, SymbolKind, WorkspaceSymbolParams, WorkspaceSymbolResponse};
 use std::path::PathBuf;
 
 /// Responds to an LSP `workspace/symbol` request with the user-defined
@@ -28,10 +26,7 @@ pub(super) fn handle_workspace_symbol(
     let cdir = match get_current_dir() {
         Some(d) => d,
         None => {
-            send_response(
-                id,
-                Ok::<_, ()>(WorkspaceSymbolResponse::Flat(Vec::new())),
-            );
+            send_response(id, Ok::<_, ()>(WorkspaceSymbolResponse::Flat(Vec::new())));
             return;
         }
     };

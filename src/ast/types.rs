@@ -7,26 +7,26 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
-use crate::fixstd::builtin::{
-    get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
-    is_funptr_tycon, make_array_tycon, make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon,
-    make_iostate_name, make_tuple_name_abs,
-};
 use crate::constants::{
     TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
     TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
+use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
+use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
+use crate::fixstd::builtin::{
+    get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
+    is_funptr_tycon, make_array_tycon, make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon,
+    make_iostate_name, make_tuple_name_abs,
+};
 use crate::generator::Generator;
 use crate::misc::collect_results;
 use crate::misc::number_to_varname;
 use crate::misc::Map;
 use crate::misc::Set;
-use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::object::{ty_to_object_ty, ObjectType};
 use crate::parse::sourcefile::{SourcePos, Span};
-use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use core::panic;
 use inkwell::context::Context;
 use inkwell::types::{BasicType, BasicTypeEnum, StructType};
@@ -106,7 +106,10 @@ impl AssocType {
     pub fn global_to_absolute(&self) -> AssocType {
         let mut name = self.name.clone();
         name.global_to_absolute();
-        AssocType { name, src: self.src.clone() }
+        AssocType {
+            name,
+            src: self.src.clone(),
+        }
     }
 }
 
@@ -705,8 +708,10 @@ impl TypeNode {
                             }
                             let (assoc_ty_args, following_args) = args.split_at(arity);
                             let assoc_ty_name_src = app_seq[0].get_source().clone();
-                            let last_assoc_arg_src = assoc_ty_args.last().unwrap().get_source().clone();
-                            let assoc_ty_span = Span::unite_opt(&assoc_ty_name_src, &last_assoc_arg_src);
+                            let last_assoc_arg_src =
+                                assoc_ty_args.last().unwrap().get_source().clone();
+                            let assoc_ty_span =
+                                Span::unite_opt(&assoc_ty_name_src, &last_assoc_arg_src);
                             let mut assoc_ty = type_assocty(
                                 AssocType {
                                     name: assoc_ty_name,
@@ -1895,7 +1900,11 @@ impl Scheme {
         // If the right side of an equality contains an opaque type variable,
         // then the equality must be on an opaque type variable (i.e., args[0] is an opaque tyvar).
         for eq in &self.equalities {
-            let rhs_has_opaque = eq.value.free_vars_vec().iter().any(|tv| is_opaque_tyvar(&tv.name));
+            let rhs_has_opaque = eq
+                .value
+                .free_vars_vec()
+                .iter()
+                .any(|tv| is_opaque_tyvar(&tv.name));
             if rhs_has_opaque && !eq.on_opaque_tyvar() {
                 return Err(Errors::from_msg_srcs(
                     format!(
@@ -1948,7 +1957,9 @@ impl Scheme {
                         &[&eq.src],
                     ));
                 }
-                let Type::TyVar(tv) = &arg.ty else { unreachable!() };
+                let Type::TyVar(tv) = &arg.ty else {
+                    unreachable!()
+                };
                 param_set.insert(tv.name.clone());
             }
             if param_set.len() != eq.args[1..].len() {
@@ -2335,5 +2346,3 @@ pub struct OpaqueTyConResolution {
     // None until type-checking resolves it.
     pub rhs: Option<Arc<TypeNode>>,
 }
-
-

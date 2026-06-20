@@ -1,7 +1,7 @@
 use crate::commands::build::build;
+use crate::configuration::{Configuration, ValgrindTool};
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
-use crate::configuration::{Configuration, ValgrindTool};
 use rand::Rng;
 use std::fs;
 use std::io;

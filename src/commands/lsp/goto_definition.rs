@@ -1,7 +1,10 @@
 // LSP "textDocument/definition" handler.
 
 use super::server::{send_response, LatestContent};
-use super::util::{find_local_occurrences, find_field_def_src, find_trait_or_alias_def_src, find_tycon_def_src, get_current_dir, resolve_source_pos, span_to_location};
+use super::util::{
+    find_field_def_src, find_local_occurrences, find_trait_or_alias_def_src, find_tycon_def_src,
+    get_current_dir, resolve_source_pos, span_to_location,
+};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::traits::TraitId;
 use crate::ast::types::TyCon;

@@ -8731,11 +8731,7 @@ main = (
         Configuration::develop_mode(),
         "is the type for this expression.",
     );
-    test_source_fail_excludes(
-        &source,
-        Configuration::develop_mode(),
-        "is the type for:",
-    );
+    test_source_fail_excludes(&source, Configuration::develop_mode(), "is the type for:");
 }
 
 #[test]

@@ -9,6 +9,15 @@ use crate::{
         typedecl::{TypeAlias, TypeDeclValue, TypeDefn},
         types::{type_fun, type_tyapp, type_tycon, type_tyvar_star, Scheme, TyCon, TypeNode},
     },
+    configuration::Configuration,
+    constants::{
+        ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
+        ARRAY_UNSAFE_FILL_NAME, ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
+        ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
+        ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, DESTRUCTOR_NAME, F32_NAME,
+        F64_NAME, FFI_NAME, HOLE_NAME, IOSTATE_NAME, IO_NAME, STD_NAME, WITH_RETAINED_NAME,
+    },
+    error::Errors,
     fixstd::builtin::{
         add_trait_instance_float, add_trait_instance_int, array_check_range, array_check_size,
         array_get_capacity, array_get_size, array_unsafe_empty, array_unsafe_fill,
@@ -20,27 +29,18 @@ use crate::{
         divide_trait_instance_float, divide_trait_instance_int, eq_trait_instance_float,
         eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types, force_unique_array,
         get_get_boxed_ptr, get_mutate_boxed_internal, get_mutate_boxed_ios_internal, get_ptr_array,
-        get_release_function_of_boxed_value, get_retain_function_of_boxed_value, infinity_value,
-        integral_types, is_unique_function, less_than_or_equal_to_trait_instance_float,
-        less_than_or_equal_to_trait_instance_int, less_than_trait_instance_float,
-        less_than_trait_instance_int, make_array_ty, make_bool_ty, make_dynamic_object_ty,
-        make_floating_ty, make_integral_ty, make_iostate_unsafe_create, make_ptr_ty,
-        mark_threaded_function, multiply_trait_instance_float, multiply_trait_instance_int,
-        negate_trait_instance_float, negate_trait_instance_int, not_trait_instance_bool,
-        quiet_nan_value, remainder_trait_instance_int, set_array, shift_function,
-        hole_function, subtract_trait_instance_float, subtract_trait_instance_int,
+        get_release_function_of_boxed_value, get_retain_function_of_boxed_value, hole_function,
+        infinity_value, integral_types, is_unique_function,
+        less_than_or_equal_to_trait_instance_float, less_than_or_equal_to_trait_instance_int,
+        less_than_trait_instance_float, less_than_trait_instance_int, make_array_ty, make_bool_ty,
+        make_dynamic_object_ty, make_floating_ty, make_integral_ty, make_iostate_unsafe_create,
+        make_ptr_ty, mark_threaded_function, multiply_trait_instance_float,
+        multiply_trait_instance_int, negate_trait_instance_float, negate_trait_instance_int,
+        not_trait_instance_bool, quiet_nan_value, remainder_trait_instance_int, set_array,
+        shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
         undefined_internal_function, unsafe_set_size_array, with_retained_function,
         BitOperationType,
     },
-    configuration::Configuration,
-    constants::{
-        ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME,
-        ARRAY_UNSAFE_EMPTY_NAME, ARRAY_UNSAFE_FILL_NAME, ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
-        ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-        ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, DESTRUCTOR_NAME, F32_NAME,
-        F64_NAME, FFI_NAME, HOLE_NAME, IOSTATE_NAME, IO_NAME, STD_NAME, WITH_RETAINED_NAME,
-    },
-    error::Errors,
     misc::{make_map, upper_camel_to_lower_snake, Map},
     parse::parser::parse_and_save_to_temporary_file,
 };
@@ -862,10 +862,8 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
 
     // Programmatic impls.
     let make_impl = |from: &Arc<TypeNode>, to_name: &str, body: Arc<ExprNode>| -> TraitImpl {
-        let trait_id = TraitId::from_fullname(FullName::from_strs(
-            &[STD_NAME],
-            &format!("To{}", to_name),
-        ));
+        let trait_id =
+            TraitId::from_fullname(FullName::from_strs(&[STD_NAME], &format!("To{}", to_name)));
         let method = upper_camel_to_lower_snake(to_name);
         TraitImpl {
             qual_pred: QualPred {
@@ -887,21 +885,20 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     // Build the cast body for `from -> to`, dispatched on the (int/float)
     // shapes of both ends. `to_alias` is the C alias type when present
     // (Fix → C target); for Fix → Fix targets it is `None`.
-    let cast_body =
-        |from: &Arc<TypeNode>,
-         from_is_int: bool,
-         to_fix: Arc<TypeNode>,
-         to_is_int: bool,
-         to_alias: Option<Arc<TypeNode>>|
-         -> Arc<ExprNode> {
-            let (body, _) = match (from_is_int, to_is_int) {
-                (true, true) => cast_between_integral_function(from.clone(), to_fix, to_alias),
-                (false, false) => cast_between_float_function(from.clone(), to_fix, to_alias),
-                (true, false) => cast_int_to_float_function(from.clone(), to_fix),
-                (false, true) => cast_float_to_int_function(from.clone(), to_fix),
-            };
-            body
+    let cast_body = |from: &Arc<TypeNode>,
+                     from_is_int: bool,
+                     to_fix: Arc<TypeNode>,
+                     to_is_int: bool,
+                     to_alias: Option<Arc<TypeNode>>|
+     -> Arc<ExprNode> {
+        let (body, _) = match (from_is_int, to_is_int) {
+            (true, true) => cast_between_integral_function(from.clone(), to_fix, to_alias),
+            (false, false) => cast_between_float_function(from.clone(), to_fix, to_alias),
+            (true, false) => cast_int_to_float_function(from.clone(), to_fix),
+            (false, true) => cast_float_to_int_function(from.clone(), to_fix),
         };
+        body
+    };
 
     // Fix → Fix: every (int|float) → (int|float) combination.
     for (from, from_is_int) in int_types
@@ -916,7 +913,8 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
         {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             let body = cast_body(from, from_is_int, to.clone(), to_is_int, None);
-            prog.trait_env.add_instance(make_impl(from, &to_name, body))?;
+            prog.trait_env
+                .add_instance(make_impl(from, &to_name, body))?;
         }
     }
     // Fix → C type. The C type name (e.g. `CInt`) is an alias for one of the
@@ -939,7 +937,8 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
                 to_name_c,
             ))));
             let body = cast_body(from, from_is_int, to_fix, to_is_int, Some(to_alias));
-            prog.trait_env.add_instance(make_impl(from, to_name_c, body))?;
+            prog.trait_env
+                .add_instance(make_impl(from, to_name_c, body))?;
         }
     }
 

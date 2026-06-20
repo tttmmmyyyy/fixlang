@@ -20,7 +20,6 @@ Purpose:
 - This transformation is a prerequisite for applying the unwrap-newtype optimization. See the "unwrap-newtype.rs" for details.
 */
 
-use std::sync::Arc;
 use crate::{
     ast::{
         expr::{expr_let_typed, expr_match_typed, Expr, ExprNode},
@@ -35,6 +34,7 @@ use crate::{
     },
     misc::{Map, Set},
 };
+use std::sync::Arc;
 
 struct Env {
     tycons: Map<TyCon, TyConInfo>,

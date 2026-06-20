@@ -3,10 +3,10 @@ use std::sync::Arc;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::Name;
 use crate::ast::program::{EndNode, TypeEnv};
-use crate::ast::types::{is_opaque_tyvar, AssocType, TyVar, Type, TypeNode, type_assocty};
+use crate::ast::types::{is_opaque_tyvar, type_assocty, AssocType, TyVar, Type, TypeNode};
+use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::misc::Set;
-use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
 

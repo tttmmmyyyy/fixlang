@@ -47,10 +47,7 @@ pub(super) struct RepairOutput {
 /// 2. Loop: try to parse, and on each parse error splice in a `;` /
 ///    `?` per `RepairHint`. Bounded to `MAX_ATTEMPTS` iterations to
 ///    keep pathological inputs from looping forever.
-pub(super) fn repair_for_completion(
-    live_buffer: &str,
-    cursor_byte: usize,
-) -> Option<RepairOutput> {
+pub(super) fn repair_for_completion(live_buffer: &str, cursor_byte: usize) -> Option<RepairOutput> {
     let RepairOutput {
         source,
         cursor_byte,
@@ -133,11 +130,7 @@ fn apply_outer_repair(mut source: String, mut cursor_byte: usize) -> Option<Repa
 /// resulting source either parses cleanly or moves the parser's
 /// failure position the furthest forward. `None` if no candidate
 /// makes progress.
-fn pick_insertion(
-    source: &str,
-    pos: usize,
-    candidates: &[&'static str],
-) -> Option<&'static str> {
+fn pick_insertion(source: &str, pos: usize, candidates: &[&'static str]) -> Option<&'static str> {
     let mut best_full: Option<&'static str> = None;
     let mut best_progress: Option<(&'static str, usize)> = None;
     for cand in candidates {
@@ -406,8 +399,7 @@ mod tests {
     /// has to try `{};` to make the parser succeed.
     #[test]
     fn outer_repair_handles_if_body_missing_braces() {
-        let src =
-            "module Main;\nmain : IO () = (\n    if 42.\n    pure()\n);";
+        let src = "module Main;\nmain : IO () = (\n    if 42.\n    pure()\n);";
         // Cursor right after the dot (= where the user typed `.` to
         // open dot-completion).
         let cursor = "module Main;\nmain : IO () = (\n    if 42.".len();
