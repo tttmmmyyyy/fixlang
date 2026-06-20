@@ -73,14 +73,19 @@ fn process_message(message: Value, shared: &SharedState) {
             .insert(file_path, diagnostics_value.clone());
     }
 
-    // Check if it's a response (has an id field)
-    if let Some(id) = message.get("id") {
-        if let Some(id_num) = id.as_u64() {
-            shared
-                .responses
-                .lock()
-                .unwrap()
-                .insert(id_num as u32, message.clone());
+    // Check if it's a response to one of our requests: it carries an `id` but
+    // no `method`. Messages with a `method` and an `id` are server-initiated
+    // requests (e.g. `workspace/semanticTokens/refresh`), whose ids live in a
+    // separate space and must not clobber our response map.
+    if message.get("method").is_none() {
+        if let Some(id) = message.get("id") {
+            if let Some(id_num) = id.as_u64() {
+                shared
+                    .responses
+                    .lock()
+                    .unwrap()
+                    .insert(id_num as u32, message.clone());
+            }
         }
     }
 

@@ -5,34 +5,36 @@ use super::goto_definition;
 use super::hover;
 use super::references;
 use super::rename;
-use super::workspace_symbol;
+use super::semantic_tokens;
 use super::util::{get_current_dir, path_to_uri, span_to_location, span_to_range, uri_to_path};
+use super::workspace_symbol;
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
-use crate::elaboration::elaborate_via_config;
 use crate::configuration::BuildConfigType;
+use crate::configuration::{Configuration, DiagnosticsConfig};
 use crate::dependency::lockfile::LockFileType;
+use crate::elaboration::elaborate_via_config;
+use crate::elaboration::typecheckcache::{self, SharedTypeCheckCache};
 use crate::error::{any_to_string, Error, Errors, Severity, WARN_DEPRECATED};
+use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{to_absolute_path, Map, Set};
 use crate::parse::parser::{parse_str_import_statements, parse_str_module_defn};
-use crate::metafiles::project_file::ProjectFile;
-use crate::elaboration::typecheckcache::{self, SharedTypeCheckCache};
 use crate::write_log;
-use crate::configuration::{Configuration, DiagnosticsConfig};
 use lsp_types::{
     CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
     CallHierarchyServerCapability, CodeActionParams, CodeActionProviderCapability, CompletionItem,
     CompletionOptions, CompletionParams, Diagnostic, DiagnosticRelatedInformation,
-    DiagnosticSeverity, DiagnosticTag, DidChangeTextDocumentParams,
-    DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
-    GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, NumberOrString, OneOf, Position, PositionEncodingKind,
-    ProgressParams, ProgressParamsValue, ProgressToken, PublishDiagnosticsParams, Range,
-    ReferenceParams, RenameOptions, RenameParams, SaveOptions, ServerCapabilities,
-    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgress,
-    WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
-    WorkDoneProgressOptions, WorkspaceSymbolParams,
+    DiagnosticSeverity, DiagnosticTag, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+    DidSaveTextDocumentParams, DocumentSymbolParams, GotoDefinitionParams, HoverParams,
+    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, NumberOrString,
+    OneOf, Position, PositionEncodingKind, ProgressParams, ProgressParamsValue, ProgressToken,
+    PublishDiagnosticsParams, Range, ReferenceParams, RenameOptions, RenameParams, SaveOptions,
+    SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams,
+    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentPositionParams,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    TextDocumentSyncSaveOptions, Uri, WorkDoneProgress, WorkDoneProgressBegin,
+    WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
+    WorkspaceSymbolParams,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -188,6 +190,11 @@ pub fn launch_language_server() {
     // The last diagnostics result.
     let mut last_diag: Option<DiagnosticsResult> = None;
 
+    // Id counter for requests the server itself initiates (e.g. the semantic
+    // tokens refresh below). Kept separate from client-provided ids; the
+    // client's responses to these carry no `method` and are ignored.
+    let mut server_request_id: u32 = 0;
+
     // Maps to get file contents from Uris.
     let mut uri_to_latest_content: Map<Uri, LatestContent> = Map::default();
 
@@ -201,8 +208,23 @@ pub fn launch_language_server() {
 
     loop {
         // If new diagnostics are available, send store it to `last_diag`.
+        let mut diagnostics_updated = false;
         while let Ok(res) = diag_res_recv.try_recv() {
             last_diag = Some(res);
+            diagnostics_updated = true;
+        }
+        if diagnostics_updated {
+            // A freshly elaborated program is now available. Ask the client to
+            // re-request semantic tokens so the AST overlay (local-vs-global
+            // identifier coloring) gets applied; without this prompt the client
+            // keeps the base-layer-only result it fetched before diagnostics
+            // finished and the overlay never appears.
+            server_request_id += 1;
+            send_request(
+                server_request_id,
+                "workspace/semanticTokens/refresh".to_string(),
+                None::<()>,
+            );
         }
         if last_diag.is_some() {
             // If there are pending document symbol requests, process them.
@@ -498,8 +520,7 @@ pub fn launch_language_server() {
                 if id.is_none() {
                     continue;
                 }
-                let params: Option<CodeActionParams> =
-                    parase_params(message.params.unwrap());
+                let params: Option<CodeActionParams> = parase_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -542,12 +563,7 @@ pub fn launch_language_server() {
                 if params.is_none() {
                     continue;
                 }
-                rename::handle_rename(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    diag,
-                    &uri_to_latest_content,
-                );
+                rename::handle_rename(id.unwrap(), &params.unwrap(), diag, &uri_to_latest_content);
             } else if method == "textDocument/prepareRename" {
                 if last_diag.is_none() {
                     continue;
@@ -618,6 +634,24 @@ pub fn launch_language_server() {
                     continue;
                 }
                 references::handle_call_hierarchy_outgoing(id.unwrap(), &params.unwrap(), program);
+            } else if method == "textDocument/semanticTokens/full" {
+                // Intentionally not gated on `last_diag`: semantic tokens are
+                // produced by a never-failing lexer over the live buffer, so
+                // highlighting works even while the file does not parse.
+                let id = parse_id(&message, method);
+                if id.is_none() {
+                    continue;
+                }
+                let params: Option<SemanticTokensParams> = parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                semantic_tokens::handle_semantic_tokens_full(
+                    id.unwrap(),
+                    &params.unwrap(),
+                    &uri_to_latest_content,
+                    last_diag.as_ref(),
+                );
             }
         }
     }
@@ -645,7 +679,8 @@ fn parse_id(message: &JSONRPCMessage, method: &str) -> Option<u32> {
     message.id
 }
 
-#[allow(dead_code)]
+/// Send a server-initiated JSON-RPC request (carrying both an `id` and a
+/// `method`) to the client.
 fn send_request<T: Serialize>(id: u32, method: String, params: Option<T>) {
     let msg = JSONRPCMessage::new(
         Some(id),
@@ -749,7 +784,16 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
             execute_command_provider: None,
             workspace: None,
             call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
-            semantic_tokens_provider: None,
+            semantic_tokens_provider: Some(
+                SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                    legend: semantic_tokens::legend(),
+                    // No range provider yet: highlighting is recomputed for the
+                    // whole document on each request (the lexer is cheap).
+                    range: Some(false),
+                    full: Some(SemanticTokensFullOptions::Bool(true)),
+                }),
+            ),
             moniker_provider: None,
             linked_editing_range_provider: None,
             inline_value_provider: None,
@@ -865,9 +909,6 @@ fn handle_textdocument_did_save(
         write_log!("{}", msg);
     }
 }
-
-
-
 
 /// Entry point of the diagnostics thread: consume `DiagnosticsMessage`s
 /// off `req_recv`, re-run elaboration, and ship each `DiagnosticsResult`
@@ -1072,9 +1113,7 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
     Diagnostic {
         range,
         severity: Some(severity),
-        code: err
-            .code
-            .map(|c| NumberOrString::String(c.to_string())),
+        code: err.code.map(|c| NumberOrString::String(c.to_string())),
         code_description: None,
         source: None,
         message: err.msg.clone(),
@@ -1233,5 +1272,3 @@ pub fn send_work_done_progress_end(token: &str) {
     };
     send_notification("$/progress".to_string(), Some(params));
 }
-
-

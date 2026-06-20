@@ -409,3 +409,74 @@ file = _{ SOI ~ sep* ~ module ~ sep* ~ EOI }
 file_only_import_statements = { SOI ~ sep* ~ module_defn ~ sep* ~ (import_statement | ANY)* ~ EOI }
 
 file_only_module_defn = { SOI ~ sep* ~ module_defn ~ ANY* ~ EOI }
+
+// === Lexer for semantic-token syntax highlighting ===
+//
+// An additive, never-failing token scanner used *only* by the LSP semantic
+// tokens feature (see `src/parse/lexer.rs`). It is a separate entry rule
+// (`lex_tokens`) and does not change the behavior of `file` or any other
+// rule above: `lex_token` only *reuses* a handful of existing rules so the
+// lexical definitions stay single-sourced in this file.
+//
+// Robustness requirement: the editor must get highlighting even when the
+// buffer is syntactically broken (mid-edit). PEG normally fails fast, so the
+// scanner is written to be unable to fail — every position is consumed by
+// some alternative, and the final `lex_other` falls back to a single `ANY`.
+// Thus `lex_token*` always consumes the whole input up to `EOI`.
+lex_tokens = { SOI ~ lex_token* ~ EOI }
+
+lex_token = {
+      lex_line_comment
+    | lex_block_comment
+    | lex_string
+    | lex_char
+    | expr_number_lit
+    | lex_field_accessor
+    | lex_keyword
+    | expr_bool_lit
+    | expr_nullptr_lit
+    | capital_name
+    | name
+    | lex_operator
+    | lex_other
+}
+
+// Field/tuple accessor in index syntax: `^field` / `^0`. `^` appears nowhere
+// else in the grammar, so this is unambiguous lexically and is colored as a
+// property.
+lex_field_accessor = { "^" ~ name_char* }
+
+// Comments tolerate unterminated forms (common while typing): a block comment
+// may be closed by EOI instead of `*/`, and a line comment runs to NEWLINE.
+lex_line_comment  = { "//" ~ (!NEWLINE ~ ANY)* }
+lex_block_comment = { "/*" ~ (!"*/" ~ ANY)* ~ ("*/" | EOI) }
+
+// String / char literals: consume escapes, stop at the unescaped closing
+// quote, or bail at end-of-line / end-of-file if the quote is never closed.
+// They never cross a NEWLINE, so these tokens are always single-line.
+lex_string = { "\"" ~ (("\\" ~ ANY) | (!("\"" | NEWLINE) ~ ANY))* ~ ("\"" | &NEWLINE | EOI) }
+lex_char   = { "'" ~ (("\\" ~ ANY) | (!("'" | NEWLINE) ~ ANY))* ~ ("'" | &NEWLINE | EOI) }
+
+// Highlight keywords. Broader than the parser's `keywords` rule (which lists
+// only value-expression keywords): it also covers declaration keywords that
+// the grammar otherwise spells as inline string literals. `!name_char`
+// stops a keyword from matching a prefix of a longer identifier (`import` in
+// `important`). Longer words are listed before shorter ones that share a
+// prefix so the longest keyword wins under PEG ordered choice.
+lex_keyword = {
+    ( "namespace" | "import" | "hiding" | "struct" | "union" | "module"
+    | "trait" | "impl" | "match" | "else" | "eval" | "type" | "unbox"
+    | "box" | "let" | "in" | "if" | "do" ) ~ !name_char
+}
+
+// Operators / separators worth coloring. Multi-character operators come first
+// so the longest match wins under PEG ordered choice.
+lex_operator = {
+      "::" | "=>" | "->" | "<<" | ">>" | "==" | "!=" | "<=" | ">=" | ";;"
+    | "&&" | "||" | "+" | "-" | "*" | "/" | "%" | "<" | ">" | "=" | "." | "$"
+    | "!" | ":" | ";"
+}
+
+// Fallback: consume exactly one character so the scan always makes progress
+// and `lex_tokens` can never fail, no matter how broken the input is.
+lex_other = { ANY }
