@@ -10,8 +10,7 @@ use super::util::{get_current_dir, path_to_uri, span_to_location, span_to_range,
 use super::workspace_symbol;
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
-use crate::configuration::BuildConfigType;
-use crate::configuration::{Configuration, DiagnosticsConfig};
+use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig};
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
 use crate::elaboration::typecheckcache::{self, SharedTypeCheckCache};
@@ -86,10 +85,11 @@ impl JSONRPCMessage {
 
 // Requests sent to diagnostic thread.
 enum DiagnosticsMessage {
-    // Started the diagnostics thread.
-    Start,
-    // A file is saved.
-    OnSaveFile(PathBuf),
+    // Run diagnostics, elaborating against these live (possibly unsaved)
+    // buffer contents (absolute path -> content) layered over the on-disk
+    // sources. An empty map means "use the on-disk sources as-is", which
+    // is what the initial run uses.
+    Run(Arc<Map<PathBuf, String>>),
     // Stop the diagnostics thread.
     Stop,
 }
@@ -384,7 +384,11 @@ pub fn launch_language_server() {
                 if params.is_none() {
                     continue;
                 }
-                handle_textdocument_did_change(&params.unwrap(), &mut uri_to_latest_content);
+                handle_textdocument_did_change(
+                    diag_req_send.clone(),
+                    &params.unwrap(),
+                    &mut uri_to_latest_content,
+                );
             } else if method == "textDocument/didSave" {
                 let params: Option<DidSaveTextDocumentParams> =
                     parase_params(message.params.unwrap());
@@ -806,8 +810,16 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
     send_response(id, Ok::<_, ()>(result))
 }
 
+/// Send a request to the diagnostics thread, logging on failure. A send
+/// only fails once the thread has already stopped (its receiver dropped).
+fn send_to_diagnostics_thread(send: &Sender<DiagnosticsMessage>, msg: DiagnosticsMessage) {
+    if let Err(e) = send.send(msg) {
+        write_log!("Failed to send a message to the diagnostics thread: \n{:?}", e);
+    }
+}
+
 /// Handle the LSP `initialized` notification: spawn the diagnostics
-/// thread and prime it with an initial `Start` message.
+/// thread and prime it with an initial diagnostics run.
 fn handle_initialized(
     _params: &InitializedParams,
     diag_req_send: Sender<DiagnosticsMessage>,
@@ -831,22 +843,18 @@ fn handle_initialized(
         }
     });
 
-    // Send `Start` message to the diagnostics thread.
-    if let Err(e) = diag_req_send.send(DiagnosticsMessage::Start) {
-        let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
-        msg.push_str(&format!("{:?}", e));
-        write_log!("{}", msg);
-    }
+    // Kick off the initial diagnostics run over the on-disk sources (no
+    // live overrides yet).
+    send_to_diagnostics_thread(
+        &diag_req_send,
+        DiagnosticsMessage::Run(Arc::new(Map::default())),
+    );
 }
 
 // Handle "shutdown" method.
 fn handle_shutdown(id: u32, diag_send: Sender<DiagnosticsMessage>) {
     // Shutdown the diagnostics thread.
-    if let Err(e) = diag_send.send(DiagnosticsMessage::Stop) {
-        let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
-        msg.push_str(&format!("{:?}", e));
-        write_log!("{}", msg);
-    }
+    send_to_diagnostics_thread(&diag_send, DiagnosticsMessage::Stop);
 
     // Respond to the client.
     let param = Ok::<_, ()>(serde_json::to_value(None::<()>).unwrap());
@@ -866,8 +874,28 @@ fn handle_textdocument_did_open(
     );
 }
 
-// Handle "textDocument/didChange" method.
+/// Snapshot every open buffer (absolute path -> content) and send a
+/// debounced diagnostics `Run` carrying those live overrides, so
+/// elaboration sees the current editor state even for unsaved edits. The
+/// diagnostics thread coalesces bursts, so calling this on every keystroke
+/// is fine.
+fn request_diagnostics(
+    diag_send: &Sender<DiagnosticsMessage>,
+    uri_to_latest_content: &Map<Uri, LatestContent>,
+) {
+    let mut overrides: Map<PathBuf, String> = Map::default();
+    for latest in uri_to_latest_content.values() {
+        if let Ok(abs) = to_absolute_path(&latest.path) {
+            overrides.insert(abs, latest.content.clone());
+        }
+    }
+    send_to_diagnostics_thread(diag_send, DiagnosticsMessage::Run(Arc::new(overrides)));
+}
+
+/// Record the changed buffer's latest content and trigger on-type
+/// diagnostics over the live buffers (handler for "textDocument/didChange").
 fn handle_textdocument_did_change(
+    diag_send: Sender<DiagnosticsMessage>,
     params: &DidChangeTextDocumentParams,
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
 ) {
@@ -879,6 +907,9 @@ fn handle_textdocument_did_change(
             LatestContent::new(path, change.text.clone()),
         );
     }
+
+    // Trigger on-type diagnostics over the live buffers.
+    request_diagnostics(&diag_send, uri_to_latest_content);
 }
 
 // Handle "textDocument/didSave" method.
@@ -899,72 +930,97 @@ fn handle_textdocument_did_save(
         write_log!("{}", msg);
     }
 
-    // Get the path of the saved file.
-    let path = uri_to_path(&params.text_document.uri);
-
-    // Send a message to the diagnostics thread.
-    if let Err(e) = diag_send.send(DiagnosticsMessage::OnSaveFile(path)) {
-        let mut msg = "Failed to send a message to the diagnostics thread: \n".to_string();
-        msg.push_str(&format!("{:?}", e));
-        write_log!("{}", msg);
-    }
+    // Trigger diagnostics over the live buffers.
+    request_diagnostics(&diag_send, uri_to_latest_content);
 }
+
+/// How long the diagnostics thread waits for input to go quiet before it
+/// runs. Each `Run` request that arrives within the window replaces the
+/// pending one (coalescing), so a burst of keystrokes triggers a single
+/// run once typing pauses for this long.
+const DIAGNOSTICS_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(400);
 
 /// Entry point of the diagnostics thread: consume `DiagnosticsMessage`s
 /// off `req_recv`, re-run elaboration, and ship each `DiagnosticsResult`
 /// back through `res_send`. The shared `typecheck_cache` is reused
 /// across runs (and shared with the main thread's feature handlers).
+///
+/// Requests are debounced and coalesced: after a `Run` arrives the thread
+/// keeps draining `req_recv` until input stays quiet for
+/// `DIAGNOSTICS_DEBOUNCE`, keeping only the most recent overrides, then
+/// runs once. A run is never interrupted once started — newer requests
+/// arriving mid-run simply queue and coalesce into the next run — so the
+/// initial (cold, slow) run over the dependency libraries always finishes.
 fn diagnostics_thread(
     req_recv: Receiver<DiagnosticsMessage>,
     res_send: Sender<DiagnosticsResult>,
     typecheck_cache: SharedTypeCheckCache,
 ) {
     let mut prev_err_paths = Set::default();
+    // The latest coalesced request waiting to run, if any.
+    let mut pending: Option<Arc<Map<PathBuf, String>>> = None;
 
     loop {
-        // Wait for a message.
-        let msg = req_recv.recv();
-        if msg.is_err() {
-            // If the sender is dropped, stop the diagnostics thread.
-            break;
+        // With nothing pending, block until a request arrives. With a
+        // request pending, wait only up to the debounce window; if input
+        // stays quiet that long, fire the latest coalesced request.
+        let msg = if pending.is_none() {
+            req_recv.recv().ok()
+        } else {
+            match req_recv.recv_timeout(DIAGNOSTICS_DEBOUNCE) {
+                Ok(msg) => Some(msg),
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    run_diagnostics_and_publish(
+                        pending.take().unwrap(),
+                        &typecheck_cache,
+                        &res_send,
+                        &mut prev_err_paths,
+                    );
+                    continue;
+                }
+                // The sender was dropped: stop the diagnostics thread.
+                Err(mpsc::RecvTimeoutError::Disconnected) => None,
+            }
+        };
+        match msg {
+            // Coalesce: keep only the most recent overrides.
+            Some(DiagnosticsMessage::Run(overrides)) => pending = Some(overrides),
+            // `Stop`, or the sender was dropped.
+            Some(DiagnosticsMessage::Stop) | None => break,
         }
-
-        // Create and begin work done progress.
-        const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
-        send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
-
-        // Run diagnostics.
-        let res = match msg.unwrap() {
-            DiagnosticsMessage::Stop => {
-                // Stop the diagnostics thread.
-                break;
-            }
-            DiagnosticsMessage::OnSaveFile(_path) => {
-                // TODO: we should run diagnostics only for the saved file and its dependents.
-                // To achieve it, we need to write a mechanism to update diagnostics result (i.e. the Program and the Errors) incrementally.
-                send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
-                run_diagnostics(typecheck_cache.clone())
-            }
-            DiagnosticsMessage::Start => {
-                send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
-                run_diagnostics(typecheck_cache.clone())
-            }
-        };
-
-        // End work done progress.
-        send_work_done_progress_end(WORK_DONE_PROGRESS_TOKEN);
-
-        // Send the result to the main thread and language clinent.
-        let errs = match res {
-            Ok(mut res) => {
-                let errs = mem::replace(&mut res.program.deferred_errors, Errors::empty());
-                res_send.send(res).unwrap();
-                errs
-            }
-            Err(errs) => errs,
-        };
-        prev_err_paths = send_diagnostics_notification(errs, mem::take(&mut prev_err_paths));
     }
+}
+
+/// Run one diagnostics pass over `overrides`, publish the resulting
+/// `textDocument/publishDiagnostics` notifications, and forward the
+/// elaborated program to the main thread. `prev_err_paths` carries the
+/// set of files that had diagnostics last time so cleared files can be
+/// reset; it is updated in place.
+fn run_diagnostics_and_publish(
+    overrides: Arc<Map<PathBuf, String>>,
+    typecheck_cache: &SharedTypeCheckCache,
+    res_send: &Sender<DiagnosticsResult>,
+    prev_err_paths: &mut Set<PathBuf>,
+) {
+    const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
+    send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
+    send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
+
+    // Run diagnostics against the coalesced live overrides.
+    let res = run_diagnostics(typecheck_cache.clone(), overrides);
+
+    send_work_done_progress_end(WORK_DONE_PROGRESS_TOKEN);
+
+    // Send the result to the main thread and language client.
+    let errs = match res {
+        Ok(mut res) => {
+            let errs = mem::replace(&mut res.program.deferred_errors, Errors::empty());
+            res_send.send(res).unwrap();
+            errs
+        }
+        Err(errs) => errs,
+    };
+    *prev_err_paths = send_diagnostics_notification(errs, mem::take(prev_err_paths));
 }
 
 // Send the diagnostics notification to the client.
@@ -1169,12 +1225,20 @@ pub(super) fn get_file_content_at_previous_diagnostics(
     return Err(msg);
 }
 
-pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<DiagnosticsResult, Errors> {
+/// Elaborate the whole project and collect its diagnostics, returning the
+/// elaborated program alongside the source snapshot used. `live_overrides`
+/// (absolute path -> content) replaces the on-disk content of those files
+/// during elaboration so unsaved buffers are checked; an empty map uses the
+/// on-disk sources as-is.
+pub fn run_diagnostics(
+    typecheck_cache: SharedTypeCheckCache,
+    live_overrides: Arc<Map<PathBuf, String>>,
+) -> Result<DiagnosticsResult, Errors> {
     // Why we don't gate this on a content-changed check: the cost
     // (~95% of the wall time) lives inside the typecheck loop, and the
     // shared `TypeCheckCache` keys results by
     // `(name, scheme, module_dependency_hash)`. The dep-hash folds in
-    // the source hash of every transitive dependency, so a saved file
+    // the source hash of every transitive dependency, so an edited file
     // only invalidates its own module's globals plus those of every
     // module that imports it (transitively); everything else stays a
     // cache hit and skips the actual type inference. In effect we
@@ -1184,9 +1248,9 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
     // What an explicit "did anything change?" gate would still buy:
     // skipping the per-gv iteration overhead — `tc.clone()`, closure
     // boxing, cache lookup, etc., ~30 µs per global × ~1900 globals ≈
-    // tens of ms — for the no-op-save case where nothing actually
-    // changed. Worth doing if save-without-edit becomes a common
-    // workflow, but not the primary lever for diagnostics speed.
+    // tens of ms — for the no-op case where nothing actually changed.
+    // Worth doing if it becomes a common workflow, but not the primary
+    // lever for diagnostics speed.
 
     // Read the project file.
     let proj_file = ProjectFile::read_root_file()?;
@@ -1196,24 +1260,30 @@ pub fn run_diagnostics(typecheck_cache: SharedTypeCheckCache) -> Result<Diagnost
 
     // Capture the absolute paths and current contents of user source files
     // before elaboration, so the resulting `DiagnosticsResult` can support
-    // stale-buffer detection and "is this symbol user-defined?" queries. A
-    // file whose content fails to read is omitted entirely (no entry for
-    // it), so the user-defined membership check and the stale check stay
-    // consistent.
+    // stale-buffer detection and "is this symbol user-defined?" queries.
+    // Prefer the live (possibly unsaved) buffer over the on-disk content
+    // so the captured snapshot matches exactly what elaboration sees. A
+    // file with neither a live override nor readable on-disk content is
+    // omitted entirely (no entry for it), so the user-defined membership
+    // check and the stale check stay consistent.
     let mut user_source_contents: Map<PathBuf, String> = Default::default();
     for file_path in &files {
         let abs = match to_absolute_path(file_path) {
             Ok(p) => p,
             Err(_) => continue,
         };
-        if let Ok(content) = std::fs::read_to_string(&abs) {
+        if let Some(content) = live_overrides.get(&abs) {
+            user_source_contents.insert(abs, content.clone());
+        } else if let Ok(content) = std::fs::read_to_string(&abs) {
             user_source_contents.insert(abs, content);
         }
     }
 
-    // Create the configuration.
+    // Create the configuration. The live overrides swap in unsaved buffer
+    // contents for their paths; everything else is read from disk.
     let mut config = Configuration::diagnostics_mode(DiagnosticsConfig {
         files,
+        live_source_overrides: live_overrides,
         ..Default::default()
     })?;
     config.type_check_cache = typecheck_cache.clone();

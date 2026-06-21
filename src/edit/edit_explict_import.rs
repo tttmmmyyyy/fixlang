@@ -3,7 +3,7 @@
 
 use crate::ast::import::ImportStatement;
 use crate::ast::name::{FullName, Name};
-use crate::ast::program::Program;
+use crate::ast::program::{ModuleInfo, Program};
 use crate::commands::lsp::edit_import::{
     create_text_edit_to_insert_imports, create_text_edits_to_erase_imports,
 };
@@ -13,7 +13,7 @@ use crate::edit::edit_util::apply_text_edits;
 use crate::elaboration::typecheckcache::MemoryCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::{info_msg, to_absolute_path};
+use crate::misc::{info_msg, to_absolute_path, Map};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -32,8 +32,9 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
     let proj_file = ProjectFile::read_root_file()?;
 
     // Run diagnostics to check if the project has errors and get the Program.
+    // This CLI path works on the on-disk sources, so no live overrides.
     let typecheck_cache = Arc::new(MemoryCache::new());
-    let result = run_diagnostics(typecheck_cache)?;
+    let result = run_diagnostics(typecheck_cache, Arc::new(Map::default()))?;
     let program = result.program;
     if program.deferred_errors.has_error() {
         return Err(program.deferred_errors);
@@ -151,10 +152,10 @@ pub fn generate_import_statements(
     import_stmts
 }
 
-// Rewrite the file content by removing old import statements and inserting new ones.
+/// Rewrite the file content by removing old import statements and inserting new ones.
 fn rewrite_file_content(
     content: &str,
-    module_info: &crate::ast::program::ModuleInfo,
+    module_info: &ModuleInfo,
     new_import_stmts: &[ImportStatement],
     program: &Program,
 ) -> Result<String, Errors> {
