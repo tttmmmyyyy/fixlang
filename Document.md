@@ -7,7 +7,7 @@
             - [Use pre-built binary](#use-pre-built-binary)
             - [Build from source](#build-from-source)
             - [Use Docker image](#use-docker-image)
-        - [(Optional) VScode extensions](#optional-vscode-extensions)
+        - [(Optional) Editor extensions](#optional-editor-extensions)
     - [Running Your First Fix Program](#running-your-first-fix-program)
     - [Modules](#modules)
     - [Global values](#global-values)
@@ -157,12 +157,14 @@ cargo install --locked --path .
 
 Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker.com/r/pt9999/fixlang) is available! 
 
-### (Optional) VScode extensions
+### (Optional) Editor extensions
 
 If you are using VScode, we recommend you to install the following extensions:
 
 - [Syntax highlighting](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlangsyntax)
 - [Language client](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)
+
+If you are using Zed, install the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support), which integrates the Fix language server (with semantic-token syntax highlighting).
 
 ## Running Your First Fix Program
 
@@ -3042,9 +3044,42 @@ Language client extension for VSCode is available in [here](https://marketplace.
 
 The language server requires [the project file](#project-file) to recognize the Fix source files.
 
-Each time you save a file, the language server will attempt to diagnose the Fix program.
-The information obtained in the latest successful diagnostics is used to comletion, hover or go-to-definition, etc.
-So to update the information, you need to write correct Fix code and save the file.
+The language server analyzes (diagnoses) the Fix program as you type, a short while after you stop typing.
+The information obtained from the latest successful analysis is used for completion, hover, go-to-definition, etc.
+
+### Configuring analysis (diagnostics)
+
+The server re-analyzes your code shortly after you stop typing (the burst of edits is debounced into a single run). Two settings, delivered from the editor via `workspace/didChangeConfiguration`, control this:
+
+| Setting | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `fix.analyze.delayMs` | number (milliseconds) | `400` | How long the server waits for typing to pause before re-analyzing. `0` disables on-type analysis (it then runs only on save and on initial load). |
+| `fix.analyze.onSave` | boolean | `true` | Whether saving a file also triggers analysis. |
+
+The initial analysis over the standard library and dependencies always runs to completion and is never interrupted by subsequent edits.
+
+In **VSCode** (the [Fix language client extension](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)), set them in `settings.json`:
+
+```json
+{
+  "fix.analyze.delayMs": 300,
+  "fix.analyze.onSave": false
+}
+```
+
+In **Zed** (the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support)), put them under the `fix` language server's `settings` in your `settings.json`:
+
+```json
+{
+  "lsp": {
+    "fix": {
+      "settings": {
+        "analyze": { "delayMs": 300, "onSave": false }
+      }
+    }
+  }
+}
+```
 
 ### Specifying parameter list in the documentation comment as a hint to the language server
 

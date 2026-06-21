@@ -23,27 +23,29 @@ use lsp_types::{
     CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
     CallHierarchyServerCapability, CodeActionParams, CodeActionProviderCapability, CompletionItem,
     CompletionOptions, CompletionParams, Diagnostic, DiagnosticRelatedInformation,
-    DiagnosticSeverity, DiagnosticTag, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    DidSaveTextDocumentParams, DocumentSymbolParams, GotoDefinitionParams, HoverParams,
-    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, NumberOrString,
-    OneOf, Position, PositionEncodingKind, ProgressParams, ProgressParamsValue, ProgressToken,
-    PublishDiagnosticsParams, Range, ReferenceParams, RenameOptions, RenameParams, SaveOptions,
-    SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams,
-    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentPositionParams,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    TextDocumentSyncSaveOptions, Uri, WorkDoneProgress, WorkDoneProgressBegin,
-    WorkDoneProgressCreateParams, WorkDoneProgressEnd, WorkDoneProgressOptions,
-    WorkspaceSymbolParams,
+    DiagnosticSeverity, DiagnosticTag, DidChangeConfigurationParams, DidChangeTextDocumentParams,
+    DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbolParams,
+    GotoDefinitionParams, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
+    InitializedParams, NumberOrString, OneOf, Position, PositionEncodingKind, ProgressParams,
+    ProgressParamsValue, ProgressToken, PublishDiagnosticsParams, Range, ReferenceParams,
+    RenameOptions, RenameParams, SaveOptions, SemanticTokensFullOptions, SemanticTokensOptions,
+    SemanticTokensParams, SemanticTokensServerCapabilities, ServerCapabilities,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Uri, WorkDoneProgress,
+    WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
+    WorkDoneProgressOptions, WorkspaceSymbolParams,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::mem;
 use std::path::Path;
+use std::time::Duration;
 use std::{
     io::{Read, Write},
     path::PathBuf,
     sync::{
+        atomic::{AtomicU64, Ordering},
         mpsc::{self, Receiver, Sender},
         Arc,
     },
@@ -186,6 +188,14 @@ pub fn launch_language_server() {
     // can still drive their own elaborate without paying disk I/O
     // for every cache lookup.
     let typecheck_cache: SharedTypeCheckCache = Arc::new(typecheckcache::MemoryCache::new());
+
+    // Analyze (diagnostics) settings, configurable from the client via
+    // `workspace/didChangeConfiguration`. `analyze_debounce_ms` is shared
+    // with the diagnostics thread (which reads it before each debounce
+    // wait); `analyze_on_save` gates whether saving triggers a run and is
+    // read only on this thread.
+    let analyze_debounce_ms: Arc<AtomicU64> = Arc::new(AtomicU64::new(DEFAULT_ANALYZE_DELAY_MS));
+    let mut analyze_on_save: bool = DEFAULT_ANALYZE_ON_SAVE;
 
     // The last diagnostics result.
     let mut last_diag: Option<DiagnosticsResult> = None;
@@ -361,6 +371,7 @@ pub fn launch_language_server() {
                     diag_req_recv.take().unwrap(),
                     diag_res_send.clone(),
                     typecheck_cache.clone(),
+                    analyze_debounce_ms.clone(),
                 );
             } else if method == "shutdown" {
                 let id = parse_id(&message, method);
@@ -384,10 +395,14 @@ pub fn launch_language_server() {
                 if params.is_none() {
                     continue;
                 }
+                // `delayMs == 0` disables on-type analysis (analysis then
+                // runs only on save / initial load).
+                let analyze_on_type = analyze_debounce_ms.load(Ordering::Relaxed) != 0;
                 handle_textdocument_did_change(
                     diag_req_send.clone(),
                     &params.unwrap(),
                     &mut uri_to_latest_content,
+                    analyze_on_type,
                 );
             } else if method == "textDocument/didSave" {
                 let params: Option<DidSaveTextDocumentParams> =
@@ -399,6 +414,18 @@ pub fn launch_language_server() {
                     diag_req_send.clone(),
                     &params.unwrap(),
                     &mut uri_to_latest_content,
+                    analyze_on_save,
+                );
+            } else if method == "workspace/didChangeConfiguration" {
+                let params: Option<DidChangeConfigurationParams> =
+                    parase_params(message.params.unwrap());
+                if params.is_none() {
+                    continue;
+                }
+                apply_analyze_config(
+                    &params.unwrap().settings,
+                    &analyze_debounce_ms,
+                    &mut analyze_on_save,
                 );
             } else if method == "textDocument/completion" {
                 // Don't gate on `last_diag.is_some()` — the dot-context
@@ -814,7 +841,10 @@ fn handle_initialize(id: u32, _params: &InitializeParams) {
 /// only fails once the thread has already stopped (its receiver dropped).
 fn send_to_diagnostics_thread(send: &Sender<DiagnosticsMessage>, msg: DiagnosticsMessage) {
     if let Err(e) = send.send(msg) {
-        write_log!("Failed to send a message to the diagnostics thread: \n{:?}", e);
+        write_log!(
+            "Failed to send a message to the diagnostics thread: \n{:?}",
+            e
+        );
     }
 }
 
@@ -826,11 +856,12 @@ fn handle_initialized(
     diag_req_recv: Receiver<DiagnosticsMessage>,
     diag_res_send: Sender<DiagnosticsResult>,
     typecheck_cache: SharedTypeCheckCache,
+    debounce_ms: Arc<AtomicU64>,
 ) {
     // Launch the diagnostics thread.
     std::thread::spawn(move || {
         let res = std::panic::catch_unwind(move || {
-            diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache);
+            diagnostics_thread(diag_req_recv, diag_res_send, typecheck_cache, debounce_ms);
         });
         if res.is_err() {
             // If a panic occurs in the diagnostics thread,
@@ -898,8 +929,11 @@ fn handle_textdocument_did_change(
     diag_send: Sender<DiagnosticsMessage>,
     params: &DidChangeTextDocumentParams,
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
+    analyze_on_type: bool,
 ) {
-    // Store the content of the file into `uri_to_content`.
+    // Store the content of the file into `uri_to_content`. This must
+    // happen even when on-type analysis is off, so other features
+    // (completion, hover) still see the live buffer.
     if let Some(change) = params.content_changes.last() {
         let path = uri_to_path(&params.text_document.uri);
         uri_to_latest_content.insert(
@@ -908,15 +942,20 @@ fn handle_textdocument_did_change(
         );
     }
 
-    // Trigger on-type diagnostics over the live buffers.
-    request_diagnostics(&diag_send, uri_to_latest_content);
+    // Trigger on-type analysis over the live buffers, unless disabled.
+    if analyze_on_type {
+        request_diagnostics(&diag_send, uri_to_latest_content);
+    }
 }
 
-// Handle "textDocument/didSave" method.
+/// Record the saved buffer's content and, when `analyze_on_save` is set,
+/// trigger analysis over the live buffers (handler for
+/// "textDocument/didSave").
 fn handle_textdocument_did_save(
     diag_send: Sender<DiagnosticsMessage>,
     params: &DidSaveTextDocumentParams,
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
+    analyze_on_save: bool,
 ) {
     // Store the content of the file into maps.
     if let Some(text) = &params.text {
@@ -930,15 +969,43 @@ fn handle_textdocument_did_save(
         write_log!("{}", msg);
     }
 
-    // Trigger diagnostics over the live buffers.
-    request_diagnostics(&diag_send, uri_to_latest_content);
+    // On-type diagnostics already keep the buffer analyzed; only re-run on
+    // save when the client opted in (`fix.analyze.onSave`).
+    if analyze_on_save {
+        request_diagnostics(&diag_send, uri_to_latest_content);
+    }
 }
 
-/// How long the diagnostics thread waits for input to go quiet before it
-/// runs. Each `Run` request that arrives within the window replaces the
-/// pending one (coalescing), so a burst of keystrokes triggers a single
-/// run once typing pauses for this long.
-const DIAGNOSTICS_DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(400);
+/// Apply the client's `fix.analyze.*` settings from a
+/// `workspace/didChangeConfiguration` payload: update the shared debounce
+/// (`delayMs`) and the save-trigger flag (`onSave`). Absent keys are left
+/// unchanged. The payload is accepted both as the full settings tree
+/// (`/fix/analyze/...`) and as the already-unwrapped `fix` section
+/// (`/analyze/...`), since clients differ in what they send.
+fn apply_analyze_config(settings: &Value, debounce_ms: &AtomicU64, analyze_on_save: &mut bool) {
+    let lookup = |key: &str| -> Option<&Value> {
+        settings
+            .pointer(&format!("/fix/analyze/{}", key))
+            .or_else(|| settings.pointer(&format!("/analyze/{}", key)))
+    };
+    if let Some(delay) =
+        lookup("delayMs").and_then(|v| v.as_u64().or_else(|| v.as_f64().map(|f| f as u64)))
+    {
+        debounce_ms.store(delay, Ordering::Relaxed);
+    }
+    if let Some(on_save) = lookup("onSave").and_then(|v| v.as_bool()) {
+        *analyze_on_save = on_save;
+    }
+}
+
+/// Default debounce window: how long the diagnostics thread waits for
+/// input to go quiet before it runs. Overridable via the client setting
+/// `fix.analyze.delayMs`.
+const DEFAULT_ANALYZE_DELAY_MS: u64 = 400;
+
+/// Default for whether saving a file triggers analysis. Overridable via
+/// the client setting `fix.analyze.onSave`.
+const DEFAULT_ANALYZE_ON_SAVE: bool = true;
 
 /// Entry point of the diagnostics thread: consume `DiagnosticsMessage`s
 /// off `req_recv`, re-run elaboration, and ship each `DiagnosticsResult`
@@ -946,15 +1013,17 @@ const DIAGNOSTICS_DEBOUNCE: std::time::Duration = std::time::Duration::from_mill
 /// across runs (and shared with the main thread's feature handlers).
 ///
 /// Requests are debounced and coalesced: after a `Run` arrives the thread
-/// keeps draining `req_recv` until input stays quiet for
-/// `DIAGNOSTICS_DEBOUNCE`, keeping only the most recent overrides, then
-/// runs once. A run is never interrupted once started — newer requests
-/// arriving mid-run simply queue and coalesce into the next run — so the
-/// initial (cold, slow) run over the dependency libraries always finishes.
+/// keeps draining `req_recv` until input stays quiet for `debounce_ms`
+/// (read fresh before each wait, so client config changes take effect),
+/// keeping only the most recent overrides, then runs once. A run is never
+/// interrupted once started — newer requests arriving mid-run simply
+/// queue and coalesce into the next run — so the initial (cold, slow) run
+/// over the dependency libraries always finishes.
 fn diagnostics_thread(
     req_recv: Receiver<DiagnosticsMessage>,
     res_send: Sender<DiagnosticsResult>,
     typecheck_cache: SharedTypeCheckCache,
+    debounce_ms: Arc<AtomicU64>,
 ) {
     let mut prev_err_paths = Set::default();
     // The latest coalesced request waiting to run, if any.
@@ -967,7 +1036,8 @@ fn diagnostics_thread(
         let msg = if pending.is_none() {
             req_recv.recv().ok()
         } else {
-            match req_recv.recv_timeout(DIAGNOSTICS_DEBOUNCE) {
+            let debounce = Duration::from_millis(debounce_ms.load(Ordering::Relaxed));
+            match req_recv.recv_timeout(debounce) {
                 Ok(msg) => Some(msg),
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     run_diagnostics_and_publish(
@@ -1004,7 +1074,7 @@ fn run_diagnostics_and_publish(
 ) {
     const WORK_DONE_PROGRESS_TOKEN: &str = "diagnostics";
     send_work_done_progress_create(WORK_DONE_PROGRESS_TOKEN, 0);
-    send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Running diagnostics");
+    send_work_done_progress_begin(WORK_DONE_PROGRESS_TOKEN, "Analyzing");
 
     // Run diagnostics against the coalesced live overrides.
     let res = run_diagnostics(typecheck_cache.clone(), overrides);

@@ -72,6 +72,7 @@ main = (
   - Dependency manager
   - Document generation
   - Language Server Protocol (LSP) support
+    - Editor extensions: [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) / [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support)
 
 ## Examples
 
@@ -109,4 +110,3 @@ See [this page](https://tttmmmyyyy.github.io/fixlang/third-party-licenses.html).
 ## Discord
 
 * https://discord.gg/ad4GakEA7R
-* Mostly Japanese speakers here, but English is also welcome!

@@ -7,7 +7,7 @@
             - [ビルド済みバイナリを使用](#ビルド済みバイナリを使用)
             - [ソースからビルド](#ソースからビルド)
             - [Dockerイメージを使用](#dockerイメージを使用)
-        - [（オプション）VScode拡張機能](#オプションvscode拡張機能)
+        - [（オプション）エディタ拡張機能](#オプションエディタ拡張機能)
     - [最初のFixプログラムを実行する](#最初のfixプログラムを実行する)
     - [モジュール](#モジュール)
     - [グローバルな値](#グローバルな値)
@@ -158,12 +158,14 @@ cargo install --locked --path .
 
 [pt9999](https://github.com/pt9999)のおかげで、[Dockerイメージ](https://hub.docker.com/r/pt9999/fixlang)が利用可能です！
 
-### （オプション）VScode拡張機能
+### （オプション）エディタ拡張機能
 
 VScodeを使用している場合、以下の拡張機能をインストールすることをお勧めします。
 
 - [構文ハイライト](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlangsyntax)
 - [言語クライアント](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)
+
+Zedを使用している場合は、[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support)をインストールしてください。
 
 ## 最初のFixプログラムを実行する
 
@@ -3151,9 +3153,42 @@ impl MyType : MyTrait  {
 VSCode用の言語クライアント拡張機能は[こちら](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)で利用可能です。
 言語サーバーは[プロジェクトファイル](#project-file)を必要とし、Fixソースファイルを認識します。
 
-ファイルを保存するたびに、言語サーバーはFixプログラムを診断しようとします。
-最新の診断で得られた情報は、補完、ホバー、定義への移動などに使用されます。
-したがって、情報を更新するには、正しいFixコードを書いてファイルを保存する必要があります。
+言語サーバーは、入力を止めてから少し経つと、入力中の内容に対してFixプログラムを診断（解析）します。
+最新の成功した解析で得られた情報は、補完、ホバー、定義への移動などに使用されます。
+
+### 解析（診断）の設定
+
+サーバーは入力が止まってから少し待って再解析します（連続した編集はまとめられ、1回の解析に集約されます）。次の2つの設定で挙動を制御でき、エディタから `workspace/didChangeConfiguration` を通じてサーバーに渡されます：
+
+| 設定 | 型 | 既定値 | 意味 |
+| --- | --- | --- | --- |
+| `fix.analyze.delayMs` | 数値（ミリ秒） | `400` | 入力が止まってから再解析するまでの待機時間。`0` にすると on-type 解析を無効化します（解析は保存時と初回ロード時のみ）。 |
+| `fix.analyze.onSave` | 真偽値 | `true` | 保存時にも解析するか。 |
+
+標準ライブラリや依存ライブラリに対する最初の解析は必ず完了まで実行され、その後の編集によって中断されることはありません。
+
+**VSCode**（[Fix言語クライアント拡張](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)）では、`settings.json` に次のように設定します：
+
+```json
+{
+  "fix.analyze.delayMs": 300,
+  "fix.analyze.onSave": false
+}
+```
+
+**Zed**（[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support)）では、`settings.json` の `fix` 言語サーバーの `settings` の下に設定します：
+
+```json
+{
+  "lsp": {
+    "fix": {
+      "settings": {
+        "analyze": { "delayMs": 300, "onSave": false }
+      }
+    }
+  }
+}
+```
 
 ### ドキュメントコメントでパラメータリストを指定して言語サーバーにヒントを与える
 
