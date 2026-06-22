@@ -2,11 +2,25 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-22
+
 ### Added
 
 #### Tool
 
 - LSP: Added support for the "Semantic Tokens" feature, providing editor syntax highlighting from the language server without a separate TextMate / tree-sitter grammar. A lexical layer colors tokens even while the buffer is syntactically broken; once the file type-checks, an AST overlay refines identifiers (locals, globals, struct / union / trait names, type parameters, union variants, fields), merged line by line so an edit only affects the edited line.
+
+### Changed
+
+#### Tool
+
+- LSP: Diagnostics now run on every edit (on-type, debounced) over the live, possibly unsaved buffer, instead of only on save. Two new settings, read from the editor via `workspace/didChangeConfiguration`, control analysis timing: `fix.analyze.delayMs` (on-type debounce in milliseconds; default 400, where 0 disables on-type analysis) and `fix.analyze.onSave` (default true). See `Document.md` / `Document-ja.md` for per-editor configuration snippets.
+
+### Fixed
+
+#### Tool
+
+- LSP: Fixed a busy loop in which the language server spun at ~100% CPU (leaving an orphaned process behind) when the editor closed its stdin. The server now treats stdin EOF as a shutdown signal and terminates.
 
 ## [1.3.0] - 2026-06-19
 
