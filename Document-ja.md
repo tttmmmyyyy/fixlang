@@ -160,10 +160,7 @@ cargo install --locked --path .
 
 ### （オプション）エディタ拡張機能
 
-VScodeを使用している場合、以下の拡張機能をインストールすることをお勧めします。
-
-- [構文ハイライト](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlangsyntax)
-- [言語クライアント](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)
+VSCodeを使用している場合は、[Fix拡張](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)をインストールしてください。
 
 Zedを使用している場合は、[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support)をインストールしてください。
 

@@ -159,12 +159,9 @@ Thanks to [pt9999](https://github.com/pt9999), [docker image](https://hub.docker
 
 ### (Optional) Editor extensions
 
-If you are using VScode, we recommend you to install the following extensions:
+If you are using VSCode, install the [Fix extension](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client).
 
-- [Syntax highlighting](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlangsyntax)
-- [Language client](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)
-
-If you are using Zed, install the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support), which integrates the Fix language server (with semantic-token syntax highlighting).
+If you are using Zed, install the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support).
 
 ## Running Your First Fix Program
 
