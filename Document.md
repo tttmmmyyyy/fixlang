@@ -3037,7 +3037,7 @@ impl MyType : MyTrait  {
 ## Language Server Protocol
 
 Running `fix language-server` starts a language server which supports Language Server Protocol (LSP). 
-Language client extension for VSCode is available in [here](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client).
+Editor extensions that connect to this language server are available for [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support).
 
 The language server requires [the project file](#project-file) to recognize the Fix source files.
 
@@ -3055,7 +3055,7 @@ The server re-analyzes your code shortly after you stop typing (the burst of edi
 
 The initial analysis over the standard library and dependencies always runs to completion and is never interrupted by subsequent edits.
 
-In **VSCode** (the [Fix language client extension](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)), set them in `settings.json`:
+In **VSCode** (the [Fix extension](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)), set them in `settings.json`:
 
 ```json
 {

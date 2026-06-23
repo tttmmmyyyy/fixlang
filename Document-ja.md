@@ -3147,7 +3147,7 @@ impl MyType : MyTrait  {
 ## Language Server Protocol
 
 `fix language-server`を実行すると、Language Server Protocol（LSP）をサポートする言語サーバーが起動します。
-VSCode用の言語クライアント拡張機能は[こちら](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)で利用可能です。
+この言語サーバーに接続するエディタ拡張は、[VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) と [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) 向けに利用可能です。
 言語サーバーは[プロジェクトファイル](#project-file)を必要とし、Fixソースファイルを認識します。
 
 言語サーバーは、入力を止めてから少し経つと、入力中の内容に対してFixプログラムを診断（解析）します。
@@ -3164,7 +3164,7 @@ VSCode用の言語クライアント拡張機能は[こちら](https://marketpla
 
 標準ライブラリや依存ライブラリに対する最初の解析は必ず完了まで実行され、その後の編集によって中断されることはありません。
 
-**VSCode**（[Fix言語クライアント拡張](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)）では、`settings.json` に次のように設定します：
+**VSCode**（[Fix拡張](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)）では、`settings.json` に次のように設定します：
 
 ```json
 {
