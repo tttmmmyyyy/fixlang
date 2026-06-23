@@ -11,6 +11,7 @@ use super::workspace_symbol;
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
 use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig};
+use crate::constants::PROJECT_FILE_PATH;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
 use crate::elaboration::typecheckcache::{self, SharedTypeCheckCache};
@@ -1103,8 +1104,11 @@ fn send_diagnostics_notification(errs: Errors, mut prev_err_paths: Set<PathBuf>)
         return err_paths;
     };
 
-    // Send the diagnostics notification for each file that has errors.
-    for (path, errs) in errs.organize_by_path() {
+    // Group span-less errors under the project file (`fixproj.toml`) rather
+    // than an empty path: publishing them at `cdir.join("")` would target the
+    // project directory's URI, which editors cannot attach a diagnostic to, so
+    // the message would be silently dropped.
+    for (path, errs) in errs.organize_by_path(&PathBuf::from(PROJECT_FILE_PATH)) {
         err_paths.insert(path.clone());
         prev_err_paths.remove(&path);
 

@@ -1,9 +1,12 @@
 use crate::{
     configuration::BuildConfigType,
-    configuration::{Configuration, FixOptimizationLevel, LinkType, OutputFileType},
+    configuration::{Configuration, FixOptimizationLevel, LinkType, OutputFileType, ValgrindTool},
     constants::{PROJECT_FILE_PATH, TRY_FIX_DEPS_UPDATE},
     constants::{SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE_TEST},
-    dependency::lockfile::{get_lock_file_path, DependecyLockFile, LockFileType, ProjectSource},
+    dependency::lockfile::{
+        clone_git_repo, get_lock_file_path, get_versions_from_repo, DependecyLockFile,
+        LockFileType, ProjectSource,
+    },
     error::Errors,
     metafiles::config_file::ConfigFile,
     metafiles::registry_file::RegistryFile,
@@ -20,6 +23,7 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
 };
+use toml::Spanned;
 
 // The name of a project.
 pub type ProjectName = String;
@@ -58,7 +62,7 @@ impl ProjectFileGeneral {
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuild {
-    files: Vec<PathBuf>,
+    files: Vec<Spanned<PathBuf>>,
     #[serde(default)]
     objects: Vec<PathBuf>,
     static_links: Option<Vec<String>>,
@@ -87,7 +91,7 @@ pub struct ProjectFileBuild {
 #[derive(Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectFileBuildTest {
-    files: Vec<PathBuf>,
+    files: Vec<Spanned<PathBuf>>,
     #[serde(default)]
     objects: Vec<PathBuf>,
     static_links: Option<Vec<String>>,
@@ -467,24 +471,50 @@ impl ProjectFile {
         Ok(())
     }
 
+    // The source-file entries listed in the project file, each paired (via
+    // `Spanned`) with its byte range in the project file. Does not include
+    // files of dependent projects.
+    // - `mode`: The build mode (Build or Test). If Test, include files in the `[build.test]` section.
+    fn source_file_entries(&self, mode: BuildConfigType) -> Vec<&Spanned<PathBuf>> {
+        let mut entries: Vec<&Spanned<PathBuf>> = self.build.files.iter().collect();
+        if mode == BuildConfigType::Test {
+            if let Some(test) = self.build.test.as_ref() {
+                entries.extend(test.files.iter());
+            }
+        }
+        entries
+    }
+
     // Get source files of this project. Does not include files of dependent projects.
     // - `mode`: The build mode (Build or Test). If Test, include files in the `[build.test]` section.
     pub fn get_files(&self, mode: BuildConfigType) -> Vec<PathBuf> {
-        let mut files: Vec<PathBuf> = self
-            .build
-            .files
+        self.source_file_entries(mode)
             .iter()
-            .map(|p| self.join_to_project_dir(p))
-            .collect();
-        if mode == BuildConfigType::Test {
-            files.append(&mut self.build.test.as_ref().map_or(vec![], |test| {
-                test.files
-                    .iter()
-                    .map(|p| self.join_to_project_dir(p))
-                    .collect()
-            }));
+            .map(|entry| self.join_to_project_dir(entry.get_ref()))
+            .collect()
+    }
+
+    // Check that every source file listed in the project file exists on disk.
+    // Each error points at the offending entry within the project file, so
+    // editors can surface a problem whose cause is the project file rather
+    // than any source code. `mode` selects whether `[build.test]` files are
+    // included.
+    fn check_source_files_exist(&self, mode: BuildConfigType) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+        for entry in self.source_file_entries(mode) {
+            if self.join_to_project_dir(entry.get_ref()).exists() {
+                continue;
+            }
+            let span = entry.span();
+            errors.append(Errors::from_msg_srcs(
+                format!(
+                    "Source file \"{}\" does not exist.",
+                    entry.get_ref().to_string_lossy()
+                ),
+                &[&Some(self.project_file_span(span.start, span.end))],
+            ));
         }
-        files
+        errors.to_result()
     }
 
     // Get the version requirement for the Fix compiler.
@@ -530,6 +560,12 @@ impl ProjectFile {
         if is_dependent_proj {
             mode = BuildConfigType::Build;
         }
+
+        // Reject missing source files up front, pointing at the offending
+        // project-file entry. Otherwise the missing file surfaces later as a
+        // span-less "failed to canonicalize" error that editors cannot
+        // attach to any file.
+        self.check_source_files_exist(mode)?;
 
         // Append source files. Root-project files go through
         // `add_user_source_file` so they also land in
@@ -704,7 +740,7 @@ impl ProjectFile {
         if mode == BuildConfigType::Test {
             if let Some(memcheck) = self.build.test.as_ref().and_then(|test| test.memcheck) {
                 if memcheck {
-                    config.set_valgrind(crate::configuration::ValgrindTool::MemCheck);
+                    config.set_valgrind(ValgrindTool::MemCheck);
                 }
             }
         }
@@ -1105,9 +1141,8 @@ impl ProjectFile {
                     let version = match version {
                         Some(v) => v.clone(),
                         None => {
-                            let (_tmp_dir, repo) =
-                                crate::dependency::lockfile::clone_git_repo(&proj_info.git)?;
-                            let vers = crate::dependency::lockfile::get_versions_from_repo(&repo)?;
+                            let (_tmp_dir, repo) = clone_git_repo(&proj_info.git)?;
+                            let vers = get_versions_from_repo(&repo)?;
                             let mut tagged_vers = vers
                                 .iter()
                                 .filter_map(|vi| {

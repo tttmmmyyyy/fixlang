@@ -62,6 +62,39 @@ mod integration_tests {
         );
     }
 
+    /// A source file listed in `fixproj.toml` that does not exist on disk
+    /// must produce a clear error that points at the offending entry in the
+    /// project file (here, `test.fix` in `[build.test]`), rather than an
+    /// opaque, location-less "Failed to canonicalize path" message.
+    #[test]
+    fn test_check_missing_source_file() {
+        install_fix();
+        let (_temp_dir, project_dir) = setup_test_env("missing_source_file_project");
+
+        let output = Command::new("fix")
+            .arg("check")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix check");
+
+        assert!(
+            !output.status.success(),
+            "fix check should fail when a listed source file is missing"
+        );
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Source file \"test.fix\" does not exist."),
+            "Error message should name the missing source file, got: {}",
+            stderr
+        );
+        assert!(
+            stderr.contains("fixproj.toml"),
+            "Error should be located in the project file, got: {}",
+            stderr
+        );
+    }
+
     #[test]
     fn test_check_detects_type_error_in_test_code() {
         install_fix();

@@ -307,20 +307,40 @@ mod tests {
             .values()
             .flat_map(|diagnostics| {
                 diagnostics.iter().filter_map(|diag| {
-                    diag.get("message").and_then(|m| m.as_str()).map(String::from)
+                    diag.get("message")
+                        .and_then(|m| m.as_str())
+                        .map(String::from)
                 })
             })
             .collect();
 
         // Verify the error message contains "Failed to clone the repository"
-        let has_clone_error = all_messages.iter().any(|message| {
-            message.contains("Failed to clone the repository")
-        });
+        let has_clone_error = all_messages
+            .iter()
+            .any(|message| message.contains("Failed to clone the repository"));
 
         assert!(
             has_clone_error,
             "Should have 'Failed to clone the repository' error. Found messages: {:?}",
             all_messages
+        );
+
+        // The dependency-resolution failure has no source span. Such errors
+        // must be anchored to `fixproj.toml` so editors display them; if they
+        // were published against the project directory's URI instead, editors
+        // would silently drop them (the diagnostic would appear empty).
+        let clone_error_on_project_file = all_diagnostics.iter().any(|(path, diagnostics)| {
+            path.file_name().and_then(|n| n.to_str()) == Some("fixproj.toml")
+                && diagnostics.iter().any(|diag| {
+                    diag.get("message")
+                        .and_then(|m| m.as_str())
+                        .map_or(false, |m| m.contains("Failed to clone the repository"))
+                })
+        });
+        assert!(
+            clone_error_on_project_file,
+            "A location-less error must be anchored to fixproj.toml. Diagnostics: {:?}",
+            all_diagnostics
         );
 
         // Verify that at least one error has Error severity (not just warning)

@@ -2,7 +2,10 @@ use crate::misc::{Map, Set};
 use crate::{misc, parse::sourcefile::Span};
 use colored::{Color, Colorize};
 use serde_json::Value;
-use std::{fmt::Display, path::PathBuf};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 /// Diagnostic code for "use of a deprecated item".
 pub const WARN_DEPRECATED: &'static str = "deprecated";
@@ -139,14 +142,17 @@ impl Errors {
         str
     }
 
-    // Organize all `Error`s by the path of its (first) `Span`.
-    // If an `Error` has no `Span`, it will be considered as having a default PathBuf.
-    pub fn organize_by_path(&self) -> Vec<(PathBuf, Vec<Error>)> {
+    // Organize all `Error`s by the path of their (first) `Span`. An `Error`
+    // with no `Span` is grouped under `spanless_fallback`, letting a caller
+    // that needs every error attached to a real file route the location-less
+    // ones there (the language server uses the project file, since a
+    // diagnostic with no file is not displayable).
+    pub fn organize_by_path(&self, spanless_fallback: &Path) -> Vec<(PathBuf, Vec<Error>)> {
         // Organize errors into a hashmap.
         let mut map: Map<PathBuf, Vec<Error>> = Map::default();
         for err in &self.errs {
             let path = match err.srcs.first() {
-                None => PathBuf::new(),
+                None => spanless_fallback.to_path_buf(),
                 Some((_, span)) => span.input.file_path.clone(),
             };
             misc::insert_to_map_vec(&mut map, &path, err.clone());
