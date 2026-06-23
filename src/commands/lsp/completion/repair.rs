@@ -172,14 +172,18 @@ fn pick_insertion(source: &str, pos: usize, candidates: &[&'static str]) -> Opti
 /// landed (in the partial id, between dot and id, before whitespace,
 /// etc.).
 ///
-/// Fix's `expr_dot_seq` allows `sep*` (whitespace including newlines)
-/// on both sides of the dot, so the search walks across whitespace in
-/// both directions:
+/// The search is asymmetric around the dot:
 ///
 ///   - back from the cursor: any name chars (the partial id), then
-///     whitespace, then the dot we anchor on
-///   - forward from the dot: any whitespace, then the name chars that
-///     form the post-dot identifier (which might be on a later line)
+///     whitespace (newlines included — the cursor is on the method the
+///     user is completing, which may sit on a continuation line), then
+///     the dot we anchor on.
+///   - forward from the dot: only same-line whitespace, then the name
+///     chars of the post-dot identifier. The forward scan must not cross
+///     a newline: past the dot lies code the user is *not* completing, and
+///     reaching into the next statement or declaration would rewrite it
+///     into the hole. With no identifier on the dot's line, the hole is
+///     anchored right after the dot.
 fn apply_a0(live_buffer: &str, cursor_byte: usize) -> Option<RepairOutput> {
     let cursor_byte = cursor_byte.min(live_buffer.len());
     let bytes = live_buffer.as_bytes();
@@ -212,11 +216,17 @@ fn apply_a0(live_buffer: &str, cursor_byte: usize) -> Option<RepairOutput> {
         return None;
     }
 
-    // Walk forward from the dot through whitespace, then through name
-    // chars, to find the full post-dot identifier the user wrote
-    // (possibly on a later line).
+    // Walk forward from the dot through *same-line* whitespace (spaces or
+    // tabs only) and then through name chars, to find the post-dot
+    // identifier on the dot's own line. The scan deliberately stops at a
+    // newline: crossing it would let the scan reach into the following
+    // statement or top-level declaration (e.g. `foo = x.` followed by
+    // `\n\nmain : ...`) and rewrite *that* into the hole, destroying
+    // unrelated code and leaving no receiver type to read. When the dot's
+    // line has no post-dot identifier, the hole is anchored right after
+    // the dot; outer repair then fixes up whatever follows on later lines.
     let mut id_start = dot_pos + 1;
-    while id_start < bytes.len() && is_ascii_whitespace(bytes[id_start]) {
+    while id_start < bytes.len() && is_same_line_whitespace(bytes[id_start]) {
         id_start += 1;
     }
     let mut id_end = id_start;
@@ -224,10 +234,9 @@ fn apply_a0(live_buffer: &str, cursor_byte: usize) -> Option<RepairOutput> {
         id_end += 1;
     }
 
-    // Replace [id_start..id_end] with `?`. Whitespace between the dot
-    // and the id stays in place — `obj.\n    ?` parses the same as
-    // `obj.?` and preserving the indentation keeps every other span
-    // unchanged.
+    // Replace [id_start..id_end] with `?`. Same-line whitespace between
+    // the dot and the id stays in place — `obj.  ?` parses the same as
+    // `obj.?` and preserving it keeps every other span unchanged.
     let mut out = String::with_capacity(live_buffer.len() + 1);
     out.push_str(&live_buffer[..id_start]);
     out.push('?');
@@ -237,6 +246,13 @@ fn apply_a0(live_buffer: &str, cursor_byte: usize) -> Option<RepairOutput> {
         source: out,
         cursor_byte: id_start + 1,
     })
+}
+
+/// True for whitespace that stays on the same line — spaces and tabs.
+/// Newlines and CR are excluded so the forward post-dot scan never
+/// crosses a line boundary into following statements or declarations.
+fn is_same_line_whitespace(b: u8) -> bool {
+    matches!(b, b' ' | b'\t')
 }
 
 /// True for bytes that pest's `name_char` rule accepts as a
@@ -324,16 +340,15 @@ mod tests {
         assert_eq!(out.source, "    42.?");
     }
 
+    /// With the cursor right after a dot at the end of a line, the forward
+    /// scan stops at the newline, leaving the token on the next line
+    /// (`pure`) intact and anchoring the hole right after the dot.
     #[test]
-    fn a0_replaces_post_dot_id_across_newline() {
-        // Cursor right after the dot on one line; the post-dot id
-        // lives on the next line. Fix's `expr_dot_seq` allows `sep*`
-        // between the dot and the next component, so this is `42.pure`
-        // to the parser, and A0 should replace `pure` with `?`.
+    fn a0_anchors_hole_at_dot_when_dot_ends_the_line() {
         let src = "    42.\n    pure()";
         let cursor = "    42.".len();
-        let out = apply_a0(src, cursor).expect("multi-line post-dot id");
-        assert_eq!(out.source, "    42.\n    ?()");
+        let out = apply_a0(src, cursor).expect("dot at end of line");
+        assert_eq!(out.source, "    42.?\n    pure()");
         // Cursor anchor lands just after the inserted `?`.
         assert_eq!(
             out.source.as_bytes()[out.cursor_byte - 1],
@@ -341,6 +356,39 @@ mod tests {
             "cursor should land on the inserted `?`; got source = {:?}, byte = {}",
             out.source,
             out.cursor_byte
+        );
+    }
+
+    /// `foo : I64 = "Foo".` followed by a blank line and the next
+    /// top-level declaration (`main`). The forward post-dot scan must NOT
+    /// cross the blank line and rewrite `main` into the hole — that
+    /// destroys the `main` declaration and makes the whole file
+    /// unparseable, so dot-completion finds no receiver type and falls
+    /// back to an untiered (alphabetical) candidate list. The hole should
+    /// instead be anchored right after the dot, leaving `main` intact.
+    #[test]
+    fn a0_does_not_eat_next_top_level_decl_across_blank_line() {
+        let src = "foo : I64 = \"Foo\".\n\nmain : IO () = (\n    pure()\n);";
+        let cursor = "foo : I64 = \"Foo\".".len();
+        let out = apply_a0(src, cursor).unwrap();
+        assert_eq!(
+            out.source,
+            "foo : I64 = \"Foo\".?\n\nmain : IO () = (\n    pure()\n);"
+        );
+        assert_eq!(out.source.as_bytes()[out.cursor_byte - 1], b'?');
+    }
+
+    /// Same hazard without a blank line between the declarations: the
+    /// forward scan still stops at the newline, so the next declaration
+    /// must not be consumed as a post-dot method.
+    #[test]
+    fn a0_does_not_eat_next_top_level_decl_without_blank_line() {
+        let src = "foo : I64 = \"Foo\".\nmain : IO () = (\n    pure()\n);";
+        let cursor = "foo : I64 = \"Foo\".".len();
+        let out = apply_a0(src, cursor).unwrap();
+        assert_eq!(
+            out.source,
+            "foo : I64 = \"Foo\".?\nmain : IO () = (\n    pure()\n);"
         );
     }
 

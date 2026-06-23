@@ -1,0 +1,6 @@
+[general]
+name = "completion-dot-toplevel-value"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
