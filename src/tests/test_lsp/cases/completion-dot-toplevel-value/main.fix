@@ -1,0 +1,7 @@
+module Main;
+
+foo : I64 = "Foo".
+
+main : IO () = (
+    pure()
+);

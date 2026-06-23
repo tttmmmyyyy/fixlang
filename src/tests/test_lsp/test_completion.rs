@@ -544,7 +544,6 @@ mod tests {
     /// any fix lands; once it passes the regression is closed.
     #[test]
     fn test_completion_dot_sort_stale_snapshot_after_dot_added() {
-        use crate::tests::test_lsp::lsp_client::LspClient;
         use std::fs;
 
         install_fix();
@@ -1282,6 +1281,63 @@ mod tests {
             "completion in ordinary code must still return candidates \
              (expected `Main::myfunc`); got {:?}",
             labels,
+        );
+
+        ctx.shutdown();
+    }
+
+    /// A dot at the end of a *top-level value's* body
+    /// (`foo : I64 = "Foo".`) extracts the receiver type (`String`) so
+    /// String methods rank in Tier 0.
+    ///
+    /// The hazard: the repair pre-pass scans forward from the dot, and
+    /// the next non-whitespace token is the following top-level
+    /// declaration (`main`) across a blank line. The scan must not rewrite
+    /// `main` into the hole — doing so destroys the `main` declaration, the
+    /// file no longer elaborates, no receiver type is found, and completion
+    /// falls back to an untiered (alphabetical) list with String methods
+    /// buried below unrelated ones. The hole must instead anchor right
+    /// after the dot.
+    #[test]
+    fn test_completion_dot_at_end_of_top_level_value_body() {
+        let mut ctx =
+            LspCompletionCtx::setup("completion-dot-toplevel-value", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: foo : I64 = "Foo".   <- dot at end; cursor at col 18
+        //   3: (blank)
+        //   4: main : IO () = (
+        //   5:     pure()
+        //   6: );
+        let items = ctx.complete_with_timeout("main.fix", 2, 18, Duration::from_secs(60));
+
+        // The receiver is a `String`, so the dot-context ranker must have
+        // run: at least one `Std::String::*` candidate must land in
+        // Tier 0 (a `0`-prefixed sortText). Before the fix these were
+        // untiered (no sortText) because no receiver type was recovered.
+        let best_string_sort = items
+            .iter()
+            .filter(|it| {
+                it.get("label")
+                    .and_then(|l| l.as_str())
+                    .map_or(false, |l| l.starts_with("Std::String::"))
+            })
+            .filter_map(|it| it.get("sortText").and_then(|v| v.as_str()))
+            .min();
+        let best = best_string_sort.unwrap_or_else(|| {
+            panic!(
+                "expected at least one `Std::String::*` candidate carrying a \
+                 dot-context sortText (receiver should be String); got {} items",
+                items.len()
+            )
+        });
+        assert!(
+            best.starts_with('0'),
+            "a `Std::String::*` method should rank in Tier 0 for a String \
+             receiver; best sortText was {:?}",
+            best,
         );
 
         ctx.shutdown();
