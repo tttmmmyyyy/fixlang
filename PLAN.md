@@ -4,7 +4,7 @@
 
 RC（参照カウント）最適化の基盤として **RC IR**（評価順を固定した ANF ＋ 明示 retain/release ＋ ローカル名グローバル一意）を導入し、その上で uniqueness 解析・unique-check-elim・将来の RC 最適化（retain/release 相殺・reuse・borrow・順序スケジューリング）を行う。
 
-用語: 値の形＝`AVal`（boxed はロケーションへのポインタ）、参照カウント上界＝`CTRefCnt`（`Static(n)`/`Dynamic`、`Static(1)`=unique）をコンパイル時の仮想ヒープ `heap: Loc→Cell` に持つ、関数ごとの要約＝`UniqSignature`。
+用語: 値の形＝`Shape`（boxed はロケーションへのポインタ）、参照カウント上界＝`CTRefCnt`（`Static(n)`/`Dynamic`、`Static(1)`=unique）をコンパイル時の仮想ヒープ `heap: Loc→Cell` に持つ、関数ごとの要約＝`UniqSignature`。
 
 ## 0. 動機（なぜ RC IR か）
 
@@ -136,36 +136,36 @@ type Loc;                  // AllocSite | Summary(AllocSite) | Top
 type PtsTo = Set<Loc>;     // points-to 集合（分岐合流で複数 Loc を指しうる。通常は単集合）
 
 #[derive(Clone, PartialEq, Eq)]
-enum AVal {                  // env / フィールドが持つ「値の形」。boxed はインラインせず必ずポインタ1個で切れる
+enum Shape {                  // env / フィールドが持つ「値の形」。boxed はインラインせず必ずポインタ1個で切れる
     Unboxed,                 // scalar（refcount 無し）
-    UnboxedAgg(Vec<AVal>),   // タプル/unboxed struct/unboxed union（refcount 無し、子を持つ）
+    UnboxedAgg(Vec<Shape>),   // タプル/unboxed struct/unboxed union（refcount 無し、子を持つ）
     Boxed(PtsTo),            // boxed 値＝仮想ヒープへのポインタ（rc と中身は cell 側）
     Bottom,                  // ⊥（到達しない・union の不在 variant）。join 単位元
 }
 
-struct Cell { rc: CTRefCnt, contents: AVal } // 1 オブジェクト分。Array は contents=要素 AVal、boxed struct は UnboxedAgg(フィールド)、boxed union は variant ごと
-struct State { env: Map<Var, AVal>, heap: Map<Loc, Cell> } // heap ＝ 仮想ヒープ
+struct Cell { rc: CTRefCnt, contents: Shape } // 1 オブジェクト分。Array は contents=要素 Shape、boxed struct は UnboxedAgg(フィールド)、boxed union は variant ごと
+struct State { env: Map<Var, Shape>, heap: Map<Loc, Cell> } // heap ＝ 仮想ヒープ
 ```
 
-**再帰型は有限グラフ**: `AVal` は boxed のところで必ず `Boxed(PtsTo)`（ポインタ）に切れるので `AVal` 単体は常に有限。`List` 等の再帰は **cell の contents が別の Loc（自分自身も可）を指す巡回グラフ**になり、Loc が有限（アロケーションサイト抽象）なので全体も有限。よって木の打ち切りノードは要らず、有限性は Loc 集合の有限性が担保する。ループ生成された再帰構造は同一サイト → summary loc に集約（rc は `Dynamic`、更新は弱更新）。
+**再帰型は有限グラフ**: `Shape` は boxed のところで必ず `Boxed(PtsTo)`（ポインタ）に切れるので `Shape` 単体は常に有限。`List` 等の再帰は **cell の contents が別の Loc（自分自身も可）を指す巡回グラフ**になり、Loc が有限（アロケーションサイト抽象）なので全体も有限。よって木の打ち切りノードは要らず、有限性は Loc 集合の有限性が担保する。ループ生成された再帰構造は同一サイト → summary loc に集約（rc は `Dynamic`、更新は弱更新）。
 
 **強更新 / 弱更新**（`Release`/`Retain` による cell 更新の話。uniqueness の**読み取り** `is_unique`（§3.2 末尾）とは別軸）: points-to が**単集合 `{L}` かつ `L` が非 summary** のときだけ `L` の cell を**強更新**（`Release` で `Static(2)`→`Static(1)` の unique 回復ができる＝線形スレッドの精度）。多重指し or summary loc では**弱更新**（`Retain` は各 Loc を +1＝上界、`Release` は減算しない＝上界を保つ）。これで「線形ケースは精度を保ち、別名・要約は健全に保守的」を両立する。多重指しでも、各候補が rc 1 なら `is_unique` は unique と読める（読み取りは候補 rc の max）。
 
-**join**（合流・不動点）: `AVal` は pointwise（`Bottom` 単位元、`Unboxed` 同士、`UnboxedAgg` は zip、`Boxed(P1)⊔Boxed(P2)=Boxed(P1∪P2)`）。`heap` は Loc ごとに cell を join（`rc` は max、`contents` は join）。**points-to 集合は「指しうる候補」の列挙（各 Loc を個別に追跡・rc も個別）であり summary loc とは別物**: 分岐で別アロケーションを指すと `{L_A, L_B}` になるが、各 cell の rc は join で `Static(1)` のまま（潰して `Dynamic` にはしない。summary loc はループ等で**共存**する複数オブジェクトを1つに畳んだ場合のみ）。PtsTo は有限 Loc 集合の部分集合なので有界（サイズ widening は不要）。`CTRefCnt` の K-cap と Loc の有限性で格子は有限 → 不動点は停止。
+**join**（合流・不動点）: `Shape` は pointwise（`Bottom` 単位元、`Unboxed` 同士、`UnboxedAgg` は zip、`Boxed(P1)⊔Boxed(P2)=Boxed(P1∪P2)`）。`heap` は Loc ごとに cell を join（`rc` は max、`contents` は join）。**points-to 集合は「指しうる候補」の列挙（各 Loc を個別に追跡・rc も個別）であり summary loc とは別物**: 分岐で別アロケーションを指すと `{L_A, L_B}` になるが、各 cell の rc は join で `Static(1)` のまま（潰して `Dynamic` にはしない。summary loc はループ等で**共存**する複数オブジェクトを1つに畳んだ場合のみ）。PtsTo は有限 Loc 集合の部分集合なので有界（サイズ widening は不要）。`CTRefCnt` の K-cap と Loc の有限性で格子は有限 → 不動点は停止。
 補助: `top_of(ty)`（保守的 ⊤＝boxed は `Boxed({Top})`、`heap[Top].rc=Dynamic`）。
 
 ### 3.2 interpret 規則（RC IR を辿る）
 `State`（env, heap）を更新しながら `RcExpr` を順に処理:
-- `Let(x, Construct(_, args), k)`: このサイトの Loc `L`（初訪は新規、再訪は summary 化）に `Cell{ rc: Static(1)（summary なら join → Dynamic）, contents: args の AVal }` を確保。`env[x] = Boxed({L})`。args は move-in（参照がフィールドへ移るだけで arg-cell の rc は不変）。
-- `Let(x, Closure(_, captures), k)`: 同様に新規 cell `Cell{ Static(1), UnboxedAgg(captures の AVal) }`、`env[x]=Boxed({L})`。捕捉は move-in。これにより捕捉された配列等を追える。
+- `Let(x, Construct(_, args), k)`: このサイトの Loc `L`（初訪は新規、再訪は summary 化）に `Cell{ rc: Static(1)（summary なら join → Dynamic）, contents: args の Shape }` を確保。`env[x] = Boxed({L})`。args は move-in（参照がフィールドへ移るだけで arg-cell の rc は不変）。
+- `Let(x, Closure(_, captures), k)`: 同様に新規 cell `Cell{ Static(1), UnboxedAgg(captures の Shape) }`、`env[x]=Boxed({L})`。捕捉は move-in。これにより捕捉された配列等を追える。
 - `Let(x, LLVM(prim, args), k)`: prim の宣言 `UniqSignature`（§3.3）を適用。
-  - 射影（getter）`x = get(a, i)`: `env[x]` ＝ `a` の指す cell の `contents` を i 射影した AVal（boxed なら同じ Loc を指す）。**retain する getter**（`Array::@` 等、配列を残して要素を複製）は子 Loc の rc を +1 → `env[x]` と `a` の field i が同一 Loc を共有＝**別名を捕捉**（以後 `Retain`/`Release` が同じ cell を更新）。**move-out する linear get**（`mod`/`act` の `_unsafe..unretained`）は rc 据え置き（参照がフィールドから出るだけ）。
+  - 射影（getter）`x = get(a, i)`: `env[x]` ＝ `a` の指す cell の `contents` を i 射影した Shape（boxed なら同じ Loc を指す）。**retain する getter**（`Array::@` 等、配列を残して要素を複製）は子 Loc の rc を +1 → `env[x]` と `a` の field i が同一 Loc を共有＝**別名を捕捉**（以後 `Retain`/`Release` が同じ cell を更新）。**move-out する linear get**（`mod`/`act` の `_unsafe..unretained`）は rc 据え置き（参照がフィールドから出るだけ）。
   - force-unique 系（`set`/`mod`/`act`）: 結果は新規 or 再利用 Loc で `rc=Static(1)`、格納値は要素位置へ。
-- `Let(x, App(f, args), k)`: `f` の `UniqSignature` を適用（結果 AVal ／ 各 arg cell の rc 効果 ／ 結果が arg を別名化するか、を反映。クロージャ値でも funptr でも対象関数の要約を引く）。
+- `Let(x, App(f, args), k)`: `f` の `UniqSignature` を適用（結果 Shape ／ 各 arg cell の rc 効果 ／ 結果が arg を別名化するか、を反映。クロージャ値でも funptr でも対象関数の要約を引く）。
 - `Retain(x, k)`: `env[x]` の root PtsTo の各 Loc の rc を +1（単集合・非 summary は強更新、多重・summary は各 +1 の弱更新）。全別名が同一 cell を見るので同期する。
 - `Release(x, k)`: 単集合 `{L}` かつ非 summary なら `L.rc` を −1（**`Static(2)`→`Static(1)` で unique 回復**、`Static(1)`→0 で解放し contents を辿って子を再帰 Release）。多重・summary は据え置き（上界維持）。`Release` が count を戻すので net-zero（1→2→1）は**解析自身が回復**する。
 - `Match(a, arms)`: 各 arm を**分岐前 State のコピー**から解析し、結果 State を `join`。不在 variant の payload は `Bottom`。Bool もここ（2 variant）。
-- `Ret(atom)`: 結果 ＝ atom の AVal。
+- `Ret(atom)`: 結果 ＝ atom の Shape。
 - global 参照 → `Boxed({Top})`（`heap[Top].rc=Dynamic`）。
 
 要点: **refcount を仮想ヒープの cell で追い、別名は同一 Loc で共有**。線形スレッド（`a1=set(a0,..); a2=set(a1,..)`）は単集合・強更新で rc が `Static(1)` を保ち、retain getter で生じた別名は子 Loc の rc が ≥2 になって正しく shared と分かる。
@@ -175,7 +175,7 @@ struct State { env: Map<Var, AVal>, heap: Map<Loc, Cell> } // heap ＝ 仮想ヒ
 詳細（getter ごとの retain 有無、summary loc の弱更新の精密化）は P2 で確定。
 
 ### 3.3 関数の効果（`UniqSignature`, per-input-key concrete）
-関数の効果は、入力（各引数の AVal ＋ 関係する cell）をキーに body を §3.2 で解析した結果＝`(結果 AVal, 各 arg cell の rc 効果, 結果↔引数の別名関係)` を memo する（入力ごとの concrete な要約）。
+関数の効果は、入力（各引数の Shape ＋ 関係する cell）をキーに body を §3.2 で解析した結果＝`(結果 Shape, 各 arg cell の rc 効果, 結果↔引数の別名関係)` を memo する（入力ごとの concrete な要約）。
 - **ソース関数 = 推論**: 入力キーごとに body 解析を memo（§4.1 の特殊化 worklist と共有。再帰は不動点、初期 `Bottom`）。
 - **プリミティブ（`LLVM`/FFI）= 宣言**: retain getter `@i`→結果が field i の Loc を別名化（子 rc +1）、linear get→field を move-out、`set`/`mod`/`act`→配列引数 consume・結果 `rc=Static(1)`・格納値は要素位置へ、`fill`→要素を多スロットへ複製（要素 rc を `Dynamic`）、`boxed_to_retained_ptr`→引数 escape。未知 FFI は保守的（引数を `Dynamic`、結果 `top_of`）。
 - global = `Dynamic`。assert ビルドで不健全な claim を実行時検出。
