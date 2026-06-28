@@ -4,7 +4,7 @@
 
 RC（参照カウント）最適化の基盤として **RC IR**（評価順を固定した ANF ＋ 明示 retain/release ＋ ローカル名グローバル一意）を導入し、その上で uniqueness 解析・unique-check-elim・将来の RC 最適化（retain/release 相殺・reuse・borrow・順序スケジューリング）を行う。
 
-用語: 各値の uniqueness 表現＝`CTRefCntTree`（leaf＝`CTRefCnt`（`Static(n)`/`Dynamic`、refcount 上界。`Static(1)`=unique））、関数ごとの要約＝`UniqSignature`。
+用語: 値の形＝`AVal`（boxed はロケーションへのポインタ）、参照カウント上界＝`CTRefCnt`（`Static(n)`/`Dynamic`、`Static(1)`=unique）をコンパイル時の仮想ヒープ `heap: Loc→Cell` に持つ、関数ごとの要約＝`UniqSignature`。
 
 ## 0. 動機（なぜ RC IR か）
 
@@ -113,57 +113,69 @@ enum RcState {            // retain/release の state ディスパッチ。lower
 - → 後段の uniqueness 解析は「**`Retain` されていない boxed 値 ＝ unique**」を素直に読めるようになる。
 - clone 削減としても有用。
 
-これは**純粋な RC 削減の最適化**（最終コードの retain/release が減って速くなる、clone も減る）。**uniqueness 解析の precision には不要**: §3 は leaf を refcount 上界 `Static(n)` にして `Release` で count を戻すので、net-zero（1→2→1）を**解析自身が回復**する（相殺前でも `Static(1)` と分かる）。よって相殺は順序自由でいつ走らせてもよく、解析の前提ではない（健全性とも無関係）。
+これは**純粋な RC 削減の最適化**（最終コードの retain/release が減って速くなる、clone も減る）。**uniqueness 解析の precision には不要**: §3 はオブジェクトの参照カウントを上界 `Static(n)` で持ち `Release` で戻すので、net-zero（1→2→1）を**解析自身が回復**する（相殺前でも `Static(1)` と分かる）。よって相殺は順序自由でいつ走らせてもよく、解析の前提ではない（健全性とも無関係）。
 
-## 3. uniqueness 解析（RC IR の interpret）
+## 3. uniqueness 解析（RC IR を抽象解釈）
 
-`CTRefCntTree`（各値の uniqueness を静的に表す、保守的に `Dynamic` 側へ倒した近似）を RC IR を辿って求める。**名前グローバル一意**なので env は `Map<Var, CTRefCntTree>` のみ（スコープ push/pop 不要）。
+RC IR を**抽象解釈**し、**コンパイル時の仮想ヒープ**上で参照カウントだけを emulate する。各オブジェクト（ロケーション）に `CTRefCnt`（refcount 上界）を持たせ、`Construct`=確保、`Retain`/`Release`=増減、射影=エイリアス、を辿る。ループ・再帰は実回数まわさず、有限領域上の**不動点**で畳む（合流で join、終端のため cap で widen）。`CTRefCnt` は上界なので、合流・要約ロケーションでは shared 側（保守的）へ倒れる。
 
-### 3.1 `CTRefCntTree` と格子
+**なぜ per-var の木でなく仮想ヒープか**: refcount は「オブジェクトの属性」であって「変数の属性」ではない。retain する getter（`arr.@i`）は boxed の子に**第二の参照**を作る＝複数の変数が同一オブジェクトを指す（別名）。refcount を変数ごとに持つと別名間で同期できず不健全（`x` 経由で「unique」と誤判定して in-place 破壊しうる）。refcount を**ロケーションの cell に1つ**持てば、`Retain`/`Release` が cell を更新し、それを指す全別名が同じ値を見る。
+
+### 3.1 状態（仮想ヒープ）
 ```rust
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum CTRefCnt { Static(usize), Dynamic } // boxed root の refcount **上界**。Static(1)=unique、Static(n>1)/Dynamic=shared、Dynamic=⊤。
+enum CTRefCnt { Static(usize), Dynamic } // オブジェクトの refcount **上界**。Static(1)=unique、Static(n>1)/Dynamic=shared、Dynamic=⊤。
 // 健全性: Static(n) ＝「real refcount ≤ n」。Construct→Static(1)、Retain→+1、Release→−1、join→max。
-// 終端性: count に上限 K を設け超過は Dynamic に widen（K=2 で実用十分。実質 {Static(1),Static(2),Dynamic} の有限格子）。
-// 以降の散文では unique＝Static(1)、shared＝Static(n>1)/Dynamic の意。
+// 終端性: count に上限 K（K=2 で実用十分）。超過は Dynamic に widen（実質 {Static(1),Static(2),Dynamic} の有限格子）。
+// 散文では unique＝Static(1)、shared＝Static(n>1)/Dynamic の意。
+
+// 抽象ロケーション: アロケーションサイト（Construct/Closure/force-unique 結果/不明 alloc のプログラム地点）で抽象化。
+//   サイトは有限個 → Loc も有限。ループ等で同一サイトを再訪すると同じ Loc に集約＝summary loc（複数の具体オブジェクトを表す）。
+//   + Top: 外部・global・未知 FFI 由来。常に Dynamic。
+type Loc;                  // AllocSite | Summary(AllocSite) | Top
+type PtsTo = Set<Loc>;     // points-to 集合（分岐合流で複数 Loc を指しうる。通常は単集合）
 
 #[derive(Clone, PartialEq, Eq)]
-enum CTRefCntTree {
-    Bottom,                               // ⊥。情報なし/到達しない。join 単位元。union の出現しない variant。
-    UnboxedLeaf,                          // boxed 内容なし（scalar / 正規化で畳まれた all-unboxed aggregate）。
-    BoxedAggregate(CTRefCnt, Vec<CTRefCntTree>), // Array(len1=要素)/boxed struct(フィールド)/boxed union(variant payload)。root + 中身。
-    UnboxedAggregate(Vec<CTRefCntTree>),      // タプル/unboxed struct/unboxed union（root 無し）。
-    OpaqueBoxed(CTRefCnt),            // boxed root のみ追跡し中身は要約（再帰位置・深さ上限での打ち切り）。project すると ⊤。
+enum AVal {                  // env / フィールドが持つ「値の形」。boxed はインラインせず必ずポインタ1個で切れる
+    Unboxed,                 // scalar（refcount 無し）
+    UnboxedAgg(Vec<AVal>),   // タプル/unboxed struct/unboxed union（refcount 無し、子を持つ）
+    Boxed(PtsTo),            // boxed 値＝仮想ヒープへのポインタ（rc と中身は cell 側）
+    Bottom,                  // ⊥（到達しない・union の不在 variant）。join 単位元
 }
+
+struct Cell { rc: CTRefCnt, contents: AVal } // 1 オブジェクト分。Array は contents=要素 AVal、boxed struct は UnboxedAgg(フィールド)、boxed union は variant ごと
+struct State { env: Map<Var, AVal>, heap: Map<Loc, Cell> } // heap ＝ 仮想ヒープ
 ```
-join は pointwise（`Bottom` 単位元、leaf は `max`（`Static(a)`,`Static(b)`→`Static(max(a,b))`、`Dynamic` が絡めば `Dynamic`、cap 超は `Dynamic`）、`BoxedAggregate` は root と中身を join、aggregate は zip、`OpaqueBoxed` は root を `max`）。
 
-**形は特殊化後の具体型のレイアウトに一致する**（畳み込み正規化はしない）。`(I64,I64)` = `UnboxedAggregate([UnboxedLeaf, UnboxedLeaf])`、`Array I64` = `BoxedAggregate(_, [UnboxedLeaf])`。型が決まれば形も一意に決まる（特殊化後は全型が具体）ので、`project(u, i)` は Vec の i 番目を引くだけ（Array は i=0 が要素）、`join` は同型どうしで必ず同形になる。
+**再帰型は有限グラフ**: `AVal` は boxed のところで必ず `Boxed(PtsTo)`（ポインタ）に切れるので `AVal` 単体は常に有限。`List` 等の再帰は **cell の contents が別の Loc（自分自身も可）を指す巡回グラフ**になり、Loc が有限（アロケーションサイト抽象）なので全体も有限。よって木の打ち切りノードは要らず、有限性は Loc 集合の有限性が担保する。ループ生成された再帰構造は同一サイト → summary loc に集約（rc は `Dynamic`、更新は弱更新）。
 
-**再帰型の打ち切り（終端性）**: レイアウトをそのまま展開すると再帰型（`List` 等、boxed union が自分自身を子に持つ）は無限木になる。型を木へ展開する際、根からの経路に既出の型コンストラクタが再び現れた再帰位置（相互再帰も含む）で `OpaqueBoxed(rc)` に打ち切る（任意で深さ上限 D も併用）。再帰は必ず boxed を経由する（unboxed 再帰型は有限レイアウトを持てない）ので打ち切りノードは常に `OpaqueBoxed`。打ち切り点は型ごとに確定するので同型どうしの形は一致したまま。これにより格子が有限になり、再帰関数の不動点反復が停止する。`project(OpaqueBoxed(rc), i)` は `top_of`（中身は保守的に `Dynamic`）。再帰位置スロットへの値の格納は `OpaqueBoxed(その値の root rc)` に要約する（shape analysis の fold）。
-補助: `top_of(ty)`（保守的 ⊤＝全 boxed root を `Dynamic`、再帰位置は `OpaqueBoxed(Dynamic)`）、`project(u, i)`（aggregate の i 番目。Array は i=0 が要素。`OpaqueBoxed` は ⊤）。
+**強更新 / 弱更新**: points-to が**単集合 `{L}` かつ `L` が非 summary** のときだけ `L` の cell を**強更新**（`Release` で `Static(2)`→`Static(1)` の unique 回復ができる＝線形スレッドの精度）。多重指し or summary loc では**弱更新**（`Retain` は各 Loc を +1＝上界、`Release` は減算しない＝上界を保つ）。これで「線形ケースは精度を保ち、別名・要約は健全に保守的」を両立する。
+
+**join**（合流・不動点）: `AVal` は pointwise（`Bottom` 単位元、`Unboxed` 同士、`UnboxedAgg` は zip、`Boxed(P1)⊔Boxed(P2)=Boxed(P1∪P2)`）。`heap` は Loc ごとに cell を join（`rc` は max、`contents` は join）。PtsTo が増えすぎたら summary loc に集約（widen）。`CTRefCnt` の K-cap と Loc の有限性で格子は有限 → 不動点は停止。
+補助: `top_of(ty)`（保守的 ⊤＝boxed は `Boxed({Top})`、`heap[Top].rc=Dynamic`）。
 
 ### 3.2 interpret 規則（RC IR を辿る）
-env: `Map<Var, CTRefCntTree>`。`RcExpr` を順に処理:
-- `Let(x, op, k)`: `env[x] = U(op)`; `k` へ。
-  - `Construct` → 新規確保: `BoxedAggregate(Static(1), [引数の CTRefCntTree])` または `UnboxedAggregate(...)`。再帰位置のスロットへ収まる引数は `OpaqueBoxed(その引数の root)` に要約。
-  - `LLVM(prim, args)` → prim の宣言 `UniqSignature` を適用（force-unique 系の**結果 root は常に `Static(1)`**）。
-  - `App(f, args)` → `f` の `UniqSignature`（推論）を適用（`f` がクロージャ値でも funptr でも、対象 top-level 関数の要約を引く）。
-  - `Closure(func, captures)` → `BoxedAggregate(Static(1), [captures の CTRefCntTree])`（新規 closure。捕捉を保持）。これにより捕捉された配列等の uniqueness を追える（捕捉クロージャ越しの健全性が扱える）。
-  - 射影（フィールド/variant payload/配列要素）は getter プリミティブ＝`LLVM` なので上の `LLVM` 規則で扱う（`project(env[a], i)` 相当は getter の `UniqSignature` の中身。専用規則なし）。
-- `Retain(x, k)`: `env[x]` の root（`BoxedAggregate`/`OpaqueBoxed` の `CTRefCnt`）を +1（`Static(n)`→`Static(n+1)`、cap 超は `Dynamic`）。`k` へ。
-- `Release(x, k)`: `env[x]` の root を −1（`Static(n)`→`Static(n-1)`。**`Static(2)`→`Static(1)` で unique に回復**、`Static(1)`→消費/dead、`Dynamic` は据え置き）。`k` へ。`Release` が count を戻すので net-zero（1→2→1）は**解析自身が回復**する。
-- `Match(a, arms)`: 各 arm を**分岐前 env のコピー**から解析し、結果と env を `join`（名前一意なので merge は単純）。`Bottom` で variant payload を扱う（union の出現しない variant）。Bool もここ（2 variant の union）。
-- global 変数参照 → `top_of`（`Dynamic`）。env 対象外。
+`State`（env, heap）を更新しながら `RcExpr` を順に処理:
+- `Let(x, Construct(_, args), k)`: このサイトの Loc `L`（初訪は新規、再訪は summary 化）に `Cell{ rc: Static(1)（summary なら join → Dynamic）, contents: args の AVal }` を確保。`env[x] = Boxed({L})`。args は move-in（参照がフィールドへ移るだけで arg-cell の rc は不変）。
+- `Let(x, Closure(_, captures), k)`: 同様に新規 cell `Cell{ Static(1), UnboxedAgg(captures の AVal) }`、`env[x]=Boxed({L})`。捕捉は move-in。これにより捕捉された配列等を追える。
+- `Let(x, LLVM(prim, args), k)`: prim の宣言 `UniqSignature`（§3.3）を適用。
+  - 射影（getter）`x = get(a, i)`: `env[x]` ＝ `a` の指す cell の `contents` を i 射影した AVal（boxed なら同じ Loc を指す）。**retain する getter**（`Array::@` 等、配列を残して要素を複製）は子 Loc の rc を +1 → `env[x]` と `a` の field i が同一 Loc を共有＝**別名を捕捉**（以後 `Retain`/`Release` が同じ cell を更新）。**move-out する linear get**（`mod`/`act` の `_unsafe..unretained`）は rc 据え置き（参照がフィールドから出るだけ）。
+  - force-unique 系（`set`/`mod`/`act`）: 結果は新規 or 再利用 Loc で `rc=Static(1)`、格納値は要素位置へ。
+- `Let(x, App(f, args), k)`: `f` の `UniqSignature` を適用（結果 AVal ／ 各 arg cell の rc 効果 ／ 結果が arg を別名化するか、を反映。クロージャ値でも funptr でも対象関数の要約を引く）。
+- `Retain(x, k)`: `env[x]` の root PtsTo の各 Loc の rc を +1（単集合・非 summary は強更新、多重・summary は各 +1 の弱更新）。全別名が同一 cell を見るので同期する。
+- `Release(x, k)`: 単集合 `{L}` かつ非 summary なら `L.rc` を −1（**`Static(2)`→`Static(1)` で unique 回復**、`Static(1)`→0 で解放し contents を辿って子を再帰 Release）。多重・summary は据え置き（上界維持）。`Release` が count を戻すので net-zero（1→2→1）は**解析自身が回復**する。
+- `Match(a, arms)`: 各 arm を**分岐前 State のコピー**から解析し、結果 State を `join`。不在 variant の payload は `Bottom`。Bool もここ（2 variant）。
+- `Ret(atom)`: 結果 ＝ atom の AVal。
+- global 参照 → `Boxed({Top})`（`heap[Top].rc=Dynamic`）。
 
-要点: **明示 RC を `Static(n)` の上下で追うだけ**（`Construct`=1, `Retain`=+1, `Release`=−1, 分岐=max, cap で widen）。`Static(1)`＝unique。`Release` が count を戻すので net-zero は解析自身が回復する。
+要点: **refcount を仮想ヒープの cell で追い、別名は同一 Loc で共有**。線形スレッド（`a1=set(a0,..); a2=set(a1,..)`）は単集合・強更新で rc が `Static(1)` を保ち、retain getter で生じた別名は子 Loc の rc が ≥2 になって正しく shared と分かる。
 
-詳細（特に getter の retain 有無、`Release` 後の精密な扱い）は P2 で確定。
+詳細（getter ごとの retain 有無、summary loc の弱更新の精密化、PtsTo 集約しきい値）は P2 で確定。
 
-### 3.3 関数の効果（per-input-key concrete）
-関数の効果は、入力 uniqueness（キー）ごとに body を §3.2 で解析した結果＝`(結果 CTRefCntTree, 各引数の呼び出し後状態)` を memo する（入力ごとの concrete な要約）。複製は明示 `Retain`（+1）、分岐合流は `CTRefCnt` の max join で表される。
+### 3.3 関数の効果（`UniqSignature`, per-input-key concrete）
+関数の効果は、入力（各引数の AVal ＋ 関係する cell）をキーに body を §3.2 で解析した結果＝`(結果 AVal, 各 arg cell の rc 効果, 結果↔引数の別名関係)` を memo する（入力ごとの concrete な要約）。
 - **ソース関数 = 推論**: 入力キーごとに body 解析を memo（§4.1 の特殊化 worklist と共有。再帰は不動点、初期 `Bottom`）。
-- **プリミティブ（`LLVM`/FFI）= 宣言**（concrete な効果）: getter `@i`→結果＝入力 field i／対象 field を consume・他 release、`set`/`mod`/`act`→配列引数 consume・結果 root `Static(1)`・格納値は要素位置へ、`fill`→要素 `Dynamic`（多数スロットに同値＝複製）、`boxed_to_retained_ptr`→引数 escape。未知 FFI は保守的（引数 `Dynamic`・結果 `top_of`）。
+- **プリミティブ（`LLVM`/FFI）= 宣言**: retain getter `@i`→結果が field i の Loc を別名化（子 rc +1）、linear get→field を move-out、`set`/`mod`/`act`→配列引数 consume・結果 `rc=Static(1)`・格納値は要素位置へ、`fill`→要素を多スロットへ複製（要素 rc を `Dynamic`）、`boxed_to_retained_ptr`→引数 escape。未知 FFI は保守的（引数を `Dynamic`、結果 `top_of`）。
 - global = `Dynamic`。assert ビルドで不健全な claim を実行時検出。
 
 ## 4. unique-check-elim
@@ -212,7 +224,7 @@ clone した body 中の force-unique を担う `LLVM`(InlineLLVM) ノードを 
 - **P0（P1 前）**: **デバッグ情報の E2E テストを追加**してベースライン化。現状その回帰テストが無いため、`fix build -g`（DWARF 付き）でビルドした小プログラムを **gdb 駆動**（`gdb -batch`: `break main.fix:N` → run → backtrace）で検査する統合テストを作る（CLAUDE.md 規約: サンプルを tempdir にコピー、`fix`/`gdb` を `Command` 実行）。assert は file:line の解決・停止・スタックの行情報（マングル名非依存）。補助で bundled `llvm-dwarfdump` の構造 assert も可。**現 main で通すこと**＝P1 の「デバッグ情報一致」(§1.6) の比較対象。ツール: `/usr/bin/gdb` あり、`llvm-dwarfdump` は `/home/maruyama/llvm-17.0.6/bin/`（system には無し）。
 - **P0.5（P1 前提）**: **Bool を union 化**（std.fix: `type Bool = unbox union {_false,_true}; true=_true(); false=_false();` ＋ 比較演算子の結果型 ＋ FFI Bool↔i8 tag）。これが `If` を IR から落とす前提（`If`→`Match` desugar は P1 lowering 内）。性能中立（Bool-union＝i8）。de-risk するなら現 `eval_if` を union Bool 対応にして先行検証、または P1 で `eval_if` 撤去と同時。
 - **P1**: RC IR 型 ＋ AST→RC IR lowering（`generator.rs` から RC 抽出。名前は lowering が fresh 発番）＋ codegen 付け替え ＋ 全テスト再検証。**最大の山**。完了ゲート: `cargo test --release` 全通過・全ベンチでリグレッションなし・デバッグ情報一致（§1.6）を満たし、**ユーザに連絡して外部ライブラリテストを依頼してから次フェーズへ**。lowering は現 codegen の RC（move-out/last-use ＝既に最小 RC）を踏襲し冗長 RC を出さない方針 → retain/release 相殺は早期不要（§3 の `Static(n)` leaf が net-zero を回復するので解析にも不要）。相殺は §6/P4 の perf 磨きに回す。
-- **P2**: uniqueness 解析（`CTRefCntTree`/`UniqSignature` を RC IR interpret）。read-only ログから始め arrayrw のループ `set` を unique・共有テストを shared と判定することを確認。
+- **P2**: uniqueness 解析（仮想ヒープ＋`UniqSignature` で RC IR を抽象解釈）。read-only ログから始め arrayrw のループ `set` を unique・共有テストを shared と判定することを確認。
 - **P3**: unique-check-elim（force-unique 除去 ＋ 特殊化）。arrayrw/fannkuch 計測、全テスト。
 - **P4**: reuse / borrow / 順序スケジューリング / 境界チェック除去 等。
 
@@ -220,12 +232,13 @@ clone した body 中の force-unique を担う `LLVM`(InlineLLVM) ノードを 
 - **P1 の codegen 付け替えの再検証コスト・範囲**が最大リスク（全プログラムに影響）。段階導入できるか（一部関数だけ RC IR 経由、等）も検討。
 - `Release` 後の uniqueness 回復は §3 解析が `Static(n)` leaf で行う（`Release`=−1 で `Static(2)`→`Static(1)`）。§2 の相殺とは独立。
 - ローカル名一意の**全変換での保存**（lowering は fresh 発番で構築的に一意。clone/特殊化は fresh 名発番で freshen）。
-- getter（射影）の retain 有無・`UniqSignature` の不動点収束・threaded state・FFI escape の RC IR での扱い。捕捉クロージャは `Closure` で captures を `BoxedAggregate` として追える（旧 TODO 解消方向）が、共有/別名の健全性は検証する。
-- `CTRefCntTree` の boxed aggregate 内部追跡は設計済み（RC IR でも同じ）。
+- getter（射影）の retain 有無・`UniqSignature` の不動点収束・threaded state・FFI escape の RC IR での扱い。捕捉クロージャは `Closure` の captures を cell の contents として追える（旧 TODO 解消方向）が、共有/別名の健全性は検証する。
+- 別名健全性は refcount を cell に1つ持つことで担保（§3）。summary loc・PtsTo 集約・強/弱更新しきい値の精度調整は P2 で詰める。
 - 旧 TODO「汎用 metadata フィールド」は、RC IR を新設するなら RC IR ノード側に最初から付随情報欄を設ければよく、AST 改修は不要になりうる（P1 設計で判断）。
 
 ### 決定事項・要確認（設計レビューで確定したもの）
-- **（決定）leaf を refcount 上界 `Static(n)|Dynamic` にする**（§3.1）: `Construct`=Static(1)、`Retain`=+1、`Release`=−1（net-zero を回復＝`Static(2)`→`Static(1)`）、分岐=max、終端性のため cap で `Dynamic` に widen（K=2 で実用十分）。これにより: (a) 要約は入力ごとの concrete な数値（明示 RC が駆動する）、(b) **retain/release 相殺は順序自由な純粋 perf**（解析が `Release` で net-zero を回復するので、相殺の前後どちらでも `Static(1)` を得る）。§3.3 は per-key memoize。
+- **（決定）env を仮想ヒープ（store）にする**（§3）: refcount を変数ごとでなくロケーションの cell に持つ。理由: retain する getter が boxed の子に第二参照を作り、変数ごとの木では別名間で同期できず不健全（`x` 経由で unique 誤判定 → in-place 破壊）。cell に refcount を1つ持てば `Retain`/`Release` が全別名に同期する。再帰型は有限 Loc（アロケーションサイト抽象）の巡回グラフで表現するので木の打ち切りノードは不要。線形ケースは単集合・強更新で精度維持、別名・summary loc は弱更新で保守的。
+- **（決定）参照カウントを上界 `Static(n)|Dynamic`（`CTRefCnt`）で表す**（§3.1）: `Construct`=Static(1)、`Retain`=+1、`Release`=−1（net-zero を回復＝`Static(2)`→`Static(1)`）、分岐=max、終端性のため cap で `Dynamic` に widen（K=2 で実用十分）。これにより: (a) 要約は入力ごとの concrete な数値（明示 RC が駆動する）、(b) **retain/release 相殺は順序自由な純粋 perf**（解析が `Release` で net-zero を回復するので、相殺の前後どちらでも `Static(1)` を得る）。§3.3 は per-key memoize。
 - **（決定）Bool→union（P0.5、§7）**: std.fix 定義＋比較演算子の結果型＋FFI（Bool↔i8 tag、`_false`=0/`_true`=1）。`If`→`Match` desugar は P1 lowering 内。要確認: 比較 InlineLLVM の結果構築・`&&`/`||`/`not`・typecheck が union Bool で通るか（ビットは i8 不変）。
 - **（決定）global 値の表現**: global 初期化を RC IR（init）として表し `MarkGlobal` を init で発行。参照は atom で解析は `Dynamic`。program = top-level 関数集合 ＋ global init。現状の global 機構（lazy/eager・mark_global 発火点）は P1 実装時に確認。
 - **（決定）lowering サブパス順**: AST 正規化（ANF 化 → lambda lift → `If`→`Match` desugar → destructure→getter → fresh 命名）→ 最後に last-use 解析＋明示 retain/release 挿入で RC IR 生成（形と名前が確定してから RC を載せる）。
