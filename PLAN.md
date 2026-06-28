@@ -149,9 +149,9 @@ struct State { env: Map<Var, AVal>, heap: Map<Loc, Cell> } // heap ＝ 仮想ヒ
 
 **再帰型は有限グラフ**: `AVal` は boxed のところで必ず `Boxed(PtsTo)`（ポインタ）に切れるので `AVal` 単体は常に有限。`List` 等の再帰は **cell の contents が別の Loc（自分自身も可）を指す巡回グラフ**になり、Loc が有限（アロケーションサイト抽象）なので全体も有限。よって木の打ち切りノードは要らず、有限性は Loc 集合の有限性が担保する。ループ生成された再帰構造は同一サイト → summary loc に集約（rc は `Dynamic`、更新は弱更新）。
 
-**強更新 / 弱更新**: points-to が**単集合 `{L}` かつ `L` が非 summary** のときだけ `L` の cell を**強更新**（`Release` で `Static(2)`→`Static(1)` の unique 回復ができる＝線形スレッドの精度）。多重指し or summary loc では**弱更新**（`Retain` は各 Loc を +1＝上界、`Release` は減算しない＝上界を保つ）。これで「線形ケースは精度を保ち、別名・要約は健全に保守的」を両立する。
+**強更新 / 弱更新**（`Release`/`Retain` による cell 更新の話。uniqueness の**読み取り** `is_unique`（§3.2 末尾）とは別軸）: points-to が**単集合 `{L}` かつ `L` が非 summary** のときだけ `L` の cell を**強更新**（`Release` で `Static(2)`→`Static(1)` の unique 回復ができる＝線形スレッドの精度）。多重指し or summary loc では**弱更新**（`Retain` は各 Loc を +1＝上界、`Release` は減算しない＝上界を保つ）。これで「線形ケースは精度を保ち、別名・要約は健全に保守的」を両立する。多重指しでも、各候補が rc 1 なら `is_unique` は unique と読める（読み取りは候補 rc の max）。
 
-**join**（合流・不動点）: `AVal` は pointwise（`Bottom` 単位元、`Unboxed` 同士、`UnboxedAgg` は zip、`Boxed(P1)⊔Boxed(P2)=Boxed(P1∪P2)`）。`heap` は Loc ごとに cell を join（`rc` は max、`contents` は join）。PtsTo が増えすぎたら summary loc に集約（widen）。`CTRefCnt` の K-cap と Loc の有限性で格子は有限 → 不動点は停止。
+**join**（合流・不動点）: `AVal` は pointwise（`Bottom` 単位元、`Unboxed` 同士、`UnboxedAgg` は zip、`Boxed(P1)⊔Boxed(P2)=Boxed(P1∪P2)`）。`heap` は Loc ごとに cell を join（`rc` は max、`contents` は join）。**points-to 集合は「指しうる候補」の列挙（各 Loc を個別に追跡・rc も個別）であり summary loc とは別物**: 分岐で別アロケーションを指すと `{L_A, L_B}` になるが、各 cell の rc は join で `Static(1)` のまま（潰して `Dynamic` にはしない。summary loc はループ等で**共存**する複数オブジェクトを1つに畳んだ場合のみ）。PtsTo は有限 Loc 集合の部分集合なので有界（サイズ widening は不要）。`CTRefCnt` の K-cap と Loc の有限性で格子は有限 → 不動点は停止。
 補助: `top_of(ty)`（保守的 ⊤＝boxed は `Boxed({Top})`、`heap[Top].rc=Dynamic`）。
 
 ### 3.2 interpret 規則（RC IR を辿る）
@@ -170,7 +170,9 @@ struct State { env: Map<Var, AVal>, heap: Map<Loc, Cell> } // heap ＝ 仮想ヒ
 
 要点: **refcount を仮想ヒープの cell で追い、別名は同一 Loc で共有**。線形スレッド（`a1=set(a0,..); a2=set(a1,..)`）は単集合・強更新で rc が `Static(1)` を保ち、retain getter で生じた別名は子 Loc の rc が ≥2 になって正しく shared と分かる。
 
-詳細（getter ごとの retain 有無、summary loc の弱更新の精密化、PtsTo 集約しきい値）は P2 で確定。
+**uniqueness クエリ**（unique-check-elim が使う、§4）: `is_unique(x) = ∀ L ∈ PtsTo(env[x]): heap[L].rc == Static(1)`（指しうる全候補が unique。＝候補 rc の max が `Static(1)`）。例: `let arr = if c { [1,2,3] } else { [4,5,6] }` は `env[arr]={L_A,L_B}` で両 cell とも `Static(1)` なので **unique**（実行時はどちらか一方の object で、その実 rc ≤ `Static(1)` かつ live なので =1）。候補に `Dynamic`・summary loc が混じれば非 unique（保守的）。
+
+詳細（getter ごとの retain 有無、summary loc の弱更新の精密化）は P2 で確定。
 
 ### 3.3 関数の効果（`UniqSignature`, per-input-key concrete）
 関数の効果は、入力（各引数の AVal ＋ 関係する cell）をキーに body を §3.2 で解析した結果＝`(結果 AVal, 各 arg cell の rc 効果, 結果↔引数の別名関係)` を memo する（入力ごとの concrete な要約）。
@@ -180,7 +182,7 @@ struct State { env: Map<Var, AVal>, heap: Map<Loc, Cell> } // heap ＝ 仮想ヒ
 
 ## 4. unique-check-elim
 
-force-unique を含む `LLVM` op（`set`/`mod`/`act` 系）で、対象 boxed 値の refcount==1（LOCAL）が §3 の解析で証明できれば、**force-unique を行わない版に差し替える**。結果は force-unique 後どのみち unique なので、ループ `let arr = arr.set(…)` で 2 回目以降の入力が unique になり「**初回 checked・以降 unchecked**」が自然に出る。
+force-unique を含む `LLVM` op（`set`/`mod`/`act` 系）で、対象 boxed 値が §3 の `is_unique`（指しうる全候補が `Static(1)`）かつ LOCAL と証明できれば、**force-unique を行わない版に差し替える**。結果は force-unique 後どのみち unique なので、ループ `let arr = arr.set(…)` で 2 回目以降の入力が unique になり「**初回 checked・以降 unchecked**」が自然に出る。
 
 ### 4.1 特殊化（uniqueness 駆動）
 呼び出し地点ごとに流れてくる引数 uniqueness をキーに関数を clone（`decapturing::SpecializationRequest` に倣う、md5 命名）。worklist で不動点。clone 時は fresh 名を発番して freshen（不変条件 1.3 を保存）。`dead_symbol_elimination` が未使用 original/clone を掃除。
