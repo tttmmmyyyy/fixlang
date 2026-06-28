@@ -110,7 +110,7 @@ enum RcState {            // retain/release の state ディスパッチ。lower
 
 効果:
 - 「used-later で一旦 retain したが直後の op が release（net-zero）」のような冗長 RC が消える。
-- → 後段の uniqueness 解析は「**`Retain` されていない boxed 値 ＝ unique**」を素直に読めるようになり、AST 版で苦労した last-use/net-zero の再導出が不要になる。
+- → 後段の uniqueness 解析は「**`Retain` されていない boxed 値 ＝ unique**」を素直に読めるようになる。
 - clone 削減としても有用。
 
 これは**純粋な RC 削減の最適化**（最終コードの retain/release が減って速くなる、clone も減る）。**uniqueness 解析の precision には不要**: §3 は leaf を refcount 上界 `Static(n)` にして `Release` で count を戻すので、net-zero（1→2→1）を**解析自身が回復**する（相殺前でも `Static(1)` と分かる）。よって相殺は順序自由でいつ走らせてもよく、解析の前提ではない（健全性とも無関係）。
@@ -143,7 +143,7 @@ join は pointwise（`Bottom` 単位元、leaf は `max`（`Static(a)`,`Static(b
 **再帰型の打ち切り（終端性）**: レイアウトをそのまま展開すると再帰型（`List` 等、boxed union が自分自身を子に持つ）は無限木になる。型を木へ展開する際、根からの経路に既出の型コンストラクタが再び現れた再帰位置（相互再帰も含む）で `OpaqueBoxed(rc)` に打ち切る（任意で深さ上限 D も併用）。再帰は必ず boxed を経由する（unboxed 再帰型は有限レイアウトを持てない）ので打ち切りノードは常に `OpaqueBoxed`。打ち切り点は型ごとに確定するので同型どうしの形は一致したまま。これにより格子が有限になり、再帰関数の不動点反復が停止する。`project(OpaqueBoxed(rc), i)` は `top_of`（中身は保守的に `Dynamic`）。再帰位置スロットへの値の格納は `OpaqueBoxed(その値の root rc)` に要約する（shape analysis の fold）。
 補助: `top_of(ty)`（保守的 ⊤＝全 boxed root を `Dynamic`、再帰位置は `OpaqueBoxed(Dynamic)`）、`project(u, i)`（aggregate の i 番目。Array は i=0 が要素。`OpaqueBoxed` は ⊤）。
 
-### 3.2 interpret 規則（RC IR を辿る。retain/release 相殺後を入力に想定）
+### 3.2 interpret 規則（RC IR を辿る）
 env: `Map<Var, CTRefCntTree>`。`RcExpr` を順に処理:
 - `Let(x, op, k)`: `env[x] = U(op)`; `k` へ。
   - `Construct` → 新規確保: `BoxedAggregate(Static(1), [引数の CTRefCntTree])` または `UnboxedAggregate(...)`。再帰位置のスロットへ収まる引数は `OpaqueBoxed(その引数の root)` に要約。
@@ -152,16 +152,16 @@ env: `Map<Var, CTRefCntTree>`。`RcExpr` を順に処理:
   - `Closure(func, captures)` → `BoxedAggregate(Static(1), [captures の CTRefCntTree])`（新規 closure。捕捉を保持）。これにより捕捉された配列等の uniqueness を追える（捕捉クロージャ越しの健全性が扱える）。
   - 射影（フィールド/variant payload/配列要素）は getter プリミティブ＝`LLVM` なので上の `LLVM` 規則で扱う（`project(env[a], i)` 相当は getter の `UniqSignature` の中身。専用規則なし）。
 - `Retain(x, k)`: `env[x]` の root（`BoxedAggregate`/`OpaqueBoxed` の `CTRefCnt`）を +1（`Static(n)`→`Static(n+1)`、cap 超は `Dynamic`）。`k` へ。
-- `Release(x, k)`: `env[x]` の root を −1（`Static(n)`→`Static(n-1)`。**`Static(2)`→`Static(1)` で unique に回復**、`Static(1)`→消費/dead、`Dynamic` は据え置き）。`k` へ。これにより net-zero を**解析自身が回復**し、相殺は precision には不要（§2）。
+- `Release(x, k)`: `env[x]` の root を −1（`Static(n)`→`Static(n-1)`。**`Static(2)`→`Static(1)` で unique に回復**、`Static(1)`→消費/dead、`Dynamic` は据え置き）。`k` へ。`Release` が count を戻すので net-zero（1→2→1）は**解析自身が回復**する。
 - `Match(a, arms)`: 各 arm を**分岐前 env のコピー**から解析し、結果と env を `join`（名前一意なので merge は単純）。`Bottom` で variant payload を扱う（union の出現しない variant）。Bool もここ（2 variant の union）。
 - global 変数参照 → `top_of`（`Dynamic`）。env 対象外。
 
-要点: **明示 RC を `Static(n)` の上下で追うだけ**（`Construct`=1, `Retain`=+1, `Release`=−1, 分岐=max, cap で widen）。`Static(1)`＝unique。`Release` が count を戻すので net-zero は解析自身が回復し、AST 版の `received`/`shareize`/disposition/last-use 再導出は不要。
+要点: **明示 RC を `Static(n)` の上下で追うだけ**（`Construct`=1, `Retain`=+1, `Release`=−1, 分岐=max, cap で widen）。`Static(1)`＝unique。`Release` が count を戻すので net-zero は解析自身が回復する。
 
-詳細（特に getter の retain 有無、`Release` 後の精密な扱い、相殺との連携）は P2 で確定。
+詳細（特に getter の retain 有無、`Release` 後の精密な扱い）は P2 で確定。
 
-### 3.3 関数の効果（per-input-key concrete。cardinality 不要）
-RC IR は複製を明示 `Retain` で表すので、AST 版の cardinality 半環（`{1,2}`, `·` で `1·1=2`）・parametric signature は**不要**。`·`（複製）は明示 `Retain`（+1）、`+`（分岐合流）は `CTRefCnt` の max join に吸収される。関数の効果は、入力 uniqueness（キー）ごとに body を §3.2 で解析した結果＝`(結果 CTRefCntTree, 各引数の呼び出し後状態)` を memo するだけ（concrete、parametric 変数なし）。
+### 3.3 関数の効果（per-input-key concrete）
+関数の効果は、入力 uniqueness（キー）ごとに body を §3.2 で解析した結果＝`(結果 CTRefCntTree, 各引数の呼び出し後状態)` を memo する（入力ごとの concrete な要約）。複製は明示 `Retain`（+1）、分岐合流は `CTRefCnt` の max join で表される。
 - **ソース関数 = 推論**: 入力キーごとに body 解析を memo（§4.1 の特殊化 worklist と共有。再帰は不動点、初期 `Bottom`）。
 - **プリミティブ（`LLVM`/FFI）= 宣言**（concrete な効果）: getter `@i`→結果＝入力 field i／対象 field を consume・他 release、`set`/`mod`/`act`→配列引数 consume・結果 root `Static(1)`・格納値は要素位置へ、`fill`→要素 `Dynamic`（多数スロットに同値＝複製）、`boxed_to_retained_ptr`→引数 escape。未知 FFI は保守的（引数 `Dynamic`・結果 `top_of`）。
 - global = `Dynamic`。assert ビルドで不健全な claim を実行時検出。
@@ -218,14 +218,14 @@ clone した body 中の force-unique を担う `LLVM`(InlineLLVM) ノードを 
 
 ## 8. リスク・未解決
 - **P1 の codegen 付け替えの再検証コスト・範囲**が最大リスク（全プログラムに影響）。段階導入できるか（一部関数だけ RC IR 経由、等）も検討。
-- RC IR の正確な意味論: `Release` 後の uniqueness 回復は §2 の相殺に委ね、§3 解析は保守的に（回復しない）。
+- `Release` 後の uniqueness 回復は §3 解析が `Static(n)` leaf で行う（`Release`=−1 で `Static(2)`→`Static(1)`）。§2 の相殺とは独立。
 - ローカル名一意の**全変換での保存**（lowering は fresh 発番で構築的に一意。clone/特殊化は fresh 名発番で freshen）。
 - getter（射影）の retain 有無・`UniqSignature` の不動点収束・threaded state・FFI escape の RC IR での扱い。捕捉クロージャは `Closure` で captures を `BoxedAggregate` として追える（旧 TODO 解消方向）が、共有/別名の健全性は検証する。
 - `CTRefCntTree` の boxed aggregate 内部追跡は設計済み（RC IR でも同じ）。
 - 旧 TODO「汎用 metadata フィールド」は、RC IR を新設するなら RC IR ノード側に最初から付随情報欄を設ければよく、AST 改修は不要になりうる（P1 設計で判断）。
 
 ### 決定事項・要確認（設計レビューで確定したもの）
-- **（決定）leaf を refcount 上界 `Static(n)|Dynamic` にする**（§3.1）: `Construct`=Static(1)、`Retain`=+1、`Release`=−1（net-zero を回復＝`Static(2)`→`Static(1)`）、分岐=max、終端性のため cap で `Dynamic` に widen（K=2 で実用十分）。これにより: (a) AST 版の parametric cardinality 半環・記号変数は不要（明示 RC が駆動する concrete 数値に置換。`·`/parametric なし）、(b) **retain/release 相殺は precision に不要**（解析が `Release` で回復するため。相殺は純粋 perf）。§3.3 は per-key memoize に簡素化済み。
+- **（決定）leaf を refcount 上界 `Static(n)|Dynamic` にする**（§3.1）: `Construct`=Static(1)、`Retain`=+1、`Release`=−1（net-zero を回復＝`Static(2)`→`Static(1)`）、分岐=max、終端性のため cap で `Dynamic` に widen（K=2 で実用十分）。これにより: (a) 要約は入力ごとの concrete な数値（明示 RC が駆動する）、(b) **retain/release 相殺は順序自由な純粋 perf**（解析が `Release` で net-zero を回復するので、相殺の前後どちらでも `Static(1)` を得る）。§3.3 は per-key memoize。
 - **（決定）Bool→union（P0.5、§7）**: std.fix 定義＋比較演算子の結果型＋FFI（Bool↔i8 tag、`_false`=0/`_true`=1）。`If`→`Match` desugar は P1 lowering 内。要確認: 比較 InlineLLVM の結果構築・`&&`/`||`/`not`・typecheck が union Bool で通るか（ビットは i8 不変）。
 - **（決定）global 値の表現**: global 初期化を RC IR（init）として表し `MarkGlobal` を init で発行。参照は atom で解析は `Dynamic`。program = top-level 関数集合 ＋ global init。現状の global 機構（lazy/eager・mark_global 発火点）は P1 実装時に確認。
 - **（決定）lowering サブパス順**: AST 正規化（ANF 化 → lambda lift → `If`→`Match` desugar → destructure→getter → fresh 命名）→ 最後に last-use 解析＋明示 retain/release 挿入で RC IR 生成（形と名前が確定してから RC を載せる）。
