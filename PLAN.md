@@ -113,6 +113,51 @@ enum RcState {            // retain/release の state ディスパッチ。lower
 - **全ベンチマークでリグレッションなし**: `benchmark/speedtest` 全 case ＋ `fix-bench/batch` を走らせ、commit hash 付きで記録・比較。RC IR 導入は挙動を変えない（性能含め）はずなので、速度劣化が無いことを確認。
 - **外部ライブラリのテスト**: 一通り走らせて確認する（ユーザが実施）。**P1 完了時にユーザへ連絡し、外部ライブラリテストの実行を依頼する**（このタイミングで手を止めて報告）。
 
+### 1.7 lowering 例（呼び出しと cap release）
+
+呼び出し規約は現 codegen に合わせる＝**callee 所有（consume）**: op は引数参照を消費し、関数/クロージャは自分の引数と cap を所有して release する（`implement_lambda_function`）。値を N 回使うには使用前に `Retain`（最終使用以外）。dead な束縛・分岐 dead 値だけ呼び出し側 scope の `Release` になる。
+
+Fix:
+```
+concat_len : Array I64 -> Array I64 -> I64 = |a, b| a.@size + b.@size;  // global 2引数 -> uncurry で funptr 版
+f : Array I64 -> Array I64 -> I64 = |arr, brr| (
+    let g = |b| concat_len(arr, b);   // g は arr（boxed）を捕捉。g : Array I64 -> I64
+    g(brr)                            // クロージャ呼び出し
+);
+```
+
+RC IR:
+```
+// funptr（uncurry 版・cap なし・2引数）。a,b を所有し最終使用で release。
+fn concat_len#funptr2(a, b):
+    let sa = LLVM[@size](a)        // a を borrow して size 読み出し
+    Release(a)                     // a 最終使用 -> release
+    let sb = LLVM[@size](b)
+    Release(b)                     // b 最終使用 -> release
+    let r  = LLVM[add_i64](sa, sb)
+    ret r
+
+// クロージャ関数（arity-1: 引数 b ＋ 末尾 cap）。b と cap を所有。
+fn g#lifted(b, cap):               // cap : *cap{ arr : Array I64 }
+    let arr2 = LLVM[proj.0](cap)   // 捕捉 arr を取り出し（cap を borrow）
+    Retain(arr2)                   // boxed 捕捉 -> retain out（ローカルが所有権を得る）
+    Release(cap)                   // callee が cap を所有 -> 捕捉コンテナを release（cap release）
+    let r2   = App(concat_len#funptr2, [arr2, b])  // funptr 呼び出し（cap 無し）。arr2,b を consume
+    ret r2
+
+fn f(arr, brr):                    // arr, brr : Array I64 を所有
+    let g = Closure(g#lifted, [arr])  // cap{arr} を alloc（rc=1）。arr を1参照 move-in
+    let r = App(g, [brr])             // クロージャ呼び出し。g を consume（cap 所有権 -> callee）、brr を consume（-> b）
+    ret r                             // f 側に cap の release は無い（g は App が consume、cap は callee が release）
+```
+
+ポイント:
+- **cap の release は callee（`g#lifted`）**。boxed 捕捉は「`Retain`(取り出し)＋`Release(cap)`」のペア（§2 の相殺が move-out に畳んで両方消せる）。空捕捉なら cap は null で `Release(cap)` は no-op。
+- **呼び出し側 `f` に cap の release は無い**: クロージャ `g` を `App` が consume し所有権（cap 含む）が callee へ渡る。`g` を2回呼ぶなら使用前に `Retain(g)`（＝cap obj を retain）が入り各 callee-release と釣り合う。
+- funptr（`concat_len#funptr2`）は **cap 引数なし**。boxed 引数を所有し最終使用で release。
+- RC 収支（arr）: cap へ1参照 → `g#lifted` で +1 → `Release(cap)` で −1 → `concat_len` で `Release(a)` −1 = 0（リーク・二重解放なし）。
+- 捕捉と呼び出しの両方で同じ値を使う版（`g(arr)`）なら、`arr` は2回使用 → `f` で使用前に `Retain(arr)` が1つ入り、`concat_len` は `a==b`（同一配列・rc 2＝shared）を受け取る。
+
 ## 2. retain/release 相殺（基盤の一部・uniqueness 解析を簡単にする）
 
 `Retain(x)` の後、その追加参照を必要とする使用が無いまま `Release(x)` が来るなら両方除去（peephole / 簡単な dataflow）。名前一意なので追跡が容易。
