@@ -75,11 +75,11 @@ enum RcState {            // retain/release の state ディスパッチ。lower
     Threaded,            // THREADED 確定: atomic inc/dec、state チェック省略
     Global,              // GLOBAL 確定: codegen で no-op（コードを出さない）。最小化したければ後段 cleanup で削除可
 }
-enum Disposition {       // op（InlineLLVM/関数）の各引数の所有権の扱い。引数ごとに宣言（§3.3 UniqSignature と同一宣言で兼ねる）
-    Borrow,              // 読むだけ・所有権を取らない → IR 生成は release を出さない（所有者が別所で release）
-    Consume,             // 所有権を取り使い切る（結果に載せない）→ IR 生成が op 後に明示 Release を挿入（例: @size の配列引数）
-    MoveToRet,           // 所有権を結果（戻り値）へ移す → release しない（結果が所有。例: set の配列引数・格納値）
+enum Disposition {       // op の各引数の RC 上の扱い（§3.3 UniqSignature と同一宣言）。release を「いつ」出すかは last-use 解析が決めるので、op が宣言するのは「結果へ move するか」だけ
+    NotMoved,            // 結果に残らない → last-use 解析が最終使用で Release（例: @size の配列。読むだけ／使い切りの別は dataflow が決める）
+    MovedToResult,       // 参照が結果（または構築/格納先）へ移る → Release しない（結果が所有。例: set の配列・格納値。どのスロットかは Shape 効果で宣言）
 }
+// 読むだけ vs in-place 変更（force-unique 除去用）は別軸で Shape 効果（§3.3）に持つ。所有権を移譲しない真の borrow（retain/release を省く）は §6 の最適化。
 ```
 
 - **分岐は `Match` のみ（`If` を持たない）**: Bool を union 化する（std.fix: `type Bool = unbox union { _false : (), _true : () }; true = _true(); false = _false();`）。ソースの `if`/`true`/`false`/比較演算子は不変で、AST→RC IR 生成で `Expr::If(c,t,e)` を `Match(c, [_false => e, _true => t])` に desugar するだけ。性能中立（Bool-union ＝ `{i8 tag, [i8;0]}` ＝ i8。比較演算子は今も i8(0/1) を返す＝tag そのものでビット不変。FFI も i8 tag で不変。match は i8 tag の compare+branch で `if` と同等）。`&&`/`||`/`not` は `if` 経由なら desugar で吸収。
@@ -89,7 +89,7 @@ enum Disposition {       // op（InlineLLVM/関数）の各引数の所有権の
 - **`Let` は単一 Var のみ（Pattern を持たない）**: `let (x,y)=s` 等の struct/タプル destructure は **getter プリミティブ列 ＋ `Release(container)`** に lower（役割分担: 構造分解は getter、union 分岐は `Match`）。`get_struct_fields`/`get_union_value` の retain/release を getter プリミティブ＋明示 RC で再現し、相殺が move-out に最適化する。
 - **RC IR は nested lambda を持たない**: lowering が全 lambda を top-level RC IR 関数へ lift し、使用箇所を `Closure(func, 捕捉)` に変換する（クロージャ生成を明示）。各関数の RC が閉じる。クロージャ値は unboxed の `{funptr, 捕捉オブジェクトへのポインタ}` ペアで、捕捉オブジェクトのみ boxed（rc 追跡。空捕捉は nullptr で複製しても RC 増減なし）。`FuncRef` ＝ top-level RC IR 関数への参照（名前/id。lift した lambda body。codegen で funptr に解決）。`Closure` の捕捉リスト（`Vec<Var>`）は**順序つきでノードに保持**する（順序＝closure の env レイアウトで lifted 関数の env パラメータ順と一致。free vars から再計算は可能だが順序が一意でない・生成時の retain 等 RC に要る・再計算回避のため保持。全変換が lifted 関数 env と整合を保つ）。
 - **トップレベル定義は `RcFunc`、クロージャ値生成は `RcRhs::Closure`**: lift した lambda body・global 関数・uncurry funptr 版はすべて `RcFunc`。**クロージャは必ず arity-1**（arrow 型はカリー化される）で closure ABI の関数は `(arg, cap)` の2引数（cap が末尾、body が cap から捕捉を射影）。多引数＋捕捉は入れ子の arity-1 クロージャになる（多引数クロージャは存在しない）。**多引数は funptr のみ**（捕捉なし n 引数。uncurry が global lambda から `name#funptr{n}` を生成、`n ≤ FUNPTR_ARGS_MAX`）。`Closure(FuncRef, captures)` は実行時クロージャ値（unboxed `{funptr, 捕捉obj}`）を生成し、捕捉 obj は heap 値で `RcFunc` の一部ではない。`App` は callee 型で振り分け（funptr＝直接 n 引数、closure＝arg ＋抽出した cap）。
-- **RC 完全性（IR が単一の真実）**: codegen が現在行う全 RC 操作を IR ノードで表す。retain/release → `Retain`/`Release`、`mark_global`/`mark_threaded` → `MarkGlobal`/`MarkThreaded`。**`InlineLLVM` は内部で RC をしない**——使用引数の `Disposition`（`Consume`→release／`MoveToRet`→release しない／`Borrow`。§1.2 データ型）を宣言し、IR 生成が明示 `Release` を挿入する（この宣言は §3.3 `UniqSignature` と同一宣言で兼ねる）。`make_array_unique` 等の force-unique 内 clone は op の意味に内包するが、引数 disposition は宣言する。`MarkGlobal` 以外に「is-global チェック」専用ノードは不要（状態チェックは状態不明時の runtime `Retain`/`Release` に内包。静的に global/local と分かれば `RcState` を `Global`(no-op)/`Local`(チェック省略) に特殊化する＝将来の state 最適化、§6）。**P1 で codegen の全 RC site を監査**し、漏れなく IR ノード化されることを確認する（§1.6 受け入れ条件）。
+- **RC 効果の宣言（解析が RC を読めること）**: codegen の RC 操作を IR で扱えるようにする。retain/release → `Retain`/`Release`、`mark_global`/`mark_threaded` → `MarkGlobal`/`MarkThreaded`。**各 `InlineLLVM` は自身の RC 効果を完全に宣言する**: 各引数の `Disposition`（`MovedToResult`／`NotMoved`。§1.2）と、外に出せない内部 RC（「内部で X を release/retain する」）。IR 生成は `NotMoved` 引数の `Release` を last-use で挿入する（この宣言は §3.3 `UniqSignature` と同一）。`make_array_unique` 等の force-unique 内 clone は op の意味に内包する。**理想は内部 RC をせず外部の明示ノードに出すこと**（相殺/reuse 等の RC 最適化が効く）**だが必須ではない**——外に出せない内部 RC は宣言で足りる。`MarkGlobal` 以外に「is-global チェック」専用ノードは不要（状態チェックは状態不明時の runtime `Retain`/`Release` に内包。静的に global/local と分かれば `RcState` を `Global`(no-op)/`Local`(チェック省略) に特殊化＝将来の state 最適化、§6）。**全 InlineLLVM の RC 効果が宣言/外部化できるかは P1 で全件監査**（特に `fix`/`loop`/bulk array 系は内部 RC が残る候補。§8）。
 
 直線列の peephole（retain/release 相殺等）は「直線スパンを `Vec` に集めて変換し再構築」ヘルパで扱う。代替形式 = `Block { stmts: Vec<Stmt>, term: Term }`（文/終端子を型で分離、Vec 操作が楽だが二段構造・既存 AST と別形・型増）。Fix は構造化制御フロー（任意 jump 無し）なので継続入れ子で十分。
 
@@ -311,5 +311,6 @@ clone した body 中の force-unique を担う `LLVM`(InlineLLVM) ノードを 
 - **（決定）Bool→union（P0.5、§7）**: std.fix 定義＋比較演算子の結果型＋FFI（Bool↔i8 tag、`_false`=0/`_true`=1）。`If`→`Match` desugar は P1 lowering 内。要確認: 比較 InlineLLVM の結果構築・`&&`/`||`/`not`・typecheck が union Bool で通るか（ビットは i8 不変）。
 - **（決定）global 値の表現**: global 初期化を RC IR（init）として表し `MarkGlobal` を init で発行。参照は atom で解析は `Dynamic`。program = top-level 関数集合 ＋ global init。現状の global 機構（lazy/eager・mark_global 発火点）は P1 実装時に確認。
 - **（決定）lowering サブパス順**: AST 正規化（ANF 化 → lambda lift → `If`→`Match` desugar → destructure→getter → fresh 命名）→ 最後に last-use 解析＋明示 retain/release 挿入で RC IR 生成（形と名前が確定してから RC を載せる）。
-- **（調査済み）RC site 監査の規模**: codegen の RC は `generator.rs` ~38・`builtin.rs` ~29（InlineLLVM `generate` 内部の release/retain）・`object.rs` ~21。builtin の 29 を「primitive 内 atomic（`make_array_unique` の clone-release 等、op 意味に内包し disposition 宣言）」と「明示 `Release` 化すべきもの（引数を使用後に release 等）」に分類するのが P1 の主要監査。
+- **（調査済み）RC site 監査の規模**: codegen の RC は `generator.rs` ~38・`builtin.rs` ~29（InlineLLVM `generate` 内部の release/retain）・`object.rs` ~21。builtin の 29 を「primitive 内 atomic（`make_array_unique` の clone-release 等、op 意味に内包）」「明示 `Release` 化すべきもの（引数を使用後に release 等）」「外部化できず宣言で残す内部 RC」に分類するのが P1 の主要監査。
+- **（要確認）InlineLLVM の RC 効果が完全に宣言/外部化できるか**: 「内部 RC をしない」は必須ではないが、可能な範囲で外部化したい（相殺/reuse 最適化のため）。全件確認が要る。**`fix`（不動点コンビネータ）・`loop`・bulk array 系**が、外部化できない内部 RC を持つ候補。P1 監査で各 op を「外部化可／内部 RC を宣言で残す」に分類する。
 - **force-unique 内 clone の RC 境界**: `make_array_unique`/`make_struct_unique` の clone（共有時に deep copy ＋要素 retain）は op の atomic 意味に内包し、内部 RC は IR ノードに出さない（最適化対象でない共有パスのため）。引数 disposition のみ宣言。
