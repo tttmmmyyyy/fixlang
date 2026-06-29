@@ -75,6 +75,11 @@ enum RcState {            // retain/release の state ディスパッチ。lower
     Threaded,            // THREADED 確定: atomic inc/dec、state チェック省略
     Global,              // GLOBAL 確定: codegen で no-op（コードを出さない）。最小化したければ後段 cleanup で削除可
 }
+enum Disposition {       // op（InlineLLVM/関数）の各引数の所有権の扱い。引数ごとに宣言（§3.3 UniqSignature と同一宣言で兼ねる）
+    Borrow,              // 読むだけ・所有権を取らない → IR 生成は release を出さない（所有者が別所で release）
+    Consume,             // 所有権を取り使い切る（結果に載せない）→ IR 生成が op 後に明示 Release を挿入（例: @size の配列引数）
+    MoveToRet,           // 所有権を結果（戻り値）へ移す → release しない（結果が所有。例: set の配列引数・格納値）
+}
 ```
 
 - **分岐は `Match` のみ（`If` を持たない）**: Bool を union 化する（std.fix: `type Bool = unbox union { _false : (), _true : () }; true = _true(); false = _false();`）。ソースの `if`/`true`/`false`/比較演算子は不変で、AST→RC IR 生成で `Expr::If(c,t,e)` を `Match(c, [_false => e, _true => t])` に desugar するだけ。性能中立（Bool-union ＝ `{i8 tag, [i8;0]}` ＝ i8。比較演算子は今も i8(0/1) を返す＝tag そのものでビット不変。FFI も i8 tag で不変。match は i8 tag の compare+branch で `if` と同等）。`&&`/`||`/`not` は `if` 経由なら desugar で吸収。
@@ -84,7 +89,7 @@ enum RcState {            // retain/release の state ディスパッチ。lower
 - **`Let` は単一 Var のみ（Pattern を持たない）**: `let (x,y)=s` 等の struct/タプル destructure は **getter プリミティブ列 ＋ `Release(container)`** に lower（役割分担: 構造分解は getter、union 分岐は `Match`）。`get_struct_fields`/`get_union_value` の retain/release を getter プリミティブ＋明示 RC で再現し、相殺が move-out に最適化する。
 - **RC IR は nested lambda を持たない**: lowering が全 lambda を top-level RC IR 関数へ lift し、使用箇所を `Closure(func, 捕捉)` に変換する（クロージャ生成を明示）。各関数の RC が閉じる。クロージャ値は unboxed の `{funptr, 捕捉オブジェクトへのポインタ}` ペアで、捕捉オブジェクトのみ boxed（rc 追跡。空捕捉は nullptr で複製しても RC 増減なし）。`FuncRef` ＝ top-level RC IR 関数への参照（名前/id。lift した lambda body。codegen で funptr に解決）。`Closure` の捕捉リスト（`Vec<Var>`）は**順序つきでノードに保持**する（順序＝closure の env レイアウトで lifted 関数の env パラメータ順と一致。free vars から再計算は可能だが順序が一意でない・生成時の retain 等 RC に要る・再計算回避のため保持。全変換が lifted 関数 env と整合を保つ）。
 - **トップレベル定義は `RcFunc`、クロージャ値生成は `RcRhs::Closure`**: lift した lambda body・global 関数・uncurry funptr 版はすべて `RcFunc`。**クロージャは必ず arity-1**（arrow 型はカリー化される）で closure ABI の関数は `(arg, cap)` の2引数（cap が末尾、body が cap から捕捉を射影）。多引数＋捕捉は入れ子の arity-1 クロージャになる（多引数クロージャは存在しない）。**多引数は funptr のみ**（捕捉なし n 引数。uncurry が global lambda から `name#funptr{n}` を生成、`n ≤ FUNPTR_ARGS_MAX`）。`Closure(FuncRef, captures)` は実行時クロージャ値（unboxed `{funptr, 捕捉obj}`）を生成し、捕捉 obj は heap 値で `RcFunc` の一部ではない。`App` は callee 型で振り分け（funptr＝直接 n 引数、closure＝arg ＋抽出した cap）。
-- **RC 完全性（IR が単一の真実）**: codegen が現在行う全 RC 操作を IR ノードで表す。retain/release → `Retain`/`Release`、`mark_global`/`mark_threaded` → `MarkGlobal`/`MarkThreaded`。**`InlineLLVM` は内部で RC をしない**——使用引数の disposition（consume→release ／ 戻り値へ move→release しない ／ borrow）を宣言し、IR 生成が明示 `Release` を挿入する（この disposition は §3.3 `UniqSignature` と同一宣言で兼ねる）。`make_array_unique` 等の force-unique 内 clone は op の意味に内包するが、引数 disposition は宣言する。`MarkGlobal` 以外に「is-global チェック」専用ノードは不要（状態チェックは状態不明時の runtime `Retain`/`Release` に内包。静的に global/local と分かれば `RcState` を `Global`(no-op)/`Local`(チェック省略) に特殊化する＝将来の state 最適化、§6）。**P1 で codegen の全 RC site を監査**し、漏れなく IR ノード化されることを確認する（§1.6 受け入れ条件）。
+- **RC 完全性（IR が単一の真実）**: codegen が現在行う全 RC 操作を IR ノードで表す。retain/release → `Retain`/`Release`、`mark_global`/`mark_threaded` → `MarkGlobal`/`MarkThreaded`。**`InlineLLVM` は内部で RC をしない**——使用引数の `Disposition`（`Consume`→release／`MoveToRet`→release しない／`Borrow`。§1.2 データ型）を宣言し、IR 生成が明示 `Release` を挿入する（この宣言は §3.3 `UniqSignature` と同一宣言で兼ねる）。`make_array_unique` 等の force-unique 内 clone は op の意味に内包するが、引数 disposition は宣言する。`MarkGlobal` 以外に「is-global チェック」専用ノードは不要（状態チェックは状態不明時の runtime `Retain`/`Release` に内包。静的に global/local と分かれば `RcState` を `Global`(no-op)/`Local`(チェック省略) に特殊化する＝将来の state 最適化、§6）。**P1 で codegen の全 RC site を監査**し、漏れなく IR ノード化されることを確認する（§1.6 受け入れ条件）。
 
 直線列の peephole（retain/release 相殺等）は「直線スパンを `Vec` に集めて変換し再構築」ヘルパで扱う。代替形式 = `Block { stmts: Vec<Stmt>, term: Term }`（文/終端子を型で分離、Vec 操作が楽だが二段構造・既存 AST と別形・型増）。Fix は構造化制御フロー（任意 jump 無し）なので継続入れ子で十分。
 
