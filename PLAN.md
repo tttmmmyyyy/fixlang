@@ -104,7 +104,7 @@ enum Ownership {       // op が各引数を「所有権ごと受け取る」か
 - **ANF 化**（兄弟位置を atom 化、effectful を `let` に）。
 - **lambda lifting**: 残存する全 lambda（`Expr::Lam`）を top-level RC IR 関数へ持ち上げ、使用箇所を `Closure(func, 捕捉)` に変換（現状 codegen が `declare_lambda_function`/`eval_lam` でやっている「lambda ごとに関数を宣言＋捕捉でクロージャ生成」を、IR 生成に前出し）。RC IR に nested lambda は残さない。
 - **名前は lowering が fresh 発番**（名前カウンタ＋AST名→新名の env で traverse、シャドー解消）＝構築により一意。
-- **last-use 解析**（`Scope.used_later` / `scope_lock_as_used_later` 相当。`find_usage_of_name` も利用可）。
+- **last-use 解析**（`Scope.used_later` / `scope_lock_as_used_later` 相当。変数ごとの最終使用を求める後ろ向きパス）。
 - **明示 retain/release 挿入**: `get_scoped_obj` の used_later→retain を `Retain` ノードに、scope 退出（未使用 let 束縛・分岐 dead 変数）の release を `Release` ノードに。
 - IOState threading はデータ依存として保持（順序自動保存）。
 
