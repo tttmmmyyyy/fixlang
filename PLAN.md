@@ -80,6 +80,8 @@ enum Ownership {       // op が各引数を「所有権ごと受け取る」か
     Ref,                 // 所有権を受け取らない・参照のみ（weak_ptr 相当、RC 操作しない）。呼び出し側: 何もせず呼ぶ
 }
 // Own 引数が「内部 release」か「結果へ move」か、read か mutate かは op の内部効果で、解析用に Shape 効果（§3.3）が宣言する（どのスロットへ行くか・read/mutate）。
+// `Ownership` は RC IR ノードのフィールドではなく `InlineLLVM`（`LLVMGenerator`）から引数位置ごとに取得する: 例 `InlineLLVM::arg_ownership(i) -> Ownership`（variant ごとに dispatch。既定は op 意味から決まりほぼ `Own`）。lowering がこれを引いて明示 RC を挿入。
+// 格納されるのは `Ref` 化の上書きだけ（§6 borrow 最適化）: `can_set_ref(i) -> bool` ／ `set_ref(i)`（arg を `Ref` 化＝generator の generate がその引数の内部 release をやめるモードに切替）。`FixBody` 等は `can_set_ref` が false。
 ```
 
 - **分岐は `Match` のみ（`If` を持たない）**: Bool を union 化する（std.fix: `type Bool = unbox union { _false : (), _true : () }; true = _true(); false = _false();`）。ソースの `if`/`true`/`false`/比較演算子は不変で、AST→RC IR 生成で `Expr::If(c,t,e)` を `Match(c, [_false => e, _true => t])` に desugar するだけ。性能中立（Bool-union ＝ `{i8 tag, [i8;0]}` ＝ i8。比較演算子は今も i8(0/1) を返す＝tag そのものでビット不変。FFI も i8 tag で不変。match は i8 tag の compare+branch で `if` と同等）。`&&`/`||`/`not` は `if` 経由なら desugar で吸収。
@@ -282,7 +284,7 @@ clone した body 中の force-unique を担う `LLVM`(InlineLLVM) ノードを 
 ## 6. 将来の RC 最適化（同じ RC IR 上）
 - **retain/release 相殺**（§2）。純粋な perf（冗長 RC 削減）。unique-check-elim の前提ではない（`Static(n)` leaf が net-zero を回復するため。lowering を最小 RC にすれば仕事も少ない）。
 - **reuse**（`Release` した alloc を直後の alloc で再利用＝in-place 再確保）。
-- **borrow 推論（`Own`→`Ref`）**: InlineLLVM の各引数 `Ownership` に「`Ref` に設定可能か」の問い合わせ＋setter を持たせる。現状ほぼ全引数が `Own`（読むだけの op も `Own` で、呼び出し側が `Retain` → op 内部で `release` という無駄）。読むだけの引数を `Ref` に切り替えると op は内部 release をやめ、release を外部の明示ノードへ出せる → 直前の `Retain` と相殺（§2）してペアが消え高速化。`Ref` 化できない op もある（`fix` 内側の InlineLLVM 等）。
+- **borrow 推論（`Own`→`Ref`）**: `InlineLLVM`（`LLVMGenerator`）に per-arg の `can_set_ref(i) -> bool`／`set_ref(i)` を持たせる（§1.2）。現状ほぼ全引数が `Own`（読むだけの op も `Own` で、呼び出し側が `Retain` → op 内部で `release` という無駄）。読むだけの引数を `Ref` に切り替えると op は内部 release をやめ、release を外部の明示ノードへ出せる → 直前の `Retain` と相殺（§2）してペアが消え高速化。`Ref` 化できない op もある（`fix` 内側の InlineLLVM 等）。
 - **順序スケジューリング**（意味を保つ範囲で評価順を並べ替え in-place 機会を増やす。例: `f(arr.set(0,42), arr.@0)` を `arr.@0` 先に並べ替えると set が in-place 化し clone が消える）。
 - **state 推論**（各値の refcount-state＝LOCAL/THREADED/GLOBAL を静的に決め、RC・状態チェック・`mark_threaded` を省く）。proven-global → `RcState::Global`（codegen no-op）。proven-local → `RcState::Local`（状態チェック省略）。送信値が proven-deeply-unique → `MarkThreaded` 省略。`MarkGlobal` も静的に分かる範囲で最適化。
 - **境界チェック除去**（`idx ∈ [0,size)` を証明し完全 unchecked へ。一意性除去と合成でベクトル化 0.20x）。
