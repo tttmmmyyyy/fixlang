@@ -186,6 +186,7 @@ RC IR を**抽象解釈**し、**コンパイル時の仮想ヒープ**上で参
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CTRefCnt { Static(usize), Dynamic } // オブジェクトの refcount **上界**。Static(1)=unique、Static(n>1)/Dynamic=shared、Dynamic=⊤。
 // 健全性: Static(n) ＝「real refcount ≤ n」。alloc→Static(1)、Retain→+1、Release→−1、join→max。
+//   == は単一 Loc・強更新の直線コード。join の max・多重指しの弱更新・widen で実 rc < n になりうる（過小評価＝実 rc > n は起こさない）。
 // 終端性: count に上限 K（K=2 で実用十分）。超過は Dynamic に widen（実質 {Static(1),Static(2),Dynamic} の有限格子）。
 // 散文では unique＝Static(1)、shared＝Static(n>1)/Dynamic の意。
 
