@@ -4,7 +4,7 @@
 
 RC（参照カウント）最適化の基盤として **RC IR**（評価順を固定した ANF ＋ 明示 retain/release ＋ ローカル名グローバル一意）を導入し、その上で uniqueness 解析・unique-check-elim・将来の RC 最適化（retain/release 相殺・reuse・borrow・順序スケジューリング）を行う。
 
-用語: 値の形＝`Shape`（boxed はロケーションへのポインタ）、参照カウント＝`CTRefCnt`（`Static(n)`＝静的に正確に n／`Dynamic`＝不明、`Static(1)`=unique）をコンパイル時の仮想ヒープ `heap: Loc→Cell` に持つ、関数ごとの要約＝`UniqSignature`。
+用語: 値の形＝`Shape`（変数がいま指す値の形。boxed はその参照カウントを持つ）、参照カウント＝`CTRefCnt`（`Static(n)`＝静的に正確に n／`Dynamic`＝不明、`Static(1)`=unique）、関数ごとの要約＝`UniqSignature`。
 
 ## 0. 動機（なぜ RC IR か）
 
@@ -173,111 +173,75 @@ fn f(arr, brr):                    // arr, brr : Array I64 を所有
 - → 後段の uniqueness 解析は「**`Retain` されていない boxed 値 ＝ unique**」を素直に読めるようになる。
 - clone 削減としても有用。
 
-これは**純粋な RC 削減の最適化**（最終コードの retain/release が減って速くなる、clone も減る）。**主目的の線形ケースの precision には不要**: §3 はオブジェクトの参照カウントを `Static(n)`（正確に n）で持ち単一 Loc で `Release` が戻すので、net-zero（1→2→1）を**解析自身が回復**する（相殺前でも `Static(1)` と分かる）。よって相殺は順序自由でいつ走らせてもよく、解析の前提ではない（健全性とも無関係）。多重指しでは `Dynamic` になり戻らないので、そこの回復には相殺が効く（§3.1。ただし rare で線形ケースには影響しない）。
+これは**純粋な RC 削減の最適化**（最終コードの retain/release が減って速くなる、clone も減る）。**主目的の線形ケースの precision には不要**: §3 は boxed の参照カウントを `Static(n)`（正確に n）で持ち `Release` が戻すので、net-zero（1→2→1）を**解析自身が回復**する（相殺前でも `Static(1)` と分かる）。よって相殺は順序自由でいつ走らせてもよく、解析の前提ではない（健全性とも無関係）。
 
 ## 3. uniqueness 解析（RC IR を抽象解釈）
 
-RC IR を**抽象解釈**し、**コンパイル時の仮想ヒープ**上で参照カウントだけを emulate する。各オブジェクト（ロケーション）に `CTRefCnt`（**静的に正確な refcount**＝`Static(n)` は「正確に n」、決まらなければ `Dynamic`）を持たせ、alloc（構築）=新規 cell、`Retain`/`Release`=rc 増減、射影(getter)=同一 Loc の別名（新規確保でなく、容器の子と同じ Loc を共有。retain する getter は子 Loc の rc +1）、を辿る。再帰は実回数まわさず、有限領域上の**不動点**で畳む（合流で join＝rc が一致なら保持・不一致なら `Dynamic`。この不一致→`Dynamic` が widening を兼ね不動点を停止させる）。正確に決まらない場面（不一致 join・多重指しへの retain/release・summary・opaque op）は `Dynamic`（静的に unique と確定できない）になる。`Dynamic` では unique-check-elim が force-unique を除去せず、**force-unique の実行時 uniqueness チェックが残る**（§4。実行時に unique なら in-place、shared なら clone＝現状動作）。
+RC IR を**抽象解釈**し、各変数がいま指す値の**参照カウント**を追う。boxed 値はその rc（`CTRefCnt`）を持ち、unboxed 集約（タプル・unboxed struct/union・クロージャ）は子の Shape を持つ。**別名**（同じ boxed が複数の変数/場所から指される）が生じた値は `Dynamic` にする（`unique_ptr` をコピーすると `shared_ptr` になるのと同様）。単独所有のまま move される値は `Static(1)` を保つ。ループ・再帰は有限領域上の**不動点**で畳む（合流で join）。`Dynamic` では unique-check-elim が force-unique を除去せず、**force-unique の実行時 uniqueness チェックが残る**（§4。実行時に unique なら in-place、shared なら clone）。
 
-**なぜ per-var の木でなく仮想ヒープか**: refcount は「オブジェクトの属性」であって「変数の属性」ではない。retain する getter（`arr.@i`）は boxed の子に**第二の参照**を作る＝複数の変数が同一オブジェクトを指す（別名）。refcount を変数ごとに持つと別名間で同期できず不健全（`x` 経由で「unique」と誤判定して in-place 破壊しうる）。refcount を**ロケーションの cell に1つ**持てば、`Retain`/`Release` が cell を更新し、それを指す全別名が同じ値を見る。
-
-### 3.1 状態（仮想ヒープ）
+### 3.1 状態
 ```rust
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CTRefCnt { Static(usize), Dynamic } // オブジェクトの **静的に正確な** refcount（決まらなければ Dynamic）。Static(1)=unique、Static(n>1)=shared、Dynamic=不明（⊤。unique と確定できない＝実行時チェックが残る）。
-// 意味: Static(n) ＝「静的に正確に n」。正確に決まらなければ Dynamic。alloc→Static(1)、単一 Loc（非 summary）への Retain→+1/Release→−1、join→一致なら保持・不一致（異なる非 Bottom の Static）なら Dynamic。
-//   Dynamic 化する不確定要因: 不一致 join／多重指しへの retain/release（どの Loc がどれだけ ±1 か不明）／summary loc／opaque op・global・未知 FFI。過小評価（unique と誤判定）は起こさない。
-// 終端性: 不一致→Dynamic が widening。straight-line の Static(n) は retain 数で有限、ループ/再帰の不動点は back-edge join の不一致→Dynamic で停止（K-cap 不要）。
-// 散文では unique＝Static(1)、shared＝Static(n>1)/Dynamic の意。
-
-// 抽象ロケーション: アロケーションサイト（構築/クロージャ捕捉obj/force-unique 結果/不明 alloc のプログラム地点）で抽象化。
-//   サイトは有限個 → Loc も有限。再帰で同一サイトを再訪すると同じ Loc に集約＝summary loc（複数の具体オブジェクトを表す）。
-//   + Top: 外部・global・未知 FFI 由来。常に Dynamic。
-type Loc;                  // AllocSite | Summary(AllocSite) | Top
-type PtsTo = Set<Loc>;     // points-to 集合（分岐合流で複数 Loc を指しうる。通常は単集合）
-
-#[derive(Clone, PartialEq, Eq)]
-enum Shape {                  // env / フィールドが持つ「値の形」。boxed はインラインせず必ずポインタ1個で切れる
-    Unboxed,                 // scalar（refcount 無し）
-    UnboxedAgg(Vec<Shape>),   // タプル/unboxed struct/unboxed union/クロージャ（refcount 無し、子を持つ。クロージャ＝[Unboxed funptr, Boxed 捕捉obj]、空捕捉は Boxed({})＝null）
-    Boxed(PtsTo),            // boxed 値＝仮想ヒープへのポインタ（rc と中身は cell 側）。空集合 {}=null（指す先なし。空捕捉クロージャ等。RC op は no-op）。Bottom とは別（Bottom=無情報/到達不能）
+enum CTRefCnt { Static(usize), Dynamic } // 参照カウント。Static(n)=静的に正確に n（Static(1)=unique）、Dynamic=不明（保守的に shared 扱い）
+enum Shape {                 // 変数がいま指す値の形
+    Unboxed,                 // scalar（rc 無し）
+    UnboxedAgg(Vec<Shape>),  // タプル/unboxed struct/unboxed union/クロージャ（子の Shape を持つ。クロージャ＝[Unboxed funptr, 捕捉obj の Shape]）
+    Boxed(CTRefCnt),         // boxed 値。自身の rc のみ持ち、中身は追わない
     Bottom,                  // ⊥（到達しない・union の不在 variant）。join 単位元
 }
-
-struct Cell { rc: CTRefCnt, contents: Shape } // 1 オブジェクト分。Array は contents=要素 Shape、boxed struct は UnboxedAgg(フィールド)、boxed union は variant ごと
-struct State { env: Map<Var, Shape>, heap: Map<Loc, Cell> } // heap ＝ 仮想ヒープ
+struct State { env: Map<Var, Shape> }
 ```
+- **boxed の中身は追わない**: `Boxed(CTRefCnt)` は自身の rc だけを持つ。boxed 容器（`Array a`・`Box a`・boxed struct/union）から取り出した boxed 値は `Dynamic`（中身の rc を静的に持たないため）。→ 容器自身の in-place（フィールド `set` 等、容器の rc が `Static(1)` なら可）は効き、容器の中の値の in-place は効かない（保守的に clone）。
+- **unboxed 集約は子を追う**: タプル・unboxed struct・unboxed union（`LoopState` 等）・クロージャは `UnboxedAgg` で子の Shape を保持。destructure（move で取り出し）は子 Shape をそのまま引き継ぐ。→ unboxed 容器越しの boxed 値（例: `(cnt, arr)` の `arr`）は uniqueness を追える。
 
-**再帰型は有限グラフ**: `Shape` は boxed のところで必ず `Boxed(PtsTo)`（ポインタ）に切れるので `Shape` 単体は常に有限。`List` 等の再帰は **cell の contents が別の Loc（自分自身も可）を指す巡回グラフ**になり、Loc が有限（アロケーションサイト抽象）なので全体も有限。よって木の打ち切りノードは要らず、有限性は Loc 集合の有限性が担保する。再帰で構築される構造（`List` 等）は同一サイト → summary loc に集約（rc は `Dynamic`）。
+**join**（合流・不動点）: pointwise（`Bottom` 単位元、`UnboxedAgg` は zip、`Boxed` の rc は**一致なら保持・不一致なら `Dynamic`**）。この不一致→`Dynamic` が widening を兼ね不動点を停止させる（straight-line の `Static(n)` は retain 回数で有限）。
 
-**cell rc の更新**（`Retain`/`Release` による cell 更新の話。`is_unique` の読み取り §3.2 末尾とは別軸）: points-to が**単集合 `{L}` かつ `L` 非 summary** のときだけ `L.rc` を正確に ±1（`Retain`→+1、`Release`→−1。`Static(2)`→`Static(1)` の unique 回復ができる＝線形スレッドの精度）。多重指し or summary loc では、どの Loc がどれだけ ±1 されるか静的に決まらないので**指し先の全候補 cell を `Dynamic`** にする（`Static(n)` は『正確に n』の意味なので、決まらなければ `Dynamic`）。読み取りは別軸: 多重指しでも各候補 cell が `Static(1)` なら `is_unique` は unique（retain/release していなければ候補は `Static(1)` のまま）。
-
-**net-zero 回復が効く範囲**: retain→release の打ち消しを解析自身が戻せるのは**単一 Loc（非 summary）の線形ケースだけ**。多重指しでは `Dynamic` になり戻らない。この取りこぼしは retain/release 相殺（§2）が net-zero ペアごと消すことで解消する（rare ケース）。
-
-**join**（合流・不動点）: `Shape` は pointwise（`Bottom` 単位元、`Unboxed` 同士、`UnboxedAgg` は zip、`Boxed(P1)⊔Boxed(P2)=Boxed(P1∪P2)`）。`heap` は Loc ごとに cell を join（`rc` は一致なら保持・不一致なら `Dynamic`、`contents` は join）。**points-to 集合は「指しうる候補」の列挙（各 Loc を個別に追跡・rc も個別）であり summary loc とは別物**: 分岐で別アロケーションを指すと `{L_A, L_B}` になるが、各 cell の rc は join で `Static(1)` のまま（潰して `Dynamic` にはしない。summary loc は再帰で**共存**する複数オブジェクトを1つに畳んだ場合のみ）。PtsTo は有限 Loc 集合の部分集合なので有界（サイズ widening は不要）。rc の不一致→`Dynamic`（widening）と Loc の有限性で不動点は停止。
-補助: `top_of(ty)`（保守的 ⊤＝boxed は `Boxed({Top})`、`heap[Top].rc=Dynamic`）。
-
-### 3.2 interpret 規則（RC IR を辿る）
-`State`（env, heap）を更新しながら `RcExpr` を順に処理:
-- `Let(x, Closure(_, captures), k)`: クロージャ値は unboxed pair `{funptr, capture_ptr}`。捕捉が非空なら捕捉 cell `L`（`Cell{ Static(1), UnboxedAgg(captures の Shape) }`）を alloc し `env[x] = UnboxedAgg([Unboxed /*funptr*/, Boxed({L})])`、捕捉は move-in。捕捉が空なら alloc 無しで `env[x] = UnboxedAgg([Unboxed, Boxed({})])`（null＝RC-free）。これにより捕捉された配列等を追える。
-- `Let(x, LLVM(prim, args), k)`: prim の宣言 `UniqSignature`（§3.3）を適用（getter/set/construct を特別扱いせず、以下は代表的な prim の効果例）。
-  - 射影（getter）`x = get(a, i)`: `env[x]` ＝ `a` の指す cell の `contents` を i 射影した Shape（boxed なら同じ Loc を指す）。**retain する getter**（`Array::@` 等、配列を残して要素を複製）は子 Loc の rc を +1 → `env[x]` と `a` の field i が同一 Loc を共有＝**別名を捕捉**（以後 `Retain`/`Release` が同じ cell を更新）。**move-out する linear get**（`mod`/`act` の `_unsafe..unretained`）は rc 据え置き（参照がフィールドから出るだけ）。
-  - force-unique 系（`set`/`mod`/`act`）: 結果は新規 or 再利用 Loc で `rc=Static(1)`、格納値は要素位置へ。
-  - 構築（alloc 系。struct/タプル/`ArrayLit`/union variant）: 新規 Loc `L`（初訪は新規、再訪は summary 化）に `Cell{ rc: Static(1)（summary なら join→Dynamic）, contents: args の Shape をスロットへ }`、`env[x]=Boxed({L})`。args は move-in（rc 不変）。
-- `Let(x, App(f, args), k)`: `f` の `UniqSignature` を適用（結果 Shape ／ 各 arg cell の rc 効果 ／ 結果が arg を別名化するか、を反映。クロージャ値でも funptr でも対象関数の要約を引く）。
-- `Retain(x, k)`: `env[x]` の root PtsTo が単集合・非 summary なら その Loc の rc を正確に +1。多重指し or summary は対象候補の cell を `Dynamic`（どの Loc がどれだけ増えるか不明）。全別名が同一 cell を見るので同期する。
-- `Release(x, k)`: 単集合 `{L}` かつ非 summary なら `L.rc` を正確に −1（**`Static(2)`→`Static(1)` で unique 回復**、`Static(1)`→0 で解放し contents を辿って子を再帰 Release）。多重指し or summary は対象候補の cell を `Dynamic`。単一 Loc では `Release` が count を戻すので net-zero（1→2→1）を**解析自身が回復**する。
-- `Match(a, arms)`: 各 arm を**分岐前 State のコピー**から解析し、結果 State を `join`。不在 variant の payload は `Bottom`。Bool もここ（2 variant）。
+### 3.2 interpret 規則
+`State`(env) を更新しながら `RcExpr` を順に処理:
+- `Let(x, LLVM(prim, args), k)`: prim の `UniqSignature`（§3.3）を適用（getter/set/construct を特別扱いせず一律）。alloc 系（構築・`set`/`mod`/`act` の結果・`fill` 等）→ `Boxed(Static(1))`。boxed 容器からの取り出し（getter）→ `Dynamic`。unboxed 集約からの取り出し → 子 Shape を引き継ぐ。
+- `Let(x, Closure(_, captures), k)`: `env[x] = UnboxedAgg([Unboxed /*funptr*/, cap])`。捕捉が非空なら cap＝`Boxed(Static(1))`（新規捕捉obj に捕捉値を move-in）、空なら null（RC-free）。
+- `Let(x, App(f, args), k)`: `f` の `UniqSignature` を適用。
+- `Retain(x, k)`: `env[x]` の boxed root rc を +1（`Static(n)→Static(n+1)`）。
+- `Release(x, k)`: `env[x]` の boxed root rc を −1（`Static(2)→Static(1)` で unique 回復、`Static(1)→0` で dead）。
+- `Match(x, arms)`: 各 arm を**分岐前 State のコピー**から解析し join。unbox union の payload は move 取り出しで子 Shape を引き継ぐ（不在 variant は `Bottom`）。Bool もここ（2 variant）。
 - `Ret(x)`: 結果 ＝ `env[x]`。
-- global 参照 → `Boxed({Top})`（`heap[Top].rc=Dynamic`）。
+- global 参照 → `Boxed(Dynamic)`。
 
-要点: **refcount を仮想ヒープの cell で追い、別名は同一 Loc で共有**。線形スレッド（`a1=set(a0,..); a2=set(a1,..)`）は単一 Loc で rc が `Static(1)` を保ち、retain getter で生じた別名は子 Loc の rc が `Static(2)` になって正しく shared と分かる。
+**別名 → `Dynamic`**（健全性の要）: boxed 値が2箇所以上から指される状況を作る操作でその値を `Dynamic` にする——boxed 容器からの取り出し（getter）、同じ boxed を第二の変数が参照（`let y = x`、容器を残す retain getter、使用中に closure へ capture）。**move**（destructure・consume で単独所有を移す）は `Dynamic` 化せず子 Shape を引き継ぐ（線形スレッドの精度）。
 
-**uniqueness クエリ**（unique-check-elim が使う、§4）: `is_unique(x) = ∀ L ∈ PtsTo(env[x]): heap[L].rc == Static(1)`（指しうる全候補が `Static(1)`）。例: `let arr = if c { [1,2,3] } else { [4,5,6] }` は `env[arr]={L_A,L_B}` で両 cell とも `Static(1)` なので **unique**（実行時はどちらか一方の object で、その rc は正確に 1）。候補に `Dynamic`・summary loc が混じれば非 unique（保守的）。
+**uniqueness クエリ**（unique-check-elim が使う、§4）: `is_unique(x)` ＝ `env[x]` が boxed でその root rc が `Static(1)`。`Static(1)` は別名なし・単独所有でしか付かないので真に unique。
 
-詳細（getter ごとの retain 有無、summary loc の扱いの精密化）は P2 で確定。
-
-### 3.3 関数の効果（`UniqSignature`, per-input-key concrete）
-関数/op の効果は、呼び出し地点 `let r = f(a0..a_{n-1})` で `State`(env,heap) を更新する変換。引数を超えた参照を持たないので、効果は**引数からの相対参照**で記述できる。
+### 3.3 関数の効果（`UniqSignature`）
+関数/op の効果は、呼び出し `let r = f(a0..a_{n-1})` で `State`(env) を更新する変換。引数からの相対で記述する:
 ```rust
-struct UniqSignature {        // 1 回の適用で State をどう変えるか
-    actions: Vec<Action>,     // 順に適用: rc 増減・新規 alloc・スロット格納
-    result:  ShapeRef,        // 適用後の結果 r の Shape
+struct UniqSignature {
+    args:   Vec<ArgEffect>,   // 各引数 a_i の rc/所有権効果
+    result: ShapeRef,         // 結果 r の Shape の組み立て方（引数からの相対）
 }
-enum ShapeRef {               // 効果内の「値/場所」を引数から相対指定
-    Unboxed,                      // rc 無しスカラー
-    Arg(usize),                   // a_i をそのまま（result が a_i を alias）
-    Field(Box<ShapeRef>, usize),  // 射影（cell の slot。getter。boxed なら同じ子 Loc を指す）
-    Fresh(FreshId),               // 下の Alloc で作った新規 Loc を指す Boxed
-    Agg(Vec<ShapeRef>),           // unboxed 集約（タプル/struct/closure ペア）
-    Null,                         // Boxed({})（空捕捉）
+enum ArgEffect { Consume, Move, Borrow }  // Consume=消費(rc−1)／Move=結果・構築先へ移す(rc 不変)／Borrow=触らない
+enum ShapeRef {
+    Unboxed,
+    FreshBoxed,               // 新規 boxed（Static(1)）: 構築・set/fill の結果 等
+    DynBoxed,                 // 中身不明の boxed（Dynamic）: boxed 容器からの取り出し・global・boxed_from_retained_ptr
+    Arg(usize),               // a_i をそのまま
+    Field(usize, Vec<usize>), // unboxed 集約な a_i の子（move 取り出し）。boxed 容器の子は DynBoxed
+    Agg(Vec<ShapeRef>),       // unboxed 集約（タプル/struct/closure ペア）
 }
-enum Action {
-    Alloc   { id: FreshId, rc: CTRefCnt, contents: ShapeRef }, // 新規 cell（通常 Static(1)）
-    Store   { cell: ShapeRef, slot: usize, value: ShapeRef },  // cell.slot ← value（in-place set 等）
-    Retain  { target: ShapeRef },  // target の Loc rc を正確に +1（単一 Loc・非 summary のみ。多重/summary は Dynamic）
-    Release { target: ShapeRef },  // target の Loc rc を正確に −1（同上。引数 consume・旧要素 drop 等）
-}
-type InputKey = Vec<ArgKey>;  // メモ化キー: 引数 Shape を有限に要約（uniqueness が効果を変えるので最低限 unique/shared）
-enum ArgKey { Unboxed, UniqueBoxed, SharedBoxed /* 必要なら子の要約も。粒度は精度ノブ、P2 */ }
+type InputKey = Vec<ArgKey>;              // メモ化キー: 引数 Shape を有限に要約
+enum ArgKey { Unboxed, UniqueBoxed, SharedBoxed } // 粒度は精度ノブ（P2）
 ```
-**適用** `apply(state, args, sig)`: `actions` を順に State へ反映（`Alloc`→cell 追加、`Store`→cell スロット更新、`Retain`/`Release`→対象 Loc の rc を exact ±1／多重・summary は `Dynamic`）し、`env[r] = resolve(sig.result)`（`Arg(i)`→`env[a_i]`、`Field`→射影、`Fresh`→`Boxed({新 Loc})`、`Agg`→`UnboxedAgg`、`Null`→`Boxed({})`）。
+- **ソース関数 = 推論**: 関数ごとに `Map<InputKey, UniqSignature>` を memo（解析側テーブル、`FuncRef` キー。IR の `RcFunc` には載せない）。入力キーごとに body を §3.2 で解析して埋める。§4.1 の特殊化 worklist と共有。再帰は不動点（初期 `Bottom`）。
+- **プリミティブ（`InlineLLVM`）= 宣言**: `LLVMGenerator::signature(key) -> UniqSignature`（variant ごと、入力キー依存可）。`Ownership`（§1.2）は同宣言の射影（`Consume`/`Move`→`Own`、`Borrow`→`Ref`）。
+- global／`boxed_from_retained_ptr`（ptr→boxed で rc 不明）→ 結果 `DynBoxed`。FFI（`CALL_C`）は boxed を返さない（結果 unboxed）ので rc 対象外。assert ビルドで不健全な claim を実行時検出。
 
-**保持場所**:
-- **ソース関数 = 推論**: 解析が関数ごとに `Map<InputKey, UniqSignature>` を memo（`FuncRef` キー。IR の `RcFunc` とは別の解析テーブルで、ノードに解析状態を載せない）。入力キーごとに body を §3.2 で解析して埋める。§4.1 の特殊化 worklist と共有。再帰は不動点（初期 `Bottom`）。
-- **プリミティブ（`InlineLLVM`/FFI）= 宣言**: `LLVMGenerator::signature(&self, key: &InputKey) -> UniqSignature`（variant ごとに宣言、入力キー依存可）。`Ownership`（§1.2、lowering 用）は同じ宣言の射影＝`Release{Arg(i)}` あり or result/fresh へ move なら `Own`、rc 操作も move も無ければ `Ref`。
-- global / 未知 FFI = `Dynamic`（`Boxed({Top})`）。assert ビルドで不健全な claim を実行時検出。
-
-例（`elem` は要素 slot。boxed 要素では旧要素の `Release` も要るが簡略化）:
-- **retain getter** `Array::@(i, arr)`: `actions=[Retain{ Field(Arg(arr), elem) }]`、`result=Field(Arg(arr), elem)`（要素を複製＝子 Loc rc +1、配列は残す）。
-- **set** `set(i, v, arr)`: `arr` が `UniqueBoxed` なら in-place＝`actions=[Store{ cell: Arg(arr), slot: elem, value: Arg(v) }]`、`result=Arg(arr)`（**同 Loc・rc 不変**、v は要素へ move。これでループ `arr=arr.set(..)` が同一 Loc を保ち `Static(1)` 継続）。`SharedBoxed` なら clone＝`actions=[Alloc{f0, Static(1), <要素を v にした Shape>}, Release{Arg(arr)}]`、`result=Fresh(f0)`。
-- **構築** `MakeStruct{a,b}`: `actions=[Alloc{f0, Static(1), Agg([Arg(a),Arg(b)])}]`、`result=Fresh(f0)`（引数 move-in）。
-- **Closure**(g,[c0]): `actions=[Alloc{f0 /*捕捉obj*/, Static(1), Agg([Arg(c0)])}]`、`result=Agg([Unboxed /*funptr*/, Fresh(f0)])`。
-- **fill** `fill(n, x)`: `actions=[Retain{Arg(x)}（多スロットに複製→子 rc Dynamic）, Alloc{f0, Static(1), Arg(x)}]`、`result=Fresh(f0)`。`boxed_to_retained_ptr`→引数 escape（`Retain` ＋ 結果 unboxed ptr）。
+例:
+- **retain getter** `Array::@(i, arr)`: `arr`＝`Borrow`、要素が boxed なら `result=DynBoxed`（容器から取り出す＝別名）、unboxed なら `result=Unboxed`。
+- **set** `set(i, v, arr)`: `arr`＝`Consume`・`v`＝`Move`（要素へ）・`result=FreshBoxed`（＝`Static(1)`。in-place/clone どちらでも結果は unique）。これでループ `arr=arr.set(..)` が `Static(1)` を継続。
+- **構築** `MakeStruct{a,b}`: boxed struct なら `a`,`b`＝`Move`・`result=FreshBoxed`。unboxed struct/タプルなら `result=Agg([Arg(a),Arg(b)])`。
+- **Closure**(g,[c0]): `c0`＝`Move`・`result=Agg([Unboxed, FreshBoxed])`（funptr＋捕捉obj）。
 
 ## 4. unique-check-elim
 
-force-unique を含む `LLVM` op（`set`/`mod`/`act` 系）で、対象 boxed 値が §3 の `is_unique`（指しうる全候補が `Static(1)`）かつ LOCAL と証明できれば、その RC IR の `LLVM` ノードを **force-unique を行わない版に差し替える**（証明できない＝`Dynamic`/`Static(n>1)`/summary では除去せず、force-unique の実行時 uniqueness チェックを残す＝現状動作）。結果は force-unique 後どのみち unique なので、ループ `let arr = arr.set(…)` で 2 回目以降の入力が unique になり「**初回 checked・以降 unchecked**」が自然に出る。
+force-unique を含む `LLVM` op（`set`/`mod`/`act` 系）で、対象 boxed 値が §3 の `is_unique`（root rc が `Static(1)`）かつ LOCAL と証明できれば、その RC IR の `LLVM` ノードを **force-unique を行わない版に差し替える**（証明できない＝`Dynamic`/`Static(n>1)` では除去せず、force-unique の実行時 uniqueness チェックを残す＝現状動作）。結果は force-unique 後どのみち unique なので、ループ `let arr = arr.set(…)` で 2 回目以降の入力が unique になり「**初回 checked・以降 unchecked**」が自然に出る。
 
 ### 4.1 特殊化（uniqueness 駆動、RC IR 上）
 `RcFunc` を、流れてくる引数 uniqueness（§3 の入力 `Shape`）をキーに clone する。呼び出し地点で引数が unique なら unique 用 clone を、shared なら別 clone（または original）を呼ぶ。worklist で不動点（§3.3 の per-input-key 解析と共有）。clone は fresh 名を発番し（名前グローバル一意 §1.1-3 を保存）一意な clone 名を付ける。未使用になった `RcFunc`（original/clone）は RC IR 上の dead-function 除去で掃除する。
@@ -321,7 +285,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - **P0（P1 前）**: **デバッグ情報の E2E テストを追加**してベースライン化。現状その回帰テストが無いため、`fix build -g`（DWARF 付き）でビルドした小プログラムを **gdb 駆動**（`gdb -batch`: `break main.fix:N` → run → backtrace）で検査する統合テストを作る（CLAUDE.md 規約: サンプルを tempdir にコピー、`fix`/`gdb` を `Command` 実行）。assert は file:line の解決・停止・スタックの行情報（マングル名非依存）。補助で bundled `llvm-dwarfdump` の構造 assert も可。**現 main で通すこと**＝P1 の「デバッグ情報一致」(§1.6) の比較対象。ツール: `/usr/bin/gdb` あり、`llvm-dwarfdump` は `/home/maruyama/llvm-17.0.6/bin/`（system には無し）。
 - **P0.5（P1 前提）**: **Bool を union 化**（std.fix: `type Bool = unbox union {_false,_true}; true=_true(); false=_false();` ＋ 比較演算子の結果型 ＋ FFI Bool↔i8 tag）。これが `If` を IR から落とす前提（`If`→`Match` desugar は P1 lowering 内）。性能中立（Bool-union＝i8）。de-risk するなら現 `eval_if` を union Bool 対応にして先行検証、または P1 で `eval_if` 撤去と同時。
 - **P1**: RC IR 型 ＋ AST→RC IR lowering（`generator.rs` から RC 抽出。名前は lowering が fresh 発番）＋ codegen 付け替え ＋ 全テスト再検証。**最大の山**。完了ゲート: `cargo test --release` 全最適化レベル（`FIX_MAX_OPT_LEVEL` max/basic/none、§1.6）で全通過・全ベンチでリグレッションなし・デバッグ情報一致（§1.6）を満たし、**ユーザに連絡して外部ライブラリテストを依頼してから次フェーズへ**。lowering は現 codegen の RC（move-out/last-use ＝既に最小 RC）を踏襲。retain/release 相殺は §6/P4 の perf 磨きに回す（§3 解析が net-zero を回復するので相殺前でも動く）。
-- **P2**: uniqueness 解析（仮想ヒープ＋`UniqSignature` で RC IR を抽象解釈）。read-only ログから始め arrayrw のループ `set` を unique・共有テストを shared と判定することを確認。
+- **P2**: uniqueness 解析（`Shape`＋`UniqSignature` で RC IR を抽象解釈）。read-only ログから始め arrayrw のループ `set` を unique・共有テストを shared と判定することを確認。
 - **P3**: unique-check-elim（force-unique 除去 ＋ 特殊化）。arrayrw/fannkuch 計測、全テスト。
 - **P4**: reuse / borrow / 順序スケジューリング / 境界チェック除去 等。
 
@@ -329,12 +293,12 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - **P1 の codegen 付け替えの再検証コスト・範囲**が最大リスク（全プログラムに影響）。段階導入できるか（一部関数だけ RC IR 経由、等）も検討。
 - `Release` 後の uniqueness 回復は §3 解析が行う（`Release`=−1 で `Static(2)`→`Static(1)`）。§2 の相殺とは独立。
 - ローカル名一意の**全変換での保存**（lowering は fresh 発番で構築的に一意。clone/特殊化は fresh 名発番で freshen）。
-- getter（射影）の retain 有無・`UniqSignature` の不動点収束・threaded state・FFI escape の RC IR での扱い。捕捉クロージャは `Closure` の captures を cell の contents として追えるが、共有/別名の健全性は検証する。
-- 別名健全性は refcount を cell に1つ持つことで担保（§3）。summary loc・PtsTo 集約・多重指しの `Dynamic` 化など精度調整は P2 で詰める。
+- getter（射影）の retain 有無・`UniqSignature` の不動点収束・threaded state・boxed の escape（`boxed_to_retained_ptr`）の RC IR での扱い。捕捉クロージャは `Closure` の captures を `UnboxedAgg` の子 Shape として追えるが、共有/別名の健全性は検証する。
+- 別名健全性は「別名を作る操作で対象を `Dynamic` にする」で担保（§3.2）。`ArgKey` の粒度など精度調整は P2 で詰める。
 ### 決定事項・要確認
-- **（決定）env を仮想ヒープ（store）にする**（§3）: refcount を変数ごとでなくロケーションの cell に持つ。理由: retain する getter が boxed の子に第二参照を作り、変数ごとの木では別名間で同期できず不健全（`x` 経由で unique 誤判定 → in-place 破壊）。cell に refcount を1つ持てば `Retain`/`Release` が全別名に同期する。再帰型は有限 Loc（アロケーションサイト抽象）の巡回グラフで表現するので木の打ち切りノードは不要。線形ケースは単一 Loc で正確に追い、別名・summary loc は `Dynamic`。
+- **（決定）状態は変数ごとの `Shape`（`State{env: Map<Var,Shape>}`）**（§3）: boxed 値は自身の rc（`CTRefCnt`）だけを持ち、boxed 容器の中身は追わない（nested uniqueness は追わない）。同じ boxed が2箇所から指される状況を作る操作（getter・`let y = x`・使用中の capture 等）で対象を `Dynamic` にすることで別名の健全性を担保する（変数ごとに rc を持つと別名間で同期できず不健全になる問題を、別名を作らせない＝作った時点で `Dynamic` にすることで回避）。単独所有のまま move される値は `Static(1)` を保つ。unboxed 集約は `UnboxedAgg` で子 Shape を追う（`LoopState` 越しの配列など線形スレッドの精度）。
 - **（決定）`Construct` ノードを設けず構築も `LLVM`**（§1.2）: 集約構築（struct/タプル/`ArrayLit`/union variant）は alloc 系 `LLVM` プリミティブ＋`UniqSignature`（fresh・rc=Static(1)・引数をスロットへ）で表す。InlineLLVM が効果を宣言する設計なので fresh=unique は解析に伝わり、専用ノードは不要（射影＝getter を専用ノード化しない方針の双対）。
-- **（決定）参照カウントを `Static(n)`（静的に正確に n）|`Dynamic`（不明）で表す**（`CTRefCnt`、§3.1）: alloc=Static(1)、単一 Loc の `Retain`=+1／`Release`=−1（net-zero を回復＝`Static(2)`→`Static(1)`）、分岐 join＝一致なら保持・不一致なら `Dynamic`、多重指しへの retain/release・summary・opaque も `Dynamic`（これらが widening を兼ね終端性を担保。K-cap 不要）。これにより: (a) 要約は入力ごとの concrete な数値（明示 RC が駆動する）、(b) **retain/release 相殺は順序自由な純粋 perf**（解析が `Release` で net-zero を回復するので、相殺の前後どちらでも `Static(1)` を得る）。§3.3 は per-key memoize。
+- **（決定）参照カウントを `Static(n)`（静的に正確に n）|`Dynamic`（不明）で表す**（`CTRefCnt`、§3.1）: alloc=Static(1)、`Retain`=+1／`Release`=−1（net-zero を回復＝`Static(2)`→`Static(1)`）、分岐 join＝一致なら保持・不一致なら `Dynamic`、別名化・boxed 容器からの取り出し・global・opaque も `Dynamic`（不一致 join が widening を兼ね終端性を担保。K-cap 不要）。これにより: (a) 要約は入力ごとの concrete な数値（明示 RC が駆動する）、(b) **retain/release 相殺は順序自由な純粋 perf**（解析が `Release` で net-zero を回復するので、相殺の前後どちらでも `Static(1)` を得る）。§3.3 は per-key memoize。
 - **（決定）Bool→union（P0.5、§7）**: std.fix 定義＋比較演算子の結果型＋FFI（Bool↔i8 tag、`_false`=0/`_true`=1）。`If`→`Match` desugar は P1 lowering 内。要確認: 比較 InlineLLVM の結果構築・`&&`/`||`/`not`・typecheck が union Bool で通るか（ビットは i8 不変）。
 - **（決定）global 値の表現**: global 初期化を RC IR（init）として表し `MarkGlobal` を init で発行。参照は atom で解析は `Dynamic`。program = top-level 関数集合 ＋ global init。現状の global 機構（lazy/eager・mark_global 発火点）は P1 実装時に確認。
 - **（決定）lowering サブパス順**: AST 正規化（ANF 化 → lambda lift → `If`→`Match` desugar → destructure→getter → fresh 命名）→ 最後に last-use 解析＋明示 retain/release 挿入で RC IR 生成（形と名前が確定してから RC を載せる）。
