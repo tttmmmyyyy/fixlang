@@ -177,7 +177,7 @@ fn f(arr, brr):                    // arr, brr : Array I64 を所有
 
 ## 3. uniqueness 解析（RC IR を抽象解釈）
 
-RC IR を**抽象解釈**し、**コンパイル時の仮想ヒープ**上で参照カウントだけを emulate する。各オブジェクト（ロケーション）に `CTRefCnt`（**静的に正確な refcount**＝`Static(n)` は「正確に n」、決まらなければ `Dynamic`）を持たせ、alloc（構築）=確保、`Retain`/`Release`=増減、射影=エイリアス、を辿る。再帰は実回数まわさず、有限領域上の**不動点**で畳む（合流で join＝rc が一致なら保持・不一致なら `Dynamic`。この不一致→`Dynamic` が widening を兼ね不動点を停止させる）。正確に決まらない場面（不一致 join・多重指しへの retain/release・summary・opaque op）は `Dynamic`（静的に unique と確定できない）になる。`Dynamic` では unique-check-elim が force-unique を除去せず、**force-unique の実行時 uniqueness チェックが残る**（§4。実行時に unique なら in-place、shared なら clone＝現状動作）。
+RC IR を**抽象解釈**し、**コンパイル時の仮想ヒープ**上で参照カウントだけを emulate する。各オブジェクト（ロケーション）に `CTRefCnt`（**静的に正確な refcount**＝`Static(n)` は「正確に n」、決まらなければ `Dynamic`）を持たせ、alloc（構築）=新規 cell、`Retain`/`Release`=rc 増減、射影(getter)=同一 Loc の別名（新規確保でなく、容器の子と同じ Loc を共有。retain する getter は子 Loc の rc +1）、を辿る。再帰は実回数まわさず、有限領域上の**不動点**で畳む（合流で join＝rc が一致なら保持・不一致なら `Dynamic`。この不一致→`Dynamic` が widening を兼ね不動点を停止させる）。正確に決まらない場面（不一致 join・多重指しへの retain/release・summary・opaque op）は `Dynamic`（静的に unique と確定できない）になる。`Dynamic` では unique-check-elim が force-unique を除去せず、**force-unique の実行時 uniqueness チェックが残る**（§4。実行時に unique なら in-place、shared なら clone＝現状動作）。
 
 **なぜ per-var の木でなく仮想ヒープか**: refcount は「オブジェクトの属性」であって「変数の属性」ではない。retain する getter（`arr.@i`）は boxed の子に**第二の参照**を作る＝複数の変数が同一オブジェクトを指す（別名）。refcount を変数ごとに持つと別名間で同期できず不健全（`x` 経由で「unique」と誤判定して in-place 破壊しうる）。refcount を**ロケーションの cell に1つ**持てば、`Retain`/`Release` が cell を更新し、それを指す全別名が同じ値を見る。
 
