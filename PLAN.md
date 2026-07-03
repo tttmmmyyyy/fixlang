@@ -190,6 +190,8 @@ sum : Array I64 -> I64 -> I64 -> I64 = |arr, i, acc|
     if i == arr.@size { acc } else { sum(arr, i+1, acc + arr.@(i)) };  // arr は読むだけ
 main = ( let arr = fill(100, 0); let s = sum(arr, 0, 0); arr.set(0, s) );  // arr を再使用してから set
 ```
+（各引数の所有権は本来 `OwnershipShape`。この例の `arr` は単一 boxed なので末端1個＝`Boxed(Own/Borrow)` に潰れ、以下その末端を `Own`/`Borrow` と略記する。引数が unboxed タプル/struct なら `OwnershipShape` は `Agg([…])` で子ごとに分かれる——例: `(cnt, arr)` で `cnt` 消費・`arr` 借用なら `Agg([Unboxed, Boxed(Borrow)])`。）
+
 baseline（source 引数は全 `Own`。`@`/`@size` は宣言 `Borrow`）:
 ```
 fn sum(arr /*Own*/, i, acc):
