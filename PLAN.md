@@ -219,21 +219,23 @@ fn main:
 - (a) `sum` 内部の `Release(arr)`（`_true` 枝）を落とす（もう所有しない）。
 - (b) 呼び出し地点で release を引き受ける: `main` は `arr` を所有するので `sum(arr,…)` の直後に `Release(arr)`。`sum` の再帰呼び出しは `arr` を借用（所有しない）ので**足さない**（借用を借用へ渡すだけ＝末尾保持）。
 
-相殺後（`main` の `Retain(arr) … Release(arr)` が借用呼び出しをまたぐ net-zero として §2.2 で消える）:
+書き換え直後（相殺前）:
 ```
 fn sum(arr /*Borrow*/, i, acc):
     let n = LLVM[@size](arr); let c = LLVM[eq_i64](i, n)
     Match c {
-      _true  => Ret(acc)                                // Release 消滅（借用のみ）
+      _true  => Ret(acc)                                // (a) で Release(arr) 消滅（借用のみ）
       _false => let e = LLVM[@](i, arr); …
                 let r = App(sum, [arr, i2, a2]); Ret(r) // borrow->borrow: release 無し = tail 保持
     }
 fn main:
-    let arr = LLVM[fill](100, 0)          // Unique
-    let s   = App(sum, [arr, 0, 0])        // 借用: arr は Unique のまま
-    let a2  = LLVM[set](0, s, arr)         // arr は Unique -> set の force-unique を除去
+    let arr = LLVM[fill](100, 0)          // rc 1（Unique）
+    Retain(arr)                           // rc 2 : baseline から残った Retain
+    let s   = App(sum, [arr, 0, 0])        // 借用（rc 2 のまま、消費しない）
+    Release(arr)                          // rc 1 : (b) で足した Release
+    let a2  = LLVM[set](0, s, arr)         // Own 消費（rc 1->0）
 ```
-`arr` が `fill`(Unique) -> `sum`(借用) -> `set` と `Unique` で届き elision 成立。`sum` の再帰は borrow->borrow で tail のまま。`main` の `sum(arr,0,0)` は arr の last-use でなく（後で set）末尾位置でもないので、足した `Release` は相殺で消える。
+`main` の `Retain(arr) … Release(arr)` は借用呼び出し `sum(arr,0,0)` をまたぐだけ（間に consume が無い）の net-zero なので §2.2 が両方消す -> `let s = App(sum, [arr,0,0]); let a2 = LLVM[set](0, s, arr)`。結果 `arr` は `fill`(Unique) -> `sum`(借用・rc 不変) -> `set` と `Unique` で届き **elision 成立**。`sum` の再帰は borrow->borrow で release が出ず tail のまま。
 
 ### 2.2 retain/release 相殺
 `Retain(x)` の後、その追加参照を必要とする使用が無いまま `Release(x)` が来るなら両方除去（peephole / 簡単な dataflow）。名前一意なので追跡が容易。
