@@ -237,42 +237,41 @@ fn main:
 ```
 `main` の `Retain(arr) … Release(arr)` は借用呼び出し `sum(arr,0,0)` をまたぐだけ（間に consume が無い）の net-zero なので §2.2 が両方消す -> `let s = App(sum, [arr,0,0]); let a2 = LLVM[set](0, s, arr)`。結果 `arr` は `fill`(Unique) -> `sum`(借用・rc 不変) -> `set` と `Unique` で届き **elision 成立**。`sum` の再帰は borrow->borrow で release が出ず tail のまま。
 
-**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。
+**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。所有権は **boxed 末端単位**で、`own` は末端をキーに `Own|Borrow` を引く（`own[g.q@π]`＝g の param q の末端 π）。値 `x` を位置 q へ渡すとき各 boxed 末端 `x@π` は callee param q の末端 π に対応する。値の末端が param 由来かは move-bind/proj を辿って判定する（散文の「親引数の末端へ帰着」）。g が未知＝間接呼び出しの位置は `Own` 固定（散文の「間接呼び出しは全 Own」）。
 ```
 borrow_ify(prog):
-  # 1. 借用可能性: 全 source 引数の boxed 末端を Borrow と仮定 -> 単調降格で不動点
-  own = { source 関数の全引数の全 boxed 末端: 初期値 Borrow }      # 楽観初期化
+  # 1. 借用可能性: 全 source param の全 boxed 末端を Borrow と仮定 -> 単調降格で不動点
+  own = { source 関数の全 param の全 boxed 末端: 初期値 Borrow }   # 楽観初期化
   for scc in bottom_up(condensation(call_graph(prog))):          # callee 先
     repeat 変化が無くなるまで:                                    # SCC 内不動点（自己/相互再帰）
       for f in scc:
         for f.body 中の param 末端 p の各使用 u:
-          if consumes(u, own): own[p] = Own                       # (i) 消費 -> 降格
+          if consumes(u): own[p] = Own                            # (i) 消費 -> 降格
         for f の各「閉路 tail 呼び出し」App(g, args); Ret(r):      # intra-SCC の tail 辺だけ
-          for (q, x) in enumerate(args):                          # q=位置, x=その位置の引数
-            if owns(f, x, own) and last_use(f, x): own[g.q] = Own  # (ii) case B -> 降格
+          for (q, x) in enumerate(args), x の各 boxed 末端 x@π:    # q=位置
+            if owns(f, x@π) and last_use(f, x): own[g.q@π] = Own   # (ii) case B -> 降格
 
   # 2. RC 書き換え（own 確定後、all-Own の RC を patch）
   for f in prog:
-    for own[p]==Borrow な param p:
-      remove f 内部の Release(p)                                   # callee は所有しない
+    remove: own==Borrow な param 末端の内部 Release                # callee は所有しない
     for f.body 中の呼び出し App/Closure(g, args):
-      for (q, x) in enumerate(args):                              # q=位置, x=その位置の引数
-        if own[g.q]==Borrow and owns(f, x, own):
-          呼び出し直後に Release(x) を挿入                          # 借用値 x なら何もしない
+      for (q, x) in enumerate(args), x の各 boxed 末端 x@π:        # q=位置
+        if own[g.q@π]==Borrow and owns(f, x@π):
+          呼び出し直後に x@π の Release を挿入                      # 借用末端なら何もしない
 
   # 3. §2.2 相殺が「Retain … (借用呼び出し) … Release」の net-zero を消す
 
-consumes(u, own):                          # 値の使用 u は消費か
-  App(g, [..x@i..])   -> own[g.param_i]==Own
-  LLVM(op, [..x@i..]) -> op.arg_ownership(i)==Own    # 構築 alloc 系は Own、read getter(@/@size)は Borrow=False
-  Closure(_, [..x..]) -> True                        # capture = move-in
-  Ret(x)              -> True                        # return で escape
-  Let(y, Var(x))      -> consumes(y の使用, own)      # move-bind は透過
-  それ以外（Match scrutinee・Retain/Release・未使用）-> False   # 借用位置・drop は消費でない
+consumes(u):                               # 末端の使用 u（x@π が位置 q に出現）は消費か
+  App(g, 位置 q)   -> own[g.q@π]==Own
+  LLVM(op, 位置 q) -> op.arg_ownership(q)@π==Own     # 構築 alloc 系は Own、read getter(@/@size)は Borrow
+  Closure 捕捉     -> True                           # capture = move-in
+  Ret             -> True                           # return で escape
+  Let(y, Var(x))  -> consumes(y の対応末端の使用)     # move-bind は透過
+  それ以外（Match tag・Retain/Release・未使用）-> False   # 借用位置・drop は消費でない
 
-owns(f, x, own):                           # f が x を所有するか（借用でなく）
-  x が fresh alloc / getter 取り出し / own[x]==Own な param  -> True
-  x が own[x]==Borrow な param（や借用値）                    -> False
+owns(f, x@π):                              # f が末端 x@π を所有するか（借用でなく）
+  x@π が fresh alloc / getter 取り出し / 呼び出し結果 由来      -> True
+  x@π が param 末端由来（move-bind/proj で辿る）: own==Own -> True / own==Borrow -> False
 ```
 
 ### 2.2 retain/release 相殺
