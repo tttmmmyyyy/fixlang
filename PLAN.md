@@ -264,11 +264,11 @@ borrow_ify(prog):
 
 consumes(u, own):                          # 値の使用 u は消費か
   App(g, [..x@i..])   -> own[g.param_i]==Own
-  LLVM(op, [..x@i..]) -> op.arg_ownership(i)==Own    # 構築 alloc 系も Own 宣言
+  LLVM(op, [..x@i..]) -> op.arg_ownership(i)==Own    # 構築 alloc 系は Own、read getter(@/@size)は Borrow=False
   Closure(_, [..x..]) -> True                        # capture = move-in
   Ret(x)              -> True                        # return で escape
   Let(y, Var(x))      -> consumes(y の使用, own)      # move-bind は透過
-  getter/@/@size/Match の tag/未使用 -> False         # 借用・drop
+  それ以外（Match scrutinee・Retain/Release・未使用）-> False   # 借用位置・drop は消費でない
 
 owns(f, x, own):                           # f が x を所有するか（借用でなく）
   x が fresh alloc / getter 取り出し / own[x]==Own な param  -> True
