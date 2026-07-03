@@ -248,7 +248,7 @@ borrow_ify(prog):
         for f.body 中の param 末端 p の各使用 u:
           if consumes(u, own): own[p] = Own                       # (i) 消費 -> 降格
         for f の各「閉路 tail 呼び出し」App(g, args); Ret(r):      # intra-SCC の tail 辺だけ
-          for (位置 q の引数 x) in args:
+          for (q, x) in enumerate(args):                          # q=位置, x=その位置の引数
             if owns(f, x, own) and last_use(f, x): own[g.q] = Own  # (ii) case B -> 降格
 
   # 2. RC 書き換え（own 確定後、all-Own の RC を patch）
@@ -256,8 +256,9 @@ borrow_ify(prog):
     for own[p]==Borrow な param p:
       remove f 内部の Release(p)                                   # callee は所有しない
     for f.body 中の呼び出し App/Closure(g, args):
-      for (位置 q の引数 x) with own[g.q]==Borrow:
-        if owns(f, x, own): 呼び出し直後に Release(x) を挿入        # 借用値 x なら何もしない
+      for (q, x) in enumerate(args):                              # q=位置, x=その位置の引数
+        if own[g.q]==Borrow and owns(f, x, own):
+          呼び出し直後に Release(x) を挿入                          # 借用値 x なら何もしない
 
   # 3. §2.2 相殺が「Retain … (借用呼び出し) … Release」の net-zero を消す
 
