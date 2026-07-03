@@ -237,7 +237,7 @@ fn main:
 ```
 `main` の `Retain(arr) … Release(arr)` は借用呼び出し `sum(arr,0,0)` をまたぐだけ（間に consume が無い）の net-zero なので §2.2 が両方消す -> `let s = App(sum, [arr,0,0]); let a2 = LLVM[set](0, s, arr)`。結果 `arr` は `fill`(Unique) -> `sum`(借用・rc 不変) -> `set` と `Unique` で届き **elision 成立**。`sum` の再帰は borrow->borrow で release が出ず tail のまま。
 
-**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。所有権は **boxed 末端単位**で、`own` は末端をキーに `Own|Borrow` を引く（`own[g.q@π]`＝g の param q の末端 π）。値 `x` を位置 q へ渡すとき各 boxed 末端 `x@π` は callee param q の末端 π に対応する。値の末端が param 由来かは move-bind/proj を辿って判定する（散文の「親引数の末端へ帰着」）。g が未知＝間接呼び出しの位置は `Own` 固定（散文の「間接呼び出しは全 Own」）。
+**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。所有権は **boxed 末端単位**で、`own` は末端をキーに `Own|Borrow` を引く（`own[g.q@π]`＝g の param q の末端 π）。値 `x` を位置 q へ渡すとき各 boxed 末端 `x@π` は callee param q の末端 π に対応する。値の末端が param 由来かは move-bind と unboxed 集約/union の子取り出し（getter LLVM・Match payload）を辿って判定する（散文の「親引数の末端へ帰着」）。g が未知＝間接呼び出しの位置は `Own` 固定（散文の「間接呼び出しは全 Own」）。
 ```
 borrow_ify(prog):
   # 1. 借用可能性: 全 source param の全 boxed 末端を Borrow と仮定 -> 単調降格で不動点
@@ -272,9 +272,13 @@ consumes(u):                               # 末端の使用 u（x@π が位置 
 owns(f, x@π):    # f が末端 x@π を所有するか。x の束縛を基底まで辿る（π=ルートから boxed 末端への子位置パス）
   x が f の param                          -> own[x@π]==Own    # 基底: param 末端の own（Own=所有 / Borrow=借用）
   Let(x, Var(y))                          -> owns(f, y@π)      # move-bind: 同じ末端 π を y へ透過
-  Let(x, proj_k(y)) / Match payload_k(y), y が unboxed 集約/union
-                                          -> owns(f, y@(k::π)) # 子取り出し(move-out): π の先頭に子位置 k を付ける（k::π）
-  Let(x, fresh alloc | boxed 容器/union の getter | App 結果 | Closure) -> True  # 基底: 新規確保/retain 取り出し/呼び出し結果は f 所有
+  Let(x, LLVM(op, args)):                                     # 射影/getter も専用ノードでなく LLVM。op の結果 UniquenessShapeRef(§3.3) で分岐
+     unboxed 集約/union の子取り出し（結果 Field(i,path)/Arg(i)）-> owns(f, args[i]@(path::π))  # 同一オブジェクト → 親末端へ辿る（Arg は path=[]）
+     alloc / boxed 容器 getter（結果 FreshBoxed/DynBoxed）      -> True  # 新規確保 or retain 取り出し = f 所有
+  Match arm payload（scrutinee s, variant k）:                 # union payload の取り出し（Match は専用ノード）
+     s が unboxed union                    -> owns(f, s@(k::π)) # move-out → scrutinee の子末端へ
+     s が boxed union                      -> True             # boxed union getter = f 所有
+  Let(x, App 結果 | Closure)               -> True             # 基底: 呼び出し結果/クロージャは escape 済みで f 所有
 ```
 
 ### 2.2 retain/release 相殺
