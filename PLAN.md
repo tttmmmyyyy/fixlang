@@ -269,9 +269,12 @@ consumes(u):                               # 末端の使用 u（x@π が位置 
   Let(y, Var(x))  -> consumes(y の対応末端の使用)     # move-bind は透過
   それ以外（Match tag・Retain/Release・未使用）-> False   # 借用位置・drop は消費でない
 
-owns(f, x@π):                              # f が末端 x@π を所有するか（借用でなく）
-  x@π が fresh alloc / getter 取り出し / 呼び出し結果 由来      -> True
-  x@π が param 末端由来（move-bind/proj で辿る）: own==Own -> True / own==Borrow -> False
+owns(f, x@π):    # f が末端 x@π を所有するか。x の束縛を基底まで辿る（π=ルートから boxed 末端への子位置パス）
+  x が f の param                          -> own[x@π]==Own    # 基底: param 末端の own（Own=所有 / Borrow=借用）
+  Let(x, Var(y))                          -> owns(f, y@π)      # move-bind: 同じ末端 π を y へ透過
+  Let(x, proj_k(y)) / Match payload_k(y), y が unboxed 集約/union
+                                          -> owns(f, y@(k::π)) # 子取り出し(move-out): π の先頭に子位置 k を付ける（k::π）
+  Let(x, fresh alloc | boxed 容器/union の getter | App 結果 | Closure) -> True  # 基底: 新規確保/retain 取り出し/呼び出し結果は f 所有
 ```
 
 ### 2.2 retain/release 相殺
