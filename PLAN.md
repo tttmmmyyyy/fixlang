@@ -237,6 +237,43 @@ fn main:
 ```
 `main` の `Retain(arr) … Release(arr)` は借用呼び出し `sum(arr,0,0)` をまたぐだけ（間に consume が無い）の net-zero なので §2.2 が両方消す -> `let s = App(sum, [arr,0,0]); let a2 = LLVM[set](0, s, arr)`。結果 `arr` は `fill`(Unique) -> `sum`(借用・rc 不変) -> `set` と `Unique` で届き **elision 成立**。`sum` の再帰は borrow->borrow で release が出ず tail のまま。
 
+**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。
+```
+borrow_ify(prog):
+  # 1. 借用可能性: 全 source 引数の boxed 末端を Borrow と仮定 -> 単調降格で不動点
+  own = { source 関数の全引数の全 boxed 末端: 初期値 Borrow }      # 楽観初期化
+  for scc in bottom_up(condensation(call_graph(prog))):          # callee 先
+    repeat 変化が無くなるまで:                                    # SCC 内不動点（自己/相互再帰）
+      for f in scc:
+        for f.body 中の param 末端 p の各使用 u:
+          if consumes(u, own): own[p] = Own                       # (i) 消費 -> 降格
+        for f の各「閉路 tail 呼び出し」App(g, args); Ret(r):      # intra-SCC の tail 辺だけ
+          for (位置 q の引数 x) in args:
+            if owns(f, x, own) and last_use(f, x): own[g.q] = Own  # (ii) case B -> 降格
+
+  # 2. RC 書き換え（own 確定後、all-Own の RC を patch）
+  for f in prog:
+    for own[p]==Borrow な param p:
+      remove f 内部の Release(p)                                   # callee は所有しない
+    for f.body 中の呼び出し App/Closure(g, args):
+      for (位置 q の引数 x) with own[g.q]==Borrow:
+        if owns(f, x, own): 呼び出し直後に Release(x) を挿入        # 借用値 x なら何もしない
+
+  # 3. §2.2 相殺が「Retain … (借用呼び出し) … Release」の net-zero を消す
+
+consumes(u, own):                          # 値の使用 u は消費か
+  App(g, [..x@i..])   -> own[g.param_i]==Own
+  LLVM(op, [..x@i..]) -> op.arg_ownership(i)==Own    # 構築 alloc 系も Own 宣言
+  Closure(_, [..x..]) -> True                        # capture = move-in
+  Ret(x)              -> True                        # return で escape
+  Let(y, Var(x))      -> consumes(y の使用, own)      # move-bind は透過
+  getter/@/@size/Match の tag/未使用 -> False         # 借用・drop
+
+owns(f, x, own):                           # f が x を所有するか（借用でなく）
+  x が fresh alloc / getter 取り出し / own[x]==Own な param  -> True
+  x が own[x]==Borrow な param（や借用値）                    -> False
+```
+
 ### 2.2 retain/release 相殺
 `Retain(x)` の後、その追加参照を必要とする使用が無いまま `Release(x)` が来るなら両方除去（peephole / 簡単な dataflow）。名前一意なので追跡が容易。
 
