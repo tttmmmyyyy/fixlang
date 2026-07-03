@@ -205,9 +205,19 @@ fn main:
     let s   = App(sum, [arr, 0, 0])
     let a2  = LLVM[set](0, s, arr)         // Retain のせいで Dynamic -> force-unique チェックが残る
 ```
-不動点: 閉路 {`sum`}。`arr` は `@size`/`@`（`Borrow`）と再帰 `App(sum, [arr,…])`（位置0＝`sum.arr` の現在値 `Borrow`）でしか使われず消費されない -> `sum.arr = Borrow` で収束（上記 (A) の素通しスレッド）。
+不動点で `sum.arr` を決める（閉路 {`sum`}）:
+- 初期化: `sum.arr = Borrow`。
+- `sum` body を走査、`arr` は消費されるか?
+  - `@size(arr)`・`@(i, arr)` は `Borrow`（宣言）-> 消費でない。
+  - `App(sum, [arr, …])` の位置0は `sum.arr` の現在値 `Borrow` -> 消費でない（再帰の自己参照はここ）。
+  - `_true` の `Release(arr)` は drop（own-then-release ＝ borrow と両立）-> 消費でない。
+- どこでも消費されない -> `sum.arr = Borrow` で収束（(A) の素通しスレッド）。
 
-書き換え＋相殺後（`sum` 内 `Release(arr)` を落とし、`main` は借用呼び出し後に `Release(arr)` を足す -> 手前の `Retain` と §2.2 が相殺）:
+書き換え（`sum.arr` を `Borrow` に）:
+- (a) `sum` 内部の `Release(arr)`（`_true` 枝）を落とす（もう所有しない）。
+- (b) 呼び出し地点で release を引き受ける: `main` は `arr` を所有するので `sum(arr,…)` の直後に `Release(arr)`。`sum` の再帰呼び出しは `arr` を借用（所有しない）ので**足さない**（借用を借用へ渡すだけ＝末尾保持）。
+
+相殺後（`main` の `Retain(arr) … Release(arr)` が借用呼び出しをまたぐ net-zero として §2.2 で消える）:
 ```
 fn sum(arr /*Borrow*/, i, acc):
     let n = LLVM[@size](arr); let c = LLVM[eq_i64](i, n)
