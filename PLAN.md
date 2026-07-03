@@ -179,7 +179,7 @@ lowering が作る RC IR は**全引数 `Own`**（現 codegen が全引数 `Own`
 **書き換え**: `p` を `Borrow` にしたら、callee は `p` の内部 `Release` を落とす（もう所有しない）。呼び出し側 `f(x)` は callee が release しなくなったぶんを引き受ける——`x` の last-use がその呼び出しなら直後に `Release(x)`（`x` はそこで drop）、後でも使うなら all-Own 時に入れていた呼び出し前の `Retain(x)` が余り、呼び出しをまたぐ `Retain`/`Release` を §2.2 の相殺が net-zero として消す。結果、`x` は `Unique` のまま後続（`set` 等）へ届く。
 
 **末尾呼び出しを壊さない（制約）**: 「呼び出し**後**の `Release`」が末尾位置の呼び出しに**残る**（相殺で消えない）と tail call でなくなる（`let r = App(f, args); Ret(r)` が `…; Release(x); Ret(r)`）。無限に深くなるのは**閉路の末尾呼び出し**だけ——非末尾化で伸びるスタックは、閉路（intra-SCC の tail back-edge）なら再帰深さぶん（オーバーフロー）だが、cross-SCC なら condensation（DAG）の深さ＝静的定数ぶん（O(1)、無害）。よって**守るのは閉路の末尾呼び出しだけ**で、cross-SCC の末尾は非末尾化してよい（O(1) と引き換えに `Borrow` の利得を取る）。閉路の末尾呼び出しの扱い:
-- **(A) read-only 値を SCC 内で param から param へ素通しするスレッド**: 不動点がそのスレッド上の全 param を `Borrow` にするので、閉路末尾は borrow -> borrow で release が出ず、tail は**自動で保たれる**（所有者は SCC 外の呼び出し元）。普通の read-only 再帰はこれ。
+- **(A) read-only 値を SCC 内で param から param へ受け渡すだけ（素通し）**: 不動点がその値の通る全 param を `Borrow` にするので、閉路末尾は borrow -> borrow で release が出ず、tail は**自動で保たれる**（所有者は SCC 外の呼び出し元）。普通の read-only 再帰はこれ。
 - **(B) その関数が所有する fresh 値を borrow 引数として閉路末尾に渡す**: fresh は借用できず後続 `Release` が残るので、その引数を `Own` に留める（callee が consume＝tail 保持。fresh を受ける param は uniqueness を運ばないので `Borrow` 化の利得は元々無い）。(B) で `Own` 固定した param は外部呼び出し元にも `Own` になり、そこが再使用すると `Dynamic` になる（両取りは特殊化。P2）。
 
 **パス順**: lowering で全 `Own` の RC IR（§1.4）→ borrow 化（`OwnershipShape` 確定＋上記 RC 書き換え）→ §2.2 相殺 → uniqueness 解析（§3 が `OwnershipShape` を読む）。borrow 化は uniqueness と独立（消費の構造だけで決まり、引数が unique かに依らない）。
@@ -213,7 +213,7 @@ fn main:
   - `@size(arr)`・`@(i, arr)` は `Borrow`（宣言）-> 消費でない。
   - `App(sum, [arr, …])` の位置0は `sum.arr` の現在値 `Borrow` -> 消費でない（再帰の自己参照はここ）。
   - `_true` の `Release(arr)` は drop（own-then-release ＝ borrow と両立）-> 消費でない。
-- どこでも消費されない -> `sum.arr = Borrow` で収束（(A) の素通しスレッド）。
+- どこでも消費されない -> `sum.arr = Borrow` で収束（(A) の素通し受け渡し）。
 
 書き換え（`sum.arr` を `Borrow` に）:
 - (a) `sum` 内部の `Release(arr)`（`_true` 枝）を落とす（もう所有しない）。
@@ -374,7 +374,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - getter（射影）の retain 有無・`UniqSignature` の不動点収束・threaded state・boxed の escape（`boxed_to_retained_ptr`）の RC IR での扱い。捕捉クロージャは `Closure` の captures を `UnboxedAgg` の子 UniquenessShape として追えるが、共有/別名の健全性は検証する。
 - 別名健全性は「別名を作る操作で対象を `Dynamic` にする」で担保（§3.2）。`ArgKey` の粒度など精度調整は P2 で詰める。
 ### 決定事項・要確認
-- **（決定）状態は変数ごとの `UniquenessShape`（`State{env: Map<Var,UniquenessShape>}`）、boxed rc は `Unique | Dynamic`**（§3）: boxed 値は自身の rc（`CTRefCnt`）だけを持ち、boxed 容器の中身は追わない（nested uniqueness は追わない）。`Unique -> Dynamic` を起こすのは `Retain`（複製＝2つ目の参照）だけで、`Dynamic` は吸収状態（`unique_ptr`/`shared_ptr` 対応）。boxed 容器からの取り出し・global・opaque・join 不一致も `Dynamic`。move（`Let(x, Var(y))`・consume）は `Unique` を引き継ぐ。unboxed 集約は `UnboxedAgg` で子 UniquenessShape を追う（`LoopState` 越しの配列など線形スレッドの精度）。
+- **（決定）状態は変数ごとの `UniquenessShape`（`State{env: Map<Var,UniquenessShape>}`）、boxed rc は `Unique | Dynamic`**（§3）: boxed 値は自身の rc（`CTRefCnt`）だけを持ち、boxed 容器の中身は追わない（nested uniqueness は追わない）。`Unique -> Dynamic` を起こすのは `Retain`（複製＝2つ目の参照）だけで、`Dynamic` は吸収状態（`unique_ptr`/`shared_ptr` 対応）。boxed 容器からの取り出し・global・opaque・join 不一致も `Dynamic`。move（`Let(x, Var(y))`・consume）は `Unique` を引き継ぐ。unboxed 集約は `UnboxedAgg` で子 UniquenessShape を追う（`LoopState` 越しの配列など線形な受け渡しの精度）。
 - **（決定）`Construct` ノードを設けず構築も `LLVM`**（§1.2）: 集約構築（struct/タプル/`ArrayLit`/union variant）は alloc 系 `LLVM` プリミティブ＋`UniqSignature`（結果 `Unique`・引数をスロットへ move）で表す。InlineLLVM が効果を宣言する設計なので結果 unique は解析に伝わる（専用ノードを持たない。射影＝getter を専用ノード化しない方針の双対）。
 - **（決定）boxed rc を `Unique | Dynamic` の 2 点で表す**（`CTRefCnt`、§3.1）: `alloc=Unique`、`Retain`->`Dynamic`（一方向）、`Release`・呼び出しは `Dynamic` を回復させない。これにより (a) **関数効果 ＝ 入力 UniquenessShape → 結果 UniquenessShape の map** で書ける（要約は結果 UniquenessShape のみ。引数の生存は `OwnershipShape` が決める＝`Own`+`Unique` は last-use で dead、`Dynamic` は据え置き、`Borrow` は存続。§3.3）、(b) precision は borrow 化（§2.1）＋相殺（§2.2）で `Retain` を減らして作る、(c) 2 点束かつ単調遷移なので不動点は自明。§3.3 は per-input-key memoize。
 - **（決定）`RcRhs::Var(Var)`（move-bind）を持つ**（§1.2/§3.2）: `let y = x` を表せる。意味は move（`x` 消費・`y` が UniquenessShape を引き継ぐ、`Unique` も継ぐ）で rc 中立、それ自体は `Dynamic` トリガーでない。エイリアス（`x`,`y` 両方生存）は「後でも `x` を使う＝non-last use なので手前に `Retain`（`->Dynamic`）」で出る＝copy = `Retain` + move。copy propagation で消せる。
