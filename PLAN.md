@@ -434,6 +434,45 @@ main = ( let arr = Array::fill(1000, 0);
 
 `Fresh` は常に Unique なので、実質**結果の uniqueness は入力 arr が unique かで決まる**。同じ `L` を入力ごとに resolve するだけで両方正しく出る。（実ベンチは 2 重ループだが、内ループ結果 `{Fresh,Arg(0,[1])}` を外ループが同様に畳んで外も `{Fresh,Arg(0,[1])}`、main で `{Fresh}`。）
 
+### 3.5 例: read-only 引数の素通し（`sum`）
+§2.1 の `sum`（read-only 再帰）を Provenance 解析にかける。§3.4（結果が `Array`・不動点が非自明）に対し、こちらは**結果が I64＝boxed 末端なし**で、**「読むだけの引数は `Retain` されず `Arg`/`Fresh` のまま素通しする」**という §3 の肝と、§2（borrow化＋相殺）との接続を示す。
+
+pass 順（§2.1: lowering → borrow化 → 相殺 → 解析）より、解析は**borrow化＋相殺後**の RC IR に働く（§2.1 の書き換え結果）:
+```
+fn sum(arr /*Borrow*/, i, acc):
+    let n = LLVM[@size](arr); let c = LLVM[eq_i64](i, n)
+    Match c {
+      _true  => Ret(acc)
+      _false => let e = LLVM[@](i, arr); let a2 = LLVM[add](acc, e); let i2 = LLVM[add](i, 1)
+                let r = App(sum, [arr, i2, a2]); Ret(r)
+    }
+fn main:
+    let arr = LLVM[fill](100, 0)
+    let s   = App(sum, [arr, 0, 0])
+    let a2  = LLVM[set](0, s, arr)
+```
+
+**sum の Provenance**（param: `env[arr]=Boxed({Arg(0,[])})`、i・acc は `Unboxed`）:
+- `n = @size(arr)`: I64 を返す → `env[n]=Unboxed`。arr は借用 read ゆえ由来不変（`Arg(0,[])` のまま）。
+- `c = eq_i64(i,n)` → `Unboxed`。
+- Match c: `_true => Ret(acc)`＝`Unboxed`／`_false`: `e=@(i,arr)`（要素 I64）→`Unboxed`、`a2`・`i2`→`Unboxed`、`r=App(sum,…)`＝sum の結果を合成 →`Unboxed`、`Ret(r)`。join＝`Unboxed`。
+- **sum の結果 Provenance ＝ `Unboxed`**（I64 返却＝boxed 末端なし。結果に boxed 末端が無いので再帰の不動点も自明に収束）。
+- 要点: **arr は sum 内で終始 `Arg(0,[])`**。@size/@ で読む（借用）だけで `Retain` が無い（borrow化が内部 Release を消し、呼び出し側の Retain を相殺が消した）ので `Dyn` に倒れない。
+
+**main の Provenance**:
+- `arr = fill(100,0)`: `env[arr]=Boxed({Fresh})`。
+- `s = App(sum,[arr,0,0])`: sum の結果 Provenance（`Unboxed`）を合成 → `env[s]=Unboxed`。**呼び出しは引数の由来を変えない**（§3.2、`Fresh -> Dyn` は `Retain` のみ）ので `env[arr]` は `Boxed({Fresh})` のまま。
+- `a2 = set(0,s,arr)`: `is_unique(arr@[])`＝`env[arr]={Fresh}` を resolve（main は boxed 入力なし）→ **Unique** → **set 除去（elision 成立）**。
+
+∴ **arr は `fill`(Fresh) → `sum`(借用・由来不変) → `set` と `Unique` で届く**。§2.1 の結論（elision 成立）を Provenance 側から裏付ける。
+
+**§2 が §3 の precision を作る確認（baseline 対比）**: borrow化前の baseline は `fill` 直後に `Retain(arr)` が残る（§2.1 baseline）。すると `Retain(arr)` が §3.2 の唯一の `Fresh -> Dyn` を発火し `env[arr]=Boxed({Dyn})` → `set` で resolve すると `Dynamic` → **除去されない**。つまり Provenance の結果（arr が `Fresh` か `Dyn` か）は `Retain` の有無で決まり、その `Retain` を borrow化＋相殺（§2）が消すことで `Fresh` が保たれ elision が成立する——「precision は `Retain` を減らして作る」（§2 冒頭／§3 の precision 節）が、この 1 例で具体化される。
+
+| | sum の結果 | main の arr @ `set` | elision |
+|---|---|---|---|
+| §3.2 エミュ（post-§2） | `Unboxed` | `Fresh` = Unique | 成立 |
+| （baseline 対比・§2 未適用） | `Unboxed` | `Dyn` = Dynamic | 不成立 |
+
 ## 4. unique-check-elim
 
 §3 の解析が出す `Provenance` を、関数の入力 uniqueness に **resolve** して各 boxed 末端が `Unique` か判定し、それを使って force-unique を除去する。
