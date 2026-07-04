@@ -553,6 +553,31 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - ローカル名一意の**全変換での保存**（lowering は fresh 発番で構築的に一意。clone/特殊化は fresh 名発番で freshen）。
 - getter（射影）の retain 有無・`Provenance` の不動点収束・threaded state・boxed の escape（`boxed_to_retained_ptr`）の RC IR での扱い。捕捉クロージャは `Closure` の captures を `UnboxedAgg` の子の `Provenance` として追えるが、共有/別名の健全性は検証する。
 - 別名健全性は「別名を作る操作で対象を `Dynamic` にする」で担保（§3.2）。
+
+### InlineLLVM の `OwnershipShape`/`result_prov` 全件監査（67 件）
+全 `LLVMGenerator` variant（`src/fixstd/builtin.rs`）を精読し、2 属性（`arg_ownership(i)`／`result_prov`）を割り当て可能か確認した。内訳の目安: **CLEAN ~41**（数値/比較/cast/literal＝unboxed in/out で宣言不要・結果 `Unboxed`、構築＝`Fresh`、read-only getter〔size/capacity/`union is`〕＝`Borrow`・結果 `Unboxed`、`empty`/`fill`＝`Fresh`、`DestructorMake`＝子を move-in し `Fresh`）、**NONTRIVIAL ~19**（下記(1)。割り当て可だが実装者が誤りやすい）、**DOESNT-FIT ~7**（下記(2)。2 属性で綺麗に表せない）。
+
+**(1) 宣言を誤りやすい（P1 監査のチェックリスト）**:
+- **force-unique 内包 → 結果 `Fresh`**（返るポインタが入力と同一でも一意保証）: `set`・`Array::force_unique`・struct `set_`/`mod_`(fu)・`plug_in`(fu)・`_unsafe_mutate_boxed_*`。
+- **force-unique しない in-place → 結果 `Arg(i)`**（同じ・共有かもしれないポインタ。**`Fresh` にしない**）: `_unsafe_set_size`・`_unsafe_set_bounds_uniqueness_unchecked_unreleased`・`punch`(fu=false)・`plug_in`(fu=false)。後者2つは「古いスロットを release しない」内容 RC も伴い、呼び出し側の move-out 前提でのみ健全。
+- **boxed 容器から要素/フィールドを取り出す getter → `Dyn`**（retain されるが容器と共有＝unique でない。**`Fresh` にしない**）: `_unsafe_get_bounds_unchecked`（要素 boxed 時）・boxed struct の `@field`・boxed union の `as_`。
+- **container の boxed/unbox で結果が変わる**（一律に扱わない）: struct `@field`／union `as_` は boxed 容器 → `Dyn`、unbox 容器 → `Arg(i,[field])`（move-out・no-retain の素通し。retain されないので「retain 済みコピー」と誤ると二重計上）。
+- **passthrough（値を返すが refcount は変えない）→ 結果 value 部 = `Arg(0)`**: `unsafe_is_unique`（`(Bool, a)` の `a`）・`mark_threaded`。前者は refcount を**読む**だけ、後者は **state を変える**だけで、どちらも `Retain` ではない（`Fresh` を潰さない）。
+- **`union mod` の結果は分岐の phi = `{Fresh, Arg(1)}`**（match 枝＝新規構築、mismatch 枝＝入力 union 素通し）。
+- **値未使用・型 witness のみ → arg `Borrow`・結果 `Ptr`＝`Unboxed`**: `get_retain_function_of_boxed_value`／`get_release_function_of_boxed_value`（引数の**型**だけ使い値は捨てる。返すのは helper 関数ポインタ＝rc 対象外）。
+- **`union is` の RC idiom**: `get_scoped_obj_noretain`＋`if !used_later release`（実効 `Own` だが transient retain 無し）。`get_scoped_obj` ベースの `Own` パターンと形が違うので検査が見落としやすい（§8 分類A の read getter 群と同類）。
+
+**(2) 2 属性で綺麗に表せない（opaque 化 or 別扱いが要る）**:
+- **(a) タプル内の「借用 boxed 末端」**: `_unsafe_get_linear_bounds_unchecked_unretained`（`mod`/`act` の中核）は `(Array a, a)` を返し、要素を **no-retain** で読んで tuple.1 に置く（builtin.rs:1946）。`a` が boxed なら tuple.1 は tuple.0 の配列内要素を **refcount を持たず alias**する。`Provenance` の語彙（`Fresh`/`Dyn`/`Arg`）は各 boxed 末端が**所有参照**である前提なので「兄弟末端と refcount を共有する借用末端」を表せず、tuple.1 を素直に解放すると二重解放。→ この種の op は **opaque に保つ**（結果タプルの内部末端を個別 RC 管理せず、op 全体を atomic 単位に）。`mod`/`act` は force-unique 対象で §4 は tuple.0 の array 末端だけ見れば足りるので実害は無いが、宣言としては「tuple.1 は所有末端でない」を別途保護する必要がある。
+- **(b) boxed 内部への生ポインタ**: `Array::_unsafe_get_ptr`（`Array a -> Ptr`, builtin.rs:2393）・`get_boxed_data_ptr`（`a -> Ptr`）は結果 `Ptr`（`Unboxed`）が**引数 boxed の内部バッファを alias**する。現 codegen は引数を last-use で release し得る＝返した `Ptr` が dangling しうる（`unsafe` op）。RC IR では引数を **`Borrow`**（呼び出し側が Ptr の生存中 配列を保持）と宣言するのが正しく、`Ptr` 結果は `Unboxed` で解析は alias を追わない——寿命義務はモデル外（呼び出し側責務）。「unboxed 結果が boxed 引数の内部を alias しその寿命に縛られる」は 2 属性の外。
+- **(c) RC 追跡域の境界**: `boxed_to_retained_ptr`（boxed の 1 参照を生 `Ptr` へ escape。arg=`Own`、結果 `Ptr`=`Unboxed`＝生きた参照が帳簿外へ）／`boxed_from_retained_ptr`（生 `Ptr` の参照を boxed `a` へ materialize。結果=`Dyn`）。前者は「`Unboxed` の引数/結果が実は所有権を運ぶ」非対称で `Own`/`Borrow` 軸に載らない（§8 冒頭の boxed escape 未解決項目）。健全側には「to→arg `Own`・結果は追跡外／from→結果 `Dyn`」で倒す。
+- **(d) `with_retained`**: 呼び出しをまたぐ意味的 retain。arg=`Own`/`Own` では意味が抜ける。**opaque のまま常に retain**（§8 の (B) の結論を再確認）。
+- **(e) `fix`（`FixBody`）**: `free_vars` に Fix レベルの仮引数でない暗黙 capture `#CAP` が含まれ、それを合成 closure `fixf` に alias 格納して `f` が消費する（中間 closure のフロー）。RC IR では `LLVM(FixBody,[x,f,cap])` の全 `Own`＋内部 RC opaque で扱う（§8 の fix 項で既述）。per-Fix-arg だけ見ると `cap`（=`#CAP`）を見落とす点に注意。
+
+**(3) 監査で裏取りできた既存 PLAN 決定**:
+- unbox union の結果は「variant ごとの `UnboxedAgg`＋非活性 variant ⊥」で表す（§3.1/§3.3）。`make_union`/`union as`/`union mod` の unbox 版がこの表現を要求＝§3.3 で足した union 構築宣言が load-bearing と確認（tag 付き sum を positional product＋⊥ で表す点が肝）。
+- `unsafe_is_unique` の value 部＝`Arg(0)` passthrough（§8）で `Fresh` を保つ、は妥当と確認。force-unique 内 clone を op に内包（§3.3/§4.2/§8）も確認。
+
 ### 決定事項・要確認
 - **（決定）状態は変数ごとの `Provenance`（`State{env: Map<Var,Provenance>}`）、uniqueness は resolve して得る**（§3）: 各 boxed 末端の由来（`Fresh`/`Dyn`/`Arg`）を追い、`is_unique` は入力に resolve して `Unique` か見る。boxed 容器の中身は追わない（取り出しは `Dyn`）。`Fresh -> Dyn`（＝`Unique -> Dynamic`）を起こすのは `Retain`（複製＝2つ目の参照）だけで、`Dyn` は吸収状態（`unique_ptr`/`shared_ptr` 対応）。global・`boxed_from_retained_ptr`・join も由来を `Dyn` にする。move（`Let(x, Var(y))`）は由来を引き継ぐ。unboxed 集約は `UnboxedAgg` で子の由来を追う（`LoopState` 越しの配列など線形な受け渡しの精度）。
 - **（決定）`Construct` ノードを設けず構築も `LLVM`**（§1.2）: 集約構築（struct/タプル/`ArrayLit`/union variant）は alloc 系 `LLVM` プリミティブ＋`Provenance`（引数をスロットへ move。結果は boxed 集約＝`Fresh`、unboxed 集約＝子の由来を担ぐ）で表す。InlineLLVM が効果を宣言する設計なので boxed alloc の Fresh も unboxed 集約が担ぐ子の由来も解析に伝わる（専用ノードを持たない。射影＝getter を専用ノード化しない方針の双対）。
