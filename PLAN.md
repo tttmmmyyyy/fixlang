@@ -390,7 +390,7 @@ enum BaseSource {
   - `Match` 合流 → 末端の `LeafSource` を union（枝で由来が割れたら join）
   - 呼び出し `g(a…)` の結果 → g の `Provenance` を取り、その `Arg(j, p)`（g の引数プレースホルダ）を実引数 `a_j` の由来で埋める（合成）
   - 関数の `Provenance` ＝ 返り値末端の由来
-  param を記号 `Arg` のまま残すので出力は**入力非依存**（`FuncRef` → `Provenance` を 1 つ memo。IR の `RcFunc` には載せない）。複製は `Retain`→`Dyn` が捌く（例 `(y,y)`->`(Dyn,Dyn)`、§5 テスト）。再帰は不動点（初期 ⊥＝空 Set）。
+  param を記号 `Arg` のまま残すので出力は**入力非依存**（`FuncRef` → `Provenance` を 1 つ memo。派生情報なので `RcFunc` に載せても解析側テーブルでもよい〔載せるなら変換時の再計算/invalidation に注意。相殺 §2.2 後に走るので実際の staleness リスクは小さい〕）。複製は `Retain`→`Dyn` が捌く（例 `(y,y)`->`(Dyn,Dyn)`、§5 テスト）。再帰は不動点（初期 ⊥＝空 Set）。
 - **プリミティブ（`InlineLLVM`）= 宣言**: `LLVMGenerator::result_prov() -> Provenance`（引数の型に依存し得る）。`OwnershipShape`（§1.2）は別 API（`arg_ownership(i)`）で宣言。
 - global（値の型どおりの Provenance。boxed 末端は `Dyn`、unboxed 部は型どおり）／`boxed_from_retained_ptr`（ptr→boxed → `Dyn`）。FFI（`CALL_C`）は boxed を返さない（結果 unboxed）ので rc 対象外。assert ビルドで不健全な claim を実行時検出。
 
