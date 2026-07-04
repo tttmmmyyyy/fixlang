@@ -356,7 +356,7 @@ struct State { env: Map<Var, Provenance> }
 - `Let(x, Var(y), k)`: `env[x] = env[y]`（move。別名を作らないので `Dyn` 化しない）。
 - `Let(x, LLVM(prim, args), k)`: prim の宣言 `Provenance`（§3.3）を実引数の由来で合成（`Arg(j,p)` を `env[a_j]@p` に置換）。alloc→`Fresh`、boxed 容器 getter→`Dyn`、unboxed 集約の子取り出し→親の子末端、はこの宣言に含まれる。
 - `Let(x, Closure(_, caps), k)`: `env[x] = UnboxedAgg([Unboxed /*funptr*/, cap])`。捕捉非空なら cap の boxed 末端＝`Fresh`（新規捕捉obj に move-in）、空なら null（RC-free）。
-- `Let(x, App(f, args), k)`: `f` の `Provenance` を実引数の由来で合成（`Arg` 置換）。
+- `Let(x, App(f, args), k)`: callee が既知なら `f` の `Provenance` を実引数の由来で合成（`Arg` 置換）。callee 不明の間接呼び出し（closure パラメータ等で decapturing が特殊化できなかった残り）は結果の boxed 末端を保守的に `Dyn`。
 - `Retain(x, k)`: `env[x]` の boxed 末端を `Dyn` に倒す（**唯一の `Fresh -> Dyn`**。既 `Dyn` はそのまま）。
 - `Release(x, k)`: 由来は不変（`x` は dead）。
 - `Match(x, arms)`: 各 arm を**分岐前 env のコピー**から解析し join（末端 `LeafSource` を union）。unboxed union payload → move 取り出しで scrutinee の子末端（`Arg` 系。不在 variant は空 Set）、boxed union payload → getter＝`Dyn`。Bool もここ（2 variant）。
@@ -374,9 +374,35 @@ struct State { env: Map<Var, Provenance> }
 
 例（`OwnershipShape` は §2.1／§1.2 の宣言、ここでは result `Provenance` のみ）:
 - **retain getter** `Array::@(i, arr)`: `arr`＝`Borrow`、要素が boxed なら `result=Boxed({Dyn})`（容器から取り出す＝別名）、unboxed なら `Unboxed`。
-- **set** `set(i, v, arr)`: `arr`＝`Own`・`v`＝`Own`（要素へ move）・`result=Boxed({Fresh})`。ループ `arr=arr.set(..)` が `Unique` を継続。
+- **set** `set(i, v, arr)`: `arr`＝`Own`・`v`＝`Own`（要素へ move）・`result=Boxed({Fresh})`。ループ `arr=arr.set(..)` が `Unique` を継続。`set` は shared なら clone・unique なら in-place だが**どちらも結果は単独所有の配列**なので、返る物理 object は入力 rc 次第でも uniqueness の由来は一定＝結果は入力非依存に `Fresh`（この clone-on-shared が `Provenance` を入力非依存にしている本体）。
 - **構築** `MakeStruct{a,b}`: boxed struct なら `a`,`b`＝`Own`・`result=Boxed({Fresh})`。unboxed struct/タプルなら `result=UnboxedAgg([Boxed({Arg(0,[])}), Boxed({Arg(1,[])})])`。
 - **id** `id(x)`: `x`＝`Own`・`result=Boxed({Arg(0,[])})`（結果は入力 0 を引き継ぐ）。
+
+### 3.4 例: 配列ループ更新の Provenance（`arrayrw`）
+```
+main = ( let arr = Array::fill(1000, 0);
+         let arr = loop((0, arr), |(i, arr)|
+             if i == 1000 { break $ arr }
+             else { continue $ (i+1, arr.set(i, arr.@(i) + 1)) });
+         ... );
+```
+`loop : s -> (s -> LoopState s r) -> r`（std）。状態 `s = (I64, Array I64)`（unboxed タプル、arr 末端 path `[1]`）。
+
+**前提（既存の decapturing）**: RC IR lowering の前に **decapturing の closure specialization**（`src/optimization/decapturing.rs`。`inline` 後・`uncurry` 前）が、body closure を引数に取る `loop` を「その body を焼き込んだ特殊版 `loop#lam`」へ書き換え、内部の `body(s0)` を lift 済み body への**直接呼び出し**にする（`loop` は再帰・自己呼び出しで body を同 index に渡す＝specializable。std `fold` と同型）。§3/§4 はこの直接化後の形（`loop#lam`）に働く——generic な `loop` 単体では `body(s0)` が間接呼び出しで結果 Dyn になり精度が出ない。以下その `loop#lam` の body を単に body と書く。
+
+**body の Provenance**（param `s` ＝ `UnboxedAgg([Unboxed, Boxed({Arg(0,[1])})])`）:
+- `arr = s.@1`: `Boxed({Arg(0,[1])})`（入力 arr を引き継ぐ）。`arr.@(i)` は借用 read で結果 unboxed（I64）＝arr の由来を変えない。
+- break 枝 `break(arr)`: 結果 `LoopState` の break payload（Array）＝ `{Arg(0,[1])}`。
+- continue 枝 `arr2 = arr.set(i, …)`: `set` 宣言より `{Fresh}`（§3.3）。continue payload の arr 末端＝ `{Fresh}`。
+- 関数結果＝2 枝 join（unboxed union は variant ごとに payload 末端を持つ）: `continue.arr = {Fresh}`、`break.r = {Arg(0,[1])}`。
+
+**loop の結果 Provenance**（`loop = |s0,f| match f(s0){ continue(s1)=>loop(s1,f); break(r)=>r }`、結果 Array 末端を `L`、再帰は不動点・初期 ∅）:
+- `f(s0)` を合成: continue の `s1.arr = {Fresh}`、break の `r = s0.arr = {Arg(0,[1])}`。
+- `L = join( L[s0.arr:={Fresh}], {Arg(0,[1])} )` を反復:
+  - L₀=∅ → L₁={Arg(0,[1])} → L₂=join({Fresh},{Arg(0,[1])})={Fresh,Arg(0,[1])} → L₃=L₂（収束）
+- ∴ `loop` 結果＝ `Boxed({Fresh, Arg(0,[1])})`＝「1 回以上更新すれば Fresh、0 反復なら入力 arr」。
+
+**main での合成**: `loop((0, arr), …)` は `Arg(0,[1])` を実引数 `arr` の由来 `{Fresh}`（fill）で埋める → `{Fresh, Fresh}={Fresh}`。∴ 最終 arr ＝ `Boxed({Fresh})`＝**Unique**（main は boxed 入力なしなので resolve は入力に依らず Unique）。（実ベンチは 2 重ループだが、内ループ結果 `{Fresh,Arg(0,[1])}` を外ループが同様に畳んで外も `{Fresh,Arg(0,[1])}`、main で `{Fresh}`。）
 
 ## 4. unique-check-elim
 
@@ -384,11 +410,18 @@ struct State { env: Map<Var, Provenance> }
 
 - **`resolve`（由来 → uniqueness）**: `Provenance` を関数の入力 uniqueness に解決し `UniquenessShape`（＝`Boxed(CTRefCnt)` の木、§3.1）を得る。木を辿り各 `Boxed(leafsrc)` を `Boxed(⊔_{s∈leafsrc} rc(s))` に（`rc(Fresh)=Unique`・`rc(Dyn)=Dynamic`・`rc(Arg(i,p))=入力 i の末端 p の uniqueness`）。`Unboxed`/`UnboxedAgg` は素通し。（§3.2 の呼び出し結果 `Provenance` 合成も同形の `Arg` 置換だが、そちらは `Provenance` を返して解析内で閉じる。）
 - **`is_unique`**: `is_unique(x@π)` ＝ `env[x]` の末端 π の由来を、その関数の入力 uniqueness に resolve して `Unique` になること。§4.1 の特殊化 clone 内では入力 uniqueness が既知なので確定する（entry `main` は boxed 入力が無く `Fresh`/`Dyn` に底打ち）。`Unique` は複製（`Retain`）を経ていない単独所有でしか付かないので真に unique。
+- **LOCAL（v1）**: `Provenance` は uniqueness の由来だけを追い state（LOCAL/THREADED/GLOBAL、§6）は追わない。`Unique` な boxed 値は由来をたどると Fresh alloc（LOCAL）に至る（main は boxed 入力なし・global は `Dyn`）ので、その object の流れに `MarkThreaded` が無ければ LOCAL。in-place は LOCAL ∧ rc==1 のときだけ（§1.3）なので、v1 は「`is_unique` かつ その object の流れに `MarkThreaded` 無し」を LOCAL の十分条件とする（単スレッドのベンチは自明成立）。厳密な state 判定は §6 の state 推論で一般化。
 
 force-unique を含む `LLVM` op（`set`/`mod`/`act` 系）で、対象 boxed 値が `is_unique`（`Boxed(Unique)`）かつ LOCAL と証明できれば、その RC IR の `LLVM` ノードを **force-unique を行わない版に差し替える**（証明できない＝`Dynamic` では除去せず、force-unique の実行時 uniqueness チェックを残す＝現状動作）。結果は force-unique 後どのみち unique なので、ループ `let arr = arr.set(…)` で 2 回目以降の入力が unique になり「**初回 checked・以降 unchecked**」が自然に出る。
 
 ### 4.1 特殊化（uniqueness 駆動、RC IR 上）
-`RcFunc` を、流れてくる**引数の `UniquenessShape`（§3.1。各引数の resolve 済み uniqueness＝`Boxed(Unique)`/`Boxed(Dynamic)`・`Unboxed`・`UnboxedAgg` の木）をキー**に clone する（`Unique|Dynamic` が有限なのでキーも有限）。**key は force-unique に効く入力末端だけに射影する**（各 force-unique 対象の `is_unique` はその `Provenance` を resolve する＝そこに現れる `Arg(i,p)` 末端の uniqueness だけが判定を変える。他の末端で分けても中身が同一の clone になるので分けない）＝無損失で clone 爆発を抑える。呼び出し地点で引数が `Unique` なら unique 用 clone を、`Dynamic` なら別 clone（または original）を呼ぶ。各 clone の uniqueness は §3.2 の入力非依存 `Provenance` を resolve（§4 冒頭）して得る（入力で分けるのはこの特殊化だけ）。worklist で不動点。clone は fresh 名を発番し（名前グローバル一意 §1.1-3 を保存）一意な clone 名を付ける。**特殊化は関数を clone するので、未使用になった `RcFunc`（どの call site からも到達しない original/clone）の dead-function 除去を初版で必ず実装する**（さもないと未到達 clone がバイナリに残る＝回帰。到達解析＋未到達 `RcFunc` 削除の 1 パス）。
+`RcFunc` を、流れてくる**引数の `UniquenessShape`（§3.1。各引数の resolve 済み uniqueness＝`Boxed(Unique)`/`Boxed(Dynamic)`・`Unboxed`・`UnboxedAgg` の木）をキー**に clone する（`Unique|Dynamic` が有限なのでキーも有限）。**key は force-unique に効く入力末端だけに射影する**（各 force-unique 対象の `is_unique` はその `Provenance` を resolve する＝そこに現れる `Arg(i,p)` 末端の uniqueness だけが判定を変える。他の末端で分けても中身が同一の clone になるので分けない）＝無損失で clone 爆発を抑える。呼び出し地点で引数が `Unique` なら unique 用 clone を、`Dynamic` なら別 clone（または original）を呼ぶ。各 clone の uniqueness は §3.2 の入力非依存 `Provenance` を resolve（§4 冒頭）して得る（入力で分けるのはこの特殊化だけ）。worklist で到達 clone を閉包（下記の駆動）。clone は fresh 名を発番し（名前グローバル一意 §1.1-3 を保存）一意な clone 名を付ける。**特殊化は関数を clone するので、未使用になった `RcFunc`（どの call site からも到達しない original/clone）の dead-function 除去を初版で必ず実装する**（さもないと未到達 clone がバイナリに残る＝回帰。到達解析＋未到達 `RcFunc` 削除の 1 パス）。
+
+**駆動（worklist、clone あたり 1 パス）**: エントリ `main`（boxed 入力なし＝key 自明）から出発。clone は `(RcFunc, key)` で一意化し、未生成を queue に積む。1 つ取り出して body を前から走査する:
+1. **force-unique op**: 対象の `Provenance` を今の clone の入力 uniqueness で resolve し、`is_unique` かつ LOCAL なら unchecked 版へ差し替える（§4.2）。
+2. **`App(g, a…)`**: 各引数の uniqueness を resolve → key（force-unique 関連末端に射影）→ `(g, key)` を未生成なら queue へ積む → callee を clone 名に書き換える。呼び出し結果の uniqueness は g の結果 `Provenance`（§3.2、入力非依存・全 clone 共有）を実引数の由来で resolve するだけで即得る（g の clone body の実装を待たない）。
+
+`Ret` で 1 clone 分の走査が終わり、queue が空になるまで繰り返す。key は有限（末端の `Unique|Dynamic`）なので clone 集合は有限＝停止。結果 uniqueness が precompute 済み `Provenance` から即決まるため各 clone は 1 回処理で済み再訪不要（＝「到達 clone 集合の閉包」で、反復不動点ではない）。
 
 ### 4.2 force-unique の除去（RC IR の `LLVM` ノード差し替え）
 clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) ノードを、force-unique しない版（`InlineLLVM` の `force_unique=false`／unchecked generator）に差し替える（新規ノードを作って置換。共有呼び出し地点側の clone は checked のまま）。`force_unique` フラグの有無:
@@ -402,6 +435,17 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 | struct `act_<field>` | 非 fu punch を既に使用（unique 保証） | 対応不要 |
 
 `Const` functor の `act` は force-unique なし（対象外）。generic な `act`（任意 functor）は `unsafe_is_unique` の once-per-call チェックで follow-on。act の functor 特殊化（`optimize_act`。Identity/Const/Tuple2、ホットな `mod`=Identity 含む）は lowering 前に行い、RC IR には上表の具体形（force-unique を持つ op）が現れる——それを §4 が除去する。
+
+### 4.3 例: `arrayrw` の unique-check-elim（§3.4 の続き）
+エントリ `main` の初期 arr は `fill`＝Unique。
+- main は `loop((0,arr), body)` を状態 arr＝Unique で呼ぶ → key「状態 arr = Unique」で `loop@U` を要求し、呼び出しを `loop@U` に書き換え。
+- `loop@U` の走査: `f(s0)` は `body@U`（状態 arr = Unique）を要求。`body@U` 内の `arr.set(i, …)` の対象は `Arg(0,[1])`→resolve→Unique・LOCAL → **`set` を unchecked 版へ差し替え**。continue payload の arr＝Fresh→Unique。
+- `loop@U` の再帰 `loop(s1, f)` は `s1.arr`＝Fresh→Unique → 同 key → `loop@U`（自己）。∴ **全反復 unchecked**（fill から一貫して Unique）。ベンチのコメント「set は unique（in-place）path を取る」がこれ。
+
+**共有入力の場合**（arr が shared で loop に入る）:
+- main は状態 arr＝Dynamic で `loop@D` を呼ぶ。`loop@D`→`body@D`: 対象 `Arg(0,[1])`→Dynamic → **除去せず force-unique を残す**（初回 checked。shared なら実行時 clone）。set 結果＝Fresh。
+- continue payload の arr＝Fresh→Unique。`loop@D` の再帰の key＝状態 arr = Unique → **`loop@U`**（別 clone）。以降 `loop@U` は全 unchecked。
+- ∴ 「**初回 checked・以降 unchecked**」（§4 冒頭）が `loop@D -> loop@U` の 2 clone として実現する。
 
 ## 5. 適用対象・検証
 
@@ -453,4 +497,6 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - **（調査済み）`is_var_used_later` 依存の InlineLLVM**（`builtin.rs` 全10 site を分類。いずれも RC 判断のみで計算結果・挙動は used_later に非依存＝in-place/clone はランタイム refcount で決定）: **(A) 借用読み後 last-use なら引数 release**（`noretain` 読み＋`if !used_later release`）＝1855（配列要素 get）/2418（配列 ptr）/2489（get_size）/2540（get_capacity）/3873（union `is`）/4546・4648（retain 関数 ptr 取得）/4755（data ptr 取得）の 8。**(B) 呼び出しをまたぐ retain/release**（`with_retained`: `f(x)` の前後で x を retain→release し呼び出し中 x を生存）＝4206+4214。RC IR では (A) は容器引数を `Borrow`（借用）で宣言し、lowering の last-use 解析が容器の明示 `Release` を last-use に配置（getter が boxed 要素を retain するのは別効果）。(B)（`with_retained`）は **opaque な InlineLLVM のまま retain/release を内部に埋める**。この `Retain` は呼び出し中 x を shared に見せ f の in-place 変更を防ぐ**意味的** RC で、最適化で消えては困る＝外に出すメリットが無くリスク（相殺で消える）だけなので内部に残すのが正しい。used_later スキップは落として**常に retain**（内部 RC は codegen 時に used_later を見ない）。P1 の書き換え: (A) は used_later を `Borrow`＋lowering の last-use 解析へ移す、(B) は常に retain へ。どちらも `generate` は `is_var_used_later` を呼ばなくなる（grep 由来なので網羅監査）。
 - **（要確認）各 InlineLLVM 引数の `OwnershipShape` と `Borrow` 化可否**: read-only op（§8 分類A）は既に `noretain`（借用的）なので `Borrow` に素直に対応。`Own` で retain してから読む引数があれば `Borrow` 化＋release 外出し＋相殺で速くなる（§6）。`Borrow` 化できない op もある。全件確認が要る。**`fix`（不動点コンビネータ）・bulk array 系**が `Borrow` 化できない候補（`loop` は InlineLLVM op でなく std の再帰関数なので対象外＝§3.2 の不動点で透過的に解析される）。P1 監査で各引数を「`Borrow` 化可／`Own` のまま（内部 RC を宣言で残す）」に分類する。
 - **force-unique 内 clone の RC 境界**: `make_array_unique`/`make_struct_unique` の clone（共有時に deep copy ＋要素 retain）は op の atomic 意味に内包し、内部 RC は IR ノードに出さない（最適化対象でない共有パスのため）。引数 `OwnershipShape` のみ宣言。
+- **（調査済み）ソースレベルの `unsafe_is_unique` 分岐**（std.fix 3 箇所）は §4 の対象外だが健全なので削除しない: (1) generic `Array::act`（`_unsafe_act_bounds_unchecked`、任意 functor）が `arr.unsafe_is_unique` で unique(punch)／shared(clone+set) を実行時分岐する。`optimize_act`（`src/optimization/optimize_act.rs`、既存・`enable_act_optimization`）が Identity/Const/Tuple2 の act body を force-unique op 版（`_unsafe_act_bounds_unchecked_{identity,const,tuple2}`）へ lowering 前に置換するので、ホットな act はこの分岐を通らず §4 の対象になる（`mod` は元から force-unique op 版）。それ以外の functor の act だけ分岐が残り、RC IR では `unsafe_is_unique` の結果 `Bool` 上の runtime `Match` に lower される（§3.2 が健全に扱い、§4 は差し替えない）。(2) `Destructor::mutate_unique_io`（FFI 資源の複製判断）・(3) `assert_unique`（デバッグ、assert ビルド §1.6）は配列/struct ホットパス外の正当用途で残す。削除は不適（(1) は op の途中でユーザ closure を呼ぶため単一 op に畳めない）。P1 監査: `unsafe_is_unique` の `result_prov` を passthrough（`Arg(0)`）と宣言して `Fresh` を保つ（精度）。unique-check-elim 実行時は act 最適化を有効にしておく。
+- **（確認済み）高階イテレータの直接化は既存 decapturing に依存**: `loop`/`fold` 等は body を closure 引数で受け、その内部呼び出しは間接。uniqueness 特殊化（§4）が内部の force-unique op に届き、Provenance 解析（§3）が精度を出すには、この間接呼び出しが直接化されている必要がある。既存の **decapturing の closure specialization**（`src/optimization/decapturing.rs`、`enable_decapturing_optimization`。`inline` 後・`uncurry` 前＝RC IR lowering の前）が、body を焼き込んだ特殊版（`loop#lam` 等）を生成し内部呼び出しを直接化する（`pull_let` が適用範囲を広げる）。ベンチの `loop((0,arr), |…|)` は適用対象（lambda を直接渡す・自己呼び出しで同 index）。適用外の形（doc の制限: lambda をタプル等に入れて渡す等）は間接のまま残り、§3.2 の規則で結果 Dyn＝除去は効かない（健全・許容）。unique-check-elim を回すときは decapturing を有効にしておくのが前提。
 - **（確認済み）`fix`（ローカル再帰の不動点コンビネータ）は RC IR で表現可能**: std `fix = |f| |x| FixBody`（`FixBody` は InlineLLVM、free vars `x,f,cap`）。lift で outer `|f|`／inner `|x|` の `RcFunc` になり、`fix(f)`=`Closure(inner,[f])`、本体は `LLVM(FixBody, [x,f,cap])`（全 `Own`）。FixBody は自己 funptr（codegen の `get_parent`）＋現 cap 再利用で `fixf=fix(f)` を作り `f(fixf)(x)` を呼ぶ（heap alloc なし、RC cycle 無し＝fixf→f だが f→fixf 無し）。内部 RC は宣言で残す（opaque・`Borrow` 化不可）ので fix 内再帰は解析から保守的に見える。`Closure(self)+App` への desugar は避ける（cap 再利用を失うため）。
