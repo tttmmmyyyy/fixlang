@@ -421,13 +421,18 @@ main = ( let arr = Array::fill(1000, 0);
 - continue 枝 `arr2 = arr.set(i, …)`: `set` 宣言より `{Fresh}`（§3.3）。continue payload の arr 末端＝ `{Fresh}`。
 - 関数結果＝2 枝 join（各枝は 1 variant を構築＝§3.3 の union 構築宣言: 構築 variant のスロットに payload 由来・他 variant は ⊥）: `continue.arr = {Fresh}`、`break.r = {Arg(0,[1])}`。
 
-**loop の結果 Provenance**（`loop = |s0,f| match f(s0){ continue(s1)=>loop(s1,f); break(r)=>r }`、結果 Array 末端を `L`、再帰は不動点・初期 ∅）:
-- `f(s0)` を合成: continue の `s1.arr = {Fresh}`、break の `r = s0.arr = {Arg(0,[1])}`。
-- `L = join( L[s0.arr:={Fresh}], {Arg(0,[1])} )` を反復:
-  - L₀=∅ → L₁={Arg(0,[1])} → L₂=join({Fresh},{Arg(0,[1])})={Fresh,Arg(0,[1])} → L₃=L₂（収束）
+**loop の結果 Provenance**（`loop = |s0,f| match f(s0){ continue(s1)=>loop(s1,f); break(r)=>r }`、結果 Array 末端を `L`）: `L` は「loop の結果を**入力の関数として**書いた式」で、入力 arr を指す記号が `Arg(0,[1])`。
+- **直感（展開）**: loop が返すのは break した時点の配列。0 反復なら即 `break(arr)` で入力そのもの＝`Arg(0,[1])`、1 反復以上なら最後の `set` 結果＝`Fresh`。反復回数は静的に不明なので**起こりうる全部の和**を取る＝`{Fresh, Arg(0,[1])}`。以下これを不動点で（展開せず）求める。
+- **方程式**: body 結果（上）から、break 枝＝`{Arg(0,[1])}`（入力を返す）、continue 枝＝`loop(s1)` の結果。ここで `loop(s1)` は「同じ式 `L` の入力を s1 に差し替えたもの」＝`L` 中の `Arg(0,[1])` を `s1.arr={Fresh}` で置換したもの（§3.2 の呼び出し合成）。両枝の join で `L = join( L[Arg(0,[1]):={Fresh}], {Arg(0,[1])} )`（`L` が両辺＝再帰方程式）。
+- **不動点**（初期 ∅。各段が「反復回数を 1 つ増やした場合」を足していく）:
+  - L₀=∅ → L₁=`{Arg(0,[1])}`（0 反復＝入力を返す）→ L₂=join(`L₁[Arg(0,[1]):=Fresh]`, `{Arg(0,[1])}`)=join(`{Fresh}`,`{Arg(0,[1])}`)=`{Fresh,Arg(0,[1])}`（1 反復＝Fresh 追加）→ L₃=L₂（2 反復も Fresh で既出＝**収束**）。基底集合は有限・置換は `Arg` を消し `Fresh` を増やすだけ（単調）ゆえ必ず停止。
 - ∴ `loop` 結果＝ `Boxed({Fresh, Arg(0,[1])})`＝「1 回以上更新すれば Fresh、0 反復なら入力 arr」。
 
-**main での合成**: `loop((0, arr), …)` は `Arg(0,[1])` を実引数 `arr` の由来 `{Fresh}`（fill）で埋める → `{Fresh, Fresh}={Fresh}`。∴ 最終 arr ＝ `Boxed({Fresh})`＝**Unique**（main は boxed 入力なしなので resolve は入力に依らず Unique）。（実ベンチは 2 重ループだが、内ループ結果 `{Fresh,Arg(0,[1])}` を外ループが同様に畳んで外も `{Fresh,Arg(0,[1])}`、main で `{Fresh}`。）
+**使い道（resolve）**: `L` は入力非依存なので 1 回求めれば全 call site で使い回せる。呼び出し地点で `Arg(0,[1])` を実引数の由来で埋め、各要素を uniqueness に写して ⊔（`Unique < Dynamic`＝一つでも Dynamic なら Dynamic。§4）:
+- **main（`fill`＝Unique）**: `Arg(0,[1]):=Fresh` → `{Fresh, Fresh}={Fresh}` → **Unique**（0 反復でも入力が Fresh、1 反復以上でも set が Fresh。どちらの経路も unique）。∴ 最終 arr は Unique で後続 `set` に届く。
+- **共有配列を渡す場合**: `Arg(0,[1]):=Dyn` → `{Fresh, Dyn}` → `Unique ⊔ Dynamic = Dynamic`（0 反復で共有入力をそのまま返す経路があるので unique 保証できない）。
+
+`Fresh` は常に Unique なので、実質**結果の uniqueness は入力 arr が unique かで決まる**。同じ `L` を入力ごとに resolve するだけで両方正しく出る。（実ベンチは 2 重ループだが、内ループ結果 `{Fresh,Arg(0,[1])}` を外ループが同様に畳んで外も `{Fresh,Arg(0,[1])}`、main で `{Fresh}`。）
 
 ## 4. unique-check-elim
 
