@@ -322,7 +322,7 @@ cancel(f):
 ```
 `consume_sites`/`root` は §2.1 と共有する（相殺・borrow 化・uniqueness が同じ別名知識で動く）。
 
-## 3. uniqueness 解析（RC IR を抽象解釈）
+## 3. Provenance 解析
 
 RC IR を**抽象解釈**し、各変数末端の**由来（`Provenance`）**を追う。uniqueness（`Unique`/`Dynamic`）はその由来を関数の入力に **resolve** して得る——解析は「由来を追う 1 本」で、関数の効果（結果の由来）も同じ解析から出る。由来の基底は `Fresh`（新規＝resolve で `Unique`）／`Dyn`（不明＝`Dynamic`。boxed 容器 getter・global 等）／`Arg(i,p)`（入力 i の末端を引き継ぐ）。**`Retain`（複製＝2つ目の参照）だけが `Fresh -> Dyn`（＝`Unique -> Dynamic`）**に一方向で倒し、`Dyn` は吸収状態。`unique_ptr`/`shared_ptr` の対応そのもの（複製したければ `shared_ptr` に変換するしかない）。ループ・再帰は有限領域上の**不動点**で畳む。`Dynamic` では unique-check-elim が force-unique を除去せず**実行時 uniqueness チェックが残る**（§4。実行時に unique なら in-place、shared なら clone）。
 
