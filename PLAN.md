@@ -384,7 +384,13 @@ enum BaseSource {
 }
 ```
 - **`resolve`（呼び出しで結果 shape を作る）**: `let r = f(a0..)` で `env[r] = resolve(sig.result, args)`。木を辿り、各 `Boxed(leafsrc)` を `Boxed(⊔_{s∈leafsrc} rc(s))` に解決（`rc(Fresh)=Unique`・`rc(Dyn)=Dynamic`・`rc(Arg(i,p))=env[a_i]@p`）。`Unboxed`/`UnboxedAgg` は素通し。引数の後始末は §3.2 不変則。
-- **ソース関数 = 推論**: `FuncRef` → `Provenance` を 1 つ memo（IR の `RcFunc` には載せない）。body を §3.2 で解析して Provenance を組む（`alloc`→`Fresh`、`getter/global`→`Dyn`、`Retain`→末端 `Dyn`、`Match` 合流→末端 `LeafSource` を union、param 末端→初期 `Arg(i,π)`、内側呼び出し→callee Provenance の `Arg(j,p)` を実引数の由来で置換）。**入力 uniqueness に依存しない**（複製は `Retain`→`Dyn` が捌く。例 `(y,y)`->`(Dyn,Dyn)` は §5 テスト）ので入力キーは持たない。再帰は不動点（初期 ⊥＝空 Set）。
+- **ソース関数の `Provenance` を body から推論**: body を 1 回走査し、各変数末端の**由来**を求める（§3.2 と同じ辿りだが、`Unique`/`Dynamic` の具体値でなく `Arg`/`Fresh`/`Dyn` の**記号**を追う点だけ違う）:
+  - `param` の末端 → `Arg(i, π)`（入力そのもの、記号のまま残す）
+  - `alloc`（構築/`set`/`fill`）→ `Fresh`／boxed 容器 getter・`global` → `Dyn`／`Retain(x)` 後は x の末端が `Dyn`
+  - `Match` 合流 → 末端の `LeafSource` を union（枝で由来が割れたら join）
+  - 呼び出し `g(a…)` の結果 → g の `Provenance` を取り、その `Arg(j, p)`（g の引数プレースホルダ）を実引数 `a_j` の由来で埋める（合成）
+  - 関数の `Provenance` ＝ 返り値末端の由来
+  param を記号 `Arg` のまま残すので出力は**入力非依存**（`FuncRef` → `Provenance` を 1 つ memo。IR の `RcFunc` には載せない）。複製は `Retain`→`Dyn` が捌く（例 `(y,y)`->`(Dyn,Dyn)`、§5 テスト）。再帰は不動点（初期 ⊥＝空 Set）。
 - **プリミティブ（`InlineLLVM`）= 宣言**: `LLVMGenerator::result_prov() -> Provenance`（引数の型に依存し得る）。`OwnershipShape`（§1.2）は別 API（`arg_ownership(i)`）で宣言。
 - global（値の型どおりの Provenance。boxed 末端は `Dyn`、unboxed 部は型どおり）／`boxed_from_retained_ptr`（ptr→boxed → `Dyn`）。FFI（`CALL_C`）は boxed を返さない（結果 unboxed）ので rc 対象外。assert ビルドで不健全な claim を実行時検出。
 
