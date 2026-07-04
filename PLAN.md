@@ -498,7 +498,8 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 | 操作 | force-unique の所在 | フラグ |
 |---|---|---|
 | Array `set` | `InlineLLVMArraySetBody`（無条件 `make_array_unique`, builtin.rs:2170） | **無し→追加** |
-| Array `mod`/`act_identity`/`act_tuple2` | `_unsafe_get_linear_bounds_unchecked_unretained`（`force_unique`, builtin.rs:1901/1936） | 既存→`false` |
+| Array `swap` | 新 builtin `InlineLLVMArraySwapBody`（force-unique 内蔵。§7 P0.7 で `_unsafe_swap`＋linear-get を置換） | **新設（フラグ付き）** |
+| Array `mod`/`act_identity`/`act_tuple2` | §7 P0.7 で PunchedArray punch/plug 化（punch が force-unique）。旧 `_unsafe_get_linear_bounds_unchecked_unretained`（`force_unique`, builtin.rs:1901/1936）は廃止 | punch の `force_unique`→`false` |
 | struct `mod_<field>` | `#punch_fu_{field}`（`InlineLLVMStructPunchBody`{true}, `make_struct_unique` @2656） | 既存（非 fu punch あり）→`false` |
 | struct `set_<field>` | `InlineLLVMStructSetBody`（無条件 `make_struct_unique`, builtin.rs:3580） | **無し→追加** |
 | struct `act_<field>` | 非 fu punch を既に使用（unique 保証） | 対応不要 |
@@ -518,14 +519,14 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 
 ## 5. 適用対象・検証
 
-- マイクロ: `batch/arrayrw{,_unsafe,_fn}`、`fannkuch`。正しさ: `cargo test --release`（全最適化レベル、§1.6）＋**共有値テスト**（2 箇所に格納して破壊しないこと）。回帰: `benchmark/speedtest`。assert ビルドで不健全検出。
+- マイクロ: `batch/arrayrw{,_unsafe,_fn}`、`fannkuch`、**ソート**（`sort_by`/introsort・heapsort＝`swap` が hot、§7 P0.7）。正しさ: `cargo test --release`（全最適化レベル、§1.6）＋**共有値テスト**（2 箇所に格納して破壊しないこと）。回帰: `benchmark/speedtest`。assert ビルドで不健全検出。
 - 一意文脈でチェックが消える（IR/asm に `build_branch_by_is_unique` 由来分岐が残らない or cachegrind 命令数低下）＋共有文脈で消えない（クローンされる）を各セルで確認:
 
-| 対象 | set | mod | act(Id) | act(Tuple2) | act(Const) | 備考 |
-|---|:--:|:--:|:--:|:--:|:--:|---|
-| Array | ✓ | ✓ | ✓ | ✓ | — | Const は getter |
-| boxed struct field | ✓ | ✓ | ✓ | ✓ | — | `make_struct_unique` を外す |
-| union | — | — | — | — | — | `mod_<variant>` は force-unique を踏まない＝対象外 |
+| 対象 | set | swap | mod | act(Id) | act(Tuple2) | act(Const) | 備考 |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|---|
+| Array | ✓ | ✓ | ✓ | ✓ | ✓ | — | Const は getter。swap はソートで hot（§7 P0.7 の builtin） |
+| boxed struct field | ✓ | — | ✓ | ✓ | ✓ | — | `make_struct_unique` を外す。swap は Array 専用 |
+| union | — | — | — | — | — | — | `mod_<variant>` は force-unique を踏まない＝対象外 |
 
 入れ子伝播も確認: タプル内配列 `loop((cnt, arr), …)`、struct 内配列・配列内 struct、union 内配列（`LoopState`）。
 
@@ -542,12 +543,13 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 ## 7. マイルストーン
 - **P0（P1 前）**: **デバッグ情報の E2E テストを追加**してベースライン化。現状その回帰テストが無いため、`fix build -g`（DWARF 付き）でビルドした小プログラムを **gdb 駆動**（`gdb -batch`: `break main.fix:N` → run → backtrace）で検査する統合テストを作る（CLAUDE.md 規約: サンプルを tempdir にコピー、`fix`/`gdb` を `Command` 実行）。assert は file:line の解決・停止・スタックの行情報（マングル名非依存）。補助で bundled `llvm-dwarfdump` の構造 assert も可。**現 main で通すこと**＝P1 の「デバッグ情報一致」(§1.6) の比較対象。ツール: `/usr/bin/gdb` あり、`llvm-dwarfdump` は `/home/maruyama/llvm-17.0.6/bin/`（system には無し）。
 - **P0.5（P1 前提）**: **Bool を union 化**（std.fix: `type Bool = unbox union {_false,_true}; true=_true(); false=_false();` ＋ 比較演算子の結果型 ＋ FFI Bool↔i8 tag）。これが `If` を IR から落とす前提（`If`→`Match` desugar は P1 lowering 内）。性能中立（Bool-union＝i8）。de-risk するなら現 `eval_if` を union Bool 対応にして先行検証、または P1 で `eval_if` 撤去と同時。
-- **P0.7（早期・P1 と独立に入れられる）: `PunchedArray` を builtin 抽象型化**。狙い: 穴を型に出して §8 (a) の DOESNT-FIT を CLEAN 化しつつ、std の swap 版（std.fix:2648）の要素 move 2 回を無くす。作業:
+- **P0.7（早期・P1 と独立に入れられる）: 配列 read-modify-write を atomic builtin へ集約**（builtin `PunchedArray`＋builtin `swap`、`_unsafe_get_linear_bounds_unchecked_unretained` 系・`_unsafe_swap` を廃止）。狙い: **隠れ穴を作る composable primitive を無くして §8 (a) の DOESNT-FIT を完全消滅**させ、各 atomic op に force_unique フラグを付けて **§4 の除去対象に揃える**（swap もソートで全 unchecked 化）。std の swap 版 `PunchedArray`（std.fix:2648）の要素 move 2 回も無くす。作業:
   - **表現は `Array` を使い回す**: `PunchedArray a` は内部に**通常の `Array a` オブジェクトをそのまま持つ**（buffer/LEN/CAP・要素アクセス・`@size` 等は Array と**同一・変更なし**。LEN も減らさない＝穴は idx に据え置き）＋ punch した `idx`（unboxed）を携える（std と同じ `unbox { arr, idx }` レイアウトでよいが **swap はしない**）。
   - **`Array` と違うのは release と clone だけ**: `release(PunchedArray)` ＝ Array の要素解放ループを **idx をスキップ**した版（`[0,idx)` と `(idx,size)` の 2 レンジ、または per-element の skip 分岐）で内側 array を解放。`clone`/`make_unique` も同様に idx をスキップ。**boxed 要素型のときだけ Array と差が出る**（unboxed 要素は per-element release が無く、release/clone は Array と完全同一）。→ 実装は**既存の array デストラクタ/clone 生成コードに「skip index」を渡す変種を足すだけ**（新規のメモリ表現もアロケーションも増やさない）。
   - **punch/plug（新 builtin・swap 無し）**: `punch : I64 -> Array a -> (PunchedArray a, a)` ＝ idx の要素を no-retain で move-out、穴は idx に据え置き、idx を tag。**force-unique 版も用意**（`mod`/`act` の §4 除去がこの上に乗る）。`plug : PunchedArray a -> a -> Array a` ＝ idx に書き戻し（unreleased）て Array へ戻す。所有権は **PunchedArray＝idx 以外の全要素／取り出した要素＝idx** に分割される（∴ 取り出した要素は正真正銘の所有末端＝§8 (a) が CLEAN 化）。
   - **抽象に保つ**: 内側 `Array` をフィールド取り出しさせない（取り出して通常 `Array` として release すると idx 二重解放）。punch/plug/release/clone 以外の操作を生やさない。
-  - **置換対象（穴 1 個の read-modify-write に限る）**: PunchedArray/punch/plug が扱うのは**穴 1 個**の場合——最適化 `mod`／`act`（Identity/Tuple2）の生 `_unsafe_get_linear_bounds_unchecked_unretained`(+`_forceunique`)／`_unsafe_set_bounds_uniqueness_unchecked_unreleased` 対と、generic `act`・std `PunchedArray`（`_unsafe_punch_bounds_uniqueness_unchecked`/`_plug_in`＝swap 版）を punch/plug に寄せる。**生 primitive 自体は残す**: `swap`（`_unsafe_swap_bounds_uniqueness_unchecked` は i,j の**穴を 2 つ同時**に開ける＝単一 idx の PunchedArray に載らない）・`pop_back` 等の他利用者は生 linear-get/set のまま、always-plug（必ず全穴を埋め drop しない）で安全な opaque linear 窓として扱う（§8 (a)）。
+  - **builtin `swap`（force_unique フラグ付き）**: `swap : I64 -> I64 -> Array a -> Array a` を単一 InlineLLVM op（`ArraySwapBody`）で codegen 直書き（`set` 同様＝超高速）。`i,j` の要素を op 内部で move 交換（`read_from_array_buf_noretain`＋`write_to_array_buf` を op 内に閉じ込め、穴を外に出さない）。`set` と同じ **`force_unique` フラグ**を持ち、§4 が配列を静的 unique と証明できれば unchecked 版へ差し替え → ソート（introsort/heapsort、std.fix:439/461/466/473/527/555）の O(n log n) 回の swap から uniqueness チェックが消える。arg: `i,j` unboxed・`array`=`Own`、result=`Fresh`（force-unique 版・unchecked 版とも結果は unique）＝**CLEAN**（穴を露出しないので §8 (a) の窓が消える）。
+  - **廃止と置換**: `_unsafe_get_linear_bounds_unchecked_unretained`(+`_forceunique`) と `_unsafe_swap_bounds_uniqueness_unchecked` を**廃止**し、利用者を atomic builtin へ移す—— `mod`/`act`（単一穴、std.fix:166/174/190）→ PunchedArray punch/plug、`swap`（二重穴、570/571）→ builtin swap、`pop_back`（`set_size(len-1)` 後に**境界外**の末端を取り出す、366）→ 専用 builtin（shrink＋末端 move-out を op 内に閉じ込め）、generic `act`・std swap 版 `PunchedArray`（2668/2692/2698）→ builtin PunchedArray。**`_unsafe_set_bounds_uniqueness_unchecked_unreleased` は残す**（穴埋め用途は消えるが、append/push_back/map/reserve の**未初期化スロット書き込み**という別用途で正当に使う。265/307/383/401/689）。生 codegen helper（`read_from_array_buf_noretain` 等）は各 atomic builtin の**内部**に閉じ、Fix レベルの composable op としては露出させない → **隠れ穴 primitive はどこにも残らない**。
   - **穴 release のデッドコード確認（要望）**: `mod`／total-functor `act` は punch を必ず plug するので PunchedArray を drop せず、その skip-idx release を**呼ばない**。PunchedArray を unbox 型にして release を drop 地点でインライン生成する実装なら、drop 地点の無いプログラムでは skip-idx release が**そもそも生成されない**（望ましい）。`emit_symbols`／IR を grep して `mod`/`act`(total) のみのプログラムで skip-idx release が出ないことを確認。型ごと無条件生成する実装なら LLVM/リンカ DCE で strip されることを最終バイナリで確認。generic `act`（失敗し得る functor は PunchedArray を drop し得る）では release は**実使用**なので大域 dead ではない（total path でのみ dead）。
   - **独立性・検証**: RC IR 導入前に単独で入る（挙動不変の内部最適化＝changelog 不要）。共有値テスト（2 箇所格納で破壊しないこと）＋回帰ベンチ（`benchmark/speedtest`・`fix-bench/batch`）で std PunchedArray の swap トリック除去分（generic `act`）の改善と非劣化を確認。assert ビルドで穴の二重解放を検出。
 - **P1**: RC IR 型 ＋ AST→RC IR lowering（`generator.rs` から RC 抽出。名前は lowering が fresh 発番）＋ codegen 付け替え ＋ 全テスト再検証。**最大の山**。完了ゲート: `cargo test --release` 全最適化レベル（`FIX_MAX_OPT_LEVEL` max/basic/none、§1.6）で全通過・全ベンチでリグレッションなし・デバッグ情報一致（§1.6）を満たし、**ユーザに連絡して外部ライブラリテストを依頼してから次フェーズへ**。lowering は現 codegen の RC（move-out/last-use ＝既に最小 RC）を踏襲し、引数は全 `Own`（ベースライン）。source 関数の borrow 化・相殺（§2）は P2 で uniqueness と併せて入れる（前処理）。なお `InlineLLVM` の `OwnershipShape` 宣言（read getter は `Borrow`。§1.2）だけでも hot loop の array getter は借用扱いになり、ベンチの elision の主要部はそれで届く。
@@ -580,7 +582,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
   - std の `PunchedArray`（`unbox struct {_arr, _idx}`, std.fix:2648）は穴を**末尾へ swap＋@size 減で境界外へ追い出して** release-safe にしているが、`idx != 末尾`で**要素 move が 2 回余分**（drop され得る generic functor 対応のため）。
   - **解消: `PunchedArray` を builtin 抽象型化**（`{Array a, idx}`、専用デストラクタ／clone が **idx をスキップ**）。穴は idx に据え置き（**swap 無し・実行時ゼロコスト**、idx は unbox でレジスタ）、所有権が **PunchedArray＝idx 以外／element＝idx** にきれいに分割され、tuple.1 は正真正銘の所有末端・穴は型に出る → shape 解析が普通の boxed 型として扱え **(a) は CLEAN 化**。droppable なので最適化パス（total functor）と generic パスを一本化でき、std の swap 版を上位互換で置換、「linear 窓を触らない」壊れやすい不変条件も不要。punch/plug のみの抽象型に保つ（内側 `Array` を取り出させない）。
   - この置換で linear-get の unsafe 3 点のうち **(3) move-out の refcount プロトコルが型で安全化**され、残る unsafe は (1) 境界（＋非 forceunique 版の (2) 一意性）だけになる。§4 の force-unique 除去は punch 内で効くので不変。早期フェーズで入れる（§7）。
-  - **PunchedArray が扱うのは穴 1 個**（`mod`/`act`）。`swap` のように**穴を 2 つ同時**に開ける op は単一 idx の PunchedArray に載らないので、生 `_unsafe_get_linear_bounds_unchecked_unretained`/set のまま残し、always-plug（必ず全穴を埋め drop しない）で安全な **opaque linear 窓**として扱う（生 primitive の (3) はこの usage 不変条件で回避＝§7 P0.7 の対象外）。
+  - **PunchedArray が扱うのは穴 1 個**（`mod`/`act`）。`swap` のように**穴を 2 つ同時**に開ける op は単一 idx の PunchedArray に載らないが、**builtin `swap`（force_unique フラグ付き）として atomic 化**する（§7 P0.7）——穴を op 内部に閉じるので窓が露出せず、これも CLEAN・§4 除去対象（ソートで全 unchecked 化）。生 `_unsafe_get_linear_bounds_unchecked_unretained`/`_unsafe_swap` 系は廃止（§7 P0.7）＝**隠れ穴を作る composable primitive はどこにも残さない**ので、DOESNT-FIT (a) は完全消滅する。
 - **(b) boxed 内部への生ポインタ**: `Array::_unsafe_get_ptr`（`Array a -> Ptr`, builtin.rs:2393）・`get_boxed_data_ptr`（`a -> Ptr`）は結果 `Ptr`（`Unboxed`）が**引数 boxed の内部バッファを alias**する。現 codegen は引数を last-use で release し得る＝返した `Ptr` が dangling しうる（`unsafe` op）。RC IR では引数を **`Borrow`**（呼び出し側が Ptr の生存中 配列を保持）と宣言するのが正しく、`Ptr` 結果は `Unboxed` で解析は alias を追わない——寿命義務はモデル外（呼び出し側責務）。「unboxed 結果が boxed 引数の内部を alias しその寿命に縛られる」は 2 属性の外。
 - **(c) RC 追跡域の境界**: `boxed_to_retained_ptr`（boxed の 1 参照を生 `Ptr` へ escape。arg=`Own`、結果 `Ptr`=`Unboxed`＝生きた参照が帳簿外へ）／`boxed_from_retained_ptr`（生 `Ptr` の参照を boxed `a` へ materialize。結果=`Dyn`）。前者は「`Unboxed` の引数/結果が実は所有権を運ぶ」非対称で `Own`/`Borrow` 軸に載らない（§8 冒頭の boxed escape 未解決項目）。健全側には「to→arg `Own`・結果は追跡外／from→結果 `Dyn`」で倒す。
 - **(d) `with_retained`**: 呼び出しをまたぐ意味的 retain。arg=`Own`/`Own` では意味が抜ける。**opaque のまま常に retain**（§8 の (B) の結論を再確認）。
