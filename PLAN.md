@@ -356,16 +356,16 @@ struct State { env: Map<Var, UniquenessShape> }
 - `Ret(x)`: 結果 ＝ `env[x]`（`x` escape）。
 - global 参照 → その値の型どおりの UniquenessShape（boxed 末端はすべて `Dynamic`：global は GLOBAL 状態で unique にならない。unboxed 部は `Unboxed`/`UnboxedAgg`）。
 
-**引数の後始末（共通）**: `App`/`LLVM`/`Closure` の各引数 `a_i` を、callee のその位置の `OwnershipShape`（§1.2。source 関数は §2.1 の borrow 化、`InlineLLVM` は宣言）で処理する:
-- `Own` かつ `env[a_i]` が `Unique`: **これは `a_i` の last-use**（後で使うなら手前に `Retain` が入り既に `Dynamic` のはず）。`a_i` は消費されて dead。
-- `Own` かつ `Dynamic`: `Dynamic` のまま（後で使われても `Dynamic`）。
-- `Borrow`（借用）: `env[a_i]` 不変（`Unique` は `Unique` のまま生き残る）。
+**呼び出しが引数 uniqueness に及ぼす作用（不変則）**: `App`/`LLVM`/`Closure` の各引数 `a_i` について、callee のその位置の `OwnershipShape`（§1.2。source 関数は §2.1 の borrow 化、`InlineLLVM` は宣言）に応じて次が**成り立つ**:
+- `Own` かつ `env[a_i]` が `Unique`: これは `a_i` の last-use（後で使うなら手前に `Retain` が入り既に `Dynamic`）。以後 `a_i` は読まれない。
+- `Own` かつ `Dynamic`: `Dynamic` のまま。
+- `Borrow`（借用）: `env[a_i]` 不変（`Unique` は `Unique` のまま生存）。
 
-つまり呼び出しは **`Unique` の生存**にしか関与せず（`Own`->dead / `Borrow`->存続）、`a_i` の rc を書き換えない。`Unique -> Dynamic` を起こすのは `Retain` だけ。
+よって呼び出しは引数の rc を書き換えず、**`Unique` の生存だけに関与する**（`Own`->以後読まれない / `Borrow`->存続）。`Unique -> Dynamic` を起こすのは `Retain` だけ。**この不変則ゆえ、関数効果は結果 UniquenessShape だけで表せる（§3.3）**。
 
 **`Dynamic` の発生源**（`Unique` を保てない所）: `Retain`（複製）／boxed 容器からの取り出し（getter・boxed union payload）／global／`boxed_from_retained_ptr`／opaque op／join 不一致。`Let(x, Var(y))`（move）と capture-while-live は**発生源でない**（前者は rename、後者は手前の `Retain` が既に倒している）。
 
-**uniqueness クエリ**（unique-check-elim が使う、§4）: `is_unique(x)` ＝ `env[x]` が `Boxed(Unique)`。`Unique` は複製（`Retain`）を経ていない単独所有でしか付かないので真に unique。
+**uniqueness クエリ**（unique-check-elim が使う、§4）: `is_unique(x@π)` ＝ `env[x]` の boxed 末端 π が `Boxed(Unique)`（単一 boxed 値は π=ε で `env[x]` そのもの、unboxed 集約は末端 π を選ぶ。force-unique の対象は射影で取り出した単一 boxed が普通）。`Unique` は複製（`Retain`）を経ていない単独所有でしか付かないので真に unique。
 
 ### 3.3 関数の効果（`UniqSignature` ＝ 入力 UniquenessShape → 結果 UniquenessShape）
 §3.2 で見たとおり、呼び出しが env に及ぼす作用のうち rc に関わる部分は引数の `OwnershipShape`（§1.2/§2.1）だけで決まる（`Own`+`Unique`->dead／`Borrow`->存続）。よって関数固有の効果は**結果 UniquenessShape の組み立て方**だけを持てばよい:
