@@ -382,7 +382,7 @@ struct State { env: Map<Var, Provenance> }
 force-unique を含む `LLVM` op（`set`/`mod`/`act` 系）で、対象 boxed 値が §3 の `is_unique`（`Boxed(Unique)`）かつ LOCAL と証明できれば、その RC IR の `LLVM` ノードを **force-unique を行わない版に差し替える**（証明できない＝`Dynamic` では除去せず、force-unique の実行時 uniqueness チェックを残す＝現状動作）。結果は force-unique 後どのみち unique なので、ループ `let arr = arr.set(…)` で 2 回目以降の入力が unique になり「**初回 checked・以降 unchecked**」が自然に出る。
 
 ### 4.1 特殊化（uniqueness 駆動、RC IR 上）
-`RcFunc` を、流れてくる引数 uniqueness を要約したキー `InputKey`（`= Vec<ArgKey>`; `enum ArgKey { Unboxed, UniqueBoxed, DynBoxed, Agg(Vec<ArgKey>) }`。粒度は精度ノブ、P2）に clone する。呼び出し地点で引数が `Unique` なら unique 用 clone を、`Dynamic` なら別 clone（または original）を呼ぶ。各 clone の uniqueness は §3.3 の入力非依存 `Provenance` を resolve して得る（入力で分けるのはこの特殊化だけ）。worklist で不動点。clone は fresh 名を発番し（名前グローバル一意 §1.1-3 を保存）一意な clone 名を付ける。未使用になった `RcFunc`（original/clone）は RC IR 上の dead-function 除去で掃除する。
+`RcFunc` を、流れてくる引数 uniqueness を要約したキー `InputKey`（`= Vec<ArgKey>`; `enum ArgKey { Unboxed, UniqueBoxed, DynBoxed, Agg(Vec<ArgKey>) }`。粒度は精度ノブ、P2）に clone する。呼び出し地点で引数が `Unique` なら unique 用 clone を、`Dynamic` なら別 clone（または original）を呼ぶ。各 clone の uniqueness は §3.3 の入力非依存 `Provenance` を resolve して得る（入力で分けるのはこの特殊化だけ）。worklist で不動点。clone は fresh 名を発番し（名前グローバル一意 §1.1-3 を保存）一意な clone 名を付ける。**特殊化は関数を clone するので、未使用になった `RcFunc`（どの call site からも到達しない original/clone）の dead-function 除去を初版で必ず実装する**（さもないとバイナリサイズ回帰。到達解析＋未到達 `RcFunc` 削除の 1 パス）。使われる clone ぶんの増加は code-size↔速度のトレードオフとして残るので、サイズは §5 で監視する。
 
 ### 4.2 force-unique の除去（RC IR の `LLVM` ノード差し替え）
 clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) ノードを、force-unique しない版（`InlineLLVM` の `force_unique=false`／unchecked generator）に差し替える（新規ノードを作って置換。共有呼び出し地点側の clone は checked のまま）。`force_unique` フラグの有無:
@@ -400,6 +400,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 ## 5. 適用対象・検証
 
 - マイクロ: `batch/arrayrw{,_unsafe,_fn}`、`fannkuch`。正しさ: `cargo test --release`（全最適化レベル、§1.6）＋**共有値テスト**（2 箇所に格納して破壊しないこと）。回帰: `benchmark/speedtest`。assert ビルドで不健全検出。
+- **バイナリサイズ回帰**: 特殊化は関数を clone するので、生成バイナリのサイズを commit hash 付きで記録・比較（`benchmark/speedtest` 各 case ＋外部ライブラリ）。未使用 clone の dead-function 除去（§4.1/P3）後もサイズが不当に増えないことを確認。増分は code-size↔速度のトレードオフとして把握する。
 - 一意文脈でチェックが消える（IR/asm に `build_branch_by_is_unique` 由来分岐が残らない or cachegrind 命令数低下）＋共有文脈で消えない（クローンされる）を各セルで確認:
 
 | 対象 | set | mod | act(Id) | act(Tuple2) | act(Const) | 備考 |
@@ -425,7 +426,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - **P0.5（P1 前提）**: **Bool を union 化**（std.fix: `type Bool = unbox union {_false,_true}; true=_true(); false=_false();` ＋ 比較演算子の結果型 ＋ FFI Bool↔i8 tag）。これが `If` を IR から落とす前提（`If`→`Match` desugar は P1 lowering 内）。性能中立（Bool-union＝i8）。de-risk するなら現 `eval_if` を union Bool 対応にして先行検証、または P1 で `eval_if` 撤去と同時。
 - **P1**: RC IR 型 ＋ AST→RC IR lowering（`generator.rs` から RC 抽出。名前は lowering が fresh 発番）＋ codegen 付け替え ＋ 全テスト再検証。**最大の山**。完了ゲート: `cargo test --release` 全最適化レベル（`FIX_MAX_OPT_LEVEL` max/basic/none、§1.6）で全通過・全ベンチでリグレッションなし・デバッグ情報一致（§1.6）を満たし、**ユーザに連絡して外部ライブラリテストを依頼してから次フェーズへ**。lowering は現 codegen の RC（move-out/last-use ＝既に最小 RC）を踏襲し、引数は全 `Own`（ベースライン）。source 関数の borrow 化・相殺（§2）は P2 で uniqueness と併せて入れる（前処理）。なお `InlineLLVM` の `OwnershipShape` 宣言（read getter は `Borrow`。§1.2）だけでも hot loop の array getter は借用扱いになり、ベンチの elision の主要部はそれで届く。
 - **P2**: 前処理（borrow 化 §2.1・相殺 §2.2 で `OwnershipShape` を確定し `Retain` を削る）＋ uniqueness 解析（`Provenance` を追い resolve で uniqueness を得る）。read-only ログから始め arrayrw のループ `set` を `Unique`・共有される配列のテストを `Dynamic`（非 unique）と判定することを確認。
-- **P3**: unique-check-elim（force-unique 除去 ＋ 特殊化）。arrayrw/fannkuch 計測、全テスト。
+- **P3**: unique-check-elim（force-unique 除去 ＋ 特殊化）。**特殊化 clone の dead-function 除去（到達解析＋未到達 `RcFunc` 削除）を同時に実装**——未使用 clone を掃除しないとバイナリサイズが回帰する（§4.1）。arrayrw/fannkuch 計測、全テスト、**バイナリサイズ回帰チェック**（§5）。
 - **P4**: reuse / 順序スケジューリング / 境界チェック除去 等。
 
 ## 8. リスク・未解決
