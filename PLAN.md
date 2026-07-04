@@ -261,20 +261,23 @@ borrow_ify(prog):
 
   # 3. §2.2 相殺が「Retain … (借用呼び出し) … Release」の net-zero を消す
 
-consumes(u):                               # 末端の使用 u（x@π が位置 q に出現）は消費か
-  App(g, 位置 q)   -> own[g.q@π]==Own
-  LLVM(op, 位置 q) -> op.arg_ownership(q)@π==Own     # 構築 alloc 系は Own、read getter(@/@size)は Borrow
-  Closure 捕捉     -> True                           # capture = move-in
-  Ret             -> True                           # return で escape
-  Let(y, Var(x))  -> consumes(y の対応末端の使用)     # move-bind は透過
-  それ以外（Match tag・Retain/Release・未使用）-> False   # 借用位置・drop は消費でない
+consumes(u):    # 末端の使用 u（x@π が op の位置 i に出現）は消費か。owns の時間反転（同じ result ref で分岐）
+  App(g, 位置 i)   -> own[g.i@π]==Own                             # 呼び出し境界（escape⟹own。owns の App->True と対、alias 再帰不要）
+  LLVM(op, 位置 i):                                               # in-frame op。op の result ref で分岐
+     op.result ref が arg i の末端 π を結果末端 z@ρ へ写す -> consumes(z@ρ の使用)   # 射影・unboxed 構築 = 透過
+     写さない                                        -> op.arg_ownership(i)@π==Own    # boxed 構築=消費 / getter 純読み=借用
+  Let(y, Var(x))  -> consumes(y@π の使用)                         # move-bind = 透過（result ref Arg(0)）
+  Match payload z of x（x が unboxed union）-> consumes(z の対応末端の使用)   # payload 取り出し = 透過
+  Closure 捕捉     -> True                                        # capture = move-in
+  Ret             -> True                                        # return で escape
+  それ以外（Match tag・Retain/Release・未使用）-> False              # 借用位置・drop は消費でない
 
 owns(f, x@π):    # f が末端 x@π を所有するか。x の束縛を基底まで辿る（π=ルートから boxed 末端への子位置パス）
   x が f の param                          -> own[x@π]==Own    # 基底: param 末端の own（Own=所有 / Borrow=借用）
   Let(x, Var(y))                          -> owns(f, y@π)      # move-bind: 同じ末端 π を y へ透過
-  Let(x, LLVM(op, args)):                                     # 射影/getter も専用ノードでなく LLVM。op の結果 UniquenessShapeRef(§3.3) で分岐
-     unboxed 集約/union の子取り出し（結果 Field(i,path)/Arg(i)）-> owns(f, args[i]@(path::π))  # 同一オブジェクト → 親末端へ辿る（Arg は path=[]）
-     alloc / boxed 容器 getter（結果 FreshBoxed/DynBoxed）      -> True  # 新規確保 or retain 取り出し = f 所有
+  Let(x, LLVM(op, args)):    # 射影/getter も専用ノードでなく LLVM。op 種別でなく、結果 UniquenessShapeRef(§3.3) を π で辿った末端 r で分岐:
+     r が arg を指す（Arg(j) / Field(j,path)）-> owns(f, r が指す args[j] の末端)  # 結果=引数(の子)と同一オブジェクト → 親末端へ辿る（例: タプル/struct/union 射影）
+     r が新規/別ref（FreshBoxed / DynBoxed）  -> True                            # f 所有（例: 構築 alloc / boxed 容器 getter・global）
   Match arm payload（scrutinee s, variant k）:                 # union payload の取り出し（Match は専用ノード）
      s が unboxed union                    -> owns(f, s@(k::π)) # move-out → scrutinee の子末端へ
      s が boxed union                      -> True             # boxed union getter = f 所有
