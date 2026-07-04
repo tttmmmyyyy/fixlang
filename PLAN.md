@@ -347,7 +347,7 @@ struct State { env: Map<Var, UniquenessShape> }
 ### 3.2 interpret 規則
 `State`(env) を更新しながら `RcExpr` を順に処理:
 - `Let(x, Var(y), k)`: **move**。`env[x] = env[y]`、`y` は消費（dead）。`Unique` も含め UniquenessShape をそのまま引き継ぐ（別名を作らないので **`Dynamic` 化しない**）。
-- `Let(x, LLVM(prim, args), k)`: prim の `UniqSignature`（§3.3）で結果 UniquenessShape を組む。alloc 系（構築・`set`/`mod`/`act` の結果・`fill` 等）→ `Boxed(Unique)`。boxed 容器からの取り出し（getter）→ `Boxed(Dynamic)`。unboxed 集約からの取り出し → 子 UniquenessShape を引き継ぐ。引数の後始末は下の共通規則。
+- `Let(x, LLVM(prim, args), k)`: prim の `UniqSignature`（§3.3）で結果 UniquenessShape を組む。alloc 系（構築・`set`/`mod`/`act` の結果・`fill` 等）→ `Boxed(Unique)`。boxed 容器からの取り出し（getter）→ boxed 要素なら `Boxed(Dynamic)`・unboxed 要素なら `Unboxed`。unboxed 集約からの取り出し → 子 UniquenessShape を引き継ぐ。引数の後始末は下の共通規則。
 - `Let(x, Closure(_, captures), k)`: `env[x] = UnboxedAgg([Unboxed /*funptr*/, cap])`。捕捉が非空なら cap＝`Boxed(Unique)`（新規捕捉obj に捕捉値を move-in）、空なら null（RC-free）。捕捉された各値は `Own` 引数として後始末（§3.2 共通規則）。
 - `Let(x, App(f, args), k)`: `f` の `UniqSignature` で結果 UniquenessShape を組む。引数の後始末は下の共通規則。
 - `Retain(x, k)`: `env[x]` の boxed root を `Dynamic` に倒す（複製＝2つ目の参照。`Unique -> Dynamic`、`Dynamic` はそのまま）。**これが唯一の `Unique -> Dynamic` 遷移**。
