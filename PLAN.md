@@ -237,6 +237,30 @@ fn main:
 ```
 `main` の `Retain(arr) … Release(arr)` は借用呼び出し `sum(arr,0,0)` をまたぐだけ（間に consume が無い）の net-zero なので §2.2 が両方消す -> `let s = App(sum, [arr,0,0]); let a2 = LLVM[set](0, s, arr)`。結果 `arr` は `fill`(Unique) -> `sum`(借用・rc 不変) -> `set` と `Unique` で届き **elision 成立**。`sum` の再帰は borrow->borrow で release が出ず tail のまま。
 
+**具体例（case B: fresh を閉路 tail へ）**: `buf` を読むだけ（consume しない）だが、再帰は毎回 fresh な `buf` を tail に渡す `loop_fresh`。
+```
+loop_fresh : I64 -> Array I64 -> I64 = |n, buf|
+    if n == 0 { buf.@size }                          // buf は読むだけ
+    else { loop_fresh(n - 1, Array::fill(n, 0)) };   // 毎回 fresh を tail で渡す
+main = loop_fresh(3, Array::fill(1, 0));
+```
+baseline（全 `Own`）:
+```
+fn loop_fresh(n, buf /*Own*/):
+    let c = LLVM[eq_i64](n, 0)
+    Match c {
+      _true  => let sz = LLVM[@size](buf); Release(buf); Ret(sz)      // 読んで drop
+      _false => let n1 = LLVM[sub](n, 1); let fr = LLVM[fill](n, 0)   // fr : Unique
+                Release(buf)                                          // buf 未使用 -> drop
+                let r = App(loop_fresh, [n1, fr]); Ret(r)             // fr -> Own = 消費（tail）
+    }
+```
+不動点（閉路 {`loop_fresh`}、`own[loop_fresh.1@[]]`＝`buf` 末端、初期 `Borrow`）:
+- `consume_sites`: `@size` は `Borrow`・`Release(buf)` は drop・再帰位置1 の `fr` は `own[loop_fresh.1@[]]=Borrow` ゆえ非消費 ⇒ ∅（phase(i) 降格なし）。
+- phase(ii) tail `App(loop_fresh,[n1,fr]);Ret(r)`: `owns(loop_fresh, fr@[])`＝`root` が fill producer ⇒ **True**、`last_use` ⇒ True ⇒ **`own[loop_fresh.1@[]]=Own`**（case B 降格）。
+
+**`Own` が要る理由（`Borrow` だと tail が壊れる）**: 仮に `buf` を `Borrow` にすると phase 2 は内部 `Release(buf)` を消し、`fr`（fresh・この frame 所有）を借用位置へ渡すので呼び出し**後**に `Release(fr)` が要る ⇒ `…; App(loop_fresh,[n1,fr]); Release(fr); Ret(r)` ＝非 tail ＝閉路で深さ分スタック → overflow。case B が `buf` を `Own` に留めるので `fr` は callee が consume ⇒ 後続 `Release` 無し ⇒ **tail 保持**（結果は baseline のまま・RC 不変）。fresh を受ける `buf` は uniqueness を運ばないので `Borrow` 化の利得は元々無い（散文(B)）。外部の `main` でも `loop_fresh.buf` は `Own` なので `a0` を消費する（main が `a0` を再使用するなら `Retain` -> `Dynamic`。両取りは特殊化 P2）。
+
 **手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。所有権は **boxed 末端単位**で、`own` は末端をキーに `Own|Borrow` を引く（`own[g.q@π]`＝g の param q の末端 π）。値 `x` を位置 q へ渡すとき各 boxed 末端 `x@π` は callee param q の末端 π に対応する。値の末端は、別名辺（move-bind と unboxed 集約/union の子取り出し＝getter LLVM・Match payload）を後ろ向きに辿った**定義位置 `root`**（producer。= object 同一性）で識別する（散文の「親引数の末端へ帰着」）。`owns`（所有判定）・phase(i)（消費降格）・§2.2 相殺は同じ `root` を共有する。g が未知＝間接呼び出しの位置は `Own` 固定（散文の「間接呼び出しは全 Own」）。
 ```
 borrow_ify(prog):
