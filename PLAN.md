@@ -287,7 +287,7 @@ borrow 化（§2.1）が余らせた「呼び出しをまたぐ `Retain`/`Releas
 
 **正規化＝末端ごとに分解**: 相殺の前に `Retain(x)`/`Release(x)` を **boxed 末端ごと**に分解する（`Retain(x@π)`：unboxed 集約なら各 boxed 末端を個別に retain/release、単一 boxed なら 1 個）。codegen が出す機械語は whole-value 辿りと同じ。これで相殺は**末端単位で一様**になり、「whole を部分的に消して残り末端へ縮約」する手間が消える（`Retain(x)`＋`Release(x.f0)` は分解後 `Retain(x@f0)` と `Release(x@f0)` の対消滅に落ち、`Retain(x@f1)` が残るだけ）。（`Retain`/`Release` が leaf path を持つ＝§1.2 の小拡張。または各末端を getter で名付けてから retain。）
 
-**照合＝object identity（`origin` の別名辺）**: `Retain(x@π)` と `Release(y@π')` は**同一 object 末端**を指すとき対消滅候補。同一性は別名辺（move-bind・射影・Match payload。`origin`（§2.1）と同じ辺）を定義位置まで辿って照合する（`canon`）。so move-bind rename（`Release(arr2)`, `origin(arr2)=arr@π`）も部分 field release（`Release(g)`, `origin(g)=x@f0`）も同じ末端照合に落ちる。copy-prop で move-bind を先に畳めば照合は同名で済む。
+**照合＝object identity（`origin` の別名辺）**: `Retain(x@π)` と `Release(y@π')` は**同一 object 末端**を指すとき対消滅候補。同一性は別名辺（move-bind・射影・Match payload。`origin`（§2.1）と同じ辺）を定義位置まで辿って照合する（`canon`）。よって move-bind rename（`Release(arr2)`, `origin(arr2)=arr@π`）も部分 field release（`Release(g)`, `origin(g)=x@f0`）も同じ末端照合に落ちる。copy-prop で move-bind を先に畳めば照合は同名で済む。
 
 **消せる条件と、その理由**: その object 末端の**消費使用**（`consume_sites`：Own 位置 / `Ret` / `Closure` 捕捉。§2.1）が `Retain` から対応 `Release` までに無いこと。借用（getter・比較・`Match` tag・`Borrow` 位置）は追加参照を要らない。**なぜ単純な +1/-1 除去でないか**: 間に消費使用が挟まると、`Retain` の +1 はその消費が奪い、`Release` の -1 は別の参照を落とす——往復でないので消すと use-after-free。
 ```
@@ -305,7 +305,7 @@ Release(x)     # rc 1->0
 ```
 Retain(arr); let s = App(sum, [arr,0,0]); Release(arr); let a2 = LLVM[set](0, s, arr)
 ```
-`Retain(arr)`〜`Release(arr)` 間の使用は `sum(arr)` のみ。borrow 化で `sum.arr` は `Borrow`＝借用（消費でない）。so 対消滅し、`arr` は `fill`(Unique) のまま `set` に届く（elision 成立）。
+`Retain(arr)`〜`Release(arr)` 間の使用は `sum(arr)` のみ。borrow 化で `sum.arr` は `Borrow`＝借用（消費でない）。よって対消滅し、`arr` は `fill`(Unique) のまま `set` に届く（elision 成立）。
 
 **手順（擬似コード）**（前向き dataflow・末端単位・`canon` 照合）:
 ```
