@@ -354,7 +354,7 @@ struct State { env: Map<Var, UniquenessShape> }
 - `Release(x, k)`: `Dynamic` はそのまま。`Unique` の `Release` は drop（`x` は dead）。
 - `Match(x, arms)`: 各 arm を**分岐前 State のコピー**から解析し join。unbox union の payload は move 取り出しで子 UniquenessShape を引き継ぐ（不在 variant は `Bottom`）。boxed union の payload 取り出しは getter＝`Boxed(Dynamic)`。Bool もここ（2 variant）。
 - `Ret(x)`: 結果 ＝ `env[x]`（`x` escape）。
-- global 参照 → `Boxed(Dynamic)`。
+- global 参照 → その値の型どおりの UniquenessShape（boxed 末端はすべて `Dynamic`：global は GLOBAL 状態で unique にならない。unboxed 部は `Unboxed`/`UnboxedAgg`）。
 
 **引数の後始末（共通）**: `App`/`LLVM`/`Closure` の各引数 `a_i` を、callee のその位置の `OwnershipShape`（§1.2。source 関数は §2.1 の borrow 化、`InlineLLVM` は宣言）で処理する:
 - `Own` かつ `env[a_i]` が `Unique`: **これは `a_i` の last-use**（後で使うなら手前に `Retain` が入り既に `Dynamic` のはず）。`a_i` は消費されて dead。
@@ -385,7 +385,7 @@ enum ArgKey { Unboxed, UniqueBoxed, DynBoxed, Agg(Vec<ArgKey>) } // 粒度は精
 呼び出し `let r = f(a0..)`: `env[r] = resolve(sig.result, args)`（`Arg(i)`->`env[a_i]`、`Field`->射影、`Fresh/Dyn`->`Boxed(Unique/Dynamic)`、`Agg`->`UnboxedAgg`）。引数の後始末は §3.2 共通規則（`OwnershipShape` で）。
 - **ソース関数 = 推論**: 関数ごとに `Map<InputKey, UniqSignature>` を memo（解析側テーブル、`FuncRef` キー。IR の `RcFunc` には載せない）。入力キーごとに body を §3.2 で解析し結果 UniquenessShape を得る。§4.1 の特殊化 worklist と共有。再帰は不動点（初期 `Bottom`）。
 - **プリミティブ（`InlineLLVM`）= 宣言**: `LLVMGenerator::result_shape(key) -> Provenance`（variant ごと、入力キー依存可）。`OwnershipShape`（§1.2）は別 API（`arg_ownership(i)`）で宣言。
-- global／`boxed_from_retained_ptr`（ptr→boxed で rc 不明）→ 結果 `Dyn`。FFI（`CALL_C`）は boxed を返さない（結果 unboxed）ので rc 対象外。assert ビルドで不健全な claim を実行時検出。
+- global（値の型どおりの Provenance。boxed 末端は `Dyn`、unboxed 部は型どおり）／`boxed_from_retained_ptr`（ptr→boxed で rc 不明 → `Dyn`）。FFI（`CALL_C`）は boxed を返さない（結果 unboxed）ので rc 対象外。assert ビルドで不健全な claim を実行時検出。
 
 例（`OwnershipShape` は §2.1／§1.2 の宣言、ここでは result のみ）:
 - **retain getter** `Array::@(i, arr)`: `arr`＝`Borrow`、要素が boxed なら `result=Dyn`（容器から取り出す＝別名）、unboxed なら `result=Unboxed`。
@@ -455,7 +455,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - **（決定）`RcRhs::Var(Var)`（move-bind）を持つ**（§1.2/§3.2）: `let y = x` を表せる。意味は move（`x` 消費・`y` が UniquenessShape を引き継ぐ、`Unique` も継ぐ）で rc 中立、それ自体は `Dynamic` トリガーでない。エイリアス（`x`,`y` 両方生存）は「後でも `x` を使う＝non-last use なので手前に `Retain`（`->Dynamic`）」で出る＝copy = `Retain` + move。copy propagation で消せる。
 - **（決定）borrow 化を source 関数へ拡張**（§2.1）: lowering の all-`Own` を、読むだけの引数に限り `Own` -> `Borrow` へ**書き換える**。引数ごとの `OwnershipShape`（`UniquenessShape` 同型、末端 boxed に `Ownership`）を、消費の有無からコールグラフ上の最大不動点（初期 `Borrow`、消費で `Own` に降格）で決め、callee の内部 `Release` を落として呼び出し側へ出す（余る `Retain`/`Release` は §2.2 が相殺）。uniqueness 解析の前に走らせる。P2。
 - **（決定）Bool→union（P0.5、§7）**: std.fix 定義＋比較演算子の結果型＋FFI（Bool↔i8 tag、`_false`=0/`_true`=1）。`If`→`Match` desugar は P1 lowering 内。要確認: 比較 InlineLLVM の結果構築・`&&`/`||`/`not`・typecheck が union Bool で通るか（ビットは i8 不変）。
-- **（決定）global 値の表現**: global 初期化を RC IR（init）として表し `MarkGlobal` を init で発行。参照は atom で解析は `Dynamic`。program = top-level 関数集合 ＋ global init。現状の global 機構（lazy/eager・mark_global 発火点）は P1 実装時に確認。
+- **（決定）global 値の表現**: global 初期化を RC IR（init）として表し `MarkGlobal` を init で発行。参照は atom で、解析は値の型どおり（boxed 末端は `Dynamic`）。program = top-level 関数集合 ＋ global init。現状の global 機構（lazy/eager・mark_global 発火点）は P1 実装時に確認。
 - **（決定）lowering サブパス順**: AST 正規化（ANF 化 → lambda lift → `If`→`Match` desugar → destructure→getter → fresh 命名）→ 最後に last-use 解析＋明示 retain/release 挿入で RC IR 生成（形と名前が確定してから RC を載せる）。
 - **（調査済み）RC site 監査の規模**: codegen の RC は `generator.rs` ~38・`builtin.rs` ~29（InlineLLVM `generate` 内部の release/retain）・`object.rs` ~21。builtin の 29 を「primitive 内 atomic（`make_array_unique` の clone-release 等、op 意味に内包）」「明示 `Release` 化すべきもの（引数を使用後に release 等）」「外部化できず宣言で残す内部 RC」に分類するのが P1 の主要監査。
 - **（調査済み）`is_var_used_later` 依存の InlineLLVM**（`builtin.rs` 全10 site を分類。いずれも RC 判断のみで計算結果・挙動は used_later に非依存＝in-place/clone はランタイム refcount で決定）: **(A) 借用読み後 last-use なら引数 release**（`noretain` 読み＋`if !used_later release`）＝1855（配列要素 get）/2418（配列 ptr）/2489（get_size）/2540（get_capacity）/3873（union `is`）/4546・4648（retain 関数 ptr 取得）/4755（data ptr 取得）の 8。**(B) 呼び出しをまたぐ retain/release**（`with_retained`: `f(x)` の前後で x を retain→release し呼び出し中 x を生存）＝4206+4214。RC IR では (A) は容器引数を `Borrow`（借用）で宣言し、lowering の last-use 解析が容器の明示 `Release` を last-use に配置（getter が boxed 要素を retain するのは別効果）。(B)（`with_retained`）は **opaque な InlineLLVM のまま retain/release を内部に埋める**。この `Retain` は呼び出し中 x を shared に見せ f の in-place 変更を防ぐ**意味的** RC で、最適化で消えては困る＝外に出すメリットが無くリスク（相殺で消える）だけなので内部に残すのが正しい。used_later スキップは落として**常に retain**（内部 RC は codegen 時に used_later を見ない）。P1 の書き換え: (A) は used_later を `Borrow`＋lowering の last-use 解析へ移す、(B) は常に retain へ。どちらも `generate` は `is_var_used_later` を呼ばなくなる（grep 由来なので網羅監査）。
