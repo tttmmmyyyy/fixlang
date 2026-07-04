@@ -249,7 +249,10 @@ borrow_ify(prog):
           if root(f, c@π') が (param p, π0): own[p@π0] = Own
         for f の各「閉路 tail 呼び出し」App(g, args); Ret(r):      # intra-SCC の tail 辺だけ
           for (q, x) in enumerate(args), x の各 boxed 末端 x@π:    # q=位置
-            if owns(f, x@π) and last_use(f, x): own[g.q@π] = Own   # (ii) case B -> 降格
+            # last_use(_,_,q)=位置 q の x が最終使用か。tail 後続は Ret だけだが同一 tail に x は
+            # 複数回現れ得る（g(x, x)）ので恒真でない。最終でない出現を Own 降格すると後続位置が
+            # 使う前に consume＝use-after-free。ゆえ最終使用の位置だけ降格する。
+            if owns(f, x@π) and last_use(f, x, q): own[g.q@π] = Own   # (ii) case B -> 降格
 
   # 2. RC 書き換え（own 確定後、all-Own の RC を patch）
   for f in prog:
