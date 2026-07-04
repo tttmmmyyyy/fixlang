@@ -237,7 +237,7 @@ fn main:
 ```
 `main` の `Retain(arr) … Release(arr)` は借用呼び出し `sum(arr,0,0)` をまたぐだけ（間に consume が無い）の net-zero なので §2.2 が両方消す -> `let s = App(sum, [arr,0,0]); let a2 = LLVM[set](0, s, arr)`。結果 `arr` は `fill`(Unique) -> `sum`(借用・rc 不変) -> `set` と `Unique` で届き **elision 成立**。`sum` の再帰は borrow->borrow で release が出ず tail のまま。
 
-**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。所有権は **boxed 末端単位**で、`own` は末端をキーに `Own|Borrow` を引く（`own[g.q@π]`＝g の param q の末端 π）。値 `x` を位置 q へ渡すとき各 boxed 末端 `x@π` は callee param q の末端 π に対応する。値の末端が param 由来かは move-bind と unboxed 集約/union の子取り出し（getter LLVM・Match payload）を辿って判定する（散文の「親引数の末端へ帰着」）。g が未知＝間接呼び出しの位置は `Own` 固定（散文の「間接呼び出しは全 Own」）。
+**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。所有権は **boxed 末端単位**で、`own` は末端をキーに `Own|Borrow` を引く（`own[g.q@π]`＝g の param q の末端 π）。値 `x` を位置 q へ渡すとき各 boxed 末端 `x@π` は callee param q の末端 π に対応する。値の末端の由来（source）は move-bind と unboxed 集約/union の子取り出し（getter LLVM・Match payload）を後ろ向きに辿る `origin` で判定する（散文の「親引数の末端へ帰着」）。`owns`（所有判定）と phase(i)（消費降格）は同じ `origin` を共有する。g が未知＝間接呼び出しの位置は `Own` 固定（散文の「間接呼び出しは全 Own」）。
 ```
 borrow_ify(prog):
   # 1. 借用可能性: 全 source param の全 boxed 末端を Borrow と仮定 -> 単調降格で不動点
@@ -245,8 +245,8 @@ borrow_ify(prog):
   for scc in bottom_up(condensation(call_graph(prog))):          # callee 先
     repeat 変化が無くなるまで:                                    # SCC 内不動点（自己/相互再帰）
       for f in scc:
-        for f.body 中の param 末端 p の各使用 u:
-          if consumes(u): own[p] = Own                            # (i) 消費 -> 降格
+        for c@π' in consume_sites(f):                            # (i) 消費された末端を source param へ帰属して降格
+          if origin(f, c@π') == Param(p@π0): own[p@π0] = Own
         for f の各「閉路 tail 呼び出し」App(g, args); Ret(r):      # intra-SCC の tail 辺だけ
           for (q, x) in enumerate(args), x の各 boxed 末端 x@π:    # q=位置
             if owns(f, x@π) and last_use(f, x): own[g.q@π] = Own   # (ii) case B -> 降格
@@ -261,27 +261,25 @@ borrow_ify(prog):
 
   # 3. §2.2 相殺が「Retain … (借用呼び出し) … Release」の net-zero を消す
 
-consumes(u):    # 末端の使用 u（x@π が op の位置 i に出現）は消費か。owns の時間反転（同じ result ref で分岐）
-  App(g, 位置 i)   -> own[g.i@π]==Own                             # 呼び出し境界（escape⟹own。owns の App->True と対、alias 再帰不要）
-  LLVM(op, 位置 i):                                               # in-frame op。op の result ref で分岐
-     op.result ref が arg i の末端 π を結果末端 z@ρ へ写す -> consumes(z@ρ の使用)   # 射影・unboxed 構築 = 透過
-     写さない                                        -> op.arg_ownership(i)@π==Own    # boxed 構築=消費 / getter 純読み=借用
-  Let(y, Var(x))  -> consumes(y@π の使用)                         # move-bind = 透過（result ref Arg(0)）
-  Match payload z of x（x が unboxed union）-> consumes(z の対応末端の使用)   # payload 取り出し = 透過
-  Closure 捕捉     -> True                                        # capture = move-in
-  Ret             -> True                                        # return で escape
-  それ以外（Match tag・Retain/Release・未使用）-> False              # 借用位置・drop は消費でない
+origin(f, x@π):    # x@π の別名鎖を source まで後ろ向きに辿る（owns と phase(i) が共有する唯一の別名知識）
+                   # π=ルートから boxed 末端への子位置パス。別名辺 = move-bind / LLVM 射影 / Match payload
+  x が f の param                      -> Param(x@π)               # 源 = param 末端
+  Let(x, Var(y))                      -> origin(f, y@π)            # 別名辺: move-bind
+  Let(x, LLVM(op, args)):             # op 種別でなく result UniquenessShapeRef(§3.3) を π で辿った末端 r で分岐
+     r が args[j] を指す（Arg(j)/Field(j,path)）-> origin(f, r が指す args[j] の末端)  # 別名辺: 射影/unboxed 構築（例: タプル/struct 射影）
+     r = FreshBoxed | DynBoxed               -> Owned                             # 源 = 新規 alloc / boxed 容器 getter・global
+  Match payload of s（s が unboxed union の variant k）-> origin(f, s@(k::π))       # 別名辺: payload 取り出し
+  Match payload of s（s が boxed union）      -> Owned                             # boxed union getter = 別ref
+  Let(x, App 結果 | Closure)           -> Owned                                    # 源 = 呼び出し結果/クロージャ（escape 済み）
 
-owns(f, x@π):    # f が末端 x@π を所有するか。x の束縛を基底まで辿る（π=ルートから boxed 末端への子位置パス）
-  x が f の param                          -> own[x@π]==Own    # 基底: param 末端の own（Own=所有 / Borrow=借用）
-  Let(x, Var(y))                          -> owns(f, y@π)      # move-bind: 同じ末端 π を y へ透過
-  Let(x, LLVM(op, args)):    # 射影/getter も専用ノードでなく LLVM。op 種別でなく、結果 UniquenessShapeRef(§3.3) を π で辿った末端 r で分岐:
-     r が arg を指す（Arg(j) / Field(j,path)）-> owns(f, r が指す args[j] の末端)  # 結果=引数(の子)と同一オブジェクト → 親末端へ辿る（例: タプル/struct/union 射影）
-     r が新規/別ref（FreshBoxed / DynBoxed）  -> True                            # f 所有（例: 構築 alloc / boxed 容器 getter・global）
-  Match arm payload（scrutinee s, variant k）:                 # union payload の取り出し（Match は専用ノード）
-     s が unboxed union                    -> owns(f, s@(k::π)) # move-out → scrutinee の子末端へ
-     s が boxed union                      -> True             # boxed union getter = f 所有
-  Let(x, App 結果 | Closure)               -> True             # 基底: 呼び出し結果/クロージャは escape 済みで f 所有
+owns(f, x@π):      # f が末端 x@π を所有するか（借用でなく）。origin の薄いラッパ
+  match origin(f, x@π) { Param(p@π0) -> own[p@π0]==Own ; Owned -> True }
+
+consume_sites(f):  # 所有権が f から出て行く末端の集合（別名辺で結果へ抜けない Own 位置 = sink）
+  App(g, [..x@位置 i..])   -> {x@π | own[g.i@π]==Own}                            # 呼び出し境界（未知 g は Own）
+  LLVM(op, [..x@位置 i..]) -> {x@π | x@π が結果へ写らず arg_ownership(i)@π==Own}   # boxed 構築等（射影/unboxed 構築は別名辺で除外）
+  Closure(_, [..x..])      -> x の全 boxed 末端                                   # capture = move-in
+  Ret(x)                   -> x の全 boxed 末端                                   # return で escape
 ```
 
 ### 2.2 retain/release 相殺
