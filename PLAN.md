@@ -267,13 +267,13 @@ origin(f, x@π):    # x@π の別名鎖を source まで後ろ向きに辿る（
   Let(x, Var(y))                      -> origin(f, y@π)            # 別名辺: move-bind
   Let(x, LLVM(op, args)):             # op 種別でなく result UniquenessShapeRef(§3.3) を π で辿った末端 r で分岐
      r が args[j] を指す（Arg(j)/Field(j,path)）-> origin(f, r が指す args[j] の末端)  # 別名辺: 射影/unboxed 構築（例: タプル/struct 射影）
-     r = FreshBoxed | DynBoxed               -> Owned                             # 源 = 新規 alloc / boxed 容器 getter・global
+     r = FreshBoxed | DynBoxed               -> Fresh                             # 源 = 新規 alloc / boxed 容器 getter・global
   Match payload of s（s が unboxed union の variant k）-> origin(f, s@(k::π))       # 別名辺: payload 取り出し
-  Match payload of s（s が boxed union）      -> Owned                             # boxed union getter = 別ref
-  Let(x, App 結果 | Closure)           -> Owned                                    # 源 = 呼び出し結果/クロージャ（escape 済み）
+  Match payload of s（s が boxed union）      -> Fresh                             # boxed union getter = 別ref
+  Let(x, App 結果 | Closure)           -> Fresh                                    # 源 = 呼び出し結果/クロージャ（escape 済み）
 
 owns(f, x@π):      # f が末端 x@π を所有するか（借用でなく）。origin の薄いラッパ
-  match origin(f, x@π) { Param(p@π0) -> own[p@π0]==Own ; Owned -> True }
+  match origin(f, x@π) { Param(p@π0) -> own[p@π0]==Own ; Fresh -> True }
 
 consume_sites(f):  # 所有権が f から出て行く末端の集合（別名辺で結果へ抜けない Own 位置 = sink）
   App(g, [..x@位置 i..])   -> {x@π | own[g.i@π]==Own}                            # 呼び出し境界（未知 g は Own）
