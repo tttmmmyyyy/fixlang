@@ -237,7 +237,7 @@ fn main:
 ```
 `main` の `Retain(arr) … Release(arr)` は借用呼び出し `sum(arr,0,0)` をまたぐだけ（間に consume が無い）の net-zero なので §2.2 が両方消す -> `let s = App(sum, [arr,0,0]); let a2 = LLVM[set](0, s, arr)`。結果 `arr` は `fill`(Unique) -> `sum`(借用・rc 不変) -> `set` と `Unique` で届き **elision 成立**。`sum` の再帰は borrow->borrow で release が出ず tail のまま。
 
-**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。所有権は **boxed 末端単位**で、`own` は末端をキーに `Own|Borrow` を引く（`own[g.q@π]`＝g の param q の末端 π）。値 `x` を位置 q へ渡すとき各 boxed 末端 `x@π` は callee param q の末端 π に対応する。値の末端の由来（source）は move-bind と unboxed 集約/union の子取り出し（getter LLVM・Match payload）を後ろ向きに辿る `origin` で判定する（散文の「親引数の末端へ帰着」）。`owns`（所有判定）と phase(i)（消費降格）は同じ `origin` を共有する。g が未知＝間接呼び出しの位置は `Own` 固定（散文の「間接呼び出しは全 Own」）。
+**手順（擬似コード）**: 自己/相互/非再帰で一様（SCC は不動点のスケジュールと「閉路 tail」の定義に使うだけ）。所有権は **boxed 末端単位**で、`own` は末端をキーに `Own|Borrow` を引く（`own[g.q@π]`＝g の param q の末端 π）。値 `x` を位置 q へ渡すとき各 boxed 末端 `x@π` は callee param q の末端 π に対応する。値の末端は、別名辺（move-bind と unboxed 集約/union の子取り出し＝getter LLVM・Match payload）を後ろ向きに辿った**定義位置 `root`**（producer。= object 同一性）で識別する（散文の「親引数の末端へ帰着」）。`owns`（所有判定）・phase(i)（消費降格）・§2.2 相殺は同じ `root` を共有する。g が未知＝間接呼び出しの位置は `Own` 固定（散文の「間接呼び出しは全 Own」）。
 ```
 borrow_ify(prog):
   # 1. 借用可能性: 全 source param の全 boxed 末端を Borrow と仮定 -> 単調降格で不動点
@@ -246,7 +246,7 @@ borrow_ify(prog):
     repeat 変化が無くなるまで:                                    # SCC 内不動点（自己/相互再帰）
       for f in scc:
         for c@π' in consume_sites(f):                            # (i) 消費された末端を source param へ帰属して降格
-          if origin(f, c@π') == Param(p@π0): own[p@π0] = Own
+          if root(f, c@π') が (param p, π0): own[p@π0] = Own
         for f の各「閉路 tail 呼び出し」App(g, args); Ret(r):      # intra-SCC の tail 辺だけ
           for (q, x) in enumerate(args), x の各 boxed 末端 x@π:    # q=位置
             if owns(f, x@π) and last_use(f, x): own[g.q@π] = Own   # (ii) case B -> 降格
@@ -261,19 +261,20 @@ borrow_ify(prog):
 
   # 3. §2.2 相殺が「Retain … (借用呼び出し) … Release」の net-zero を消す
 
-origin(f, x@π):    # x@π の別名鎖を source まで後ろ向きに辿る（owns と phase(i) が共有する唯一の別名知識）
-                   # π=ルートから boxed 末端への子位置パス。別名辺 = move-bind / LLVM 射影 / Match payload
-  x が f の param                      -> Param(x@π)               # 源 = param 末端
-  Let(x, Var(y))                      -> origin(f, y@π)            # 別名辺: move-bind
-  Let(x, LLVM(op, args)):             # op 種別でなく result UniquenessShapeRef(§3.3) を π で辿った末端 r で分岐
-     r が args[j] を指す（Arg(j)/Field(j,path)）-> origin(f, r が指す args[j] の末端)  # 別名辺: 射影/unboxed 構築（例: タプル/struct 射影）
-     r = FreshBoxed | DynBoxed               -> Fresh                             # 源 = 新規 alloc / boxed 容器 getter・global
-  Match payload of s（s が unboxed union の variant k）-> origin(f, s@(k::π))       # 別名辺: payload 取り出し
-  Match payload of s（s が boxed union）      -> Fresh                             # boxed union getter = 別ref
-  Let(x, App 結果 | Closure)           -> Fresh                                    # 源 = 呼び出し結果/クロージャ（escape 済み）
+root(f, x@π):    # x@π の別名鎖を辿った定義位置（producer）= object 同一性。owns/phase(i)/相殺(§2.2) が共有
+                 # 別名辺 = move-bind / LLVM 射影(Provenance Arg/Field) / Match payload(unboxed union)。producer で停止
+  x が f の param                      -> (param x, π)             # producer: param 末端
+  Let(x, Var(y))                      -> root(f, y@π)              # 別名辺: move-bind
+  Let(x, LLVM(op, args)):             # op の結果 Provenance(§3.3) を π で辿った末端 r
+     r が args[j] を指す（Arg(j)/Field(j,path)）-> root(f, r が指す args[j] の末端)  # 別名辺: 射影/unboxed 構築（例: タプル/struct 射影）
+     r = Fresh | Dyn                  -> (この Let, π)              # producer: 新規 alloc / boxed 容器 getter・global
+  Match payload of s（s が unboxed union の variant k）-> root(f, s@(k::π))       # 別名辺: payload 取り出し
+  Match payload of s（s が boxed union）      -> (この payload 束縛, π)             # producer: boxed union getter
+  Let(x, App 結果 | Closure)           -> (この Let, π)                            # producer: 呼び出し結果/クロージャ
 
-owns(f, x@π):      # f が末端 x@π を所有するか（借用でなく）。origin の薄いラッパ
-  match origin(f, x@π) { Param(p@π0) -> own[p@π0]==Own ; Fresh -> True }
+owns(f, x@π):      # f が末端 x@π を所有するか（借用でなく）。root の分類（param なら own、他 producer なら f 所有）
+  root(f, x@π) が (param p, π0) -> own[p@π0]==Own    # root が param -> その末端の own
+  それ以外の producer            -> True             # alloc/getter/call/closure = f 所有
 
 consume_sites(f):  # 所有権が f から出て行く末端の集合（別名辺で結果へ抜けない Own 位置 = sink）
   App(g, [..x@位置 i..])   -> {x@π | own[g.i@π]==Own}                            # 呼び出し境界（未知 g は Own）
@@ -287,7 +288,7 @@ borrow 化（§2.1）が余らせた「呼び出しをまたぐ `Retain`/`Releas
 
 **正規化＝末端ごとに分解**: 相殺の前に `Retain(x)`/`Release(x)` を **boxed 末端ごと**に分解する（`Retain(x@π)`：unboxed 集約なら各 boxed 末端を個別に retain/release、単一 boxed なら 1 個）。codegen が出す機械語は whole-value 辿りと同じ。これで相殺は**末端単位で一様**になり、「whole を部分的に消して残り末端へ縮約」する手間が消える（`Retain(x)`＋`Release(x.f0)` は分解後 `Retain(x@f0)` と `Release(x@f0)` の対消滅に落ち、`Retain(x@f1)` が残るだけ）。（`Retain`/`Release` が leaf path を持つ＝§1.2 の小拡張。または各末端を getter で名付けてから retain。）
 
-**照合＝object identity（`origin` の別名辺）**: `Retain(x@π)` と `Release(y@π')` は**同一 object 末端**を指すとき対消滅候補。同一性は別名辺（move-bind・射影・Match payload。`origin`（§2.1）と同じ辺）を定義位置まで辿って照合する（`canon`）。よって move-bind rename（`Release(arr2)`, `origin(arr2)=arr@π`）も部分 field release（`Release(g)`, `origin(g)=x@f0`）も同じ末端照合に落ちる。copy-prop で move-bind を先に畳めば照合は同名で済む。
+**照合＝object identity（`root`）**: `Retain(x@π)` と `Release(y@π')` は `root`（§2.1）が**同一 object（定義位置）**を返すとき対消滅候補。`root` が別名辺（move-bind・射影・Match payload）を辿って正準化するので、move-bind rename（`Release(arr2)`, `root(arr2)=arr@π`）も部分 field release（`Release(g)`, `root(g)=x@f0`）も同じ照合に落ちる。copy-prop で move-bind を先に畳めば照合は同名で済む。
 
 **消せる条件と、その理由**: その object 末端の**消費使用**（`consume_sites`：Own 位置 / `Ret` / `Closure` 捕捉。§2.1）が `Retain` から対応 `Release` までに無いこと。借用（getter・比較・`Match` tag・`Borrow` 位置）は追加参照を要らない。**なぜ単純な +1/-1 除去でないか**: 間に消費使用が挟まると、`Retain` の +1 はその消費が奪い、`Release` の -1 は別の参照を落とす——往復でないので消すと use-after-free。
 ```
@@ -307,20 +308,19 @@ Retain(arr); let s = App(sum, [arr,0,0]); Release(arr); let a2 = LLVM[set](0, s,
 ```
 `Retain(arr)`〜`Release(arr)` 間の使用は `sum(arr)` のみ。borrow 化で `sum.arr` は `Borrow`＝借用（消費でない）。よって対消滅し、`arr` は `fill`(Unique) のまま `set` に届く（elision 成立）。
 
-**手順（擬似コード）**（前向き dataflow・末端単位・`canon` 照合）:
+**手順（擬似コード）**（前向き dataflow・末端単位・`root` 照合）:
 ```
 cancel(f):
-  # 前提: Retain/Release は末端ごとに分解済み（Retain(x@π)）。
-  # canon(x@π) = 別名辺（origin と同じ辺: move-bind / 射影 / Match payload）を辿った定義位置 = object 同一性
+  # 前提: Retain/Release は末端ごとに分解済み（Retain(x@π)）。キー o = root(f, x@π)（§2.1）= object 同一性
   pend = {}                          # pend[o] = 未消費・未解放の Retain(_@π) ノード集合（消せる候補）
   f.body を前向き走査（分岐は各枝を分岐時 pend のコピーで解析、合流で全枝共通の候補だけ残す = all-paths）:
-    Retain(x@π):          pend[canon(x@π)].add(このノード)
-    c@π' ∈ consume_sites: pend[canon(c@π')] から 1 つ除去           # 消費 -> その retain は必要、候補から外す
-    Release(y@π):         o = canon(y@π)
+    Retain(x@π):          pend[root(f, x@π)].add(このノード)
+    c@π' ∈ consume_sites: pend[root(f, c@π')] から 1 つ除去          # 消費 -> その retain は必要、候補から外す
+    Release(y@π):         o = root(f, y@π)
                           if pend[o] 非空: 候補 1 つと この Release を IR から削除、候補も外す   # 対消滅
                           else:            本物の Release（残す）
 ```
-`consume_sites`/`canon` は §2.1 の `origin` が辿る別名辺を共有する（相殺・borrow 化・uniqueness が同じ別名知識で動く）。
+`consume_sites`/`root` は §2.1 と共有する（相殺・borrow 化・uniqueness が同じ別名知識で動く）。
 
 ## 3. uniqueness 解析（RC IR を抽象解釈）
 
@@ -370,27 +370,27 @@ struct State { env: Map<Var, UniquenessShape> }
 ### 3.3 関数の効果（`UniqSignature` ＝ 入力 UniquenessShape → 結果 UniquenessShape）
 §3.2 で見たとおり、呼び出しが env に及ぼす作用のうち rc に関わる部分は引数の `OwnershipShape`（§1.2/§2.1）だけで決まる（`Own`+`Unique`->dead／`Borrow`->存続）。よって関数固有の効果は**結果 UniquenessShape の組み立て方**だけを持てばよい:
 ```rust
-struct UniqSignature { result: UniquenessShapeRef }  // 入力キー（引数 UniquenessShape の要約）ごとの結果 UniquenessShape
-enum UniquenessShapeRef {
+struct UniqSignature { result: Provenance }  // 入力キー（引数 UniquenessShape の要約）ごとの結果 UniquenessShape
+enum Provenance {
     Unboxed,
-    FreshBoxed,               // 新規 boxed（Unique）: 構築・set/fill の結果 等
-    DynBoxed,                 // 中身不明の boxed（Dynamic）: boxed 容器からの取り出し・global・boxed_from_retained_ptr
+    Fresh,               // 新規 boxed（Unique）: 構築・set/fill の結果 等
+    Dyn,                 // 中身不明の boxed（Dynamic）: boxed 容器からの取り出し・global・boxed_from_retained_ptr
     Arg(usize),               // a_i をそのまま（結果が a_i を引き継ぐ。id 等）
-    Field(usize, Vec<usize>), // unboxed 集約な a_i の子（move 取り出し）。boxed 容器の子は DynBoxed
-    Agg(Vec<UniquenessShapeRef>),       // unboxed 集約（タプル/struct/closure ペア）
+    Field(usize, Vec<usize>), // unboxed 集約な a_i の子（move 取り出し）。boxed 容器の子は Dyn
+    Agg(Vec<Provenance>),       // unboxed 集約（タプル/struct/closure ペア）
 }
 type InputKey = Vec<ArgKey>;              // メモ化キー: 引数 UniquenessShape を有限に要約（集約は木）
 enum ArgKey { Unboxed, UniqueBoxed, DynBoxed, Agg(Vec<ArgKey>) } // 粒度は精度ノブ（P2）
 ```
-呼び出し `let r = f(a0..)`: `env[r] = resolve(sig.result, args)`（`Arg(i)`->`env[a_i]`、`Field`->射影、`Fresh/DynBoxed`->`Boxed(Unique/Dynamic)`、`Agg`->`UnboxedAgg`）。引数の後始末は §3.2 共通規則（`OwnershipShape` で）。
+呼び出し `let r = f(a0..)`: `env[r] = resolve(sig.result, args)`（`Arg(i)`->`env[a_i]`、`Field`->射影、`Fresh/Dyn`->`Boxed(Unique/Dynamic)`、`Agg`->`UnboxedAgg`）。引数の後始末は §3.2 共通規則（`OwnershipShape` で）。
 - **ソース関数 = 推論**: 関数ごとに `Map<InputKey, UniqSignature>` を memo（解析側テーブル、`FuncRef` キー。IR の `RcFunc` には載せない）。入力キーごとに body を §3.2 で解析し結果 UniquenessShape を得る。§4.1 の特殊化 worklist と共有。再帰は不動点（初期 `Bottom`）。
-- **プリミティブ（`InlineLLVM`）= 宣言**: `LLVMGenerator::result_shape(key) -> UniquenessShapeRef`（variant ごと、入力キー依存可）。`OwnershipShape`（§1.2）は別 API（`arg_ownership(i)`）で宣言。
-- global／`boxed_from_retained_ptr`（ptr→boxed で rc 不明）→ 結果 `DynBoxed`。FFI（`CALL_C`）は boxed を返さない（結果 unboxed）ので rc 対象外。assert ビルドで不健全な claim を実行時検出。
+- **プリミティブ（`InlineLLVM`）= 宣言**: `LLVMGenerator::result_shape(key) -> Provenance`（variant ごと、入力キー依存可）。`OwnershipShape`（§1.2）は別 API（`arg_ownership(i)`）で宣言。
+- global／`boxed_from_retained_ptr`（ptr→boxed で rc 不明）→ 結果 `Dyn`。FFI（`CALL_C`）は boxed を返さない（結果 unboxed）ので rc 対象外。assert ビルドで不健全な claim を実行時検出。
 
 例（`OwnershipShape` は §2.1／§1.2 の宣言、ここでは result のみ）:
-- **retain getter** `Array::@(i, arr)`: `arr`＝`Borrow`、要素が boxed なら `result=DynBoxed`（容器から取り出す＝別名）、unboxed なら `result=Unboxed`。
-- **set** `set(i, v, arr)`: `arr`＝`Own`・`v`＝`Own`（要素へ move）・`result=FreshBoxed`（in-place/clone どちらでも結果は `Unique`）。これでループ `arr=arr.set(..)` が `Unique` を継続。
-- **構築** `MakeStruct{a,b}`: boxed struct なら `a`,`b`＝`Own`・`result=FreshBoxed`。unboxed struct/タプルなら `result=Agg([Arg(a),Arg(b)])`。
+- **retain getter** `Array::@(i, arr)`: `arr`＝`Borrow`、要素が boxed なら `result=Dyn`（容器から取り出す＝別名）、unboxed なら `result=Unboxed`。
+- **set** `set(i, v, arr)`: `arr`＝`Own`・`v`＝`Own`（要素へ move）・`result=Fresh`（in-place/clone どちらでも結果は `Unique`）。これでループ `arr=arr.set(..)` が `Unique` を継続。
+- **構築** `MakeStruct{a,b}`: boxed struct なら `a`,`b`＝`Own`・`result=Fresh`。unboxed struct/タプルなら `result=Agg([Arg(a),Arg(b)])`。
 - **id** `id(x)`: `x`＝`Own`・`result=Arg(0)`（入力が `Unique` なら last-use で dead になり、結果がその `Unique` を引き継ぐ）。
 
 ## 4. unique-check-elim
