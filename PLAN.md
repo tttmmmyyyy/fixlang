@@ -380,7 +380,7 @@ type LeafSource = Set<BaseSource>;  // 結果 boxed 末端の由来（join）。
 enum BaseSource {
     Fresh,                    // 新規 Unique（構築・set/fill 等）
     Dyn,                      // 中身不明 Dynamic（boxed 容器 getter・global・boxed_from_retained_ptr・Retain 後）
-    Arg(usize, Vec<usize>),   // 引数 i の末端 path を引き継ぐ（id・射影。旧 Arg/Field 統合、Arg(i)=Arg(i,[])）
+    Arg(usize, Vec<usize>),   // 引数 i の末端 path を引き継ぐ（id・射影〔struct/tuple/unboxed union variant の子取り出し〕。boxed union は Dyn。旧 Arg/Field 統合、Arg(i)=Arg(i,[])）
 }
 struct UniqSignature { result: Provenance }   // 関数ごとに 1 つ（入力非依存）。resolve が呼び出し時に入力を差し込む
 ```
