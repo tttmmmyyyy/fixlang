@@ -585,7 +585,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - **P1 の codegen 付け替えの再検証コスト・範囲**が最大リスク（全プログラムに影響）。段階導入できるか（一部関数だけ RC IR 経由、等）も検討。
 - uniqueness の precision は「`Retain` を入れないこと」で作る（borrow 化 §2.1・相殺 §2.2）。`Retain` は `Unique -> Dynamic` の一方向で回復しないので、`Retain` を減らせるかが要。
 - ローカル名一意の**全変換での保存**（lowering は fresh 発番で構築的に一意。clone/特殊化は fresh 名発番で freshen）。
-- getter（射影）の retain 有無・`Provenance` の不動点収束・threaded state・boxed の escape（`boxed_to_retained_ptr`）の RC IR での扱い。捕捉クロージャは `Closure` の captures を `UnboxedAgg` の子の `Provenance` として追えるが、共有/別名の健全性は検証する。
+- getter（射影）の retain 有無・`Provenance` の不動点収束・threaded state・boxed の escape（`boxed_to_retained_ptr`）の RC IR での扱い。捕捉クロージャの捕捉 object は **boxed dynamic object** なので §3.1「boxed の中身は追わない」に従い**単一 `Boxed({Fresh})` 末端**として扱う（取り出しは `Dyn`・保守的で健全。§3.2 L395 と一致）。捕捉ごとに `UnboxedAgg` の子として**透過追跡**するのは、クロージャ共有時に `Retain` が全捕捉子を `Dyn` 降格する別名健全性を要する**将来の精度拡張**（§3.1 の boxed 不追跡の例外）。
 - 別名健全性は「別名を作る操作で対象を `Dynamic` にする」で担保（§3.2）。
 
 ### InlineLLVM の `OwnershipShape`/`result_prov` 全件監査（67 件）
