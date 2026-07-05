@@ -338,14 +338,23 @@ Retain(arr); let s = App(sum, [arr,0,0]); Release(arr); let a2 = LLVM[set](0, s,
 **手順（擬似コード）**（前向き dataflow・末端単位・`root` 照合）:
 ```
 cancel(f):
-  # 前提: Retain/Release は末端ごとに分解済み（Retain(x@π)）。キー o = root(f, x@π)（§2.1）= object 同一性
-  pend = {}                          # pend[o] = 未消費・未解放の Retain(_@π) ノード集合（消せる候補）
-  f.body を前向き走査（分岐は各枝を分岐時 pend のコピーで解析、合流で全枝共通の候補だけ残す = all-paths）:
-    Retain(x@π):          pend[root(f, x@π)].add(このノード)
-    c@π' ∈ consume_sites: pend[root(f, c@π')] から 1 つ除去          # 消費 -> その retain は必要、候補から外す
-    Release(y@π):         o = root(f, y@π)
-                          if pend[o] 非空: 候補 1 つと この Release を IR から削除、候補も外す   # 対消滅
-                          else:            本物の Release（残す）
+  # 前提: Retain/Release は末端ごとに分解済み（Retain(x@π)）。キー o = root(f, x@π)（§2.1）= object 同一性。
+  # cancel 可能な Retain R（object o）⇔ R から前向きの【全経路】で、o の consume（consume_sites。§2.1）
+  # より前に対応 Release(o) に至る（all-paths / must）。★削除は走査中に枝ローカルで即行わず、走査後に
+  #  この条件を確認してからコミットする（枝ローカルで即削除すると、別の枝が o を consume する場合に
+  #  その枝が under-retain となり use-after-free。例: `Retain(x); Match { A => Release(x); B => App(g,[x]/*Own*/) }`
+  #  で枝A の走査だけで Retain も消すと、枝B〔g が +1 を消費〕が under-retain）。
+  各 Retain ノード R: needed[R]=false, pairs[R]={}
+  前向き走査（pend[o] = いま生きている未対応 Retain の集合。分岐は枝ごと pend コピー、合流は下記）:
+    Retain(x@π):          R=このノード; pend[root(f,x@π)].add(R)
+    c@π' ∈ consume_sites: o=root(f,c@π'); pend[o] の各 R を needed[R]=true にし pend から外す
+                          （consume が対 Release より先着＝その経路で R は必要。恒久確定）
+    Release(y@π):         o=root(f,y@π); pend[o] 非空なら R を1つ取り pairs[R].add(この Release), pend から外す
+                          （この経路で R と対消滅。空なら本物の Release＝据え置き）
+    分岐合流:             needed は or（ある枝で needed なら全体で needed）。pend は must（全枝で pending な R のみ継続候補）
+  # 走査後の commit: needed[R]=false かつ「R から到達する全 leaf 経路が pairs[R] のいずれかで閉じる」
+  #   （＝どの経路も consume より先に対 Release を通る）Retain R を、pairs[R] の Release ごと IR から削除。
+  #   分岐をまたぐ厳密な bracket 対応は must-dataflow の実装詳細で、核心は「全経路で cancel されない限り消さない」。
 ```
 `consume_sites`/`root` は §2.1 と共有する（相殺・borrow 化・uniqueness が同じ別名知識で動く）。
 
