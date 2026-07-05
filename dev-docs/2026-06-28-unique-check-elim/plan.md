@@ -161,7 +161,7 @@ fn f(arr, brr):                    // arr, brr : Array I64 を所有
 ```
 
 ポイント:
-- **cap の release は callee（`g#lifted`）**。boxed 捕捉は「`Retain`(取り出し)＋`Release(cap)`」のペア（§2.2 の相殺が move-out に畳んで両方消せる）。空捕捉なら cap は null で `Release(cap)` は no-op。
+- **cap の release は callee（`g#lifted`）**。boxed 捕捉は「`Retain`(取り出し)＋`Release(cap)`」で表す（現 codegen 忠実）。arr2＝取り出した要素と cap＝コンテナは**別 object** なので §2.2 の相殺（同一 root 照合）ではこの形のままでは消えない（両方消すと cap の殻が解放されずリーク＝下の RC 収支が破れる）。**ただし cap が unique なら消せる**: `Release(unique cap)` を「殻解放＋各中身の `Release`」に分解すると、中身 `Release(cap.@0)` が arr2 と同一 object になり `Retain(arr2)` と §2.2 で相殺 → 残るのは cap の殻解放だけ（＝move-out）。cap は param ゆえ uniqueness は §4 の特殊化（unique-cap clone）が与えるので、これは **§6 reuse フェーズ**の最適化（§2 前処理は §3 前で uniqueness 未確定ゆえ不可）。空捕捉なら cap は null で `Release(cap)` は no-op。
 - **呼び出し側 `f` に cap の release は無い**: クロージャ `g` を `App` が consume し所有権（cap 含む）が callee へ渡る。`g` を2回呼ぶなら使用前に `Retain(g)`（＝cap obj を retain）が入り各 callee-release と釣り合う。
 - funptr（`concat_len#funptr2`）は **cap 引数なし**。例は `@size` の配列引数を `Borrow`（読むだけ）として release を呼び出し側の明示 `Release` に出した形。base の `Own`（`@size` が内部 release）なら明示 `Release(a)/(b)` は出ず op 内部にある（§2.1 の borrow 化が `Own`→`Borrow` 化して外出しする）。
 - RC 収支（arr）: cap へ1参照 → `g#lifted` で +1 → `Release(cap)` で −1 → `concat_len` で `Release(a)` −1 = 0（リーク・二重解放なし）。
@@ -551,6 +551,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 ## 6. 将来の RC 最適化（同じ RC IR 上）
 （borrow 化・retain/release 相殺は uniqueness の precision の前処理として §2 で初版から入れる。）
 - **reuse**（`Release` した alloc を直後の alloc で再利用＝in-place 再確保）。
+- **move-out（unique コンテナからの取り出し）**: `Release(unique cap)` を「殻解放＋各中身の `Release`」に分解すると、中身 `Release(cap.@i)` が取り出した要素と同一 object になり、取り出し時の `Retain` と §2.2 で相殺できる → 残るのはコンテナの殻解放だけ。boxed 捕捉の取り出し（§1.7）や boxed struct/union の destructure に効く。コンテナが param のときの uniqueness は §4 の特殊化（unique-container clone）が与える（§2 前処理では §3 前で未確定）。
 - **順序スケジューリング**（意味を保つ範囲で評価順を並べ替え in-place 機会を増やす。例: `f(arr.set(0,42), arr.@0)` を `arr.@0` 先に並べ替えると set が in-place 化し clone が消える）。
 - **state 推論**（各値の refcount-state＝LOCAL/THREADED/GLOBAL を静的に決め、RC・状態チェック・`mark_threaded` を省く）。proven-global → `RcState::Global`（codegen no-op）。proven-local → `RcState::Local`（状態チェック省略）。送信値が proven-deeply-unique → `MarkThreaded` 省略。`MarkGlobal` も静的に分かる範囲で最適化。
 - **境界チェック除去**（`idx ∈ [0,size)` を証明し完全 unchecked へ。一意性除去と合成でベクトル化 0.20x）。
