@@ -400,6 +400,7 @@ struct State { env: Map<Var, Provenance> }
 ### 3.2 interpret（由来を追う）
 `State`(env) を更新しながら `RcExpr` を順に処理し、各変数の `Provenance` を求める:
 - **param**: 初期 `env[param]` の各 boxed 末端 = `Arg(i, π)`（入力そのもの、記号のまま）。
+- **cap**（closure ABI の捕捉ポインタ引数。`params` とは別フィールド §1.2）: 入力なので `env[cap]` の boxed 末端 = `Arg(cap)`（構築側の `Fresh`〔§3.2 の `Closure` 生成〕と対で、callee 側は入力＝`Arg`）。ただし **Fix から lower した RC IR では body は cap を getter で取り出す（→ `Dyn`）だけで cap 自身を `Ret`/mark しない**（whole 捕捉 object を名指す source 構文が無い）ので、この seed は interpret を total にする定義上のもので、いかなる結果 provenance にも影響しない（取り出しは常に `Dyn`）。
 - `Let(x, Var(y), k)`: `env[x] = env[y]`（move。別名を作らないので `Dyn` 化しない）。
 - `Let(x, LLVM(prim, args), k)`: prim の宣言 `Provenance`（§3.3）を実引数の由来で合成（`Arg(j,p)` を `env[a_j]@p` に置換）。alloc→`Fresh`、boxed 容器 getter→`Dyn`、unboxed 集約の子取り出し→親の子末端、はこの宣言に含まれる。
 - `Let(x, Closure(_, caps), k)`: `env[x] = UnboxedAgg([Unboxed /*funptr*/, cap])`。捕捉非空なら cap の boxed 末端＝`Fresh`（新規捕捉obj に move-in）、空なら null（RC-free）。
