@@ -541,6 +541,7 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - **match-of-known-constructor / case-of-case**（LLVM 未実施を確認の上）。
 
 ## 7. マイルストーン
+各フェーズの検証入力（何を入力し何を観測するか）は **§9 フェーズ別テスト計画**に対応。
 - **P0（P1 前）**: **デバッグ情報の E2E テストを追加**してベースライン化。現状その回帰テストが無いため、`fix build -g`（DWARF 付き）でビルドした小プログラムを **gdb 駆動**（`gdb -batch`: `break main.fix:N` → run → backtrace）で検査する統合テストを作る（CLAUDE.md 規約: サンプルを tempdir にコピー、`fix`/`gdb` を `Command` 実行）。assert は file:line の解決・停止・スタックの行情報（マングル名非依存）。補助で bundled `llvm-dwarfdump` の構造 assert も可。**現 main で通すこと**＝P1 の「デバッグ情報一致」(§1.6) の比較対象。ツール: `/usr/bin/gdb` あり、`llvm-dwarfdump` は `/home/maruyama/llvm-17.0.6/bin/`（system には無し）。
 - **P0.5（P1 前提）**: **Bool を union 化**（std.fix: `type Bool = unbox union {_false,_true}; true=_true(); false=_false();` ＋ 比較演算子の結果型 ＋ FFI Bool↔i8 tag）。これが `If` を IR から落とす前提（`If`→`Match` desugar は P1 lowering 内）。性能中立（Bool-union＝i8）。de-risk するなら現 `eval_if` を union Bool 対応にして先行検証、または P1 で `eval_if` 撤去と同時。
 - **P0.7（早期・P1 と独立に入れられる）: 配列 read-modify-write を atomic builtin へ集約**（builtin `PunchedArray`＋builtin `swap`、`_unsafe_get_linear_bounds_unchecked_unretained` 系・`_unsafe_swap` を廃止）。狙い: **隠れ穴を作る composable primitive を無くして §8 (a) の DOESNT-FIT を完全消滅**させ、各 atomic op に force_unique フラグを付けて **§4 の除去対象に揃える**（swap もソートで全 unchecked 化）。std の swap 版 `PunchedArray`（std.fix:2648）の要素 move 2 回も無くす。作業:
@@ -614,3 +615,59 @@ clone した `RcFunc` の body 中で force-unique を担う `LLVM`(InlineLLVM) 
 - **（調査済み）ソースレベルの `unsafe_is_unique` 分岐**（std.fix 3 箇所）は §4 の対象外だが健全なので削除しない: (1) generic `Array::act`（`_unsafe_act_bounds_unchecked`、任意 functor）が `arr.unsafe_is_unique` で unique(punch)／shared(clone+set) を実行時分岐する。`optimize_act`（`src/optimization/optimize_act.rs`、既存・`enable_act_optimization`）が Identity/Const/Tuple2 の act body を force-unique op 版（`_unsafe_act_bounds_unchecked_{identity,const,tuple2}`）へ lowering 前に置換するので、ホットな act はこの分岐を通らず §4 の対象になる（`mod` は元から force-unique op 版）。それ以外の functor の act だけ分岐が残り、RC IR では `unsafe_is_unique` の結果 `Bool` 上の runtime `Match` に lower される（§3.2 が健全に扱い、§4 は差し替えない）。(2) `Destructor::mutate_unique_io`（FFI 資源の複製判断）・(3) `assert_unique`（デバッグ、assert ビルド §1.6）は配列/struct ホットパス外の正当用途で残す。削除は不適（(1) は op の途中でユーザ closure を呼ぶため単一 op に畳めない）。P1 監査: `unsafe_is_unique` の `result_prov` を passthrough（`Arg(0)`）と宣言して `Fresh` を保つ（精度）。unique-check-elim 実行時は act 最適化を有効にしておく。
 - **（確認済み）高階イテレータの直接化は既存 decapturing に依存**: `loop`/`fold` 等は body を closure 引数で受け、その内部呼び出しは間接。uniqueness 特殊化（§4）が内部の force-unique op に届き、Provenance 解析（§3）が精度を出すには、この間接呼び出しが直接化されている必要がある。既存の **decapturing の closure specialization**（`src/optimization/decapturing.rs`、`enable_decapturing_optimization`。`inline` 後・`uncurry` 前＝RC IR lowering の前）が、body を焼き込んだ特殊版（`loop#lam` 等）を生成し内部呼び出しを直接化する（`pull_let` が適用範囲を広げる）。ベンチの `loop((0,arr), |…|)` は適用対象（lambda を直接渡す・自己呼び出しで同 index）。適用外の形（doc の制限: lambda をタプル等に入れて渡す等）は間接のまま残り、§3.2 の規則で結果 Dyn＝除去は効かない（健全・許容）。unique-check-elim を回すときは decapturing を有効にしておくのが前提。
 - **（確認済み）`fix`（ローカル再帰の不動点コンビネータ）は RC IR で表現可能**: std `fix = |f| |x| FixBody`（`FixBody` は InlineLLVM、free vars `x,f,cap`）。lift で outer `|f|`／inner `|x|` の `RcFunc` になり、`fix(f)`=`Closure(inner,[f])`、本体は `LLVM(FixBody, [x,f,cap])`（全 `Own`）。FixBody は自己 funptr（codegen の `get_parent`）＋現 cap 再利用で `fixf=fix(f)` を作り `f(fixf)(x)` を呼ぶ（heap alloc なし、RC cycle 無し＝fixf→f だが f→fixf 無し）。内部 RC は宣言で残す（opaque・`Borrow` 化不可）ので fix 内再帰は解析から保守的に見える。`Closure(self)+App` への desugar は避ける（cap 再利用を失うため）。
+
+## 9. フェーズ別テスト計画（検証入力）
+各フェーズが「想定どおり動く」ことを、どの入力コードで・何を観測して確認するか（§7 のマイルストーンに対応）。統合テストは CLAUDE.md 規約（`main` から実際に実行・参照、tempdir へコピー、`Command::new("fix")` で `fix` 実行）で書く。
+
+### 9.0 共通の検証基盤（複数フェーズで使う。P0/P1 で先に整える）
+- **shared-value テスト（最重要の正しさパターン）**: 値を 2 箇所に格納（＝別名を作り共有に）→ 一方を in-place 系 op で mutate → **他方が壊れていないこと**を assert。`let a = [1,2,3]; let keep = (a, a); let a2 = a.set(0, 99); eval (keep.@0.@0, a2.@0)` が `(1, 99)`。clone-on-shared の健全性を突く（`set`/`mod`/`act`/`swap`/struct 系 全部に効く）。
+- **assert ビルド（健全性）**: 「unique と判定した値が実行時に共有なら abort」するビルドモード。全テストをこれで走らせ、uniqueness 判定の誤りをゼロ検出で確認（§1.6/§5）。
+- **除去の観測（IR/asm チェック）**: 一意文脈で `build_branch_by_is_unique` 由来の分岐が emit IR/asm から**消えている**こと、共有文脈で**残っている**ことを grep で確認。`fix` に IR/asm ダンプ経路が要る（既存の emit を利用）。
+- **provenance/ownership ダンプ（P2 の照合用）**: 各関数の結果 `Provenance`・各変数末端の由来・各引数の `OwnershipShape` を出す debug 出力（`optimize_act` 等が使う `emit_symbols` と同様の仕組み）。P2 はこれで期待値照合する（この経路を作るのが P2 の前提作業）。
+- **cachegrind 計測**: `fix-bench/batch/arrayrw{,_unsafe,_fn}`・`fannkuch`・ソートを commit hash 付きで instruction 数記録（§0 の目安表と比較）。
+- **leak/double-free**: valgrind か assert ビルドで、boxed 要素の `mod`/`act`/`swap`・深い再帰・クロージャ捕捉を回すストレス。
+
+### 9.1 P0（デバッグ情報ベースライン）
+テスト自体が成果物。入力＝行構造が既知の小プログラム、`fix build -g` → `gdb -batch`（`break main.fix:N` → run → backtrace）。file:line 解決・停止・スタックの行情報（マングル名非依存）を assert。**現 main で通す**（P1 の比較基準）。
+
+### 9.2 P0.5（Bool→union）
+Bool の挙動・ビットが不変であることを突く。入力（`main` から eval して結果 assert）:
+- 比較: `3 == 3`, `5 < 2`, `2 <= 2`, `1.0 < 2.0`。`&&`/`||`/`not`: `true && false`, `true || false`, `not(true)`。
+- 分岐: `if b {..} else {..}`・`match b { true() => .. }`。
+- FFI: Bool を i8 として C 関数へ渡す/受ける（tag `_false`=0/`_true`=1）。
+観測: 実行結果一致＋既存全テスト通過。性能中立（i8 のまま）。
+
+### 9.3 P0.7（builtin PunchedArray + builtin swap）
+`mod`/`act`/`swap` の正しさ・PunchedArray の drop 安全・リーク無しを突く。入力:
+- 正しさ（unboxed/boxed 要素）: `[1,2,3].mod(1, |x| x+10)` == `[1,12,3]`、`[[1],[2]].mod(0, |x| x.push(9))`、`[1,2,3,4].swap(0,3)` == `[4,2,3,1]`、ソート結果。
+- **shared-value**: 上記 9.0 の型を `mod`/`swap` でも（`keep` 側が不変であること）。
+- **PunchedArray drop 安全（skip-idx release を突く核）**: 失敗し得る functor の generic `act`（`[[1],[2]].act(0, |_| Option::none())`）で **plug されず PunchedArray が drop** される経路 → リーク/二重解放なし（valgrind/assert）。
+観測: 実行結果＋shared-value＋leak。ソートベンチ（§4 前なので劣化は想定内＝§7 の注意書きどおり振り分け）。
+
+### 9.4 P1（RC IR + lowering + codegen 付け替え）
+挙動保存（無回帰）の**最大の検証**。入力＝**既存全テスト＋全ベンチ**（§1.6）＋ RC ストレス（boxed 捕捉クロージャ・深い再帰・ループ内 boxed・共有構造）。観測: `cargo test --release` を `FIX_MAX_OPT_LEVEL` max/basic/none で全通過／全ベンチ commit hash 比較で無回帰／9.1 の gdb テストでデバッグ情報一致／leak チェック／RC 挿入数・順序・解放挙動が現状一致（assert ビルド or RC ダンプ）。
+
+### 9.5 P2（borrow化 + 相殺 + provenance 解析）
+解析が期待どおりの値を出すことを 9.0 の provenance/ownership ダンプで照合。入力と期待:
+- `|x| let y = [x]; (y, y)` → 両末端 `(Dyn, Dyn)`（複製 Retain。§5）。`id(x)` 結果 `Arg(0,[])`。`set(i,v,arr)` 結果 `Fresh`。
+- §3.4 arrayrw ループ → `loop` 結果 `{Fresh, Arg(0,[1])}`、`main` で `{Fresh}`＝Unique。§3.5 read-only `sum` → `arr` は `Arg` 素通し、`main` の set 前 `Fresh`＝Unique。同じ配列を共有してから渡す版 → `Dynamic`。
+- borrow化: read-only 再帰 `sum` → `own[sum.arr] = Borrow`（§2.1）。case B `loop_fresh` → fresh を受ける param が `Own` 固定。相殺 → 借用呼び出しをまたぐ `Retain … Release` が消える。
+
+### 9.6 P3（unique-check-elim + 特殊化 + dead-func 除去）
+§5 の全項目。入力と観測:
+- **一意文脈で除去**: arrayrw ループ（threaded unique array の `set`/`mod`/`swap`）→ 分岐消滅（IR grep or cachegrind 減）。§5 マトリクス全セル（Array の set/mod/act(Id)/act(Tuple2)/swap、boxed struct field の set/mod/act）。
+- **共有文脈で非除去**: 9.0 shared-value → 分岐残存（IR grep）＋他方不変。
+- **初回 checked・以降 unchecked**: shared で入り初回 `set` で unique 化するループ → `loop@D -> loop@U` の 2 clone（IR に 2 clone、cachegrind で初回だけ高コスト）。
+- **入れ子伝播**（§5）: タプル内配列 `loop((cnt, arr), …)`・struct 内配列・配列内 struct・union 内配列（`LoopState`）。
+- **dead-func 除去**: 特殊化後に未到達 clone・元関数が消える（emit symbol 数／バイナリサイズが膨れない）。
+- **健全性**: 全テストを assert ビルドで（unique 誤判定 abort）。
+観測: IR/asm 分岐 grep／cachegrind（§0 目安の array 部を狙う）／shared-value／symbol・size／assert。
+
+### 9.7 P3.5（`*_uniqueness_unchecked` 削除）
+安全版＋§4 で同速・関数消滅を突く。入力: 同じホットパス（ソート・push/append/map）を安全版で → §4 が除去し**旧 unsafe 版と同速**（cachegrind 比較）。削除した関数への参照が無い（使えばコンパイルエラー）。全テスト＋shared-value。観測: cachegrind 同等／grep で不在／全通過。
+
+### 9.8 P4（reuse / 順序スケジューリング / 境界チェック除去）
+- reuse: `Release` 直後の alloc が再利用される小例（cachegrind で alloc 数減）。
+- 順序スケジューリング: `f(arr.set(0,42), arr.@0)` を並べ替えて `set` が in-place 化（clone 消滅、cachegrind）。
+- 境界チェック除去: `idx ∈ [0,size)` 証明で完全 unchecked、一意性除去と合成でベクトル化 → arrayrw が C 比 0.20x（§0）。
+各 正しさ（実行結果）＋cachegrind。
