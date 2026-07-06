@@ -378,7 +378,12 @@ cancel(f):
     c@π' ∈ consume_sites: o=root(f,c@π'); pend[o] の各 R を needed[R]=true にし pend から外す
                           （consume が対 Release より先着＝その経路で R は必要。恒久確定）
     Release(y@π):         o=root(f,y@π); pend[o] 非空なら R を1つ取り pairs[R].add(この Release), pend から外す
-                          （この経路で R と対消滅。空なら本物の Release＝据え置き）
+                          （この経路で R と対消滅＝R の一時 +1 を打ち消す【un-bump】Release。空なら本物の Release＝据え置き。
+                           【zeroing-release 不変条件】pend[o] 非空のときだけ対消滅するので、消す Release は必ず「先行 Retain が
+                           rc を上げたのを戻す非 zeroing な un-bump」で、rc を 0 にする zeroing release〔＝解放・dtor 発火〕は
+                           消さない。実装が Retain を後方の任意 Release とペアにする〔pend を介さず遠くの Release を選ぶ〕と、
+                           un-bump が zeroing に化けて object を使用中に早期解放＝UAF・dtor 早期発火になる。pend から取る
+                           ＝最も手前の Release と対にする first-Release ペアリングがこれを保証する）
     分岐 `Match`:          非 tail（`Let(x,Match,k)`）は arm が継続 k で合流: needed は or（ある arm で needed なら全体）・pend は must（全 arm で pending な R だけ k へ継続）。tail（`Ret(Match)`）は各 arm が終端（合流 k なし＝各 arm が leaf）
   # 走査後の commit: needed[R]=false かつ「R から到達する全 leaf 経路が pairs[R] のいずれかで閉じる」
   #   （＝どの経路も consume より先に対 Release を通る）Retain R を、pairs[R] の Release ごと IR から削除。
