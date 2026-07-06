@@ -285,7 +285,7 @@ borrow_ify(prog):
 
   # 2. RC 書き換え（own 確定後、all-Own の RC を patch）
   for f in prog:
-    remove: own==Borrow な param 末端の内部 Release                # callee は所有しない
+    remove: root(f, y@π) が own==Borrow の param 末端に解決される全 Release(y@π) を削除   # callee は所有しない。root ベース([6])：p 直接名指しだけでなく別名の Release も拾う——unboxed union payload drop の Release(payload)(root=p@(k::π))・passthrough drop（let (b,_)=p.unsafe_is_unique の @1 の Release, root=p）。変数名マッチだと残って過剰解放→caller UAF
     for f.body 中の呼び出し App/Closure(g, args):
       for (q, x) in enumerate(args), x の各 boxed 末端 x@π:        # q=位置
         if own[g.q@π]==Borrow and owns(f, x@π):
