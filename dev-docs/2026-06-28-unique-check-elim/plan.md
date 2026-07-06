@@ -260,7 +260,7 @@ fn loop_fresh(n, buf /*Own*/):
 ```
 不動点（閉路 {`loop_fresh`}、`own[loop_fresh.1@[]]`＝`buf` 末端、初期 `Borrow`）:
 - `consume_sites`: `@size` は `Borrow`・`Release(buf)` は drop・再帰位置1 の `fr` は `own[loop_fresh.1@[]]=Borrow` ゆえ非消費 ⇒ ∅（phase(i) 降格なし）。
-- phase(ii) tail `App(loop_fresh,[n1,fr]);Ret(r)`: `owns(loop_fresh, fr@[])`＝`root` が fill producer ⇒ **True**、`last_use` ⇒ True ⇒ **`own[loop_fresh.1@[]]=Own`**（case B 降格）。
+- phase(ii) tail `App(loop_fresh,[n1,fr]);Ret(r)`: `owns(loop_fresh, fr@[])`＝`root` が fill producer ⇒ **True** ⇒ **`own[loop_fresh.1@[]]=Own`**（case B 降格。判定は `owns` のみ——`last_use` は使わない。閉路 tail の f 所有末端は【全て】Own、§10）。
 
 **`Own` が要る理由（`Borrow` だと tail が壊れる）**: 仮に `buf` を `Borrow` にすると phase 2 は内部 `Release(buf)` を消し、`fr`（fresh・この frame 所有）を借用位置へ渡すので呼び出し**後**に `Release(fr)` が要る ⇒ `…; App(loop_fresh,[n1,fr]); Release(fr); Ret(r)` ＝非 tail ＝閉路で深さ分スタック → overflow。case B が `buf` を `Own` に留めるので `fr` は callee が consume ⇒ 後続 `Release` 無し ⇒ **tail 保持**（結果は baseline のまま・RC 不変）。fresh を受ける `buf` は uniqueness を運ばないので `Borrow` 化の利得は元々無い（散文(B)）。外部の `main` でも `loop_fresh.buf` は `Own` なので `a0` を消費する（main が `a0` を再使用するなら `Retain` -> `Dynamic`。両取りは特殊化 P2）。
 
