@@ -270,8 +270,13 @@ fn loop_fresh(n, buf /*Own*/):
 borrow_ify(prog):
   # 1. 借用可能性: 全 source param の全 boxed 末端を Borrow と仮定 -> 単調降格で不動点
   own = { source 関数の全 param の全 boxed 末端: 初期値 Borrow }   # 楽観初期化
-  for scc in bottom_up(condensation(call_graph(prog))):          # callee 先
-    repeat 変化が無くなるまで:                                    # SCC 内不動点（自己/相互再帰）
+  # 大域単調不動点: phase(i) は callee の Own → caller param を Own（上向き＝bottom-up と同順）だが、
+  # phase(ii)（全 tail・[#2] B 案）は caller 所有 → callee param を Own と【下向き】に降格する（cross-SCC の
+  # tail で lower-SCC の callee を降格し得る＝SCC 順に逆）。ゆえに per-SCC で確定できず、全体を回す。
+  # （初案の「閉路 tail のみ」では case B が intra-SCC に閉じ per-SCC 確定で足りたが、全 tail では下向き cross-SCC 降格が出る。
+  #  Borrow->Own 一方向・末端有限ゆえ有限回で停止。bottom-up SCC 順は各ラウンド内の収束を速めるスケジュール。）
+  repeat 全体で変化が無くなるまで:
+    for scc in bottom_up(condensation(call_graph(prog))):        # callee 先（ラウンド内スケジュール）
       for f in scc:
         for c@π' in consume_sites(f):                            # (i) 消費された末端を source param へ帰属して降格
           if root(f, c@π') が (param p, π0): own[p@π0] = Own
