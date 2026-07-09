@@ -363,9 +363,9 @@ root(f, x@π):    # x@π の別名鎖を辿った定義位置（producer）= obj
   Let(x, Match(...))                  -> (この Let, π)                            # producer: 分岐 merge（arm 値の join）。param 消費は各 arm の Ret〔consume_sites〕が捕捉するので merge 後は producer で停止
   Let(x, App 結果 | Closure)           -> (この Let, π)                            # producer: 呼び出し結果/クロージャ
 
-owns(f, x@π):      # f が末端 x@π を所有するか（借用でなく）。root の分類（param なら own、他 producer なら f 所有）
-  root(f, x@π) が (param p, π0) -> own[p@π0]==Own    # root が param -> その末端の own
-  それ以外の producer            -> True             # alloc/getter/call/closure = f 所有
+owns(v, x@π):      # 版 v∈{f_own, f_borrow} の body で末端 x@π を所有するか（借用でなく）。root の分類（param なら版依存・他 producer なら所有）
+  root(v, x@π) が (param p, π0) -> (v==f_own) ∨ (own[p@π0]==Own)   # **f_own は全 param Own**（own[] は f_borrow の shape なので v で分岐必須）・f_borrow は不動点の own[] を引く。呼び出しは owns(v,…)〔step 2/3〕
+  それ以外の producer            -> True             # alloc/getter/call/closure = f 所有（版に依らない）
 
 consume_sites(f):  # 所有権が消費される（escape or release）boxed 末端の集合（別名辺で結果へ抜けない Own 位置 = sink）。本体の全ノードを歩く（値 match の arm 内も）
   App(g /*callee*/, [..x@位置 i..])   -> g の全 boxed 末端（callee closure の cap）           # [#2round9]: クロージャを呼ぶ＝それを consume（callee が cap を release・§1.7・generator.rs:1980-1984）。funptr/空捕捉は boxed 末端無し＝no-op。「呼ぶだけ」の closure param が Borrow 誤分類→cap 二重解放を防ぐ
