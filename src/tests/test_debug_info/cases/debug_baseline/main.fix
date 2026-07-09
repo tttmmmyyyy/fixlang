@@ -1,0 +1,16 @@
+module Main;
+
+compute : I64 -> I64;
+compute = |x| (
+    let y = x + 1;
+    y * 2
+);
+
+wrap : I64 -> I64;
+wrap = |x| compute(x + 10);
+
+main : IO ();
+main = (
+    let r = wrap(5);
+    println(r.to_string)
+);
