@@ -1,0 +1,7 @@
+module Test;
+
+test : IO ();
+test = (
+    assert_eq(|_|"case 1", 42, 6*7);;
+    pure()
+);
