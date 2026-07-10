@@ -2127,10 +2127,14 @@ impl InlineLLVMArraySetBody {
         // Force array to be unique
         let array = make_array_unique(gc, array);
 
-        // Perform write and return.
-        let array_len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        // Perform write and return. Bounds-check unless `--no-runtime-check` is set.
+        let len = if gc.config.runtime_check() {
+            Some(array.extract_field(gc, ARRAY_LEN_IDX).into_int_value())
+        } else {
+            None
+        };
         let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-        ObjectFieldType::write_to_array_buf(gc, Some(array_len), array_buf, idx, value, true);
+        ObjectFieldType::write_to_array_buf(gc, len, array_buf, idx, value, true);
         array
     }
 }
@@ -2237,7 +2241,9 @@ impl InlineLLVMArraySwapBody {
         };
 
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-        let len = if self.bounds_checked {
+        // `swap` bounds-checks unless `--no-runtime-check` is set; `swap_bounds_unchecked`
+        // never bounds-checks.
+        let len = if self.bounds_checked && gc.config.runtime_check() {
             Some(array.extract_field(gc, ARRAY_LEN_IDX).into_int_value())
         } else {
             None
