@@ -41,8 +41,12 @@ module Std;
 // * `msg` - The message to print to the stderr when the undefined value is reached.
 undefined : String -> a = |msg| msg.@_data._undefined_internal;
 
+// The type of boolean values. The `true` / `false` keywords desugar to the constructors
+// `_true()` / `_false()`.
+type Bool = unbox union { _false : (), _true : () };
+
 // A union type with variants `continue` and `break`.
-// 
+//
 // This type is used to represent the result of a loop body function passed to `Std::loop` or other similar functions.
 type LoopState s r = unbox union { continue : s, break : r };
 

@@ -5622,9 +5622,10 @@ Defined as: `type Arrow a b = unbox { built-in }`
 
 #### Bool
 
-Defined as: `type Bool = unbox { built-in }`
+Defined as: `type Bool = unbox union { ...variants... }`
 
-The type of boolean values.
+The type of boolean values. The `true` / `false` keywords desugar to the constructors
+`_true()` / `_false()`.
 
 #### Box
 

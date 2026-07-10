@@ -106,4 +106,91 @@ mod debug_info_tests {
             );
         }
     }
+
+    fn sample_debug_vars() -> PathBuf {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("src/tests/test_debug_info/cases/debug_vars/main.fix");
+        p
+    }
+
+    // Line in cases/debug_vars/main.fix where all locals (i, bt, bf, arr, s) are live.
+    const LINE_VARS_BREAK: u32 = 10; // "    eval i;"
+
+    // Debug info drives correct variable inspection at a breakpoint. Unboxed values print their
+    // value — an `I64` as its number, a `Bool` as `true` / `false` (i.e. `Bool`'s debug type is
+    // `DW_ATE_boolean`, not a union struct). Boxed containers carry their Fix type (`Std::Array
+    // Std::I64`, `Std::String`), and an `Array` also exposes its size. `-g` forces `-O none`, so
+    // the locals are not optimized away.
+    #[test]
+    fn test_debug_info_variable_values() {
+        install_fix();
+
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::copy(sample_debug_vars(), dir.join("main.fix")).expect("Failed to copy main.fix");
+
+        let build = Command::new("fix")
+            .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g` failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr)
+        );
+
+        let breakpoint = format!("break main.fix:{}", LINE_VARS_BREAK);
+        let gdb = Command::new("gdb")
+            .args([
+                "-batch",
+                "-iex",
+                "set debuginfod enabled off",
+                "-ex",
+                &breakpoint,
+                "-ex",
+                "run",
+                "-ex",
+                "print i",
+                "-ex",
+                "print bt",
+                "-ex",
+                "print bf",
+                "-ex",
+                "whatis arr",
+                "-ex",
+                "print *arr",
+                "-ex",
+                "whatis s",
+                "-ex",
+                "continue",
+                "./prog",
+            ])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `gdb`");
+        let out = format!(
+            "{}{}",
+            String::from_utf8_lossy(&gdb.stdout),
+            String::from_utf8_lossy(&gdb.stderr)
+        );
+
+        for (needle, what) in [
+            ("= 42", "I64 value"),
+            ("= true", "Bool `true`"),
+            ("= false", "Bool `false`"),
+            ("Std::Array Std::I64", "Array type"),
+            ("<array size> = 3", "Array size"),
+            ("Std::String", "String type"),
+        ] {
+            assert!(
+                out.contains(needle),
+                "gdb did not show {} (expected `{}`).\ngdb output:\n{}",
+                what,
+                needle,
+                out
+            );
+        }
+    }
 }

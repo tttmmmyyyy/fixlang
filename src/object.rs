@@ -10,7 +10,7 @@ use crate::constants::{
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
-    make_bool_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty, make_i32_ty,
+    make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty, make_i32_ty,
     make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty,
     make_u8_ty,
 };
@@ -1275,8 +1275,6 @@ pub fn ty_to_object_ty(
                     // There are no fields in IOState.
                 } else if ty == &make_ptr_ty() {
                     ret.field_types.push(ObjectFieldType::Ptr);
-                } else if ty == &make_bool_ty() {
-                    ret.field_types.push(ObjectFieldType::U8);
                 } else if ty == &make_i8_ty() {
                     ret.field_types.push(ObjectFieldType::I8);
                 } else if ty == &make_u8_ty() {
@@ -1708,23 +1706,19 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
 pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
+    // Bool is a (bit-identical to i8) union type, but its debug type stays `DW_ATE_BOOLEAN`.
+    // Checked before the primitive gate below because Bool's variant is now `Union`.
+    if ty.toplevel_tycon().map_or(false, |tc| tc.is_boolean()) {
+        return gc
+            .get_di_builder()
+            .create_basic_type(&format!("{}::{}", STD_NAME, BOOL_NAME), 8, DW_ATE_BOOLEAN, 0)
+            .unwrap()
+            .as_type();
+    }
     let is_primitive = !ty.is_closure()
         && ty.toplevel_tycon_info(gc.type_env()).variant == TyConVariant::Primitive;
     if is_primitive {
         // Primitive case
-        if ty.toplevel_tycon().unwrap().is_boolean() {
-            // Boolean case
-            return gc
-                .get_di_builder()
-                .create_basic_type(
-                    &format!("{}::{}", STD_NAME, BOOL_NAME),
-                    8,
-                    DW_ATE_BOOLEAN,
-                    0,
-                )
-                .unwrap()
-                .as_type();
-        };
         if obj_type.field_types.len() == 0 {
             // Empty type case
             gc.get_di_builder()

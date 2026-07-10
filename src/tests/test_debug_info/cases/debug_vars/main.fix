@@ -1,0 +1,13 @@
+module Main;
+
+main : IO ();
+main = (
+    let i : I64 = 42;
+    let bt : Bool = 1 == 1;
+    let bf : Bool = 1 == 2;
+    let arr : Array I64 = [10, 20, 30];
+    let s : String = "hello";
+    eval i;
+    let n = if bt || bf { i + arr.@(0) + s.get_size } else { 0 };
+    println(n.to_string)
+);

@@ -170,18 +170,6 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], BOOL_NAME)),
-        TyConInfo {
-            kind: kind_star(),
-            variant: TyConVariant::Primitive,
-            is_unbox: true,
-            tyvars: vec![],
-            fields: vec![],
-            source: None,
-            document: Some("The type of boolean values.".to_string()),
-        },
-    );
-    ret.insert(
         TyCon::new(FullName::from_strs(&[STD_NAME], F32_NAME)),
         TyConInfo {
             kind: kind_star(),
@@ -753,43 +741,13 @@ pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     .global_to_absolute()
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBoolLit {
-    val: bool,
-}
-
-impl InlineLLVMBoolLit {
-    pub fn name(&self) -> String {
-        format!("bool({})", self.val)
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![]
-    }
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        let obj = create_obj(
-            ty.clone(),
-            &vec![],
-            None,
-            gc,
-            Some(&format!("bool_lit_{}", self.val)),
-        );
-        let value = gc.context.i8_type().const_int(self.val as u64, false);
-        obj.insert_field(gc, 0, value)
-    }
-}
-
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(
-        LLVMGenerator::BoolLit(InlineLLVMBoolLit { val }),
-        make_bool_ty(),
-        source,
-    )
-    .global_to_absolute()
+    // Desugar `true` / `false` to the `Bool` union's constructors, referenced by absolute path
+    // so the desugaring resolves without an `import` at the use site.
+    let mut ctor = FullName::from_strs(&[STD_NAME, BOOL_NAME], if val { "_true" } else { "_false" });
+    ctor.set_absolute();
+    let unit = expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]);
+    expr_app(expr_var(ctor, source.clone()), vec![unit], source)
 }
 
 // Create a byte array by copying from given pointer.
