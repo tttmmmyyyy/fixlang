@@ -38,8 +38,8 @@ use crate::{
         multiply_trait_instance_int, negate_trait_instance_float, negate_trait_instance_int,
         not_trait_instance_bool, quiet_nan_value, remainder_trait_instance_int, set_array,
         shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
-        undefined_internal_function, unsafe_set_size_array, with_retained_function,
-        BitOperationType,
+        swap_array, swap_bounds_unchecked_array, undefined_internal_function,
+        unsafe_set_size_array, with_retained_function, BitOperationType,
     },
     misc::{make_map, upper_camel_to_lower_snake, Map},
     parse::parser::parse_and_save_to_temporary_file,
@@ -474,6 +474,20 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         None,
         Some(include_str!("../docs/std_array_set.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "swap"),
+        swap_array(),
+        None,
+        None,
+        Some(include_str!("../docs/std_array_swap.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "swap_bounds_unchecked"),
+        swap_bounds_unchecked_array(),
+        None,
+        None,
+        Some(include_str!("../docs/std_array_swap_bounds_unchecked.md").to_string()),
     ));
     // The canonical name of the array capacity accessor is `Array::@capacity`;
     // it gets the LLVM-builtin implementation. `Array::get_capacity` is then

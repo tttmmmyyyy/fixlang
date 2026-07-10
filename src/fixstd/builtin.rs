@@ -2189,6 +2189,119 @@ pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArraySwapBody {
+    array_name: FullName,
+    i_name: FullName,
+    j_name: FullName,
+    // When true, clone the array first if it is shared, so the swap writes into a uniquely
+    // owned array. Set false only where the array is statically known to be unique.
+    force_unique: bool,
+    // When true, panic if `i` or `j` is out of range.
+    bounds_checked: bool,
+}
+
+impl InlineLLVMArraySwapBody {
+    pub fn name(&self) -> String {
+        format!(
+            "Array::swap{}({}, {}, {})",
+            if self.bounds_checked {
+                ""
+            } else {
+                "_bounds_unchecked"
+            },
+            self.i_name.to_string(),
+            self.j_name.to_string(),
+            self.array_name.to_string()
+        )
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.array_name, &mut self.i_name, &mut self.j_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        _ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // Get arguments.
+        let array = gc.get_scoped_obj(&self.array_name);
+        let i = gc.get_scoped_obj_field(&self.i_name, 0).into_int_value();
+        let j = gc.get_scoped_obj_field(&self.j_name, 0).into_int_value();
+
+        // Force array to be unique.
+        let array = if self.force_unique {
+            make_array_unique(gc, array)
+        } else {
+            array
+        };
+
+        let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+        let len = if self.bounds_checked {
+            Some(array.extract_field(gc, ARRAY_LEN_IDX).into_int_value())
+        } else {
+            None
+        };
+        let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+
+        // Read both elements without retaining, then store them back into each other's slot
+        // without releasing: the two elements only change places, so their reference counts
+        // are unchanged.
+        let elem_i =
+            ObjectFieldType::read_from_array_buf_noretain(gc, len, array_buf, elem_ty.clone(), i);
+        let elem_j =
+            ObjectFieldType::read_from_array_buf_noretain(gc, len, array_buf, elem_ty, j);
+        ObjectFieldType::write_to_array_buf(gc, len, array_buf, i, elem_j, false);
+        ObjectFieldType::write_to_array_buf(gc, len, array_buf, j, elem_i, false);
+        array
+    }
+}
+
+fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+    let body = expr_llvm(
+        LLVMGenerator::ArraySwapBody(InlineLLVMArraySwapBody {
+            array_name: FullName::local("array"),
+            i_name: FullName::local("i"),
+            j_name: FullName::local("j"),
+            force_unique: true,
+            bounds_checked,
+        }),
+        type_tyapp(make_array_ty(), type_tyvar_star("a")),
+        None,
+    );
+    let expr = expr_abs(
+        vec![var_local("i")],
+        expr_abs(
+            vec![var_local("j")],
+            expr_abs(vec![var_local("array")], body, None),
+            None,
+        ),
+        None,
+    );
+    let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(
+            make_i64_ty(),
+            type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+        ),
+    );
+    (expr, scm)
+}
+
+// `Array::swap` built-in function.
+pub fn swap_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    swap_array_common(true)
+}
+
+// `Array::swap_bounds_unchecked` built-in function.
+pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    swap_array_common(false)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayForceUniqueBody {
     arr_name: FullName,
 }
