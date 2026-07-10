@@ -3130,7 +3130,7 @@ Moreover, if you add `--backtrace` option to `fix build`, `fix run` or `fix test
 
 Other notes on debugging Fix program:
 - Unlike other languages, Fix does not release local variables at the end of their scope, but at the last point of use. So if you break after the last use of a local variable, the debugger may show an invalid value.
-- Currently, we are not able to tell the debugger the size of an array which is determined at run time. So we are always setting the array size to 100 in the debug information. You cannot show elements indexed after 100, and if the array is shorter than 100, invalid values are shown.
+- The debug information records the element count of an `Array` (including the byte array inside a `String`) as a fixed value of 100, because the actual count is determined at run time and cannot be recorded. Debuggers display 100 elements, of which the first `<array size>` ones are the valid values: for an array shorter than 100, invalid values are displayed after the end, and for a longer one, elements after the 100th are hidden. The actual size can be checked by the `<array size>` member displayed together.
 
 ## Environment Variables
 
