@@ -41,6 +41,7 @@ mod optimization;
 mod parse;
 mod preliminary_command;
 mod printer;
+mod rc_ir;
 #[cfg(test)]
 mod tests;
 mod tool;

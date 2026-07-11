@@ -21,4 +21,5 @@ pub mod optimization;
 pub mod parse;
 pub mod preliminary_command;
 pub mod printer;
+pub mod rc_ir;
 pub mod tool;

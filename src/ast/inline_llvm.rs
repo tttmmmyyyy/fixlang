@@ -84,6 +84,11 @@ pub enum LLVMGenerator {
     ),
     IOStateUnsafeCreate(InlineLLVMIOStateUnsafeCreate),
     DestructorMake(InlineLLVMDestructorMake),
+    MakeStructBody(InlineLLVMMakeStructBody),
+    ArrayLitBody(InlineLLVMArrayLitBody),
+    FFICallBody(InlineLLVMFFICallBody),
+    CaptureProjectBody(InlineLLVMCaptureProjectBody),
+    StructProjectBody(InlineLLVMStructProjectBody),
 }
 
 impl LLVMGenerator {
@@ -170,6 +175,11 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayCheckSize(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::IOStateUnsafeCreate(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::DestructorMake(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::MakeStructBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayLitBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::FFICallBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::CaptureProjectBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::StructProjectBody(x) => Some(x.generate(gc, ty)),
         };
         match obj {
             None => {
@@ -270,6 +280,40 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayCheckRange(x) => x.free_vars(),
             LLVMGenerator::ArrayCheckSize(x) => x.free_vars(),
             LLVMGenerator::DestructorMake(x) => x.free_vars(),
+            LLVMGenerator::MakeStructBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayLitBody(x) => x.free_vars(),
+            LLVMGenerator::FFICallBody(x) => x.free_vars(),
+            LLVMGenerator::CaptureProjectBody(x) => x.free_vars(),
+            LLVMGenerator::StructProjectBody(x) => x.free_vars(),
+        }
+    }
+
+    /// Whether operand `i` is only *borrowed* (read without taking ownership) rather than *owned*
+    /// (consumed — moved into the result, released internally, or force-unique-returned). RC IR
+    /// insertion emits an explicit `Release` after the last use of a borrowed operand, and a
+    /// `Retain` before a non-last use of an owned one.
+    ///
+    /// Whole-value granularity (P1): only the boxed container of the read-getters is borrowed; every
+    /// other operand is owned. Unboxed operands are reference-counting-neutral, so classifying them
+    /// as owned is harmless. Derived from the operand-ownership audit (plan §8); the container is
+    /// operand 0 in each read-getter's `free_vars`.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        match self {
+            // Read-getters: the container (operand 0) is borrowed — the op reads it without
+            // consuming it (it may bake in a retain of the extracted value, but never releases the
+            // container). The remaining operands are unboxed indices.
+            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(_)
+            | LLVMGenerator::ArrayGetPtrBody(_)
+            | LLVMGenerator::ArrayGetSizeBody(_)
+            | LLVMGenerator::ArrayGetCapacityBody(_)
+            | LLVMGenerator::UnionIsBody(_)
+            | LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(_)
+            | LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(_)
+            | LLVMGenerator::GetBoxedDataPtrFunctionBody(_)
+            | LLVMGenerator::StructProjectBody(_)
+            | LLVMGenerator::CaptureProjectBody(_) => i == 0,
+            // Every other built-in consumes (owns) all its operands.
+            _ => false,
         }
     }
 
@@ -345,6 +389,11 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayCheckRange(x) => x.name(),
             LLVMGenerator::ArrayCheckSize(x) => x.name(),
             LLVMGenerator::DestructorMake(x) => x.name(),
+            LLVMGenerator::MakeStructBody(x) => x.name(),
+            LLVMGenerator::ArrayLitBody(x) => x.name(),
+            LLVMGenerator::FFICallBody(x) => x.name(),
+            LLVMGenerator::CaptureProjectBody(x) => x.name(),
+            LLVMGenerator::StructProjectBody(x) => x.name(),
         };
         format!("LLVM<{}>", raw_name)
     }

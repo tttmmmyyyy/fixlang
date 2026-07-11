@@ -59,6 +59,23 @@ pub fn build_object_files<'c>(
     // Run optimizations.
     optimization::optimization::run(&mut program, &config);
 
+    // Dump the RC IR for inspection when requested. The value of `DUMP_RC_IR` selects which symbols
+    // to lower: a module name dumps that module's symbols, or `all` dumps every symbol.
+    if let Ok(filter) = std::env::var("DUMP_RC_IR") {
+        let type_env = program.type_env();
+        let all_program_symbols: Vec<crate::ast::program::Symbol> =
+            program.symbols.values().cloned().collect();
+        let symbols: Vec<crate::ast::program::Symbol> = all_program_symbols
+            .iter()
+            .filter(|s| filter == "all" || s.name.module() == filter)
+            .cloned()
+            .collect();
+        let mut rc_program =
+            crate::rc_ir::lower::lower_program(&type_env, &symbols, &all_program_symbols);
+        crate::rc_ir::rc_insert::insert_rc(&mut rc_program, &type_env);
+        eprintln!("{}", crate::rc_ir::print::program_to_string(&rc_program));
+    }
+
     // Determine compilation units.
     let mut units = vec![];
     let mut symbols = program.symbols.values().cloned().collect::<Vec<_>>();
@@ -151,15 +168,33 @@ pub fn build_object_files<'c>(
             // Declare runtime functions.
             runtime::build_runtime(&mut gc, BuildMode::Declare);
 
-            // Declare all symbols in this program.
-            // TODO: Optimize so that only necessary symbols are declared.
-            for symbol in &all_symbols {
-                gc.declare_symbol(symbol);
-            }
+            if std::env::var("USE_RC_IR").is_ok() {
+                // Experimental RC IR back end (unit 3 of the P1 rollout). Declare all symbols as the
+                // legacy path does (prototypes + global registration, in every unit), then lower and
+                // implement only THIS unit's symbols via the RC IR path so no symbol is defined twice.
+                for symbol in &all_symbols {
+                    gc.declare_symbol(symbol);
+                }
+                let unit_symbols = unit.symbols().to_vec();
+                let rc_prog = {
+                    let type_env = gc.type_env();
+                    let mut p =
+                        crate::rc_ir::lower::lower_program(type_env, &unit_symbols, &all_symbols);
+                    crate::rc_ir::rc_insert::insert_rc(&mut p, type_env);
+                    p
+                };
+                gc.implement_rc_program(&rc_prog);
+            } else {
+                // Declare all symbols in this program.
+                // TODO: Optimize so that only necessary symbols are declared.
+                for symbol in &all_symbols {
+                    gc.declare_symbol(symbol);
+                }
 
-            // Implement all symbols in this unit.
-            for symbol in unit.symbols() {
-                gc.implement_symbol(symbol);
+                // Implement all symbols in this unit.
+                for symbol in unit.symbols() {
+                    gc.implement_symbol(symbol);
+                }
             }
 
             if is_main_unit {

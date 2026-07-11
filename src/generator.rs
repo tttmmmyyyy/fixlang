@@ -448,6 +448,11 @@ pub struct Generator<'c, 'm> {
     pub target_data: TargetData,
     pub config: Configuration,
     global_strings: Map<String, GlobalValue<'c>>,
+    /// Whether code is being generated from the RC IR (reference counting is explicit). In this mode
+    /// operands are read plain — `used_later` is never raised, so `get_scoped_obj` does not retain —
+    /// and `is_var_used_later` reports `true`, so the borrow getters skip their conditional container
+    /// release (the explicit `Release` node disposes it) and `with_retained` retains unconditionally.
+    pub rc_ir_mode: bool,
 }
 
 pub struct PopBuilderGuard<'c> {
@@ -589,6 +594,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             target_data: target_data,
             config,
             global_strings: Map::default(),
+            rc_ir_mode: false,
         };
         ret
     }
@@ -693,7 +699,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         if var.is_local() {
             self.scope.borrow().last().unwrap().get(var)
         } else {
-            self.global.get(var).unwrap().clone()
+            self.global
+                .get(var)
+                .unwrap_or_else(|| panic!("global not found in codegen: `{}`", var.to_string()))
+                .clone()
         }
     }
 
@@ -746,6 +755,13 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Is a variable used later?
     pub fn is_var_used_later(&self, var: &FullName) -> bool {
+        if self.rc_ir_mode {
+            // In the RC IR path a borrow getter must not release its container (an explicit `Release`
+            // node does) and `with_retained` must retain unconditionally; reporting `true` here
+            // achieves both, and `get_scoped_obj` does not consult this (it reads the raw
+            // `used_later`, which the RC IR path never raises).
+            return true;
+        }
         if var.is_global() {
             return true;
         }
@@ -753,7 +769,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Push scope.
-    fn scope_push(self: &mut Self, var: &FullName, obj: &Object<'c>) {
+    pub fn scope_push(self: &mut Self, var: &FullName, obj: &Object<'c>) {
         self.scope
             .borrow_mut()
             .last_mut()
@@ -762,7 +778,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Pop scope.
-    fn scope_pop(self: &mut Self, var: &FullName) {
+    pub fn scope_pop(self: &mut Self, var: &FullName) {
         self.scope.borrow_mut().last_mut().unwrap().pop_local(var);
     }
 
@@ -1060,7 +1076,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Retain an object.
-    fn build_retain(&mut self, obj: Object<'c>) {
+    pub fn build_retain(&mut self, obj: Object<'c>) {
         if obj.is_box(self.type_env()) {
             let current_bb = self.builder().get_insert_block().unwrap();
             let current_func = current_bb.get_parent().unwrap();
@@ -2477,7 +2493,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         tail: bool,
     ) -> Option<Object<'c>> {
         // Prepare return object.
-        let mut obj = {
+        let obj = {
             let ret_ty = type_tycon(ret_tycon);
             let ret_ty = if is_io {
                 make_tuple_ty(vec![make_iostate_ty(), ret_ty])
@@ -2485,35 +2501,6 @@ impl<'c, 'm> Generator<'c, 'm> {
                 ret_ty
             };
             create_obj(ret_ty.clone(), &vec![], None, self, Some("allocate_CallC"))
-        };
-
-        // Get c function
-        let c_fun = match self.module.get_function(&fun_name) {
-            Some(fun) => fun,
-            None => {
-                let ret_c_ty = ret_tycon.get_c_type(self.context);
-                let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
-                    .iter()
-                    .map(|param_ty| {
-                        let c_type = param_ty.get_c_type(self.context);
-                        if c_type.is_none() {
-                            panic_with_msg_src(
-                                "Cannot use `()` as a parameter type of C function.",
-                                &expr.source,
-                            )
-                        }
-                        c_type.unwrap().into()
-                    })
-                    .collect::<Vec<_>>();
-                let fn_ty = match ret_c_ty {
-                    None => {
-                        // Void case.
-                        self.context.void_type().fn_type(&parm_c_tys, is_var_args)
-                    }
-                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_var_args),
-                };
-                self.module.add_function(&fun_name, fn_ty, None)
-            }
         };
 
         // Evaluate arguments
@@ -2529,6 +2516,64 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.scope_unlock_as_used_later(&args[i].free_vars());
             arg_objs.push(self.eval_expr(args[i].clone(), false).unwrap());
         }
+
+        let obj = self.build_ffi_call_core(
+            &expr.source,
+            obj,
+            fun_name,
+            ret_tycon,
+            param_tys,
+            is_var_args,
+            arg_objs,
+            is_io,
+        );
+
+        self.build_tail(obj, tail)
+    }
+
+    // Emit a call to a C function from already-evaluated argument objects and a pre-allocated return
+    // object. Each argument is marshalled to its C scalar (field 0), the function is called, and the
+    // result is written back into the return object (field 1 of the `(IOState, ret)` tuple when
+    // `is_io`, else field 0). A void return writes nothing.
+    pub fn build_ffi_call_core(
+        &mut self,
+        source: &Option<Span>,
+        mut obj: Object<'c>,
+        fun_name: &Name,
+        ret_tycon: &Arc<TyCon>,
+        param_tys: &Vec<Arc<TyCon>>,
+        is_var_args: bool,
+        arg_objs: Vec<Object<'c>>,
+        is_io: bool,
+    ) -> Object<'c> {
+        // Get c function
+        let c_fun = match self.module.get_function(&fun_name) {
+            Some(fun) => fun,
+            None => {
+                let ret_c_ty = ret_tycon.get_c_type(self.context);
+                let parm_c_tys: Vec<BasicMetadataTypeEnum> = param_tys
+                    .iter()
+                    .map(|param_ty| {
+                        let c_type = param_ty.get_c_type(self.context);
+                        if c_type.is_none() {
+                            panic_with_msg_src(
+                                "Cannot use `()` as a parameter type of C function.",
+                                source,
+                            )
+                        }
+                        c_type.unwrap().into()
+                    })
+                    .collect::<Vec<_>>();
+                let fn_ty = match ret_c_ty {
+                    None => {
+                        // Void case.
+                        self.context.void_type().fn_type(&parm_c_tys, is_var_args)
+                    }
+                    Some(ret_c_ty) => ret_c_ty.fn_type(&parm_c_tys, is_var_args),
+                };
+                self.module.add_function(&fun_name, fn_ty, None)
+            }
+        };
 
         // Get argment values
         let args_vals = arg_objs
@@ -2558,7 +2603,48 @@ impl<'c, 'm> Generator<'c, 'm> {
             Either::Right(_) => {}
         }
 
-        self.build_tail(obj, tail)
+        obj
+    }
+
+    // Project the captured value at `cap_idx` out of a closure's capture object `cap_name`,
+    // retaining it (a retain-getter). `cap_tys` are the types of all captured values, needed to
+    // reconstruct the capture object's struct layout; `result_ty` is the projected value's type.
+    // This is the counterpart, for the RC IR, of the capture read-back that `implement_lambda_function`
+    // performs at a closure function's entry.
+    pub fn build_capture_project(
+        &mut self,
+        cap_name: &FullName,
+        cap_idx: usize,
+        cap_tys: &Vec<Arc<TypeNode>>,
+        result_ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        let cap_obj = self.get_scoped_obj_noretain(cap_name);
+        let cap_obj_ty = make_dynamic_object_ty().get_object_type(cap_tys, self.type_env());
+        let cap_obj_str_ty = cap_obj_ty.to_struct_type(self, vec![]);
+        let cap_val =
+            cap_obj.extract_field_as(self, cap_obj_str_ty, cap_idx as u32 + DYNAMIC_OBJ_CAP_IDX);
+        let obj = Object::new(cap_val, result_ty.clone(), self);
+        self.build_retain(obj.clone());
+        obj
+    }
+
+    // Project field `field_idx` out of the struct/tuple named `var_name`. When the struct is boxed
+    // the extracted field is retained (a retain-getter, so it outlives the container's later
+    // release), and the container is not released here; when the struct is unboxed the field is a
+    // pure projection with no reference-counting. The complementary releases (of the boxed container
+    // and of dropped unboxed leaves) are emitted as explicit `Release` nodes by RC insertion.
+    // Project one field out of a struct as a retain-getter: read the container without consuming it
+    // and return the field with an added reference. The container's `Release` is an explicit RC IR
+    // node (the container is a `Borrow` operand). Retaining the field for BOTH boxed and unbox
+    // containers keeps that container `Release` sound for either layout (a boxed container's
+    // `Release` frees the box; an unbox container's `Release` drops the moved-out leaves, which the
+    // retain balances). For an unbox container this is a whole-value approximation that adds a
+    // retain/release pair the later cancellation pass removes; per-leaf pure projection is deferred.
+    pub fn build_struct_project(&mut self, var_name: &FullName, field_idx: usize) -> Object<'c> {
+        let str = self.get_scoped_obj_noretain(var_name);
+        let field = ObjectFieldType::move_out_struct_field(self, &str, field_idx as u32);
+        self.build_retain(field.clone());
+        field
     }
 
     fn eval_array_lit(

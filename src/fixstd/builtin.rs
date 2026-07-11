@@ -2962,6 +2962,202 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
     (expr, scm)
 }
 
+// Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
+// struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
+// `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMMakeStructBody {
+    pub field_names: Vec<FullName>,
+}
+
+impl InlineLLVMMakeStructBody {
+    pub fn name(&self) -> String {
+        format!(
+            "make_struct({})",
+            self.field_names
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        self.field_names.iter_mut().collect()
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        let mut str_obj = create_obj(ty.clone(), &vec![], None, gc, Some("allocate_MakeStruct"));
+        let offset = if ty.is_box(gc.type_env()) { 1 } else { 0 };
+        for (i, name) in self.field_names.iter().enumerate() {
+            let field_obj = gc.get_scoped_obj_noretain(name);
+            str_obj = str_obj.insert_field(gc, i as u32 + offset, field_obj.value);
+        }
+        str_obj
+    }
+}
+
+// Allocate an array whose length equals the number of operands and fill it with them. The array
+// type is the value type of the enclosing expression. This is the RC IR counterpart of the
+// `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayLitBody {
+    pub elem_names: Vec<FullName>,
+}
+
+impl InlineLLVMArrayLitBody {
+    pub fn name(&self) -> String {
+        format!(
+            "array_lit[{}]",
+            self.elem_names
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        self.elem_names.iter_mut().collect()
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        let len = gc
+            .context
+            .i64_type()
+            .const_int(self.elem_names.len() as u64, false);
+        let array = create_obj(ty.clone(), &vec![], Some(len), gc, Some("array_literal"));
+        let buffer = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let array = array.insert_field(gc, ARRAY_LEN_IDX, len);
+        for (i, name) in self.elem_names.iter().enumerate() {
+            let value = gc.get_scoped_obj_noretain(name);
+            let idx = gc.context.i64_type().const_int(i as u64, false);
+            ObjectFieldType::write_to_array_buf(gc, None, buffer, idx, value, false);
+        }
+        array
+    }
+}
+
+// Call a C function. This is the RC IR counterpart of the `Expr::FFICall` AST node. `arg_names` are
+// the operands; when `is_io`, the last one is the input `IOState` token, which establishes the
+// ordering dependency but is not passed to C.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMFFICallBody {
+    pub fun_name: Name,
+    pub ret_tycon: Arc<TyCon>,
+    pub param_tycons: Vec<Arc<TyCon>>,
+    pub is_var_args: bool,
+    pub is_io: bool,
+    pub arg_names: Vec<FullName>,
+}
+
+impl InlineLLVMFFICallBody {
+    pub fn name(&self) -> String {
+        format!(
+            "FFI_CALL{}[{}]",
+            if self.is_io { "_IOS" } else { "" },
+            self.fun_name
+        )
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        self.arg_names.iter_mut().collect()
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // The return object's type is the value type of this expression: `(IOState, ret)` when
+        // `is_io`, else `ret`.
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("allocate_CallC"));
+        // The C arguments are all operands except the trailing IOState token (when `is_io`).
+        let c_arg_count = if self.is_io {
+            self.arg_names.len() - 1
+        } else {
+            self.arg_names.len()
+        };
+        let arg_objs = self.arg_names[..c_arg_count]
+            .iter()
+            .map(|name| gc.get_scoped_obj_noretain(name))
+            .collect::<Vec<_>>();
+        gc.build_ffi_call_core(
+            &None,
+            obj,
+            &self.fun_name,
+            &self.ret_tycon,
+            &self.param_tycons,
+            self.is_var_args,
+            arg_objs,
+            self.is_io,
+        )
+    }
+}
+
+// Project one field out of a struct/tuple. When the struct is boxed the field is retained (a
+// retain-getter); when unboxed it is a pure projection. Lowering emits these to destructure a
+// pattern binding into per-field variables.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMStructProjectBody {
+    pub var_name: FullName,
+    pub field_idx: usize,
+}
+
+impl InlineLLVMStructProjectBody {
+    pub fn name(&self) -> String {
+        format!("{}.#project.{}", self.var_name.to_string(), self.field_idx)
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        _ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        gc.build_struct_project(&self.var_name, self.field_idx)
+    }
+}
+
+// Project a captured value out of a lifted closure's capture object, retaining it (a retain-getter).
+// Lowering emits this at the entry of a lifted closure function to bind each captured variable.
+// `cap_tys` are the types of all captured values, needed to reconstruct the capture object's layout.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMCaptureProjectBody {
+    pub cap_name: FullName,
+    pub cap_idx: usize,
+    pub cap_tys: Vec<Arc<TypeNode>>,
+}
+
+impl InlineLLVMCaptureProjectBody {
+    pub fn name(&self) -> String {
+        format!("{}.#cap.{}", self.cap_name.to_string(), self.cap_idx)
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.cap_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        gc.build_capture_project(&self.cap_name, self.cap_idx, &self.cap_tys, ty)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPunchBody {
     pub var_name: FullName,
@@ -4542,8 +4738,11 @@ impl InlineLLVMWithRetainedFunctionBody {
         // Get the argument "x".
         let x = gc.get_scoped_obj(&self.x_name);
 
-        // Retain "x".
-        if !gc.is_var_used_later(&self.x_name) {
+        // Retain "x" around the call so that "f" sees it as shared and cannot mutate it in place.
+        // In the RC IR path this transient retain is unconditional (the semantic reference count is
+        // baked into the op, per the ownership audit's "always retain"); in the legacy path it is
+        // elided when "x" is used later and is therefore already shared.
+        if gc.rc_ir_mode || !gc.is_var_used_later(&self.x_name) {
             gc.retain(x.clone());
         }
 
@@ -4551,7 +4750,7 @@ impl InlineLLVMWithRetainedFunctionBody {
         let ret = gc.apply_lambda(f, vec![x.clone()], false).unwrap();
 
         // Release "x".
-        if !gc.is_var_used_later(&self.x_name) {
+        if gc.rc_ir_mode || !gc.is_var_used_later(&self.x_name) {
             gc.release(x);
         }
 
