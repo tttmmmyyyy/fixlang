@@ -232,8 +232,8 @@ namespace Array {
     _unsafe_act_bounds_unchecked = |idx, fun, arr| (
         let (unique, arr) = arr.unsafe_is_unique;
         if unique {
-            let (parr, elm) = PunchedArray::_unsafe_punch_bounds_uniqueness_unchecked(idx, arr);
-            fun(elm).map(|elm| parr._plug_in(elm))
+            let (parr, elm) = PunchedArray::_punch_uniqueness_unchecked(idx, arr);
+            fun(elm).map(|elm| parr._plug(elm))
         } else {
             fun(arr._unsafe_get_bounds_unchecked(idx)).map(|elm| arr.set(idx, elm))
         }
@@ -2629,68 +2629,8 @@ impl Option : Monad {
 // The type for file path.
 type Path = String;
 
-// The type of punched arrays. 
-// 
-// A punched array is an array from which a certain element has been removed.
-// This is used in the implementation of `Array::act`.
+// The type of punched arrays: an array with one element moved out. Used internally by `Array::act`.
 type PunchedArray a = unbox struct { _arr : Array a, _idx : I64 };
-
-namespace PunchedArray {
-
-    // Plug in an element to a punched array to get back an array.
-    //
-    // # Parameters
-    //
-    // * `element` - The element to be plugged in.
-    // * `parray` - The punched array to be plugged in.
-    _plug_in : a -> PunchedArray a -> Array a;
-    _plug_in = |elm, parr| (
-        let PunchedArray { _arr : arr, _idx : idx } = parr;
-        let size = arr.@size + 1;
-
-        // Increment the size.
-        let arr = arr._unsafe_force_unique._unsafe_set_size(size);
-
-        // Move the element at the `idx` to the last.
-        let arr = if idx == size - 1 { arr } else {
-            let (arr, last) = arr._unsafe_get_linear_bounds_unchecked_unretained(idx);
-            arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(size - 1, last)
-        };
-
-        // Insert the element.
-        arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, elm)
-    );
-
-    // Creates a punched array by moving out the element at the specified index.
-    // 
-    // This function is unsafe because:
-    // - It does not perform bounds checking on the index.
-    // - It does not check the uniqueness of the array.
-    //
-    // # Parameters
-    //
-    // * `i` - The index of the element to be punched.
-    // * `array` - The array to be punched.
-    _unsafe_punch_bounds_uniqueness_unchecked : I64 -> Array a -> (PunchedArray a, a);
-    _unsafe_punch_bounds_uniqueness_unchecked = |idx, arr| (
-        // Bounds check.
-        let size = arr.@size;
-
-        // Decrement the size.
-        let (arr, elm) = arr._unsafe_set_size(size - 1)._unsafe_get_linear_bounds_unchecked_unretained(idx);
-
-        // Move the last element to the punched index.
-        let arr = if idx == size - 1 {
-            arr
-        } else {
-            let (arr, last) = arr._unsafe_get_linear_bounds_unchecked_unretained(size-1);
-            arr._unsafe_set_bounds_uniqueness_unchecked_unreleased(idx, last)
-        };
-
-        let parr = PunchedArray { _arr : arr, _idx : idx };
-        (parr, elm)
-    );
-}
 
 // A type of result value for a computation that may fail.
 type Result e o = unbox union { ok : o, err: e };

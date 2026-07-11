@@ -37,6 +37,7 @@ pub const C_DOUBLE_NAME: &str = "CDouble";
 pub const IOSTATE_NAME: &str = "IOState";
 pub const BOOL_NAME: &str = "Bool";
 pub const ARRAY_NAME: &str = "Array";
+pub const PUNCHED_ARRAY_NAME: &str = "PunchedArray";
 pub const LAZY_NAME: &str = "Lazy";
 pub const FUNCTOR_NAME: &str = "Functor";
 pub const TUPLE_NAME: &str = "Tuple";

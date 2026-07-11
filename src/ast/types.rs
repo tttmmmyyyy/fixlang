@@ -17,8 +17,8 @@ use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_array_tycon, is_destructor_object_tycon, is_dynamic_object_tycon,
-    is_funptr_tycon, make_array_tycon, make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon,
-    make_iostate_name, make_tuple_name_abs,
+    is_funptr_tycon, is_punched_array_tycon, make_array_tycon, make_arrow_name_abs,
+    make_arrow_tycon, make_funptr_tycon, make_iostate_name, make_tuple_name_abs,
 };
 use crate::generator::Generator;
 use crate::misc::collect_results;
@@ -991,6 +991,15 @@ impl TypeNode {
         }
         let tc = tc.unwrap();
         return is_array_tycon(tc.as_ref());
+    }
+
+    pub fn is_punched_array(&self) -> bool {
+        let tc = self.toplevel_tycon();
+        if tc.is_none() {
+            return false;
+        }
+        let tc = tc.unwrap();
+        return is_punched_array_tycon(tc.as_ref());
     }
 
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {

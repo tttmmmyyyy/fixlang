@@ -25,7 +25,8 @@ use crate::constants::{
     CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
     FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, STD_NAME, STRING_NAME,
+    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
+    STRING_NAME,
     STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
     STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
@@ -341,6 +342,15 @@ pub fn is_array_tycon(tc: &TyCon) -> bool {
     *tc == make_array_tycon()
 }
 
+pub fn make_punched_array_tycon() -> TyCon {
+    TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))
+}
+
+// Returns whether given tycon is a punched array (`Std::PunchedArray`).
+pub fn is_punched_array_tycon(tc: &TyCon) -> bool {
+    *tc == make_punched_array_tycon()
+}
+
 // Make `Std::Boxed` trait.
 pub fn make_boxed_trait() -> TraitId {
     TraitId::from_fullname(FullName::from_strs(&[STD_NAME], BOXED_TRAIT_NAME))
@@ -426,6 +436,10 @@ pub fn make_bool_ty() -> Arc<TypeNode> {
 // Get Array type.
 pub fn make_array_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
+}
+
+pub fn make_punched_array_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME)))
 }
 
 pub fn integral_types() -> Vec<Arc<TypeNode>> {
@@ -2032,6 +2046,16 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // If it is unique, do nothing.
 // If it is shared, clone the object.
 fn make_array_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: Object<'c>) -> Object<'c> {
+    make_array_unique_with_hole(gc, array, None)
+}
+
+// Force array object to be unique, as `make_array_unique`. When `hole` is `Some(idx)`, a shared
+// array is cloned skipping the element at `idx` (its slot in the clone is left uninitialized).
+fn make_array_unique_with_hole<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    array: Object<'c>,
+    hole: Option<IntValue<'c>>,
+) -> Object<'c> {
     assert!(array.ty.is_array());
 
     let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
@@ -2062,7 +2086,7 @@ fn make_array_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: Object<'c>) -> O
     // Copy elements to the cloned array.
     let cloned_array_buf = cloned_array.gep_boxed(gc, ARRAY_BUF_IDX);
     let array_buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
-    ObjectFieldType::clone_array_buf(gc, array_len, array_buf, cloned_array_buf, elem_ty);
+    ObjectFieldType::clone_array_buf(gc, array_len, array_buf, cloned_array_buf, elem_ty, hole);
     gc.release(array.clone()); // Given array should be released here.
 
     // Jump to the end_bb.
@@ -2305,6 +2329,180 @@ pub fn swap_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 // `Array::swap_bounds_unchecked` built-in function.
 pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     swap_array_common(false)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayPunchBody {
+    force_unique: bool,
+    idx_name: FullName,
+    arr_name: FullName,
+}
+
+impl InlineLLVMArrayPunchBody {
+    pub fn name(&self) -> String {
+        format!(
+            "PunchedArray::_punch{}({}, {})",
+            if self.force_unique {
+                ""
+            } else {
+                "_uniqueness_unchecked"
+            },
+            self.idx_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        ret_ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // ret_ty = (PunchedArray a, a)
+        let mut array = gc.get_scoped_obj(&self.arr_name);
+        let idx_obj = gc.get_scoped_obj(&self.idx_name);
+        let idx = idx_obj.extract_field(gc, 0).into_int_value();
+
+        // The array has no hole yet, so this is an ordinary clone-if-shared.
+        if self.force_unique {
+            array = make_array_unique(gc, array);
+        }
+
+        // Move the element at `idx` out without retaining, leaving its slot as the hole; the
+        // length is unchanged.
+        let punched_ty = ret_ty.collect_type_argments().get(0).unwrap().clone();
+        let elem_ty = ret_ty.collect_type_argments().get(1).unwrap().clone();
+        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty, idx);
+
+        // Build `(PunchedArray { _arr : array, _idx : idx }, elem)`.
+        let punched = create_obj(punched_ty, &vec![], None, gc, Some("alloca@_punch"));
+        let punched = ObjectFieldType::move_into_struct_field(gc, punched, 0, &array);
+        let punched = ObjectFieldType::move_into_struct_field(gc, punched, 1, &idx_obj);
+        let res = create_obj(ret_ty.clone(), &vec![], None, gc, Some("alloca@_punch_ret"));
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &punched);
+        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &elem);
+        res
+    }
+}
+
+// Moves the element at `idx` out of an array (without bounds checking), leaving a hole, and
+// returns the punched array together with the moved-out element.
+// Type: I64 -> Array a -> (PunchedArray a, a)
+pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const IDX_NAME: &str = "idx";
+    const ARR_NAME: &str = "array";
+    const ELEM_TYPE: &str = "a";
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+    let punched_ty = type_tyapp(make_punched_array_ty(), elem_tyvar.clone());
+    let res_ty = make_tuple_ty(vec![punched_ty, elem_tyvar.clone()]);
+
+    let expr = expr_abs_many(
+        vec![var_local(IDX_NAME), var_local(ARR_NAME)],
+        expr_llvm(
+            LLVMGenerator::ArrayPunchBody(InlineLLVMArrayPunchBody {
+                force_unique,
+                idx_name: FullName::local(IDX_NAME),
+                arr_name: FullName::local(ARR_NAME),
+            }),
+            res_ty.clone(),
+            None,
+        ),
+    );
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(make_i64_ty(), type_fun(array_ty, res_ty)),
+    );
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMPunchedArrayPlugBody {
+    force_unique: bool,
+    elem_name: FullName,
+    punched_name: FullName,
+}
+
+impl InlineLLVMPunchedArrayPlugBody {
+    pub fn name(&self) -> String {
+        format!(
+            "PunchedArray::_plug{}({}, {})",
+            if self.force_unique {
+                ""
+            } else {
+                "_uniqueness_unchecked"
+            },
+            self.elem_name.to_string(),
+            self.punched_name.to_string(),
+        )
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.elem_name, &mut self.punched_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        _ret_ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        let elem = gc.get_scoped_obj(&self.elem_name);
+        let punched = gc.get_scoped_obj(&self.punched_name);
+
+        // Deconstruct PunchedArray { _arr : array, _idx : idx }.
+        let mut array = ObjectFieldType::move_out_struct_field(gc, &punched, 0);
+        let idx_obj = ObjectFieldType::move_out_struct_field(gc, &punched, 1);
+        let idx = idx_obj.extract_field(gc, 0).into_int_value();
+
+        // On a shared array, clone skipping the hole so this plug gets a private array.
+        if self.force_unique {
+            array = make_array_unique_with_hole(gc, array, Some(idx));
+        }
+
+        // Write the element back into the hole (no bounds check, and no release of the hole slot).
+        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        ObjectFieldType::write_to_array_buf(gc, None, buf, idx, elem, false);
+        array
+    }
+}
+
+// Writes an element back into a punched array's hole, returning the completed array.
+// Type: a -> PunchedArray a -> Array a
+pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const ELEM_NAME: &str = "elem";
+    const PUNCHED_NAME: &str = "punched";
+    const ELEM_TYPE: &str = "a";
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+    let punched_ty = type_tyapp(make_punched_array_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs_many(
+        vec![var_local(ELEM_NAME), var_local(PUNCHED_NAME)],
+        expr_llvm(
+            LLVMGenerator::PunchedArrayPlugBody(InlineLLVMPunchedArrayPlugBody {
+                force_unique,
+                elem_name: FullName::local(ELEM_NAME),
+                punched_name: FullName::local(PUNCHED_NAME),
+            }),
+            array_ty.clone(),
+            None,
+        ),
+    );
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_fun(elem_tyvar, type_fun(punched_ty, array_ty)),
+    );
+    (expr, scm)
 }
 
 #[derive(Clone, Serialize, Deserialize)]

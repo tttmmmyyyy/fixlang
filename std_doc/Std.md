@@ -5790,10 +5790,7 @@ The type of pointers.
 
 Defined as: `type PunchedArray a = unbox struct { ...fields... }`
 
-The type of punched arrays.
-
-A punched array is an array from which a certain element has been removed.
-This is used in the implementation of `Array::act`.
+The type of punched arrays: an array with one element moved out. Used internally by `Array::act`.
 
 #### Result
 

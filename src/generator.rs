@@ -33,7 +33,6 @@ use crate::constants::DYNAMIC_OBJ_TRAVARSER_IDX;
 use crate::constants::REFCNT_STATE_GLOBAL;
 use crate::constants::REFCNT_STATE_LOCAL;
 use crate::constants::REFCNT_STATE_THREADED;
-use crate::constants::TRAVERSER_WORK_RELEASE;
 use crate::error::panic_with_msg;
 use crate::error::panic_with_msg_src;
 use crate::fixstd::builtin::make_dynamic_object_ty;
@@ -1173,7 +1172,24 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Release or mark global or mark threaded nonnull boxed object.
+    // Release or mark a non-null boxed object: process its owned references with the standard
+    // traverser.
     fn build_release_mark_nonnull_boxed(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
+        let obj_for_refs = obj.clone();
+        self.build_release_mark_nonnull_boxed_with(obj, work, move |gc| {
+            gc.traverse_boxed_refs(&obj_for_refs, work)
+        });
+    }
+
+    // Release or mark a non-null boxed object, using `traverse_refs` — in place of the type's
+    // standard traverser — to process its owned references. A caller thus reuses the refcount
+    // bookkeeping with a custom reference traversal.
+    pub(crate) fn build_release_mark_nonnull_boxed_with(
+        &mut self,
+        obj: &Object<'c>,
+        work: TraverserWorkType,
+        traverse_refs: impl FnOnce(&mut Self),
+    ) {
         // If the work is release, and the object's type is Std::Destructor, then call destructor when the refcnt is one.
         if work == TraverserWorkType::release() && obj.is_destructor_object() {
             // Branch by whether or not the reference counter is one.
@@ -1206,9 +1222,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
 
         if work == TraverserWorkType::release() {
-            self.build_release_boxed(obj);
+            self.build_release_boxed_with(obj, traverse_refs);
         } else {
-            self.build_mark_boxed(obj, work);
+            self.build_mark_boxed_with(obj, work, traverse_refs);
         }
     }
 
@@ -1267,8 +1283,40 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    // Release a boxed object.
-    fn build_release_boxed(&mut self, obj: &Object<'c>) {
+    // Traverse a non-null boxed object's owned references (its elements / fields) for `work`
+    // (release / mark). Dynamic objects carry their traverser and are called indirectly;
+    // others use the statically generated one.
+    fn traverse_boxed_refs(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
+        let obj_ptr = obj.value.into_pointer_value();
+        if obj.is_dynamic_object() {
+            let trav = obj.extract_trav_from_dynamic(self);
+            let trav_ty = traverser_type(self, &obj.ty, true);
+            self.builder()
+                .build_indirect_call(
+                    trav_ty,
+                    trav,
+                    &[
+                        obj_ptr.into(),
+                        traverser_work_type(self.context)
+                            .const_int(work.0 as u64, false)
+                            .into(),
+                    ],
+                    "call_trav",
+                )
+                .unwrap();
+        } else {
+            let trav = object::create_traverser(&obj.ty, &vec![], self, Some(work));
+            if let Some(trav) = trav {
+                self.builder()
+                    .build_call(trav, &[obj_ptr.into()], "call_trav")
+                    .unwrap();
+            }
+        }
+    }
+
+    // Release a non-null boxed object, emitting `traverse_refs` to release its owned references
+    // once the refcount reaches zero, before the object is freed.
+    fn build_release_boxed_with(&mut self, obj: &Object<'c>, traverse_refs: impl FnOnce(&mut Self)) {
         // Get pointer to the object.
         let obj_ptr = obj.value.into_pointer_value();
 
@@ -1370,40 +1418,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Implement `destruction_bb`
         self.builder().position_at_end(destruction_bb);
 
-        // Call dtor.
-        if obj.is_dynamic_object() {
-            // If the object is dynamic, extract the traverser from the object and call it.
-            let trav = obj.extract_trav_from_dynamic(self);
-            let trav_ty = traverser_type(self, &obj.ty, true);
-            self.builder()
-                .build_indirect_call(
-                    trav_ty,
-                    trav,
-                    &[
-                        obj_ptr.into(),
-                        traverser_work_type(self.context)
-                            .const_int(TRAVERSER_WORK_RELEASE as u64, false)
-                            .into(),
-                    ],
-                    "call_dtor",
-                )
-                .unwrap();
-        } else {
-            // If the object is not dynamic, call the dtor of the object.
-            let dtor = object::create_traverser(
-                &obj.ty,
-                &vec![],
-                self,
-                Some(TraverserWorkType::release()),
-            );
-            if let Some(dtor) = dtor {
-                self.builder()
-                    .build_call(dtor, &[obj_ptr.into()], "call_dtor")
-                    .unwrap();
-            }
-        }
-
-        // free.
+        // Release the object's owned references, then free it.
+        traverse_refs(self);
         self.builder().build_free(obj_ptr).unwrap();
         self.builder().build_unconditional_branch(end_bb).unwrap();
 
@@ -1414,8 +1430,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(end_bb);
     }
 
-    // Mark global or mark threaded a boxed object.
-    fn build_mark_boxed(&mut self, obj: &Object<'c>, work: TraverserWorkType) {
+    // Mark a boxed object, emitting `traverse_refs` to mark its owned references before the
+    // object itself is marked.
+    fn build_mark_boxed_with(
+        &mut self,
+        obj: &Object<'c>,
+        work: TraverserWorkType,
+        traverse_refs: impl FnOnce(&mut Self),
+    ) {
         assert!(
             work == TraverserWorkType::mark_global() || work == TraverserWorkType::mark_threaded()
         );
@@ -1423,32 +1445,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         // Get pointer to the object.
         let obj_ptr = obj.value.into_pointer_value();
 
-        // Get pointer to call the traverser function.
-        if obj.is_dynamic_object() {
-            let trav = obj.extract_trav_from_dynamic(self);
-            let trav_ty = traverser_type(self, &obj.ty, true);
-            self.builder()
-                .build_indirect_call(
-                    trav_ty,
-                    trav,
-                    &[
-                        obj_ptr.into(),
-                        traverser_work_type(self.context)
-                            .const_int(work.0 as u64, false)
-                            .into(),
-                    ],
-                    "call_trav_dynamic_for_mark",
-                )
-                .unwrap();
-        } else {
-            // If the object is not dynamic, call the dtor of the object.
-            let trav = object::create_traverser(&obj.ty, &vec![], self, Some(work));
-            if let Some(trav) = trav {
-                self.builder()
-                    .build_call(trav, &[obj_ptr.into()], "call_trav_for_mark")
-                    .unwrap();
-            }
-        }
+        // Mark the object's owned references.
+        traverse_refs(self);
 
         // Mark the object itself.
         if work == TraverserWorkType::mark_global() {

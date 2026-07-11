@@ -15,7 +15,8 @@ use crate::{
         ARRAY_UNSAFE_FILL_NAME, ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
         ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
         ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, DESTRUCTOR_NAME, F32_NAME,
-        F64_NAME, FFI_NAME, HOLE_NAME, IOSTATE_NAME, IO_NAME, STD_NAME, WITH_RETAINED_NAME,
+        F64_NAME, FFI_NAME, HOLE_NAME, IOSTATE_NAME, IO_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
+        WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -38,7 +39,8 @@ use crate::{
         multiply_trait_instance_int, negate_trait_instance_float, negate_trait_instance_int,
         not_trait_instance_bool, quiet_nan_value, remainder_trait_instance_int, set_array,
         shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
-        swap_array, swap_bounds_unchecked_array, undefined_internal_function,
+        array_punch, punched_array_plug, swap_array, swap_bounds_unchecked_array,
+        undefined_internal_function,
         unsafe_set_size_array, with_retained_function, BitOperationType,
     },
     misc::{make_map, upper_camel_to_lower_snake, Map},
@@ -488,6 +490,34 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         None,
         Some(include_str!("../docs/std_array_swap_bounds_unchecked.md").to_string()),
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_punch"),
+        array_punch(true),
+        None,
+        None,
+        None,
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_punch_uniqueness_unchecked"),
+        array_punch(false),
+        None,
+        None,
+        None,
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_plug"),
+        punched_array_plug(true),
+        None,
+        None,
+        None,
+    ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_plug_uniqueness_unchecked"),
+        punched_array_plug(false),
+        None,
+        None,
+        None,
     ));
     // The canonical name of the array capacity accessor is `Array::@capacity`;
     // it gets the LLVM-builtin implementation. `Array::get_capacity` is then

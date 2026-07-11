@@ -407,10 +407,34 @@ impl ObjectFieldType {
         after_loop(gc, size, buffer);
     }
 
-    pub fn release_or_mark_array_buf<'c, 'm>(
+    // The buffer and element count of the elements that follow a hole: elements `(hole, size)`
+    // live at `&buffer[hole + 1]`, and there are `size - hole - 1` of them.
+    fn array_buf_after_hole<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
-        size: IntValue<'c>,
+        elem_basic_ty: BasicTypeEnum<'c>,
         buffer: PointerValue<'c>,
+        size: IntValue<'c>,
+        hole: IntValue<'c>,
+    ) -> (PointerValue<'c>, IntValue<'c>) {
+        let one = gc.context.i64_type().const_int(1, false);
+        let after_hole = gc.builder().build_int_add(hole, one, "after_hole").unwrap();
+        let tail_buffer = unsafe {
+            gc.builder()
+                .build_gep(elem_basic_ty, buffer, &[after_hole], "buf_after_hole")
+                .unwrap()
+        };
+        let tail_count = gc
+            .builder()
+            .build_int_sub(size, after_hole, "count_after_hole")
+            .unwrap();
+        (tail_buffer, tail_count)
+    }
+
+    // Release / mark each of `count` consecutive elements starting at `buffer`.
+    fn release_or_mark_array_range<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        buffer: PointerValue<'c>,
+        count: IntValue<'c>,
         elem_ty: Arc<TypeNode>,
         work_type: TraverserWorkType,
     ) {
@@ -444,7 +468,29 @@ impl ObjectFieldType {
         }
 
         // Generate loop.
-        Self::loop_over_array_buf(gc, size, buffer, loop_body, after_loop);
+        Self::loop_over_array_buf(gc, count, buffer, loop_body, after_loop);
+    }
+
+    // Release / mark every element of an array's buffer. When `hole` is `Some(idx)`, the element
+    // at `idx` is skipped (a slot whose element was moved out).
+    pub fn release_or_mark_array_buf<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        size: IntValue<'c>,
+        buffer: PointerValue<'c>,
+        elem_ty: Arc<TypeNode>,
+        work_type: TraverserWorkType,
+        hole: Option<IntValue<'c>>,
+    ) {
+        match hole {
+            None => Self::release_or_mark_array_range(gc, buffer, size, elem_ty, work_type),
+            Some(hole) => {
+                let value_ty = elem_ty.get_embedded_type(gc, &vec![]);
+                Self::release_or_mark_array_range(gc, buffer, hole, elem_ty.clone(), work_type);
+                let (tail_buffer, tail_count) =
+                    Self::array_buf_after_hole(gc, value_ty, buffer, size, hole);
+                Self::release_or_mark_array_range(gc, tail_buffer, tail_count, elem_ty, work_type);
+            }
+        }
     }
 
     // Initialize an array by value.
@@ -613,56 +659,70 @@ impl ObjectFieldType {
         gc.builder().build_store(elm_ptr, value.value).unwrap();
     }
 
-    // Clone an array.
-    // `dst` should be already allocated but not initialized.
+    // Clone (retain + copy) `count` consecutive elements from `src_buffer` into `dst_buffer`,
+    // starting at index 0 of each. `dst_buffer` should be already allocated but not initialized.
+    fn clone_array_range<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        src_buffer: PointerValue<'c>,
+        dst_buffer: PointerValue<'c>,
+        count: IntValue<'c>,
+        elem_ty: Arc<TypeNode>,
+    ) {
+        let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
+        // In loop body, retain value and store it at idx.
+        let loop_body = |gc: &mut Generator<'c, 'm>,
+                         idx: IntValue<'c>,
+                         _len: IntValue<'c>,
+                         _ptr_to_buffer: PointerValue<'c>| {
+            let src_ptr = unsafe {
+                gc.builder()
+                    .build_gep(elm_basic_ty, src_buffer, &[idx.into()], "ptr_to_src_elem")
+            }
+            .unwrap();
+            let dst_ptr = unsafe {
+                gc.builder()
+                    .build_gep(elm_basic_ty, dst_buffer, &[idx.into()], "ptr_to_dst_elem")
+            }
+            .unwrap();
+            let src_elem = gc
+                .builder()
+                .build_load(elm_basic_ty, src_ptr, "src_elem")
+                .unwrap();
+            gc.builder().build_store(dst_ptr, src_elem).unwrap();
+            let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
+            gc.retain(src_obj);
+        };
+
+        // After loop, do nothing.
+        let after_loop = |_gc: &mut Generator<'c, 'm>,
+                          _len: IntValue<'c>,
+                          _ptr_to_buffer: PointerValue<'c>| {};
+
+        Self::loop_over_array_buf(gc, count, src_buffer, loop_body, after_loop);
+    }
+
+    // Clone an array's buffer into `dst`. When `hole` is `Some(idx)`, the element at `idx` is
+    // skipped — its slot in `dst` is left uninitialized. `dst` should be already allocated but
+    // not initialized.
     pub fn clone_array_buf<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         len: IntValue<'c>,
         src_buffer: PointerValue<'c>,
         dst_buffer: PointerValue<'c>,
         elem_ty: Arc<TypeNode>,
+        hole: Option<IntValue<'c>>,
     ) {
-        // Clone each elements.
-        {
-            let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
-            // In loop body, retain value and store it at idx.
-            let loop_body = |gc: &mut Generator<'c, 'm>,
-                             idx: IntValue<'c>,
-                             _len: IntValue<'c>,
-                             _ptr_to_buffer: PointerValue<'c>| {
-                let src_ptr = unsafe {
-                    gc.builder().build_gep(
-                        elm_basic_ty,
-                        src_buffer,
-                        &[idx.into()],
-                        "ptr_to_src_elem",
-                    )
-                }
-                .unwrap();
-                let dst_ptr = unsafe {
-                    gc.builder().build_gep(
-                        elm_basic_ty,
-                        dst_buffer,
-                        &[idx.into()],
-                        "ptr_to_dst_elem",
-                    )
-                }
-                .unwrap();
-                let src_elem = gc
-                    .builder()
-                    .build_load(elm_basic_ty, src_ptr, "src_elem")
-                    .unwrap();
-                gc.builder().build_store(dst_ptr, src_elem).unwrap();
-                let src_obj = Object::new(src_elem, elem_ty.clone(), gc);
-                gc.retain(src_obj);
-            };
-
-            // After loop, do nothing.
-            let after_loop = |_gc: &mut Generator<'c, 'm>,
-                              _len: IntValue<'c>,
-                              _ptr_to_buffer: PointerValue<'c>| {};
-
-            Self::loop_over_array_buf(gc, len, src_buffer, loop_body, after_loop);
+        match hole {
+            None => Self::clone_array_range(gc, src_buffer, dst_buffer, len, elem_ty),
+            Some(hole) => {
+                let elm_basic_ty = elem_ty.get_embedded_type(gc, &vec![]);
+                Self::clone_array_range(gc, src_buffer, dst_buffer, hole, elem_ty.clone());
+                let (tail_src, tail_count) =
+                    Self::array_buf_after_hole(gc, elm_basic_ty, src_buffer, len, hole);
+                let (tail_dst, _) =
+                    Self::array_buf_after_hole(gc, elm_basic_ty, dst_buffer, len, hole);
+                Self::clone_array_range(gc, tail_src, tail_dst, tail_count, elem_ty);
+            }
         }
     }
 
@@ -1634,6 +1694,24 @@ fn build_traverse<'c, 'm>(
     work: TraverserWorkType,
     gc: &mut Generator<'c, 'm>,
 ) {
+    // `PunchedArray a` = unbox { Array a, I64 idx }: release / mark the inner array's elements
+    // while skipping the hole at `idx` (the moved-out element), reusing the array's refcount
+    // bookkeeping.
+    if obj.ty.is_punched_array() {
+        let inner_array_ty = obj.ty.field_types(gc.type_env())[0].clone();
+        let elem_ty = inner_array_ty.field_types(gc.type_env())[0].clone();
+        let inner_array = Object::new(obj.extract_field(gc, 0), inner_array_ty, gc);
+        let idx = Object::new(obj.extract_field(gc, 1), make_i64_ty(), gc)
+            .extract_field(gc, 0)
+            .into_int_value();
+        let size = inner_array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let buffer = inner_array.ptr_to_field(gc, ARRAY_BUF_IDX);
+        gc.build_release_mark_nonnull_boxed_with(&inner_array, work, |gc| {
+            ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, Some(idx));
+        });
+        return;
+    }
+
     // In this function, we need to access captured fields, which is not possible by `obj` only.
     let object_type = ty_to_object_ty(&obj.ty, capture, gc.type_env());
     let struct_type = object_type.to_struct_type(gc, vec![]);
@@ -1669,7 +1747,7 @@ fn build_traverse<'c, 'm>(
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
                 let size = obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
                 let buffer = obj.ptr_to_field(gc, ARRAY_BUF_IDX);
-                ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, ty.clone(), work);
+                ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, ty.clone(), work, None);
             }
             ObjectFieldType::UnionTag => {}
             ObjectFieldType::UnionBuf(_) => {
