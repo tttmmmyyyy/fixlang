@@ -1973,6 +1973,71 @@ pub fn array_unsafe_get_linear_bounds_unchecked_unretained(
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMArrayPopBackNonemptyBody {
+    arr_name: FullName,
+}
+
+impl InlineLLVMArrayPopBackNonemptyBody {
+    pub fn name(&self) -> String {
+        format!("Array::_pop_back_nonempty({})", self.arr_name.to_string())
+    }
+
+    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
+    }
+
+    pub fn generate<'c, 'm, 'b>(
+        &self,
+        gc: &mut Generator<'c, 'm>,
+        _ty: &Arc<TypeNode>,
+    ) -> Object<'c> {
+        // Force the array to be unique before shrinking it in place.
+        let array = gc.get_scoped_obj(&self.arr_name);
+        let array = make_array_unique(gc, array);
+
+        // The caller guarantees the array is non-empty, so the last index is `size - 1`.
+        let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
+        let len = array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let last_idx = gc
+            .builder()
+            .build_int_sub(len, len.get_type().const_int(1, false), "last_idx")
+            .unwrap();
+
+        // Drop the last element, then shrink the length so the released slot falls out of bounds.
+        let buf = array.gep_boxed(gc, ARRAY_BUF_IDX);
+        let elem = ObjectFieldType::read_from_array_buf_noretain(gc, None, buf, elem_ty, last_idx);
+        gc.release(elem);
+        array.insert_field(gc, ARRAY_LEN_IDX, last_idx)
+    }
+}
+
+// Drops the last element of a non-empty array and shrinks its length by one.
+// The caller must ensure the array is non-empty.
+// Type: Array a -> Array a
+pub fn array_pop_back_nonempty() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const ARR_NAME: &str = "array";
+    const ELEM_TYPE: &str = "a";
+
+    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
+    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
+
+    let expr = expr_abs(
+        vec![var_local(ARR_NAME)],
+        expr_llvm(
+            LLVMGenerator::ArrayPopBackNonemptyBody(InlineLLVMArrayPopBackNonemptyBody {
+                arr_name: FullName::local(ARR_NAME),
+            }),
+            array_ty.clone(),
+            None,
+        ),
+        None,
+    );
+
+    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(array_ty.clone(), array_ty));
+    (expr, scm)
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayUnsafeSetSizeBody {
     arr_name: FullName,
     len_name: FullName,
@@ -2231,11 +2296,11 @@ pub struct InlineLLVMArraySwapBody {
 impl InlineLLVMArraySwapBody {
     pub fn name(&self) -> String {
         format!(
-            "Array::swap{}({}, {}, {})",
+            "Array::{}({}, {}, {})",
             if self.bounds_checked {
-                ""
+                "swap"
             } else {
-                "_bounds_unchecked"
+                "unsafe_swap_bounds_unchecked"
             },
             self.i_name.to_string(),
             self.j_name.to_string(),
@@ -2265,7 +2330,7 @@ impl InlineLLVMArraySwapBody {
         };
 
         let elem_ty = array.ty.field_types(gc.type_env())[0].clone();
-        // `swap` bounds-checks unless `--no-runtime-check` is set; `swap_bounds_unchecked`
+        // `swap` bounds-checks unless `--no-runtime-check` is set; `unsafe_swap_bounds_unchecked`
         // never bounds-checks.
         let len = if self.bounds_checked && gc.config.runtime_check() {
             Some(array.extract_field(gc, ARRAY_LEN_IDX).into_int_value())
@@ -2326,7 +2391,7 @@ pub fn swap_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     swap_array_common(true)
 }
 
-// `Array::swap_bounds_unchecked` built-in function.
+// `Array::unsafe_swap_bounds_unchecked` built-in function.
 pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     swap_array_common(false)
 }
@@ -2341,9 +2406,9 @@ pub struct InlineLLVMArrayPunchBody {
 impl InlineLLVMArrayPunchBody {
     pub fn name(&self) -> String {
         format!(
-            "PunchedArray::_punch{}({}, {})",
+            "PunchedArray::_unsafe_punch_bounds{}({}, {})",
             if self.force_unique {
-                ""
+                "_unchecked"
             } else {
                 "_uniqueness_unchecked"
             },
@@ -2433,9 +2498,9 @@ pub struct InlineLLVMPunchedArrayPlugBody {
 impl InlineLLVMPunchedArrayPlugBody {
     pub fn name(&self) -> String {
         format!(
-            "PunchedArray::_plug{}({}, {})",
+            "PunchedArray::_unsafe_plug_bounds{}({}, {})",
             if self.force_unique {
-                ""
+                "_unchecked"
             } else {
                 "_uniqueness_unchecked"
             },

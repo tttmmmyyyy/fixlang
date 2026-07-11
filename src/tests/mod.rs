@@ -1,5 +1,6 @@
 mod test_abs_path_dep_hash;
 mod test_array_bounds_check;
+mod test_array_rmw;
 mod test_array_swap;
 mod test_punched_array;
 mod test_assert;

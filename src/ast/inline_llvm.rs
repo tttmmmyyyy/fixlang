@@ -78,6 +78,7 @@ pub enum LLVMGenerator {
     WithRetainedFunctionBody(InlineLLVMWithRetainedFunctionBody),
     UnsafeMutateBoxedInternalBody(InlineLLVMUnsafeMutateBoxedInternalFunctionBody),
     UnsafeMutateBoxedIOSInternalBody(InlineLLVMUnsafeMutateBoxedIOSInternalBody),
+    ArrayPopBackNonemptyBody(InlineLLVMArrayPopBackNonemptyBody),
     ArrayUnsafeGetLinearBoundsUncheckedUnretained(
         InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained,
     ),
@@ -161,6 +162,7 @@ impl LLVMGenerator {
             LLVMGenerator::WithRetainedFunctionBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => Some(x.generate(gc, ty)),
+            LLVMGenerator::ArrayPopBackNonemptyBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => {
                 Some(x.generate(gc, ty))
             }
@@ -262,6 +264,7 @@ impl LLVMGenerator {
             LLVMGenerator::WithRetainedFunctionBody(x) => x.free_vars(),
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.free_vars(),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.free_vars(),
+            LLVMGenerator::ArrayPopBackNonemptyBody(x) => x.free_vars(),
             LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.free_vars(),
             LLVMGenerator::IOStateUnsafeCreate(x) => x.free_vars(),
             LLVMGenerator::ArrayCheckRange(x) => x.free_vars(),
@@ -301,6 +304,7 @@ impl LLVMGenerator {
             LLVMGenerator::WithRetainedFunctionBody(x) => x.name(),
             LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.name(),
             LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.name(),
+            LLVMGenerator::ArrayPopBackNonemptyBody(x) => x.name(),
             LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.name(),
             LLVMGenerator::IOStateUnsafeCreate(x) => x.name(),
             LLVMGenerator::IntLit(x) => x.name(),

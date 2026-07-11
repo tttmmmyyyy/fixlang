@@ -603,20 +603,6 @@ This function clones the given array if it is shared.
 * `j` - The index of the second element.
 * `array` - The array to modify.
 
-#### swap_bounds_unchecked
-
-Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
-
-Swaps the two elements of an array at indices `i` and `j`, omitting the bounds check.
-
-This function clones the given array if it is shared. The caller must ensure `i` and `j` are in range `[0, size)`; an out-of-range index causes undefined behavior.
-
-##### Parameters
-
-* `i` - The index of the first element.
-* `j` - The index of the second element.
-* `array` - The array to modify.
-
 #### to_iter
 
 Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] Std::Array a -> ?it`
@@ -639,6 +625,20 @@ Truncates an array, keeping the given number of first elements.
 
 * `new_length` - The number of elements to be kept.
 * `array` - The array to be truncated.
+
+#### unsafe_swap_bounds_unchecked
+
+Type: `Std::I64 -> Std::I64 -> Std::Array a -> Std::Array a`
+
+Swaps the two elements of an array at indices `i` and `j`, omitting the bounds check.
+
+This function clones the given array if it is shared. The caller must ensure `i` and `j` are in range `[0, size)`; an out-of-range index causes undefined behavior.
+
+##### Parameters
+
+* `i` - The index of the first element.
+* `j` - The index of the second element.
+* `array` - The array to modify.
 
 ### namespace Std::Box
 

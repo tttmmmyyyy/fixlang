@@ -6,7 +6,7 @@
 
 #### Std
 
-- Added `Array::swap` and `Array::swap_bounds_unchecked`, which swap the two elements of an array at given indices. `swap` bounds-checks the indices; `swap_bounds_unchecked` omits that check (the caller must ensure the indices are in range).
+- Added `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which swap the two elements of an array at given indices. `swap` bounds-checks the indices; `unsafe_swap_bounds_unchecked` omits that check (the caller must ensure the indices are in range).
 
 ### Fixed
 

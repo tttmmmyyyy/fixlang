@@ -164,15 +164,15 @@ pub fn test_swap_bounds_check_respects_no_runtime_check() {
 }
 
 #[test]
-pub fn test_swap_bounds_unchecked_skips_check() {
-    // `swap_bounds_unchecked` never bounds-checks, even with runtime checks on.
+pub fn test_unsafe_swap_bounds_unchecked_skips_check() {
+    // `unsafe_swap_bounds_unchecked` never bounds-checks, even with runtime checks on.
     let source = r#"
             module Main;
 
             main : IO ();
             main = (
                 let arr : Array I64 = Array::empty(10); // size 0, capacity 10
-                eval arr.swap_bounds_unchecked(3, 5);   // in capacity, past size
+                eval arr.unsafe_swap_bounds_unchecked(3, 5);   // in capacity, past size
                 pure()
             );
         "#;

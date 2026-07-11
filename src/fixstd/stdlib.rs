@@ -22,7 +22,8 @@ use crate::{
     fixstd::builtin::{
         add_trait_instance_float, add_trait_instance_int, array_check_range, array_check_size,
         array_get_capacity, array_get_size, array_unsafe_empty, array_unsafe_fill,
-        array_unsafe_get_bounds_unchecked, array_unsafe_get_linear_bounds_unchecked_unretained,
+        array_pop_back_nonempty, array_unsafe_get_bounds_unchecked,
+        array_unsafe_get_linear_bounds_unchecked_unretained,
         array_unsafe_set_bounds_uniqueness_unchecked_unreleased, bit_not_function,
         bitwise_operation_function, boxed_from_retained_ptr_ios, boxed_to_retained_ptr_ios,
         boxed_trait_instance, cast_between_float_function, cast_between_integral_function,
@@ -414,6 +415,13 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         None,
         Some(include_str!("../docs/std_array_unsafe_get_bounds_unchecked.md").to_string()),
     ));
+    errors.eat_err(fix_module.add_global_value(
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_pop_back_nonempty"),
+        array_pop_back_nonempty(),
+        None,
+        None,
+        None,
+    ));
     errors.eat_err(
         fix_module.add_global_value(
             FullName::from_strs(
@@ -485,35 +493,35 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("../docs/std_array_swap.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "swap_bounds_unchecked"),
+        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "unsafe_swap_bounds_unchecked"),
         swap_bounds_unchecked_array(),
         None,
         None,
-        Some(include_str!("../docs/std_array_swap_bounds_unchecked.md").to_string()),
+        Some(include_str!("../docs/std_array_unsafe_swap_bounds_unchecked.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_punch"),
+        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_unsafe_punch_bounds_unchecked"),
         array_punch(true),
         None,
         None,
         None,
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_punch_uniqueness_unchecked"),
+        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_unsafe_punch_bounds_uniqueness_unchecked"),
         array_punch(false),
         None,
         None,
         None,
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_plug"),
+        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_unsafe_plug_bounds_unchecked"),
         punched_array_plug(true),
         None,
         None,
         None,
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_plug_uniqueness_unchecked"),
+        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_unsafe_plug_bounds_uniqueness_unchecked"),
         punched_array_plug(false),
         None,
         None,
