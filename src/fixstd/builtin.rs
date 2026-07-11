@@ -1794,6 +1794,13 @@ impl InlineLLVMArrayUnsafeGetBoundsUnchecked {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
 
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -2743,6 +2750,13 @@ impl InlineLLVMArrayGetPtrBody {
         vec![&mut self.arr_name]
     }
 
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -2817,6 +2831,13 @@ impl InlineLLVMArrayGetSizeBody {
         vec![&mut self.arr_name]
     }
 
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -2866,6 +2887,13 @@ impl InlineLLVMArrayGetCapacityBody {
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name]
+    }
+
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -3121,6 +3149,13 @@ impl InlineLLVMStructProjectBody {
         vec![&mut self.var_name]
     }
 
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -3147,6 +3182,13 @@ impl InlineLLVMCaptureProjectBody {
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.cap_name]
+    }
+
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -4370,6 +4412,13 @@ impl InlineLLVMUnionIsBody {
         vec![&mut self.union_arg_name]
     }
 
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -5075,6 +5124,13 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         vec![&mut self.var_name]
     }
 
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -5177,6 +5233,13 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         vec![&mut self.var_name]
     }
 
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -5276,6 +5339,13 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
+    }
+
+    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
+    /// borrows its boxed container (operand 0) and does not release it; the container's
+    /// `Release` is an explicit RC IR node.
+    pub fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 
     pub fn generate<'c, 'm, 'b>(

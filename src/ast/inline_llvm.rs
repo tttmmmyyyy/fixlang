@@ -291,27 +291,21 @@ impl LLVMGenerator {
     /// Whether operand `i` is only *borrowed* (read without taking ownership) rather than *owned*
     /// (consumed — moved into the result, released internally, or force-unique-returned). RC IR
     /// insertion emits an explicit `Release` after the last use of a borrowed operand, and a
-    /// `Retain` before a non-last use of an owned one.
-    ///
-    /// Whole-value granularity (P1): only the boxed container of the read-getters is borrowed; every
-    /// other operand is owned. Unboxed operands are reference-counting-neutral, so classifying them
-    /// as owned is harmless. Derived from the operand-ownership audit (plan §8); the container is
-    /// operand 0 in each read-getter's `free_vars`.
+    /// `Retain` before a non-last use of an owned one. Each built-in declares this on its own body
+    /// (next to `free_vars`); the read-getters borrow their boxed container and everything else owns
+    /// all its operands (the default).
     pub fn borrows_operand(&self, i: usize) -> bool {
         match self {
-            // Read-getters: the container (operand 0) is borrowed — the op reads it without
-            // consuming it (it may bake in a retain of the extracted value, but never releases the
-            // container). The remaining operands are unboxed indices.
-            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(_)
-            | LLVMGenerator::ArrayGetPtrBody(_)
-            | LLVMGenerator::ArrayGetSizeBody(_)
-            | LLVMGenerator::ArrayGetCapacityBody(_)
-            | LLVMGenerator::UnionIsBody(_)
-            | LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(_)
-            | LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(_)
-            | LLVMGenerator::GetBoxedDataPtrFunctionBody(_)
-            | LLVMGenerator::StructProjectBody(_)
-            | LLVMGenerator::CaptureProjectBody(_) => i == 0,
+            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayGetPtrBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayGetSizeBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayGetCapacityBody(x) => x.borrows_operand(i),
+            LLVMGenerator::UnionIsBody(x) => x.borrows_operand(i),
+            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::StructProjectBody(x) => x.borrows_operand(i),
+            LLVMGenerator::CaptureProjectBody(x) => x.borrows_operand(i),
             // Every other built-in consumes (owns) all its operands.
             _ => false,
         }
