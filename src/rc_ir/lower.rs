@@ -94,7 +94,12 @@ impl<'a> Lowerer<'a> {
     fn fresh_var(&mut self, hint: &str, ty: Arc<TypeNode>, source: Option<Span>) -> RcVar {
         self.counter += 1;
         let name = FullName::local(&format!("{}#{}", hint, self.counter));
-        RcVar { name, ty, source }
+        RcVar {
+            name,
+            ty,
+            source,
+            debug_name: None,
+        }
     }
 
     fn fresh_func(&mut self, hint: &str) -> FuncRef {
@@ -206,7 +211,8 @@ impl<'a> Lowerer<'a> {
                     cap_idx: i,
                     cap_tys: cap_tys.clone(),
                 });
-                let proj = self.fresh_var(&ast_name.name, cap_tys[i].clone(), None);
+                let mut proj = self.fresh_var(&ast_name.name, cap_tys[i].clone(), None);
+                proj.debug_name = Some(ast_name.to_string());
                 stmts.push((proj.clone(), RcRhs::Llvm(gen, vec![cap_var.clone()]), None));
                 self.push_env(ast_name, proj);
             }
@@ -264,6 +270,7 @@ impl<'a> Lowerer<'a> {
                 name: v.name.clone(),
                 ty: ty.clone(),
                 source: source.clone(),
+                debug_name: None,
             },
         }
     }
@@ -295,6 +302,7 @@ impl<'a> Lowerer<'a> {
                         name: name.clone(),
                         ty,
                         source: None,
+                        debug_name: None,
                     }
                 }
             })
@@ -417,7 +425,12 @@ impl<'a> Lowerer<'a> {
             Pattern::Union(variant_name, _, subpat) => {
                 let (variant_idx, _, _) = Pattern::get_variant_info(variant_name, self.type_env);
                 let payload_ty = scrutinee.ty.field_types(self.type_env)[variant_idx].clone();
-                let payload = self.fresh_var("payload", payload_ty, pat.info.source.clone());
+                let mut payload = self.fresh_var("payload", payload_ty, pat.info.source.clone());
+                // When the payload is bound whole to a source variable (e.g. `Some(x)`), that name is
+                // its debug name; a destructuring sub-pattern names its leaves instead.
+                if let Pattern::Var(v, _) = &subpat.pattern {
+                    payload.debug_name = Some(v.name.to_string());
+                }
                 // Destructure the payload's subpattern, then lower the arm body under those bindings.
                 let mut arm_stmts = vec![];
                 let pushed = self.destructure_pattern(subpat, &payload, &mut arm_stmts);
@@ -432,8 +445,9 @@ impl<'a> Lowerer<'a> {
                 }
             }
             Pattern::Var(v, _) => {
-                // A catch-all arm binds the whole scrutinee.
-                let payload = self.fresh_var(&v.name.name, scrutinee.ty.clone(), pat.info.source.clone());
+                // A catch-all arm binds the whole scrutinee to its source variable.
+                let mut payload = self.fresh_var(&v.name.name, scrutinee.ty.clone(), pat.info.source.clone());
+                payload.debug_name = Some(v.name.to_string());
                 self.push_env(&v.name, payload.clone());
                 let body = self.lower_body(body);
                 self.pop_env(&v.name);
@@ -545,6 +559,7 @@ impl<'a> Lowerer<'a> {
     ) -> Vec<FullName> {
         match &pat.pattern {
             Pattern::Var(v, _) => {
+                name_definition(&v.name, obj, stmts);
                 self.push_env(&v.name, obj.clone());
                 vec![v.name.clone()]
             }
@@ -585,6 +600,19 @@ impl<'a> Lowerer<'a> {
             .iter()
             .position(|f| f.name == *field_name)
             .expect("unknown field in struct pattern")
+    }
+}
+
+/// Record `dbg` as the source-level debug name of the statement that just produced `var`, so code
+/// generation can emit a debug local variable under it. This applies only when that statement is the
+/// immediately preceding one and is not already named — i.e. `var` is the fresh result of a compound
+/// expression bound to a source `let`/pattern variable. An alias to a pre-existing variable (a
+/// rename, a global, or a parameter) has no such statement and keeps its original binding's name.
+fn name_definition(dbg: &FullName, var: &RcVar, stmts: &mut Vec<Stmt>) {
+    if let Some(last) = stmts.last_mut() {
+        if last.0.name == var.name && last.0.debug_name.is_none() {
+            last.0.debug_name = Some(dbg.to_string());
+        }
     }
 }
 

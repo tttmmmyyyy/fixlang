@@ -152,11 +152,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     // Each arm returned directly; the continuation is a pure rename to `Ret`.
                     None
                 } else {
-                    let obj = obj.unwrap();
-                    self.scope_push(&x.name, &obj);
-                    let res = self.eval_rc_expr(k, tail, fn_map);
-                    self.scope_pop(&x.name);
-                    res
+                    self.bind_and_continue(x, obj.unwrap(), k, tail, fn_map)
                 }
             }
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
@@ -168,11 +164,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 if app_tail {
                     None
                 } else {
-                    let obj = obj.unwrap();
-                    self.scope_push(&x.name, &obj);
-                    let res = self.eval_rc_expr(k, tail, fn_map);
-                    self.scope_pop(&x.name);
-                    res
+                    self.bind_and_continue(x, obj.unwrap(), k, tail, fn_map)
                 }
             }
             RcExpr::Let(x, RcRhs::Llvm(gen, _args), k) => {
@@ -181,20 +173,39 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let llvm_tail = tail && is_tail_cont(k, &x.name);
                 match gen.generate(self, &x.ty, llvm_tail) {
                     None => None,
-                    Some(obj) => {
-                        self.scope_push(&x.name, &obj);
-                        let res = self.eval_rc_expr(k, tail, fn_map);
-                        self.scope_pop(&x.name);
-                        res
-                    }
+                    Some(obj) => self.bind_and_continue(x, obj, k, tail, fn_map),
                 }
             }
             RcExpr::Let(x, rhs, k) => {
                 let obj = self.eval_rc_rhs(rhs, &x.ty, fn_map);
-                self.scope_push(&x.name, &obj);
-                let res = self.eval_rc_expr(k, tail, fn_map);
-                self.scope_pop(&x.name);
-                res
+                self.bind_and_continue(x, obj, k, tail, fn_map)
+            }
+        }
+    }
+
+    /// Bind `obj` to `x` on the scope, emit its debug local variable, evaluate the continuation `k`,
+    /// then pop the binding. This is the common tail of the non-tail `Let` arms.
+    fn bind_and_continue(
+        &mut self,
+        x: &RcVar,
+        obj: Object<'c>,
+        k: &RcExprNode,
+        tail: bool,
+        fn_map: &Map<FuncRef, FunctionValue<'c>>,
+    ) -> Option<Object<'c>> {
+        self.scope_push(&x.name, &obj);
+        self.emit_rc_debug_local(x, &obj);
+        let res = self.eval_rc_expr(k, tail, fn_map);
+        self.scope_pop(&x.name);
+        res
+    }
+
+    /// Emit a debug local variable for the binding of `var` to `obj`, when debug info is enabled and
+    /// `var` carries a source-level name. A debugger can then inspect the value under that name.
+    fn emit_rc_debug_local(&mut self, var: &RcVar, obj: &Object<'c>) {
+        if self.has_di() {
+            if let Some(name) = &var.debug_name {
+                self.create_debug_local_variable(name, obj);
             }
         }
     }
@@ -333,6 +344,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 None => self.get_scoped_obj_noretain(&scrut.name),
             };
             self.scope_push(&arm.payload.name, &payload_obj);
+            self.emit_rc_debug_local(&arm.payload, &payload_obj);
 
             let arm_val = self.eval_rc_expr(&arm.body, tail, fn_map);
             self.scope_pop(&arm.payload.name);

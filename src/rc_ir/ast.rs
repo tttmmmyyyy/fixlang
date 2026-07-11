@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::ast::inline_llvm::LLVMGenerator;
-use crate::ast::name::FullName;
+use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
 use crate::misc::Map;
 use crate::parse::sourcefile::Span;
@@ -16,6 +16,11 @@ pub struct RcVar {
     pub name: FullName,
     pub ty: Arc<TypeNode>,
     pub source: Option<Span>,
+    /// The source-level name this variable denotes, when it is the binding of a `let`-pattern
+    /// variable, a match-arm payload, or a projected capture. Code generation emits a debug local
+    /// variable under this name so a debugger can inspect it by its source name. `None` for the
+    /// compiler-introduced intermediates that have no source name.
+    pub debug_name: Option<Name>,
 }
 
 /// A reference to a top-level RC IR function: a lifted lambda body, a global function, or an

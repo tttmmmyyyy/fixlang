@@ -50,9 +50,14 @@ fn func_to_string(func: &RcFunc) -> String {
     out
 }
 
-/// A variable renders as its name annotated with its type.
+/// A variable renders as its name annotated with its type, plus its source name in a binding
+/// position when it has one.
 fn var_to_string(var: &RcVar) -> String {
-    format!("{} : {}", var.name.to_string(), var.ty.to_string())
+    let dbg = match &var.debug_name {
+        Some(name) => format!(" (as {})", name),
+        None => String::new(),
+    };
+    format!("{} : {}{}", var.name.to_string(), var.ty.to_string(), dbg)
 }
 
 /// A variable in a position where only its identity matters (operands) renders as just its name.
