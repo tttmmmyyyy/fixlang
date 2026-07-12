@@ -1,0 +1,9 @@
+module Main;
+
+my_fill : I64 -> a -> Array a = |len, elem| Array::fill(len, elem);
+
+main : IO () = (
+    let arr = my_fill(3, 42);
+    eval arr;
+    pure()
+);

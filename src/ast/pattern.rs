@@ -3,7 +3,6 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::typedecl::Field;
 use crate::ast::types::{TyCon, TyConInfo, TypeNode};
-use crate::constants::WILDCARD_VAR_PREFIX;
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::error::Errors;
@@ -697,7 +696,7 @@ impl Pattern {
             Pattern::Var(v, t) => {
                 // Render a generated wildcard binder back as the `_` the
                 // user wrote.
-                if v.name.name.starts_with(WILDCARD_VAR_PREFIX) {
+                if v.name.is_wildcard() {
                     ret += "_";
                 } else {
                     ret += &v.name.to_string();

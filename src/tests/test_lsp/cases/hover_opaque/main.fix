@@ -1,0 +1,13 @@
+module Main;
+
+repeat_val : [?it : Iterator, Item ?it = a] a -> I64 -> ?it;
+repeat_val = |x, n| (
+    let iter = Iterator::range(0, n).map(|idx| x);
+    iter
+);
+
+main : IO () = (
+    let arr = repeat_val("hello", 3).to_array;
+    eval arr;
+    pure()
+);

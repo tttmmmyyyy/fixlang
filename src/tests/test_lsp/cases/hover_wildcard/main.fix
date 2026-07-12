@@ -1,0 +1,24 @@
+module Main;
+
+use_wild : I64 -> I64 = |x| (
+    let _ = x + 100;
+    x + 1
+);
+
+ignore_arg : a -> I64 = |_| 42;
+
+// `_` nested inside a tuple pattern.
+second : (I64, String) -> String = |pair| (
+    let (_, s) = pair;
+    s
+);
+
+main : IO () = (
+    let a = use_wild(5);
+    let b = ignore_arg("hello");
+    let c = second((1, "x"));
+    eval a;
+    eval b;
+    eval c;
+    pure()
+);
