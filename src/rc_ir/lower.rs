@@ -72,16 +72,16 @@ pub fn lower_program(type_env: &TypeEnv, symbols: &[Symbol], all_symbols: &[Symb
     }
 }
 
-/// The lowering context: a fresh-name counter, the accumulated top-level functions, and the scoped
-/// environment mapping each AST local name to the RC IR variable currently bound to it. Because a
-/// fresh globally-unique name is minted at every binding, the environment resolves shadowing and
-/// the resulting names need no scope tracking downstream.
+/// The lowering context: a fresh-name counter, the accumulated top-level functions, and the scope
+/// mapping each AST local name to the RC IR variable currently bound to it. Because a fresh
+/// globally-unique name is minted at every binding, the scope resolves shadowing and the resulting
+/// names need no scope tracking downstream.
 struct Lowerer<'a> {
     type_env: &'a TypeEnv,
-    counter: u64,
+    fresh_counter: u64,
     funcs: Map<FuncRef, RcFunc>,
     // A shadow stack per AST name; the last entry is the current binding.
-    env: Map<FullName, Vec<RcVar>>,
+    scope: Map<FullName, Vec<RcVar>>,
     // The type of each top-level symbol, to type a global referenced as an LLVM operand.
     symbol_types: Map<FullName, Arc<TypeNode>>,
 }
@@ -90,9 +90,9 @@ impl<'a> Lowerer<'a> {
     fn new(type_env: &'a TypeEnv) -> Self {
         Lowerer {
             type_env,
-            counter: 0,
+            fresh_counter: 0,
             funcs: Map::default(),
-            env: Map::default(),
+            scope: Map::default(),
             symbol_types: Map::default(),
         }
     }
@@ -100,8 +100,8 @@ impl<'a> Lowerer<'a> {
     // --- fresh names ---
 
     fn fresh_var(&mut self, hint: &str, ty: Arc<TypeNode>, source: Option<Span>) -> RcVar {
-        self.counter += 1;
-        let name = FullName::local(&format!("{}#{}", hint, self.counter));
+        self.fresh_counter += 1;
+        let name = FullName::local(&format!("{}#{}", hint, self.fresh_counter));
         RcVar {
             name,
             ty,
@@ -111,26 +111,26 @@ impl<'a> Lowerer<'a> {
     }
 
     fn fresh_func(&mut self, hint: &str) -> FuncRef {
-        self.counter += 1;
+        self.fresh_counter += 1;
         FuncRef {
-            name: FullName::local(&format!("{}#{}", hint, self.counter)),
+            name: FullName::local(&format!("{}#{}", hint, self.fresh_counter)),
         }
     }
 
     // --- environment ---
 
-    fn push_env(&mut self, ast_name: &FullName, var: RcVar) {
-        self.env.entry(ast_name.clone()).or_insert_with(Vec::new).push(var);
+    fn bind(&mut self, ast_name: &FullName, var: RcVar) {
+        self.scope.entry(ast_name.clone()).or_insert_with(Vec::new).push(var);
     }
 
-    fn pop_env(&mut self, ast_name: &FullName) {
-        if let Some(stack) = self.env.get_mut(ast_name) {
+    fn unbind(&mut self, ast_name: &FullName) {
+        if let Some(stack) = self.scope.get_mut(ast_name) {
             stack.pop();
         }
     }
 
-    fn lookup_env(&self, ast_name: &FullName) -> Option<RcVar> {
-        self.env.get(ast_name).and_then(|stack| stack.last()).cloned()
+    fn resolve(&self, ast_name: &FullName) -> Option<RcVar> {
+        self.scope.get(ast_name).and_then(|stack| stack.last()).cloned()
     }
 
     // --- building the continuation-nested body ---
@@ -202,12 +202,12 @@ impl<'a> Lowerer<'a> {
         let src_tys = lam_ty.get_lambda_srcs();
         assert_eq!(params.len(), src_tys.len());
 
-        let saved_env = std::mem::take(&mut self.env);
+        let saved_env = std::mem::take(&mut self.scope);
 
         let mut param_vars = vec![];
         for (p, ty) in params.iter().zip(src_tys.iter()) {
             let pv = self.fresh_var(&p.name.name, ty.clone(), None);
-            self.push_env(&p.name, pv.clone());
+            self.bind(&p.name, pv.clone());
             param_vars.push(pv);
         }
 
@@ -216,7 +216,7 @@ impl<'a> Lowerer<'a> {
             let cap_var = self.fresh_var("cap", make_dynamic_object_ty(), None);
             // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
             // raw capture object by that name (the `fix` combinator's `FixBody`) resolves to it.
-            self.push_env(&FullName::local(CAP_NAME), cap_var.clone());
+            self.bind(&FullName::local(CAP_NAME), cap_var.clone());
             let cap_tys: Vec<Arc<TypeNode>> =
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
@@ -228,7 +228,7 @@ impl<'a> Lowerer<'a> {
                 let mut proj = self.fresh_var(&ast_name.name, cap_tys[i].clone(), None);
                 proj.debug_name = Some(ast_name.to_string());
                 bindings.push(Binding::Let(proj.clone(), RcRhs::Llvm(gen, vec![cap_var.clone()]), None));
-                self.push_env(ast_name, proj);
+                self.bind(ast_name, proj);
             }
             Some(cap_var)
         } else {
@@ -239,7 +239,7 @@ impl<'a> Lowerer<'a> {
         let ret_var = self.lower_to_var(&body, &mut bindings);
         let body_expr = Self::fold_bindings(bindings, Self::ret_node(ret_var));
 
-        self.env = saved_env;
+        self.scope = saved_env;
 
         RcFunc {
             name: func_ref,
@@ -282,7 +282,7 @@ impl<'a> Lowerer<'a> {
     }
 
     fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
-        match self.lookup_env(&v.name) {
+        match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
             Some(var) => var,
             // A global: an atom naming the global, materialized by code generation.
@@ -309,7 +309,7 @@ impl<'a> Lowerer<'a> {
         let operand_vars: Vec<RcVar> = gen
             .free_vars()
             .iter()
-            .map(|name| match self.lookup_env(name) {
+            .map(|name| match self.resolve(name) {
                 Some(var) => var,
                 None => {
                     let ty = self.symbol_types.get(name).cloned().unwrap_or_else(|| {
@@ -365,7 +365,7 @@ impl<'a> Lowerer<'a> {
         let cap_names = expr.lambda_cap_names();
         let cap_vals: Vec<RcVar> = cap_names
             .iter()
-            .map(|n| self.lookup_env(n).expect("captured variable not bound"))
+            .map(|n| self.resolve(n).expect("captured variable not bound"))
             .collect();
         let captures: Vec<(FullName, RcVar)> =
             cap_names.iter().cloned().zip(cap_vals.iter().cloned()).collect();
@@ -390,7 +390,7 @@ impl<'a> Lowerer<'a> {
         let pushed = self.destructure_pattern(pat, &bound_var, bindings);
         let result = self.lower_to_var(val, bindings);
         for name in &pushed {
-            self.pop_env(name);
+            self.unbind(name);
         }
         result
     }
@@ -456,7 +456,7 @@ impl<'a> Lowerer<'a> {
                 let pushed = self.destructure_pattern(subpat, &payload, &mut arm_bindings);
                 let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 for name in &pushed {
-                    self.pop_env(name);
+                    self.unbind(name);
                 }
                 MatchArm {
                     variant: Some(variant_idx),
@@ -468,9 +468,9 @@ impl<'a> Lowerer<'a> {
                 // A catch-all arm binds the whole scrutinee to its source variable.
                 let mut payload = self.fresh_var(&v.name.name, scrutinee.ty.clone(), pat.info.source.clone());
                 payload.debug_name = Some(v.name.to_string());
-                self.push_env(&v.name, payload.clone());
+                self.bind(&v.name, payload.clone());
                 let body = self.lower_body(body);
-                self.pop_env(&v.name);
+                self.unbind(&v.name);
                 MatchArm {
                     variant: None,
                     payload,
@@ -485,7 +485,7 @@ impl<'a> Lowerer<'a> {
                 let pushed = self.destructure_pattern(pat, &payload, &mut arm_bindings);
                 let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 for name in &pushed {
-                    self.pop_env(name);
+                    self.unbind(name);
                 }
                 MatchArm {
                     variant: None,
@@ -593,7 +593,7 @@ impl<'a> Lowerer<'a> {
                     // The value is the fresh result just produced for this binding (named on its
                     // defining binding), or `obj` was already created as this variable's binding (a
                     // match-arm payload). Either way it carries the name; bind directly.
-                    self.push_env(&v.name, obj.clone());
+                    self.bind(&v.name, obj.clone());
                 } else {
                     // `obj` is a pre-existing variable (a rename such as `let j = i`, or a
                     // parameter), so it has no defining binding to name. Represent the rename
@@ -603,7 +603,7 @@ impl<'a> Lowerer<'a> {
                     let mut renamed = self.fresh_var(&v.name.name, obj.ty.clone(), pat.info.source.clone());
                     renamed.debug_name = Some(v.name.to_string());
                     bindings.push(Binding::Let(renamed.clone(), RcRhs::Var(obj.clone()), pat.info.source.clone()));
-                    self.push_env(&v.name, renamed);
+                    self.bind(&v.name, renamed);
                 }
                 vec![v.name.clone()]
             }
@@ -622,7 +622,7 @@ impl<'a> Lowerer<'a> {
                         // and bind it. The field variable is always freshly produced by the
                         // destructure, so no rename move is needed (unlike the top-level `Var` case).
                         field_var.debug_name = Some(v.name.to_string());
-                        self.push_env(&v.name, field_var.clone());
+                        self.bind(&v.name, field_var.clone());
                         pushed.push(v.name.clone());
                     } else {
                         // A nested sub-pattern destructures this field further, after it is extracted.
