@@ -263,10 +263,10 @@ mod tests {
         // (0-based line, the exact `_ = <type>` the hover must contain).
         // On each of these lines the hole `_` is the last underscore.
         let cases = [
-            (3usize, "_ = Std::I64"),             // concrete element type
-            (6usize, "_ = a"),                    // generic type variable
-            (9usize, "_ = Std::Array"),           // higher-kinded: the `Array` constructor
-            (14usize, "_ = Main::counter::?it"),  // a function's opaque return type
+            (3usize, "_ = Std::I64"),            // concrete element type
+            (6usize, "_ = a"),                   // generic type variable
+            (9usize, "_ = Std::Array"),          // higher-kinded: the `Array` constructor
+            (14usize, "_ = Main::counter::?it"), // a function's opaque return type
         ];
         for (line, expected) in cases {
             let col = lines[line].rfind('_').expect("hole line must contain `_`") as u32;
