@@ -33,4 +33,5 @@ mod test_struct_destructure;
 mod test_trait_implementable_type;
 mod test_type_sign_in_trait_impl;
 mod test_undefined;
+mod test_union_match;
 mod test_util;
