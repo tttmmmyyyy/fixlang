@@ -222,7 +222,7 @@ type_expr = { type_fun }
 
 type_tuple = { "(" ~ (sep* ~ type_expr ~ (sep* ~ "," ~ sep* ~ type_expr)* ~ (sep* ~ comma_)?)? ~ sep* ~ ")" }
 
-type_nlr = { type_tycon | type_var | type_tuple }
+type_nlr = { type_tycon | type_var | type_hole | type_hole_kinded | type_tuple }
 
 type_tyapp = { type_nlr ~ (sep+ ~ type_nlr)* }
 
@@ -235,6 +235,14 @@ type_tycon = { capital_fullname }
 tyvar_head = _{ ASCII_ALPHA_LOWER }
 tyvar_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 type_var = { !keywords ~ "?"? ~ tyvar_head ~ tyvar_char* }
+
+// A type hole `_` stands for a type the compiler should infer; each `_`
+// becomes a fresh type variable. A bare `_` has kind `*`. Fix does not
+// infer kinds, so to give a hole a higher kind write `(_ : k)`, e.g.
+// `(_ : * -> *) I64`. The `!name_char` stops `_` from matching the start
+// of a longer identifier.
+type_hole = { "_" ~ !name_char }
+type_hole_kinded = { "(" ~ sep* ~ "_" ~ !name_char ~ sep* ~ ":" ~ sep* ~ kind ~ sep* ~ ")" }
 
 type_qualified = { constraints? ~ sep* ~ type_expr }
 

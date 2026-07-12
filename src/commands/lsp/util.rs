@@ -898,6 +898,10 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
         EndNode::Type(tycon) => {
             document_tycon_or_alias(program, &mut docs, tycon);
         }
+        EndNode::InferredType(ty) => {
+            // The type a `_` hole was inferred to.
+            docs += &format!("```\n_ = {}\n```", ty.to_string_normalize());
+        }
         EndNode::Trait(trait_id) => {
             document_trait_or_alias(program, &mut docs, trait_id);
         }

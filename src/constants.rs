@@ -265,5 +265,14 @@ pub const HOLE_NAME: &str = "#hole";
 /// binder back as `_`.
 pub const WILDCARD_VAR_PREFIX: &str = "#wildcard";
 
+/// Prefix of the type-variable names the parser generates for `_` type
+/// holes (e.g. `#typehole0`). Each `_` in a type annotation gets a
+/// distinct name so that, for example, the two holes in `(_, _)` stay
+/// independent; the leading `#` keeps these names disjoint from any type
+/// variable a user can write. `validate_type_annotation` replaces each
+/// such name with a fresh inference variable, so it never surfaces to the
+/// user.
+pub const TYPE_HOLE_VAR_PREFIX: &str = "#typehole";
+
 // Formatting
 pub const FORMAT_LINE_LIMIT: usize = 100;

@@ -243,6 +243,7 @@ pub(super) fn handle_rename(
                 .collect()
         }
         EndNode::Module(_) => unreachable!("Module rename is filtered out earlier"),
+        EndNode::InferredType(_) => unreachable!("Type-hole rename is filtered out earlier"),
     };
 
     let Some(cdir) = get_current_dir() else {
@@ -262,6 +263,7 @@ fn rename_target_supported(node: &EndNode) -> bool {
         EndNode::Field(_, _) | EndNode::Variant(_, _) => true,
         EndNode::Type(_) | EndNode::TypeOrTrait(_) => true,
         EndNode::Module(_) => false,
+        EndNode::InferredType(_) => false,
     }
 }
 
@@ -296,6 +298,7 @@ fn token_category_for(node: &EndNode) -> TokenCategory {
         }
         EndNode::Field(_, _) | EndNode::Variant(_, _) => TokenCategory::TypeFieldName,
         EndNode::Module(_) => TokenCategory::CapitalName,
+        EndNode::InferredType(_) => TokenCategory::CapitalName,
     }
 }
 
@@ -1127,5 +1130,6 @@ fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Optio
                     .and_then(|f| f.name_src.clone())
             }),
         EndNode::Module(_) => None,
+        EndNode::InferredType(_) => None,
     }
 }

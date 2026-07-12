@@ -248,6 +248,49 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// Hovering a `_` type hole in an annotation shows the type it was
+    /// inferred to: a concrete type, a generic type variable, the type
+    /// constructor a higher-kinded hole resolved to, or a function's
+    /// opaque return type. The internal `#typehole` / `#a` names the
+    /// compiler uses for holes must never leak.
+    #[test]
+    fn test_hover_type_hole_shows_inferred_type() {
+        let mut ctx = LspTestCtx::setup("hover_type_hole", &["main.fix"]);
+        let src = std::fs::read_to_string(ctx.project_dir.join("main.fix"))
+            .expect("should read the copied main.fix");
+        let lines: Vec<&str> = src.lines().collect();
+
+        // (0-based line, the exact `_ = <type>` the hover must contain).
+        // On each of these lines the hole `_` is the last underscore.
+        let cases = [
+            (3usize, "_ = Std::I64"),             // concrete element type
+            (6usize, "_ = a"),                    // generic type variable
+            (9usize, "_ = Std::Array"),           // higher-kinded: the `Array` constructor
+            (14usize, "_ = Main::counter::?it"),  // a function's opaque return type
+        ];
+        for (line, expected) in cases {
+            let col = lines[line].rfind('_').expect("hole line must contain `_`") as u32;
+            let hov = ctx.hover("main.fix", line as u32, col);
+            let text = hover_text(&hov)
+                .unwrap_or_else(|| panic!("hover on hole at line {} should return content", line));
+            assert!(
+                text.contains(expected),
+                "hole at line {} should hover as `{}`, got {:?}",
+                line,
+                expected,
+                text
+            );
+            assert!(
+                !text.contains("#typehole") && !text.contains("#a"),
+                "hover on hole at line {} leaked an internal name: {:?}",
+                line,
+                text
+            );
+        }
+
+        ctx.shutdown();
+    }
+
     /// Hover on or near the hole position itself should NOT leak the
     /// internal `Std::#hole` name. The user has no way to spell `#hole`
     /// in their own code (the parser's `name` rule rejects `#`), so

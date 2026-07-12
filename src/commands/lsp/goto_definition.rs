@@ -48,6 +48,8 @@ pub(super) fn handle_goto_definition(
         EndNode::Variant(_, _) => None,
         // The cursor is on the declaration name itself; there is no other definition to jump to.
         EndNode::ValueDecl(_) => None,
+        // A `_` type hole has no declaration to jump to.
+        EndNode::InferredType(_) => None,
     };
     if let Some(var_name) = var_name {
         let full_name = &var_name;
@@ -102,6 +104,9 @@ pub(super) fn handle_goto_definition(
             }
             EndNode::ValueDecl(_) => {
                 unreachable!()
+            }
+            EndNode::InferredType(_) => {
+                def_src = None;
             }
         }
     }
