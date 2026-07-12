@@ -11,6 +11,7 @@ This project implements the Fix programming language compiler and related tools 
 - **Data Structures**:
   - Use `Set` and `Map` from `crate::misc` module instead of `std::collections::HashSet` and `std::collections::HashMap`.
   - Example: `use crate::misc::{Set, Map};` then use `Set::default()` or `Map::default()`.
+- **Testability abstractions**: Do NOT complicate the code or introduce abstractions solely to make it unit-testable. Abstractions introduced solely for unit-testability tend to make the code harder to read.
 
 ## Testing Guidelines
 
@@ -20,8 +21,6 @@ This project implements the Fix programming language compiler and related tools 
   - **Always reference the thing under test from `main`**: When writing a test that checks whether some Fix code compiles, do NOT just declare/define the global value or trait member you want to verify. The test must actually use it from `main` — call the function, evaluate the value (using `eval` if direct calling is awkward), or otherwise reference it. Otherwise the symbol may be skipped by the compiler and a broken definition will not produce an error.
   
 - **When modifying `fix` command behavior**:
-  - You may add unit tests, but do NOT complicate the code or introduce abstractions solely to make it unit-testable.
-    - Reason: abstractions introduced solely to make code unit-testable tend to make the code harder to read.
   - Prefer integration tests.
   - Place sample Fix projects in the `tests` folder (e.g., `src/tests/test_dependencies/cases/`).
   - In test code, call `install_fix()` to install Fix to the system.
@@ -44,14 +43,3 @@ This project implements the Fix programming language compiler and related tools 
 - **When a round of modifications is complete**, add an entry describing the change to `CHANGELOG.md`.
   - Add it under the `## [Unreleased]` section at the top, in the appropriate category (`### Added` / `### Changed`) and subcategory (`#### Language` / `#### Tool` / `#### Std`), following the style of existing entries.
   - **Performance improvements that do not change observable behavior do NOT need a changelog entry.** The changelog documents user-visible changes (new/changed/fixed behavior), not internal speedups.
-
-## Reference Documentation
-
-- **Fix Language Sample Code**: Refer to `src/fix/std.fix` for extensive examples of Fix language code.
-- **Standard Library Documentation**: Refer to `std_doc/Std.md` for documentation of the Std standard library.
-
-## Fix Language Specifics
-
-- **Iterator `fold` function**: The closure passed to `fold` has the signature `(Item, Acc) -> Acc`, where the first argument is the current item and the second is the accumulator. This is the reverse of Haskell's `foldl`.
-  - Correct: `iterator.fold(initial, |item, acc| acc + item)`
-  - Incorrect: `iterator.fold(initial, |acc, item| acc + item)` (This will cause a type error)
