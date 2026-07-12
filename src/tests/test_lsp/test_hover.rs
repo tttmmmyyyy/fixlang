@@ -1,9 +1,9 @@
 //! LSP integration tests for `textDocument/hover`. These cover hover on
-//! local variables and the shape of the type shown: concrete types,
-//! generic type variables (`a`), opaque types, and `_` wildcard binders,
-//! as well as hover around `Std::#hole` placeholders (where hover must
-//! still serve the surrounding locals' inferred types even though ERR_HOLE
-//! rejects the value).
+//! local variables and the shape of the type shown — concrete types,
+//! generic type variables (`a`), opaque types, and `_` wildcard pattern
+//! binders — plus `_` type wildcards in annotations, and hover around
+//! `Std::#hole` placeholders (where hover must still serve the surrounding
+//! locals' inferred types even though ERR_HOLE rejects the value).
 
 #[cfg(test)]
 mod tests {
@@ -377,6 +377,79 @@ mod tests {
                 col,
                 text
             );
+        }
+
+        ctx.shutdown();
+    }
+
+    /// Hovering a `_` type wildcard in an annotation shows the type it was
+    /// inferred to: a concrete type, a generic type variable, the type
+    /// constructor a higher-kinded wildcard resolved to, or a function's
+    /// opaque return type. Covers wildcards in both expression and pattern
+    /// (let-binding) annotations, and two independent wildcards in one
+    /// annotation disambiguated by position. The internal `#typewildcard` /
+    /// `#a` names the compiler uses for wildcards must never leak.
+    #[test]
+    fn test_hover_type_wildcard_shows_inferred_type() {
+        let mut ctx = LspTestCtx::setup("hover_type_wildcard", &["main.fix"]);
+        let src = std::fs::read_to_string(ctx.project_dir.join("main.fix"))
+            .expect("should read the copied main.fix");
+        let lines: Vec<&str> = src.lines().collect();
+
+        // Each case locates a wildcard-bearing line by a unique substring, then
+        // pairs the `_`s on that line (left to right) with the `_ = <type>`
+        // each must hover as. Matching by content keeps the test stable when
+        // the fixture's line numbers shift.
+        let cases: &[(&str, &[&str])] = &[
+            ("[1, 2, 3]", &["_ = Std::I64"]), // concrete element type
+            ("Array::fill", &["_ = a"]),      // generic type variable
+            ("* -> *", &["_ = Std::Array"]),  // higher-kinded: the `Array` constructor
+            ("(1, true)", &["_ = Std::I64", "_ = Std::Bool"]), // two wildcards, by position
+            ("let xs", &["_ = Std::I64"]),    // pattern (let-binding) annotation
+            ("counter(3)", &["_ = Main::counter::?it"]), // a function's opaque return type
+        ];
+
+        for (needle, expected) in cases {
+            let line = lines
+                .iter()
+                .position(|l| !l.trim_start().starts_with("//") && l.contains(needle))
+                .unwrap_or_else(|| panic!("fixture should contain a line with {:?}", needle));
+            let cols: Vec<u32> = lines[line]
+                .match_indices('_')
+                .map(|(i, _)| i as u32)
+                .collect();
+            assert_eq!(
+                cols.len(),
+                expected.len(),
+                "line {:?} should have {} wildcard(s), found {}",
+                needle,
+                expected.len(),
+                cols.len()
+            );
+            for (col, want) in cols.iter().zip(*expected) {
+                let hov = ctx.hover("main.fix", line as u32, *col);
+                let text = hover_text(&hov).unwrap_or_else(|| {
+                    panic!(
+                        "hover on wildcard at {:?} col {} should return content",
+                        needle, col
+                    )
+                });
+                assert!(
+                    text.contains(want),
+                    "wildcard at {:?} col {} should hover as `{}`, got {:?}",
+                    needle,
+                    col,
+                    want,
+                    text
+                );
+                assert!(
+                    !text.contains("#typewildcard") && !text.contains("#a"),
+                    "hover at {:?} col {} leaked an internal name: {:?}",
+                    needle,
+                    col,
+                    text
+                );
+            }
         }
 
         ctx.shutdown();
