@@ -287,9 +287,12 @@ impl LLVMGenerator {
     /// Whether operand `i` is only *borrowed* (read without taking ownership) rather than *owned*
     /// (consumed — moved into the result, released internally, or force-unique-returned). RC IR
     /// insertion emits an explicit `Release` after the last use of a borrowed operand, and a
-    /// `Retain` before a non-last use of an owned one. Each built-in declares this on its own body
-    /// (next to `free_vars`); the read-getters borrow their boxed container and everything else owns
-    /// all its operands (the default).
+    /// `Retain` before a non-last use of an owned one. Each read-getter declares this on its own body
+    /// (next to `free_vars`); every other built-in owns all its operands.
+    ///
+    /// The owning built-ins are listed explicitly rather than caught by `_`, so adding a new built-in
+    /// forces a borrow-or-own decision here — the same exhaustiveness `free_vars_mut` relies on. A
+    /// silent default would give a new borrowing built-in the wrong reference counting.
     pub fn borrows_operand(&self, i: usize) -> bool {
         match self {
             LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.borrows_operand(i),
@@ -301,8 +304,71 @@ impl LLVMGenerator {
             LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
             LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.borrows_operand(i),
             LLVMGenerator::CaptureProjectBody(x) => x.borrows_operand(i),
-            // Every other built-in consumes (owns) all its operands.
-            _ => false,
+            LLVMGenerator::IntLit(_)
+            | LLVMGenerator::FloatLit(_)
+            | LLVMGenerator::NullPtrLit(_)
+            | LLVMGenerator::StringBuf(_)
+            | LLVMGenerator::FixBody(_)
+            | LLVMGenerator::CastIntegralBody(_)
+            | LLVMGenerator::CastFloatBody(_)
+            | LLVMGenerator::CastIntToFloatBody(_)
+            | LLVMGenerator::CastFloatToIntBody(_)
+            | LLVMGenerator::ShiftBody(_)
+            | LLVMGenerator::BitwiseOperationBody(_)
+            | LLVMGenerator::BitNotBody(_)
+            | LLVMGenerator::ArrayUnsafeFill(_)
+            | LLVMGenerator::ArrayUnsafeEmpty(_)
+            | LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(_)
+            | LLVMGenerator::ArrayUnsafeSetSizeBody(_)
+            | LLVMGenerator::ArraySetBody(_)
+            | LLVMGenerator::ArraySwapBody(_)
+            | LLVMGenerator::ArrayPunchBody(_)
+            | LLVMGenerator::PunchedArrayPlugBody(_)
+            | LLVMGenerator::ArrayForceUniqueBody(_)
+            | LLVMGenerator::StructGetBody(_)
+            | LLVMGenerator::StructSetBody(_)
+            | LLVMGenerator::StructPunchBody(_)
+            | LLVMGenerator::StructPlugInBody(_)
+            | LLVMGenerator::MakeUnionBody(_)
+            | LLVMGenerator::UnionAsBody(_)
+            | LLVMGenerator::UnionModBody(_)
+            | LLVMGenerator::UndefinedFunctionBody(_)
+            | LLVMGenerator::HoleFunctionBody(_)
+            | LLVMGenerator::IsUniqueFunctionBody(_)
+            | LLVMGenerator::IntNegBody(_)
+            | LLVMGenerator::FloatNegBody(_)
+            | LLVMGenerator::BoolNegBody(_)
+            | LLVMGenerator::IntEqBody(_)
+            | LLVMGenerator::PtrEqBody(_)
+            | LLVMGenerator::FloatEqBody(_)
+            | LLVMGenerator::IntLessThanBody(_)
+            | LLVMGenerator::FloatLessThanBody(_)
+            | LLVMGenerator::IntLessThanOrEqBody(_)
+            | LLVMGenerator::FloatLessThanOrEqBody(_)
+            | LLVMGenerator::IntAddBody(_)
+            | LLVMGenerator::FloatAddBody(_)
+            | LLVMGenerator::IntSubBody(_)
+            | LLVMGenerator::FloatSubBody(_)
+            | LLVMGenerator::IntMulBody(_)
+            | LLVMGenerator::FloatMulBody(_)
+            | LLVMGenerator::IntDivBody(_)
+            | LLVMGenerator::FloatDivBody(_)
+            | LLVMGenerator::IntRemBody(_)
+            | LLVMGenerator::MarkThreadedFunctionBody(_)
+            | LLVMGenerator::BoxedToRetainedPtrIOS(_)
+            | LLVMGenerator::BoxedFromRetainedPtrIOS(_)
+            | LLVMGenerator::WithRetainedFunctionBody(_)
+            | LLVMGenerator::UnsafeMutateBoxedInternalBody(_)
+            | LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(_)
+            | LLVMGenerator::ArrayPopBackNonemptyBody(_)
+            | LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(_)
+            | LLVMGenerator::IOStateUnsafeCreate(_)
+            | LLVMGenerator::ArrayCheckRange(_)
+            | LLVMGenerator::ArrayCheckSize(_)
+            | LLVMGenerator::DestructorMake(_)
+            | LLVMGenerator::MakeStructBody(_)
+            | LLVMGenerator::ArrayLitBody(_)
+            | LLVMGenerator::FFICallBody(_) => false,
         }
     }
 
