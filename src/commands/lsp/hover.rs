@@ -49,7 +49,7 @@ pub(super) fn handle_hover(
 /// identifiers cannot start with `#`, so this never matches anything
 /// the user wrote. Used to suppress hover content that would expose
 /// internal placeholders. Wildcard binders (`#wildcard{N}`) are excluded:
-/// they are shown as `_ : <type>` rather than suppressed.
+/// they are shown as `_ : <type>`.
 fn is_internal_name_node(node: &EndNode) -> bool {
     let name = match node {
         EndNode::Expr(var, _) => &var.name,

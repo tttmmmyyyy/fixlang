@@ -250,9 +250,9 @@ mod tests {
     }
 
     /// Hover on a local variable whose inferred type is a generic type
-    /// variable must display that variable (normalized to `a`, `b`, ...),
-    /// not a concrete type. Here `my_fill : I64 -> a -> Array a`, so `elem`
-    /// has type `a` both at its binder and at its use inside `fill`.
+    /// variable must display that variable, normalized to `a`, `b`, ....
+    /// Here `my_fill : I64 -> a -> Array a`, so `elem` has type `a` both at
+    /// its binder and at its use inside `fill`.
     #[test]
     fn test_hover_generic_local_shows_type_variable() {
         let mut ctx = LspTestCtx::setup("hover_generic", &["main.fix"]);
