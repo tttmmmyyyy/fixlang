@@ -1,6 +1,9 @@
 module Main;
 
-import Random;
+import Std::{
+    loop, Array, Bool, I64, IO, Array::{fill, set, @}, Debug::assert_eq, LoopState::{break, continue}, 
+    Monad::pure
+};
 
 // Creates a prime table up to n.
 prime_table : I64 -> Array Bool;

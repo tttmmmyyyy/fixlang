@@ -1,5 +1,10 @@
 module Main;
 
+import Std::{
+    loop, Array, I64, IO, Array::{from_map, @, @size}, Debug::assert_eq, LoopState::{break, continue}, 
+    Monad::pure
+};
+
 sum_by_loop_arr : Array I64 -> I64;
 sum_by_loop_arr = |arr| (
     loop((0, 0), |(i, sum)|

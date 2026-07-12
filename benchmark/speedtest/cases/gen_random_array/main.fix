@@ -1,6 +1,10 @@
 module Main;
 
-import Random;
+import Random::{generate_U64, init_by_array};
+import Std::{
+    Array, I64, IO, U64, Array::{fill, set, @}, Debug::assert_eq, Iterator::{fold, range}, Monad::pure, 
+    Tuple2::@0
+};
 
 // Common random seed
 g_seed : Array U64;

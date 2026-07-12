@@ -1,7 +1,11 @@
 module Main;
 
-import CPLib.ZP;
-import CPLib.Convolution;
+import CPLib.Convolution::convolve_zp;
+import CPLib.ZP::{make, P998244353, ZP};
+import Std::{
+    Array, IO, Array::@, Debug::{assert_eq, consumed_time_while_lazy}, IO::println, 
+    Iterator::{fold, map, range, to_array}, Monad::pure, String::populate, ToString::to_string
+};
 
 main : IO ();
 main = (

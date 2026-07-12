@@ -1,5 +1,7 @@
 module Main;
 
+import Std::{Array, I64, IO, Array::{from_map, @, @size}, Debug::assert_eq, Iterator::{fold, range}, Monad::pure};
+
 sum_by_fold_cap : Array I64 -> I64;
 sum_by_fold_cap = |arr| (
     range(0, arr.@size).fold(0, |i, sum| sum + arr.@(i))

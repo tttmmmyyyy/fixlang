@@ -1,5 +1,7 @@
 module Main;
 
+import Std::{loop, I64, IO, Debug::assert_eq, LoopState::{break, continue}, Monad::pure};
+
 sum_by_loop : I64 -> I64;
 sum_by_loop = |n| (
     loop((0, 0), |(i, sum)|

@@ -1,7 +1,11 @@
 module Main;
 
-import Random;
-import CPLib.UnionFind;
+import CPLib.UnionFind::{create, get_groups, is_united, unite};
+import Random::{generate_I64_nonneg, init_by_seed};
+import Std::{
+    IO, Array::@size, Debug::{assert_eq, consumed_time_while_lazy}, IO::println, Iterator::{fold, range}, 
+    Monad::pure, String::populate, ToString::to_string
+};
 
 main : IO ();
 main = (

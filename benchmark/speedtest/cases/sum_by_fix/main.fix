@@ -1,5 +1,7 @@
 module Main;
 
+import Std::{fix, IO, Debug::assert_eq, Monad::pure};
+
 main : IO ();
 main = (
     let n = 1e6;

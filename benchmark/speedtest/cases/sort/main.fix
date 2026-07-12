@@ -1,5 +1,10 @@
 module Main;
 
+import Std::{
+    Array, Bool, I64, IO, Array::{empty, push_back, sort, to_iter, @, @size}, Debug::assert_eq, 
+    Iterator::{fold, range, sum}, Monad::pure, Tuple2::@0
+};
+
 // Sort benchmark: `Array::sort` on a fixed pseudo-random array, so the O(n log n)
 // element swaps dominate. Guards that the plan's atomic-`swap` migration and the
 // later force-unique elision keep sort at least as fast as the pre-implementation

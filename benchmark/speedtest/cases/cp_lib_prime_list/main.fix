@@ -1,6 +1,10 @@
 module Main;
 
-import CPLib.Arithmetic;
+import CPLib.Arithmetic::create_prime_list;
+import Std::{
+    IO, Array::@size, Debug::{assert_eq, consumed_time_while_lazy}, Functor::map, IO::println, 
+    Monad::pure, String::populate, ToString::to_string, U32::to_I64
+};
 
 main : IO ();
 main = (

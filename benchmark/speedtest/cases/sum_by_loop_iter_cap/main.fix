@@ -1,5 +1,10 @@
 module Main;
 
+import Std::{
+    Array, I64, IO, Array::{from_map, @, @size}, Debug::assert_eq, Iterator::{loop_iter, range}, 
+    LoopState::{break, continue}, Monad::pure
+};
+
 sum_by_loop_iter_cap : Array I64 -> I64;
 sum_by_loop_iter_cap = |arr| (
     Iterator::range(0, arr.@size).loop_iter(0, |i, sum|

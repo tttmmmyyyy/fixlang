@@ -1,5 +1,10 @@
 module Main;
 
+import Std::{
+    Array, I64, IO, Add::add, Array::{from_map, mod, @, @size}, Debug::assert_eq, 
+    Iterator::{fold, range}, Monad::pure
+};
+
 array_mod : Array I64 -> I64;
 array_mod = |arr| (
     let n = arr.@size;
