@@ -168,13 +168,16 @@ pub fn build_object_files<'c>(
             // Declare runtime functions.
             runtime::build_runtime(&mut gc, BuildMode::Declare);
 
+            // Declare all symbols in this program.
+            // TODO: Optimize so that only necessary symbols are declared.
+            for symbol in &all_symbols {
+                gc.declare_symbol(symbol);
+            }
+
             if std::env::var("USE_RC_IR").is_ok() {
-                // Experimental RC IR back end (unit 3 of the P1 rollout). Declare all symbols as the
-                // legacy path does (prototypes + global registration, in every unit), then lower and
+                // Experimental RC IR back end (unit 3 of the P1 rollout). Every symbol is already
+                // declared above (prototypes + global registration, in every unit); lower and
                 // implement only THIS unit's symbols via the RC IR path so no symbol is defined twice.
-                for symbol in &all_symbols {
-                    gc.declare_symbol(symbol);
-                }
                 let unit_symbols = unit.symbols().to_vec();
                 let rc_prog = {
                     let type_env = gc.type_env();
@@ -185,12 +188,6 @@ pub fn build_object_files<'c>(
                 };
                 gc.implement_rc_program(&rc_prog);
             } else {
-                // Declare all symbols in this program.
-                // TODO: Optimize so that only necessary symbols are declared.
-                for symbol in &all_symbols {
-                    gc.declare_symbol(symbol);
-                }
-
                 // Implement all symbols in this unit.
                 for symbol in unit.symbols() {
                     gc.implement_symbol(symbol);

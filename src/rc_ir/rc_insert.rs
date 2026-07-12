@@ -115,23 +115,11 @@ impl<'a> FuncRc<'a> {
                 // Returning `x` consumes it. If `x` is also live after this expression — e.g. a match
                 // arm returns a variable that is used again after the match — it is consumed twice, so
                 // retain it here to provide the extra reference.
-                let node = if x.name.is_local()
-                    && live_after.contains(&x.name)
-                    && self.needs_rc(&x)
-                {
-                    build_retains(
-                        vec![x.clone()],
-                        RcExprNode {
-                            expr: Box::new(RcExpr::Ret(x)),
-                            source,
-                        },
-                    )
-                } else {
-                    RcExprNode {
-                        expr: Box::new(RcExpr::Ret(x)),
-                        source,
-                    }
+                let ret = RcExprNode {
+                    expr: Box::new(RcExpr::Ret(x.clone())),
+                    source,
                 };
+                let node = self.retain_if_live(&x, live_after, ret);
                 (node, live)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), cont) => {
@@ -236,14 +224,7 @@ impl<'a> FuncRc<'a> {
         };
         // Retain the container before the destructure iff it is used afterward, so both the extracted
         // fields and the later use are covered.
-        let node = if container.name.is_local()
-            && live_cont.contains(&container.name)
-            && self.needs_rc(&container)
-        {
-            build_retains(vec![container.clone()], node)
-        } else {
-            node
-        };
+        let node = self.retain_if_live(&container, &live_cont, node);
 
         let mut live_before = live_cont;
         for (_, fv) in &fields {
@@ -340,14 +321,7 @@ impl<'a> FuncRc<'a> {
             source,
         };
         // The scrutinee is owned: retain it before the match if it is used after the match.
-        let node = if scrut.name.is_local()
-            && used_after.contains(&scrut.name)
-            && self.needs_rc(&scrut)
-        {
-            build_retains(vec![scrut.clone()], node)
-        } else {
-            node
-        };
+        let node = self.retain_if_live(&scrut, &used_after, node);
 
         let mut live_before = live_before_arms;
         live_before.remove(&x.name);
@@ -367,6 +341,17 @@ impl<'a> FuncRc<'a> {
     /// `Retain`/`Release` would generate no code and is omitted.
     fn needs_rc(&self, var: &RcVar) -> bool {
         !var.ty.is_fully_unboxed(self.type_env)
+    }
+
+    /// Wrap `node` in a `Retain` of `var` iff `var` is a local that needs reference counting and is
+    /// live in `live` — the owned-operand rule for a variable a consuming construct (a `Ret`, a
+    /// `Destructure`, or a `Match` scrutinee) uses, when it is still live afterward.
+    fn retain_if_live(&self, var: &RcVar, live: &Set<FullName>, node: RcExprNode) -> RcExprNode {
+        if var.name.is_local() && live.contains(&var.name) && self.needs_rc(var) {
+            build_retains(vec![var.clone()], node)
+        } else {
+            node
+        }
     }
 }
 
