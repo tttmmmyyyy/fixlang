@@ -446,6 +446,22 @@ The risk this rule has to actively avoid is **function fragmentation** — chopp
 
 **Flag instead of applying** when extraction looks beneficial but you can't satisfy all the Apply conditions — especially when a good name doesn't come to mind. Surface the location and your proposed name in the report; let the author decide whether the seam belongs there.
 
+#### Place each item in the namespace that fits its role
+
+Where a value, function, or method *lives* is part of its interface. An item filed under the wrong module — or left as a free function when it is really an operation of one type — sends the reader looking in the wrong place and invites the next duplicate, because the natural home looked empty. This is the code analogue of *Struct fields must be non-redundant and on-role*: that convention keeps a value in the struct whose role it matches; this one keeps an item in the module or on the type whose role it matches.
+
+Placements to correct:
+
+- **A free function that is really an operation of one type.** If a function takes some `T` as its primary argument and reads as something `T` *does* (or produces a `T` from nothing else), it belongs as a method or associated function on `T`, not as a loose function in an unrelated module — the same reasoning the DRY convention applies when *adding* a helper, here applied to one the diff has already placed.
+- **An item filed in a module about a different concern.** A function whose name and behavior are about subsystem B, sitting in subsystem A's file because that is where it was first needed.
+
+The litmus test: reading only the item's name and what it does, would someone new to the project look for it where it currently lives? If they would look on a type or in a module elsewhere, that elsewhere is its home.
+
+This convention is distinct from `shorten-qualifiers`, which fixes how an item is *imported*, not where it is *defined*. It triggers on items the diff **adds or moves**; a pre-existing item the diff merely references is out of scope. Relocating an item necessarily edits its definition, its call sites, and the destination module's imports — those edits are the mechanical consequence of the move and are in scope even where they fall outside the original diff hunk.
+
+**Apply** when the right home is clear and the move is mechanical: relocate the definition, update the call sites and imports, run `cargo check`, and prefer performing the move over deferring it.
+**Report only** when choosing the home is a genuine design call, when the move would cross a crate or visibility boundary that needs judgment, or when the call sites ripple widely enough that the author should decide. Name the item, its current home, the home you would give it, and why.
+
 #### Split an overgrown file at a natural seam
 
 When the diff has grown a file to the point that it now spans several distinct concerns — different groups of types, or unrelated passes / utilities that merely share a file — and it has become large enough to be hard to navigate, flag it for splitting. **Report only**: moving code into new modules changes module paths, imports, and visibility across call sites, so it is a redesign the author should choose, not a hunk-local edit.
@@ -586,20 +602,23 @@ This project's source comments are written in English (`Document.md`, `std.fix`,
 
 #### Every Rust item must have a doc comment — [Rust]
 
-The other conventions here are about *rewriting* existing comments (and prose). This one is about *adding* missing ones.
+The other conventions here mostly *rewrite* existing comments; this one *adds* the missing ones and governs what each should contain.
 
 Every Rust item — `struct`, `enum`, `union`, their fields and variants, `trait`, trait method, free function, and `impl`-block method — must carry a `///` doc comment. **This applies to both `pub` and private items.**
 
+The test for what a comment should contain, in one line: **leave out what the name and signature already make obvious, and put in the meaning they leave unsaid that a reader of this item would want to know.** Each rule below is that one test applied to a specific part of the comment.
+
 Function comment shape:
 - The first line describes what the function does. Don't restate the name (e.g., don't write `/// Adds two numbers.` for `fn add`).
-- Add a `# Arguments` section *only* for arguments whose role isn't self-evident from the function's purpose — those that prompt the reader to ask "why is this argument needed?" Skip arguments whose role is obvious from name and type. Format:
+- Add a `# Arguments` section *only* for arguments whose role isn't self-evident from the function's purpose — those that prompt the reader to ask "why is this argument needed?" Skip arguments whose role is obvious from name and type. When you do add an entry, state the argument's *meaning* — the part its name and type leave unsaid, such as units, indexing base and bounds, frame of reference, or which of two same-typed values (`from` / `to`) this is — not a restatement of the name. Format:
   ```rust
   /// Resolves the symbol at the given position.
   ///
   /// # Arguments
   /// * `prefer_definition` — when true, jump through re-exports to the original definition. Used by goto-def; references search wants this off.
   ```
-- Add a `# Returns` section only when the return value needs explanation beyond the type.
+  A bare restatement adds nothing: `the position` for `pos` says only what the name already says, where `0-indexed byte offset into the source string` states the meaning.
+- Add a `# Returns` section only when the return value needs explanation beyond the type — and then say what the value *means*, such as what a `None`, an empty collection, or a particular variant signifies here. Keep this to the surprising cases; the *Don't enumerate None / error cases* convention still suppresses routine failures.
 
 Test comment shape (for `#[test]` functions): the comment must state *what perspective the test exercises* — which behavior, edge case, or invariant it validates — not just "tests `foo`." Example: `/// Verifies that rename across an import boundary updates both the definition and the qualified callsite.`
 
