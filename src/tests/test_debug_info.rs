@@ -1,4 +1,4 @@
-// P0 baseline: debug-information end-to-end test.
+// Debug-information end-to-end test.
 //
 // Builds a small Fix program with `-g` and drives `gdb -batch` to confirm that
 // DWARF line information is emitted correctly: a source breakpoint resolves to
@@ -7,8 +7,8 @@
 // check `file:line`, not the mangled/closure frame names), so they stay valid
 // across name-mangling changes.
 //
-// This is the comparison baseline for the RC-IR codegen swap (P1), whose gate
-// requires debug information to be unchanged.
+// The AST and RC IR back ends must emit identical debug information; this test
+// guards that it stays correct under both.
 
 #[cfg(test)]
 mod debug_info_tests {

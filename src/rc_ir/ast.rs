@@ -47,8 +47,8 @@ pub struct RcProgram {
 #[derive(Clone)]
 pub struct RcFunc {
     pub name: FuncRef,
-    /// The lambda's arrow type (funptr or closure). Code generation reads it to build the LLVM
-    /// function signature (`lambda_function_type`) and to distinguish the funptr and closure ABIs.
+    /// The lambda's arrow type (funptr or closure). It determines the LLVM function signature and
+    /// distinguishes the funptr and closure ABIs.
     pub fn_ty: Arc<TypeNode>,
     /// The parameters. A closure-ABI function takes its single arrow argument; a funptr-ABI
     /// function takes the uncurried arguments (at least one).

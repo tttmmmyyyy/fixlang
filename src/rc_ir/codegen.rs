@@ -1,7 +1,7 @@
 //! Code generation from the RC IR to LLVM.
 //!
-//! This is unit 3 of the P1 rollout: the parallel LLVM back end that consumes the RC IR (with its
-//! explicit `Retain`/`Release` nodes) instead of the AST. Reference counting is driven entirely by
+//! The parallel LLVM back end that consumes the RC IR (with its explicit `Retain`/`Release` nodes)
+//! instead of the AST. Reference counting is driven entirely by
 //! the RC nodes; variable reads are plain (no `used_later` retain decision). The generator runs with
 //! `rc_ir_mode = true`, which makes `get_scoped_obj` read plain and the borrow getters skip their
 //! conditional container release. Non-reference-counting work (closure layout, FFI, struct/array
@@ -226,7 +226,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Bind `obj` to `x` on the scope, emit its debug local variable, evaluate the continuation `k`,
-    /// then pop the binding. This is the common tail of the non-tail `Let` arms.
+    /// then pop the binding.
     fn bind_and_continue(
         &mut self,
         x: &RcVar,

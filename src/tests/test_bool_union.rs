@@ -1,14 +1,14 @@
-// P0.5: `Bool` is an unbox union `{ _false : (), _true : () }` (was a primitive `i8`).
+// `Bool` is an unbox union `{ _false : (), _true : () }`.
 //
-// The comparison / `if` / `&&` / `||` / `not` behavior is unchanged and already covered by
-// test_basic. The one new capability is matching on a `Bool` with its variant patterns, which
-// this test exercises. (Its debug type staying `DW_ATE_boolean` is checked in test_debug_info.)
+// Comparison, `if`, `&&`, `||`, and `not` are covered by test_basic; this test covers matching on
+// a `Bool` with its variant patterns. (Its debug type being `DW_ATE_boolean` is checked in
+// test_debug_info.)
 
 #[cfg(test)]
 mod bool_union_tests {
     use crate::{configuration::Configuration, tests::test_util::test_source};
 
-    // `Bool` is now a union, so it can be matched on with the `_true()` / `_false()` patterns.
+    // `Bool` is a union, so it can be matched on with the `_true()` / `_false()` patterns.
     #[test]
     pub fn test_match_on_bool() {
         let source = r#"

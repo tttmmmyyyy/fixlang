@@ -1784,8 +1784,8 @@ pub fn ty_to_debug_embedded_ty<'c, 'm>(
 pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 'm>) -> DIType<'c> {
     let name = &ty.to_string();
     let obj_type = ty_to_object_ty(&ty, &vec![], gc.type_env());
-    // Bool is a (bit-identical to i8) union type, but its debug type stays `DW_ATE_BOOLEAN`.
-    // Checked before the primitive gate below because Bool's variant is now `Union`.
+    // Bool is a union type bit-identical to i8, but its debug type is `DW_ATE_BOOLEAN`. It is
+    // checked before the primitive gate because Bool's variant is `Union`.
     if ty.toplevel_tycon().map_or(false, |tc| tc.is_boolean()) {
         return gc
             .get_di_builder()

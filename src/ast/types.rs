@@ -781,7 +781,7 @@ impl TypeNode {
         ti.fields
     }
 
-    // The index of the struct/union field named `field_name`, or `None` if there is no such field.
+    // The index of the struct/union field named `field_name`.
     pub fn field_index(&self, type_env: &TypeEnv, field_name: &str) -> Option<usize> {
         self.toplevel_tycon_info(type_env)
             .fields

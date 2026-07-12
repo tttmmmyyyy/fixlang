@@ -30,6 +30,8 @@ pub fn program_to_string(prog: &RcProgram) -> String {
     out
 }
 
+/// A function renders as its signature line (`fn name(params) cap -> ret:`) followed by its
+/// indented body.
 fn func_to_string(func: &RcFunc) -> String {
     let params = func
         .params
@@ -67,10 +69,13 @@ fn var_name(var: &RcVar) -> String {
     var.name.to_string()
 }
 
+/// The indentation prefix for a nesting level: four spaces per level.
 fn indent(level: usize) -> String {
     "    ".repeat(level)
 }
 
+/// A statement chain renders as one `let` / `retain` / `release` / `destructure` per line, indented
+/// at `level`, ending in `ret`.
 fn expr_to_string(node: &RcExprNode, level: usize) -> String {
     let ind = indent(level);
     match node.expr.as_ref() {
@@ -119,6 +124,7 @@ fn expr_to_string(node: &RcExprNode, level: usize) -> String {
     }
 }
 
+/// A `let` right-hand side renders inline; a `match` expands to indented `case` arms.
 fn rhs_to_string(rhs: &RcRhs, level: usize) -> String {
     match rhs {
         RcRhs::Var(var) => var_name(var),
@@ -152,14 +158,19 @@ fn rhs_to_string(rhs: &RcRhs, level: usize) -> String {
     }
 }
 
+/// A comma-separated list of operand variables, each by name.
 fn operands(vars: &[RcVar]) -> String {
     vars.iter().map(var_name).collect::<Vec<_>>().join(", ")
 }
 
+/// A path renders as a run of `.index` segments; the empty path (the whole value) renders as the
+/// empty string.
 fn path_to_string(path: &Path) -> String {
     path.iter().map(|i| format!(".{}", i)).collect::<String>()
 }
 
+/// A known reference-counting state renders as a trailing `@local` / `@threaded` / `@global` tag;
+/// `Unknown` renders as the empty string.
 fn state_to_string(state: &RcState) -> String {
     match state {
         RcState::Unknown => String::new(),

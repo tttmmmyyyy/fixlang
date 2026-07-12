@@ -4755,8 +4755,8 @@ impl InlineLLVMWithRetainedFunctionBody {
 
         // Retain "x" around the call so that "f" sees it as shared and cannot mutate it in place.
         // In the RC IR path this transient retain is unconditional (the semantic reference count is
-        // baked into the op, per the ownership audit's "always retain"); in the legacy path it is
-        // elided when "x" is used later and is therefore already shared.
+        // baked into the op); in the legacy path it is elided when "x" is used later and is
+        // therefore already shared.
         if gc.rc_ir_mode || !gc.is_var_used_later(&self.x_name) {
             gc.retain(x.clone());
         }

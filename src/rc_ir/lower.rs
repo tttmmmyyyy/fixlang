@@ -1,6 +1,6 @@
 //! Lowering from the typed AST to the RC IR.
 //!
-//! This is the structural half of P1 lowering: it produces the RC IR skeleton — an A-normal form
+//! This is the structural pass: it produces the RC IR skeleton — an A-normal form
 //! with fresh, globally-unique names, every lambda lifted to a top-level function, `If` and union
 //! patterns desugared to `Match`, and struct/tuple `let`-patterns desugared to a `Destructure` node.
 //! Every argument is owned and there are NO explicit `Retain`/`Release` nodes yet; reference-counting

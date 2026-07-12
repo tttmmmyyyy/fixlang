@@ -358,8 +358,8 @@ impl<'a> FuncRc<'a> {
 }
 
 /// The operands of a compound expression together with whether each is only borrowed, in evaluation
-/// order (callee before arguments). A `Match` rhs never reaches here — it is handled by
-/// `process_match`, so `process_nonmatch_let` (this function's only caller) excludes it.
+/// order (callee before arguments). A `Match` rhs never reaches here; it is handled by
+/// `process_match`.
 fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, bool)> {
     match rhs {
         RcRhs::Var(v) => vec![(v.clone(), false)],

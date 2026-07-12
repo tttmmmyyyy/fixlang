@@ -172,7 +172,7 @@ pub fn build_object_files<'c>(
             }
 
             if std::env::var("USE_RC_IR").is_ok() {
-                // Experimental RC IR back end (unit 3 of the P1 rollout). Every symbol is already
+                // Experimental RC IR back end. Every symbol is already
                 // declared above (prototypes + global registration, in every unit); lower and
                 // implement only THIS unit's symbols via the RC IR path so no symbol is defined twice.
                 let unit_symbols = unit.symbols().to_vec();
