@@ -256,6 +256,16 @@ impl FullName {
         self.name.starts_with(WILDCARD_VAR_PREFIX)
     }
 
+    // Render this name for display, showing a wildcard binder as the `_` the
+    // user wrote.
+    pub fn display_name(&self) -> String {
+        if self.is_wildcard() {
+            "_".to_string()
+        } else {
+            self.to_string()
+        }
+    }
+
     /// Treat `self` as a path relative to `container` and return the
     /// qualified `FullName` (with `container` prepended to `self`'s namespace).
     ///

@@ -807,16 +807,6 @@ pub(super) fn find_field_def_src(program: &Program, tc: &TyCon, name: &Name) -> 
     field.name_src.clone()
 }
 
-// Render a local binder's name for hover. A generated wildcard binder
-// (`#wildcard{N}`) is shown as the `_` the user wrote.
-fn local_display_name(name: &FullName) -> String {
-    if name.is_wildcard() {
-        "_".to_string()
-    } else {
-        name.to_string()
-    }
-}
-
 pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> MarkupContent {
     fn document_tycon_or_alias(program: &Program, docs: &mut String, tycon: &TyCon) {
         *docs += &format!("```\n{}\n```", tycon.to_string());
@@ -856,11 +846,11 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
                 if let Some(ty) = ty.as_ref() {
                     docs += &format!(
                         "```\n{} : {}\n```",
-                        local_display_name(full_name),
+                        full_name.display_name(),
                         ty.to_string_normalize()
                     );
                 } else {
-                    docs += &format!("```\n{}\n```", local_display_name(full_name));
+                    docs += &format!("```\n{}\n```", full_name.display_name());
                 }
             } else {
                 // In case the variable is global, show the documentation of the global value.
@@ -898,11 +888,11 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
             if let Some(ty) = ty.as_ref() {
                 docs += &format!(
                     "```\n{} : {}\n```",
-                    local_display_name(&var.name),
+                    var.name.display_name(),
                     ty.to_string_normalize()
                 );
             } else {
-                docs += &format!("```\n{}\n```", local_display_name(&var.name));
+                docs += &format!("```\n{}\n```", var.name.display_name());
             }
         }
         EndNode::Type(tycon) => {

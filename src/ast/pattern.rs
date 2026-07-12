@@ -694,13 +694,7 @@ impl Pattern {
         let mut ret = "".to_string();
         match self {
             Pattern::Var(v, t) => {
-                // Render a generated wildcard binder back as the `_` the
-                // user wrote.
-                if v.name.is_wildcard() {
-                    ret += "_";
-                } else {
-                    ret += &v.name.to_string();
-                }
+                ret += &v.name.display_name();
                 match t {
                     Some(t) => {
                         ret += ": ";
