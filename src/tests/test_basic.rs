@@ -906,11 +906,7 @@ pub fn test_wildcard_pattern_not_readable() {
             println(_)
         );
         "#;
-    test_source_fail(
-        source,
-        Configuration::develop_mode(),
-        "Unknown name `_`.",
-    );
+    test_source_fail(source, Configuration::develop_mode(), "Unknown name `_`.");
 }
 
 #[test]

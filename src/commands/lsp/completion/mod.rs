@@ -84,11 +84,7 @@ pub(super) fn handle_completion(
     // buffer, so it can still produce candidates; for non-dot contexts
     // without a snapshot we reply with an empty list and let the next
     // diagnostics run restore the full list.
-    let Some(active_program) = dot_extract
-        .as_ref()
-        .map(|d| &d.program)
-        .or(program)
-    else {
+    let Some(active_program) = dot_extract.as_ref().map(|d| &d.program).or(program) else {
         send_response(id, Ok::<_, ()>(Vec::<CompletionItem>::new()));
         return;
     };
@@ -100,8 +96,7 @@ pub(super) fn handle_completion(
         // Build a base typechecker over the active program; clone-
         // per-candidate inside `assign_tier` keeps unify substitutions
         // from leaking between candidates.
-        let scratch_config =
-            Configuration::diagnostics_mode(DiagnosticsConfig::default()).ok();
+        let scratch_config = Configuration::diagnostics_mode(DiagnosticsConfig::default()).ok();
         let tc_template = scratch_config
             .as_ref()
             .map(|cfg| d.program.create_typechecker(cfg));
@@ -226,10 +221,8 @@ pub(super) fn handle_completion(
             // `global_tiers` is `Some` whenever `dot_ranking` is, and is
             // indexed in lockstep with `global_candidates`.
             let tier = global_tiers.as_ref().unwrap()[idx];
-            let ns_match = namespace_match(
-                ranking.receiver_type.toplevel_tycon().as_deref(),
-                full_name,
-            );
+            let ns_match =
+                namespace_match(ranking.receiver_type.toplevel_tycon().as_deref(), full_name);
             item.sort_text = Some(sort_text_for(tier, ns_match, deprecated, full_name));
         } else if deprecated {
             // Non-dot context. Live items keep `sort_text = None` so the
