@@ -1373,6 +1373,31 @@ main = (
 );
 ```
 
+### Type wildcards (`_`)
+
+Inside a type annotation you can write `_` for a type you want the compiler to infer. Each `_` becomes a fresh type variable, so you can spell out part of a type and leave the rest to inference: `arr : Array _` says that `arr` is an array without naming its element type, and `(_, _)` annotates a pair whose two components are inferred independently.
+
+A bare `_` has kind `*`. Fix infers no kinds, so a wildcard of a higher kind is written with an explicit kind as `(_ : k)`. For example `(_ : * -> *) I64` is a wildcard of kind `* -> *` applied to `I64`, so it ranges over type constructors such as `Array` or `Option`.
+
+```
+module Main;
+
+main : IO ();
+main = (
+    let arr = [1, 2, 3] : Array _;   // element type inferred as I64
+    let pair = (1, true) : (_, _);   // (I64, Bool)
+
+    // The element type of `[]` alone is ambiguous. Hiding the container
+    // behind a `* -> *` wildcard and pinning the element to `I64` resolves
+    // the type to `Array I64`.
+    let empty : (_ : * -> *) I64 = [];
+
+    assert_eq(|_|"", arr, [1, 2, 3]);;
+    assert_eq(|_|"", empty.@size, 0);;
+    pure()
+);
+```
+
 ## Pattern matching
 
 Pattern matching is a syntax for extracting values from structs (including tuples) or unions.

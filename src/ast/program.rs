@@ -2808,4 +2808,7 @@ pub enum EndNode {
     // A union variant name; the cursor is on the bare name in the type
     // definition or on a Pattern::Union variant-name use.
     Variant(TyCon, Name),
+    // The type inferred for a `_` type wildcard; the cursor is on the wildcard
+    // in a type annotation. Carries the resolved type so hover can display it.
+    InferredType(Arc<TypeNode>),
 }
