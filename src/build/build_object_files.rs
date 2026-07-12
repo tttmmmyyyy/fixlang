@@ -1,7 +1,7 @@
 use crate::{
     ast::{
         export_statement::ExportStatement,
-        expr::{Expr, ExprNode},
+        expr::ExprNode,
         program::{Program, Symbol},
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
@@ -511,10 +511,7 @@ fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNo
     // Run the main IO action. `main_expr` is a reference to the instantiated `main` symbol (see
     // `instantiate_exported_value`), which the RC-IR back end has already implemented; materialize
     // that symbol's object here.
-    let main_name = match main_expr.expr.as_ref() {
-        Expr::Var(var) => var.name.clone(),
-        _ => unreachable!("the entry IO value is a reference to the main symbol"),
-    };
+    let main_name = main_expr.get_var().name.clone();
     let main_obj = gc.get_scoped_obj(&main_name); // A value of type `IO ()`.
     run_io_or_ios_runner(gc, &main_obj);
 

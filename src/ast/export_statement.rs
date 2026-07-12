@@ -1,6 +1,6 @@
 // Export syntax: `FFI_EXPORT[fix_value_name, c_functio_name];`
 
-use crate::ast::expr::{Expr, ExprNode};
+use crate::ast::expr::ExprNode;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::Scheme;
@@ -126,10 +126,7 @@ impl ExportStatement {
         // (see `instantiate_exported_value`), which the RC-IR back end has already implemented;
         // materialize that symbol's object here.
         let fix_expr = self.value_expr.clone().unwrap();
-        let fix_name = match fix_expr.expr.as_ref() {
-            Expr::Var(var) => var.name.clone(),
-            _ => unreachable!("an exported value is a reference to its instantiated symbol"),
-        };
+        let fix_name = fix_expr.get_var().name.clone();
         let mut fix_value = gc.get_scoped_obj(&fix_name);
 
         // Pass the arguments to the Fix value.

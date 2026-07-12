@@ -76,7 +76,10 @@ use std::{cell::RefCell, env, sync::Arc};
 #[derive(Clone)]
 pub struct ScopedValue<'c> {
     accessor: ValueAccessor<'c>,
-    used_later: u32,
+    /// Whether `get_scoped_obj` retains the value's boxed subobjects when reading it. True only for
+    /// unboxed globals, which keep their own reference and so must hand out a retained copy; a boxed
+    /// global is moved out on read, and local values are reference-counted by explicit RC-IR nodes.
+    retain_on_read: bool,
 }
 
 #[derive(Clone)]
@@ -362,7 +365,7 @@ impl<'c> Scope<'c> {
         }
         self.data.get_mut(var).unwrap().push(ScopedValue {
             accessor: ValueAccessor::Local(obj.clone()),
-            used_later: 0,
+            retain_on_read: false,
         });
     }
 
@@ -594,17 +597,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         if self.global.contains_key(&name) {
             panic_with_msg(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
-            let used_later = if ty.is_box(self.type_env()) {
-                // We do not need to retain global objects. Always move out it.
-                0
-            } else {
-                u32::MAX / 2
-            };
+            // A boxed global is moved out when read, so it needs no retain; an unboxed global keeps
+            // its own reference, so reading it must retain its boxed subobjects.
+            let retain_on_read = !ty.is_box(self.type_env());
             self.global.insert(
                 name.clone(),
                 ScopedValue {
                     accessor: ValueAccessor::Global(function, ty),
-                    used_later,
+                    retain_on_read,
                 },
             );
         }
@@ -655,8 +655,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);
-        if val.used_later > 0 {
-            // If used later, clone object.
+        if val.retain_on_read {
             self.build_retain(obj.clone());
         }
         obj
