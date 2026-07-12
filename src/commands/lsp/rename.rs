@@ -243,7 +243,7 @@ pub(super) fn handle_rename(
                 .collect()
         }
         EndNode::Module(_) => unreachable!("Module rename is filtered out earlier"),
-        EndNode::InferredType(_) => unreachable!("Type-hole rename is filtered out earlier"),
+        EndNode::InferredType(_) => unreachable!("Type-wildcard rename is filtered out earlier"),
     };
 
     let Some(cdir) = get_current_dir() else {

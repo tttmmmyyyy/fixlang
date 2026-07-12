@@ -899,7 +899,7 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
             document_tycon_or_alias(program, &mut docs, tycon);
         }
         EndNode::InferredType(ty) => {
-            // The type a `_` hole was inferred to.
+            // The type a `_` wildcard was inferred to.
             docs += &format!("```\n_ = {}\n```", ty.to_string_normalize());
         }
         EndNode::Trait(trait_id) => {

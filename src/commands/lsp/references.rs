@@ -110,7 +110,7 @@ fn find_all_references(
             vec![]
         }
         EndNode::InferredType(_) => {
-            // A `_` type hole names no entity, so it has no references.
+            // A `_` type wildcard names no entity, so it has no references.
             vec![]
         }
     };

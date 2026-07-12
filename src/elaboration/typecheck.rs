@@ -23,7 +23,7 @@ use crate::{
     },
     constants::{
         ERR_AMBIGUOUS_NAME, ERR_MISSING_STRUCT_FIELD, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
-        TYPE_HOLE_VAR_PREFIX, WRAP_OPAQUE_TYVAR_PREFIX,
+        TYPE_WILDCARD_VAR_PREFIX, WRAP_OPAQUE_TYVAR_PREFIX,
     },
     elaboration::name_resolution::NameResolutionContext,
     error::{Error, Errors},
@@ -973,10 +973,10 @@ impl TypeCheckContext {
     ) -> Result<Arc<TypeNode>, Errors> {
         let mut sub = Substitution::default();
         for tv in ty.free_vars_vec() {
-            let target = if tv.name.starts_with(TYPE_HOLE_VAR_PREFIX) {
-                // A `_` type hole is a request to infer this type: replace it
-                // with a fresh inference variable (keeping the hole's kind) so
-                // it unifies freely, rather than naming a variable in scope.
+            let target = if tv.name.starts_with(TYPE_WILDCARD_VAR_PREFIX) {
+                // A `_` type wildcard is a request to infer this type: replace it
+                // with a fresh inference variable (keeping the wildcard's kind)
+                // so it unifies freely, rather than naming a variable in scope.
                 self.new_tyvar_by(&tv)
             } else if let Some(fixed_tv) = self
                 .fixed_tyvars

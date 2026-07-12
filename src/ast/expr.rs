@@ -1031,11 +1031,11 @@ impl ExprNode {
                 if node.is_some() {
                     return node;
                 }
-                // Hovering a `_` type hole shows the type it was inferred to.
+                // Hovering a `_` type wildcard shows the type it was inferred to.
                 // The node's own type (`self.type_`) is the resolved
                 // annotation, so walk it alongside the syntactic `ty`.
                 if let Some(resolved) = self.type_.as_ref() {
-                    let node = ty.find_hole_inferred_type(resolved, pos);
+                    let node = ty.find_wildcard_inferred_type(resolved, pos);
                     if node.is_some() {
                         return node;
                     }

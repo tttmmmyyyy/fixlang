@@ -34,7 +34,7 @@ use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::{
     COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
     IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME, STD_NAME,
-    STRUCT_ACT_SYMBOL, TYPE_HOLE_VAR_PREFIX, WILDCARD_VAR_PREFIX,
+    STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX, WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
 use crate::fixstd::builtin::{
@@ -90,8 +90,8 @@ struct ParseContext {
     // Counter for naming wildcard (`_`) pattern binders; see
     // `fresh_wildcard_name`.
     wildcard_counter: u32,
-    // Counter for naming `_` type holes; see `fresh_type_hole_name`.
-    type_hole_counter: u32,
+    // Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
+    type_wildcard_counter: u32,
 }
 
 impl ParseContext {
@@ -105,7 +105,7 @@ impl ParseContext {
             config: config.clone(),
             abs_path_uses: vec![],
             wildcard_counter: 0,
-            type_hole_counter: 0,
+            type_wildcard_counter: 0,
         }
     }
 
@@ -120,12 +120,12 @@ impl ParseContext {
         name
     }
 
-    // Generate a fresh type-variable name for a `_` type hole. Each hole
-    // gets a distinct name so that independent holes (e.g. the two in
-    // `(_, _)`) do not collide. See `TYPE_HOLE_VAR_PREFIX`.
-    fn fresh_type_hole_name(&mut self) -> String {
-        let name = format!("{}{}", TYPE_HOLE_VAR_PREFIX, self.type_hole_counter);
-        self.type_hole_counter += 1;
+    // Generate a fresh type-variable name for a `_` type wildcard. Each
+    // wildcard gets a distinct name so that independent wildcards (e.g. the two
+    // in `(_, _)`) do not collide. See `TYPE_WILDCARD_VAR_PREFIX`.
+    fn fresh_type_wildcard_name(&mut self) -> String {
+        let name = format!("{}{}", TYPE_WILDCARD_VAR_PREFIX, self.type_wildcard_counter);
+        self.type_wildcard_counter += 1;
         name
     }
 }
@@ -2940,8 +2940,8 @@ fn parse_type_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     match pair.as_rule() {
         Rule::type_tycon => parse_type_tycon(pair, ctx),
         Rule::type_var => parse_type_var(pair, ctx),
-        Rule::type_hole => parse_type_hole(pair, ctx),
-        Rule::type_hole_kinded => parse_type_hole_kinded(pair, ctx),
+        Rule::type_wildcard => parse_type_wildcard(pair, ctx),
+        Rule::type_wildcard_kinded => parse_type_wildcard_kinded(pair, ctx),
         Rule::type_tuple => parse_type_tuple(pair, ctx),
         _ => unreachable!(),
     }
@@ -2956,20 +2956,20 @@ fn parse_type_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     type_from_tyvar(tv).set_source(Some(span))
 }
 
-// Parse a `_` type hole as a fresh type variable of kind `*`.
-fn parse_type_hole(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
-    assert_eq!(pair.as_rule(), Rule::type_hole);
+// Parse a `_` type wildcard as a fresh type variable of kind `*`.
+fn parse_type_wildcard(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_wildcard);
     let span = Span::from_pair(&ctx.source, &pair);
-    let tv = make_tyvar(&ctx.fresh_type_hole_name(), &kind_star());
+    let tv = make_tyvar(&ctx.fresh_type_wildcard_name(), &kind_star());
     type_from_tyvar(tv).set_source(Some(span))
 }
 
-// Parse a `(_ : k)` type hole as a fresh type variable of the given kind.
-fn parse_type_hole_kinded(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
-    assert_eq!(pair.as_rule(), Rule::type_hole_kinded);
+// Parse a `(_ : k)` type wildcard as a fresh type variable of the given kind.
+fn parse_type_wildcard_kinded(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
+    assert_eq!(pair.as_rule(), Rule::type_wildcard_kinded);
     let span = Span::from_pair(&ctx.source, &pair);
     let kind = parse_kind(pair.into_inner().next().unwrap(), ctx);
-    let tv = make_tyvar(&ctx.fresh_type_hole_name(), &kind);
+    let tv = make_tyvar(&ctx.fresh_type_wildcard_name(), &kind);
     type_from_tyvar(tv).set_source(Some(span))
 }
 

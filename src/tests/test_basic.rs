@@ -7378,7 +7378,7 @@ pub fn test_type_variable_in_type_annotated_pattern() {
 }
 
 #[test]
-pub fn test_type_hole_in_annotation() {
+pub fn test_type_wildcard_in_annotation() {
     let source = r##"
         module Main;
 
@@ -7389,20 +7389,20 @@ pub fn test_type_hole_in_annotation() {
 
         main : IO ();
         main = (
-            // A kind-`*` hole in an expression annotation.
+            // A kind-`*` wildcard in an expression annotation.
             let arr = [1, 2, 3] : Array _;
             assert_eq(|_|"arr", arr, [1, 2, 3]);;
 
-            // Independent holes in a tuple type resolve to different types.
+            // Independent wildcards in a tuple type resolve to different types.
             let pair = (1, true) : (_, _);
             assert_eq(|_|"pair fst", pair.@0, 1);;
             assert_eq(|_|"pair snd", pair.@1, true);;
 
-            // A hole in a pattern type annotation.
+            // A wildcard in a pattern type annotation.
             let xs : Array _ = [10, 20];
             assert_eq(|_|"xs", xs, [10, 20]);;
 
-            // A higher-kinded hole hides the container and pins the element,
+            // A higher-kinded wildcard hides the container and pins the element,
             // resolving the otherwise-ambiguous `[]` to `Array I64`.
             let empty : (_ : * -> *) I64 = [];
             assert_eq(|_|"empty", empty.@size, 0);;
@@ -7415,7 +7415,7 @@ pub fn test_type_hole_in_annotation() {
 }
 
 #[test]
-pub fn test_type_hole_applied_without_kind_is_error() {
+pub fn test_type_wildcard_applied_without_kind_is_error() {
     // A bare `_` has kind `*`, so applying it (`_ I64`) is a kind error.
     // The higher kind must be written explicitly: `(_ : * -> *) I64`.
     let source = r##"

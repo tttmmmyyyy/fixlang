@@ -270,12 +270,12 @@ impl PatternNode {
                     if node.is_some() {
                         return node;
                     }
-                    // Hovering a `_` type hole in the annotation shows the
+                    // Hovering a `_` type wildcard in the annotation shows the
                     // type it was inferred to. The pattern's own type is the
                     // resolved annotation, so walk it alongside the syntactic
                     // `ty`.
                     if let Some(resolved) = self.info.type_.as_ref() {
-                        let node = ty.find_hole_inferred_type(resolved, pos);
+                        let node = ty.find_wildcard_inferred_type(resolved, pos);
                         if node.is_some() {
                             return node;
                         }

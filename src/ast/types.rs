@@ -10,8 +10,8 @@ use crate::ast::typedecl::Field;
 use crate::constants::{
     TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_HOLE_VAR_PREFIX, U16_NAME, U32_NAME,
-    U64_NAME, U8_NAME,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U16_NAME,
+    U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -442,16 +442,16 @@ impl TypeNode {
         }
     }
 
-    // Locate a `_` type hole at `pos` and return the type it was inferred to.
+    // Locate a `_` type wildcard at `pos` and return the type it was inferred to.
     //
-    // `self` is the syntactic annotation (holes still present as
-    // `TYPE_HOLE_VAR_PREFIX` type variables, carrying the `_`'s source span);
+    // `self` is the syntactic annotation (wildcards still present as
+    // `TYPE_WILDCARD_VAR_PREFIX` type variables, carrying the `_`'s source span);
     // `resolved` is the same annotation after type inference, so the two trees
-    // have the same shape with each hole replaced by its inferred type. The
-    // walk descends both in lockstep and, on reaching the hovered hole, returns
+    // have the same shape with each wildcard replaced by its inferred type. The
+    // walk descends both in lockstep and, on reaching the hovered wildcard, returns
     // the matching node from `resolved`. A structural mismatch (possible when
     // associated-type reduction reshaped `resolved`) yields `None`.
-    pub fn find_hole_inferred_type(
+    pub fn find_wildcard_inferred_type(
         self: &Arc<TypeNode>,
         resolved: &Arc<TypeNode>,
         pos: &SourcePos,
@@ -461,20 +461,20 @@ impl TypeNode {
             return None;
         }
         if let Type::TyVar(tv) = &self.ty {
-            if tv.name.starts_with(TYPE_HOLE_VAR_PREFIX) {
+            if tv.name.starts_with(TYPE_WILDCARD_VAR_PREFIX) {
                 return Some(EndNode::InferredType(resolved.clone()));
             }
             return None;
         }
         match (&self.ty, &resolved.ty) {
             (Type::TyApp(sfun, sarg), Type::TyApp(rfun, rarg)) => sarg
-                .find_hole_inferred_type(rarg, pos)
-                .or_else(|| sfun.find_hole_inferred_type(rfun, pos)),
+                .find_wildcard_inferred_type(rarg, pos)
+                .or_else(|| sfun.find_wildcard_inferred_type(rfun, pos)),
             (Type::AssocTy(_, sargs), Type::AssocTy(_, rargs)) if sargs.len() == rargs.len() => {
                 sargs
                     .iter()
                     .zip(rargs)
-                    .find_map(|(s, r)| s.find_hole_inferred_type(r, pos))
+                    .find_map(|(s, r)| s.find_wildcard_inferred_type(r, pos))
             }
             _ => None,
         }
