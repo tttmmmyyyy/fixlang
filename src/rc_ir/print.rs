@@ -78,9 +78,11 @@ fn expr_to_string(node: &RcExprNode, level: usize) -> String {
             out
         }
         RcExpr::Retain(var, path, state, cont) => {
+            let keyword = if var.nonnull { "retain_nonnull" } else { "retain" };
             let mut out = format!(
-                "{}retain {}{}{}\n",
+                "{}{} {}{}{}\n",
                 ind,
+                keyword,
                 var_name(var),
                 path_to_string(path),
                 state_to_string(state)

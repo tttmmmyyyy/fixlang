@@ -140,7 +140,20 @@ impl<'c, 'm> Generator<'c, 'm> {
             }
             RcExpr::Retain(x, _path, _state, k) => {
                 let obj = self.get_scoped_obj_noretain(&x.name);
-                self.build_retain(obj);
+                if x.nonnull {
+                    // A statically non-null boxed value (a non-empty capture object): retain
+                    // without the null check that a possibly-null capture object needs.
+                    //
+                    // The `nonnull` bit is set only on capture objects, and a capture object
+                    // flows linearly — projected (a borrow), released at its last use, moved when
+                    // threaded onward — so it is seldom duplicated and hence seldom retained. This
+                    // skip therefore almost never lands on a hot path, unlike the symmetric
+                    // release-side skip, which fires wherever a non-empty capture is released. It
+                    // is kept for that symmetry and for the rare code that does retain a capture.
+                    self.retain_nonnull_boxed(&obj);
+                } else {
+                    self.build_retain(obj);
+                }
                 self.eval_rc_expr(k, tail, fn_map)
             }
             RcExpr::Release(x, _path, _state, k) => {

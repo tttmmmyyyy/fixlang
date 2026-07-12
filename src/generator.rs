@@ -1078,19 +1078,16 @@ impl<'c, 'm> Generator<'c, 'm> {
     // Retain an object.
     pub fn build_retain(&mut self, obj: Object<'c>) {
         if obj.is_box(self.type_env()) {
-            let current_bb = self.builder().get_insert_block().unwrap();
-            let current_func = current_bb.get_parent().unwrap();
-            let cont_bb = self
-                .context
-                .append_basic_block(current_func, "cont_bb@retain");
-
-            if obj.is_dynamic_object() {
+            let cont_bb = if obj.is_dynamic_object() {
                 // Dynamic object can be null, so build null checking.
-
-                // Dynamic object can be null.
+                let current_bb = self.builder().get_insert_block().unwrap();
+                let current_func = current_bb.get_parent().unwrap();
                 let nonnull_bb = self
                     .context
                     .append_basic_block(current_func, "nonnull_bb@retain");
+                let cont_bb = self
+                    .context
+                    .append_basic_block(current_func, "cont_bb@retain");
 
                 // Branch to nonnull_bb if object is not null.
                 let is_null = obj.is_null(self);
@@ -1100,56 +1097,18 @@ impl<'c, 'm> Generator<'c, 'm> {
 
                 // Implement code to retain in nonnull_bb.
                 self.builder().position_at_end(nonnull_bb);
-            }
+                Some(cont_bb)
+            } else {
+                None
+            };
 
-            let obj_ptr = obj.value.into_pointer_value();
-            // Branch by refcnt_state.
-            let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+            // Increment the reference count of the (now known non-null) boxed object.
+            self.retain_nonnull_boxed(&obj);
 
-            // Implement `local_bb`.
-            self.builder().position_at_end(local_bb);
-
-            // In `local_bb`, increment refcnt and jump to `cont_bb`.
-            let old_refcnt_local = self
-                .builder()
-                .build_load(refcnt_type(self.context), obj_ptr, "")
-                .unwrap()
-                .into_int_value();
-            let new_refcnt = self
-                .builder()
-                .build_int_nsw_add(
-                    old_refcnt_local,
-                    refcnt_type(self.context).const_int(1, false).into(),
-                    "",
-                )
-                .unwrap();
-            self.builder().build_store(obj_ptr, new_refcnt).unwrap();
-            self.builder().build_unconditional_branch(cont_bb).unwrap();
-
-            // Implement threaded_bb.
-            if threaded_bb.is_some() {
-                let threaded_bb = threaded_bb.unwrap();
-                self.builder().position_at_end(threaded_bb);
-
-                // In `threaded_bb`, increment refcnt atomically and jump to `cont_bb`.
-                let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
-                let _old_refcnt_threaded = self
-                    .builder()
-                    .build_atomicrmw(
-                        inkwell::AtomicRMWBinOp::Add,
-                        ptr_to_refcnt,
-                        refcnt_type(self.context).const_int(1, false),
-                        inkwell::AtomicOrdering::Monotonic,
-                    )
-                    .unwrap();
+            if let Some(cont_bb) = cont_bb {
                 self.builder().build_unconditional_branch(cont_bb).unwrap();
+                self.builder().position_at_end(cont_bb);
             }
-
-            // Implement global_bb.
-            self.builder().position_at_end(global_bb);
-            self.builder().build_unconditional_branch(cont_bb).unwrap();
-
-            self.builder().position_at_end(cont_bb);
         } else {
             // When the object is unboxed,
             let obj_type = ty_to_object_ty(&obj.ty, &vec![], self.type_env());
@@ -1185,6 +1144,65 @@ impl<'c, 'm> Generator<'c, 'm> {
                 }
             }
         }
+    }
+
+    // Increment the reference count of a non-null boxed object, according to its refcount state,
+    // without the null check `build_retain` performs for a possibly-null dynamic object. The caller
+    // guarantees the object is a non-null boxed pointer (e.g. a non-empty capture object).
+    pub(crate) fn retain_nonnull_boxed(&mut self, obj: &Object<'c>) {
+        let current_func = self
+            .builder()
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+        let cont_bb = self
+            .context
+            .append_basic_block(current_func, "cont_bb@retain_nonnull");
+
+        let obj_ptr = obj.value.into_pointer_value();
+        // Branch by refcnt_state.
+        let (local_bb, threaded_bb, global_bb) = self.build_branch_by_refcnt_state(obj_ptr);
+
+        // In `local_bb`, increment refcnt and jump to `cont_bb`.
+        self.builder().position_at_end(local_bb);
+        let old_refcnt_local = self
+            .builder()
+            .build_load(refcnt_type(self.context), obj_ptr, "")
+            .unwrap()
+            .into_int_value();
+        let new_refcnt = self
+            .builder()
+            .build_int_nsw_add(
+                old_refcnt_local,
+                refcnt_type(self.context).const_int(1, false).into(),
+                "",
+            )
+            .unwrap();
+        self.builder().build_store(obj_ptr, new_refcnt).unwrap();
+        self.builder().build_unconditional_branch(cont_bb).unwrap();
+
+        // In `threaded_bb`, increment refcnt atomically and jump to `cont_bb`.
+        if let Some(threaded_bb) = threaded_bb {
+            self.builder().position_at_end(threaded_bb);
+            let ptr_to_refcnt = self.get_refcnt_ptr(obj_ptr);
+            let _old_refcnt_threaded = self
+                .builder()
+                .build_atomicrmw(
+                    inkwell::AtomicRMWBinOp::Add,
+                    ptr_to_refcnt,
+                    refcnt_type(self.context).const_int(1, false),
+                    inkwell::AtomicOrdering::Monotonic,
+                )
+                .unwrap();
+            self.builder().build_unconditional_branch(cont_bb).unwrap();
+        }
+
+        // In `global_bb`, there is no refcount to update; jump to `cont_bb`.
+        self.builder().position_at_end(global_bb);
+        self.builder().build_unconditional_branch(cont_bb).unwrap();
+
+        self.builder().position_at_end(cont_bb);
     }
 
     // Release or mark global or mark threaded nonnull boxed object.
