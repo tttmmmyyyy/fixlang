@@ -26,8 +26,7 @@ use crate::constants::{
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
     FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
-    STRING_NAME,
-    STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
+    STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
     STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
@@ -758,7 +757,8 @@ pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     // Desugar `true` / `false` to the `Bool` union's constructors, referenced by absolute path
     // so the desugaring resolves without an `import` at the use site.
-    let mut ctor = FullName::from_strs(&[STD_NAME, BOOL_NAME], if val { "_true" } else { "_false" });
+    let mut ctor =
+        FullName::from_strs(&[STD_NAME, BOOL_NAME], if val { "_true" } else { "_false" });
     ctor.set_absolute();
     let unit = expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]);
     expr_app(expr_var(ctor, source.clone()), vec![unit], source)
@@ -2351,8 +2351,7 @@ impl InlineLLVMArraySwapBody {
         // are unchanged.
         let elem_i =
             ObjectFieldType::read_from_array_buf_noretain(gc, len, array_buf, elem_ty.clone(), i);
-        let elem_j =
-            ObjectFieldType::read_from_array_buf_noretain(gc, len, array_buf, elem_ty, j);
+        let elem_j = ObjectFieldType::read_from_array_buf_noretain(gc, len, array_buf, elem_ty, j);
         ObjectFieldType::write_to_array_buf(gc, len, array_buf, i, elem_j, false);
         ObjectFieldType::write_to_array_buf(gc, len, array_buf, j, elem_i, false);
         array

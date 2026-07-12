@@ -23,9 +23,7 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{
-    MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
-};
+use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar};
 
 /// Insert explicit `Retain`/`Release` nodes into every function and global initializer of `prog`.
 pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
@@ -101,7 +99,9 @@ impl<'a> FuncRc<'a> {
     fn process(&self, node: RcExprNode, live_after: &Set<FullName>) -> (RcExprNode, Set<FullName>) {
         // The continuation chain recurses deeply for a large function (as lowering and code
         // generation do); grow the stack on demand so it does not overflow.
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.process_inner(node, live_after))
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+            self.process_inner(node, live_after)
+        })
     }
 
     fn process_inner(
@@ -127,7 +127,9 @@ impl<'a> FuncRc<'a> {
             RcExpr::Let(x, RcRhs::Match(scrut, arms), cont) => {
                 self.process_match(x, scrut, arms, cont, source, live_after)
             }
-            RcExpr::Let(x, rhs, cont) => self.process_nonmatch_let(x, rhs, cont, source, live_after),
+            RcExpr::Let(x, rhs, cont) => {
+                self.process_nonmatch_let(x, rhs, cont, source, live_after)
+            }
             RcExpr::Destructure(container, fields, cont) => {
                 self.process_destructure(container, fields, cont, source, live_after)
             }
@@ -376,7 +378,9 @@ fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, bool)> {
             .enumerate()
             .map(|(i, a)| (a.clone(), gen.borrows_operand(i)))
             .collect(),
-        RcRhs::Match(..) => unreachable!("a Match rhs is handled by process_match, not rhs_operands"),
+        RcRhs::Match(..) => {
+            unreachable!("a Match rhs is handled by process_match, not rhs_operands")
+        }
     }
 }
 

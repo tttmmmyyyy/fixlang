@@ -1,21 +1,9 @@
-use std::{
-    fs::{self, create_dir_all},
-    panic::panic_any,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-use inkwell::{
-    context::Context,
-    module::Module,
-    passes::PassBuilderOptions,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
-    values::BasicValue,
-    AddressSpace, OptimizationLevel,
-};
-use rand::Rng;
-use serde::{Deserialize, Serialize};
 use crate::{
-    ast::{export_statement::ExportStatement, expr::ExprNode, program::{Program, Symbol}},
+    ast::{
+        export_statement::ExportStatement,
+        expr::ExprNode,
+        program::{Program, Symbol},
+    },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
     constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
@@ -29,6 +17,22 @@ use crate::{
     optimization,
     rc_ir::{lower::lower_program, print::program_to_string, rc_insert::insert_rc},
     tool::stopwatch::StopWatch,
+};
+use inkwell::{
+    context::Context,
+    module::Module,
+    passes::PassBuilderOptions,
+    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
+    values::BasicValue,
+    AddressSpace, OptimizationLevel,
+};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use std::{
+    fs::{self, create_dir_all},
+    panic::panic_any,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 // The result of `build_object_files` function.

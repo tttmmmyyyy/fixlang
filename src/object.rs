@@ -10,9 +10,8 @@ use crate::constants::{
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty, make_i32_ty,
-    make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty,
-    make_u8_ty,
+    make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty, make_i32_ty, make_i64_ty,
+    make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty,
 };
 use crate::fixstd::runtime::{
     RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC, RUNTIME_NEGATIVE_ARRAY_SIZE,
@@ -694,9 +693,8 @@ impl ObjectFieldType {
         };
 
         // After loop, do nothing.
-        let after_loop = |_gc: &mut Generator<'c, 'm>,
-                          _len: IntValue<'c>,
-                          _ptr_to_buffer: PointerValue<'c>| {};
+        let after_loop =
+            |_gc: &mut Generator<'c, 'm>, _len: IntValue<'c>, _ptr_to_buffer: PointerValue<'c>| {};
 
         Self::loop_over_array_buf(gc, count, src_buffer, loop_body, after_loop);
     }
@@ -1704,7 +1702,9 @@ fn build_traverse<'c, 'm>(
         let idx = Object::new(obj.extract_field(gc, 1), make_i64_ty(), gc)
             .extract_field(gc, 0)
             .into_int_value();
-        let size = inner_array.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
+        let size = inner_array
+            .extract_field(gc, ARRAY_LEN_IDX)
+            .into_int_value();
         let buffer = inner_array.ptr_to_field(gc, ARRAY_BUF_IDX);
         gc.build_release_mark_nonnull_boxed_with(&inner_array, work, |gc| {
             ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, elem_ty, work, Some(idx));
@@ -1747,7 +1747,14 @@ fn build_traverse<'c, 'm>(
                 assert_eq!(i, ARRAY_CAP_IDX as usize);
                 let size = obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
                 let buffer = obj.ptr_to_field(gc, ARRAY_BUF_IDX);
-                ObjectFieldType::release_or_mark_array_buf(gc, size, buffer, ty.clone(), work, None);
+                ObjectFieldType::release_or_mark_array_buf(
+                    gc,
+                    size,
+                    buffer,
+                    ty.clone(),
+                    work,
+                    None,
+                );
             }
             ObjectFieldType::UnionTag => {}
             ObjectFieldType::UnionBuf(_) => {
@@ -1789,7 +1796,12 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, '
     if ty.toplevel_tycon().map_or(false, |tc| tc.is_boolean()) {
         return gc
             .get_di_builder()
-            .create_basic_type(&format!("{}::{}", STD_NAME, BOOL_NAME), 8, DW_ATE_BOOLEAN, 0)
+            .create_basic_type(
+                &format!("{}::{}", STD_NAME, BOOL_NAME),
+                8,
+                DW_ATE_BOOLEAN,
+                0,
+            )
             .unwrap()
             .as_type();
     }

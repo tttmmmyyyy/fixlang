@@ -1,11 +1,11 @@
 //! The RC IR data types.
 
-use std::sync::Arc;
 use crate::ast::inline_llvm::LLVMGenerator;
 use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
 use crate::misc::Map;
 use crate::parse::sourcefile::Span;
+use std::sync::Arc;
 
 /// A variable of the RC IR: a globally unique name together with its concrete (monomorphic) type
 /// and the source span it comes from. Because a fresh name is minted at every binding, a name

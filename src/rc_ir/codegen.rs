@@ -7,12 +7,6 @@
 //! conditional container release. Non-reference-counting work (closure layout, FFI, struct/array
 //! construction, the inline-LLVM builtins) reuses the existing `Generator` helpers unchanged.
 
-use inkwell::basic_block::BasicBlock;
-use inkwell::debug_info::AsDIScope;
-use inkwell::module::Linkage;
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue};
-use inkwell::{AddressSpace, IntPredicate};
-use std::sync::Arc;
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::constants::{
@@ -27,6 +21,12 @@ use crate::object::{create_obj, lambda_function_type, ObjectFieldType};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
+use inkwell::basic_block::BasicBlock;
+use inkwell::debug_info::AsDIScope;
+use inkwell::module::Linkage;
+use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue};
+use inkwell::{AddressSpace, IntPredicate};
+use std::sync::Arc;
 
 impl<'c, 'm> Generator<'c, 'm> {
     /// Generate LLVM code for the functions and global initializers of `prog` — one compilation
@@ -123,8 +123,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.push_debug_location(node.source.clone());
         // A deeply nested continuation recurses deeply here (as lowering and RC insertion do); grow
         // the stack on demand so a large program does not overflow it.
-        let result =
-            stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.eval_rc_expr_body(node, tail, fn_map));
+        let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+            self.eval_rc_expr_body(node, tail, fn_map)
+        });
         self.pop_debug_location();
         result
     }
@@ -300,18 +301,19 @@ impl<'c, 'm> Generator<'c, 'm> {
         } else {
             let cap_tys: Vec<Arc<TypeNode>> = caps.iter().map(|c| c.ty.clone()).collect();
             let dyn_ty = make_dynamic_object_ty();
-            let cap_obj = create_obj(dyn_ty.clone(), &cap_tys, None, self, Some("captured_objects"));
+            let cap_obj = create_obj(
+                dyn_ty.clone(),
+                &cap_tys,
+                None,
+                self,
+                Some("captured_objects"),
+            );
             let cap_obj_str_ty = dyn_ty
                 .get_object_type(&cap_tys, self.type_env())
                 .to_struct_type(self, vec![]);
             for (i, cap) in caps.iter().enumerate() {
                 let val = self.get_scoped_obj(&cap.name).value;
-                cap_obj.insert_field_as(
-                    self,
-                    cap_obj_str_ty,
-                    i as u32 + DYNAMIC_OBJ_CAP_IDX,
-                    val,
-                );
+                cap_obj.insert_field_as(self, cap_obj_str_ty, i as u32 + DYNAMIC_OBJ_CAP_IDX, val);
             }
             cap_obj.value
         };
@@ -370,7 +372,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().build_unconditional_branch(else_bb).unwrap();
         } else {
             let tag_val = ObjectFieldType::get_union_tag(self, &scrut_obj);
-            self.builder().build_switch(tag_val, else_bb, &cases).unwrap();
+            self.builder()
+                .build_switch(tag_val, else_bb, &cases)
+                .unwrap();
         }
 
         // Implement each arm.
@@ -448,9 +452,11 @@ impl<'c, 'm> Generator<'c, 'm> {
         let obj_embed_ty = glob.ty.get_embedded_type(self, &vec![]);
 
         // The storage for the initialized value, and the call-once flag.
-        let global_var = self
-            .module
-            .add_global(obj_embed_ty, None, &format!("GlobalVar#{}", glob.symbol.to_string()));
+        let global_var = self.module.add_global(
+            obj_embed_ty,
+            None,
+            &format!("GlobalVar#{}", glob.symbol.to_string()),
+        );
         global_var.set_initializer(&obj_embed_ty.const_zero());
         global_var.set_linkage(Linkage::Internal);
         let global_var_ptr = global_var.as_basic_value_enum().into_pointer_value();
@@ -464,9 +470,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             let ty = self.context.i8_type();
             (ty, ty.const_zero())
         };
-        let init_flag = self
-            .module
-            .add_global(flag_ty, None, &format!("InitFlag#{}", glob.symbol.to_string()));
+        let init_flag = self.module.add_global(
+            flag_ty,
+            None,
+            &format!("InitFlag#{}", glob.symbol.to_string()),
+        );
         init_flag.set_initializer(&flag_init_val);
         init_flag.set_linkage(Linkage::Internal);
         let init_flag = init_flag.as_basic_value_enum().into_pointer_value();
@@ -490,7 +498,12 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .into_int_value();
             let is_zero = self
                 .builder()
-                .build_int_compare(IntPredicate::EQ, flag, flag.get_type().const_zero(), "flag_is_zero")
+                .build_int_compare(
+                    IntPredicate::EQ,
+                    flag,
+                    flag.get_type().const_zero(),
+                    "flag_is_zero",
+                )
                 .unwrap();
             let init_bb = self.context.append_basic_block(acc_fn, "flag_is_zero");
             let end_bb = self.context.append_basic_block(acc_fn, "flag_is_nonzero");
@@ -535,7 +548,9 @@ impl<'c, 'm> Generator<'c, 'm> {
             let _scope_guard = self.push_scope();
             let obj = self.eval_rc_expr(&glob.init, false, fn_map).unwrap();
             self.mark_global(obj.clone());
-            self.builder().build_store(global_var_ptr, obj.value).unwrap();
+            self.builder()
+                .build_store(global_var_ptr, obj.value)
+                .unwrap();
         }
 
         if !self.config.threaded {

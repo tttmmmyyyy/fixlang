@@ -21,8 +21,8 @@ use crate::{
     error::Errors,
     fixstd::builtin::{
         add_trait_instance_float, add_trait_instance_int, array_check_range, array_check_size,
-        array_get_capacity, array_get_size, array_unsafe_empty, array_unsafe_fill,
-        array_pop_back_nonempty, array_unsafe_get_bounds_unchecked,
+        array_get_capacity, array_get_size, array_pop_back_nonempty, array_punch,
+        array_unsafe_empty, array_unsafe_fill, array_unsafe_get_bounds_unchecked,
         array_unsafe_get_linear_bounds_unchecked_unretained,
         array_unsafe_set_bounds_uniqueness_unchecked_unreleased, bit_not_function,
         bitwise_operation_function, boxed_from_retained_ptr_ios, boxed_to_retained_ptr_ios,
@@ -38,10 +38,9 @@ use crate::{
         make_dynamic_object_ty, make_floating_ty, make_integral_ty, make_iostate_unsafe_create,
         make_ptr_ty, mark_threaded_function, multiply_trait_instance_float,
         multiply_trait_instance_int, negate_trait_instance_float, negate_trait_instance_int,
-        not_trait_instance_bool, quiet_nan_value, remainder_trait_instance_int, set_array,
-        shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
-        array_punch, punched_array_plug, swap_array, swap_bounds_unchecked_array,
-        undefined_internal_function,
+        not_trait_instance_bool, punched_array_plug, quiet_nan_value, remainder_trait_instance_int,
+        set_array, shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
+        swap_array, swap_bounds_unchecked_array, undefined_internal_function,
         unsafe_set_size_array, with_retained_function, BitOperationType,
     },
     misc::{make_map, upper_camel_to_lower_snake, Map},
@@ -500,28 +499,40 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("../docs/std_array_unsafe_swap_bounds_unchecked.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_unsafe_punch_bounds_unchecked"),
+        FullName::from_strs(
+            &[STD_NAME, PUNCHED_ARRAY_NAME],
+            "_unsafe_punch_bounds_unchecked",
+        ),
         array_punch(true),
         None,
         None,
         None,
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_unsafe_punch_bounds_uniqueness_unchecked"),
+        FullName::from_strs(
+            &[STD_NAME, PUNCHED_ARRAY_NAME],
+            "_unsafe_punch_bounds_uniqueness_unchecked",
+        ),
         array_punch(false),
         None,
         None,
         None,
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_unsafe_plug_bounds_unchecked"),
+        FullName::from_strs(
+            &[STD_NAME, PUNCHED_ARRAY_NAME],
+            "_unsafe_plug_bounds_unchecked",
+        ),
         punched_array_plug(true),
         None,
         None,
         None,
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, PUNCHED_ARRAY_NAME], "_unsafe_plug_bounds_uniqueness_unchecked"),
+        FullName::from_strs(
+            &[STD_NAME, PUNCHED_ARRAY_NAME],
+            "_unsafe_plug_bounds_uniqueness_unchecked",
+        ),
         punched_array_plug(false),
         None,
         None,

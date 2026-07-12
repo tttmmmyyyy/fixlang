@@ -1350,7 +1350,11 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     // Release a non-null boxed object, emitting `traverse_refs` to release its owned references
     // once the refcount reaches zero, before the object is freed.
-    fn build_release_boxed_with(&mut self, obj: &Object<'c>, traverse_refs: impl FnOnce(&mut Self)) {
+    fn build_release_boxed_with(
+        &mut self,
+        obj: &Object<'c>,
+        traverse_refs: impl FnOnce(&mut Self),
+    ) {
         // Get pointer to the object.
         let obj_ptr = obj.value.into_pointer_value();
 

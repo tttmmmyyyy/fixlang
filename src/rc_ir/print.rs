@@ -4,9 +4,7 @@
 //! and per global initializer, with the continuation-nested body printed as a sequence of
 //! statements (`let`, `retain`, `release`) terminated by `ret`.
 
-use crate::rc_ir::ast::{
-    Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
-};
+use crate::rc_ir::ast::{Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar};
 
 /// Render a whole program.
 pub fn program_to_string(prog: &RcProgram) -> String {
@@ -80,12 +78,21 @@ fn expr_to_string(node: &RcExprNode, level: usize) -> String {
     let ind = indent(level);
     match node.expr.as_ref() {
         RcExpr::Let(var, rhs, cont) => {
-            let mut out = format!("{}let {} = {}\n", ind, var_to_string(var), rhs_to_string(rhs, level));
+            let mut out = format!(
+                "{}let {} = {}\n",
+                ind,
+                var_to_string(var),
+                rhs_to_string(rhs, level)
+            );
             out.push_str(&expr_to_string(cont, level));
             out
         }
         RcExpr::Retain(var, path, state, cont) => {
-            let keyword = if var.nonnull { "retain_nonnull" } else { "retain" };
+            let keyword = if var.nonnull {
+                "retain_nonnull"
+            } else {
+                "retain"
+            };
             let mut out = format!(
                 "{}{} {}{}{}\n",
                 ind,
@@ -98,7 +105,11 @@ fn expr_to_string(node: &RcExprNode, level: usize) -> String {
             out
         }
         RcExpr::Release(var, path, state, cont) => {
-            let keyword = if var.nonnull { "release_nonnull" } else { "release" };
+            let keyword = if var.nonnull {
+                "release_nonnull"
+            } else {
+                "release"
+            };
             let mut out = format!(
                 "{}{} {}{}{}\n",
                 ind,
@@ -116,7 +127,12 @@ fn expr_to_string(node: &RcExprNode, level: usize) -> String {
                 .map(|(idx, var)| format!(".{} -> {}", idx, var_to_string(var)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let mut out = format!("{}destructure {} {{ {} }}\n", ind, var_name(container), binds);
+            let mut out = format!(
+                "{}destructure {} {{ {} }}\n",
+                ind,
+                var_name(container),
+                binds
+            );
             out.push_str(&expr_to_string(cont, level));
             out
         }

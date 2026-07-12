@@ -1,9 +1,9 @@
-use std::sync::Arc;
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::fixstd::builtin::*;
 use crate::generator::{Generator, Object};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum LLVMGenerator {

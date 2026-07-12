@@ -7,7 +7,6 @@
 //! insertion is a separate backward pass. The one reference-counting effect already present is the
 //! retain baked into the boxed capture getter, per the retain-getter model.
 
-use std::sync::Arc;
 use crate::ast::expr::{Expr, ExprNode, Var};
 use crate::ast::inline_llvm::{InlineLLVM, LLVMGenerator};
 use crate::ast::name::{FullName, Name};
@@ -24,6 +23,7 @@ use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
+use std::sync::Arc;
 
 /// A pending binding accumulated during A-normalization: either a single `let var = rhs`, or a
 /// whole struct/tuple destructure binding several fields at once (`Destructure`).
@@ -122,7 +122,10 @@ impl<'a> Lowerer<'a> {
     // --- environment ---
 
     fn bind(&mut self, ast_name: &FullName, var: RcVar) {
-        self.scope.entry(ast_name.clone()).or_insert_with(Vec::new).push(var);
+        self.scope
+            .entry(ast_name.clone())
+            .or_insert_with(Vec::new)
+            .push(var);
     }
 
     fn unbind(&mut self, ast_name: &FullName) {
@@ -132,23 +135,29 @@ impl<'a> Lowerer<'a> {
     }
 
     fn resolve(&self, ast_name: &FullName) -> Option<RcVar> {
-        self.scope.get(ast_name).and_then(|stack| stack.last()).cloned()
+        self.scope
+            .get(ast_name)
+            .and_then(|stack| stack.last())
+            .cloned()
     }
 
     // --- building the continuation-nested body ---
 
     /// Fold accumulated bindings into the nested continuation chain ending in `terminal`.
     fn fold_bindings(bindings: Vec<Binding>, terminal: RcExprNode) -> RcExprNode {
-        bindings.into_iter().rev().fold(terminal, |cont, binding| match binding {
-            Binding::Let(var, rhs, source) => RcExprNode {
-                expr: Box::new(RcExpr::Let(var, rhs, cont)),
-                source,
-            },
-            Binding::Destructure(container, fields, source) => RcExprNode {
-                expr: Box::new(RcExpr::Destructure(container, fields, cont)),
-                source,
-            },
-        })
+        bindings
+            .into_iter()
+            .rev()
+            .fold(terminal, |cont, binding| match binding {
+                Binding::Let(var, rhs, source) => RcExprNode {
+                    expr: Box::new(RcExpr::Let(var, rhs, cont)),
+                    source,
+                },
+                Binding::Destructure(container, fields, source) => RcExprNode {
+                    expr: Box::new(RcExpr::Destructure(container, fields, cont)),
+                    source,
+                },
+            })
     }
 
     fn ret_node(var: RcVar) -> RcExprNode {
@@ -223,8 +232,7 @@ impl<'a> Lowerer<'a> {
             // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
             // raw capture object by that name (the `fix` combinator's `FixBody`) resolves to it.
             self.bind(&FullName::local(CAP_NAME), cap_var.clone());
-            let cap_tys: Vec<Arc<TypeNode>> =
-                captures.iter().map(|(_, v)| v.ty.clone()).collect();
+            let cap_tys: Vec<Arc<TypeNode>> = captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
                 let gen = LLVMGenerator::CaptureProjectBody(InlineLLVMCaptureProjectBody {
                     cap_name: cap_var.name.clone(),
@@ -233,12 +241,19 @@ impl<'a> Lowerer<'a> {
                 });
                 let mut proj = self.fresh_var(&ast_name.name, cap_tys[i].clone(), None);
                 proj.debug_name = Some(ast_name.to_string());
-                bindings.push(Binding::Let(proj.clone(), RcRhs::Llvm(gen, vec![cap_var.clone()]), None));
+                bindings.push(Binding::Let(
+                    proj.clone(),
+                    RcRhs::Llvm(gen, vec![cap_var.clone()]),
+                    None,
+                ));
                 self.bind(ast_name, proj);
             }
             Some(cap_var)
         } else {
-            assert!(captures.is_empty(), "a funptr function cannot have captures");
+            assert!(
+                captures.is_empty(),
+                "a funptr function cannot have captures"
+            );
             None
         };
 
@@ -263,7 +278,9 @@ impl<'a> Lowerer<'a> {
     fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<Binding>) -> RcVar {
         // A deeply nested expression recurses deeply here (as it does in RC insertion and code
         // generation); grow the stack on demand so a large program does not overflow it.
-        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.lower_to_var_inner(expr, bindings))
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+            self.lower_to_var_inner(expr, bindings)
+        })
     }
 
     fn lower_to_var_inner(&mut self, expr: &ExprNode, bindings: &mut Vec<Binding>) -> RcVar {
@@ -341,7 +358,11 @@ impl<'a> Lowerer<'a> {
             *slot = var.name.clone();
         }
         let result = self.fresh_var("v", ty, source.clone());
-        bindings.push(Binding::Let(result.clone(), RcRhs::Llvm(gen, operand_vars), source));
+        bindings.push(Binding::Let(
+            result.clone(),
+            RcRhs::Llvm(gen, operand_vars),
+            source,
+        ));
         result
     }
 
@@ -356,9 +377,16 @@ impl<'a> Lowerer<'a> {
         // Evaluation order (matching the current generator): the callee first, then the arguments
         // left to right.
         let callee = self.lower_to_var(fun, bindings);
-        let arg_vars: Vec<RcVar> = args.iter().map(|arg| self.lower_to_var(arg, bindings)).collect();
+        let arg_vars: Vec<RcVar> = args
+            .iter()
+            .map(|arg| self.lower_to_var(arg, bindings))
+            .collect();
         let result = self.fresh_var("app", ty, source.clone());
-        bindings.push(Binding::Let(result.clone(), RcRhs::App(callee, arg_vars), source));
+        bindings.push(Binding::Let(
+            result.clone(),
+            RcRhs::App(callee, arg_vars),
+            source,
+        ));
         result
     }
 
@@ -379,15 +407,22 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|n| self.resolve(n).expect("captured variable not bound"))
             .collect();
-        let captures: Vec<(FullName, RcVar)> =
-            cap_names.iter().cloned().zip(cap_vals.iter().cloned()).collect();
+        let captures: Vec<(FullName, RcVar)> = cap_names
+            .iter()
+            .cloned()
+            .zip(cap_vals.iter().cloned())
+            .collect();
 
         let func_ref = self.fresh_func("lambda");
         let rc_func = self.lower_lambda_as_function(expr, func_ref.clone(), captures);
         self.funcs.insert(func_ref.clone(), rc_func);
 
         let result = self.fresh_var("closure", ty, source.clone());
-        bindings.push(Binding::Let(result.clone(), RcRhs::Closure(func_ref, cap_vals), source));
+        bindings.push(Binding::Let(
+            result.clone(),
+            RcRhs::Closure(func_ref, cap_vals),
+            source,
+        ));
         result
     }
 
@@ -430,7 +465,11 @@ impl<'a> Lowerer<'a> {
             body: self.lower_body(else_expr),
         };
         let result = self.fresh_var("if", ty, source.clone());
-        bindings.push(Binding::Let(result.clone(), RcRhs::Match(cond_var, vec![then_arm, else_arm]), source));
+        bindings.push(Binding::Let(
+            result.clone(),
+            RcRhs::Match(cond_var, vec![then_arm, else_arm]),
+            source,
+        ));
         result
     }
 
@@ -448,11 +487,20 @@ impl<'a> Lowerer<'a> {
             .map(|(pat, body)| self.lower_match_arm(&cond_var, pat, body))
             .collect();
         let result = self.fresh_var("match", ty, source.clone());
-        bindings.push(Binding::Let(result.clone(), RcRhs::Match(cond_var, rc_arms), source));
+        bindings.push(Binding::Let(
+            result.clone(),
+            RcRhs::Match(cond_var, rc_arms),
+            source,
+        ));
         result
     }
 
-    fn lower_match_arm(&mut self, scrutinee: &RcVar, pat: &PatternNode, body: &ExprNode) -> MatchArm {
+    fn lower_match_arm(
+        &mut self,
+        scrutinee: &RcVar,
+        pat: &PatternNode,
+        body: &ExprNode,
+    ) -> MatchArm {
         match &pat.pattern {
             Pattern::Union(variant_name, _, subpat) => {
                 let (variant_idx, _, _) = Pattern::get_variant_info(variant_name, self.type_env);
@@ -478,7 +526,8 @@ impl<'a> Lowerer<'a> {
             }
             Pattern::Var(v, _) => {
                 // A catch-all arm binds the whole scrutinee to its source variable.
-                let mut payload = self.fresh_var(&v.name.name, scrutinee.ty.clone(), pat.info.source.clone());
+                let mut payload =
+                    self.fresh_var(&v.name.name, scrutinee.ty.clone(), pat.info.source.clone());
                 payload.debug_name = Some(v.name.to_string());
                 self.bind(&v.name, payload.clone());
                 let body = self.lower_body(body);
@@ -492,7 +541,8 @@ impl<'a> Lowerer<'a> {
             Pattern::Struct(_, _) => {
                 // A struct/tuple pattern in a `match` is a single non-variant (default) arm that
                 // binds the whole scrutinee and destructures it.
-                let payload = self.fresh_var("scrut", scrutinee.ty.clone(), pat.info.source.clone());
+                let payload =
+                    self.fresh_var("scrut", scrutinee.ty.clone(), pat.info.source.clone());
                 let mut arm_bindings = vec![];
                 let pushed = self.destructure_pattern(pat, &payload, &mut arm_bindings);
                 let ret_var = self.lower_to_var(body, &mut arm_bindings);
@@ -524,7 +574,11 @@ impl<'a> Lowerer<'a> {
             field_names: field_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("struct", ty, source.clone());
-        bindings.push(Binding::Let(result.clone(), RcRhs::Llvm(gen, field_vars), source));
+        bindings.push(Binding::Let(
+            result.clone(),
+            RcRhs::Llvm(gen, field_vars),
+            source,
+        ));
         result
     }
 
@@ -535,12 +589,19 @@ impl<'a> Lowerer<'a> {
         source: Option<Span>,
         bindings: &mut Vec<Binding>,
     ) -> RcVar {
-        let elem_vars: Vec<RcVar> = elems.iter().map(|e| self.lower_to_var(e, bindings)).collect();
+        let elem_vars: Vec<RcVar> = elems
+            .iter()
+            .map(|e| self.lower_to_var(e, bindings))
+            .collect();
         let gen = LLVMGenerator::ArrayLitBody(InlineLLVMArrayLitBody {
             elem_names: elem_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("array", ty, source.clone());
-        bindings.push(Binding::Let(result.clone(), RcRhs::Llvm(gen, elem_vars), source));
+        bindings.push(Binding::Let(
+            result.clone(),
+            RcRhs::Llvm(gen, elem_vars),
+            source,
+        ));
         result
     }
 
@@ -558,7 +619,10 @@ impl<'a> Lowerer<'a> {
     ) -> RcVar {
         // All arguments are operands; when `is_io` the last is the input IOState token, kept for the
         // ordering dependency but not passed to C.
-        let arg_vars: Vec<RcVar> = args.iter().map(|arg| self.lower_to_var(arg, bindings)).collect();
+        let arg_vars: Vec<RcVar> = args
+            .iter()
+            .map(|arg| self.lower_to_var(arg, bindings))
+            .collect();
         let gen = LLVMGenerator::FFICallBody(InlineLLVMFFICallBody {
             fun_name: fun_name.clone(),
             ret_tycon: ret_tycon.clone(),
@@ -568,11 +632,20 @@ impl<'a> Lowerer<'a> {
             arg_names: arg_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("ffi", ty, source.clone());
-        bindings.push(Binding::Let(result.clone(), RcRhs::Llvm(gen, arg_vars), source));
+        bindings.push(Binding::Let(
+            result.clone(),
+            RcRhs::Llvm(gen, arg_vars),
+            source,
+        ));
         result
     }
 
-    fn lower_eval(&mut self, side: &ExprNode, main: &ExprNode, bindings: &mut Vec<Binding>) -> RcVar {
+    fn lower_eval(
+        &mut self,
+        side: &ExprNode,
+        main: &ExprNode,
+        bindings: &mut Vec<Binding>,
+    ) -> RcVar {
         // The side value is evaluated for its effect and discarded. A compound side is forced by the
         // bindings it emits, and a local variable is already evaluated; but a reference to a global
         // value lowers to a bare atom that emits nothing, so materialize it here to force the global's
@@ -612,9 +685,14 @@ impl<'a> Lowerer<'a> {
                     // faithfully with a move binding, which carries the source name. The move is
                     // reference-count-neutral: RC insertion retains `obj` before it exactly when it
                     // is used after, matching the current back end's `let j = i`.
-                    let mut renamed = self.fresh_var(&v.name.name, obj.ty.clone(), pat.info.source.clone());
+                    let mut renamed =
+                        self.fresh_var(&v.name.name, obj.ty.clone(), pat.info.source.clone());
                     renamed.debug_name = Some(v.name.to_string());
-                    bindings.push(Binding::Let(renamed.clone(), RcRhs::Var(obj.clone()), pat.info.source.clone()));
+                    bindings.push(Binding::Let(
+                        renamed.clone(),
+                        RcRhs::Var(obj.clone()),
+                        pat.info.source.clone(),
+                    ));
                     self.bind(&v.name, renamed);
                 }
                 vec![v.name.clone()]
@@ -630,8 +708,11 @@ impl<'a> Lowerer<'a> {
                         .field_index(self.type_env, field_name)
                         .expect("unknown field in struct pattern");
                     let hint = field_var_hint(subpat, field_name);
-                    let mut field_var =
-                        self.fresh_var(&hint, field_tys[field_idx].clone(), subpat.info.source.clone());
+                    let mut field_var = self.fresh_var(
+                        &hint,
+                        field_tys[field_idx].clone(),
+                        subpat.info.source.clone(),
+                    );
                     if let Pattern::Var(v, _) = &subpat.pattern {
                         // The field binds a source variable directly: carry its name for debug info
                         // and bind it. The field variable is always freshly produced by the
@@ -647,7 +728,11 @@ impl<'a> Lowerer<'a> {
                 }
                 // Extract all fields in one step (mirroring the back end's `get_struct_fields`); RC
                 // insertion retains the container beforehand iff it is used after this destructure.
-                bindings.push(Binding::Destructure(obj.clone(), fields, pat.info.source.clone()));
+                bindings.push(Binding::Destructure(
+                    obj.clone(),
+                    fields,
+                    pat.info.source.clone(),
+                ));
                 for (field_var, subpat) in nested {
                     pushed.extend(self.destructure_pattern(subpat, &field_var, bindings));
                 }
@@ -658,7 +743,6 @@ impl<'a> Lowerer<'a> {
             }
         }
     }
-
 }
 
 /// Record `dbg` as the source-level debug name of the binding that just produced `var`, so code
