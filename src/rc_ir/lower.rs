@@ -56,8 +56,12 @@ pub fn lower_program(type_env: &TypeEnv, symbols: &[Symbol], all_symbols: &[Symb
         }
     }
     let funcs = std::mem::take(&mut lw.funcs);
-    // The real entry point is the program's `main` IO value, which code generation handles
-    // separately; this placeholder names it for the dump.
+    // `entry` labels the program in the dump only; it has no role in code generation or in
+    // entry-point selection. The actual entry point — `main` for a build, `test` for `fix test`,
+    // or an FFI-exported function — is chosen by the build driver, independently of this field.
+    // It is a placeholder, NOT a reachability root: RC-IR dead-function elimination, when added,
+    // must take its roots from the real entry points (there can be several — every FFI-exported
+    // function is one), not from this field.
     let entry = FuncRef {
         name: FullName::local("#entry"),
     };
@@ -251,6 +255,12 @@ impl<'a> Lowerer<'a> {
     // --- expressions (A-normalization: lower to an atom, appending bindings) ---
 
     fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<Binding>) -> RcVar {
+        // A deeply nested expression recurses deeply here (as it does in RC insertion and code
+        // generation); grow the stack on demand so a large program does not overflow it.
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.lower_to_var_inner(expr, bindings))
+    }
+
+    fn lower_to_var_inner(&mut self, expr: &ExprNode, bindings: &mut Vec<Binding>) -> RcVar {
         let ty = expr.type_.clone().unwrap();
         let source = expr.source.clone();
         match expr.expr.as_ref() {

@@ -94,6 +94,16 @@ impl<'a> FuncRc<'a> {
     /// Process one expression, given the set of local variables live *after* it. Returns the
     /// rewritten expression and the set of local variables live *before* it (at its entry).
     fn process(&self, node: RcExprNode, live_after: &Set<FullName>) -> (RcExprNode, Set<FullName>) {
+        // The continuation chain recurses deeply for a large function (as lowering and code
+        // generation do); grow the stack on demand so it does not overflow.
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.process_inner(node, live_after))
+    }
+
+    fn process_inner(
+        &self,
+        node: RcExprNode,
+        live_after: &Set<FullName>,
+    ) -> (RcExprNode, Set<FullName>) {
         let source = node.source.clone();
         match *node.expr {
             RcExpr::Ret(x) => {

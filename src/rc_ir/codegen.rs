@@ -119,7 +119,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         fn_map: &Map<FuncRef, FunctionValue<'c>>,
     ) -> Option<Object<'c>> {
         self.push_debug_location(node.source.clone());
-        let result = self.eval_rc_expr_body(node, tail, fn_map);
+        // A deeply nested continuation recurses deeply here (as lowering and RC insertion do); grow
+        // the stack on demand so a large program does not overflow it.
+        let result =
+            stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.eval_rc_expr_body(node, tail, fn_map));
         self.pop_debug_location();
         result
     }
