@@ -8,7 +8,6 @@
 //! retain baked into the boxed capture getter, per the retain-getter model.
 
 use std::sync::Arc;
-
 use crate::ast::expr::{Expr, ExprNode, Var};
 use crate::ast::inline_llvm::{InlineLLVM, LLVMGenerator};
 use crate::ast::name::{FullName, Name};
@@ -22,7 +21,9 @@ use crate::fixstd::builtin::{
 };
 use crate::misc::Map;
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::*;
+use crate::rc_ir::ast::{
+    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
+};
 
 /// A pending binding accumulated during A-normalization: either a single `let var = rhs`, or a
 /// whole struct/tuple destructure binding several fields at once (`Destructure`).

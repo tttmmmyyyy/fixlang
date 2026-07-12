@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::fixstd::builtin::*;

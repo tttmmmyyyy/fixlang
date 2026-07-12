@@ -4,7 +4,6 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-
 use inkwell::{
     context::Context,
     module::Module,
@@ -15,9 +14,8 @@ use inkwell::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-
 use crate::{
-    ast::{export_statement::ExportStatement, expr::ExprNode, program::Program},
+    ast::{export_statement::ExportStatement, expr::ExprNode, program::{Program, Symbol}},
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
     constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
@@ -29,6 +27,7 @@ use crate::{
     generator::Generator,
     misc::{info_msg, warn_msg},
     optimization,
+    rc_ir::{lower::lower_program, print::program_to_string, rc_insert::insert_rc},
     tool::stopwatch::StopWatch,
 };
 
@@ -63,17 +62,15 @@ pub fn build_object_files<'c>(
     // to lower: a module name dumps that module's symbols, or `all` dumps every symbol.
     if let Ok(filter) = std::env::var("DUMP_RC_IR") {
         let type_env = program.type_env();
-        let all_program_symbols: Vec<crate::ast::program::Symbol> =
-            program.symbols.values().cloned().collect();
-        let symbols: Vec<crate::ast::program::Symbol> = all_program_symbols
+        let all_program_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
+        let symbols: Vec<Symbol> = all_program_symbols
             .iter()
             .filter(|s| filter == "all" || s.name.module() == filter)
             .cloned()
             .collect();
-        let mut rc_program =
-            crate::rc_ir::lower::lower_program(&type_env, &symbols, &all_program_symbols);
-        crate::rc_ir::rc_insert::insert_rc(&mut rc_program, &type_env);
-        eprintln!("{}", crate::rc_ir::print::program_to_string(&rc_program));
+        let mut rc_program = lower_program(&type_env, &symbols, &all_program_symbols);
+        insert_rc(&mut rc_program, &type_env);
+        eprintln!("{}", program_to_string(&rc_program));
     }
 
     // Determine compilation units.

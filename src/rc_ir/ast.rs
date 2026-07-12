@@ -1,7 +1,6 @@
 //! The RC IR data types.
 
 use std::sync::Arc;
-
 use crate::ast::inline_llvm::LLVMGenerator;
 use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;

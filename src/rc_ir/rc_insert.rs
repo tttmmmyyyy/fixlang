@@ -23,7 +23,9 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::*;
+use crate::rc_ir::ast::{
+    MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
+};
 
 /// Insert explicit `Retain`/`Release` nodes into every function and global initializer of `prog`.
 pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {

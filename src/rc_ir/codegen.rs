@@ -7,12 +7,12 @@
 //! conditional container release. Non-reference-counting work (closure layout, FFI, struct/array
 //! construction, the inline-LLVM builtins) reuses the existing `Generator` helpers unchanged.
 
+use inkwell::basic_block::BasicBlock;
 use inkwell::debug_info::AsDIScope;
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue};
 use inkwell::{AddressSpace, IntPredicate};
 use std::sync::Arc;
-
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::constants::{
@@ -24,7 +24,9 @@ use crate::fixstd::runtime::RUNTIME_PTHREAD_ONCE;
 use crate::generator::{Generator, Object};
 use crate::misc::Map;
 use crate::object::{create_obj, lambda_function_type, ObjectFieldType};
-use crate::rc_ir::ast::*;
+use crate::rc_ir::ast::{
+    FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
+};
 
 impl<'c, 'm> Generator<'c, 'm> {
     /// Generate LLVM code for the functions and global initializers of `prog` — one compilation
@@ -353,7 +355,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             );
         }
         let else_bb = *arm_bbs.last().unwrap();
-        let mut cases: Vec<(IntValue<'c>, inkwell::basic_block::BasicBlock<'c>)> = vec![];
+        let mut cases: Vec<(IntValue<'c>, BasicBlock<'c>)> = vec![];
         for (i, arm) in arms.iter().enumerate().take(arms.len() - 1) {
             let tag = arm
                 .variant
@@ -372,7 +374,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
 
         // Implement each arm.
-        let mut incomings: Vec<(BasicValueEnum<'c>, inkwell::basic_block::BasicBlock<'c>)> = vec![];
+        let mut incomings: Vec<(BasicValueEnum<'c>, BasicBlock<'c>)> = vec![];
         for (i, arm) in arms.iter().enumerate() {
             self.builder().position_at_end(arm_bbs[i]);
 

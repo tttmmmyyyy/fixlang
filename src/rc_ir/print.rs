@@ -4,7 +4,9 @@
 //! and per global initializer, with the continuation-nested body printed as a sequence of
 //! statements (`let`, `retain`, `release`) terminated by `ret`.
 
-use crate::rc_ir::ast::*;
+use crate::rc_ir::ast::{
+    Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
+};
 
 /// Render a whole program.
 pub fn program_to_string(prog: &RcProgram) -> String {
