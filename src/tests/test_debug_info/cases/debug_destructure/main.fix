@@ -1,0 +1,11 @@
+module Main;
+
+main : IO ();
+main = (
+    let pair : (I64, Array I64) = (7, [10, 20, 30]);
+    let (a, arr) = pair;
+    let named : (I64, String) = (5, "hello");
+    let (n, str) = named;
+    eval a;
+    println((a + arr.@(0) + n + str.get_size).to_string)
+);

@@ -200,4 +200,91 @@ mod debug_info_tests {
             );
         }
     }
+
+    fn sample_debug_destructure() -> PathBuf {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("src/tests/test_debug_info/cases/debug_destructure/main.fix");
+        p
+    }
+
+    // Line in cases/debug_destructure/main.fix where the destructure-bound locals (a, arr, n, str)
+    // are live.
+    const LINE_DESTRUCTURE_BREAK: u32 = 9; // "    eval a;"
+
+    // A `let`-pattern that destructures a tuple binds each field to a source variable; debug info
+    // must let a debugger inspect every one by its source name. `a` and `n` are the unboxed `I64`
+    // fields, `arr` and `str` the boxed `Array`/`String` fields, each extracted from its tuple.
+    #[test]
+    fn test_debug_info_destructure() {
+        install_fix();
+
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::copy(sample_debug_destructure(), dir.join("main.fix"))
+            .expect("Failed to copy main.fix");
+
+        let build = Command::new("fix")
+            .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `fix build`");
+        assert!(
+            build.status.success(),
+            "`fix build -g` failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&build.stdout),
+            String::from_utf8_lossy(&build.stderr)
+        );
+
+        let breakpoint = format!("break main.fix:{}", LINE_DESTRUCTURE_BREAK);
+        let gdb = Command::new("gdb")
+            .args([
+                "-batch",
+                "-iex",
+                "set debuginfod enabled off",
+                "-ex",
+                &breakpoint,
+                "-ex",
+                "run",
+                "-ex",
+                "print a",
+                "-ex",
+                "print n",
+                "-ex",
+                "whatis arr",
+                "-ex",
+                "print *arr",
+                "-ex",
+                "whatis str",
+                "-ex",
+                "x/s (char*)str._data + 24",
+                "-ex",
+                "continue",
+                "./prog",
+            ])
+            .current_dir(dir)
+            .output()
+            .expect("Failed to execute `gdb`");
+        let out = format!(
+            "{}{}",
+            String::from_utf8_lossy(&gdb.stdout),
+            String::from_utf8_lossy(&gdb.stderr)
+        );
+
+        for (needle, what) in [
+            ("= 7", "destructured I64 field `a`"),
+            ("= 5", "destructured I64 field `n`"),
+            ("Std::Array Std::I64", "destructured Array field `arr` type"),
+            ("<array size> = 3", "destructured Array field `arr` size"),
+            ("Std::String", "destructured String field `str` type"),
+            ("\"hello\"", "destructured String field `str` contents"),
+        ] {
+            assert!(
+                out.contains(needle),
+                "gdb did not show {} (expected `{}`).\ngdb output:\n{}",
+                what,
+                needle,
+                out
+            );
+        }
+    }
 }
