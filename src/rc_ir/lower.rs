@@ -607,13 +607,16 @@ impl<'a> Lowerer<'a> {
                 }
                 vec![v.name.clone()]
             }
-            Pattern::Struct(tc, field_pats) => {
+            Pattern::Struct(_tc, field_pats) => {
                 let field_tys = obj.ty.field_types(self.type_env);
                 let mut fields = vec![]; // (field index, field variable) for the whole destructure
                 let mut nested = vec![]; // (field variable, sub-pattern) lowered after the extraction
                 let mut pushed = vec![];
                 for (field_name, _, subpat) in field_pats {
-                    let field_idx = self.struct_field_index(tc, field_name);
+                    let field_idx = obj
+                        .ty
+                        .field_index(self.type_env, field_name)
+                        .expect("unknown field in struct pattern");
                     let hint = field_var_hint(subpat, field_name);
                     let mut field_var =
                         self.fresh_var(&hint, field_tys[field_idx].clone(), subpat.info.source.clone());
@@ -644,17 +647,6 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn struct_field_index(&self, tc: &Arc<TyCon>, field_name: &str) -> usize {
-        let ti = self
-            .type_env
-            .tycons
-            .get(tc.as_ref())
-            .expect("unknown type constructor in struct pattern");
-        ti.fields
-            .iter()
-            .position(|f| f.name == *field_name)
-            .expect("unknown field in struct pattern")
-    }
 }
 
 /// Record `dbg` as the source-level debug name of the binding that just produced `var`, so code

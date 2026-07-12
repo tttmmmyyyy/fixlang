@@ -781,6 +781,14 @@ impl TypeNode {
         ti.fields
     }
 
+    // The index of the struct/union field named `field_name`, or `None` if there is no such field.
+    pub fn field_index(&self, type_env: &TypeEnv, field_name: &str) -> Option<usize> {
+        self.toplevel_tycon_info(type_env)
+            .fields
+            .iter()
+            .position(|f| f.name == field_name)
+    }
+
     // Flatten type application.
     // ex. If given `f a b`, returns `vec![f, a, b]`.
     pub fn flatten_type_application(&self) -> Vec<Arc<TypeNode>> {
