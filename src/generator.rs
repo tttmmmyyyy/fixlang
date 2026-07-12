@@ -651,7 +651,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Get an object on the scope (or global).
-    // This function retains the object if it will be used later.
+    // Retains the object's boxed subobjects when the value's `retain_on_read` is set, i.e. when
+    // reading an unboxed global (which keeps its own reference); other reads are plain.
     pub fn get_scoped_obj(&mut self, var_name: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var_name);
         let obj = val.accessor.get(self);

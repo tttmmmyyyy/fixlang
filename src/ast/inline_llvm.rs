@@ -95,6 +95,7 @@ pub enum LLVMGenerator {
 /// override this. RC-IR insertion releases a borrowed operand after its last use and retains an
 /// owned one before a non-last use.
 pub trait BorrowsOperand {
+    /// Returns `true` if operand `i` is only borrowed; the default owns every operand.
     fn borrows_operand(&self, _i: usize) -> bool {
         false
     }
