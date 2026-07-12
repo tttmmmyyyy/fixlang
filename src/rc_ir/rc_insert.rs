@@ -10,11 +10,14 @@
 //! `implement_lambda_function`.
 //!
 //! Ownership of an operand is `Own` (the op consumes it: moves it into the result, releases it
-//! internally, or force-unique-returns it) or `Borrow` (the op reads it without consuming it). For an
-//! `Own` operand a `Retain` is inserted before a non-last use; for a `Borrow` operand a `Release` is
-//! inserted after its last use. Only the read-getters borrow (see `LLVMGenerator::borrows_operand`);
-//! everything else owns. `RcState` is `Unknown` (always sound). Reference counting is skipped for
-//! fully-unboxed values (they have no boxed leaf, so `Retain`/`Release` would generate no code).
+//! internally, or force-unique-returns it) or `Borrow` (the op reads it without consuming it). Three
+//! rules place the nodes: (a) before a non-last use of an `Own` operand, insert a `Retain`; (b) after
+//! the last use of a `Borrow` operand, insert a `Release`; (c) a variable that becomes dead without
+//! being consumed — an unused binding, or one a sibling match arm uses but this arm does not — is
+//! released at the earliest point it is dead. Only the read-getters borrow (see
+//! `LLVMGenerator::borrows_operand`); everything else owns. `RcState` is `Unknown` (always sound).
+//! Reference counting is skipped for fully-unboxed values (they have no boxed leaf, so
+//! `Retain`/`Release` would generate no code).
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
