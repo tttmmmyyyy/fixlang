@@ -3,7 +3,7 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    inline_llvm::LLVMGenerator,
+    inline_llvm::{BorrowsOperand, LLVMGenerator},
     name::{FullName, Name, NameSpace},
     pattern::PatternNode,
     predicate::Predicate,
@@ -668,6 +668,8 @@ impl InlineLLVMIntLit {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntLit {}
+
 pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::IntLit(InlineLLVMIntLit { val: val as i64 }),
@@ -713,6 +715,8 @@ impl InlineLLVMFloatLit {
     }
 }
 
+impl BorrowsOperand for InlineLLVMFloatLit {}
+
 pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
         LLVMGenerator::FloatLit(InlineLLVMFloatLit { val }),
@@ -744,6 +748,8 @@ impl InlineLLVMNullPtrLit {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMNullPtrLit {}
 
 pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
@@ -822,6 +828,8 @@ impl InlineLLVMStringBuf {
     }
 }
 
+impl BorrowsOperand for InlineLLVMStringBuf {}
+
 pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
     let array_ty = make_array_ty().set_source(source.clone());
     let u8_ty = make_u8_ty().set_source(source.clone());
@@ -894,6 +902,8 @@ impl InlineLLVMFixBody {
         gc.apply_lambda(f_fixf, vec![x], tail)
     }
 }
+
+impl BorrowsOperand for InlineLLVMFixBody {}
 
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = FullName::local(f);
@@ -986,6 +996,8 @@ impl InlineLLVMCastIntegralBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMCastIntegralBody {}
+
 // Cast function of integrals
 //
 // - `to_alias`: A type alias to the target type. If set, it will appear in the documentation.
@@ -1069,6 +1081,8 @@ impl InlineLLVMCastFloatBody {
         obj.insert_field(gc, 0, to_val)
     }
 }
+
+impl BorrowsOperand for InlineLLVMCastFloatBody {}
 
 // Cast function of integrals
 //
@@ -1160,6 +1174,8 @@ impl InlineLLVMCastIntToFloatBody {
         obj.insert_field(gc, 0, to_val)
     }
 }
+
+impl BorrowsOperand for InlineLLVMCastIntToFloatBody {}
 
 // Cast function from int to float.
 pub fn cast_int_to_float_function(
@@ -1257,6 +1273,8 @@ impl InlineLLVMCastFloatToIntBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMCastFloatToIntBody {}
+
 // Cast function from int to float.
 pub fn cast_float_to_int_function(
     from: Arc<TypeNode>,
@@ -1336,6 +1354,8 @@ impl InlineLLVMShiftBody {
         obj.insert_field(gc, 0, to_val)
     }
 }
+
+impl BorrowsOperand for InlineLLVMShiftBody {}
 
 // Shift functions
 pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -1444,6 +1464,8 @@ impl InlineLLVMBitwiseOperationBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMBitwiseOperationBody {}
+
 pub fn bitwise_operation_function(
     ty: Arc<TypeNode>,
     op_type: BitOperationType,
@@ -1513,6 +1535,8 @@ impl InlineLLVMBitNotBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMBitNotBody {}
+
 pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const OPERAND_NAME: &str = "operand";
 
@@ -1575,6 +1599,8 @@ impl InlineLLVMArrayUnsafeFill {
         array
     }
 }
+
+impl BorrowsOperand for InlineLLVMArrayUnsafeFill {}
 
 // Implementation of Array::fill built-in function.
 fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
@@ -1664,6 +1690,8 @@ impl InlineLLVMArrayUnsafeEmpty {
     }
 }
 
+impl BorrowsOperand for InlineLLVMArrayUnsafeEmpty {}
+
 // Make an empty array.
 pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     const CAPACITY_NAME: &str = "cap";
@@ -1727,6 +1755,8 @@ impl InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
         array
     }
 }
+
+impl BorrowsOperand for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {}
 
 // Set an element to an array, with no uniqueness checking and without releasing the old value.
 pub fn array_unsafe_set_bounds_uniqueness_unchecked_unreleased() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -1794,13 +1824,6 @@ impl InlineLLVMArrayUnsafeGetBoundsUnchecked {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
 
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
-    }
-
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -1836,6 +1859,12 @@ impl InlineLLVMArrayUnsafeGetBoundsUnchecked {
         }
 
         elem
+    }
+}
+
+impl BorrowsOperand for InlineLLVMArrayUnsafeGetBoundsUnchecked {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 }
 
@@ -1942,6 +1971,8 @@ impl InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
     }
 }
 
+impl BorrowsOperand for InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {}
+
 // Gets a value from an array, without bounds checking and retaining the returned value.
 // Type: I64 -> Array a -> (Array a, a)
 pub fn array_unsafe_get_linear_bounds_unchecked_unretained(
@@ -2018,6 +2049,8 @@ impl InlineLLVMArrayPopBackNonemptyBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMArrayPopBackNonemptyBody {}
+
 // Drops the last element of a non-empty array and shrinks its length by one.
 // The caller must ensure the array is non-empty.
 // Type: Array a -> Array a
@@ -2075,6 +2108,8 @@ impl InlineLLVMArrayUnsafeSetSizeBody {
         array.insert_field(gc, ARRAY_LEN_IDX, length)
     }
 }
+
+impl BorrowsOperand for InlineLLVMArrayUnsafeSetSizeBody {}
 
 // Set the length of an array, with no uniqueness checking, no validation of size argument.
 pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -2235,6 +2270,8 @@ impl InlineLLVMArraySetBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMArraySetBody {}
+
 // Implementation of Array::set built-in function.
 // is_unique_mode - if true, generate code that calls abort when given array is shared.
 fn set_array_body(a: &str, array: &str, idx: &str, value: &str) -> Arc<ExprNode> {
@@ -2358,6 +2395,8 @@ impl InlineLLVMArraySwapBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMArraySwapBody {}
+
 fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let body = expr_llvm(
         LLVMGenerator::ArraySwapBody(InlineLLVMArraySwapBody {
@@ -2460,6 +2499,8 @@ impl InlineLLVMArrayPunchBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMArrayPunchBody {}
+
 // Moves the element at `idx` out of an array (without bounds checking), leaving a hole, and
 // returns the punched array together with the moved-out element.
 // Type: I64 -> Array a -> (PunchedArray a, a)
@@ -2544,6 +2585,8 @@ impl InlineLLVMPunchedArrayPlugBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMPunchedArrayPlugBody {}
+
 // Writes an element back into a punched array's hole, returning the completed array.
 // Type: a -> PunchedArray a -> Array a
 pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -2605,6 +2648,8 @@ impl InlineLLVMArrayForceUniqueBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMArrayForceUniqueBody {}
+
 pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
     const ELEM_TYPE: &str = "a";
@@ -2660,6 +2705,8 @@ impl InlineLLVMArrayCheckRange {
         gc.get_scoped_obj(&self.idx_name)
     }
 }
+
+impl BorrowsOperand for InlineLLVMArrayCheckRange {}
 
 // _check_range : I64 -> I64 -> I64
 pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -2717,6 +2764,8 @@ impl InlineLLVMArrayCheckSize {
     }
 }
 
+impl BorrowsOperand for InlineLLVMArrayCheckSize {}
+
 // _check_size : I64 -> I64
 pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     const SIZE_NAME: &str = "size";
@@ -2749,13 +2798,6 @@ impl InlineLLVMArrayGetPtrBody {
         vec![&mut self.arr_name]
     }
 
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
-    }
-
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -2781,6 +2823,12 @@ impl InlineLLVMArrayGetPtrBody {
             Some("alloca@get_ptr_array"),
         );
         obj.insert_field(gc, 0, ptr)
+    }
+}
+
+impl BorrowsOperand for InlineLLVMArrayGetPtrBody {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 }
 
@@ -2830,13 +2878,6 @@ impl InlineLLVMArrayGetSizeBody {
         vec![&mut self.arr_name]
     }
 
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
-    }
-
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -2851,6 +2892,12 @@ impl InlineLLVMArrayGetSizeBody {
         }
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"));
         int_obj.insert_field(gc, 0, len)
+    }
+}
+
+impl BorrowsOperand for InlineLLVMArrayGetSizeBody {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 }
 
@@ -2888,13 +2935,6 @@ impl InlineLLVMArrayGetCapacityBody {
         vec![&mut self.arr_name]
     }
 
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
-    }
-
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -2910,6 +2950,12 @@ impl InlineLLVMArrayGetCapacityBody {
 
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"));
         int_obj.insert_field(gc, 0, len)
+    }
+}
+
+impl BorrowsOperand for InlineLLVMArrayGetCapacityBody {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 }
 
@@ -2958,6 +3004,8 @@ impl InlineLLVMStructGetBody {
         ObjectFieldType::get_struct_fields(gc, &str, &[self.field_idx as u32])[0].clone()
     }
 }
+
+impl BorrowsOperand for InlineLLVMStructGetBody {}
 
 // `get` built-in function for a given struct.
 pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>) -> Arc<ExprNode> {
@@ -3028,6 +3076,8 @@ impl InlineLLVMMakeStructBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMMakeStructBody {}
+
 // Allocate an array whose length equals the number of operands and fill it with them. The array
 // type is the value type of the enclosing expression. This is the RC IR counterpart of the
 // `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
@@ -3072,6 +3122,8 @@ impl InlineLLVMArrayLitBody {
         array
     }
 }
+
+impl BorrowsOperand for InlineLLVMArrayLitBody {}
 
 // Call a C function. This is the RC IR counterpart of the `Expr::FFICall` AST node. `arg_names` are
 // the operands; when `is_io`, the last one is the input `IOState` token, which establishes the
@@ -3130,6 +3182,8 @@ impl InlineLLVMFFICallBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMFFICallBody {}
+
 // Project a captured value out of a lifted closure's capture object, retaining it (a retain-getter).
 // Lowering emits this at the entry of a lifted closure function to bind each captured variable.
 // `cap_tys` are the types of all captured values, needed to reconstruct the capture object's layout.
@@ -3149,19 +3203,18 @@ impl InlineLLVMCaptureProjectBody {
         vec![&mut self.cap_name]
     }
 
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
-    }
-
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
     ) -> Object<'c> {
         gc.build_capture_project(&self.cap_name, self.cap_idx, &self.cap_tys, ty)
+    }
+}
+
+impl BorrowsOperand for InlineLLVMCaptureProjectBody {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 }
 
@@ -3210,6 +3263,8 @@ impl InlineLLVMStructPunchBody {
         pair
     }
 }
+
+impl BorrowsOperand for InlineLLVMStructPunchBody {}
 
 // Field punching function for a given struct.
 //
@@ -3303,6 +3358,8 @@ impl InlineLLVMStructPlugInBody {
         str
     }
 }
+
+impl BorrowsOperand for InlineLLVMStructPlugInBody {}
 
 // Field plugging-in function for a given struct.
 // If the struct is `S` and the field is `F`, then the function has the type `Sx -> F -> S` where `Sx` is the punched struct type.
@@ -4131,6 +4188,8 @@ impl InlineLLVMStructSetBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMStructSetBody {}
+
 // `set` built-in function for a given struct.
 pub fn struct_set(
     _struct_name: &FullName,
@@ -4214,6 +4273,8 @@ impl InlineLLVMMakeUnionBody {
         ObjectFieldType::set_union_value(gc, obj, field)
     }
 }
+
+impl BorrowsOperand for InlineLLVMMakeUnionBody {}
 
 // constructor function for a given union.
 pub fn union_new_body(
@@ -4325,6 +4386,8 @@ impl InlineLLVMUnionAsBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMUnionAsBody {}
+
 // `as_{field}` built-in function for a given union.
 pub fn union_as_body(
     union_arg_name: &Name,
@@ -4377,13 +4440,6 @@ impl InlineLLVMUnionIsBody {
         vec![&mut self.union_arg_name]
     }
 
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
-    }
-
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -4424,6 +4480,12 @@ impl InlineLLVMUnionIsBody {
             gc.release(obj);
         }
         ret
+    }
+}
+
+impl BorrowsOperand for InlineLLVMUnionIsBody {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 }
 
@@ -4537,6 +4599,8 @@ impl InlineLLVMUnionModBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMUnionModBody {}
+
 pub fn union_mod_function(
     _union_name: &FullName,
     field_name: &Name,
@@ -4637,6 +4701,8 @@ impl InlineLLVMUndefinedInternalBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMUndefinedInternalBody {}
+
 // `_undefined_internal` built-in function
 pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
@@ -4707,6 +4773,8 @@ impl InlineLLVMHoleBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMHoleBody {}
+
 /// `Std::#hole : a` — placeholder generated when the parser accepts
 /// an empty expression position (e.g. `let x = 10; ` with no body).
 /// Type-checks at any type via the generic `a`. A post-pass scans for
@@ -4772,6 +4840,8 @@ impl InlineLLVMWithRetainedFunctionBody {
         ret
     }
 }
+
+impl BorrowsOperand for InlineLLVMWithRetainedFunctionBody {}
 
 // `with_retained : (a -> b) -> a -> b` built-in function
 pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -4884,6 +4954,8 @@ impl InlineLLVMIsUniqueFunctionBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIsUniqueFunctionBody {}
+
 // Std::is_unique : a -> (Bool, a)
 pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
@@ -4968,6 +5040,8 @@ impl InlineLLVMBoxedToRetainedPtrIOS {
     }
 }
 
+impl BorrowsOperand for InlineLLVMBoxedToRetainedPtrIOS {}
+
 pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const VAL_NAME: &str = "val";
@@ -5044,6 +5118,8 @@ impl InlineLLVMBoxedFromRetainedPtrIOS {
     }
 }
 
+impl BorrowsOperand for InlineLLVMBoxedFromRetainedPtrIOS {}
+
 pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
     const PTR_NAME: &str = "ptr";
@@ -5087,13 +5163,6 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
-    }
-
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5155,6 +5224,12 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+}
+
 pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TARGET_TY_NAME: &str = "a";
     const VAR_NAME: &str = "x";
@@ -5196,13 +5271,6 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
-    }
-
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
     }
 
     pub fn generate<'c, 'm, 'b>(
@@ -5264,6 +5332,12 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
+    }
+}
+
 pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TARGET_TYPE_NAME: &str = "a";
     const VAR_NAME: &str = "x";
@@ -5306,13 +5380,6 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         vec![&mut self.var_name]
     }
 
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
-    }
-
     pub fn generate<'c, 'm, 'b>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -5339,6 +5406,12 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
             Some("ret_val@_get_boxed_ptr"),
         );
         ret.insert_field(gc, 0, data_ptr)
+    }
+}
+
+impl BorrowsOperand for InlineLLVMGetBoxedDataPtrFunctionBody {
+    fn borrows_operand(&self, i: usize) -> bool {
+        i == 0
     }
 }
 
@@ -5442,6 +5515,8 @@ impl InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         res
     }
 }
+
+impl BorrowsOperand for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {}
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
 pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -5555,6 +5630,8 @@ impl InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMUnsafeMutateBoxedIOSInternalBody {}
+
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> IOState -> (IOState, (a, b))
 pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_TYPE_NAME: &str = "a";
@@ -5617,6 +5694,8 @@ impl InlineLLVMIOStateUnsafeCreate {
         create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
     }
 }
+
+impl BorrowsOperand for InlineLLVMIOStateUnsafeCreate {}
 
 // IOState::_unsafe_create : IOState
 pub fn make_iostate_unsafe_create() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -5688,6 +5767,8 @@ impl InlineLLVMDestructorMake {
         ret_obj
     }
 }
+
+impl BorrowsOperand for InlineLLVMDestructorMake {}
 
 // Std::FFI::Destructor::_make : a -> (a -> IOState -> (IOState, a)) -> IOState -> (IOState, Destructor a);
 pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -5802,6 +5883,8 @@ impl InlineLLVMMarkThreadedFunctionBody {
         obj
     }
 }
+
+impl BorrowsOperand for InlineLLVMMarkThreadedFunctionBody {}
 
 pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
@@ -5987,6 +6070,8 @@ impl InlineLLVMIntEqBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntEqBody {}
+
 pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         eq_trait_id(),
@@ -6066,6 +6151,8 @@ impl InlineLLVMPtrEqBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMPtrEqBody {}
+
 pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         eq_trait_id(),
@@ -6136,6 +6223,8 @@ impl InlineLLVMFloatEqBody {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMFloatEqBody {}
 
 pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6224,6 +6313,8 @@ impl InlineLLVMIntLessThanBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntLessThanBody {}
+
 pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         less_than_trait_id(),
@@ -6294,6 +6385,8 @@ impl InlineLLVMFloatLessThanBody {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMFloatLessThanBody {}
 
 pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6380,6 +6473,8 @@ impl InlineLLVMIntLessThanOrEqBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntLessThanOrEqBody {}
+
 pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         less_than_or_equal_to_trait_id(),
@@ -6451,6 +6546,8 @@ impl InlineLLVMFloatLessThanOrEqBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMFloatLessThanOrEqBody {}
+
 pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         less_than_or_equal_to_trait_id(),
@@ -6516,6 +6613,8 @@ impl InlineLLVMIntAddBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntAddBody {}
+
 pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         add_trait_id(),
@@ -6571,6 +6670,8 @@ impl InlineLLVMFloatAddBody {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMFloatAddBody {}
 
 pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6637,6 +6738,8 @@ impl InlineLLVMIntSubBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntSubBody {}
+
 pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         subtract_trait_id(),
@@ -6692,6 +6795,8 @@ impl InlineLLVMFloatSubBody {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMFloatSubBody {}
 
 pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6758,6 +6863,8 @@ impl InlineLLVMIntMulBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntMulBody {}
+
 pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         multiply_trait_id(),
@@ -6813,6 +6920,8 @@ impl InlineLLVMFloatMulBody {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMFloatMulBody {}
 
 pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6887,6 +6996,8 @@ impl InlineLLVMIntDivBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntDivBody {}
+
 pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         divide_trait_id(),
@@ -6942,6 +7053,8 @@ impl InlineLLVMFloatDivBody {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMFloatDivBody {}
 
 pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -7016,6 +7129,8 @@ impl InlineLLVMIntRemBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntRemBody {}
+
 pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
         remainder_trait_id(),
@@ -7074,6 +7189,8 @@ impl InlineLLVMIntNegBody {
     }
 }
 
+impl BorrowsOperand for InlineLLVMIntNegBody {}
+
 pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     unary_opeartor_instance(
         negate_trait_id(),
@@ -7122,6 +7239,8 @@ impl InlineLLVMFloatNegBody {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMFloatNegBody {}
 
 pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     unary_opeartor_instance(
@@ -7188,6 +7307,8 @@ impl InlineLLVMBoolNegBody {
         obj.insert_field(gc, 0, value)
     }
 }
+
+impl BorrowsOperand for InlineLLVMBoolNegBody {}
 
 pub fn not_trait_instance_bool() -> TraitImpl {
     unary_opeartor_instance(

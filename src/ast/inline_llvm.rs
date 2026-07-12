@@ -89,6 +89,17 @@ pub enum LLVMGenerator {
     CaptureProjectBody(InlineLLVMCaptureProjectBody),
 }
 
+/// Whether an inline-LLVM built-in only *borrows* operand `i` (reads it without taking
+/// ownership) rather than *owning* it (consuming it — moved into the result, released
+/// internally, or force-unique-returned). Owning every operand is the default; the read-getters
+/// override this. RC-IR insertion releases a borrowed operand after its last use and retains an
+/// owned one before a non-last use.
+pub trait BorrowsOperand {
+    fn borrows_operand(&self, _i: usize) -> bool {
+        false
+    }
+}
+
 impl LLVMGenerator {
     pub fn generate<'c, 'm, 'b>(
         &self,
@@ -285,24 +296,89 @@ impl LLVMGenerator {
     }
 
     /// Whether operand `i` is only *borrowed* (read without taking ownership) rather than *owned*
-    /// (consumed — moved into the result, released internally, or force-unique-returned). RC IR
-    /// insertion emits an explicit `Release` after the last use of a borrowed operand, and a
-    /// `Retain` before a non-last use of an owned one. Each built-in declares this on its own body
-    /// (next to `free_vars`); the read-getters borrow their boxed container and everything else owns
-    /// all its operands (the default).
+    /// (consumed — moved into the result, released internally, or force-unique-returned). Dispatches
+    /// uniformly to each body's `BorrowsOperand` impl: owning is the trait default and the
+    /// read-getters override it, so a new built-in cannot silently get the wrong reference counting.
+    /// RC-IR insertion emits an explicit `Release` after the last use of a borrowed operand, and a
+    /// `Retain` before a non-last use of an owned one.
     pub fn borrows_operand(&self, i: usize) -> bool {
         match self {
+            LLVMGenerator::IntLit(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatLit(x) => x.borrows_operand(i),
+            LLVMGenerator::NullPtrLit(x) => x.borrows_operand(i),
+            LLVMGenerator::StringBuf(x) => x.borrows_operand(i),
+            LLVMGenerator::FixBody(x) => x.borrows_operand(i),
+            LLVMGenerator::CastIntegralBody(x) => x.borrows_operand(i),
+            LLVMGenerator::CastFloatBody(x) => x.borrows_operand(i),
+            LLVMGenerator::CastIntToFloatBody(x) => x.borrows_operand(i),
+            LLVMGenerator::CastFloatToIntBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ShiftBody(x) => x.borrows_operand(i),
+            LLVMGenerator::BitwiseOperationBody(x) => x.borrows_operand(i),
+            LLVMGenerator::BitNotBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayUnsafeFill(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayUnsafeEmpty(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
+                x.borrows_operand(i)
+            }
             LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArraySetBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArraySwapBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayPunchBody(x) => x.borrows_operand(i),
+            LLVMGenerator::PunchedArrayPlugBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayForceUniqueBody(x) => x.borrows_operand(i),
             LLVMGenerator::ArrayGetPtrBody(x) => x.borrows_operand(i),
             LLVMGenerator::ArrayGetSizeBody(x) => x.borrows_operand(i),
             LLVMGenerator::ArrayGetCapacityBody(x) => x.borrows_operand(i),
+            LLVMGenerator::StructGetBody(x) => x.borrows_operand(i),
+            LLVMGenerator::StructSetBody(x) => x.borrows_operand(i),
+            LLVMGenerator::StructPunchBody(x) => x.borrows_operand(i),
+            LLVMGenerator::StructPlugInBody(x) => x.borrows_operand(i),
+            LLVMGenerator::MakeUnionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::UnionAsBody(x) => x.borrows_operand(i),
             LLVMGenerator::UnionIsBody(x) => x.borrows_operand(i),
+            LLVMGenerator::UnionModBody(x) => x.borrows_operand(i),
+            LLVMGenerator::UndefinedFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::HoleFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IsUniqueFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntNegBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatNegBody(x) => x.borrows_operand(i),
+            LLVMGenerator::BoolNegBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntEqBody(x) => x.borrows_operand(i),
+            LLVMGenerator::PtrEqBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatEqBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntLessThanBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatLessThanBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntLessThanOrEqBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatLessThanOrEqBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntAddBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatAddBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntSubBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatSubBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntMulBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatMulBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntDivBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FloatDivBody(x) => x.borrows_operand(i),
+            LLVMGenerator::IntRemBody(x) => x.borrows_operand(i),
+            LLVMGenerator::MarkThreadedFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::BoxedToRetainedPtrIOS(x) => x.borrows_operand(i),
+            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => x.borrows_operand(i),
             LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
             LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
             LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::WithRetainedFunctionBody(x) => x.borrows_operand(i),
+            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.borrows_operand(i),
+            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayPopBackNonemptyBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.borrows_operand(i),
+            LLVMGenerator::IOStateUnsafeCreate(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayCheckRange(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayCheckSize(x) => x.borrows_operand(i),
+            LLVMGenerator::DestructorMake(x) => x.borrows_operand(i),
+            LLVMGenerator::MakeStructBody(x) => x.borrows_operand(i),
+            LLVMGenerator::ArrayLitBody(x) => x.borrows_operand(i),
+            LLVMGenerator::FFICallBody(x) => x.borrows_operand(i),
             LLVMGenerator::CaptureProjectBody(x) => x.borrows_operand(i),
-            // Every other built-in consumes (owns) all its operands.
-            _ => false,
         }
     }
 
