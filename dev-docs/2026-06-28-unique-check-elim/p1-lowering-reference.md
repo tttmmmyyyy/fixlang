@@ -4,6 +4,25 @@ Working notes for implementing P1 (RC IR + AST->RC IR lowering + codegen swap). 
 `plan.md` sections 1.1-1.7; this file records the concrete implementation state and the map of the
 current code generator's implicit reference counting that the lowering must reproduce.
 
+**STATUS UPDATE (2026-07-12): P1 is near the completion gate; parts of "## State" below are
+superseded.** The key change: a struct/tuple `let`-destructure is NO LONGER lowered to per-field
+projection getters + a "uniform retain-getter". It is lowered to a single
+`RcExpr::Destructure(container, [(field_idx, var)], cont)` node that mirrors the old back end's
+`get_scoped_obj` (retain-if-used-after) + `get_struct_fields` (boxed: retain fields + release
+container; unbox: move fields out + drop the rest) EXACTLY. This restores array-iteration
+instruction parity (per-field getters made it +63.5%) and removed the `StructProjectBody`
+inline-LLVM op. `rc_insert::process_destructure` retains the container iff it is used after the
+destructure and releases dead fields; codegen calls `ObjectFieldType::get_struct_fields`. So the
+`[#F4]`/`[#R12-3]` "unbox getter = pure projection" and "uniform retain-getter" discussion below now
+applies only to the closure-capture getter. NOTE: this DEVIATES from plan §1.2's "no dedicated
+projection node" decision — justified because in P1's whole-value RC, decomposed getters cannot
+express move-out (ownership splits across getters; that needs §2.1 per-leaf RC); the unit node is
+the P1 bridge and the 2-pass split (lower + rc_insert) is confirmed the right design. Also this
+session: `eval <global>` now materializes the global so its (possibly effectful) initializer runs;
+the three RC-IR recursive passes (`lower_to_var`/`process`/`eval_rc_expr`) are guarded with
+`stacker::maybe_grow`. Validated: test_basic 355/355 all opt, broad suite 875/1, cp-library
+valgrind-clean on both paths at exact parity. Full status + TODO: memory `project-rc-ir-implementation`.
+
 ## State
 
 **Phase A (structural lowering) DONE + validated (unstaged).** The AST->RC IR traversal
