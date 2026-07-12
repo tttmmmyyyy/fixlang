@@ -134,7 +134,7 @@ impl<'a> FuncRc<'a> {
             RcExpr::Let(x, RcRhs::Match(scrut, arms), cont) => {
                 self.process_match(x, scrut, arms, cont, source, live_after)
             }
-            RcExpr::Let(x, rhs, cont) => self.process_let(x, rhs, cont, source, live_after),
+            RcExpr::Let(x, rhs, cont) => self.process_nonmatch_let(x, rhs, cont, source, live_after),
             RcExpr::Destructure(container, fields, cont) => {
                 self.process_destructure(container, fields, cont, source, live_after)
             }
@@ -144,8 +144,8 @@ impl<'a> FuncRc<'a> {
         }
     }
 
-    /// A `let x = rhs; cont` whose `rhs` is not a `Match`.
-    fn process_let(
+    /// A `let x = rhs; cont` whose `rhs` is not a `Match` (the `Match` case is `process_match`).
+    fn process_nonmatch_let(
         &self,
         x: RcVar,
         rhs: RcRhs,
@@ -153,6 +153,10 @@ impl<'a> FuncRc<'a> {
         source: Option<Span>,
         live_after: &Set<FullName>,
     ) -> (RcExprNode, Set<FullName>) {
+        assert!(
+            !matches!(rhs, RcRhs::Match(..)),
+            "process_nonmatch_let received a Match rhs; a Match is handled by process_match"
+        );
         let (cont, live_cont) = self.process(cont, live_after);
 
         // Operand reference counting. Walk operands in reverse evaluation order so that, for a
@@ -364,7 +368,8 @@ impl<'a> FuncRc<'a> {
 }
 
 /// The operands of a compound expression together with whether each is only borrowed, in evaluation
-/// order (callee before arguments). `Match` is handled separately and yields none.
+/// order (callee before arguments). A `Match` rhs never reaches here — it is handled by
+/// `process_match`, so `process_nonmatch_let` (this function's only caller) excludes it.
 fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, bool)> {
     match rhs {
         RcRhs::Var(v) => vec![(v.clone(), false)],
@@ -381,7 +386,7 @@ fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, bool)> {
             .enumerate()
             .map(|(i, a)| (a.clone(), gen.borrows_operand(i)))
             .collect(),
-        RcRhs::Match(..) => vec![],
+        RcRhs::Match(..) => unreachable!("a Match rhs is handled by process_match, not rhs_operands"),
     }
 }
 
@@ -413,7 +418,7 @@ fn insert_local(set: &mut Set<FullName>, name: &FullName) {
     }
 }
 
-/// The free local variables of an expression: local names it references that it does not itself
+/// Returns the free local variables of `node`: the local names it references but does not itself
 /// bind. Names are globally unique, so referenced-minus-bound is exact.
 fn free_locals(node: &RcExprNode) -> Set<FullName> {
     let mut refs = Set::default();
@@ -423,6 +428,9 @@ fn free_locals(node: &RcExprNode) -> Set<FullName> {
     refs
 }
 
+/// The traversal behind `free_locals`: record into `refs` every local name `node` references and
+/// into `bound` every local name it binds — a `Let` variable, a `Match` arm's payload variable, or
+/// a `Destructure` field — descending through the continuation and match arms.
 fn collect_refs_bound(node: &RcExprNode, refs: &mut Set<FullName>, bound: &mut Set<FullName>) {
     match node.expr.as_ref() {
         RcExpr::Ret(x) => insert_local(refs, &x.name),

@@ -368,6 +368,10 @@ impl<'a> Lowerer<'a> {
         source: Option<Span>,
         bindings: &mut Vec<Binding>,
     ) -> RcVar {
+        assert!(
+            matches!(expr.expr.as_ref(), Expr::Lam(..)),
+            "lower_lam received a non-lambda expression"
+        );
         // Resolve the captured values from the enclosing scope, in the closure's storage order.
         let cap_names = expr.lambda_cap_names();
         let cap_vals: Vec<RcVar> = cap_names
