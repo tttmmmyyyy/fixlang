@@ -2,12 +2,8 @@
 //!
 //! Phase A produces the RC IR skeleton with no explicit `Retain`/`Release` nodes (the only baked-in
 //! reference counting is the boxed capture getter's retain and the `Destructure` node's extraction).
-//! This pass adds the explicit nodes by a backward last-use analysis over each function, reproducing
-//! the current code generator's implicit reference counting at whole-value granularity (per-leaf
-//! paths and further precision come from later passes). The rules mirror `generator.rs`'s
-//! `get_scoped_obj` retain-if-used-later (including the container retain before a `Destructure`), the
-//! per-branch dead releases of `eval_if`/`eval_match`, and the unused param/cap releases of
-//! `implement_lambda_function`.
+//! This pass adds the explicit nodes by a backward last-use analysis over each function, at
+//! whole-value granularity (per-leaf paths and further precision come from later passes).
 //!
 //! Ownership of an operand is `Own` (the op consumes it: moves it into the result, releases it
 //! internally, or force-unique-returns it) or `Borrow` (the op reads it without consuming it). Three
@@ -74,8 +70,7 @@ impl<'a> FuncRc<'a> {
         FuncRc { type_env, vars }
     }
 
-    /// Rewrite a function body, then release any parameter or capture that the body never uses
-    /// (mirrors `implement_lambda_function`'s release of unused args and cap).
+    /// Rewrite a function body, then release any parameter or capture that the body never uses.
     fn insert_into_func(&self, mut func: RcFunc) -> RcFunc {
         let (body, live) = self.process(func.body, &Set::default());
 

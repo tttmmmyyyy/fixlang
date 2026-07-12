@@ -1781,8 +1781,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     // Project the captured value at `cap_idx` out of a closure's capture object `cap_name`,
     // retaining it (a retain-getter). `cap_tys` are the types of all captured values, needed to
     // reconstruct the capture object's struct layout; `result_ty` is the projected value's type.
-    // This is the counterpart, for the RC IR, of the capture read-back that `implement_lambda_function`
-    // performs at a closure function's entry.
     pub fn build_capture_project(
         &mut self,
         cap_name: &FullName,
