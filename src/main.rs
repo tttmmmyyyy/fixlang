@@ -305,6 +305,7 @@ fn main() {
         .arg(emit_symbols.clone())
         .arg(program_args.clone())
         .arg(backtrace.clone())
+        .arg(no_runtime_check.clone())
         .arg(allow_preliminary_commands.clone())
         .arg(allow_deprecated.clone())
         .arg(deny_deprecated.clone());
@@ -597,9 +598,12 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set `output_file_path`.
         config.out_file_path = read_output_file_option(args).or(config.out_file_path.clone());
 
-        // Set `output_file_type`.
-        if let Some(type_) = read_output_file_type_option(args)? {
-            config.output_file_type = type_;
+        // Set `output_file_type`. The `--output-type` argument exists only on
+        // the `build` subcommand; `run` and `test` always build an executable.
+        if matches!(config.subcommand, SubCommand::Build) {
+            if let Some(type_) = read_output_file_type_option(args)? {
+                config.output_file_type = type_;
+            }
         }
 
         // Set `disable_cpu_features_regex`.

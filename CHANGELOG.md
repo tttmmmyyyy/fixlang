@@ -8,6 +8,8 @@
 
 - A source file listed in `fixproj.toml` that does not exist on disk now produces a clear error that points at the offending entry in the project file (e.g. `files = ["test.fix"]`), instead of an opaque, location-less "Failed to canonicalize path" message.
 - LSP: Errors whose cause is not in any source file (e.g. a missing source file or an incompatible `fix_version` declared in `fixproj.toml`) are now anchored to `fixproj.toml` so editors display them. Previously such location-less diagnostics were published against the project directory, which editors cannot attach a diagnostic to, so the message was silently dropped (appearing as an empty/invisible error).
+- `fix run` and `fix test` no longer crash on startup in debug builds of `fix` (released builds were unaffected).
+- `fix test` now accepts the `--no-runtime-check` flag, like `fix build` and `fix run`.
 
 ## [1.4.0] - 2026-06-22
 
