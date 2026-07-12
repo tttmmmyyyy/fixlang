@@ -3488,9 +3488,7 @@ pub fn struct_act(
         .into_iter()
         .map(|name| FullName::local(&name))
         .collect();
-    let new_name = generate_new_names(&used_tyvar_names, 1)[0]
-        .name
-        .clone();
+    let new_name = generate_new_names(&used_tyvar_names, 1)[0].name.clone();
     let functor_ty = type_tyvar(&new_name, &kind_arrow(kind_star(), kind_star()));
     let src_ty = type_fun(
         field_ty.clone(),
@@ -3702,9 +3700,7 @@ pub fn struct_act_tuple2(
         .into_iter()
         .map(|name| FullName::local(&name))
         .collect();
-    let u_name = generate_new_names(&used_tyvar_names, 1)[0]
-        .name
-        .clone();
+    let u_name = generate_new_names(&used_tyvar_names, 1)[0].name.clone();
     let u_ty = type_tyvar(&u_name, &kind_star());
 
     let tuple2_tycon = tycon(make_tuple_name_abs(2));
@@ -3974,9 +3970,7 @@ pub fn struct_act_const(
         .into_iter()
         .map(|name| FullName::local(&name))
         .collect();
-    let r_name = generate_new_names(&used_tyvar_names, 1)[0]
-        .name
-        .clone();
+    let r_name = generate_new_names(&used_tyvar_names, 1)[0].name.clone();
     let r_ty = type_tyvar(&r_name, &kind_star());
 
     let const_tycon = tycon(FullName::from_strs(&[STD_NAME], CONST_NAME));
@@ -6159,12 +6153,7 @@ impl InlineLLVMFloatEqBody {
         let rhs_val = rhs_obj.extract_field(gc, 0).into_float_value();
         let value = gc
             .builder()
-            .build_float_compare(
-                FloatPredicate::OEQ,
-                lhs_val,
-                rhs_val,
-                EQ_TRAIT_EQ_NAME,
-            )
+            .build_float_compare(FloatPredicate::OEQ, lhs_val, rhs_val, EQ_TRAIT_EQ_NAME)
             .unwrap();
         let value = gc
             .builder()
