@@ -444,13 +444,6 @@ impl PatternNode {
         Arc::new(node)
     }
 
-    pub fn get_union_variant(&self) -> &FullName {
-        match &self.pattern {
-            Pattern::Union(variant, _, _) => variant,
-            _ => panic!(),
-        }
-    }
-
     pub fn is_union(&self) -> bool {
         matches!(&self.pattern, Pattern::Union(_, _, _))
     }
