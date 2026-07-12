@@ -1,12 +1,12 @@
 ---
 name: code-review
-description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, code-quality, shorten-qualifiers, comment-style), all defined in this same file. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
+description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, test-sufficiency, code-quality, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits the review edits and then applies `cargo fmt` as a separate standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
 argument-hint: "Scope: 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
 ---
 
 # Code Review
 
-Run a fixed sequence of review aspects against a chosen scope, **one after another** in subagents. The orchestrator section below resolves scope and dispatches subagents. The four aspects (`## Aspect: ...` sections, further down) define the conventions each subagent applies — they are not separate skills, they are sections of this file that subagents read directly.
+Run a fixed sequence of review aspects against a chosen scope, **one after another** in subagents. The orchestrator section below resolves scope and dispatches subagents. The seven aspects (`## Aspect: ...` sections, further down) define the conventions each subagent applies — they are not separate skills, they are sections of this file that subagents read directly. Once every aspect has finished, the orchestrator commits the accumulated review edits and then runs `cargo fmt` as a final, standalone commit so formatting churn never mixes with the substantive changes.
 
 ## Scope
 
@@ -25,9 +25,12 @@ This orchestrator owns scope selection. It resolves the argument into a single *
 Run these aspects in this order, each in its own subagent:
 
 1. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
-2. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
-3. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports introduced by step 2).
-4. **comment-style** — apply project comment conventions to whatever survived steps 2–3.
+2. **design-fit** — with the implementation now visible, re-evaluate whether the chosen design is the best fit for the change's goal; flag mismatches (this aspect never redesigns).
+3. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; flag coverage gaps (this aspect never writes tests).
+4. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
+5. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports introduced by step 4).
+6. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived steps 4–5.
+7. **no-personal-info** — scan every changed file for the user's personal data (real name, personal email, phone, address, secrets) embedded in checked-in files, and flag it. This aspect never edits; a finding blocks the commit step in the Procedure.
 
 ## Why Sequential, Not Parallel
 
@@ -53,8 +56,13 @@ Run these aspects in this order, each in its own subagent:
    b. Launch one subagent via `Agent` (subagent_type: `general-purpose`).
    c. Brief it with the prompt template below, substituting the aspect name, the base ref, and the extracted aspect text inline. Do **not** ask the subagent to open `SKILL.md` — the section text is the instruction.
    d. **Wait for it to complete** before launching the next. Never use `run_in_background`.
-3. **Summarize.** Per aspect, list which files were touched and a one-line description of each change.
-4. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop the chain and surface the failure. Do not continue.
+3. **Format and commit.** After the aspect chain completes, isolate the formatting churn into its own commit so it never mixes with the substantive edits.
+   - **First, honor a personal-info block.** If the `no-personal-info` aspect flagged any finding, do **not** commit anything. Surface those findings prominently and stop here — personal data must be removed before it can land in a commit (and be pushed). Leave the review edits uncommitted in the tree for the user to handle. Proceed to the steps below only when `no-personal-info` came back clean.
+   a. **Commit the review edits first.** If `git status --porcelain` reports pending changes, stage and commit them all as one commit — `git add -A && git commit -m "Apply code review fixes"` — so the tree is clean before formatting. This sweeps *every* pending change in the tree, the aspect edits and any other uncommitted work alike. If the tree is already clean, skip this commit.
+   b. **Run `cargo fmt`.**
+   c. **Commit the formatting as a standalone commit.** If `git status --porcelain` now reports changes (i.e. `cargo fmt` reformatted something), commit them on their own — `git commit -am "Apply cargo fmt"`. If `cargo fmt` changed nothing, make no commit and note that the code was already formatted.
+4. **Summarize.** Per aspect, list which files were touched and a one-line description of each change, and surface every finding the flag-only aspects (design-fit, test-sufficiency, no-personal-info) raised. Then report the commits created in step 3 — the review-edits commit and the `cargo fmt` commit, with their short hashes — and remind the user they can reword or split the review-edits commit, since it gathered all pending changes under one message.
+5. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop the chain and surface the failure. Do not continue. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Subagent Prompt Template
 
@@ -90,12 +98,14 @@ summary of the change in each.
 - Don't run aspects in parallel.
 - Don't let subagents decide their own scope — always pass the resolved base.
 - Don't continue the chain if a step fails.
+- Don't fold formatting into the substantive commit — `cargo fmt` always gets its own commit.
+- Don't commit anything when `no-personal-info` flagged a finding — stop and surface it so the user can remove the personal data first.
 
 ---
 
 # Review Aspects
 
-The four sections below are referenced by name from the orchestrator. Each is self-contained: a subagent should be able to apply an aspect by reading only its section.
+The seven sections below are referenced by name from the orchestrator. Each is self-contained: a subagent should be able to apply an aspect by reading only its section.
 
 ## Aspect: fix-test-main-reference
 
@@ -169,15 +179,93 @@ For trait members, "outside its own declaration lines" means: outside both the `
 
 ---
 
+## Aspect: design-fit
+
+Every other aspect works *within* the design the author chose — tidying the code, the imports, the comments. This one steps outside it and asks the question the author could not fully answer before writing the code: **now that the implementation exists, is this design the best fit for the goal?** Some design flaws are invisible on the whiteboard and only become legible once the code is on the page — the shape of the implementation is itself evidence about the design.
+
+This aspect **only flags**; it never edits or redesigns. Redesign is the author's call and out of scope for the review, so the deliverable is a clear, evidence-backed report.
+
+### First, reconstruct the goal
+
+You cannot judge fit without the goal. Before reading for design, recover what the change is *for*:
+
+- Read the commit messages between the base ref and `HEAD` (`git log <base>..HEAD`), plus any branch or PR context available.
+- Read the diff itself — the tests it adds, the public surface it changes, the names it introduces.
+- State the goal in one or two sentences. If the diff plainly serves a narrower or different goal than the commit message claims, that mismatch is itself a finding.
+
+### What the implementation reveals about the design
+
+Look for concrete evidence, in the code as written, that the chosen design fights the goal:
+
+- **Complexity out of proportion to the goal.** A conceptually simple goal that needed a lot of code, many special cases, or deep nesting — a sign the decomposition is wrong.
+- **Code fighting its own data structures.** Repeated conversions, adapters, or "reshape it first" steps because a type chosen upstream is awkward for what happens downstream.
+- **Information threaded through many layers.** A value passed down through several functions that don't use it, or a context object growing to carry it — a misplaced responsibility boundary.
+- **Abstraction that earns nothing.** A trait / generic / builder with exactly one real instantiation (over-abstraction); or, conversely, two paths the implementation reveals to be identical and that should be unified (missed unification).
+- **Edge cases accreting around the core model.** A steady pile of `if special { ... }` around the main path suggests the model doesn't match the problem.
+- **A more direct route via existing machinery.** The goal is reachable by leaning on a subsystem the project already has, rather than the parallel mechanism the diff built (the DRY instinct, at the design level).
+
+### Discipline
+
+- **Flag only, never redesign.** No edits.
+- **Evidence, not taste.** Raise a finding only when the *implementation* gives concrete evidence of a mismatch. "You could also structure it as X," with no evidence the current shape hurts, is noise — skip it.
+- **Name the alternative and its cost.** A finding must state: the goal, the current design, the implementation evidence, the better-fitting design you see, and — honestly — what the rework would cost. A design flag with no proposed direction is not actionable.
+
+### Report
+
+- **Flagged for review**: the goal as you understood it; then, per finding, the design concern, the concrete evidence in the code, and the alternative design with its rough cost.
+- If the design fits the goal well, say so in one line and flag nothing. A clean result here is the common case, not a failure to find something.
+
+---
+
+## Aspect: test-sufficiency
+
+Tests written alongside a design tend to cover what the author *expected* to matter. Once the implementation exists, it exposes cases the author could not have known to test up front — the branch that turned out reachable, the boundary the algorithm actually has, the invariant the code now leans on. This aspect reads the finished implementation and asks: **do the tests cover what this code actually does, or only what the author first imagined?**
+
+It **only flags** missing or weak coverage; it does not write tests here (that is follow-up work the author scopes). It is distinct from `fix-test-main-reference`, which checks that a test's declarations are reachable from `main`; this one checks whether *enough* of the right tests exist at all.
+
+### First, reconstruct the goal and the behavior
+
+- Read the commit messages between the base ref and `HEAD` (`git log <base>..HEAD`) and the diff, and state what behavior the change introduces or alters.
+- Enumerate that behavior's observable cases from the *implementation*: the branches, the boundary values, the error paths, the invariants the new code relies on.
+
+### Project testing conventions
+
+Ground the sufficiency judgment in how this project tests (per CLAUDE.md):
+
+- **Fix grammar or standard-library changes** need tests that **compile and execute Fix code**, with the thing under test reached from `main`. (The reachability itself is `fix-test-main-reference`'s job; here, check that such a test *exists* and exercises the new behavior.)
+- **`fix` command behavior changes** want **integration tests** that run the real `fix` binary against a sample project under `tests/` (the `setup_test_env()` pattern), rather than unit tests bolted onto internals.
+
+### Coverage gaps to flag
+
+- **A new branch or case nothing reaches.** The implementation added a path; no test exercises it.
+- **A boundary the implementation clearly has, left untested** — empty input, an off-by-one edge, the first/last element, the recursion base case, overflow.
+- **An error / failure path with only the success path tested.**
+- **An invariant the new code depends on, asserted nowhere.**
+- **A bug fix with no regression test** — the fix could silently revert and nothing would catch it.
+- **A behavior change whose only "test" is that the existing tests still pass** — nothing pins the *new* behavior.
+
+### Discipline
+
+- **Flag only; write no tests here.** No edits.
+- **Tie each gap to a concrete case.** Name the specific input / branch / boundary left uncovered and where in the diff it lives — not "add more tests."
+- **Weigh against what's already there.** Read the tests the diff adds or touches before flagging; don't flag a case an existing test already covers.
+
+### Report
+
+- **Flagged for review**: per gap, the untested case (a concrete input or branch), where the behavior lives in the diff, and the kind of test the project convention calls for (a Fix compile-and-run test, a `fix` integration test, or a Rust unit test).
+- If coverage is adequate, say so in one line.
+
+---
+
 ## Aspect: code-quality
 
-Walk the Rust code changed against the base ref, check it against the eleven conventions below, apply the safe fixes inline, and surface the riskier ones for the user to decide.
+Walk the Rust code changed against the base ref, check it against the thirteen conventions below, apply the safe fixes inline, and surface the riskier ones for the user to decide.
 
 ### Out of Scope
 
 - Comments → handled by the `comment-style` aspect.
 - Import paths and wildcard imports → handled by the `shorten-qualifiers` aspect.
-- Formatting → `cargo fmt`.
+- Formatting → the orchestrator runs `cargo fmt` in a final step; don't reformat here.
 - Major redesigns / architectural changes → flag for the user, do not perform.
 
 ### Conventions
@@ -360,12 +448,30 @@ The risk this rule has to actively avoid is **function fragmentation** — chopp
 
 **Flag instead of applying** when extraction looks beneficial but you can't satisfy all the Apply conditions — especially when a good name doesn't come to mind. Surface the location and your proposed name in the report; let the author decide whether the seam belongs there.
 
+#### 13. No ad-hoc / hacky mechanisms
+
+Convention 10 catches the *symptom-patch* flavor of ad-hoc code, but only in a diff that fixes a bug. This one is broader and un-gated: it asks of **any** changed code — feature work included — whether the mechanism it uses is sound, or whether it *works by coincidence* and will break the moment an unstated assumption shifts.
+
+Smells to look for:
+
+- **Bypassing a safe API with an unsafe or lower-level trick** where the safe path exists — e.g. a `transmute` or raw pointer cast to reinterpret a value that a proper conversion, enum, or trait method already handles.
+- **Parsing a tool's human-readable output instead of using its API** — scraping `--emit` text, log lines, or `Debug` output to recover data the producer can hand over structurally (an accessor, a typed return, a callback).
+- **Depending on a coincidence or on another component's bug** — relying on an incidental iteration order, a hash-map layout, a whitespace quirk, a filename sort, or a known-wrong behavior of a library/tool that *happens to* give the right answer today.
+- **Manipulating structured data as a string** — regex / `replace` / `split` surgery on source text, JSON, or an identifier where the structured representation (an AST node, a parsed value, a builder) is available.
+- **A hardcoded value or branch encoding an assumption the code never checks** — a fixed array size, a magic offset, or a `match` arm that silently assumes the only cases seen so far.
+
+The litmus test: *would this still be correct if the thing it silently assumes changed — a reordering, a reformat, a new variant, an upstream fix?* If the honest answer is "no, but that won't happen," the mechanism is a hack.
+
+**Report only — never auto-fix.** Replacing a hack with the sound mechanism is a design change that usually needs judgment the reviewer lacks, and the user wants to weigh in on hacky mechanisms directly. In the report, name the hack, name the sound alternative you'd expect (the safe API, the structural accessor, the invariant to enforce), and state the assumption it rides on.
+
+**Exception**: a deliberate workaround for a confirmed external limitation (an upstream bug, a missing API, a platform constraint) is legitimate when a comment names the limitation and the condition for removing the workaround.
+
 ### Procedure
 
 1. Run `git diff <base>` to find changed files and hunks.
-2. For each changed `.rs` file, walk the diff hunks and check each of the twelve conventions against the added/modified code.
+2. For each changed `.rs` file, walk the diff hunks and check each of the thirteen conventions against the added/modified code.
 3. For each violation:
-   - Identify which convention (1–12).
+   - Identify which convention (1–13).
    - If it falls in "Apply": make the edit with `Edit`.
    - If it falls in "Report only": collect it for the final report; do not edit.
 4. Run `cargo check` after edits. On failure, revert the offending edit and reclassify it as a flagged item.
@@ -434,7 +540,7 @@ In this case, keep one as a `use` import and qualify the other minimally, or qua
 
 ## Aspect: comment-style
 
-Scan the doc/inline comments touched by the diff. Rewrite ones that violate conventions 1–5, and add missing doc comments per convention 6.
+Scan the doc/inline comments touched by the diff — in Rust source, and the prose in hand-written Markdown docs. Rewrite ones that violate conventions 1–5 and 7, and add missing doc comments per convention 6. Conventions 1–3 and 6 apply to Rust only; conventions 4, 5, and 7 apply to Markdown prose as well.
 
 ### Conventions
 
@@ -456,7 +562,9 @@ A comment should be readable without prior knowledge of internal helpers or sibl
 
 #### 4. Don't narrate history / how-we-got-here
 
-Comments are read by people coming to the code fresh. They want to know *what the code does and why it works the way it does*, not the path that led the author here. AI-written comments often slip in narratives like "originally we did X, but switched to Y", "now uses the new helper", "refactored from the old approach", "previously this returned a Map" — these belong in commit messages and PR descriptions, not in the source.
+Comments are read by people coming to the code fresh. They want to know *what the code does and why it works the way it does* — not the path that led the author here, and not a justification for the choice against alternatives the reader never saw. AI-written comments often slip in narratives like "originally we did X, but switched to Y", "now uses the new helper", "refactored from the old approach", "previously this returned a Map", or defensive asides excusing why this was done rather than that — these belong in commit messages and PR descriptions, not in the source.
+
+**The litmus test** — apply it to every touched comment: *would this sentence be written if the prior conversation, the deliberation, and the previous version of the code did not exist?* A sentence that only makes sense as a reaction to that history fails; cut it.
 
 **Rewrite**: drop the historical narrative. State the current behavior on its own terms.
 
@@ -470,7 +578,7 @@ This project's source comments are written in English (`Document.md`, `std.fix`,
 
 #### 6. Every Rust item must have a doc comment
 
-Conventions 1–5 are about *rewriting* existing comments. This one is about *adding* missing ones.
+Conventions 1–5 and 7 are about *rewriting* existing comments (and prose). This one is about *adding* missing ones.
 
 Every Rust item — `struct`, `enum`, `union`, their fields and variants, `trait`, trait method, free function, and `impl`-block method — must carry a `///` doc comment. **This applies to both `pub` and private items.**
 
@@ -488,29 +596,85 @@ Function comment shape:
 Test comment shape (for `#[test]` functions): the comment must state *what perspective the test exercises* — which behavior, edge case, or invariant it validates — not just "tests `foo`." Example: `/// Verifies that rename across an import boundary updates both the definition and the qualified callsite.`
 
 **Excluded:**
+- Pre-existing undocumented items in the same file — the convention covers only items the diff introduces or whose signature it modifies.
 - Fix sample programs under `src/tests/test_*/cases/` (these are `.fix` files; this aspect only walks `.rs` anyway).
 - Items generated by `derive` macros or build scripts.
 
 **Apply**: when a Rust item appears in the diff hunks (newly added, or its signature line was modified) and has no `///` directly above it, add a meaningful one-liner.
 **Flag instead of writing boilerplate.** If you cannot articulate the item's purpose without restating its name, surface it as a flagged item rather than writing filler — the missing description may signal the item itself is redundant or poorly named.
 
+#### 7. Write in the affirmative
+
+State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to Rust comments and Markdown prose alike:
+
+**(a) Negating a rejected alternative in a definition or explanation.** Forms like "not A but B", "B rather than A", "A is wrong; B" name a rejected option, an alternative term, or a passing misunderstanding (A) only to knock it down. A reader who never had A in mind gains nothing from "it's not A" — it just makes them wonder what A was. Describe B directly.
+- *Before*: `/// Not a deep copy — shares the backing buffer.`
+- *After*: `/// Shares the backing buffer.`
+
+**(b) Negating an unnecessary action in a procedure or guide.** Forms like "you don't need to do X" describe a non-action. State only what the reader must do.
+- *Before*: `The caller does not need to lock the mutex first.`
+- *After*: drop it, or if the locking discipline is load-bearing, `Acquires the mutex internally.`
+
+**Keep** genuine prohibitions and deprecations — "must not be called after `close()`", "callers should not rely on the ordering here". These regulate future behavior rather than negating a phantom alternative, so they belong.
+
+**Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
+
 ### Procedure
 
-1. Run `git diff <base>` to find changed Rust files and the touched line ranges.
+1. Run `git diff <base>` to find changed files and the touched line ranges. Two file kinds are in scope:
+   - **Rust source** (`.rs`): all conventions apply.
+   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, `CHANGELOG.md`, docs under `docs/`: only the prose conventions 4, 5, and 7 apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten).
 2. For each changed `.rs` file, examine:
-   - (a) comments that appear in the diff hunks (added or modified lines), for conventions 1–5;
+   - (a) comments that appear in the diff hunks (added or modified lines), for conventions 1–5 and 7;
    - (b) Rust items defined or whose signature was modified in the diff hunks, for convention 6.
-3. For each violation:
-   - Identify which convention (1–6).
-   - For 1–5: propose a rewrite that preserves the intent but removes the anti-pattern, then apply with `Edit`.
+3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for conventions 4, 5, and 7.
+4. For each violation:
+   - Identify which convention (1–7).
+   - For 1–5 and 7: propose a rewrite that preserves the intent but removes the anti-pattern, then apply with `Edit`.
    - For 6: write a meaningful one-liner above the item, or flag it for review if you cannot articulate the purpose without restating the name.
-4. After all edits, run `cargo check` to confirm nothing broke (comment edits shouldn't affect builds, but verify in case of doctest changes).
-5. Report:
+5. After all edits, run `cargo check` to confirm nothing broke (comment edits shouldn't affect builds, but verify in case of doctest changes). Markdown edits don't affect the build.
+6. Report:
    - **Applied edits**: file, convention, brief rationale.
    - **Flagged for review** (convention 6 only): file, item name, why no comment was written.
 
 ### Scope
 
-- **Touch only comments and items inside the current diff hunks.** Don't comb through the entire codebase for violations — that is out of scope and would create a giant unrelated change. In particular, convention 6 does *not* require backfilling doc comments on pre-existing undocumented items in the same file.
 - **Do not rewrite comments just because they're long.** Length is not the issue; the listed anti-patterns are.
-- **Do not enforce conventions beyond the six above.** Other style judgments (tone, capitalization, line wrapping) are not in scope.
+- **Do not enforce conventions beyond the seven above.** Other style judgments (tone, capitalization, line wrapping) are not in scope.
+
+---
+
+## Aspect: no-personal-info
+
+Checked-in files — source, config, and documentation — become public the moment they are committed and pushed. This aspect scans the diff for the user's *personal* data embedded in those files and flags it before it can land in history. It **never edits or deletes**: removing personal data is the user's call, and an automatic deletion could just as easily strip a legitimate value or a test fixture.
+
+### What Counts as Personal Data
+
+Flag, in the added/modified lines of any changed file:
+
+- **Personal email addresses** — a Gmail / corporate / ISP address, or any real mailbox tied to an individual.
+- **Real personal names** presented as author, owner, or contact — in a byline, an `authors = [...]` field, a comment signature, or a copyright line naming an individual.
+- **Phone numbers, postal addresses, and other direct contact details.**
+- **Secrets that authenticate a person** — API tokens, private keys, session cookies, passwords.
+
+### Exceptions — Do Not Flag
+
+- **Published identifiers the user uses in the open**: a public handle / username, a GitHub *noreply* address (`*@users.noreply.github.com`), or an address the project already publishes in its committed metadata. These are how the user chooses to be identified publicly.
+- **Placeholder / example values**: `user@example.com`, anything under the reserved `example.{com,org,net}` domains, `127.0.0.1`, obviously-fake keys.
+- **Data that is the point of the code**: a test fixture whose subject *is* a name/email string, a parser test exercising address formats, documentation *about* this very rule. When the value is the thing under test, it is not a leak.
+
+### Procedure
+
+1. Run `git diff <base>` to find every changed file — all kinds, not only `.rs`.
+2. For each file, scan the **added/modified lines** for the categories above.
+3. For each candidate, check the exceptions. When unsure whether a value is personal or published/placeholder, flag it — the user makes the final call.
+4. **Make no edits.** Collect every surviving candidate as a flagged item.
+5. Report:
+   - **Flagged for review**: file, line, enough of the value to locate it (do not reproduce a full secret), and its category.
+   - If nothing was found, **say so explicitly** — the orchestrator treats a clean result as permission to run its commit step.
+
+### Scope Discipline
+
+- **Flag only; touch no files.** This is the one aspect that never edits.
+- **Only added/modified lines are in scope.** Pre-existing personal data in untouched parts of a changed file is out of scope; this aspect guards against *new* leaks in the diff.
+- **A single flag blocks the commit.** The orchestrator will not run its commit step while any finding stands — that interlock is the point, so don't downgrade a genuine hit to a passing note.
