@@ -973,13 +973,11 @@ impl TypeCheckContext {
     ) -> Result<Arc<TypeNode>, Errors> {
         let mut sub = Substitution::default();
         for tv in ty.free_vars_vec() {
-            if tv.name.starts_with(TYPE_HOLE_VAR_PREFIX) {
+            let target = if tv.name.starts_with(TYPE_HOLE_VAR_PREFIX) {
                 // A `_` type hole is a request to infer this type: replace it
                 // with a fresh inference variable (keeping the hole's kind) so
                 // it unifies freely, rather than naming a variable in scope.
-                let fresh = self.new_tyvar_by(&tv);
-                let merge_ok = sub.merge(&Substitution::single(&tv.name, type_from_tyvar(fresh)));
-                assert!(merge_ok);
+                self.new_tyvar_by(&tv)
             } else if let Some(fixed_tv) = self
                 .fixed_tyvars
                 .iter()
@@ -987,15 +985,15 @@ impl TypeCheckContext {
             {
                 // A named type variable must be one generalized by the current
                 // scheme. Substitute the fixed variable to carry over its kind.
-                let merge_ok =
-                    sub.merge(&Substitution::single(&tv.name, type_from_tyvar(fixed_tv.clone())));
-                assert!(merge_ok);
+                fixed_tv.clone()
             } else {
                 return Err(Errors::from_msg_srcs(
                     format!("Unknown type variable `{}`.", tv.name),
                     &[&ty.get_source()],
                 ));
-            }
+            };
+            let merge_ok = sub.merge(&Substitution::single(&tv.name, type_from_tyvar(target)));
+            assert!(merge_ok);
         }
 
         Ok(sub.substitute_type(ty))
