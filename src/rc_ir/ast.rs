@@ -76,6 +76,16 @@ pub enum RcExpr {
     /// Drop (refcount -1, freeing and traversing owned children at zero) every boxed leaf of the
     /// subtree of the variable named by the path, then continue.
     Release(RcVar, Path, RcState, RcExprNode),
+    /// Destructure a struct/tuple container into its fields at once, then continue. Each `(index,
+    /// var)` binds field `index` to `var`. The container is consumed: an unboxed container's leaves
+    /// are moved into the field variables (no per-field retain) and its fields not named here are
+    /// dropped; a boxed container retains each named field and releases the container. Reference-count
+    /// insertion retains the container before this node iff it is used afterward — together this
+    /// mirrors the current back end's `get_scoped_obj` retain-if-used-later plus `get_struct_fields`
+    /// whole-container extraction. Representing the whole destructure as one node (rather than
+    /// per-field getters) lets that retain be decided once, from the container's liveness after the
+    /// destructure, and placed before the extraction.
+    Destructure(RcVar, Vec<(usize, RcVar)>, RcExprNode),
     /// The sole terminator: the value of this expression (a function body or a match arm) is this
     /// variable.
     Ret(RcVar),

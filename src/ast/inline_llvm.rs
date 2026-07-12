@@ -88,7 +88,6 @@ pub enum LLVMGenerator {
     ArrayLitBody(InlineLLVMArrayLitBody),
     FFICallBody(InlineLLVMFFICallBody),
     CaptureProjectBody(InlineLLVMCaptureProjectBody),
-    StructProjectBody(InlineLLVMStructProjectBody),
 }
 
 impl LLVMGenerator {
@@ -179,7 +178,6 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayLitBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::FFICallBody(x) => Some(x.generate(gc, ty)),
             LLVMGenerator::CaptureProjectBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::StructProjectBody(x) => Some(x.generate(gc, ty)),
         };
         match obj {
             None => {
@@ -284,7 +282,6 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayLitBody(x) => x.free_vars(),
             LLVMGenerator::FFICallBody(x) => x.free_vars(),
             LLVMGenerator::CaptureProjectBody(x) => x.free_vars(),
-            LLVMGenerator::StructProjectBody(x) => x.free_vars(),
         }
     }
 
@@ -304,7 +301,6 @@ impl LLVMGenerator {
             LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
             LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
             LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::StructProjectBody(x) => x.borrows_operand(i),
             LLVMGenerator::CaptureProjectBody(x) => x.borrows_operand(i),
             // Every other built-in consumes (owns) all its operands.
             _ => false,
@@ -387,7 +383,6 @@ impl LLVMGenerator {
             LLVMGenerator::ArrayLitBody(x) => x.name(),
             LLVMGenerator::FFICallBody(x) => x.name(),
             LLVMGenerator::CaptureProjectBody(x) => x.name(),
-            LLVMGenerator::StructProjectBody(x) => x.name(),
         };
         format!("LLVM<{}>", raw_name)
     }

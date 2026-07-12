@@ -2628,25 +2628,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         obj
     }
 
-    // Project field `field_idx` out of the struct/tuple named `var_name`. When the struct is boxed
-    // the extracted field is retained (a retain-getter, so it outlives the container's later
-    // release), and the container is not released here; when the struct is unboxed the field is a
-    // pure projection with no reference-counting. The complementary releases (of the boxed container
-    // and of dropped unboxed leaves) are emitted as explicit `Release` nodes by RC insertion.
-    // Project one field out of a struct as a retain-getter: read the container without consuming it
-    // and return the field with an added reference. The container's `Release` is an explicit RC IR
-    // node (the container is a `Borrow` operand). Retaining the field for BOTH boxed and unbox
-    // containers keeps that container `Release` sound for either layout (a boxed container's
-    // `Release` frees the box; an unbox container's `Release` drops the moved-out leaves, which the
-    // retain balances). For an unbox container this is a whole-value approximation that adds a
-    // retain/release pair the later cancellation pass removes; per-leaf pure projection is deferred.
-    pub fn build_struct_project(&mut self, var_name: &FullName, field_idx: usize) -> Object<'c> {
-        let str = self.get_scoped_obj_noretain(var_name);
-        let field = ObjectFieldType::move_out_struct_field(self, &str, field_idx as u32);
-        self.build_retain(field.clone());
-        field
-    }
-
     fn eval_array_lit(
         &mut self,
         elems: &Vec<Arc<ExprNode>>,

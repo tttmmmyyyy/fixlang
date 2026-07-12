@@ -180,6 +180,24 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let obj = self.eval_rc_rhs(rhs, &x.ty, fn_map);
                 self.bind_and_continue(x, obj, k, tail, fn_map)
             }
+            RcExpr::Destructure(container, fields, k) => {
+                // Extract all fields at once (the container was retained beforehand by a `Retain`
+                // node iff it is used afterward). `get_struct_fields` performs the whole-container
+                // reference counting: a boxed container retains the fields and releases itself, an
+                // unboxed container moves the fields out and releases the fields not named here.
+                let cont_obj = self.get_scoped_obj_noretain(&container.name);
+                let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
+                let subobjs = ObjectFieldType::get_struct_fields(self, &cont_obj, &field_indices);
+                for ((_, fv), obj) in fields.iter().zip(subobjs.iter()) {
+                    self.scope_push(&fv.name, obj);
+                    self.emit_rc_debug_local(fv, obj);
+                }
+                let res = self.eval_rc_expr(k, tail, fn_map);
+                for (_, fv) in fields {
+                    self.scope_pop(&fv.name);
+                }
+                res
+            }
         }
     }
 
@@ -522,7 +540,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 }
 
 /// Whether the continuation `k` carries `x` to the terminator only by move-renames — i.e. the
-/// binding of `x` is in tail position. Mirrors the plan's `is_tail_cont`.
+/// binding of `x` is in tail position.
 fn is_tail_cont(k: &RcExprNode, x: &FullName) -> bool {
     match k.expr.as_ref() {
         RcExpr::Ret(r) => r.name == *x,

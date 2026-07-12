@@ -1,11 +1,11 @@
 //! Lowering from the typed AST to the RC IR.
 //!
 //! This is the structural half of P1 lowering: it produces the RC IR skeleton — an A-normal form
-//! with fresh, globally-unique names, every lambda lifted to a top-level function, and `If` and
-//! pattern destructuring desugared to `Match` and getters. Every argument is owned and there are
-//! NO explicit `Retain`/`Release` nodes yet; reference-counting insertion is a separate backward
-//! pass. The one reference-counting effect already present is the retain baked into the boxed
-//! getters (capture and struct-field projection), per the retain-getter model.
+//! with fresh, globally-unique names, every lambda lifted to a top-level function, `If` and union
+//! patterns desugared to `Match`, and struct/tuple `let`-patterns desugared to a `Destructure` node.
+//! Every argument is owned and there are NO explicit `Retain`/`Release` nodes yet; reference-counting
+//! insertion is a separate backward pass. The one reference-counting effect already present is the
+//! retain baked into the boxed capture getter, per the retain-getter model.
 
 use std::sync::Arc;
 
@@ -18,14 +18,18 @@ use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::CAP_NAME;
 use crate::fixstd::builtin::{
     make_dynamic_object_ty, InlineLLVMArrayLitBody, InlineLLVMCaptureProjectBody,
-    InlineLLVMFFICallBody, InlineLLVMMakeStructBody, InlineLLVMStructProjectBody,
+    InlineLLVMFFICallBody, InlineLLVMMakeStructBody,
 };
 use crate::misc::Map;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::*;
 
-/// A pending `let`-binding accumulated during A-normalization: `let var = rhs`.
-type Stmt = (RcVar, RcRhs, Option<Span>);
+/// A pending binding accumulated during A-normalization: either a single `let var = rhs`, or a
+/// whole struct/tuple destructure binding several fields at once (`Destructure`).
+enum Stmt {
+    Let(RcVar, RcRhs, Option<Span>),
+    Destructure(RcVar, Vec<(usize, RcVar)>, Option<Span>),
+}
 
 /// The result of lowering one AST symbol.
 enum SymbolLowering {
@@ -127,11 +131,17 @@ impl<'a> Lowerer<'a> {
 
     // --- building the continuation-nested body ---
 
-    /// Fold accumulated statements into the nested `Let(var, rhs, cont)` chain ending in `terminal`.
+    /// Fold accumulated statements into the nested continuation chain ending in `terminal`.
     fn build_let_chain(stmts: Vec<Stmt>, terminal: RcExprNode) -> RcExprNode {
-        stmts.into_iter().rev().fold(terminal, |cont, (var, rhs, source)| RcExprNode {
-            expr: Box::new(RcExpr::Let(var, rhs, cont)),
-            source,
+        stmts.into_iter().rev().fold(terminal, |cont, stmt| match stmt {
+            Stmt::Let(var, rhs, source) => RcExprNode {
+                expr: Box::new(RcExpr::Let(var, rhs, cont)),
+                source,
+            },
+            Stmt::Destructure(container, fields, source) => RcExprNode {
+                expr: Box::new(RcExpr::Destructure(container, fields, cont)),
+                source,
+            },
         })
     }
 
@@ -213,7 +223,7 @@ impl<'a> Lowerer<'a> {
                 });
                 let mut proj = self.fresh_var(&ast_name.name, cap_tys[i].clone(), None);
                 proj.debug_name = Some(ast_name.to_string());
-                stmts.push((proj.clone(), RcRhs::Llvm(gen, vec![cap_var.clone()]), None));
+                stmts.push(Stmt::Let(proj.clone(), RcRhs::Llvm(gen, vec![cap_var.clone()]), None));
                 self.push_env(ast_name, proj);
             }
             Some(cap_var)
@@ -313,7 +323,7 @@ impl<'a> Lowerer<'a> {
             *slot = var.name.clone();
         }
         let result = self.fresh_var("v", ty, source.clone());
-        stmts.push((result.clone(), RcRhs::Llvm(gen, operand_vars), source));
+        stmts.push(Stmt::Let(result.clone(), RcRhs::Llvm(gen, operand_vars), source));
         result
     }
 
@@ -330,7 +340,7 @@ impl<'a> Lowerer<'a> {
         let callee = self.lower_to_var(fun, stmts);
         let arg_vars: Vec<RcVar> = args.iter().map(|arg| self.lower_to_var(arg, stmts)).collect();
         let result = self.fresh_var("app", ty, source.clone());
-        stmts.push((result.clone(), RcRhs::App(callee, arg_vars), source));
+        stmts.push(Stmt::Let(result.clone(), RcRhs::App(callee, arg_vars), source));
         result
     }
 
@@ -355,7 +365,7 @@ impl<'a> Lowerer<'a> {
         self.funcs.insert(func_ref.clone(), rc_func);
 
         let result = self.fresh_var("closure", ty, source.clone());
-        stmts.push((result.clone(), RcRhs::Closure(func_ref, cap_vals), source));
+        stmts.push(Stmt::Let(result.clone(), RcRhs::Closure(func_ref, cap_vals), source));
         result
     }
 
@@ -398,7 +408,7 @@ impl<'a> Lowerer<'a> {
             body: self.lower_body(else_expr),
         };
         let result = self.fresh_var("if", ty, source.clone());
-        stmts.push((result.clone(), RcRhs::Match(cond_var, vec![then_arm, else_arm]), source));
+        stmts.push(Stmt::Let(result.clone(), RcRhs::Match(cond_var, vec![then_arm, else_arm]), source));
         result
     }
 
@@ -416,7 +426,7 @@ impl<'a> Lowerer<'a> {
             .map(|(pat, body)| self.lower_match_arm(&cond_var, pat, body))
             .collect();
         let result = self.fresh_var("match", ty, source.clone());
-        stmts.push((result.clone(), RcRhs::Match(cond_var, rc_arms), source));
+        stmts.push(Stmt::Let(result.clone(), RcRhs::Match(cond_var, rc_arms), source));
         result
     }
 
@@ -492,7 +502,7 @@ impl<'a> Lowerer<'a> {
             field_names: field_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("struct", ty, source.clone());
-        stmts.push((result.clone(), RcRhs::Llvm(gen, field_vars), source));
+        stmts.push(Stmt::Let(result.clone(), RcRhs::Llvm(gen, field_vars), source));
         result
     }
 
@@ -508,7 +518,7 @@ impl<'a> Lowerer<'a> {
             elem_names: elem_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("array", ty, source.clone());
-        stmts.push((result.clone(), RcRhs::Llvm(gen, elem_vars), source));
+        stmts.push(Stmt::Let(result.clone(), RcRhs::Llvm(gen, elem_vars), source));
         result
     }
 
@@ -536,7 +546,7 @@ impl<'a> Lowerer<'a> {
             arg_names: arg_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("ffi", ty, source.clone());
-        stmts.push((result.clone(), RcRhs::Llvm(gen, arg_vars), source));
+        stmts.push(Stmt::Let(result.clone(), RcRhs::Llvm(gen, arg_vars), source));
         result
     }
 
@@ -546,11 +556,11 @@ impl<'a> Lowerer<'a> {
         self.lower_to_var(main, stmts)
     }
 
-    // --- pattern destructuring into per-field getters ---
+    // --- pattern destructuring ---
 
     /// Destructure `pat` against the value `obj`, binding each pattern variable in the environment
-    /// (via getter statements for struct fields) and returning the AST names pushed, for the caller
-    /// to pop after the scope closes.
+    /// (a struct/tuple pattern emits a `Destructure` statement extracting all its fields at once) and
+    /// returning the AST names pushed, for the caller to pop after the scope closes.
     fn destructure_pattern(
         &mut self,
         pat: &PatternNode,
@@ -575,28 +585,38 @@ impl<'a> Lowerer<'a> {
                     // is used after, matching the current back end's `let j = i`.
                     let mut renamed = self.fresh_var(&v.name.name, obj.ty.clone(), pat.info.source.clone());
                     renamed.debug_name = Some(v.name.to_string());
-                    stmts.push((renamed.clone(), RcRhs::Var(obj.clone()), pat.info.source.clone()));
+                    stmts.push(Stmt::Let(renamed.clone(), RcRhs::Var(obj.clone()), pat.info.source.clone()));
                     self.push_env(&v.name, renamed);
                 }
                 vec![v.name.clone()]
             }
             Pattern::Struct(tc, field_pats) => {
                 let field_tys = obj.ty.field_types(self.type_env);
+                let mut fields = vec![]; // (field index, field variable) for the whole destructure
+                let mut nested = vec![]; // (field variable, sub-pattern) lowered after the extraction
                 let mut pushed = vec![];
                 for (field_name, _, subpat) in field_pats {
                     let field_idx = self.struct_field_index(tc, field_name);
-                    let gen = LLVMGenerator::StructProjectBody(InlineLLVMStructProjectBody {
-                        var_name: obj.name.clone(),
-                        field_idx,
-                    });
                     let hint = field_var_hint(subpat, field_name);
-                    let field_var =
+                    let mut field_var =
                         self.fresh_var(&hint, field_tys[field_idx].clone(), subpat.info.source.clone());
-                    stmts.push((
-                        field_var.clone(),
-                        RcRhs::Llvm(gen, vec![obj.clone()]),
-                        subpat.info.source.clone(),
-                    ));
+                    if let Pattern::Var(v, _) = &subpat.pattern {
+                        // The field binds a source variable directly: carry its name for debug info
+                        // and bind it. The field variable is always freshly produced by the
+                        // destructure, so no rename move is needed (unlike the top-level `Var` case).
+                        field_var.debug_name = Some(v.name.to_string());
+                        self.push_env(&v.name, field_var.clone());
+                        pushed.push(v.name.clone());
+                    } else {
+                        // A nested sub-pattern destructures this field further, after it is extracted.
+                        nested.push((field_var.clone(), subpat));
+                    }
+                    fields.push((field_idx, field_var));
+                }
+                // Extract all fields in one step (mirroring the back end's `get_struct_fields`); RC
+                // insertion retains the container beforehand iff it is used after this destructure.
+                stmts.push(Stmt::Destructure(obj.clone(), fields, pat.info.source.clone()));
+                for (field_var, subpat) in nested {
                     pushed.extend(self.destructure_pattern(subpat, &field_var, stmts));
                 }
                 pushed
@@ -627,9 +647,9 @@ impl<'a> Lowerer<'a> {
 /// to an alias of a pre-existing variable (a rename, a global, or a parameter), which has no such
 /// statement.
 fn name_definition(dbg: &FullName, var: &RcVar, stmts: &mut Vec<Stmt>) -> bool {
-    if let Some(last) = stmts.last_mut() {
-        if last.0.name == var.name && last.0.debug_name.is_none() {
-            last.0.debug_name = Some(dbg.to_string());
+    if let Some(Stmt::Let(bound, _, _)) = stmts.last_mut() {
+        if bound.name == var.name && bound.debug_name.is_none() {
+            bound.debug_name = Some(dbg.to_string());
             return true;
         }
     }

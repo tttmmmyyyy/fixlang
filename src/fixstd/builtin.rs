@@ -3131,40 +3131,6 @@ impl InlineLLVMFFICallBody {
     }
 }
 
-// Project one field out of a struct/tuple. When the struct is boxed the field is retained (a
-// retain-getter); when unboxed it is a pure projection. Lowering emits these to destructure a
-// pattern binding into per-field variables.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStructProjectBody {
-    pub var_name: FullName,
-    pub field_idx: usize,
-}
-
-impl InlineLLVMStructProjectBody {
-    pub fn name(&self) -> String {
-        format!("{}.#project.{}", self.var_name.to_string(), self.field_idx)
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    /// Whether operand `i` is only borrowed (read without taking ownership). This getter
-    /// borrows its boxed container (operand 0) and does not release it; the container's
-    /// `Release` is an explicit RC IR node.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        i == 0
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        gc.build_struct_project(&self.var_name, self.field_idx)
-    }
-}
-
 // Project a captured value out of a lifted closure's capture object, retaining it (a retain-getter).
 // Lowering emits this at the entry of a lifted closure function to bind each captured variable.
 // `cap_tys` are the types of all captured values, needed to reconstruct the capture object's layout.

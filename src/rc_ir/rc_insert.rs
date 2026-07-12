@@ -1,11 +1,12 @@
 //! Reference-counting insertion (Phase B of the AST->RC IR lowering).
 //!
-//! Phase A produces the RC IR skeleton with no explicit `Retain`/`Release` nodes (only the retain
-//! baked into boxed getters). This pass adds the explicit nodes by a backward last-use analysis over
-//! each function, reproducing the current code generator's implicit reference counting at
-//! whole-value granularity (per-leaf paths and further precision come from later passes). The rules
-//! mirror `generator.rs`'s `get_scoped_obj` retain-if-used-later, the per-branch dead releases of
-//! `eval_if`/`eval_match`, the destructure/container releases, and the unused param/cap releases of
+//! Phase A produces the RC IR skeleton with no explicit `Retain`/`Release` nodes (the only baked-in
+//! reference counting is the boxed capture getter's retain and the `Destructure` node's extraction).
+//! This pass adds the explicit nodes by a backward last-use analysis over each function, reproducing
+//! the current code generator's implicit reference counting at whole-value granularity (per-leaf
+//! paths and further precision come from later passes). The rules mirror `generator.rs`'s
+//! `get_scoped_obj` retain-if-used-later (including the container retain before a `Destructure`), the
+//! per-branch dead releases of `eval_if`/`eval_match`, and the unused param/cap releases of
 //! `implement_lambda_function`.
 //!
 //! Ownership of an operand is `Own` (the op consumes it: moves it into the result, releases it
@@ -124,6 +125,9 @@ impl<'a> FuncRc<'a> {
                 self.process_match(x, scrut, arms, cont, source, live_after)
             }
             RcExpr::Let(x, rhs, cont) => self.process_let(x, rhs, cont, source, live_after),
+            RcExpr::Destructure(container, fields, cont) => {
+                self.process_destructure(container, fields, cont, source, live_after)
+            }
             RcExpr::Retain(..) | RcExpr::Release(..) => {
                 panic!("RC insertion runs on a skeleton that has no Retain/Release nodes yet")
             }
@@ -180,6 +184,55 @@ impl<'a> FuncRc<'a> {
         for (v, _) in &operands {
             insert_local(&mut live_before, &v.name);
         }
+        (node, live_before)
+    }
+
+    /// A `destructure container into fields; cont`. The container is consumed: RC insertion retains
+    /// it beforehand iff it is used after the destructure (mirroring `get_scoped_obj`'s
+    /// retain-if-used-later before `get_struct_fields`), and each field the continuation never uses is
+    /// released. Code generation performs the extraction itself: a boxed container retains the fields
+    /// and releases the container; an unboxed container moves the fields out and drops the fields not
+    /// named here. So the field retains, the container release, and the dropped-field releases are not
+    /// emitted here.
+    fn process_destructure(
+        &self,
+        container: RcVar,
+        fields: Vec<(usize, RcVar)>,
+        cont: RcExprNode,
+        source: Option<Span>,
+        live_after: &Set<FullName>,
+    ) -> (RcExprNode, Set<FullName>) {
+        let (cont, live_cont) = self.process(cont, live_after);
+
+        // A field the continuation never uses is dead: release it after the extraction.
+        let mut dead = vec![];
+        for (_, fv) in &fields {
+            if !live_cont.contains(&fv.name) && self.needs_rc(fv) {
+                dead.push(fv.clone());
+            }
+        }
+        let cont = build_releases(dead, cont);
+
+        let node = RcExprNode {
+            expr: Box::new(RcExpr::Destructure(container.clone(), fields.clone(), cont)),
+            source,
+        };
+        // Retain the container before the destructure iff it is used afterward, so both the extracted
+        // fields and the later use are covered.
+        let node = if container.name.is_local()
+            && live_cont.contains(&container.name)
+            && self.needs_rc(&container)
+        {
+            build_retains(vec![container.clone()], node)
+        } else {
+            node
+        };
+
+        let mut live_before = live_cont;
+        for (_, fv) in &fields {
+            live_before.remove(&fv.name);
+        }
+        insert_local(&mut live_before, &container.name);
         (node, live_before)
     }
 
@@ -393,6 +446,13 @@ fn collect_refs_bound(node: &RcExprNode, refs: &mut Set<FullName>, bound: &mut S
             }
             collect_refs_bound(k, refs, bound);
         }
+        RcExpr::Destructure(container, fields, k) => {
+            insert_local(refs, &container.name);
+            for (_, fv) in fields {
+                bound.insert(fv.name.clone());
+            }
+            collect_refs_bound(k, refs, bound);
+        }
         RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) => {
             insert_local(refs, &v.name);
             collect_refs_bound(k, refs, bound);
@@ -438,6 +498,13 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
                         collect_vars(&arm.body, vars);
                     }
                 }
+            }
+            collect_vars(k, vars);
+        }
+        RcExpr::Destructure(container, fields, k) => {
+            note_var(vars, container);
+            for (_, fv) in fields {
+                note_var(vars, fv);
             }
             collect_vars(k, vars);
         }
