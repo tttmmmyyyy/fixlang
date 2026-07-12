@@ -1853,11 +1853,6 @@ impl InlineLLVMArrayUnsafeGetBoundsUnchecked {
         // Get element
         let elem = ObjectFieldType::read_from_array_buf(gc, None, buf, ty.clone(), idx);
 
-        // Release the array.
-        if !gc.is_var_used_later(&self.arr_name) {
-            gc.release(array);
-        }
-
         elem
     }
 }
@@ -2809,11 +2804,6 @@ impl InlineLLVMArrayGetPtrBody {
         // Get pointer
         let ptr = array.gep_boxed(gc, ARRAY_BUF_IDX);
 
-        // Release array
-        if !gc.is_var_used_later(&self.arr_name) {
-            gc.release(array);
-        }
-
         // Make returned object
         let obj = create_obj(
             make_ptr_ty(),
@@ -2887,9 +2877,6 @@ impl InlineLLVMArrayGetSizeBody {
         let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
         let len = array_obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
 
-        if !gc.is_var_used_later(&self.arr_name) {
-            gc.release(array_obj);
-        }
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"));
         int_obj.insert_field(gc, 0, len)
     }
@@ -2943,10 +2930,6 @@ impl InlineLLVMArrayGetCapacityBody {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
         let len = array_obj.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
-
-        if !gc.is_var_used_later(&self.arr_name) {
-            gc.release(array_obj);
-        }
 
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"));
         int_obj.insert_field(gc, 0, len)
@@ -4476,9 +4459,6 @@ impl InlineLLVMUnionIsBody {
             Some(format!("is_union_{}", self.field_idx).as_str()),
         );
         let ret = ret.insert_field(gc, 0, match_bool.as_basic_value_enum());
-        if !gc.is_var_used_later(&self.union_arg_name) {
-            gc.release(obj);
-        }
         ret
     }
 }
@@ -4821,20 +4801,13 @@ impl InlineLLVMWithRetainedFunctionBody {
         let x = gc.get_scoped_obj(&self.x_name);
 
         // Retain "x" around the call so that "f" sees it as shared and cannot mutate it in place.
-        // In the RC IR path this transient retain is unconditional (the semantic reference count is
-        // baked into the op); in the legacy path it is elided when "x" is used later and is
-        // therefore already shared.
-        if gc.rc_ir_mode || !gc.is_var_used_later(&self.x_name) {
-            gc.retain(x.clone());
-        }
+        gc.retain(x.clone());
 
         // Call "f" with "x".
         let ret = gc.apply_lambda(f, vec![x.clone()], false).unwrap();
 
         // Release "x".
-        if gc.rc_ir_mode || !gc.is_var_used_later(&self.x_name) {
-            gc.release(x);
-        }
+        gc.release(x);
 
         // Return the result.
         ret
@@ -5172,9 +5145,6 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     ) -> Object<'c> {
         // Get argument
         let arg = gc.get_scoped_obj_noretain(&self.var_name);
-        if !gc.is_var_used_later(&self.var_name) {
-            gc.release(arg.clone());
-        }
 
         // Get the target type.
         let arg_ty = arg.ty.clone();
@@ -5280,9 +5250,6 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     ) -> Object<'c> {
         // Get argument
         let arg = gc.get_scoped_obj_noretain(&self.var_name);
-        if !gc.is_var_used_later(&self.var_name) {
-            gc.release(arg.clone());
-        }
 
         // Get the target type.
         let arg_ty = arg.ty.clone();
@@ -5391,11 +5358,6 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
 
         // Get data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &obj);
-
-        // Relase the argument object.
-        if !gc.is_var_used_later(&self.var_name) {
-            gc.release(obj.clone());
-        }
 
         // Make returned object.
         let ret = create_obj(

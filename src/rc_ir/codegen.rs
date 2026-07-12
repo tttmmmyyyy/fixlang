@@ -1,11 +1,10 @@
 //! Code generation from the RC IR to LLVM.
 //!
-//! The parallel LLVM back end that consumes the RC IR (with its explicit `Retain`/`Release` nodes)
-//! instead of the AST. Reference counting is driven entirely by
-//! the RC nodes; variable reads are plain (no `used_later` retain decision). The generator runs with
-//! `rc_ir_mode = true`, which makes `get_scoped_obj` read plain and the borrow getters skip their
-//! conditional container release. Non-reference-counting work (closure layout, FFI, struct/array
-//! construction, the inline-LLVM builtins) reuses the existing `Generator` helpers unchanged.
+//! The LLVM back end consumes the RC IR (with its explicit `Retain`/`Release` nodes). Reference
+//! counting is driven entirely by the RC nodes: variable reads are plain and the read-getters do not
+//! release their container — the explicit `Release` nodes dispose it. Non-reference-counting work
+//! (closure layout, FFI, struct/array construction, the inline-LLVM builtins) reuses the existing
+//! `Generator` helpers unchanged.
 
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
@@ -34,9 +33,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// all symbols in every unit), so those declarations are reused; only this unit's lifted lambdas
     /// are declared here, and only `prog`'s functions and globals are implemented.
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
-        let saved_mode = self.rc_ir_mode;
-        self.rc_ir_mode = true;
-
         let mut fn_map: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
             let fn_val = self
@@ -53,8 +49,6 @@ impl<'c, 'm> Generator<'c, 'm> {
         for glob in prog.globals.iter() {
             self.implement_rc_global(glob, &fn_map);
         }
-
-        self.rc_ir_mode = saved_mode;
     }
 
     /// Declare the LLVM function for an `RcFunc` (signature from its arrow type). Funptr functions

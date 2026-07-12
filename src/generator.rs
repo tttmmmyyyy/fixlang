@@ -31,7 +31,6 @@ use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
-use crate::misc::Set;
 use crate::object;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
@@ -378,39 +377,6 @@ impl<'c> Scope<'c> {
     pub fn get(&self, var: &FullName) -> ScopedValue<'c> {
         self.data.get(var).unwrap().last().unwrap().clone()
     }
-
-    fn modify_used_later(&mut self, vars: &Set<FullName>, by: i32) {
-        for var in vars {
-            if !var.is_local() {
-                continue;
-            }
-            let used_later = &mut self
-                .data
-                .get_mut(var)
-                .unwrap()
-                .last_mut()
-                .unwrap()
-                .used_later;
-            *used_later = add_i32_to_u32(*used_later, by);
-        }
-    }
-    fn increment_used_later(&mut self, names: &Set<FullName>) {
-        self.modify_used_later(names, 1);
-    }
-    fn decrement_used_later(&mut self, names: &Set<FullName>) {
-        self.modify_used_later(names, -1);
-    }
-    fn is_used_later(&self, name: &FullName) -> bool {
-        self.data.get(name).unwrap().last().unwrap().used_later > 0
-    }
-}
-
-fn add_i32_to_u32(u: u32, i: i32) -> u32 {
-    if i.is_negative() {
-        u - i.wrapping_abs() as u32
-    } else {
-        u + i as u32
-    }
 }
 
 pub struct Generator<'c, 'm> {
@@ -426,11 +392,6 @@ pub struct Generator<'c, 'm> {
     pub target_data: TargetData,
     pub config: Configuration,
     global_strings: Map<String, GlobalValue<'c>>,
-    /// Whether code is being generated from the RC IR (reference counting is explicit). In this mode
-    /// operands are read plain — `used_later` is never raised, so `get_scoped_obj` does not retain —
-    /// and `is_var_used_later` reports `true`, so the borrow getters skip their conditional container
-    /// release (the explicit `Release` node disposes it) and `with_retained` retains unconditionally.
-    pub rc_ir_mode: bool,
 }
 
 pub struct PopBuilderGuard<'c> {
@@ -572,7 +533,6 @@ impl<'c, 'm> Generator<'c, 'm> {
             target_data: target_data,
             config,
             global_strings: Map::default(),
-            rc_ir_mode: false,
         };
         ret
     }
@@ -711,39 +671,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) -> BasicValueEnum<'c> {
         let obj = self.get_scoped_obj(var);
         obj.extract_field(self, field_idx)
-    }
-
-    // Lock variables in scope to avoid being moved out.
-    pub fn scope_lock_as_used_later(self: &mut Self, names: &Set<FullName>) {
-        self.scope
-            .borrow_mut()
-            .last_mut()
-            .unwrap()
-            .increment_used_later(names);
-    }
-
-    // Unlock variables in scope.
-    pub fn scope_unlock_as_used_later(self: &mut Self, names: &Set<FullName>) {
-        self.scope
-            .borrow_mut()
-            .last_mut()
-            .unwrap()
-            .decrement_used_later(names);
-    }
-
-    // Is a variable used later?
-    pub fn is_var_used_later(&self, var: &FullName) -> bool {
-        if self.rc_ir_mode {
-            // In the RC IR path a borrow getter must not release its container (an explicit `Release`
-            // node does) and `with_retained` must retain unconditionally; reporting `true` here
-            // achieves both, and `get_scoped_obj` does not consult this (it reads the raw
-            // `used_later`, which the RC IR path never raises).
-            return true;
-        }
-        if var.is_global() {
-            return true;
-        }
-        self.scope.borrow().last().unwrap().is_used_later(var)
     }
 
     // Push scope.
