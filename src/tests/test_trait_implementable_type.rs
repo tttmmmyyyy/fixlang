@@ -61,6 +61,6 @@ main: IO () = (
     pure()
 );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), 
+    test_source_fail(&source, Configuration::develop_mode(),
     "Implementing trait for type `f Std::I64` is not allowed. The head (in this case, `f`) of the type should be a type constructor.");
 }
