@@ -587,9 +587,9 @@ impl<'a> Lowerer<'a> {
         match &pat.pattern {
             Pattern::Var(v, _) => {
                 // Bind the source variable to the value, carrying its source name for debug info.
-                let named_here = name_definition(&v.name, obj, bindings);
-                let is_own_binding = obj.debug_name == Some(v.name.to_string());
-                if named_here || is_own_binding {
+                let debug_named = try_attach_debug_name(&v.name, obj, bindings);
+                let already_debug_named = obj.debug_name == Some(v.name.to_string());
+                if debug_named || already_debug_named {
                     // The value is the fresh result just produced for this binding (named on its
                     // defining binding), or `obj` was already created as this variable's binding (a
                     // match-arm payload). Either way it carries the name; bind directly.
@@ -655,7 +655,7 @@ impl<'a> Lowerer<'a> {
 /// fresh result of a compound expression bound to a source `let`/pattern variable. It does not apply
 /// to an alias of a pre-existing variable (a rename, a global, or a parameter), which has no such
 /// binding.
-fn name_definition(dbg: &FullName, var: &RcVar, bindings: &mut Vec<Binding>) -> bool {
+fn try_attach_debug_name(dbg: &FullName, var: &RcVar, bindings: &mut Vec<Binding>) -> bool {
     if let Some(Binding::Let(bound, _, _)) = bindings.last_mut() {
         if bound.name == var.name && bound.debug_name.is_none() {
             bound.debug_name = Some(dbg.to_string());
