@@ -29,6 +29,7 @@ mod test_opaque_type;
 mod test_preliminary_commands;
 mod test_signal;
 mod test_string;
+mod test_struct_destructure;
 mod test_trait_implementable_type;
 mod test_type_sign_in_trait_impl;
 mod test_undefined;
