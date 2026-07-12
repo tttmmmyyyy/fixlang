@@ -21,6 +21,12 @@ pub struct RcVar {
     /// variable under this name so a debugger can inspect it by its source name. `None` for the
     /// compiler-introduced intermediates that have no source name.
     pub debug_name: Option<Name>,
+    /// Whether this value is a boxed pointer statically known to be non-null. Set for a non-empty
+    /// capture object, so its release skips the null check that a possibly-empty (null) capture
+    /// object requires. `false` elsewhere — including ordinary boxed values, which are non-null but
+    /// are never null-checked on release anyway (only capture objects are), so marking them buys
+    /// nothing.
+    pub nonnull: bool,
 }
 
 /// A reference to a top-level RC IR function: a lifted lambda body, a global function, or an

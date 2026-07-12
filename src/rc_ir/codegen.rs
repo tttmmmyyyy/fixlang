@@ -145,7 +145,13 @@ impl<'c, 'm> Generator<'c, 'm> {
             }
             RcExpr::Release(x, _path, _state, k) => {
                 let obj = self.get_scoped_obj_noretain(&x.name);
-                self.release(obj);
+                if x.nonnull {
+                    // A statically non-null boxed value (a non-empty capture object): release
+                    // without the null check that a possibly-null capture object needs.
+                    self.release_nonnull_boxed(&obj);
+                } else {
+                    self.release(obj);
+                }
                 self.eval_rc_expr(k, tail, fn_map)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {

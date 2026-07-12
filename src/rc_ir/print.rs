@@ -89,9 +89,11 @@ fn expr_to_string(node: &RcExprNode, level: usize) -> String {
             out
         }
         RcExpr::Release(var, path, state, cont) => {
+            let keyword = if var.nonnull { "release_nonnull" } else { "release" };
             let mut out = format!(
-                "{}release {}{}{}\n",
+                "{}{} {}{}{}\n",
                 ind,
+                keyword,
                 var_name(var),
                 path_to_string(path),
                 state_to_string(state)

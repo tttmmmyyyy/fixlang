@@ -1503,7 +1503,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     // Release nonnull boxed object.
-    fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
+    pub(crate) fn release_nonnull_boxed(&mut self, obj: &Object<'c>) {
         self.build_release_mark_nonnull_boxed(obj, TraverserWorkType::release())
     }
 

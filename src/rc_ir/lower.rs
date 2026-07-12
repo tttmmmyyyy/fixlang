@@ -107,6 +107,7 @@ impl<'a> Lowerer<'a> {
             ty,
             source,
             debug_name: None,
+            nonnull: false,
         }
     }
 
@@ -213,7 +214,11 @@ impl<'a> Lowerer<'a> {
 
         let mut bindings = vec![];
         let cap = if lam_ty.is_closure() {
-            let cap_var = self.fresh_var("cap", make_dynamic_object_ty(), None);
+            let mut cap_var = self.fresh_var("cap", make_dynamic_object_ty(), None);
+            // A non-empty capture is a real allocation, so the capture object is non-null; an empty
+            // capture is the null pointer. Recording this lets the capture's release skip the null
+            // check (matching the current back end). Set it before any clone so it propagates.
+            cap_var.nonnull = !captures.is_empty();
             // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
             // raw capture object by that name (the `fix` combinator's `FixBody`) resolves to it.
             self.bind(&FullName::local(CAP_NAME), cap_var.clone());
@@ -291,6 +296,7 @@ impl<'a> Lowerer<'a> {
                 ty: ty.clone(),
                 source: source.clone(),
                 debug_name: None,
+                nonnull: false,
             },
         }
     }
@@ -323,6 +329,7 @@ impl<'a> Lowerer<'a> {
                         ty,
                         source: None,
                         debug_name: None,
+                        nonnull: false,
                     }
                 }
             })
