@@ -561,8 +561,15 @@ impl<'a> Lowerer<'a> {
     }
 
     fn lower_eval(&mut self, side: &ExprNode, main: &ExprNode, bindings: &mut Vec<Binding>) -> RcVar {
-        // The side value is evaluated for its effect and discarded; RC insertion releases it.
-        let _side = self.lower_to_var(side, bindings);
+        // The side value is evaluated for its effect and discarded. A compound side is forced by the
+        // bindings it emits, and a local variable is already evaluated; but a reference to a global
+        // value lowers to a bare atom that emits nothing, so materialize it here to force the global's
+        // initializer to run (which may have effects — e.g. an `undefined`-valued global).
+        let side_var = self.lower_to_var(side, bindings);
+        if !side_var.name.is_local() {
+            let forced = self.fresh_var("eval", side_var.ty.clone(), None);
+            bindings.push(Binding::Let(forced, RcRhs::Var(side_var), None));
+        }
         self.lower_to_var(main, bindings)
     }
 
