@@ -265,11 +265,20 @@ impl PatternNode {
         }
         match &self.pattern {
             Pattern::Var(v, ty) => {
-                if ty.is_some() {
-                    let ty = ty.as_ref().unwrap();
+                if let Some(ty) = ty {
                     let node = ty.find_node_at(pos);
                     if node.is_some() {
                         return node;
+                    }
+                    // Hovering a `_` type hole in the annotation shows the
+                    // type it was inferred to. The pattern's own type is the
+                    // resolved annotation, so walk it alongside the syntactic
+                    // `ty`.
+                    if let Some(resolved) = self.info.type_.as_ref() {
+                        let node = ty.find_hole_inferred_type(resolved, pos);
+                        if node.is_some() {
+                            return node;
+                        }
                     }
                 }
                 Some(EndNode::Pattern(

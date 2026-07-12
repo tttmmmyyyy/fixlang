@@ -251,8 +251,10 @@ mod tests {
     /// Hovering a `_` type hole in an annotation shows the type it was
     /// inferred to: a concrete type, a generic type variable, the type
     /// constructor a higher-kinded hole resolved to, or a function's
-    /// opaque return type. The internal `#typehole` / `#a` names the
-    /// compiler uses for holes must never leak.
+    /// opaque return type. Covers holes in both expression and pattern
+    /// (let-binding) annotations, and two independent holes in one
+    /// annotation disambiguated by position. The internal `#typehole` /
+    /// `#a` names the compiler uses for holes must never leak.
     #[test]
     fn test_hover_type_hole_shows_inferred_type() {
         let mut ctx = LspTestCtx::setup("hover_type_hole", &["main.fix"]);
@@ -260,32 +262,57 @@ mod tests {
             .expect("should read the copied main.fix");
         let lines: Vec<&str> = src.lines().collect();
 
-        // (0-based line, the exact `_ = <type>` the hover must contain).
-        // On each of these lines the hole `_` is the last underscore.
-        let cases = [
-            (3usize, "_ = Std::I64"),            // concrete element type
-            (6usize, "_ = a"),                   // generic type variable
-            (9usize, "_ = Std::Array"),          // higher-kinded: the `Array` constructor
-            (14usize, "_ = Main::counter::?it"), // a function's opaque return type
+        // Each case locates a hole-bearing line by a unique substring, then
+        // pairs the `_`s on that line (left to right) with the `_ = <type>`
+        // each must hover as. Matching by content keeps the test stable when
+        // the fixture's line numbers shift.
+        let cases: &[(&str, &[&str])] = &[
+            ("[1, 2, 3]", &["_ = Std::I64"]),                  // concrete element type
+            ("Array::fill", &["_ = a"]),                       // generic type variable
+            ("* -> *", &["_ = Std::Array"]),                   // higher-kinded: the `Array` constructor
+            ("(1, true)", &["_ = Std::I64", "_ = Std::Bool"]), // two holes, disambiguated by position
+            ("let xs", &["_ = Std::I64"]),                     // pattern (let-binding) annotation
+            ("counter(3)", &["_ = Main::counter::?it"]),       // a function's opaque return type
         ];
-        for (line, expected) in cases {
-            let col = lines[line].rfind('_').expect("hole line must contain `_`") as u32;
-            let hov = ctx.hover("main.fix", line as u32, col);
-            let text = hover_text(&hov)
-                .unwrap_or_else(|| panic!("hover on hole at line {} should return content", line));
-            assert!(
-                text.contains(expected),
-                "hole at line {} should hover as `{}`, got {:?}",
-                line,
-                expected,
-                text
+
+        for (needle, expected) in cases {
+            let line = lines
+                .iter()
+                .position(|l| !l.trim_start().starts_with("//") && l.contains(needle))
+                .unwrap_or_else(|| panic!("fixture should contain a line with {:?}", needle));
+            let cols: Vec<u32> = lines[line]
+                .match_indices('_')
+                .map(|(i, _)| i as u32)
+                .collect();
+            assert_eq!(
+                cols.len(),
+                expected.len(),
+                "line {:?} should have {} hole(s), found {}",
+                needle,
+                expected.len(),
+                cols.len()
             );
-            assert!(
-                !text.contains("#typehole") && !text.contains("#a"),
-                "hover on hole at line {} leaked an internal name: {:?}",
-                line,
-                text
-            );
+            for (col, want) in cols.iter().zip(*expected) {
+                let hov = ctx.hover("main.fix", line as u32, *col);
+                let text = hover_text(&hov).unwrap_or_else(|| {
+                    panic!("hover on hole at {:?} col {} should return content", needle, col)
+                });
+                assert!(
+                    text.contains(want),
+                    "hole at {:?} col {} should hover as `{}`, got {:?}",
+                    needle,
+                    col,
+                    want,
+                    text
+                );
+                assert!(
+                    !text.contains("#typehole") && !text.contains("#a"),
+                    "hover at {:?} col {} leaked an internal name: {:?}",
+                    needle,
+                    col,
+                    text
+                );
+            }
         }
 
         ctx.shutdown();

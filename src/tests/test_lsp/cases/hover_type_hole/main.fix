@@ -9,6 +9,15 @@ genfill : I64 -> a -> Array a = |len, elem| (Array::fill(len, elem) : Array _);
 // `_` of kind `* -> *` resolves to the `Array` type constructor.
 empty : Array I64 = ([] : (_ : * -> *) I64);
 
+// Independent holes in a tuple type resolve to different types.
+pair : (I64, Bool) = ((1, true) : (_, _));
+
+// A `_` in a pattern (let-binding) annotation.
+patann : Array I64 = (
+    let xs : Array _ = [7, 8, 9];
+    xs
+);
+
 // `_` resolves to a function's opaque return type.
 counter : [?it : Iterator, Item ?it = I64] I64 -> ?it = |n| Iterator::range(0, n);
 opaqued : Array I64 = (
