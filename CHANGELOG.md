@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+#### Language
+
+- `_` in a pattern is now a wildcard that matches any value and discards it. It can appear multiple times in a single pattern (e.g. `let (x, _, _) = triple;`), and the matched value cannot be referred to afterwards. Previously `_` was an ordinary variable name, so multiple `_`s in one pattern were rejected as duplicate binders.
+
 ### Fixed
 
 #### Tool

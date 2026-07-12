@@ -257,5 +257,13 @@ pub const ERR_HOLE: &str = "missing-expression";
 /// user can write (the `name` grammar rule does not accept `#`).
 pub const HOLE_NAME: &str = "#hole";
 
+/// Prefix of the local names the parser generates for `_` wildcard
+/// patterns (e.g. `#wildcard0`). Each `_` binds a distinct name so that
+/// multiple `_`s in one pattern do not collide; the leading `#` keeps
+/// these names disjoint from any name a user can write (the `name`
+/// grammar rule does not accept `#`). Pattern display renders such a
+/// binder back as `_`.
+pub const WILDCARD_VAR_PREFIX: &str = "#wildcard";
+
 // Formatting
 pub const FORMAT_LINE_LIMIT: usize = 100;

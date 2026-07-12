@@ -533,6 +533,8 @@ swap = |(fst, snd)| (snd, fst);
 
 Note: Do not confuse `|(x, y)| ...` with `|x, y| ...`. The former defines a function that accepts a single tuple, while the latter defines a function that accepts two separate arguments.
 
+The pattern `_` (a single underscore) is a wildcard: it matches any value and discards it. Unlike an ordinary variable pattern, `_` introduces no binding, so it can appear more than once in a single pattern and the matched value cannot be referred to afterwards. For example, to keep only the middle element of a triple, write `let (_, y, _) = triple;`.
+
 ## The `loop`, `continue`, and `break` Functions
 
 The built-in `loop` function is used to implement loops in Fix. To continue or break a loop, you use the `continue` and `break` functions.
@@ -1415,8 +1417,7 @@ main = (
 
     let x = match opt {
         some(v) => v,
-        _ => 0 // Any value can be matched by a variable pattern. 
-                // Recall that `_` is NOT a special wildcard symbol, but just a variable name.
+        _ => 0 // `_` is a wildcard that matches any value and discards it; here it serves as the default case.
     };
     assert_eq(|_|"", x, 42);;
 
