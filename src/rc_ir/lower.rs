@@ -26,7 +26,7 @@ use crate::rc_ir::ast::*;
 
 /// A pending binding accumulated during A-normalization: either a single `let var = rhs`, or a
 /// whole struct/tuple destructure binding several fields at once (`Destructure`).
-enum Stmt {
+enum Binding {
     Let(RcVar, RcRhs, Option<Span>),
     Destructure(RcVar, Vec<(usize, RcVar)>, Option<Span>),
 }
@@ -131,14 +131,14 @@ impl<'a> Lowerer<'a> {
 
     // --- building the continuation-nested body ---
 
-    /// Fold accumulated statements into the nested continuation chain ending in `terminal`.
-    fn build_let_chain(stmts: Vec<Stmt>, terminal: RcExprNode) -> RcExprNode {
-        stmts.into_iter().rev().fold(terminal, |cont, stmt| match stmt {
-            Stmt::Let(var, rhs, source) => RcExprNode {
+    /// Fold accumulated bindings into the nested continuation chain ending in `terminal`.
+    fn fold_bindings(bindings: Vec<Binding>, terminal: RcExprNode) -> RcExprNode {
+        bindings.into_iter().rev().fold(terminal, |cont, binding| match binding {
+            Binding::Let(var, rhs, source) => RcExprNode {
                 expr: Box::new(RcExpr::Let(var, rhs, cont)),
                 source,
             },
-            Stmt::Destructure(container, fields, source) => RcExprNode {
+            Binding::Destructure(container, fields, source) => RcExprNode {
                 expr: Box::new(RcExpr::Destructure(container, fields, cont)),
                 source,
             },
@@ -176,11 +176,11 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    /// Lower an expression as a complete body: its statements followed by a `Ret` of its value.
+    /// Lower an expression as a complete body: its bindings followed by a `Ret` of its value.
     fn lower_body(&mut self, expr: &ExprNode) -> RcExprNode {
-        let mut stmts = vec![];
-        let v = self.lower_to_var(expr, &mut stmts);
-        Self::build_let_chain(stmts, Self::ret_node(v))
+        let mut bindings = vec![];
+        let v = self.lower_to_var(expr, &mut bindings);
+        Self::fold_bindings(bindings, Self::ret_node(v))
     }
 
     /// Lower a lambda into a top-level function. `captures` are the values captured from the
@@ -207,7 +207,7 @@ impl<'a> Lowerer<'a> {
             param_vars.push(pv);
         }
 
-        let mut stmts = vec![];
+        let mut bindings = vec![];
         let cap = if lam_ty.is_closure() {
             let cap_var = self.fresh_var("cap", make_dynamic_object_ty(), None);
             // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
@@ -223,7 +223,7 @@ impl<'a> Lowerer<'a> {
                 });
                 let mut proj = self.fresh_var(&ast_name.name, cap_tys[i].clone(), None);
                 proj.debug_name = Some(ast_name.to_string());
-                stmts.push(Stmt::Let(proj.clone(), RcRhs::Llvm(gen, vec![cap_var.clone()]), None));
+                bindings.push(Binding::Let(proj.clone(), RcRhs::Llvm(gen, vec![cap_var.clone()]), None));
                 self.push_env(ast_name, proj);
             }
             Some(cap_var)
@@ -232,8 +232,8 @@ impl<'a> Lowerer<'a> {
             None
         };
 
-        let ret_var = self.lower_to_var(&body, &mut stmts);
-        let body_expr = Self::build_let_chain(stmts, Self::ret_node(ret_var));
+        let ret_var = self.lower_to_var(&body, &mut bindings);
+        let body_expr = Self::fold_bindings(bindings, Self::ret_node(ret_var));
 
         self.env = saved_env;
 
@@ -248,26 +248,26 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    // --- expressions (A-normalization: lower to an atom, appending statements) ---
+    // --- expressions (A-normalization: lower to an atom, appending bindings) ---
 
-    fn lower_to_var(&mut self, expr: &ExprNode, stmts: &mut Vec<Stmt>) -> RcVar {
+    fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<Binding>) -> RcVar {
         let ty = expr.type_.clone().unwrap();
         let source = expr.source.clone();
         match expr.expr.as_ref() {
             Expr::Var(v) => self.lower_var(v, &ty, &source),
-            Expr::LLVM(inline) => self.lower_llvm(inline, ty, source, stmts),
-            Expr::App(fun, args) => self.lower_app(fun, args, ty, source, stmts),
-            Expr::Lam(_, _) => self.lower_lam(expr, ty, source, stmts),
-            Expr::Let(pat, bound, val) => self.lower_let(pat, bound, val, stmts),
-            Expr::If(c, t, e) => self.lower_if(c, t, e, ty, source, stmts),
-            Expr::Match(cond, arms) => self.lower_match(cond, arms, ty, source, stmts),
-            Expr::TyAnno(e, _) => self.lower_to_var(e, stmts),
-            Expr::MakeStruct(_, fields) => self.lower_make_struct(fields, ty, source, stmts),
-            Expr::ArrayLit(elems) => self.lower_array_lit(elems, ty, source, stmts),
+            Expr::LLVM(inline) => self.lower_llvm(inline, ty, source, bindings),
+            Expr::App(fun, args) => self.lower_app(fun, args, ty, source, bindings),
+            Expr::Lam(_, _) => self.lower_lam(expr, ty, source, bindings),
+            Expr::Let(pat, bound, val) => self.lower_let(pat, bound, val, bindings),
+            Expr::If(c, t, e) => self.lower_if(c, t, e, ty, source, bindings),
+            Expr::Match(cond, arms) => self.lower_match(cond, arms, ty, source, bindings),
+            Expr::TyAnno(e, _) => self.lower_to_var(e, bindings),
+            Expr::MakeStruct(_, fields) => self.lower_make_struct(fields, ty, source, bindings),
+            Expr::ArrayLit(elems) => self.lower_array_lit(elems, ty, source, bindings),
             Expr::FFICall(fun_name, ret_ty, param_tys, is_va, args, is_io) => self.lower_ffi_call(
-                fun_name, ret_ty, param_tys, *is_va, args, *is_io, ty, source, stmts,
+                fun_name, ret_ty, param_tys, *is_va, args, *is_io, ty, source, bindings,
             ),
-            Expr::Eval(side, main) => self.lower_eval(side, main, stmts),
+            Expr::Eval(side, main) => self.lower_eval(side, main, bindings),
         }
     }
 
@@ -290,7 +290,7 @@ impl<'a> Lowerer<'a> {
         inline: &Arc<InlineLLVM>,
         ty: Arc<TypeNode>,
         source: Option<Span>,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
         let mut gen = inline.generator.clone();
         // The generator's free variables are its operands, in a fixed order. A local operand reuses
@@ -323,7 +323,7 @@ impl<'a> Lowerer<'a> {
             *slot = var.name.clone();
         }
         let result = self.fresh_var("v", ty, source.clone());
-        stmts.push(Stmt::Let(result.clone(), RcRhs::Llvm(gen, operand_vars), source));
+        bindings.push(Binding::Let(result.clone(), RcRhs::Llvm(gen, operand_vars), source));
         result
     }
 
@@ -333,14 +333,14 @@ impl<'a> Lowerer<'a> {
         args: &[Arc<ExprNode>],
         ty: Arc<TypeNode>,
         source: Option<Span>,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
         // Evaluation order (matching the current generator): the callee first, then the arguments
         // left to right.
-        let callee = self.lower_to_var(fun, stmts);
-        let arg_vars: Vec<RcVar> = args.iter().map(|arg| self.lower_to_var(arg, stmts)).collect();
+        let callee = self.lower_to_var(fun, bindings);
+        let arg_vars: Vec<RcVar> = args.iter().map(|arg| self.lower_to_var(arg, bindings)).collect();
         let result = self.fresh_var("app", ty, source.clone());
-        stmts.push(Stmt::Let(result.clone(), RcRhs::App(callee, arg_vars), source));
+        bindings.push(Binding::Let(result.clone(), RcRhs::App(callee, arg_vars), source));
         result
     }
 
@@ -349,7 +349,7 @@ impl<'a> Lowerer<'a> {
         expr: &ExprNode,
         ty: Arc<TypeNode>,
         source: Option<Span>,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
         // Resolve the captured values from the enclosing scope, in the closure's storage order.
         let cap_names = expr.lambda_cap_names();
@@ -365,7 +365,7 @@ impl<'a> Lowerer<'a> {
         self.funcs.insert(func_ref.clone(), rc_func);
 
         let result = self.fresh_var("closure", ty, source.clone());
-        stmts.push(Stmt::Let(result.clone(), RcRhs::Closure(func_ref, cap_vals), source));
+        bindings.push(Binding::Let(result.clone(), RcRhs::Closure(func_ref, cap_vals), source));
         result
     }
 
@@ -374,11 +374,11 @@ impl<'a> Lowerer<'a> {
         pat: &PatternNode,
         bound: &ExprNode,
         val: &ExprNode,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
-        let bound_var = self.lower_to_var(bound, stmts);
-        let pushed = self.destructure_pattern(pat, &bound_var, stmts);
-        let result = self.lower_to_var(val, stmts);
+        let bound_var = self.lower_to_var(bound, bindings);
+        let pushed = self.destructure_pattern(pat, &bound_var, bindings);
+        let result = self.lower_to_var(val, bindings);
         for name in &pushed {
             self.pop_env(name);
         }
@@ -392,10 +392,10 @@ impl<'a> Lowerer<'a> {
         else_expr: &ExprNode,
         ty: Arc<TypeNode>,
         source: Option<Span>,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
         // Desugar to a match on the Bool union: `_true` (tag 1) -> then, `_false` (tag 0) -> else.
-        let cond_var = self.lower_to_var(cond, stmts);
+        let cond_var = self.lower_to_var(cond, bindings);
         let payload_tys = cond_var.ty.field_types(self.type_env);
         let then_arm = MatchArm {
             variant: Some(1),
@@ -408,7 +408,7 @@ impl<'a> Lowerer<'a> {
             body: self.lower_body(else_expr),
         };
         let result = self.fresh_var("if", ty, source.clone());
-        stmts.push(Stmt::Let(result.clone(), RcRhs::Match(cond_var, vec![then_arm, else_arm]), source));
+        bindings.push(Binding::Let(result.clone(), RcRhs::Match(cond_var, vec![then_arm, else_arm]), source));
         result
     }
 
@@ -418,15 +418,15 @@ impl<'a> Lowerer<'a> {
         arms: &[(Arc<PatternNode>, Arc<ExprNode>)],
         ty: Arc<TypeNode>,
         source: Option<Span>,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
-        let cond_var = self.lower_to_var(cond, stmts);
+        let cond_var = self.lower_to_var(cond, bindings);
         let rc_arms: Vec<MatchArm> = arms
             .iter()
             .map(|(pat, body)| self.lower_match_arm(&cond_var, pat, body))
             .collect();
         let result = self.fresh_var("match", ty, source.clone());
-        stmts.push(Stmt::Let(result.clone(), RcRhs::Match(cond_var, rc_arms), source));
+        bindings.push(Binding::Let(result.clone(), RcRhs::Match(cond_var, rc_arms), source));
         result
     }
 
@@ -442,16 +442,16 @@ impl<'a> Lowerer<'a> {
                     payload.debug_name = Some(v.name.to_string());
                 }
                 // Destructure the payload's subpattern, then lower the arm body under those bindings.
-                let mut arm_stmts = vec![];
-                let pushed = self.destructure_pattern(subpat, &payload, &mut arm_stmts);
-                let ret_var = self.lower_to_var(body, &mut arm_stmts);
+                let mut arm_bindings = vec![];
+                let pushed = self.destructure_pattern(subpat, &payload, &mut arm_bindings);
+                let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 for name in &pushed {
                     self.pop_env(name);
                 }
                 MatchArm {
                     variant: Some(variant_idx),
                     payload,
-                    body: Self::build_let_chain(arm_stmts, Self::ret_node(ret_var)),
+                    body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
             Pattern::Var(v, _) => {
@@ -471,16 +471,16 @@ impl<'a> Lowerer<'a> {
                 // A struct/tuple pattern in a `match` is a single non-variant (default) arm that
                 // binds the whole scrutinee and destructures it.
                 let payload = self.fresh_var("scrut", scrutinee.ty.clone(), pat.info.source.clone());
-                let mut arm_stmts = vec![];
-                let pushed = self.destructure_pattern(pat, &payload, &mut arm_stmts);
-                let ret_var = self.lower_to_var(body, &mut arm_stmts);
+                let mut arm_bindings = vec![];
+                let pushed = self.destructure_pattern(pat, &payload, &mut arm_bindings);
+                let ret_var = self.lower_to_var(body, &mut arm_bindings);
                 for name in &pushed {
                     self.pop_env(name);
                 }
                 MatchArm {
                     variant: None,
                     payload,
-                    body: Self::build_let_chain(arm_stmts, Self::ret_node(ret_var)),
+                    body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
             }
         }
@@ -491,18 +491,18 @@ impl<'a> Lowerer<'a> {
         fields: &[(Name, Option<Span>, Arc<ExprNode>)],
         ty: Arc<TypeNode>,
         source: Option<Span>,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
         // The AST fields are already in declaration order.
         let field_vars: Vec<RcVar> = fields
             .iter()
-            .map(|(_, _, e)| self.lower_to_var(e, stmts))
+            .map(|(_, _, e)| self.lower_to_var(e, bindings))
             .collect();
         let gen = LLVMGenerator::MakeStructBody(InlineLLVMMakeStructBody {
             field_names: field_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("struct", ty, source.clone());
-        stmts.push(Stmt::Let(result.clone(), RcRhs::Llvm(gen, field_vars), source));
+        bindings.push(Binding::Let(result.clone(), RcRhs::Llvm(gen, field_vars), source));
         result
     }
 
@@ -511,14 +511,14 @@ impl<'a> Lowerer<'a> {
         elems: &[Arc<ExprNode>],
         ty: Arc<TypeNode>,
         source: Option<Span>,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
-        let elem_vars: Vec<RcVar> = elems.iter().map(|e| self.lower_to_var(e, stmts)).collect();
+        let elem_vars: Vec<RcVar> = elems.iter().map(|e| self.lower_to_var(e, bindings)).collect();
         let gen = LLVMGenerator::ArrayLitBody(InlineLLVMArrayLitBody {
             elem_names: elem_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("array", ty, source.clone());
-        stmts.push(Stmt::Let(result.clone(), RcRhs::Llvm(gen, elem_vars), source));
+        bindings.push(Binding::Let(result.clone(), RcRhs::Llvm(gen, elem_vars), source));
         result
     }
 
@@ -532,11 +532,11 @@ impl<'a> Lowerer<'a> {
         is_io: bool,
         ty: Arc<TypeNode>,
         source: Option<Span>,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> RcVar {
         // All arguments are operands; when `is_io` the last is the input IOState token, kept for the
         // ordering dependency but not passed to C.
-        let arg_vars: Vec<RcVar> = args.iter().map(|arg| self.lower_to_var(arg, stmts)).collect();
+        let arg_vars: Vec<RcVar> = args.iter().map(|arg| self.lower_to_var(arg, bindings)).collect();
         let gen = LLVMGenerator::FFICallBody(InlineLLVMFFICallBody {
             fun_name: fun_name.clone(),
             ret_tycon: ret_tycon.clone(),
@@ -546,46 +546,46 @@ impl<'a> Lowerer<'a> {
             arg_names: arg_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("ffi", ty, source.clone());
-        stmts.push(Stmt::Let(result.clone(), RcRhs::Llvm(gen, arg_vars), source));
+        bindings.push(Binding::Let(result.clone(), RcRhs::Llvm(gen, arg_vars), source));
         result
     }
 
-    fn lower_eval(&mut self, side: &ExprNode, main: &ExprNode, stmts: &mut Vec<Stmt>) -> RcVar {
+    fn lower_eval(&mut self, side: &ExprNode, main: &ExprNode, bindings: &mut Vec<Binding>) -> RcVar {
         // The side value is evaluated for its effect and discarded; RC insertion releases it.
-        let _side = self.lower_to_var(side, stmts);
-        self.lower_to_var(main, stmts)
+        let _side = self.lower_to_var(side, bindings);
+        self.lower_to_var(main, bindings)
     }
 
     // --- pattern destructuring ---
 
     /// Destructure `pat` against the value `obj`, binding each pattern variable in the environment
-    /// (a struct/tuple pattern emits a `Destructure` statement extracting all its fields at once) and
+    /// (a struct/tuple pattern emits a `Destructure` binding extracting all its fields at once) and
     /// returning the AST names pushed, for the caller to pop after the scope closes.
     fn destructure_pattern(
         &mut self,
         pat: &PatternNode,
         obj: &RcVar,
-        stmts: &mut Vec<Stmt>,
+        bindings: &mut Vec<Binding>,
     ) -> Vec<FullName> {
         match &pat.pattern {
             Pattern::Var(v, _) => {
                 // Bind the source variable to the value, carrying its source name for debug info.
-                let named_here = name_definition(&v.name, obj, stmts);
+                let named_here = name_definition(&v.name, obj, bindings);
                 let is_own_binding = obj.debug_name == Some(v.name.to_string());
                 if named_here || is_own_binding {
                     // The value is the fresh result just produced for this binding (named on its
-                    // defining statement), or `obj` was already created as this variable's binding (a
+                    // defining binding), or `obj` was already created as this variable's binding (a
                     // match-arm payload). Either way it carries the name; bind directly.
                     self.push_env(&v.name, obj.clone());
                 } else {
                     // `obj` is a pre-existing variable (a rename such as `let j = i`, or a
-                    // parameter), so it has no defining statement to name. Represent the rename
+                    // parameter), so it has no defining binding to name. Represent the rename
                     // faithfully with a move binding, which carries the source name. The move is
                     // reference-count-neutral: RC insertion retains `obj` before it exactly when it
                     // is used after, matching the current back end's `let j = i`.
                     let mut renamed = self.fresh_var(&v.name.name, obj.ty.clone(), pat.info.source.clone());
                     renamed.debug_name = Some(v.name.to_string());
-                    stmts.push(Stmt::Let(renamed.clone(), RcRhs::Var(obj.clone()), pat.info.source.clone()));
+                    bindings.push(Binding::Let(renamed.clone(), RcRhs::Var(obj.clone()), pat.info.source.clone()));
                     self.push_env(&v.name, renamed);
                 }
                 vec![v.name.clone()]
@@ -615,9 +615,9 @@ impl<'a> Lowerer<'a> {
                 }
                 // Extract all fields in one step (mirroring the back end's `get_struct_fields`); RC
                 // insertion retains the container beforehand iff it is used after this destructure.
-                stmts.push(Stmt::Destructure(obj.clone(), fields, pat.info.source.clone()));
+                bindings.push(Binding::Destructure(obj.clone(), fields, pat.info.source.clone()));
                 for (field_var, subpat) in nested {
-                    pushed.extend(self.destructure_pattern(subpat, &field_var, stmts));
+                    pushed.extend(self.destructure_pattern(subpat, &field_var, bindings));
                 }
                 pushed
             }
@@ -640,14 +640,14 @@ impl<'a> Lowerer<'a> {
     }
 }
 
-/// Record `dbg` as the source-level debug name of the statement that just produced `var`, so code
+/// Record `dbg` as the source-level debug name of the binding that just produced `var`, so code
 /// generation can emit a debug local variable under it, and return whether it did. This applies only
-/// when that statement is the immediately preceding one and is not already named — i.e. `var` is the
+/// when that binding is the immediately preceding one and is not already named — i.e. `var` is the
 /// fresh result of a compound expression bound to a source `let`/pattern variable. It does not apply
 /// to an alias of a pre-existing variable (a rename, a global, or a parameter), which has no such
-/// statement.
-fn name_definition(dbg: &FullName, var: &RcVar, stmts: &mut Vec<Stmt>) -> bool {
-    if let Some(Stmt::Let(bound, _, _)) = stmts.last_mut() {
+/// binding.
+fn name_definition(dbg: &FullName, var: &RcVar, bindings: &mut Vec<Binding>) -> bool {
+    if let Some(Binding::Let(bound, _, _)) = bindings.last_mut() {
         if bound.name == var.name && bound.debug_name.is_none() {
             bound.debug_name = Some(dbg.to_string());
             return true;
