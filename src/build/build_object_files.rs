@@ -181,8 +181,8 @@ pub fn build_object_files<'c>(
             let unit_symbols = unit.symbols().to_vec();
             let rc_prog = {
                 let type_env = gc.type_env();
-                let mut p = crate::rc_ir::lower::lower_program(type_env, &unit_symbols, &all_symbols);
-                crate::rc_ir::rc_insert::insert_rc(&mut p, type_env);
+                let mut p = lower_program(type_env, &unit_symbols, &all_symbols);
+                insert_rc(&mut p, type_env);
                 p
             };
             gc.implement_rc_program(&rc_prog);

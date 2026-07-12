@@ -35,10 +35,11 @@ use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN};
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{create_obj, ObjectFieldType};
+use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, IntValue, PointerValue};
-use inkwell::{AddressSpace, IntPredicate};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -3487,7 +3488,7 @@ pub fn struct_act(
         .into_iter()
         .map(|name| FullName::local(&name))
         .collect();
-    let new_name = crate::optimization::rename::generate_new_names(&used_tyvar_names, 1)[0]
+    let new_name = generate_new_names(&used_tyvar_names, 1)[0]
         .name
         .clone();
     let functor_ty = type_tyvar(&new_name, &kind_arrow(kind_star(), kind_star()));
@@ -3701,7 +3702,7 @@ pub fn struct_act_tuple2(
         .into_iter()
         .map(|name| FullName::local(&name))
         .collect();
-    let u_name = crate::optimization::rename::generate_new_names(&used_tyvar_names, 1)[0]
+    let u_name = generate_new_names(&used_tyvar_names, 1)[0]
         .name
         .clone();
     let u_ty = type_tyvar(&u_name, &kind_star());
@@ -3973,7 +3974,7 @@ pub fn struct_act_const(
         .into_iter()
         .map(|name| FullName::local(&name))
         .collect();
-    let r_name = crate::optimization::rename::generate_new_names(&used_tyvar_names, 1)[0]
+    let r_name = generate_new_names(&used_tyvar_names, 1)[0]
         .name
         .clone();
     let r_ty = type_tyvar(&r_name, &kind_star());
@@ -6159,7 +6160,7 @@ impl InlineLLVMFloatEqBody {
         let value = gc
             .builder()
             .build_float_compare(
-                inkwell::FloatPredicate::OEQ,
+                FloatPredicate::OEQ,
                 lhs_val,
                 rhs_val,
                 EQ_TRAIT_EQ_NAME,
@@ -6321,7 +6322,7 @@ impl InlineLLVMFloatLessThanBody {
         let value = gc
             .builder()
             .build_float_compare(
-                inkwell::FloatPredicate::OLT,
+                FloatPredicate::OLT,
                 lhs_val,
                 rhs_val,
                 LESS_THAN_TRAIT_LT_NAME,
@@ -6481,7 +6482,7 @@ impl InlineLLVMFloatLessThanOrEqBody {
         let value = gc
             .builder()
             .build_float_compare(
-                inkwell::FloatPredicate::OLE,
+                FloatPredicate::OLE,
                 lhs_val,
                 rhs_val,
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
