@@ -163,6 +163,12 @@ mod debug_info_tests {
                 "print *arr",
                 "-ex",
                 "whatis s",
+                // A String's characters are the bytes of its `_data` array, whose elements begin
+                // after the 24-byte array header (control block + size + capacity on a 64-bit
+                // target). The debug info cannot bound the flexible element array, so read them as a
+                // C string from that offset.
+                "-ex",
+                "x/s (char*)s._data + 24",
                 "-ex",
                 "continue",
                 "./prog",
@@ -183,6 +189,7 @@ mod debug_info_tests {
             ("Std::Array Std::I64", "Array type"),
             ("<array size> = 3", "Array size"),
             ("Std::String", "String type"),
+            ("\"hello\"", "String contents (raw bytes)"),
         ] {
             assert!(
                 out.contains(needle),

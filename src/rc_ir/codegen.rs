@@ -146,7 +146,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 self.eval_rc_expr(k, tail, fn_map)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-                let match_tail = tail && is_tail_cont(k, &x.name);
+                let match_tail = self.tail_fuses(x, k, tail);
                 let obj = self.eval_rc_match(x, scrut, arms, match_tail, fn_map);
                 if match_tail {
                     // Each arm returned directly; the continuation is a pure rename to `Ret`.
@@ -156,7 +156,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 }
             }
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
-                let app_tail = tail && is_tail_cont(k, &x.name);
+                let app_tail = self.tail_fuses(x, k, tail);
                 let callee_obj = self.get_scoped_obj(&callee.name);
                 let arg_objs: Vec<Object<'c>> =
                     args.iter().map(|a| self.get_scoped_obj(&a.name)).collect();
@@ -170,7 +170,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             RcExpr::Let(x, RcRhs::Llvm(gen, _args), k) => {
                 // An inline-LLVM op may itself be in tail position (e.g. `FixBody`) and may diverge
                 // (e.g. the panic/undefined ops); in both cases `generate` returns `None`.
-                let llvm_tail = tail && is_tail_cont(k, &x.name);
+                let llvm_tail = self.tail_fuses(x, k, tail);
                 match gen.generate(self, &x.ty, llvm_tail) {
                     None => None,
                     Some(obj) => self.bind_and_continue(x, obj, k, tail, fn_map),
@@ -198,6 +198,16 @@ impl<'c, 'm> Generator<'c, 'm> {
         let res = self.eval_rc_expr(k, tail, fn_map);
         self.scope_pop(&x.name);
         res
+    }
+
+    /// Whether the binding of `x` in tail position may fuse into the tail return, skipping a scoped
+    /// binding. It fuses for the compiler-introduced ANF temporaries, which carry no source name; in
+    /// a debug build it does NOT fuse a source-named binding, so a debugger can inspect that value —
+    /// matching the current back end, which materializes every source `let` binding as a scoped
+    /// value. Genuine tail calls and tail recursion go through unnamed temporaries, so they still
+    /// fuse in every build.
+    fn tail_fuses(&self, x: &RcVar, k: &RcExprNode, tail: bool) -> bool {
+        tail && is_tail_cont(k, &x.name) && !(self.has_di() && x.debug_name.is_some())
     }
 
     /// Emit a debug local variable for the binding of `var` to `obj`, when debug info is enabled and

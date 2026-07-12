@@ -559,8 +559,25 @@ impl<'a> Lowerer<'a> {
     ) -> Vec<FullName> {
         match &pat.pattern {
             Pattern::Var(v, _) => {
-                name_definition(&v.name, obj, stmts);
-                self.push_env(&v.name, obj.clone());
+                // Bind the source variable to the value, carrying its source name for debug info.
+                let named_here = name_definition(&v.name, obj, stmts);
+                let is_own_binding = obj.debug_name == Some(v.name.to_string());
+                if named_here || is_own_binding {
+                    // The value is the fresh result just produced for this binding (named on its
+                    // defining statement), or `obj` was already created as this variable's binding (a
+                    // match-arm payload). Either way it carries the name; bind directly.
+                    self.push_env(&v.name, obj.clone());
+                } else {
+                    // `obj` is a pre-existing variable (a rename such as `let j = i`, or a
+                    // parameter), so it has no defining statement to name. Represent the rename
+                    // faithfully with a move binding, which carries the source name. The move is
+                    // reference-count-neutral: RC insertion retains `obj` before it exactly when it
+                    // is used after, matching the current back end's `let j = i`.
+                    let mut renamed = self.fresh_var(&v.name.name, obj.ty.clone(), pat.info.source.clone());
+                    renamed.debug_name = Some(v.name.to_string());
+                    stmts.push((renamed.clone(), RcRhs::Var(obj.clone()), pat.info.source.clone()));
+                    self.push_env(&v.name, renamed);
+                }
                 vec![v.name.clone()]
             }
             Pattern::Struct(tc, field_pats) => {
@@ -604,16 +621,19 @@ impl<'a> Lowerer<'a> {
 }
 
 /// Record `dbg` as the source-level debug name of the statement that just produced `var`, so code
-/// generation can emit a debug local variable under it. This applies only when that statement is the
-/// immediately preceding one and is not already named — i.e. `var` is the fresh result of a compound
-/// expression bound to a source `let`/pattern variable. An alias to a pre-existing variable (a
-/// rename, a global, or a parameter) has no such statement and keeps its original binding's name.
-fn name_definition(dbg: &FullName, var: &RcVar, stmts: &mut Vec<Stmt>) {
+/// generation can emit a debug local variable under it, and return whether it did. This applies only
+/// when that statement is the immediately preceding one and is not already named — i.e. `var` is the
+/// fresh result of a compound expression bound to a source `let`/pattern variable. It does not apply
+/// to an alias of a pre-existing variable (a rename, a global, or a parameter), which has no such
+/// statement.
+fn name_definition(dbg: &FullName, var: &RcVar, stmts: &mut Vec<Stmt>) -> bool {
     if let Some(last) = stmts.last_mut() {
         if last.0.name == var.name && last.0.debug_name.is_none() {
             last.0.debug_name = Some(dbg.to_string());
+            return true;
         }
     }
+    false
 }
 
 /// A readable name hint for a field variable: the sub-pattern's variable name, or the field name.
