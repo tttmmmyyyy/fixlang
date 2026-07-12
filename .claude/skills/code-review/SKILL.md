@@ -1,12 +1,12 @@
 ---
 name: code-review
-description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, test-sufficiency, code-quality, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits the review edits and then applies `cargo fmt` as a separate standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
+description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, test-sufficiency, code-quality, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits each editing aspect's changes as its own commit, then applies `cargo fmt` as a final standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
 argument-hint: "Scope: 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
 ---
 
 # Code Review
 
-Run a fixed sequence of review aspects against a chosen scope, **one after another** in subagents. The orchestrator section below resolves scope and dispatches subagents. The seven aspects (`## Aspect: ...` sections, further down) define the conventions each subagent applies — they are not separate skills, they are sections of this file that subagents read directly. Once every aspect has finished, the orchestrator commits the accumulated review edits and then runs `cargo fmt` as a final, standalone commit so formatting churn never mixes with the substantive changes.
+Run a fixed sequence of review aspects against a chosen scope, **one after another** in subagents. The orchestrator section below resolves scope and dispatches subagents. The aspects (`## Aspect: ...` sections, further down) define the conventions each subagent applies — they are not separate skills, they are sections of this file that subagents read directly. As the editing aspects run, the orchestrator commits each one's changes as its own commit, and finishes with `cargo fmt` in a standalone commit — so every pass is a separate, reviewable commit and formatting churn never mixes with the substantive changes.
 
 ## Scope
 
@@ -22,22 +22,25 @@ This orchestrator owns scope selection. It resolves the argument into a single *
 
 ## Aspect Sequence
 
-Run these aspects in this order, each in its own subagent:
+Run these aspects in this order, each in its own subagent. The **flag-only** aspects (they only report findings, never edit) run first; then the **editing** aspects (they modify files, and each is committed on its own — see the Procedure):
 
-1. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
+1. **no-personal-info** — scan every changed file for the user's personal data (real name, personal email, phone, address, secrets) embedded in checked-in files, and flag it. Runs first as a gate: a finding stops the review before anything is committed.
 2. **design-fit** — with the implementation now visible, re-evaluate whether the chosen design is the best fit for the change's goal; flag mismatches (this aspect never redesigns).
 3. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; flag coverage gaps (this aspect never writes tests).
-4. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
-5. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports introduced by step 4).
-6. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived steps 4–5.
-7. **no-personal-info** — scan every changed file for the user's personal data (real name, personal email, phone, address, secrets) embedded in checked-in files, and flag it. This aspect never edits; a finding blocks the commit step in the Procedure.
+4. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
+5. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
+6. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
+7. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
 
 ## Why Sequential, Not Parallel
 
-1. **Avoid conflicting edits.** Aspects modify files. Parallel runs would fight each other.
+1. **Avoid conflicting edits.** The editing aspects modify files. Parallel runs would fight each other.
 2. **Each aspect should see prior changes.** E.g., `shorten-qualifiers` should see imports added by `code-quality`; `comment-style` shouldn't waste effort polishing comments that `code-quality` just deleted.
+3. **Per-aspect commits need it.** Each editing aspect is committed on its own (see the Procedure), which means running and committing them one at a time.
 
 ## Procedure
+
+**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the base ref, and the extracted text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`.
 
 1. **Resolve the base ref** from the argument:
    - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options:
@@ -51,18 +54,13 @@ Run these aspects in this order, each in its own subagent:
    - `last N` (where N is a positive integer) → `HEAD~N`. Verify it resolves with `git rev-parse --verify HEAD~N`.
    - `branch` → `$(git merge-base HEAD main)`. Verify `main` exists; if the project uses a different default branch, abort and ask.
    - anything else → treat as a git ref. Verify it resolves with `git rev-parse --verify <ref>`.
-2. **Run the chain.** For each aspect (in the listed order):
-   a. Extract the aspect's section from this file: take everything from the line `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading, or end of file. Drop nothing — include all sub-sections (`### ...`).
-   b. Launch one subagent via `Agent` (subagent_type: `general-purpose`).
-   c. Brief it with the prompt template below, substituting the aspect name, the base ref, and the extracted aspect text inline. Do **not** ask the subagent to open `SKILL.md` — the section text is the instruction.
-   d. **Wait for it to complete** before launching the next. Never use `run_in_background`.
-3. **Format and commit.** After the aspect chain completes, isolate the formatting churn into its own commit so it never mixes with the substantive edits.
-   - **First, honor a personal-info block.** If the `no-personal-info` aspect flagged any finding, do **not** commit anything. Surface those findings prominently and stop here — personal data must be removed before it can land in a commit (and be pushed). Leave the review edits uncommitted in the tree for the user to handle. Proceed to the steps below only when `no-personal-info` came back clean.
-   a. **Commit the review edits first.** If `git status --porcelain` reports pending changes, stage and commit them all as one commit — `git add -A && git commit -m "Apply code review fixes"` — so the tree is clean before formatting. This sweeps *every* pending change in the tree, the aspect edits and any other uncommitted work alike. If the tree is already clean, skip this commit.
-   b. **Run `cargo fmt`.**
-   c. **Commit the formatting as a standalone commit.** If `git status --porcelain` now reports changes (i.e. `cargo fmt` reformatted something), commit them on their own — `git commit -am "Apply cargo fmt"`. If `cargo fmt` changed nothing, make no commit and note that the code was already formatted.
-4. **Summarize.** Per aspect, list which files were touched and a one-line description of each change, and surface every finding the flag-only aspects (design-fit, test-sufficiency, no-personal-info) raised. Then report the commits created in step 3 — the review-edits commit and the `cargo fmt` commit, with their short hashes — and remind the user they can reword or split the review-edits commit, since it gathered all pending changes under one message.
-5. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop the chain and surface the failure. Do not continue. If `cargo fmt` itself fails, surface that and skip the formatting commit.
+2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `test-sufficiency`. They only report findings; they make no edits.
+   - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
+3. **Commit the code under review** — `uncommitted` scope only. If the working tree still holds the pending changes being reviewed (the scope was `uncommitted`, so the reviewed code is not yet committed), commit it now as its own commit, with a message describing the change (you have the context of what was just written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. If the tree is already clean (`branch` / `last N` scope, where the reviewed code is already committed), skip this.
+4. **Run the editing aspects, committing each separately**, in order: `fix-test-main-reference`, `code-quality`, `shorten-qualifiers`, `comment-style`. After running each, if it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several aspects into one commit.**
+5. **Apply `cargo fmt` as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
+6. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); surface every finding the flag-only reviews (`design-fit`, `test-sufficiency`) raised; and list every commit created, with its short hash.
+7. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Subagent Prompt Template
 
@@ -98,14 +96,14 @@ summary of the change in each.
 - Don't run aspects in parallel.
 - Don't let subagents decide their own scope — always pass the resolved base.
 - Don't continue the chain if a step fails.
-- Don't fold formatting into the substantive commit — `cargo fmt` always gets its own commit.
+- Commit each editing aspect separately — don't bundle several aspects' edits into one commit, and always give `cargo fmt` its own commit.
 - Don't commit anything when `no-personal-info` flagged a finding — stop and surface it so the user can remove the personal data first.
 
 ---
 
 # Review Aspects
 
-The seven sections below are referenced by name from the orchestrator. Each is self-contained: a subagent should be able to apply an aspect by reading only its section.
+The sections below are referenced by name from the orchestrator. Each is self-contained: a subagent should be able to apply an aspect by reading only its section.
 
 ## Aspect: fix-test-main-reference
 
@@ -259,7 +257,7 @@ Ground the sufficiency judgment in how this project tests (per CLAUDE.md):
 
 ## Aspect: code-quality
 
-Walk the Rust code changed against the base ref, check it against the thirteen conventions below, apply the safe fixes inline, and surface the riskier ones for the user to decide.
+Walk the Rust code changed against the base ref, check it against the conventions below, apply the safe fixes inline, and surface the riskier ones for the user to decide.
 
 ### Out of Scope
 
@@ -270,7 +268,7 @@ Walk the Rust code changed against the base ref, check it against the thirteen c
 
 ### Conventions
 
-#### 1. DRY: don't repeat logic; reuse existing utilities
+#### DRY: don't repeat logic; reuse existing utilities
 
 If the diff introduces logic that already exists elsewhere in the project, replace the duplicate with a call to the existing helper.
 
@@ -281,7 +279,7 @@ If your reasoning suggested the helper should exist but the search comes up empt
 **Apply** when an existing helper is a near-identical match, or when no helper exists but its proper home is unambiguous (a method on the obvious receiver type, a constructor on the obvious factory, etc.).
 **Report only** when an existing version diverges enough that merging would change behavior, or when no helper exists and the right home is a judgment call.
 
-#### 2. Extract a function on the second copy
+#### Extract a function on the second copy
 
 This convention is specifically about **function extraction** (関数化), not about introducing traits, generics, or other heavier abstractions.
 
@@ -289,7 +287,7 @@ When the diff contains two or more blocks of code with the same intent — same 
 
 **Apply**: Two near-identical blocks with the same intent → extract a function, replace both call sites.
 
-#### 3. Single responsibility per function
+#### Single responsibility per function
 
 A function should do one thing at one level of abstraction. Watch for functions that mix:
 - I/O and pure computation.
@@ -299,7 +297,7 @@ A function should do one thing at one level of abstraction. Watch for functions 
 **Apply** when the split is mechanical (a long function with a clear seam, no shared mutable state across the seam).
 **Report only** when the split would require redesigning callers.
 
-#### 4. Don't add defensive code inside the trust boundary
+#### Don't add defensive code inside the trust boundary
 
 CLAUDE.md is explicit: validate at boundaries (user input, external APIs, file I/O), trust internal calls. Reject:
 - `unwrap_or_default()` / `if let Some` guards on values the caller statically guarantees.
@@ -309,7 +307,7 @@ CLAUDE.md is explicit: validate at boundaries (user input, external APIs, file I
 **Apply**: remove the defensive branch.
 **Keep** the guard only when it documents a real precondition the type system can't express — and in that case leave a one-line comment naming the invariant.
 
-#### 5. Remove dead and half-finished code
+#### Remove dead and half-finished code
 
 Delete:
 - Functions / structs / enums introduced by the diff with no callers anywhere (`grep` to confirm).
@@ -319,7 +317,7 @@ Delete:
 
 After deletion, run `cargo check` — the build will surface anything you misjudged as dead.
 
-#### 6. Avoid obvious quadratic / repeated-allocation patterns
+#### Avoid obvious quadratic / repeated-allocation patterns
 
 Catch *only* clear, unbounded cases — not micro-optimizations:
 - `Vec::contains` inside a loop over the same `Vec` → use a `Set`.
@@ -329,7 +327,7 @@ Catch *only* clear, unbounded cases — not micro-optimizations:
 **Apply** when the inputs are clearly unbounded (collections of unknown size, iterators over user data).
 **Skip** when the upper bound is small and fixed (e.g., iterating over a 4-variant enum).
 
-#### 7. Narrow the scope of mutable state
+#### Narrow the scope of mutable state
 
 Every `let mut` and every public field expands the surface a reader must hold in their head. Prefer:
 - Pushing the mutation into a `let x = { let mut tmp = ...; ...; tmp };` block so the binding is immutable outside.
@@ -339,7 +337,7 @@ Every `let mut` and every public field expands the surface a reader must hold in
 **Apply** for trivial scope tightening.
 **Report only** when narrowing scope would touch multiple call sites.
 
-#### 8. Avoid shotgun-surgery coupling; annotate it when unavoidable
+#### Avoid shotgun-surgery coupling; annotate it when unavoidable
 
 If a future change to one location will silently force a change at a distant location — different file, different module, different crate — that is a maintenance trap. The next editor will fix one side and ship the bug.
 
@@ -364,7 +362,7 @@ Examples:
 **Apply**: where possible, collapse to one source of truth — a single `const`, a `From`/`Into`, a derive macro, an exhaustive `match` that the compiler will force you to update.
 **If unavoidable**: add a one-line comment at *both* sites pointing to the other, e.g. `// must stay in sync with foo::BAR` and `// must stay in sync with bar::FOO`. The pair of comments is the load-bearing artifact, not the choice of words.
 
-#### 9. Struct fields must be non-redundant and on-role
+#### Struct fields must be non-redundant and on-role
 
 Two failure modes to catch:
 
@@ -396,7 +394,7 @@ impl Index {
 
 **Exception** for (a): if the derivation is genuinely hot and profiling justifies caching, the cached field is allowed — but add a comment naming the invariant (e.g., `// invariant: keys == data.keys(); cached because the lookup is on the hot path`).
 
-#### 10. Fix root causes, not symptoms
+#### Fix root causes, not symptoms
 
 When the diff fixes a bug, a test failure, or a panic, check whether the change addresses the underlying cause or just suppresses the visible failure. Ad-hoc symptom patches tend to leave the broken invariant in place — the same root issue resurfaces elsewhere later, often in a harder-to-diagnose form.
 
@@ -418,7 +416,7 @@ The litmus test: can the diff author state, in one sentence, what invariant was 
 
 **Exception**: a workaround for a confirmed external bug (upstream library, OS, hardware) is legitimate. Require a comment that names the external issue (link, version, ticket) and the condition for removing the workaround.
 
-#### 11. Use the project's canonical types over their standard-library counterparts
+#### Use the project's canonical types over their standard-library counterparts
 
 Where the project provides its own version of a common type, use it instead of the standard-library one. These are mechanical substitutions, not stylistic preferences — they exist so that the rest of the codebase can rely on a single consistent type.
 
@@ -426,9 +424,9 @@ Where the project provides its own version of a common type, use it instead of t
 
 **Apply** unconditionally.
 
-#### 12. Extract named steps for readability
+#### Extract named steps for readability
 
-Conventions 1 and 2 catch *duplication* (same code in two places). This one catches *cohesion*: a block of code that is conceptually one named step embedded inside a larger function, even though it only appears once. Extracting it into a helper lets the caller read as a sequence of named steps and keeps a single abstraction level per function.
+The DRY and function-extraction conventions catch *duplication* (same code in two places). This one catches *cohesion*: a block of code that is conceptually one named step embedded inside a larger function, even though it only appears once. Extracting it into a helper lets the caller read as a sequence of named steps and keeps a single abstraction level per function.
 
 The risk this rule has to actively avoid is **function fragmentation** — chopping every 3-line block into its own helper so the reader has to chase a chain of one-line functions to follow the flow. The mechanical gates below exist to ban that outcome.
 
@@ -448,9 +446,19 @@ The risk this rule has to actively avoid is **function fragmentation** — chopp
 
 **Flag instead of applying** when extraction looks beneficial but you can't satisfy all the Apply conditions — especially when a good name doesn't come to mind. Surface the location and your proposed name in the report; let the author decide whether the seam belongs there.
 
-#### 13. No ad-hoc / hacky mechanisms
+#### Split an overgrown file at a natural seam
 
-Convention 10 catches the *symptom-patch* flavor of ad-hoc code, but only in a diff that fixes a bug. This one is broader and un-gated: it asks of **any** changed code — feature work included — whether the mechanism it uses is sound, or whether it *works by coincidence* and will break the moment an unstated assumption shifts.
+When the diff has grown a file to the point that it now spans several distinct concerns — different groups of types, or unrelated passes / utilities that merely share a file — and it has become large enough to be hard to navigate, flag it for splitting. **Report only**: moving code into new modules changes module paths, imports, and visibility across call sites, so it is a redesign the author should choose, not a hunk-local edit.
+
+Split at a **natural seam**, never at an arbitrary line count: a cohesive group of related types and their methods, a self-contained submodule (a parser, a formatter, one compiler pass), or a cluster that shares a concern. Aim for files that each carry one responsibility — not two halves of one responsibility sawn apart at the midpoint.
+
+In the report, name the file, say why it has become unwieldy, and describe the natural seam(s) to split along (e.g. "move the `Span` / `SourcePos` types and their impls into a `span` submodule"). Don't perform the split.
+
+**Skip** when the file is long but genuinely one cohesive unit, or when the diff only touched a small part of an already-long file — flagging a split on a file the diff barely changed is out of scope, since that length is pre-existing.
+
+#### No ad-hoc / hacky mechanisms
+
+The root-cause-vs-symptom convention catches the *symptom-patch* flavor of ad-hoc code, but only in a diff that fixes a bug. This one is broader and un-gated: it asks of **any** changed code — feature work included — whether the mechanism it uses is sound, or whether it *works by coincidence* and will break the moment an unstated assumption shifts.
 
 Smells to look for:
 
@@ -469,15 +477,15 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 ### Procedure
 
 1. Run `git diff <base>` to find changed files and hunks.
-2. For each changed `.rs` file, walk the diff hunks and check each of the thirteen conventions against the added/modified code.
+2. For each changed `.rs` file, walk the diff hunks and check each convention against the added/modified code.
 3. For each violation:
-   - Identify which convention (1–13).
+   - Identify which convention it violates.
    - If it falls in "Apply": make the edit with `Edit`.
    - If it falls in "Report only": collect it for the final report; do not edit.
 4. Run `cargo check` after edits. On failure, revert the offending edit and reclassify it as a flagged item.
 5. Report:
-   - **Applied edits**: file, convention number, one-line summary per change.
-   - **Flagged for review**: file, convention number, what you saw and why you didn't auto-fix.
+   - **Applied edits**: file, convention (by title), one-line summary per change.
+   - **Flagged for review**: file, convention (by title), what you saw and why you didn't auto-fix.
 
 ### Scope Discipline
 
@@ -540,27 +548,27 @@ In this case, keep one as a `use` import and qualify the other minimally, or qua
 
 ## Aspect: comment-style
 
-Scan the doc/inline comments touched by the diff — in Rust source, and the prose in hand-written Markdown docs. Rewrite ones that violate conventions 1–5 and 7, and add missing doc comments per convention 6. Conventions 1–3 and 6 apply to Rust only; conventions 4, 5, and 7 apply to Markdown prose as well.
+Scan the doc/inline comments touched by the diff — in Rust source, and the prose in hand-written Markdown docs. Rewrite whatever violates a convention below; the *Every Rust item must have a doc comment* convention is the one that *adds* a missing comment rather than rewriting. Each convention is tagged with where it applies — **[Rust]** for Rust comments only, **[Rust + Markdown]** for prose in both.
 
 ### Conventions
 
-#### 1. Don't enumerate callers
+#### Don't enumerate callers — [Rust]
 
 A doc comment should describe *what the thing is and how it behaves*, not *who calls it*. Lists like "used by handlers X, Y, Z", "the three callers share this result", or "called from foo() and bar()" rot fast — every new caller is a missed comment edit, and stale lists are worse than none.
 
 **Rewrite**: drop the caller list. Let callers be discoverable by `grep` / IDE.
 
-#### 2. Don't enumerate None / error cases
+#### Don't enumerate None / error cases — [Rust]
 
 For functions returning `Option<T>` or `Result<T, E>`, omit a trailing "Returns `None` when X, Y, Z" paragraph that lists routine failure cases. The return type already advertises that the call can fail; routine cases (input not found, position out of range, name not bound) aren't surprising.
 
 **Keep** such notes only when a particular failure mode is *genuinely surprising* — a fail-fast condition the caller must guard against, an invariant the type signature can't express, or behavior diverging from what a reader would reasonably guess.
 
-#### 3. Describe inputs/outputs, not internal helpers
+#### Describe inputs/outputs, not internal helpers — [Rust]
 
 A comment should be readable without prior knowledge of internal helpers or sibling functions. If the comment says "projects X's `internal_helper` into Y" or "wraps `private_thing`", rewrite it to describe the inputs and outputs directly.
 
-#### 4. Don't narrate history / how-we-got-here
+#### Don't narrate history / how-we-got-here — [Rust + Markdown]
 
 Comments are read by people coming to the code fresh. They want to know *what the code does and why it works the way it does* — not the path that led the author here, and not a justification for the choice against alternatives the reader never saw. AI-written comments often slip in narratives like "originally we did X, but switched to Y", "now uses the new helper", "refactored from the old approach", "previously this returned a Map", or defensive asides excusing why this was done rather than that — these belong in commit messages and PR descriptions, not in the source.
 
@@ -570,15 +578,15 @@ Comments are read by people coming to the code fresh. They want to know *what th
 
 **Keep** a "why" reference to history *only* when the implementation departs from what a reader would naturally expect, and the past explains the departure — e.g., "we don't use approach X here because of bug #1234" or "the obvious recursion is unrolled to avoid stack overflow on deeply nested input." The test: would a fresh reader, seeing the code, be surprised by the choice and benefit from knowing why?
 
-#### 5. Comments must be in English
+#### Comments and prose must be in English — [Rust + Markdown]
 
 This project's source comments are written in English (`Document.md`, `std.fix`, prior code, and PRs all assume English). A comment in any other language — Japanese, Chinese, etc. — is a style violation.
 
 **Rewrite**: translate the comment into clear English while preserving its meaning.
 
-#### 6. Every Rust item must have a doc comment
+#### Every Rust item must have a doc comment — [Rust]
 
-Conventions 1–5 and 7 are about *rewriting* existing comments (and prose). This one is about *adding* missing ones.
+The other conventions here are about *rewriting* existing comments (and prose). This one is about *adding* missing ones.
 
 Every Rust item — `struct`, `enum`, `union`, their fields and variants, `trait`, trait method, free function, and `impl`-block method — must carry a `///` doc comment. **This applies to both `pub` and private items.**
 
@@ -603,7 +611,7 @@ Test comment shape (for `#[test]` functions): the comment must state *what persp
 **Apply**: when a Rust item appears in the diff hunks (newly added, or its signature line was modified) and has no `///` directly above it, add a meaningful one-liner.
 **Flag instead of writing boilerplate.** If you cannot articulate the item's purpose without restating its name, surface it as a flagged item rather than writing filler — the missing description may signal the item itself is redundant or poorly named.
 
-#### 7. Write in the affirmative
+#### Write in the affirmative — [Rust + Markdown]
 
 State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to Rust comments and Markdown prose alike:
 
@@ -619,28 +627,58 @@ State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to 
 
 **Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
 
+#### Break lines at meaning, not at a column — [Rust + Markdown]
+
+Don't drop a hard line break mid-thought just to keep a line short. The reader views these files with soft-wrap on, so a long physical line costs nothing — but a break in the middle of a clause forces the eye to reassemble the sentence and hides its real structure.
+
+Place breaks where the *meaning* divides — between clauses, sentences, or list items — or leave the line long and let soft-wrap handle the width. A break that lands mid-clause only because the line was nearing some column is the anti-pattern.
+
+- *Before* — broken to fit a column:
+  ```
+  /// Resolves the symbol at the given position, returning the
+  /// definition it binds to, or the nearest enclosing scope.
+  ```
+- *After* — broken at meaning, or not at all:
+  ```
+  /// Resolves the symbol at the given position.
+  /// Returns the definition it binds to, or the nearest enclosing scope.
+  ```
+
+Applies to Rust comments and Markdown prose alike. `cargo fmt` leaves comment text alone (the project uses default stable rustfmt, with comment wrapping off), so these breaks are the author's to place.
+
+**Rewrite**: rejoin lines split mid-clause, then break only at semantic boundaries — or not at all.
+
+#### Reference by name, not by line or section number — [Rust + Markdown]
+
+Point at things by a name the reader can search for — a function, type, module, or a section's title — not by a line number or a numbered position ("line 214", "section 4.2", "the third bullet", "rule 5 above"). Line and section numbers drift the moment anything above them is edited, so the reference silently goes stale and points at the wrong place.
+
+- *Before*: `// see the check on line 214` / `// as described in section 4.2`
+- *After*: `// see resolve_symbol` / `// as described under "Scope Discipline"`
+
+**Rewrite**: replace the numeric locator with the name of the thing it points to.
+
 ### Procedure
 
 1. Run `git diff <base>` to find changed files and the touched line ranges. Two file kinds are in scope:
    - **Rust source** (`.rs`): all conventions apply.
-   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, `CHANGELOG.md`, docs under `docs/`: only the prose conventions 4, 5, and 7 apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten).
+   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, `CHANGELOG.md`, docs under `docs/`: only the **[Rust + Markdown]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten).
 2. For each changed `.rs` file, examine:
-   - (a) comments that appear in the diff hunks (added or modified lines), for conventions 1–5 and 7;
-   - (b) Rust items defined or whose signature was modified in the diff hunks, for convention 6.
-3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for conventions 4, 5, and 7.
+   - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
+   - (b) Rust items defined or whose signature was modified in the diff hunks, for the *Every Rust item must have a doc comment* convention.
+3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** conventions.
 4. For each violation:
-   - Identify which convention (1–7).
-   - For 1–5 and 7: propose a rewrite that preserves the intent but removes the anti-pattern, then apply with `Edit`.
-   - For 6: write a meaningful one-liner above the item, or flag it for review if you cannot articulate the purpose without restating the name.
+   - Identify which convention it is.
+   - For a rewriting convention: propose a rewrite that preserves the intent but removes the anti-pattern, then apply with `Edit`.
+   - For the doc-comment convention: write a meaningful one-liner above the item, or flag it for review if you cannot articulate the purpose without restating the name.
 5. After all edits, run `cargo check` to confirm nothing broke (comment edits shouldn't affect builds, but verify in case of doctest changes). Markdown edits don't affect the build.
 6. Report:
    - **Applied edits**: file, convention, brief rationale.
-   - **Flagged for review** (convention 6 only): file, item name, why no comment was written.
+   - **Flagged for review** (the doc-comment convention only): file, item name, why no comment was written.
 
 ### Scope
 
 - **Do not rewrite comments just because they're long.** Length is not the issue; the listed anti-patterns are.
-- **Do not enforce conventions beyond the seven above.** Other style judgments (tone, capitalization, line wrapping) are not in scope.
+- **Do not enforce conventions beyond the ones listed here.** Other style judgments (tone, capitalization) are not in scope.
 
 ---
 
@@ -671,10 +709,10 @@ Flag, in the added/modified lines of any changed file:
 4. **Make no edits.** Collect every surviving candidate as a flagged item.
 5. Report:
    - **Flagged for review**: file, line, enough of the value to locate it (do not reproduce a full secret), and its category.
-   - If nothing was found, **say so explicitly** — the orchestrator treats a clean result as permission to run its commit step.
+   - If nothing was found, **say so explicitly** — the orchestrator treats a clean result as permission to proceed to the commit steps.
 
 ### Scope Discipline
 
 - **Flag only; touch no files.** This is the one aspect that never edits.
 - **Only added/modified lines are in scope.** Pre-existing personal data in untouched parts of a changed file is out of scope; this aspect guards against *new* leaks in the diff.
-- **A single flag blocks the commit.** The orchestrator will not run its commit step while any finding stands — that interlock is the point, so don't downgrade a genuine hit to a passing note.
+- **A single flag stops the review before any commit.** This aspect runs first, as a gate; the orchestrator commits nothing while a finding stands — that interlock is the point, so don't downgrade a genuine hit to a passing note.
