@@ -627,27 +627,6 @@ State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to 
 
 **Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
 
-#### Break lines at meaning, not at a column — [Rust + Markdown]
-
-Don't drop a hard line break mid-thought just to keep a line short. The reader views these files with soft-wrap on, so a long physical line costs nothing — but a break in the middle of a clause forces the eye to reassemble the sentence and hides its real structure.
-
-Place breaks where the *meaning* divides — between clauses, sentences, or list items — or leave the line long and let soft-wrap handle the width. A break that lands mid-clause only because the line was nearing some column is the anti-pattern.
-
-- *Before* — broken to fit a column:
-  ```
-  /// Resolves the symbol at the given position, returning the
-  /// definition it binds to, or the nearest enclosing scope.
-  ```
-- *After* — broken at meaning, or not at all:
-  ```
-  /// Resolves the symbol at the given position.
-  /// Returns the definition it binds to, or the nearest enclosing scope.
-  ```
-
-Applies to Rust comments and Markdown prose alike. `cargo fmt` leaves comment text alone (the project uses default stable rustfmt, with comment wrapping off), so these breaks are the author's to place.
-
-**Rewrite**: rejoin lines split mid-clause, then break only at semantic boundaries — or not at all.
-
 #### Reference by name, not by line or section number — [Rust + Markdown]
 
 Point at things by a name the reader can search for — a function, type, module, or a section's title — not by a line number or a numbered position ("line 214", "section 4.2", "the third bullet", "rule 5 above"). Line and section numbers drift the moment anything above them is edited, so the reference silently goes stale and points at the wrong place.
