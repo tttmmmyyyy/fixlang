@@ -1300,8 +1300,7 @@ mod tests {
     /// after the dot.
     #[test]
     fn test_completion_dot_at_end_of_top_level_value_body() {
-        let mut ctx =
-            LspCompletionCtx::setup("completion-dot-toplevel-value", &["main.fix"]);
+        let mut ctx = LspCompletionCtx::setup("completion-dot-toplevel-value", &["main.fix"]);
 
         // main.fix layout (0-indexed):
         //   0: module Main;

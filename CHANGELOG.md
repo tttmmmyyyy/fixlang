@@ -4,6 +4,10 @@
 
 ### Added
 
+#### Language
+
+- `_` in a pattern is now a wildcard that matches any value and discards it. It can appear multiple times in a single pattern (e.g. `let (x, _, _) = triple;`), and the matched value cannot be referred to afterwards. Previously `_` was an ordinary variable name, so multiple `_`s in one pattern were rejected as duplicate binders.
+
 #### Std
 
 - Added `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which swap the two elements of an array at given indices. `swap` bounds-checks the indices; `unsafe_swap_bounds_unchecked` omits that check (the caller must ensure the indices are in range).

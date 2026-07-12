@@ -34,7 +34,7 @@ use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::{
     COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
     IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME, STD_NAME,
-    STRUCT_ACT_SYMBOL,
+    STRUCT_ACT_SYMBOL, WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
 use crate::fixstd::builtin::{
@@ -87,6 +87,9 @@ struct ParseContext {
     /// diagnostics and LSP queries can locate any component of the
     /// absolute path.
     abs_path_uses: Vec<(FullName, Vec<Span>)>,
+    // Counter for naming wildcard (`_`) pattern binders; see
+    // `fresh_wildcard_name`.
+    wildcard_counter: u32,
 }
 
 impl ParseContext {
@@ -99,7 +102,19 @@ impl ParseContext {
             namespace: NameSpace::local(),
             config: config.clone(),
             abs_path_uses: vec![],
+            wildcard_counter: 0,
         }
+    }
+
+    // Generate a fresh name for a wildcard (`_`) pattern binder. Each `_`
+    // gets a distinct name so that multiple `_`s in one pattern do not
+    // collide. The `#` prefix cannot occur in a source identifier, so the
+    // name never clashes with a user-written variable and the value bound
+    // to it is left unreferenced (hence discarded).
+    fn fresh_wildcard_name(&mut self) -> String {
+        let name = format!("{}{}", WILDCARD_VAR_PREFIX, self.wildcard_counter);
+        self.wildcard_counter += 1;
+        name
     }
 }
 
@@ -3004,7 +3019,15 @@ fn parse_pattern_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNod
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
     let ty = pairs.next().map(|ty| parse_type(ty, ctx));
-    PatternNode::make_var(var_local(var_name), ty).set_source(span)
+    // `_` is a wildcard: it binds a fresh, unreferenceable name so that a
+    // pattern such as `(x, _, _)` has no duplicate binders and the matched
+    // value is discarded.
+    let var = if var_name == "_" {
+        var_local(&ctx.fresh_wildcard_name())
+    } else {
+        var_local(var_name)
+    };
+    PatternNode::make_var(var, ty).set_source(span)
 }
 
 fn parse_pattern_tuple(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNode> {

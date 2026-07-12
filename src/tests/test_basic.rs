@@ -858,6 +858,58 @@ pub fn test_type_annotated_pattern_2() {
 }
 
 #[test]
+pub fn test_wildcard_pattern() {
+    // `_` is a wildcard pattern: it discards the matched value and may
+    // appear multiple times in a single pattern.
+    let source = r#"
+        module Main;
+        type Pair = struct { fst : I64, snd : I64 };
+        main : IO ();
+        main = (
+            // Multiple `_` in one tuple pattern.
+            let (x, _, _) = (1, 2, 3);
+            assert_eq(|_|"", x, 1);;
+
+            // `_` in a nested tuple pattern.
+            let (_, (y, _)) = (10, (20, 30));
+            assert_eq(|_|"", y, 20);;
+
+            // `_` as a lambda parameter, used twice.
+            let const5 = |_, _| 5;
+            assert_eq(|_|"", const5(8, 9), 5);;
+
+            // `_` in a struct pattern.
+            let Pair { fst : a, snd : _ } = Pair { fst : 100, snd : 200 };
+            assert_eq(|_|"", a, 100);;
+
+            // `_` in a match arm (both the variant subpattern and a catch-all).
+            let m = match Option::some(7) {
+                some(_) => 1,
+                _ => 0
+            };
+            assert_eq(|_|"", m, 1);;
+
+            pure()
+        );
+        "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_wildcard_pattern_not_readable() {
+    // A value bound by the wildcard `_` cannot be referred to afterwards.
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            let _ = "hello";
+            println(_)
+        );
+        "#;
+    test_source_fail(source, Configuration::develop_mode(), "Unknown name `_`.");
+}
+
+#[test]
 pub fn test41_5() {
     // Test type annotation at lambda
     let source = r#"

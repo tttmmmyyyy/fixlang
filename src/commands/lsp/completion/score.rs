@@ -14,13 +14,15 @@
 // above one in `Std::*`, which ranks above one in an unrelated
 // namespace.
 
-use std::sync::{Arc, Mutex};
+use super::index::CompletionIndex;
 use crate::ast::name::FullName;
 use crate::ast::program::Program;
 use crate::ast::types::{TyCon, TypeNode};
-use crate::elaboration::typecheck::{ConstraintInstantiationMode, TypeCheckContext, UnifOrOtherErr};
+use crate::elaboration::typecheck::{
+    ConstraintInstantiationMode, TypeCheckContext, UnifOrOtherErr,
+};
 use crate::misc::Map;
-use super::index::CompletionIndex;
+use std::sync::{Arc, Mutex};
 
 /// Request-scoped cache for the `reduce_predicates` verdict of the
 /// per-candidate unify probe (see `try_unify_receiver`). Keyed by the
@@ -86,10 +88,7 @@ impl NamespaceMatch {
 /// Classify a candidate's namespace against the receiver TyCon. The
 /// receiver TyCon's full name (`Std::Array`) plays the role of a
 /// virtual "method namespace" the user expects functions to live in.
-pub(super) fn namespace_match(
-    receiver_tc: Option<&TyCon>,
-    candidate: &FullName,
-) -> NamespaceMatch {
+pub(super) fn namespace_match(receiver_tc: Option<&TyCon>, candidate: &FullName) -> NamespaceMatch {
     let Some(tc) = receiver_tc else {
         return NamespaceMatch::Unrelated;
     };
@@ -192,11 +191,7 @@ pub(super) fn assign_tier_no_unify(
 /// Cheap shape-only tier assignment: probe `index` for `name` against
 /// `receiver_type`'s head TyCon, returning Tier 1 / 2 / 3 without any
 /// unify work.
-fn bucket_tier(
-    name: &FullName,
-    index: &CompletionIndex,
-    receiver_type: &Arc<TypeNode>,
-) -> Tier {
+fn bucket_tier(name: &FullName, index: &CompletionIndex, receiver_type: &Arc<TypeNode>) -> Tier {
     let receiver_tc = receiver_type.toplevel_tycon();
 
     let in_tycon_bucket = receiver_tc
