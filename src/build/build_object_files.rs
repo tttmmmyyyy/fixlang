@@ -1,7 +1,7 @@
 use crate::{
     ast::{
         export_statement::ExportStatement,
-        expr::ExprNode,
+        expr::{Expr, ExprNode},
         program::{Program, Symbol},
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
@@ -175,25 +175,17 @@ pub fn build_object_files<'c>(
                 gc.declare_symbol(symbol);
             }
 
-            if std::env::var("USE_RC_IR").is_ok() {
-                // Experimental RC IR back end. Every symbol is already
-                // declared above (prototypes + global registration, in every unit); lower and
-                // implement only THIS unit's symbols via the RC IR path so no symbol is defined twice.
-                let unit_symbols = unit.symbols().to_vec();
-                let rc_prog = {
-                    let type_env = gc.type_env();
-                    let mut p =
-                        crate::rc_ir::lower::lower_program(type_env, &unit_symbols, &all_symbols);
-                    crate::rc_ir::rc_insert::insert_rc(&mut p, type_env);
-                    p
-                };
-                gc.implement_rc_program(&rc_prog);
-            } else {
-                // Implement all symbols in this unit.
-                for symbol in unit.symbols() {
-                    gc.implement_symbol(symbol);
-                }
-            }
+            // Lower this unit's symbols to the RC IR, insert reference counting, and generate their
+            // LLVM. Every symbol is already declared above (prototypes + global registration, in
+            // every unit), so only this unit's symbols are implemented and none is defined twice.
+            let unit_symbols = unit.symbols().to_vec();
+            let rc_prog = {
+                let type_env = gc.type_env();
+                let mut p = crate::rc_ir::lower::lower_program(type_env, &unit_symbols, &all_symbols);
+                crate::rc_ir::rc_insert::insert_rc(&mut p, type_env);
+                p
+            };
+            gc.implement_rc_program(&rc_prog);
 
             if is_main_unit {
                 // Implement runtime functions.
@@ -516,8 +508,14 @@ fn build_main_function<'c, 'm>(gc: &mut Generator<'c, 'm>, main_expr: Arc<ExprNo
         gc.builder().build_store(gv_ptr, arg_val).unwrap();
     }
 
-    // Run main object.
-    let main_obj = gc.eval_expr(main_expr, false).unwrap(); // A value of type `IO ()`.
+    // Run the main IO action. `main_expr` is a reference to the instantiated `main` symbol (see
+    // `instantiate_exported_value`), which the RC-IR back end has already implemented; materialize
+    // that symbol's object here.
+    let main_name = match main_expr.expr.as_ref() {
+        Expr::Var(var) => var.name.clone(),
+        _ => unreachable!("the entry IO value is a reference to the main symbol"),
+    };
+    let main_obj = gc.get_scoped_obj(&main_name); // A value of type `IO ()`.
     run_io_or_ios_runner(gc, &main_obj);
 
     // Return main function.
