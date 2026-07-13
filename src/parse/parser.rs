@@ -33,8 +33,8 @@ use crate::ast::{
 use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::{
     COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
-    IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME, STD_NAME,
-    STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX, WILDCARD_VAR_PREFIX,
+    IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
+    PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
 use crate::fixstd::builtin::{
@@ -87,11 +87,19 @@ struct ParseContext {
     /// diagnostics and LSP queries can locate any component of the
     /// absolute path.
     abs_path_uses: Vec<(FullName, Vec<Span>)>,
-    // Counter for naming wildcard (`_`) pattern binders; see
-    // `fresh_wildcard_name`.
-    wildcard_counter: u32,
+    // Counter for naming pattern-wildcard (`_`) binders; see
+    // `fresh_pattern_wildcard_name`.
+    pattern_wildcard_counter: u32,
     // Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
     type_wildcard_counter: u32,
+}
+
+// Format the fresh name `<prefix><counter>` and advance the counter. Mints the
+// distinct compiler-generated names for `_` pattern and type wildcards.
+fn next_prefixed_name(prefix: &str, counter: &mut u32) -> String {
+    let name = format!("{}{}", prefix, *counter);
+    *counter += 1;
+    name
 }
 
 impl ParseContext {
@@ -104,29 +112,28 @@ impl ParseContext {
             namespace: NameSpace::local(),
             config: config.clone(),
             abs_path_uses: vec![],
-            wildcard_counter: 0,
+            pattern_wildcard_counter: 0,
             type_wildcard_counter: 0,
         }
     }
 
-    // Generate a fresh name for a wildcard (`_`) pattern binder. Each `_`
+    // Generate a fresh name for a pattern-wildcard (`_`) binder. Each `_`
     // gets a distinct name so that multiple `_`s in one pattern do not
     // collide. The `#` prefix cannot occur in a source identifier, so the
     // name never clashes with a user-written variable and the value bound
     // to it is left unreferenced (hence discarded).
-    fn fresh_wildcard_name(&mut self) -> String {
-        let name = format!("{}{}", WILDCARD_VAR_PREFIX, self.wildcard_counter);
-        self.wildcard_counter += 1;
-        name
+    fn fresh_pattern_wildcard_name(&mut self) -> String {
+        next_prefixed_name(
+            PATTERN_WILDCARD_VAR_PREFIX,
+            &mut self.pattern_wildcard_counter,
+        )
     }
 
     // Generate a fresh type-variable name for a `_` type wildcard. Each
     // wildcard gets a distinct name so that independent wildcards (e.g. the two
     // in `(_, _)`) do not collide. See `TYPE_WILDCARD_VAR_PREFIX`.
     fn fresh_type_wildcard_name(&mut self) -> String {
-        let name = format!("{}{}", TYPE_WILDCARD_VAR_PREFIX, self.type_wildcard_counter);
-        self.type_wildcard_counter += 1;
-        name
+        next_prefixed_name(TYPE_WILDCARD_VAR_PREFIX, &mut self.type_wildcard_counter)
     }
 }
 
@@ -3054,7 +3061,7 @@ fn parse_pattern_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNod
     // pattern such as `(x, _, _)` has no duplicate binders and the matched
     // value is discarded.
     let var = if var_name == "_" {
-        var_local(&ctx.fresh_wildcard_name())
+        var_local(&ctx.fresh_pattern_wildcard_name())
     } else {
         var_local(var_name)
     };
