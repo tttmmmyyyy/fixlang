@@ -109,6 +109,18 @@ Both run with the fixed compiler.
 **fixlang_minilib** (`~/fixlang-projs/fixlang_minilib`, 16 sub-projects, per-project `fix
 check` + `fix test -O basic` + `fix test -O max`): every project passes at both opt levels.
 
+Also run under valgrind memcheck (`[build.test] memcheck = true`, `fix test -O max`): 14 of
+16 are completely clean (0 errors, 0 leaks). The two that valgrind flags do so entirely
+inside third-party C, not in Fix-generated code, and are identical on `main` (so
+compiler-independent, not a regression):
+
+- `minilib-thread`: 5-7 "possibly lost" blocks (0 definitely/indirectly lost) whose
+  allocations are all glibc `pthread_create` thread-stack / TLS setup — the well-known
+  valgrind false positive for pthread stacks.
+- `minilib-media`: 78 errors / 21 contexts, all inside `libpng16` (`png_write_*`) reached
+  through the `minilib_png_write_to_memory` FFI wrapper — a libpng-level uninitialised/write
+  issue, byte-for-byte identical on `main`.
+
 **Project Euler** (`~/project_euler`, 98 top-level Fix solutions, built `-O max` and run;
 correctness is each solution's compiled-in `assert_eq`). Compared against `main` (1.4.0) to
 separate regressions from the solutions' own age:
