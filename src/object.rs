@@ -3,10 +3,10 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
     TraverserWorkType, ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, BOOL_NAME, BOXED_TYPE_DATA_IDX,
-    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT,
-    DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX,
-    REFCNT_STATE_LOCAL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
-    TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
+    CTRL_BLK_REFCNT_IDX, CTRL_BLK_REFCNT_STATE_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS,
+    DW_ATE_BOOLEAN, DW_ATE_FLOAT, DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX,
+    DYNAMIC_OBJ_TRAVARSER_IDX, REFCNT_STATE_LOCAL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::builtin::{
@@ -273,13 +273,20 @@ impl ObjectFieldType {
                     .offset_of_element(&struct_ty, ARRAY_BUF_IDX - ARRAY_CAP_IDX)
                     .unwrap()
                     * 8;
+                // The number of valid elements is only known at runtime, so the debug info
+                // claims `DEBUG_ARRAY_ASSUMED_LEN` elements: debuggers display that many
+                // elements, of which the first `<array size>` ones are valid.
+                // The byte sizes of the array debug types cover the claimed elements.
+                // Debuggers read member values only within the declared byte size of a
+                // type, so the sizes have to be consistent with the claimed element count.
+                let elements_size_in_bits = DEBUG_ARRAY_ASSUMED_LEN * element_size_in_bits;
                 let element_array_ty = gc
                     .get_di_builder()
                     .create_array_type(
                         element_debug_ty,
-                        element_size_in_bits,
+                        elements_size_in_bits,
                         element_align_in_bits,
-                        &[0..100],
+                        &[0..DEBUG_ARRAY_ASSUMED_LEN as i64],
                     )
                     .as_type();
                 let element_member_ty = gc
@@ -289,7 +296,7 @@ impl ObjectFieldType {
                         "<array elements>",
                         gc.create_di_file(None),
                         0,
-                        element_size_in_bits,
+                        elements_size_in_bits,
                         element_align_in_bits,
                         element_offset_in_bits as u64,
                         0,
@@ -297,7 +304,7 @@ impl ObjectFieldType {
                     )
                     .as_type();
 
-                let size_in_bits = gc.target_data.get_bit_size(&struct_ty);
+                let size_in_bits = element_offset_in_bits + elements_size_in_bits;
                 let align_in_bits = gc.target_data.get_abi_alignment(&struct_ty) * 8;
                 let name = format!("<array buffer of `{}`>", elem_ty.to_string());
                 // It seems that the second parameter of create_struct_type (`name`, not `unique_id`) should vary depending on the element type, at least for lldb.
@@ -1888,7 +1895,7 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, '
 
             let element_di_ty = field.to_debug_type(gc);
             let elemet_ty = field.to_basic_type(gc, vec![]);
-            let size_in_bits = gc.target_data.get_bit_size(&elemet_ty);
+            let size_in_bits = element_di_ty.get_size_in_bits();
             let align_in_bits = gc.target_data.get_abi_alignment(&elemet_ty) * 8;
             let offset_in_bits = gc
                 .target_data
@@ -1911,6 +1918,17 @@ pub fn ty_to_debug_struct_ty<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, '
                 .as_type();
             elements.push(mem_ty);
         }
+
+        // The size of an array type covers the `DEBUG_ARRAY_ASSUMED_LEN` elements claimed
+        // by its last member (the `<array buffer>` struct). Debuggers read member values
+        // only within the declared byte size of a type, so the size has to cover the
+        // claimed elements for them to be displayed with values read from the target.
+        let size_in_bits = if ty.is_array() {
+            let buffer_member = elements.last().unwrap();
+            buffer_member.get_offset_in_bits() + buffer_member.get_size_in_bits()
+        } else {
+            size_in_bits
+        };
 
         gc.get_di_builder()
             .create_struct_type(

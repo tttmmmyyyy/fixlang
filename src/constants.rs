@@ -112,6 +112,14 @@ pub const CLOSURE_CAPTURE_IDX: u32 = CLOSURE_FUNPTR_IDX + 1;
 pub const ARRAY_LEN_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const ARRAY_CAP_IDX: u32 = ARRAY_LEN_IDX + 1;
 pub const ARRAY_BUF_IDX: u32 = ARRAY_CAP_IDX + 1;
+
+// Number of array elements claimed by array debug info. The element count of an array
+// is only known at run time, which debug info cannot express here, so array debug types
+// claim this fixed number of elements, and their byte sizes cover the claimed elements
+// so that debuggers display them with values read from the target. See the array branch
+// of `ObjectFieldType::to_debug_type` in object.rs and the debugging section of
+// Document.md.
+pub const DEBUG_ARRAY_ASSUMED_LEN: u64 = 100;
 pub const DYNAMIC_OBJ_TRAVARSER_IDX: u32 = CONTROL_BLOCK_IDX + 1;
 pub const DYNAMIC_OBJ_CAP_IDX: u32 = DYNAMIC_OBJ_TRAVARSER_IDX + 1;
 
