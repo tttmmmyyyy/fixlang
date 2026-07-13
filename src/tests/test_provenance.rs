@@ -6,8 +6,8 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
-    use std::{path::PathBuf, process::Command};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     fn get_test_cases_dir() -> PathBuf {
@@ -49,10 +49,9 @@ mod integration_tests {
 
     #[test]
     fn test_provenance_dump_basic() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("build")
             .arg("--emit-rc-ir")
             .arg("Main")

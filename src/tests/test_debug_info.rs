@@ -12,7 +12,7 @@
 
 #[cfg(test)]
 mod debug_info_tests {
-    use crate::tests::test_util::install_fix;
+    use crate::tests::test_util::fix_command;
     use std::{fs, path::PathBuf, process::Command};
     use tempfile::TempDir;
 
@@ -35,14 +35,12 @@ mod debug_info_tests {
 
     #[test]
     fn test_debug_info_baseline() {
-        install_fix();
-
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
         fs::copy(sample_main_fix(), dir.join("main.fix")).expect("Failed to copy main.fix");
 
         // Build with debug information (`-g` also forces `-O none`).
-        let build = Command::new("fix")
+        let build = fix_command()
             .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
             .current_dir(dir)
             .output()
@@ -129,13 +127,11 @@ mod debug_info_tests {
     // the locals are not optimized away.
     #[test]
     fn test_debug_info_variable_values() {
-        install_fix();
-
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
         fs::copy(sample_debug_vars(), dir.join("main.fix")).expect("Failed to copy main.fix");
 
-        let build = Command::new("fix")
+        let build = fix_command()
             .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
             .current_dir(dir)
             .output()
@@ -222,14 +218,12 @@ mod debug_info_tests {
     // fields, `arr` and `str` the boxed `Array`/`String` fields, each extracted from its tuple.
     #[test]
     fn test_debug_info_destructure() {
-        install_fix();
-
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
         fs::copy(sample_debug_destructure(), dir.join("main.fix"))
             .expect("Failed to copy main.fix");
 
-        let build = Command::new("fix")
+        let build = fix_command()
             .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
             .current_dir(dir)
             .output()
@@ -304,14 +298,12 @@ mod debug_info_tests {
     // bounds" errors.
     #[test]
     fn test_debug_info_array_elements() {
-        install_fix();
-
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
         fs::copy(array_main_fix(), dir.join("main.fix")).expect("Failed to copy main.fix");
 
         // Build with debug information (`-g` also forces `-O none`).
-        let build = Command::new("fix")
+        let build = fix_command()
             .args(["build", "-g", "-f", "main.fix", "-o", "prog"])
             .current_dir(dir)
             .output()
