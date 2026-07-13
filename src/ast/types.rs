@@ -461,7 +461,7 @@ impl TypeNode {
             return None;
         }
         if let Type::TyVar(tv) = &self.ty {
-            if tv.name.starts_with(TYPE_WILDCARD_VAR_PREFIX) {
+            if is_type_wildcard_tyvar(&tv.name) {
                 return Some(EndNode::InferredType(resolved.clone()));
             }
             return None;
@@ -2347,6 +2347,12 @@ impl Scheme {
 // Check if a type variable name represents an opaque type variable (starts with '?').
 pub fn is_opaque_tyvar(name: &str) -> bool {
     name.starts_with('?')
+}
+
+// Check if a type variable name represents a `_` type wildcard (starts with
+// `TYPE_WILDCARD_VAR_PREFIX`).
+pub fn is_type_wildcard_tyvar(name: &str) -> bool {
+    name.starts_with(TYPE_WILDCARD_VAR_PREFIX)
 }
 
 // Collect all free type variables from predicates, equalities, and a type into a Vec.

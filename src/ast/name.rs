@@ -1,4 +1,4 @@
-use crate::constants::{MODULE_SEPARATOR, NAMESPACE_SEPARATOR, WILDCARD_VAR_PREFIX};
+use crate::constants::{MODULE_SEPARATOR, NAMESPACE_SEPARATOR, PATTERN_WILDCARD_VAR_PREFIX};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
 
@@ -250,16 +250,17 @@ impl FullName {
         return !self.is_local();
     }
 
-    // True if this is a compiler-generated wildcard binder (the `_` the user
-    // wrote). Such binders are non-referenceable and are displayed as `_`.
-    pub fn is_wildcard(&self) -> bool {
-        self.name.starts_with(WILDCARD_VAR_PREFIX)
+    // True if this is a compiler-generated pattern-wildcard binder (a `_` the
+    // user wrote in a pattern). Such binders are non-referenceable and are
+    // displayed as `_`.
+    pub fn is_pattern_wildcard(&self) -> bool {
+        self.name.starts_with(PATTERN_WILDCARD_VAR_PREFIX)
     }
 
-    // Render this name for display, showing a wildcard binder as the `_` the
-    // user wrote.
+    // Render this name for display, showing a pattern-wildcard binder as the
+    // `_` the user wrote.
     pub fn display_name(&self) -> String {
-        if self.is_wildcard() {
+        if self.is_pattern_wildcard() {
             "_".to_string()
         } else {
             self.to_string()

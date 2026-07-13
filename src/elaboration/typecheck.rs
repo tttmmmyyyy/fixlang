@@ -17,13 +17,14 @@ use crate::{
         traits::{TraitEnv, TraitId},
         types::OpaqueTyConResolution,
         types::{
-            kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp, type_tycon, AssocType,
-            Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
+            is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar, type_fun, type_tyapp,
+            type_tycon, AssocType, Kind, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
+            TypeNode,
         },
     },
     constants::{
         ERR_AMBIGUOUS_NAME, ERR_MISSING_STRUCT_FIELD, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
-        TYPE_WILDCARD_VAR_PREFIX, WRAP_OPAQUE_TYVAR_PREFIX,
+        WRAP_OPAQUE_TYVAR_PREFIX,
     },
     elaboration::name_resolution::NameResolutionContext,
     error::{Error, Errors},
@@ -973,7 +974,7 @@ impl TypeCheckContext {
     ) -> Result<Arc<TypeNode>, Errors> {
         let mut sub = Substitution::default();
         for tv in ty.free_vars_vec() {
-            let target = if tv.name.starts_with(TYPE_WILDCARD_VAR_PREFIX) {
+            let target = if is_type_wildcard_tyvar(&tv.name) {
                 // A `_` type wildcard is a request to infer this type: replace it
                 // with a fresh inference variable (keeping the wildcard's kind)
                 // so it unifies freely, rather than naming a variable in scope.

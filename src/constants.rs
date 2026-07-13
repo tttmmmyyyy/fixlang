@@ -263,7 +263,7 @@ pub const HOLE_NAME: &str = "#hole";
 /// these names disjoint from any name a user can write (the `name`
 /// grammar rule does not accept `#`). Pattern display renders such a
 /// binder back as `_`.
-pub const WILDCARD_VAR_PREFIX: &str = "#wildcard";
+pub const PATTERN_WILDCARD_VAR_PREFIX: &str = "#wildcard";
 
 /// Prefix of the type-variable names the parser generates for `_` type
 /// wildcards (e.g. `#typewildcard0`). Each `_` in a type annotation gets a
