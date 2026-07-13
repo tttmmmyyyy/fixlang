@@ -18,7 +18,7 @@
 #[cfg(test)]
 mod bench {
     use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant};
@@ -158,7 +158,6 @@ mod bench {
             return;
         }
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("completion-bench");
         let main_rel = Path::new("main.fix");
         let text = std::fs::read_to_string(project_dir.join(main_rel)).expect("read main.fix");

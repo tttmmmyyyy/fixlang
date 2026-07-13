@@ -3,11 +3,11 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::install_fix;
+    use crate::tests::test_util::fix_command;
     use std::fs;
     use std::io::Write;
     use std::path::{Path, PathBuf};
-    use std::process::{Command, Output, Stdio};
+    use std::process::{Output, Stdio};
     use tempfile::TempDir;
 
     // ---------- Helpers ----------
@@ -58,15 +58,7 @@ mod tests {
     // `stdin_input`: optional stdin bytes. If provided, piped in (non-tty unless forced).
     // `interactive`: if true, set `FIX_TEST_FORCE_INTERACTIVE=1` so the prompt branch is taken.
     fn run_fix(env: &Env, args: &[&str], stdin_input: Option<&str>, interactive: bool) -> Output {
-        install_fix();
-        // `install_fix()` copies the fresh binary into `~/.cargo/bin/fix`. The developer's
-        // PATH may resolve `fix` to a stale binary elsewhere (e.g. `~/.local/bin/fix`),
-        // so invoke the cargo-installed binary by absolute path instead of by name.
-        let fix_path = dirs::home_dir()
-            .expect("home for cargo bin")
-            .join(".cargo/bin/fix");
-
-        let mut cmd = Command::new(&fix_path);
+        let mut cmd = fix_command();
         cmd.args(args)
             .current_dir(&env.proj)
             .env("HOME", &env.home)

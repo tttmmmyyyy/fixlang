@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::path::PathBuf;
-    use std::process::Command;
     use tempfile::TempDir;
 
     fn get_test_cases_dir() -> PathBuf {
@@ -21,10 +20,9 @@ mod integration_tests {
 
     #[test]
     fn test_check_valid_project() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("valid_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("check")
             .current_dir(&project_dir)
             .output()
@@ -40,10 +38,9 @@ mod integration_tests {
 
     #[test]
     fn test_check_type_error() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("type_error_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("check")
             .current_dir(&project_dir)
             .output()
@@ -68,10 +65,9 @@ mod integration_tests {
     /// opaque, location-less "Failed to canonicalize path" message.
     #[test]
     fn test_check_missing_source_file() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("missing_source_file_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("check")
             .current_dir(&project_dir)
             .output()
@@ -97,10 +93,9 @@ mod integration_tests {
 
     #[test]
     fn test_check_detects_type_error_in_test_code() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("test_type_error_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("check")
             .current_dir(&project_dir)
             .output()
@@ -123,10 +118,9 @@ mod integration_tests {
     /// even though the project compiles successfully.
     #[test]
     fn test_check_emits_deprecation_warning() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("deprecated_warning_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("check")
             .current_dir(&project_dir)
             .output()
@@ -152,10 +146,9 @@ mod integration_tests {
     /// build fails.
     #[test]
     fn test_build_deny_deprecated_promotes_to_error() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("deprecated_warning_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("build")
             .arg("--deny-deprecated")
             .current_dir(&project_dir)
@@ -182,10 +175,9 @@ mod integration_tests {
     /// build.
     #[test]
     fn test_build_allow_deprecated_suppresses_warning() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("deprecated_warning_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("build")
             .arg("--allow-deprecated")
             .current_dir(&project_dir)
@@ -211,10 +203,9 @@ mod integration_tests {
     /// impl's derived `GlobalValue`.
     #[test]
     fn test_check_emits_trait_member_deprecation_warning() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("deprecated_trait_warning_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("check")
             .current_dir(&project_dir)
             .output()
@@ -244,10 +235,9 @@ mod integration_tests {
     /// the unit currently being compiled.
     #[test]
     fn test_check_does_not_warn_on_dependency_internal_deprecated_use() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("deprecated_in_dependency_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("check")
             .current_dir(&project_dir)
             .output()
@@ -276,10 +266,9 @@ mod integration_tests {
     /// call. Only the use from non-deprecated code (here, `main`) warns.
     #[test]
     fn test_check_deprecated_context_suppresses_inner_warning() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("deprecated_context_project");
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("check")
             .current_dir(&project_dir)
             .output()

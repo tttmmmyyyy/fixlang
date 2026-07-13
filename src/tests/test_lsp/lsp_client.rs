@@ -3,11 +3,12 @@ use std::collections::VecDeque;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::misc::{to_absolute_path, Map};
+use crate::tests::test_util::fix_command;
 
 /// Shared state between `LspClient` and the background reader thread.
 /// Each field is an `Arc<Mutex<T>>` so `SharedState` can be cheaply cloned
@@ -117,7 +118,7 @@ impl LspClient {
         let absolute_working_dir = to_absolute_path(working_dir)
             .map_err(|e| format!("Failed to convert to absolute path: {}", e))?;
 
-        let mut process = Command::new("fix")
+        let mut process = fix_command()
             .arg("language-server")
             .current_dir(&absolute_working_dir)
             .stdin(Stdio::piped())

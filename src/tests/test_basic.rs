@@ -8,7 +8,7 @@ use crate::{
     error::panic_if_err,
     misc::{function_name, number_to_varname, split_by_max_size},
     tests::test_util::{
-        install_fix, test_files_in_directory, test_source, test_source_fail,
+        fix_command, test_files_in_directory, test_source, test_source_fail,
         test_source_fail_excludes, test_source_with_c,
     },
 };
@@ -7510,8 +7510,6 @@ pub fn test_create_dylib() {
             return 0;
         }
     "##;
-    install_fix();
-
     // Recreate working directory for this test.
     let work_dir = PathBuf::from(format!(
         "{}/{}",
@@ -7527,7 +7525,7 @@ pub fn test_create_dylib() {
     file.write_all(fix_src.as_bytes()).unwrap();
 
     // Create dynamic library using `fix`.
-    let output = Command::new("fix")
+    let output = fix_command()
         .arg("build")
         .arg("--output-type")
         .arg("dylib")

@@ -1,15 +1,12 @@
 // ==================== Integration Tests for `fix docs` Command ====================
 // These tests use actual Fix projects in src/tests/test_docs/
 
-use crate::tests::test_util::install_fix;
-use std::process::Command;
+use crate::tests::test_util::fix_command;
 
 #[test]
 pub fn test_generate_documents() {
-    install_fix();
-
     // Run `fix doc -m Std` in `std_doc` directory.
-    let _ = Command::new("fix")
+    let _ = fix_command()
         .arg("docs")
         .arg("-m")
         .arg("Std")
@@ -22,8 +19,8 @@ pub fn test_generate_documents() {
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
-    use std::{fs, path::PathBuf, process::Command};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use std::{fs, path::PathBuf};
     use tempfile::TempDir;
 
     // Get the path to the test project directory
@@ -60,12 +57,11 @@ mod integration_tests {
         // 1. Generates documentation only for Main module
         // 2. Does NOT generate documentation for Test module
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_docs(&project_dir);
 
         // Run `fix docs` in the test project directory
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("docs")
             .current_dir(&project_dir)
             .output()
@@ -114,12 +110,11 @@ mod integration_tests {
         // 1. Generates documentation for Main module
         // 2. Also generates documentation for Test module
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_docs(&project_dir);
 
         // Run `fix docs --test` in the test project directory
-        let output = Command::new("fix")
+        let output = fix_command()
             .args(&["docs", "--test"])
             .current_dir(&project_dir)
             .output()
@@ -175,12 +170,11 @@ mod integration_tests {
         // 1. Generates documentation only for Test module
         // 2. Does NOT generate documentation for Main module
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_docs(&project_dir);
 
         // Run `fix docs --test --mods Test` in the test project directory
-        let output = Command::new("fix")
+        let output = fix_command()
             .args(&["docs", "--test", "--mods", "Test"])
             .current_dir(&project_dir)
             .output()
@@ -229,8 +223,6 @@ mod integration_tests {
         // that matches the expected output for a comprehensive test case
         // containing various language features (structs, unions, traits, type aliases, etc.)
 
-        install_fix();
-
         // Set up test environment with comprehensive test case
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
@@ -243,7 +235,7 @@ mod integration_tests {
         cleanup_test_docs(&test_case_dst);
 
         // Run `fix docs` in the test case directory
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("docs")
             .current_dir(&test_case_dst)
             .output()
@@ -297,15 +289,13 @@ mod integration_tests {
         // 2. Includes accessors for public fields/variants.
         // 3. Excludes accessors for private (underscore-prefixed) fields/variants.
 
-        install_fix();
-
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
         let test_case_dst = temp_dir.path().join("comprehensive_docs");
         copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
         cleanup_test_docs(&test_case_dst);
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .args(&["docs", "--with-compiler-defined-methods"])
             .current_dir(&test_case_dst)
             .output()
@@ -362,15 +352,13 @@ mod integration_tests {
         // private top-level values, private field/variant subsections,
         // and accessors for private fields/variants.
 
-        install_fix();
-
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
         let test_case_dst = temp_dir.path().join("comprehensive_docs");
         copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
         cleanup_test_docs(&test_case_dst);
 
-        let output = Command::new("fix")
+        let output = fix_command()
             .args(&["docs", "--with-private", "--with-compiler-defined-methods"])
             .current_dir(&test_case_dst)
             .output()

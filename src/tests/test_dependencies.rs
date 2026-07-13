@@ -4,8 +4,8 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
-    use std::{fs, path::PathBuf, process::Command};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use std::{fs, path::PathBuf};
     use tempfile::TempDir;
 
     // Get the path to the test cases directory
@@ -32,10 +32,7 @@ mod integration_tests {
     fn cleanup_test_project(project_dir: &PathBuf) {
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_PATH));
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_TEST_PATH));
-        let _ = Command::new("fix")
-            .arg("clean")
-            .current_dir(project_dir)
-            .output();
+        let _ = fix_command().arg("clean").current_dir(project_dir).output();
     }
 
     #[test]
@@ -46,12 +43,11 @@ mod integration_tests {
         // 3. Only normal dependencies are included
         // 4. Test dependencies of normal dependencies are NOT included
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_project(&project_dir);
 
         // Run `fix build` in the test project directory
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("build")
             .current_dir(&project_dir)
             .output()
@@ -104,12 +100,11 @@ mod integration_tests {
         // Note: test-dep appears in fixdeps.test.lock because main-project directly depends on it,
         // not because normal-dep has it as a test dependency (dependency's test dependencies don't propagate)
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_project(&project_dir);
 
         // Run `fix test` directly (should auto-generate lock file and install dependencies)
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("test")
             .current_dir(&project_dir)
             .output()
@@ -164,12 +159,11 @@ mod integration_tests {
         // This test verifies the explicit build workflow:
         // `fix deps update` → `fix deps install` → `fix build`
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_project(&project_dir);
 
         // Step 1: Update dependencies
-        let update_output = Command::new("fix")
+        let update_output = fix_command()
             .args(&["deps", "update"])
             .current_dir(&project_dir)
             .output()
@@ -197,7 +191,7 @@ mod integration_tests {
         );
 
         // Step 2: Install dependencies
-        let install_output = Command::new("fix")
+        let install_output = fix_command()
             .args(&["deps", "install"])
             .current_dir(&project_dir)
             .output()
@@ -217,7 +211,7 @@ mod integration_tests {
         }
 
         // Step 3: Build
-        let build_output = Command::new("fix")
+        let build_output = fix_command()
             .arg("build")
             .current_dir(&project_dir)
             .output()
@@ -247,12 +241,11 @@ mod integration_tests {
         // This test verifies the explicit test workflow:
         // `fix deps update --test` → `fix deps install --test` → `fix test`
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_project(&project_dir);
 
         // Step 1: Update test dependencies
-        let update_output = Command::new("fix")
+        let update_output = fix_command()
             .args(&["deps", "update", "--test"])
             .current_dir(&project_dir)
             .output()
@@ -280,7 +273,7 @@ mod integration_tests {
         );
 
         // Step 2: Install test dependencies
-        let install_output = Command::new("fix")
+        let install_output = fix_command()
             .args(&["deps", "install", "--test"])
             .current_dir(&project_dir)
             .output()
@@ -300,7 +293,7 @@ mod integration_tests {
         }
 
         // Step 3: Run test
-        let test_output = Command::new("fix")
+        let test_output = fix_command()
             .arg("test")
             .current_dir(&project_dir)
             .output()

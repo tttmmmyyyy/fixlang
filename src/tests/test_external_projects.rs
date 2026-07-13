@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf, process::Command};
 
-use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::install_fix};
+use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command};
 
 #[test]
 pub fn test_external_project_math() {
@@ -121,7 +121,6 @@ pub fn test_external_project_cp_library() {
 
 pub fn test_external_project(url: &str, test_name: &str) {
     println!("Testing external project: {}", url);
-    install_fix();
 
     // Recreate working directory for this test.
     let work_dir = PathBuf::from(format!("{}/{}", COMPILER_TEST_WORKING_PATH, test_name));
@@ -144,14 +143,10 @@ pub fn test_external_project(url: &str, test_name: &str) {
         .to_string()
         .replace(".git", "");
 
-    // Run `fix test`. `install_fix()` writes the freshly built binary to `~/.cargo/bin/fix`;
-    // use that absolute path so we don't accidentally pick up a stale `fix` earlier on PATH.
-    // `--allow-preliminary-commands` is supplied because this test is non-interactive and
-    // some external projects legitimately ship `preliminary_commands` (e.g. cp-library).
-    let fix_path = dirs::home_dir()
-        .expect("home for cargo bin")
-        .join(".cargo/bin/fix");
-    let mut cmd = Command::new(&fix_path);
+    // Run `fix test`. `--allow-preliminary-commands` is supplied because this test is
+    // non-interactive and some external projects legitimately ship `preliminary_commands`
+    // (e.g. cp-library).
+    let mut cmd = fix_command();
     cmd.arg("test")
         .arg("--allow-preliminary-commands")
         .current_dir(work_dir.join(dir_name));
