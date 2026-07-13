@@ -1,14 +1,16 @@
 use crate::tests::test_util::fix_command;
+use std::fs;
+use std::path::Path;
 
 #[test]
 pub fn test_edit_explicit_import() {
     // Iterate through the "cases" subdirectory in the directory where this source file is located
 
-    let cases_dir = std::path::Path::new(file!())
+    let cases_dir = Path::new(file!())
         .parent()
         .unwrap()
         .join("cases");
-    let entries = std::fs::read_dir(&cases_dir).expect("Failed to read cases directory");
+    let entries = fs::read_dir(&cases_dir).expect("Failed to read cases directory");
     for entry in entries {
         let entry = entry.expect("Failed to read directory entry");
         let path = entry.path();
@@ -24,12 +26,12 @@ pub fn test_edit_explicit_import() {
     }
 }
 
-pub fn run_test_case(case_path: &std::path::Path) {
+pub fn run_test_case(case_path: &Path) {
     // Copy main.from.fix to main.fix (create if it doesn't exist)
     let from_path = case_path.join("main.from.fix");
     let to_path = case_path.join("main.to.fix");
     let target_path = case_path.join("main.fix");
-    std::fs::copy(&from_path, &target_path).expect("Failed to copy from main.from.fix to main.fix");
+    fs::copy(&from_path, &target_path).expect("Failed to copy from main.from.fix to main.fix");
 
     // Execute fix edit explicit-import
     let output = fix_command()
@@ -59,8 +61,8 @@ pub fn run_test_case(case_path: &std::path::Path) {
     }
 
     // Compare main.to.fix and main.fix to verify they match
-    let expected_content = std::fs::read_to_string(&to_path).expect("Failed to read main.to.fix");
-    let actual_content = std::fs::read_to_string(&target_path).expect("Failed to read main.fix");
+    let expected_content = fs::read_to_string(&to_path).expect("Failed to read main.to.fix");
+    let actual_content = fs::read_to_string(&target_path).expect("Failed to read main.fix");
     assert_eq!(
         expected_content,
         actual_content,
