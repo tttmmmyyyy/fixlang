@@ -15,7 +15,10 @@ use crate::{
     generator::Generator,
     misc::{info_msg, warn_msg},
     optimization,
-    rc_ir::{lower::lower_program, print::program_to_string, rc_insert::insert_rc},
+    rc_ir::{
+        lower::lower_program, print::program_to_string_annotated, provenance::analyze_program,
+        rc_insert::insert_rc,
+    },
     tool::stopwatch::StopWatch,
 };
 use inkwell::{
@@ -56,6 +59,7 @@ fn dump_rc_ir(program: &Program, filter: &str) {
         .collect();
     let mut rc_program = lower_program(&type_env, &symbols, &all_program_symbols);
     insert_rc(&mut rc_program, &type_env);
+    let provs = analyze_program(&rc_program, &type_env);
 
     // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
     let file_name = if filter == "all" {
@@ -74,7 +78,10 @@ fn dump_rc_ir(program: &Program, filter: &str) {
         format!("rc_ir.{}.txt", module)
     };
     let path = PathBuf::from(DOT_FIXLANG).join(file_name);
-    if let Err(e) = fs::write(&path, program_to_string(&rc_program)) {
+    if let Err(e) = fs::write(
+        &path,
+        program_to_string_annotated(&rc_program, Some(&provs)),
+    ) {
         panic_with_msg(&format!(
             "Failed to write RC IR to `{}`: {}",
             path.display(),

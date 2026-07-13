@@ -1,0 +1,15 @@
+module Main;
+
+// Exercises the provenance analysis dumped by `fix build --emit-rc-ir`:
+// - `Array::fill` and an array literal produce a fresh array.
+// - reading a boxed element out of a boxed container yields an unknown (`dyn`) value.
+// - constructing an unboxed tuple carries each component's provenance through.
+main : IO ();
+main = (
+    let arr = Array::fill(3, 7);
+    let strs = ["a", "b"];
+    let s0 = strs.@(0);
+    let pair = (arr, s0);
+    let total = pair.@0.get_size + pair.@1.get_size;
+    println $ total.to_string
+);

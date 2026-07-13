@@ -2974,6 +2974,11 @@ impl InlineLLVMStructGetBody {
         format!("{}.@{}", self.var_name.to_string(), self.field_idx)
     }
 
+    /// The index of the field this operation reads.
+    pub fn field_index(&self) -> usize {
+        self.field_idx
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
     }
@@ -4219,6 +4224,11 @@ impl InlineLLVMMakeUnionBody {
         format!("union_{}({})", self.field_idx, self.field_name.to_string())
     }
 
+    /// The index of the variant this operation constructs.
+    pub fn variant_index(&self) -> usize {
+        self.field_idx
+    }
+
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.field_name]
     }
@@ -4333,6 +4343,11 @@ pub struct InlineLLVMUnionAsBody {
 impl InlineLLVMUnionAsBody {
     pub fn name(&self) -> String {
         format!("{}.as_{}", self.union_arg_name.to_string(), self.field_idx)
+    }
+
+    /// The index of the variant whose payload this operation reads.
+    pub fn variant_index(&self) -> usize {
+        self.field_idx
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {

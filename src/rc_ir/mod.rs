@@ -9,4 +9,5 @@ pub mod ast;
 pub mod codegen;
 pub mod lower;
 pub mod print;
+pub mod provenance;
 pub mod rc_insert;
