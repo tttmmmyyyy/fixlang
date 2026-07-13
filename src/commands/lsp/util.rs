@@ -846,11 +846,11 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
                 if let Some(ty) = ty.as_ref() {
                     docs += &format!(
                         "```\n{} : {}\n```",
-                        full_name.to_string(),
+                        full_name.display_name(),
                         ty.to_string_normalize()
                     );
                 } else {
-                    docs += &format!("```\n{}\n```", full_name.to_string());
+                    docs += &format!("```\n{}\n```", full_name.display_name());
                 }
             } else {
                 // In case the variable is global, show the documentation of the global value.
@@ -888,15 +888,19 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
             if let Some(ty) = ty.as_ref() {
                 docs += &format!(
                     "```\n{} : {}\n```",
-                    var.name.to_string(),
+                    var.name.display_name(),
                     ty.to_string_normalize()
                 );
             } else {
-                docs += &format!("```\n{}\n```", var.name.to_string());
+                docs += &format!("```\n{}\n```", var.name.display_name());
             }
         }
         EndNode::Type(tycon) => {
             document_tycon_or_alias(program, &mut docs, tycon);
+        }
+        EndNode::InferredType(ty) => {
+            // The type a `_` wildcard was inferred to.
+            docs += &format!("```\n_ = {}\n```", ty.to_string_normalize());
         }
         EndNode::Trait(trait_id) => {
             document_trait_or_alias(program, &mut docs, trait_id);

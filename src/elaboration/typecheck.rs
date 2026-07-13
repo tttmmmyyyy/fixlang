@@ -1,7 +1,7 @@
 use super::check_holes;
 use super::typecheckcache::TypeCheckCache;
 use crate::ast::import;
-use crate::misc::{collect_results, insert_to_map_vec, make_map, Map, Set};
+use crate::misc::{collect_results, insert_to_map_vec, Map, Set};
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
@@ -23,7 +23,7 @@ use crate::{
     },
     constants::{
         ERR_AMBIGUOUS_NAME, ERR_MISSING_STRUCT_FIELD, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
-        WRAP_OPAQUE_TYVAR_PREFIX,
+        TYPE_WILDCARD_VAR_PREFIX, WRAP_OPAQUE_TYVAR_PREFIX,
     },
     elaboration::name_resolution::NameResolutionContext,
     error::{Error, Errors},
@@ -971,31 +971,32 @@ impl TypeCheckContext {
         &mut self,
         ty: &Arc<TypeNode>,
     ) -> Result<Arc<TypeNode>, Errors> {
-        // All type variables should be fixed by the TypeCheckContext, i.e., appear in the generalized variables of the current scheme.
+        let mut sub = Substitution::default();
         for tv in ty.free_vars_vec() {
-            if !self
+            let target = if tv.name.starts_with(TYPE_WILDCARD_VAR_PREFIX) {
+                // A `_` type wildcard is a request to infer this type: replace it
+                // with a fresh inference variable (keeping the wildcard's kind)
+                // so it unifies freely, rather than naming a variable in scope.
+                self.new_tyvar_by(&tv)
+            } else if let Some(fixed_tv) = self
                 .fixed_tyvars
                 .iter()
-                .any(|fixed_tv| fixed_tv.name == tv.name)
+                .find(|fixed_tv| fixed_tv.name == tv.name)
             {
+                // A named type variable must be one generalized by the current
+                // scheme. Substitute the fixed variable to carry over its kind.
+                fixed_tv.clone()
+            } else {
                 return Err(Errors::from_msg_srcs(
                     format!("Unknown type variable `{}`.", tv.name),
                     &[&ty.get_source()],
                 ));
-            }
+            };
+            let merge_ok = sub.merge(&Substitution::single(&tv.name, type_from_tyvar(target)));
+            assert!(merge_ok);
         }
 
-        // Set kinds of type variables in the type annotation.
-        let sub = Substitution {
-            data: make_map(
-                self.fixed_tyvars
-                    .iter()
-                    .map(|tv| (tv.name.clone(), type_from_tyvar(tv.clone()))),
-            ),
-        };
-        let ty = sub.substitute_type(ty);
-
-        Ok(ty)
+        Ok(sub.substitute_type(ty))
     }
 
     // Perform typechecking.

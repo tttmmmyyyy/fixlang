@@ -3,7 +3,6 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::typedecl::Field;
 use crate::ast::types::{TyCon, TyConInfo, TypeNode};
-use crate::constants::WILDCARD_VAR_PREFIX;
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::error::Errors;
@@ -265,11 +264,20 @@ impl PatternNode {
         }
         match &self.pattern {
             Pattern::Var(v, ty) => {
-                if ty.is_some() {
-                    let ty = ty.as_ref().unwrap();
+                if let Some(ty) = ty {
                     let node = ty.find_node_at(pos);
                     if node.is_some() {
                         return node;
+                    }
+                    // Hovering a `_` type wildcard in the annotation shows the
+                    // type it was inferred to. The pattern's own type is the
+                    // resolved annotation, so walk it alongside the syntactic
+                    // `ty`.
+                    if let Some(resolved) = self.info.type_.as_ref() {
+                        let node = ty.find_wildcard_inferred_type(resolved, pos);
+                        if node.is_some() {
+                            return node;
+                        }
                     }
                 }
                 Some(EndNode::Pattern(
@@ -688,13 +696,7 @@ impl Pattern {
         let mut ret = "".to_string();
         match self {
             Pattern::Var(v, t) => {
-                // Render a generated wildcard binder back as the `_` the
-                // user wrote.
-                if v.name.name.starts_with(WILDCARD_VAR_PREFIX) {
-                    ret += "_";
-                } else {
-                    ret += &v.name.to_string();
-                }
+                ret += &v.name.display_name();
                 match t {
                     Some(t) => {
                         ret += ": ";

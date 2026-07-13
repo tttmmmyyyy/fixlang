@@ -2,14 +2,14 @@ use super::server::{send_response, LatestContent};
 use super::util::{document_from_endnode, resolve_source_pos};
 use crate::ast::program::{EndNode, Program};
 use crate::misc::Map;
-use lsp_types::HoverParams;
+use lsp_types::{Hover, HoverContents, HoverParams, Uri};
 
 // Handle "textDocument/hover" method.
 pub(super) fn handle_hover(
     id: u32,
     params: &HoverParams,
     program: &Program,
-    uri_to_content: &Map<lsp_types::Uri, LatestContent>,
+    uri_to_content: &Map<Uri, LatestContent>,
 ) {
     // Resolve the cursor into a source position, then look up the AST node.
     let Some(pos) = resolve_source_pos(
@@ -30,13 +30,15 @@ pub(super) fn handle_hover(
         // expression position is left empty). Their leading `#` is not
         // a valid identifier head, so they cannot collide with
         // user-defined names; surfacing them in the hover would expose
-        // an implementation detail.
+        // an implementation detail. Wildcard binders are the exception:
+        // they are rendered as `_` (see `document_from_endnode`) so the
+        // user can inspect the type a `_` matched.
         send_response(id, Ok::<_, ()>(None::<()>));
         return;
     }
     let content = document_from_endnode(&node, program);
-    let hover = lsp_types::Hover {
-        contents: lsp_types::HoverContents::Markup(content),
+    let hover = Hover {
+        contents: HoverContents::Markup(content),
         range: None,
     };
     send_response(id, Ok::<_, ()>(hover))
@@ -46,11 +48,13 @@ pub(super) fn handle_hover(
 /// whose local name starts with `#`, e.g. `Std::#hole`). User
 /// identifiers cannot start with `#`, so this never matches anything
 /// the user wrote. Used to suppress hover content that would expose
-/// internal placeholders.
+/// internal placeholders. Wildcard binders (`#wildcard{N}`) are excluded:
+/// they are shown as `_ : <type>`.
 fn is_internal_name_node(node: &EndNode) -> bool {
-    match node {
-        EndNode::Expr(var, _) => var.name.name.starts_with('#'),
-        EndNode::Pattern(var, _) => var.name.name.starts_with('#'),
-        _ => false,
-    }
+    let name = match node {
+        EndNode::Expr(var, _) => &var.name,
+        EndNode::Pattern(var, _) => &var.name,
+        _ => return false,
+    };
+    name.name.starts_with('#') && !name.is_wildcard()
 }

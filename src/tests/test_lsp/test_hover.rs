@@ -1,8 +1,9 @@
-//! LSP integration tests for `textDocument/hover`. The current focus
-//! is on hover behaviour around expressions that contain
-//! `Std::#hole` placeholders: even when ERR_HOLE rejects the value,
-//! hover on the surrounding local variables should still show their
-//! inferred types.
+//! LSP integration tests for `textDocument/hover`. These cover hover on
+//! local variables and the shape of the type shown — concrete types,
+//! generic type variables (`a`), opaque types, and `_` wildcard pattern
+//! binders — plus `_` type wildcards in annotations, and hover around
+//! `Std::#hole` placeholders (where hover must still serve the surrounding
+//! locals' inferred types even though ERR_HOLE rejects the value).
 
 #[cfg(test)]
 mod tests {
@@ -244,6 +245,212 @@ mod tests {
             !result.is_null(),
             "goto-definition on local `n` near the hole should resolve, but got null"
         );
+
+        ctx.shutdown();
+    }
+
+    /// Hover on a local variable whose inferred type is a generic type
+    /// variable must display that variable, normalized to `a`, `b`, ....
+    /// Here `my_fill : I64 -> a -> Array a`, so `elem` has type `a` both at
+    /// its binder and at its use inside `fill`.
+    #[test]
+    fn test_hover_generic_local_shows_type_variable() {
+        let mut ctx = LspTestCtx::setup("hover_generic", &["main.fix"]);
+
+        // Source line index 2 (1-based line 3):
+        //   my_fill : I64 -> a -> Array a = |len, elem| Array::fill(len, elem);
+        //                                         ^col 38 (binder)    ^col 61 (use)
+        // `len` (col 33) is concrete I64; `elem` is the generic `a`.
+        let elem_binder = ctx.hover("main.fix", 2, 38);
+        let text = hover_text(&elem_binder).expect("hover on `elem` binder should return content");
+        assert!(
+            text.contains("elem : a"),
+            "hover on the `elem` binder should show `elem : a`. Got: {:?}",
+            text
+        );
+
+        let elem_use = ctx.hover("main.fix", 2, 61);
+        let text = hover_text(&elem_use).expect("hover on `elem` use should return content");
+        assert!(
+            text.contains("elem : a"),
+            "hover on the `elem` use inside `fill` should show `elem : a`. Got: {:?}",
+            text
+        );
+
+        // Contrast: the neighbouring `len` is a concrete I64, not a variable.
+        let len_hover = ctx.hover("main.fix", 2, 33);
+        let text = hover_text(&len_hover).expect("hover on `len` should return content");
+        assert!(
+            text.contains("len : Std::I64"),
+            "hover on `len` should show `len : Std::I64`. Got: {:?}",
+            text
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Hover on a `_` wildcard binder shows `_ : <type>` — the type the `_`
+    /// matched — and never surfaces the compiler-internal `#wildcard{N}`
+    /// name the parser assigns to it.
+    #[test]
+    fn test_hover_wildcard_local_shows_type() {
+        let mut ctx = LspTestCtx::setup("hover_wildcard", &["main.fix"]);
+
+        // line 3: `    let _ = x + 100;` — the `_` (col 8) matches an I64.
+        let let_wild = ctx.hover("main.fix", 3, 8);
+        let text = hover_text(&let_wild).expect("hover on `let _` should return content");
+        assert!(
+            text.contains("_ : Std::I64"),
+            "hover on `let _` should show `_ : Std::I64`. Got: {:?}",
+            text
+        );
+        assert!(
+            !text.contains("#wildcard"),
+            "hover on `_` leaked the internal name. Got: {:?}",
+            text
+        );
+
+        // line 7: `ignore_arg : a -> I64 = |_| 42;` — the `_` (col 25) is the
+        // generic argument `a`.
+        let lam_wild = ctx.hover("main.fix", 7, 25);
+        let text = hover_text(&lam_wild).expect("hover on `|_|` should return content");
+        assert!(
+            text.contains("_ : a"),
+            "hover on the `|_|` binder should show `_ : a`. Got: {:?}",
+            text
+        );
+        assert!(
+            !text.contains("#wildcard"),
+            "hover on `_` leaked the internal name. Got: {:?}",
+            text
+        );
+
+        // line 11: `    let (_, s) = pair;` — the `_` (col 9) nested inside a
+        // tuple pattern is the first component, an I64.
+        let nested_wild = ctx.hover("main.fix", 11, 9);
+        let text = hover_text(&nested_wild).expect("hover on nested `_` should return content");
+        assert!(
+            text.contains("_ : Std::I64"),
+            "hover on the tuple-nested `_` should show `_ : Std::I64`. Got: {:?}",
+            text
+        );
+        assert!(
+            !text.contains("#wildcard"),
+            "hover on `_` leaked the internal name. Got: {:?}",
+            text
+        );
+
+        ctx.shutdown();
+    }
+
+    /// Hover on a local variable whose inferred type is an opaque type
+    /// (the return of `Iterator::range`/`map`, resolved lazily) still
+    /// serves a `name : type` hover. The concrete rendering of the opaque
+    /// type constructors is intentionally left unasserted here; what must
+    /// hold is that hover works and never leaks the `#wrap_opaque` wrapper
+    /// the opaque desugaring inserts around the value.
+    #[test]
+    fn test_hover_opaque_local_serves_type_without_internal_wrapper() {
+        let mut ctx = LspTestCtx::setup("hover_opaque", &["main.fix"]);
+
+        // line 4: `    let iter = Iterator::range(0, n).map(|idx| x);` (binder)
+        // line 5: `    iter` (use). Both resolve to the same opaque type.
+        for (line, col) in [(4u32, 8u32), (5, 4)] {
+            let hov = ctx.hover("main.fix", line, col);
+            let text = hover_text(&hov).unwrap_or_else(|| {
+                panic!(
+                    "hover on `iter` at ({}, {}) should return content",
+                    line, col
+                )
+            });
+            assert!(
+                text.contains("iter :"),
+                "hover on `iter` at ({}, {}) should show `iter : <type>`. Got: {:?}",
+                line,
+                col,
+                text
+            );
+            assert!(
+                !text.contains("#wrap_opaque"),
+                "hover on `iter` at ({}, {}) leaked the opaque wrapper name. Got: {:?}",
+                line,
+                col,
+                text
+            );
+        }
+
+        ctx.shutdown();
+    }
+
+    /// Hovering a `_` type wildcard in an annotation shows the type it was
+    /// inferred to: a concrete type, a generic type variable, the type
+    /// constructor a higher-kinded wildcard resolved to, or a function's
+    /// opaque return type. Covers wildcards in both expression and pattern
+    /// (let-binding) annotations, and two independent wildcards in one
+    /// annotation disambiguated by position. The internal `#typewildcard` /
+    /// `#a` names the compiler uses for wildcards must never leak.
+    #[test]
+    fn test_hover_type_wildcard_shows_inferred_type() {
+        let mut ctx = LspTestCtx::setup("hover_type_wildcard", &["main.fix"]);
+        let src = std::fs::read_to_string(ctx.project_dir.join("main.fix"))
+            .expect("should read the copied main.fix");
+        let lines: Vec<&str> = src.lines().collect();
+
+        // Each case locates a wildcard-bearing line by a unique substring, then
+        // pairs the `_`s on that line (left to right) with the `_ = <type>`
+        // each must hover as. Matching by content keeps the test stable when
+        // the fixture's line numbers shift.
+        let cases: &[(&str, &[&str])] = &[
+            ("[1, 2, 3]", &["_ = Std::I64"]), // concrete element type
+            ("Array::fill", &["_ = a"]),      // generic type variable
+            ("* -> *", &["_ = Std::Array"]),  // higher-kinded: the `Array` constructor
+            ("(1, true)", &["_ = Std::I64", "_ = Std::Bool"]), // two wildcards, by position
+            ("let xs", &["_ = Std::I64"]),    // pattern (let-binding) annotation
+            ("counter(3)", &["_ = Main::counter::?it"]), // a function's opaque return type
+        ];
+
+        for (needle, expected) in cases {
+            let line = lines
+                .iter()
+                .position(|l| !l.trim_start().starts_with("//") && l.contains(needle))
+                .unwrap_or_else(|| panic!("fixture should contain a line with {:?}", needle));
+            let cols: Vec<u32> = lines[line]
+                .match_indices('_')
+                .map(|(i, _)| i as u32)
+                .collect();
+            assert_eq!(
+                cols.len(),
+                expected.len(),
+                "line {:?} should have {} wildcard(s), found {}",
+                needle,
+                expected.len(),
+                cols.len()
+            );
+            for (col, want) in cols.iter().zip(*expected) {
+                let hov = ctx.hover("main.fix", line as u32, *col);
+                let text = hover_text(&hov).unwrap_or_else(|| {
+                    panic!(
+                        "hover on wildcard at {:?} col {} should return content",
+                        needle, col
+                    )
+                });
+                assert!(
+                    text.contains(want),
+                    "wildcard at {:?} col {} should hover as `{}`, got {:?}",
+                    needle,
+                    col,
+                    want,
+                    text
+                );
+                assert!(
+                    !text.contains("#typewildcard") && !text.contains("#a"),
+                    "hover at {:?} col {} leaked an internal name: {:?}",
+                    needle,
+                    col,
+                    text
+                );
+            }
+        }
 
         ctx.shutdown();
     }

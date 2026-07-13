@@ -1158,7 +1158,7 @@ impl ProjectFile {
                                 warn_msg(&format!(
                                     "Adding version requirement \"*\" for \"{}\" since there are no tagged versions. \
                                     This means that updating the lock file (which is done by `fix deps add` or `fix deps update`) may introduce breaking changes.",
-                                    proj_name, 
+                                    proj_name,
                                 ));
                                 "*".to_string()
                             } else {

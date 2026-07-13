@@ -1,4 +1,4 @@
-use crate::constants::{MODULE_SEPARATOR, NAMESPACE_SEPARATOR};
+use crate::constants::{MODULE_SEPARATOR, NAMESPACE_SEPARATOR, WILDCARD_VAR_PREFIX};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
 
@@ -248,6 +248,22 @@ impl FullName {
 
     pub fn is_global(&self) -> bool {
         return !self.is_local();
+    }
+
+    // True if this is a compiler-generated wildcard binder (the `_` the user
+    // wrote). Such binders are non-referenceable and are displayed as `_`.
+    pub fn is_wildcard(&self) -> bool {
+        self.name.starts_with(WILDCARD_VAR_PREFIX)
+    }
+
+    // Render this name for display, showing a wildcard binder as the `_` the
+    // user wrote.
+    pub fn display_name(&self) -> String {
+        if self.is_wildcard() {
+            "_".to_string()
+        } else {
+            self.to_string()
+        }
     }
 
     /// Treat `self` as a path relative to `container` and return the

@@ -7,6 +7,11 @@
 #### Language
 
 - `_` in a pattern is now a wildcard that matches any value and discards it. It can appear multiple times in a single pattern (e.g. `let (x, _, _) = triple;`), and the matched value cannot be referred to afterwards. Previously `_` was an ordinary variable name, so multiple `_`s in one pattern were rejected as duplicate binders.
+- `_` can now be used as a type wildcard in a type annotation, standing for a type the compiler should infer. Each `_` becomes a fresh type variable, so `arr : Array _` fixes the container while leaving the element type to inference and `(_, _)` annotates a pair of two independent types. A bare `_` has kind `*`; because Fix does not infer kinds, a higher kind is written explicitly as `(_ : k)`, e.g. `let empty : (_ : * -> *) I64 = [];` pins the element type to `I64` while leaving the container to be inferred as `Array`.
+
+#### Tool
+
+- LSP: Hovering a `_` type wildcard shows the type it was inferred to (a concrete type, a generic type variable, the type constructor a higher-kinded wildcard resolved to, or a function's opaque return type). This works in both expression and pattern (let-binding) annotations.
 
 #### Std
 
