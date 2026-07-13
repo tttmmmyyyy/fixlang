@@ -26,6 +26,8 @@ pub fn test_edit_explicit_import() {
     }
 }
 
+/// Runs one `fix edit explicit-import` case: applies the edit to `main.from.fix`,
+/// checks the project still builds, and asserts the result matches `main.to.fix`.
 pub fn run_test_case(case_path: &Path) {
     // Copy main.from.fix to main.fix (create if it doesn't exist)
     let from_path = case_path.join("main.from.fix");

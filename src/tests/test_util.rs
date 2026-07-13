@@ -16,12 +16,12 @@ use std::{
 
 static BUILD_FIX: Once = Once::new();
 
-// Build the `fix` binary in release mode. Incremental compilation makes this a
-// fast freshness check once the binary is already built, so it is cheap for
-// every test to call. Thread-safe and builds at most once per test process:
-// the first caller runs `cargo build`, and every concurrent caller blocks in
-// `call_once` until that build finishes, so once this returns the binary at
-// `fix_binary_path()` is fully written and safe to execute.
+/// Build the `fix` binary in release mode. Incremental compilation makes this a
+/// fast freshness check once the binary is already built, so it is cheap for
+/// every test to call. Thread-safe and builds at most once per test process:
+/// the first caller runs `cargo build`, and every concurrent caller blocks in
+/// `call_once` until that build finishes, so once this returns the binary at
+/// `fix_binary_path()` is fully written and safe to execute.
 fn build_fix() {
     BUILD_FIX.call_once(|| {
         let output = Command::new("cargo")
@@ -37,11 +37,11 @@ fn build_fix() {
     });
 }
 
-// Absolute path to this worktree's freshly built `fix` binary. Honors
-// `CARGO_TARGET_DIR`; otherwise the crate's own `target` directory. Because
-// each git worktree compiles into its own target directory, this resolves to
-// a different binary per worktree — so tests running concurrently in several
-// worktrees exercise their own build and never share an install location.
+/// Absolute path to this worktree's freshly built `fix` binary. Honors
+/// `CARGO_TARGET_DIR`; otherwise the crate's own `target` directory. Because
+/// each git worktree compiles into its own target directory, this resolves to
+/// a different binary per worktree — so tests running concurrently in several
+/// worktrees exercise their own build and never share an install location.
 fn fix_binary_path() -> PathBuf {
     let target_dir = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
@@ -49,11 +49,11 @@ fn fix_binary_path() -> PathBuf {
     target_dir.join("release").join("fix")
 }
 
-// A `Command` that runs this worktree's freshly built `fix` binary by absolute
-// path. Building is triggered (once) first, so the returned command always
-// targets a complete binary. Tests spawn `fix` through this rather than
-// `Command::new("fix")` so they run the binary they just built instead of
-// whatever `fix` is on `PATH`, which a parallel worktree may be overwriting.
+/// A `Command` that runs this worktree's freshly built `fix` binary by absolute
+/// path. Building is triggered (once) first, so the returned command always
+/// targets a complete binary. Spawning `fix` this way runs the binary the test
+/// just built rather than whatever `fix` is on `PATH`, which a parallel
+/// worktree may be overwriting.
 pub fn fix_command() -> Command {
     build_fix();
     Command::new(fix_binary_path())
