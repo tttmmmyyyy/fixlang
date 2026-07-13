@@ -14,14 +14,16 @@ use std::{
     sync::Once,
 };
 
-static INSTALL_FIX: Once = Once::new();
+static BUILD_FIX: Once = Once::new();
 
-// Build fix in release mode and copy it to ~/.cargo/bin/.
-// This uses incremental compilation, so it's much faster than `cargo install` when already built.
-// This function is thread-safe and will only perform the installation once.
-pub fn install_fix() {
-    INSTALL_FIX.call_once(|| {
-        // Build the fix binary in release mode (uses cache if already built)
+// Build the `fix` binary in release mode. Incremental compilation makes this a
+// fast freshness check once the binary is already built, so it is cheap for
+// every test to call. Thread-safe and builds at most once per test process:
+// the first caller runs `cargo build`, and every concurrent caller blocks in
+// `call_once` until that build finishes, so once this returns the binary at
+// `fix_binary_path()` is fully written and safe to execute.
+fn build_fix() {
+    BUILD_FIX.call_once(|| {
         let output = Command::new("cargo")
             .arg("build")
             .arg("--release")
@@ -32,34 +34,29 @@ pub fn install_fix() {
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
             panic!("Failed to build fix in release mode");
         }
-
-        // Copy the built binary to ~/.cargo/bin/ using a temporary file to avoid "Text file busy"
-        let release_binary = PathBuf::from("target/release/fix");
-        let cargo_bin = dirs::home_dir()
-            .expect("Failed to get home directory")
-            .join(".cargo/bin");
-        let _ = fs::create_dir_all(&cargo_bin);
-        let dest = cargo_bin.join("fix");
-        let temp_dest = cargo_bin.join(".fix.tmp");
-
-        // Copy to temporary file first
-        fs::copy(&release_binary, &temp_dest)
-            .expect("Failed to copy fix binary to temporary location");
-
-        // Make it executable on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&temp_dest)
-                .expect("Failed to get metadata")
-                .permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&temp_dest, perms).expect("Failed to set permissions");
-        }
-
-        // Atomically rename to final destination (replaces even if file is in use)
-        fs::rename(&temp_dest, &dest).expect("Failed to move fix binary to ~/.cargo/bin/fix");
     });
+}
+
+// Absolute path to this worktree's freshly built `fix` binary. Honors
+// `CARGO_TARGET_DIR`; otherwise the crate's own `target` directory. Because
+// each git worktree compiles into its own target directory, this resolves to
+// a different binary per worktree — so tests running concurrently in several
+// worktrees exercise their own build and never share an install location.
+fn fix_binary_path() -> PathBuf {
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"));
+    target_dir.join("release").join("fix")
+}
+
+// A `Command` that runs this worktree's freshly built `fix` binary by absolute
+// path. Building is triggered (once) first, so the returned command always
+// targets a complete binary. Tests spawn `fix` through this rather than
+// `Command::new("fix")` so they run the binary they just built instead of
+// whatever `fix` is on `PATH`, which a parallel worktree may be overwriting.
+pub fn fix_command() -> Command {
+    build_fix();
+    Command::new(fix_binary_path())
 }
 
 fn run_source(

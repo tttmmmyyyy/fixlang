@@ -1,8 +1,7 @@
-use crate::tests::test_util::install_fix;
+use crate::tests::test_util::fix_command;
 
 #[test]
 pub fn test_edit_explicit_import() {
-    install_fix();
     // Iterate through the "cases" subdirectory in the directory where this source file is located
 
     let cases_dir = std::path::Path::new(file!())
@@ -33,7 +32,7 @@ pub fn run_test_case(case_path: &std::path::Path) {
     std::fs::copy(&from_path, &target_path).expect("Failed to copy from main.from.fix to main.fix");
 
     // Execute fix edit explicit-import
-    let output = std::process::Command::new("fix")
+    let output = fix_command()
         .arg("edit")
         .arg("explicit-import")
         .current_dir(case_path)
@@ -47,7 +46,7 @@ pub fn run_test_case(case_path: &std::path::Path) {
     }
 
     // Check that "fix build" succeeds after the edit
-    let build_output = std::process::Command::new("fix")
+    let build_output = fix_command()
         .arg("build")
         .current_dir(case_path)
         .output()

@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::{
         path::{Path, PathBuf},
@@ -81,7 +81,6 @@ mod tests {
 
     impl LspCompletionCtx {
         fn setup(project_name: &str, files: &[&str]) -> Self {
-            install_fix();
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
             client
@@ -546,7 +545,6 @@ mod tests {
     fn test_completion_dot_sort_stale_snapshot_after_dot_added() {
         use std::fs;
 
-        install_fix();
         let (temp_dir, project_dir) = setup_test_env("completion-dot-sort-stale");
         let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
         client

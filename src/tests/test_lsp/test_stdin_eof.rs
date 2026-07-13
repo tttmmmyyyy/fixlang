@@ -10,10 +10,10 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::{
         path::PathBuf,
-        process::{Command, Stdio},
+        process::Stdio,
         time::{Duration, Instant},
     };
     use tempfile::TempDir;
@@ -41,10 +41,9 @@ mod tests {
     /// busy-looping on `read_line` returning `Ok(0)`.
     #[test]
     fn test_lsp_exits_on_stdin_eof() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("completion");
 
-        let mut child = Command::new("fix")
+        let mut child = fix_command()
             .arg("language-server")
             .current_dir(&project_dir)
             .stdin(Stdio::piped())

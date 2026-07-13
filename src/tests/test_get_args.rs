@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::{path::PathBuf, process::Command};
     use tempfile::TempDir;
 
@@ -33,11 +33,10 @@ mod integration_tests {
         // Test: fix run -- arg0 arg1
         // Verify that arguments passed via `fix run --` are correctly received by get_args
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
 
         // Run `fix run -- arg0 arg1` in the test project directory
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("run")
             .arg("--")
             .arg("arg0")
@@ -70,7 +69,6 @@ mod integration_tests {
         // Test: Build with `fix build`, then run the executable with arguments
         // Verify that arguments passed directly to the executable are correctly received
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env();
 
         // Clean up any existing executable
@@ -78,7 +76,7 @@ mod integration_tests {
         let _ = std::fs::remove_file(&executable_path);
 
         // Build the project
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("build")
             .current_dir(&project_dir)
             .output()

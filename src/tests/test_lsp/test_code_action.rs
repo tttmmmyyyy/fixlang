@@ -6,7 +6,7 @@
 mod tests {
     use super::super::lsp_client::LspClient;
     use crate::edit::edit_util::apply_text_edits;
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::copy_dir_recursive;
     use lsp_types::TextEdit;
     use serde_json::{json, Value};
     use std::{
@@ -49,7 +49,6 @@ mod tests {
 
     impl LspQuickFixCtx {
         fn setup(project_name: &str, files: &[&str]) -> Self {
-            install_fix();
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
             client

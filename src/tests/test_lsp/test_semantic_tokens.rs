@@ -10,7 +10,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::json;
     use std::{
         path::{Path, PathBuf},
@@ -68,7 +68,6 @@ mod tests {
         /// Start a server on a fresh copy of the `semantic_tokens` project, open
         /// `main.fix`, and wait for an initial elaboration.
         fn setup() -> Self {
-            install_fix();
             let (temp_dir, project_dir) = setup_test_env("semantic_tokens");
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
             client

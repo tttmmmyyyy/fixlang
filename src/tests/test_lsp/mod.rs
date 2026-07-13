@@ -18,11 +18,10 @@ pub mod test_workspace_symbol;
 mod tests {
     use super::lsp_client::LspClient;
     use crate::constants::LOCK_FILE_LSP_PATH;
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::{
         fs,
         path::{Path, PathBuf},
-        process::Command,
         time::Duration,
     };
     use tempfile::TempDir;
@@ -50,11 +49,10 @@ mod tests {
     fn test_lsp_auto_lockfile_generation() {
         // Test: Verify that LSP automatically generates lock file with dependencies
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("project_with_deps");
 
         // Clean up before test
-        let _ = Command::new("fix")
+        let _ = fix_command()
             .arg("clean")
             .current_dir(&project_dir)
             .output();
@@ -97,7 +95,7 @@ mod tests {
         );
 
         // Add normal dependency
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("deps")
             .arg("add")
             .arg("character")
@@ -156,11 +154,10 @@ mod tests {
         // when test.fix imports an external library that is listed in test_dependencies
         // but not yet in fixproj.toml.
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("project_with_test_deps");
 
         // Clean up before test
-        let _ = Command::new("fix")
+        let _ = fix_command()
             .arg("clean")
             .current_dir(&project_dir)
             .output();
@@ -203,7 +200,7 @@ mod tests {
         );
 
         // Add character as a test dependency
-        let output = Command::new("fix")
+        let output = fix_command()
             .arg("deps")
             .arg("add")
             .arg("--test")
@@ -261,11 +258,10 @@ mod tests {
     fn test_lsp_dependency_resolution_failure() {
         // Test: Verify that LSP shows diagnostic errors when dependency resolution fails
 
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("project_with_invalid_dep");
 
         // Clean up before test
-        let _ = Command::new("fix")
+        let _ = fix_command()
             .arg("clean")
             .current_dir(&project_dir)
             .output();

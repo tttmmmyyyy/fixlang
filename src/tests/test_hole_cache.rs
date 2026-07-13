@@ -15,10 +15,9 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::process::Command;
     use tempfile::TempDir;
 
     /// Absolute path to the `cases/` directory shipped alongside this
@@ -43,7 +42,7 @@ mod integration_tests {
     /// Run `fix check` in `project_dir` and return the full process
     /// output.
     fn run_check(project_dir: &Path) -> std::process::Output {
-        Command::new("fix")
+        fix_command()
             .arg("check")
             .current_dir(project_dir)
             .output()
@@ -79,7 +78,6 @@ mod integration_tests {
     /// emits ERR_HOLE.
     #[test]
     fn hole_value_is_not_cached() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("with_hole");
 
         // First run: should emit ERR_HOLE and exit non-zero.
@@ -112,7 +110,6 @@ mod integration_tests {
     /// run cannot mask the diagnostic on the second.
     #[test]
     fn hole_diagnostic_persists_across_runs() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("with_hole");
 
         // First run.
@@ -144,7 +141,6 @@ mod integration_tests {
     /// suppression is gated on having errors, not permanent).
     #[test]
     fn fixed_value_is_cached_after_edit() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("with_hole");
 
         // First run — fails.

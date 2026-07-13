@@ -8,7 +8,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::lsp_client::LspClient;
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::copy_dir_recursive;
     use serde_json::{json, Value};
     use std::{
         path::{Path, PathBuf},
@@ -51,7 +51,6 @@ mod tests {
         /// files, and wait for diagnostics on the last one before
         /// returning.
         fn setup(project_name: &str, files: &[&str]) -> Self {
-            install_fix();
             let (temp_dir, project_dir) = setup_test_env(project_name);
             let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
             client

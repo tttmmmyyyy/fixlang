@@ -19,10 +19,10 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, install_fix};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::process::{Command, Output};
+    use std::process::Output;
     use tempfile::TempDir;
 
     /// Returns the directory holding the sample Fix projects used by these tests.
@@ -43,7 +43,7 @@ mod integration_tests {
 
     /// Runs `fix check` in `project_dir` and returns its captured output.
     fn run_check(project_dir: &Path) -> Output {
-        Command::new("fix")
+        fix_command()
             .arg("check")
             .current_dir(project_dir)
             .output()
@@ -61,7 +61,6 @@ mod integration_tests {
     /// output of a second `fix check`. The caller decides whether the
     /// second run should succeed or fail.
     fn run_lib_type_change_scenario(case_name: &str) -> Output {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env(case_name);
 
         let first = run_check(&project_dir);
@@ -124,7 +123,6 @@ mod integration_tests {
     /// "Unknown name" that hides the real cause.
     #[test]
     fn missing_module_via_absolute_path_reports_at_module_token() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("abs_path_missing_module");
 
         let output = run_check(&project_dir);
@@ -155,7 +153,6 @@ mod integration_tests {
     /// points at the user's typo rather than nowhere.
     #[test]
     fn value_typo_via_absolute_path_reports_unknown_name_with_span() {
-        install_fix();
         let (_temp_dir, project_dir) = setup_test_env("abs_path_value_typo");
 
         let output = run_check(&project_dir);
