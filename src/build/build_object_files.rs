@@ -6,7 +6,7 @@ use crate::{
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
-    constants::{GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
+    constants::{DOT_FIXLANG, GLOBAL_VAR_NAME_ARGC, GLOBAL_VAR_NAME_ARGV, UNITS_CACHE_PATH},
     error::{panic_with_msg, Errors},
     fixstd::{
         builtin::run_io_or_ios_runner,
@@ -43,6 +43,47 @@ pub struct BuildObjFilesResult {
     pub obj_paths: Vec<PathBuf>,
 }
 
+// Write the RC IR of the symbols selected by `filter` to a file under `.fixlang/`: a module name
+// dumps that module's symbols to `rc_ir.<module>.txt`, `all` dumps every symbol to `rc_ir.txt`.
+// Behind `--emit-rc-ir`, for compiler development.
+fn dump_rc_ir(program: &Program, filter: &str) {
+    let type_env = program.type_env();
+    let all_program_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
+    let symbols: Vec<Symbol> = all_program_symbols
+        .iter()
+        .filter(|s| filter == "all" || s.name.module() == filter)
+        .cloned()
+        .collect();
+    let mut rc_program = lower_program(&type_env, &symbols, &all_program_symbols);
+    insert_rc(&mut rc_program, &type_env);
+
+    // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
+    let file_name = if filter == "all" {
+        "rc_ir.txt".to_string()
+    } else {
+        let module: String = filter
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        format!("rc_ir.{}.txt", module)
+    };
+    let path = PathBuf::from(DOT_FIXLANG).join(file_name);
+    if let Err(e) = fs::write(&path, program_to_string(&rc_program)) {
+        panic_with_msg(&format!(
+            "Failed to write RC IR to `{}`: {}",
+            path.display(),
+            e
+        ));
+    }
+    info_msg(&format!("RC IR written to {}.", path.display()));
+}
+
 // Compile the program, and returns the path of object files to be linked.
 pub fn build_object_files<'c>(
     mut program: Program,
@@ -62,19 +103,9 @@ pub fn build_object_files<'c>(
     // Run optimizations.
     optimization::optimization::run(&mut program, &config);
 
-    // Dump the RC IR for inspection when requested. The value of `DUMP_RC_IR` selects which symbols
-    // to lower: a module name dumps that module's symbols, or `all` dumps every symbol.
-    if let Ok(filter) = std::env::var("DUMP_RC_IR") {
-        let type_env = program.type_env();
-        let all_program_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
-        let symbols: Vec<Symbol> = all_program_symbols
-            .iter()
-            .filter(|s| filter == "all" || s.name.module() == filter)
-            .cloned()
-            .collect();
-        let mut rc_program = lower_program(&type_env, &symbols, &all_program_symbols);
-        insert_rc(&mut rc_program, &type_env);
-        eprintln!("{}", program_to_string(&rc_program));
+    // Dump the RC IR for inspection when `--emit-rc-ir` is given.
+    if let Some(filter) = &config.emit_rc_ir {
+        dump_rc_ir(&program, filter);
     }
 
     // Determine compilation units.

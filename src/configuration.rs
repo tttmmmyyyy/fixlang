@@ -260,6 +260,9 @@ pub struct Configuration {
     // Emit symbols at each step of optimization.
     // Used only for compiler development.
     pub emit_symbols: bool,
+    // Dump the RC IR of the named module's symbols (`all` = every module) to a file under
+    // `.fixlang/`. `None` dumps nothing. Used only for compiler development.
+    pub emit_rc_ir: Option<String>,
     // Is in compiler development mode?
     pub develop_mode: bool,
     // Enable backtrace support (keep frame pointers and add backtrace library).
@@ -349,6 +352,7 @@ impl Configuration {
             llvm_passes_file: None,
             run_program_args: vec![],
             emit_symbols: false,
+            emit_rc_ir: None,
             develop_mode: false,
             backtrace: false,
             no_runtime_check: false,
