@@ -91,6 +91,13 @@ impl ObjectFieldType {
                     max_size = max_size.max(gc.sizeof(&struct_ty));
                     max_align = max_align.max(gc.alignment(&struct_ty));
                 }
+                // A union whose every variant is zero-sized (e.g. `Bool`) stores nothing in
+                // its buffer. The preferred alignment of an empty payload is 8, and keeping it
+                // would pad the whole union to 8 bytes — making `Array Bool` 8 bytes per element
+                // and defeating i8-store vectorization. A zero-length buffer needs no alignment.
+                if max_size == 0 {
+                    max_align = 1;
+                }
                 let max_align_int = if max_align == 1 {
                     gc.context.i8_type()
                 } else if max_align == 2 {
