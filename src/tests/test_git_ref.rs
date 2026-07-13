@@ -122,10 +122,7 @@ mod integration_tests {
     fn cleanup_test_project(project_dir: &PathBuf) {
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_PATH));
         let _ = fs::remove_dir_all(project_dir.join(".fix"));
-        let _ = fix_command()
-            .arg("clean")
-            .current_dir(project_dir)
-            .output();
+        let _ = fix_command().arg("clean").current_dir(project_dir).output();
     }
 
     // Test 1: rev pinning builds successfully.
@@ -419,7 +416,6 @@ mod integration_tests {
         tag: Option<&str>,
         version: Option<&str>,
     ) -> (TempDir, TempDir, PathBuf) {
-
         let upstream_tmp = TempDir::new().expect("Failed to create upstream temp dir");
         create_annotated_tag_upstream(upstream_tmp.path(), upstream_version);
 

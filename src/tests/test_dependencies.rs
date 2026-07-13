@@ -32,10 +32,7 @@ mod integration_tests {
     fn cleanup_test_project(project_dir: &PathBuf) {
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_PATH));
         let _ = fs::remove_file(project_dir.join(LOCK_FILE_TEST_PATH));
-        let _ = fix_command()
-            .arg("clean")
-            .current_dir(project_dir)
-            .output();
+        let _ = fix_command().arg("clean").current_dir(project_dir).output();
     }
 
     #[test]

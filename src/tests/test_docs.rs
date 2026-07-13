@@ -223,7 +223,6 @@ mod integration_tests {
         // that matches the expected output for a comprehensive test case
         // containing various language features (structs, unions, traits, type aliases, etc.)
 
-
         // Set up test environment with comprehensive test case
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
@@ -290,7 +289,6 @@ mod integration_tests {
         // 2. Includes accessors for public fields/variants.
         // 3. Excludes accessors for private (underscore-prefixed) fields/variants.
 
-
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
         let test_case_dst = temp_dir.path().join("comprehensive_docs");
@@ -353,7 +351,6 @@ mod integration_tests {
         // un-hides all private items that are otherwise filtered:
         // private top-level values, private field/variant subsections,
         // and accessors for private fields/variants.
-
 
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");

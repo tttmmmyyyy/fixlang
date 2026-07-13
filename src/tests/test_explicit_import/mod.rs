@@ -6,10 +6,7 @@ use std::path::Path;
 pub fn test_edit_explicit_import() {
     // Iterate through the "cases" subdirectory in the directory where this source file is located
 
-    let cases_dir = Path::new(file!())
-        .parent()
-        .unwrap()
-        .join("cases");
+    let cases_dir = Path::new(file!()).parent().unwrap().join("cases");
     let entries = fs::read_dir(&cases_dir).expect("Failed to read cases directory");
     for entry in entries {
         let entry = entry.expect("Failed to read directory entry");
