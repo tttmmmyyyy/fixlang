@@ -343,7 +343,10 @@ fn build_object_files_cache_hash(
     Ok(format!("{:x}", md5::compute(hash_source)))
 }
 
-fn get_target_machine(opt_level: OptimizationLevel, config: &Configuration) -> TargetMachine {
+pub(crate) fn get_target_machine(
+    opt_level: OptimizationLevel,
+    config: &Configuration,
+) -> TargetMachine {
     let _native = Target::initialize_native(&InitializationConfig::default())
         .map_err(|e| panic_with_msg(&format!("failed to initialize native: {}", e)))
         .unwrap();

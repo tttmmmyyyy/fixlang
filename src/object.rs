@@ -51,6 +51,35 @@ pub enum ObjectFieldType {
     Array(Arc<TypeNode>), // field to store capacity (size) and buffer for elements.
 }
 
+// The opaque buffer holding a union's payload: an integer array sized and aligned to fit the
+// largest variant.
+fn union_buf_type<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    field_tys: &[Arc<TypeNode>],
+    unboxed_path: &[String],
+) -> BasicTypeEnum<'c> {
+    let mut max_size = 0;
+    let mut max_align = 1;
+    for field_ty in field_tys {
+        let struct_ty = ty_to_object_ty(field_ty, &vec![], gc.type_env())
+            .to_embedded_type(gc, unboxed_path.to_vec());
+        max_size = max_size.max(gc.sizeof(&struct_ty));
+        // The buffer needs the payloads' ABI alignment, not the preferred alignment: the
+        // preferred alignment of a small or empty aggregate is 8, which would over-pad the union.
+        max_align = max_align.max(gc.abi_alignment(&struct_ty));
+    }
+    let max_align_int = match max_align {
+        1 => gc.context.i8_type(),
+        2 => gc.context.i16_type(),
+        4 => gc.context.i32_type(),
+        8 => gc.context.i64_type(),
+        16 => gc.context.i128_type(),
+        _ => panic!("Unsupported alignment: {}", max_align),
+    };
+    let num_of_ints = (max_size as f32 / max_align as f32).ceil() as u32;
+    max_align_int.array_type(num_of_ints).into()
+}
+
 impl ObjectFieldType {
     // Convert ObjectType to inkwell's BasicTypeEnum.
     // * `unboxed_path` -  See the comment for ObjectType::to_struct_type.
@@ -82,38 +111,7 @@ impl ObjectFieldType {
             ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::Array(_) => gc.context.i64_type().into(), // Capacity field.
             ObjectFieldType::UnionTag => union_tag_type(gc.context).into(),
-            ObjectFieldType::UnionBuf(field_tys) => {
-                let mut max_size = 0;
-                let mut max_align = 1;
-                for field_ty in field_tys {
-                    let struct_ty = ty_to_object_ty(field_ty, &vec![], gc.type_env())
-                        .to_embedded_type(gc, unboxed_path.clone());
-                    max_size = max_size.max(gc.sizeof(&struct_ty));
-                    max_align = max_align.max(gc.alignment(&struct_ty));
-                }
-                // A union whose every variant is zero-sized (e.g. `Bool`) stores nothing in
-                // its buffer. The preferred alignment of an empty payload is 8, and keeping it
-                // would pad the whole union to 8 bytes — making `Array Bool` 8 bytes per element
-                // and defeating i8-store vectorization. A zero-length buffer needs no alignment.
-                if max_size == 0 {
-                    max_align = 1;
-                }
-                let max_align_int = if max_align == 1 {
-                    gc.context.i8_type()
-                } else if max_align == 2 {
-                    gc.context.i16_type()
-                } else if max_align == 4 {
-                    gc.context.i32_type()
-                } else if max_align == 8 {
-                    gc.context.i64_type()
-                } else if max_align == 16 {
-                    gc.context.i128_type()
-                } else {
-                    panic!("Unsupported alignment: {}", max_align);
-                };
-                let num_of_ints = (max_size as f32 / max_align as f32).ceil() as u32;
-                max_align_int.array_type(num_of_ints).into()
-            }
+            ObjectFieldType::UnionBuf(field_tys) => union_buf_type(gc, field_tys, &unboxed_path),
         }
     }
 

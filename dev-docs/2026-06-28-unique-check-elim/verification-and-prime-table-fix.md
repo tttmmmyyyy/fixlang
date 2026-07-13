@@ -102,6 +102,26 @@ and the isolated `Bool` set loop match `main` exactly:
 `Bool` stays a union; only the wasted alignment of its empty buffer is removed. The fix
 also restores `Bool`'s size to 1 byte, matching `main`.
 
+### The same over-alignment, generalized: `Option`/`Result` of small types
+
+The `max_size == 0` guard only caught all-empty unions like `Bool`. The root cause is broader:
+the union buffer took the payloads' *preferred* alignment, and the preferred alignment of an
+empty or small aggregate is 8. So any union with an empty `()` variant plus a small non-empty
+one was padded to 8 bytes too:
+
+| type | before | after |
+| ---- | ------ | ----- |
+| `Option U8`  | `{ i8, [1 x i64] }` (16 B) | `{ i8, [1 x i8] }` (2 B) |
+| `Option U16` | `{ i8, [1 x i64] }` (16 B) | `{ i8, [1 x i16] }` (4 B) |
+| `Option I64` | `{ i8, [1 x i64] }` (16 B) | `{ i8, [1 x i64] }` (16 B, unchanged — I64 needs 8-align) |
+
+So `Array (Option U8)` used 16 bytes per element instead of 2. Fix: the union buffer takes the
+payloads' **ABI** alignment, not the preferred alignment (`Generator::abi_alignment`). This
+subsumes the `max_size == 0` guard (an empty payload's ABI alignment is 1) and it turned out
+`Generator::alignment` (the preferred-alignment helper) had no other caller, so it was removed.
+`test_union_layout.rs` locks the `(size, alignment)` of `Bool`, `Option T`, and `Result E O`
+across a range of payload types.
+
 ## External real-world projects
 
 Both run with the fixed compiler.

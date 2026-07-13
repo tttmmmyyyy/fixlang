@@ -493,8 +493,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.target_data.get_bit_size(ty) / 8
     }
 
-    pub fn alignment(&mut self, ty: &dyn AnyType<'c>) -> u64 {
-        self.target_data.get_preferred_alignment(ty) as u64
+    // The minimum alignment required to store/load a value of this type. Unlike the preferred
+    // alignment, this does not over-align: an empty aggregate is 1, not 8.
+    pub fn abi_alignment(&mut self, ty: &dyn AnyType<'c>) -> u64 {
+        self.target_data.get_abi_alignment(ty) as u64
     }
 
     pub fn ptr_size(&mut self) -> u64 {
