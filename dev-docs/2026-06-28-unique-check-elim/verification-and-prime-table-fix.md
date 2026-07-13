@@ -101,3 +101,27 @@ and the isolated `Bool` set loop match `main` exactly:
 
 `Bool` stays a union; only the wasted alignment of its empty buffer is removed. The fix
 also restores `Bool`'s size to 1 byte, matching `main`.
+
+## External real-world projects
+
+Both run with the fixed compiler.
+
+**fixlang_minilib** (`~/fixlang-projs/fixlang_minilib`, 16 sub-projects, per-project `fix
+check` + `fix test -O basic` + `fix test -O max`): every project passes at both opt levels.
+
+**Project Euler** (`~/project_euler`, 98 top-level Fix solutions, built `-O max` and run;
+correctness is each solution's compiled-in `assert_eq`). Compared against `main` (1.4.0) to
+separate regressions from the solutions' own age:
+
+| outcome                         | count | notes |
+| ------------------------------- | ----: | ----- |
+| build on both                   |    33 | 32 run correct; 1 is the stdin-fed `54-poker` (a harness limitation, not a miscompile) |
+| fail on both                    |    50 | pre-existing: old iterator API, WIP solutions; `main` fails them too |
+| build on `main`, fail on branch |    15 | **all** `Cannot find value _unsafe_swap_bounds_uniqueness_unchecked` — the intentional cp-library builtin migration (same as `test_external_project_cp_library`); resolves once cp-library is updated |
+| build on branch, fail on `main` |     0 | |
+
+No unexpected regression and no miscompilation: every solution that builds produces the
+correct answer, and the only branch-vs-`main` build losses are the known cp-library
+migration. (The compiler also core-dumps on a few solutions with a malformed `malloc` FFI
+declaration — `i32` size passed to an `i64` parameter — but this happens on `main` too and
+is a pre-existing robustness gap, not a branch regression.)
