@@ -20,6 +20,13 @@
 //!    parameter leaves, and each call site takes over the counting the callee no longer does — a
 //!    release after the call for an owned value passed to a borrowed position, and a retain before it
 //!    for a borrowed value passed to an owning position.
+//!
+//! Borrow-ification leaves the caller with a retain before a borrow call and a release after it,
+//! bracketing the call with no consume between. `cancel` removes those net-zero brackets: a retain is
+//! cancellable when, on every forward path, a release un-bumps it before the value is consumed. That
+//! keeps the value `Unique` for the uniqueness analysis (§3), the reason borrow-ification exists. The
+//! cancellation shares the object-identity (`root`) and consume-site machinery with the inference and
+//! rewrite above, so all three read the same aliasing facts.
 
 use crate::ast::inline_llvm::LLVMGenerator;
 use crate::ast::name::FullName;
@@ -56,12 +63,13 @@ enum Def {
 }
 
 /// The per-function facts `root` and the consume walk need: how each local variable is bound, which
-/// closure value targets which function, and the function's own parameters (with their types, so a
-/// leaf that roots at a parameter can be clamped to its reference-counting unit).
+/// closure value targets which function, the function's own parameters, and every variable's type
+/// (so a leaf that roots at any variable can be clamped to its reference-counting unit).
 struct FuncFacts {
     defs: Map<FullName, Def>,
     closure_targets: Map<FullName, FuncRef>,
     params: Map<FullName, Arc<TypeNode>>,
+    types: Map<FullName, Arc<TypeNode>>,
 }
 
 /// The result of borrow inference: which parameter leaves are `Own` (all others are `Borrow`), keyed
@@ -105,44 +113,36 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
 
 impl FuncFacts {
     fn of(func: &RcFunc) -> FuncFacts {
-        let mut defs = Map::default();
-        let mut closure_targets = Map::default();
-        let mut params = Map::default();
-        for p in &func.params {
-            defs.insert(p.name.clone(), Def::Param);
-            params.insert(p.name.clone(), p.ty.clone());
+        let mut facts = FuncFacts::empty();
+        for p in func.params.iter().chain(func.cap.iter()) {
+            facts.defs.insert(p.name.clone(), Def::Param);
+            facts.params.insert(p.name.clone(), p.ty.clone());
+            facts.types.insert(p.name.clone(), p.ty.clone());
         }
-        if let Some(cap) = &func.cap {
-            defs.insert(cap.name.clone(), Def::Param);
-            params.insert(cap.name.clone(), cap.ty.clone());
-        }
-        collect_defs(&func.body, &mut defs, &mut closure_targets);
-        FuncFacts {
-            defs,
-            closure_targets,
-            params,
-        }
+        collect_defs(&func.body, &mut facts);
+        facts
     }
 
     /// The facts of a param-less body (a global initializer).
     fn body_only(body: &RcExprNode) -> FuncFacts {
-        let mut defs = Map::default();
-        let mut closure_targets = Map::default();
-        collect_defs(body, &mut defs, &mut closure_targets);
+        let mut facts = FuncFacts::empty();
+        collect_defs(body, &mut facts);
+        facts
+    }
+
+    fn empty() -> FuncFacts {
         FuncFacts {
-            defs,
-            closure_targets,
+            defs: Map::default(),
+            closure_targets: Map::default(),
             params: Map::default(),
+            types: Map::default(),
         }
     }
 }
 
-/// Record every local variable's `Def` (and any closure value's target function) in a function body.
-fn collect_defs(
-    node: &RcExprNode,
-    defs: &mut Map<FullName, Def>,
-    closure_targets: &mut Map<FullName, FuncRef>,
-) {
+/// Record every local variable's `Def` and type (and any closure value's target function) in a
+/// function body.
+fn collect_defs(node: &RcExprNode, facts: &mut FuncFacts) {
     match node.expr.as_ref() {
         RcExpr::Ret(_) => {}
         RcExpr::Let(x, rhs, k) => {
@@ -150,33 +150,38 @@ fn collect_defs(
                 RcRhs::Var(y) => Def::Move(y.clone()),
                 RcRhs::Llvm(gen, args) => Def::Llvm(gen.clone(), args.clone(), x.ty.clone()),
                 RcRhs::Closure(fref, _) => {
-                    closure_targets.insert(x.name.clone(), fref.clone());
+                    facts.closure_targets.insert(x.name.clone(), fref.clone());
                     Def::Producer
                 }
                 RcRhs::App(..) => Def::Producer,
                 RcRhs::Match(scrut, arms) => {
                     for arm in arms {
-                        defs.insert(
+                        facts.defs.insert(
                             arm.payload.name.clone(),
                             Def::Payload(scrut.clone(), arm.variant),
                         );
-                        collect_defs(&arm.body, defs, closure_targets);
+                        facts
+                            .types
+                            .insert(arm.payload.name.clone(), arm.payload.ty.clone());
+                        collect_defs(&arm.body, facts);
                     }
                     Def::Producer
                 }
             };
-            defs.insert(x.name.clone(), def);
-            collect_defs(k, defs, closure_targets);
+            facts.defs.insert(x.name.clone(), def);
+            facts.types.insert(x.name.clone(), x.ty.clone());
+            collect_defs(k, facts);
         }
         RcExpr::Destructure(container, fields, k) => {
             for (idx, fv) in fields {
-                defs.insert(fv.name.clone(), Def::Field(container.clone(), *idx));
+                facts
+                    .defs
+                    .insert(fv.name.clone(), Def::Field(container.clone(), *idx));
+                facts.types.insert(fv.name.clone(), fv.ty.clone());
             }
-            collect_defs(k, defs, closure_targets);
+            collect_defs(k, facts);
         }
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
-            collect_defs(k, defs, closure_targets)
-        }
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => collect_defs(k, facts),
     }
 }
 
@@ -252,8 +257,9 @@ fn single_arg(ls: &Set<BaseSource>) -> Option<(usize, Path)> {
     }
 }
 
-/// Collect the leaves consumed in a function body: an owning argument position, a captured value, or
-/// a returned value. Alias edges are not consumes here — the consume of an alias is attributed to its
+/// Collect the leaves consumed in a function body, given `own` as the owned parameter leaves that
+/// decide which argument positions consume: an owning argument position, a captured value, or a
+/// returned value. Alias edges are not consumes here — the consume of an alias is attributed to its
 /// `root`. Explicit `Release` nodes are own-then-release drops, not consumes.
 fn collect_consumes(
     node: &RcExprNode,
@@ -263,62 +269,90 @@ fn collect_consumes(
     type_env: &TypeEnv,
     out: &mut Vec<Leaf>,
 ) {
+    let owns = |p: &RcVar, pi: &Path| own.contains(&(p.name.clone(), pi.clone()));
+    collect_consumes_go(node, facts, prog, type_env, &owns, out);
+}
+
+fn collect_consumes_go<F: Fn(&RcVar, &Path) -> bool>(
+    node: &RcExprNode,
+    facts: &FuncFacts,
+    prog: &RcProgram,
+    type_env: &TypeEnv,
+    owns: &F,
+    out: &mut Vec<Leaf>,
+) {
     match node.expr.as_ref() {
         RcExpr::Ret(x) => push_leaves(&x.name, &x.ty, type_env, out),
-        RcExpr::Let(_, rhs, k) => {
+        RcExpr::Let(x, rhs, k) => {
             match rhs {
-                RcRhs::Var(_) => {}
-                RcRhs::Closure(_, caps) => {
-                    for c in caps {
-                        push_leaves(&c.name, &c.ty, type_env, out);
-                    }
-                }
-                RcRhs::App(callee, args) => {
-                    // Calling a closure consumes it (the callee releases its capture).
-                    push_leaves(&callee.name, &callee.ty, type_env, out);
-                    // Each argument at an owning position of the callee is consumed. An unresolved
-                    // (indirect) callee owns every position.
-                    let callee_params = resolve_callee_params(callee, facts, prog);
-                    for (i, a) in args.iter().enumerate() {
-                        for pi in boxed_leaves(&a.ty, type_env) {
-                            let owns_pos = match &callee_params {
-                                Some(params) => params
-                                    .get(i)
-                                    .map_or(true, |p| own.contains(&(p.name.clone(), pi.clone()))),
-                                None => true,
-                            };
-                            if owns_pos {
-                                out.push((a.name.clone(), pi));
-                            }
-                        }
-                    }
-                }
-                RcRhs::Llvm(gen, args) => {
-                    let passthrough = passthrough_arg_leaves(gen, node, args, type_env);
-                    for (i, a) in args.iter().enumerate() {
-                        if gen.borrows_operand(i) {
-                            continue;
-                        }
-                        for pi in boxed_leaves(&a.ty, type_env) {
-                            // An argument leaf that the op passes through to its result is not
-                            // consumed; anything else at an owning position is moved into the op.
-                            if !passthrough.contains(&(i, pi.clone())) {
-                                out.push((a.name.clone(), pi));
-                            }
-                        }
-                    }
-                }
                 RcRhs::Match(_, arms) => {
                     for arm in arms {
-                        collect_consumes(&arm.body, facts, prog, own, type_env, out);
+                        collect_consumes_go(&arm.body, facts, prog, type_env, owns, out);
+                    }
+                }
+                _ => rhs_consumes(rhs, &x.ty, facts, prog, type_env, owns, out),
+            }
+            collect_consumes_go(k, facts, prog, type_env, owns, out);
+        }
+        RcExpr::Destructure(_, _, k) => collect_consumes_go(k, facts, prog, type_env, owns, out),
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
+            collect_consumes_go(k, facts, prog, type_env, owns, out)
+        }
+    }
+}
+
+/// The leaves an `App`, `Llvm`, or `Closure` right-hand side consumes: an owning argument position
+/// (`owns` decides, for the callee's parameter leaf), a captured value, and the closure callee. A
+/// `Var` move and a `Match` consume nothing here — a move is an alias, and a match's consumes live in
+/// its arms. `result_ty` is the type the right-hand side binds, needed to read an op's passthrough.
+fn rhs_consumes<F: Fn(&RcVar, &Path) -> bool>(
+    rhs: &RcRhs,
+    result_ty: &Arc<TypeNode>,
+    facts: &FuncFacts,
+    prog: &RcProgram,
+    type_env: &TypeEnv,
+    owns: &F,
+    out: &mut Vec<Leaf>,
+) {
+    match rhs {
+        RcRhs::Var(_) | RcRhs::Match(..) => {}
+        RcRhs::Closure(_, caps) => {
+            for c in caps {
+                push_leaves(&c.name, &c.ty, type_env, out);
+            }
+        }
+        RcRhs::App(callee, args) => {
+            // Calling a closure consumes it (the callee releases its capture).
+            push_leaves(&callee.name, &callee.ty, type_env, out);
+            // Each argument at an owning position of the callee is consumed. An unresolved (indirect)
+            // callee owns every position.
+            let callee_params = resolve_callee_params(callee, facts, prog);
+            for (i, a) in args.iter().enumerate() {
+                for pi in boxed_leaves(&a.ty, type_env) {
+                    let owns_pos = match &callee_params {
+                        Some(params) => params.get(i).map_or(true, |p| owns(p, &pi)),
+                        None => true,
+                    };
+                    if owns_pos {
+                        out.push((a.name.clone(), pi));
                     }
                 }
             }
-            collect_consumes(k, facts, prog, own, type_env, out);
         }
-        RcExpr::Destructure(_, _, k) => collect_consumes(k, facts, prog, own, type_env, out),
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
-            collect_consumes(k, facts, prog, own, type_env, out)
+        RcRhs::Llvm(gen, args) => {
+            let passthrough = passthrough_arg_leaves(gen, result_ty, args, type_env);
+            for (i, a) in args.iter().enumerate() {
+                if gen.borrows_operand(i) {
+                    continue;
+                }
+                for pi in boxed_leaves(&a.ty, type_env) {
+                    // An argument leaf that the op passes through to its result is not consumed;
+                    // anything else at an owning position is moved into the op.
+                    if !passthrough.contains(&(i, pi.clone())) {
+                        out.push((a.name.clone(), pi));
+                    }
+                }
+            }
         }
     }
 }
@@ -347,16 +381,12 @@ fn resolve_callee_params<'a>(
 /// projections declared by `result_prov` as `Arg(i, path)`.
 fn passthrough_arg_leaves(
     gen: &LLVMGenerator,
-    node: &RcExprNode,
+    result_ty: &Arc<TypeNode>,
     args: &[RcVar],
     type_env: &TypeEnv,
 ) -> Set<(usize, Path)> {
-    let result_ty = match node.expr.as_ref() {
-        RcExpr::Let(x, _, _) => x.ty.clone(),
-        _ => return Set::default(),
-    };
     let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-    let decl = result_prov(gen, &result_ty, &arg_tys, type_env);
+    let decl = result_prov(gen, result_ty, &arg_tys, type_env);
     let mut out = Set::default();
     collect_arg_leaves(&decl, &mut out);
     out
@@ -478,10 +508,12 @@ fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
 
 // --- borrow-ification ---
 
-/// The result of borrow-ification: the rewritten program, and — for the RC IR dump — each version's
-/// parameter ownership shape, keyed by the (globally unique) parameter variable name.
+/// The result of borrow-ification: the rewritten program, the owned parameter/capture units of every
+/// output version (which `cancel` reads to find each call's consume sites), and — for the RC IR dump
+/// — each version's parameter ownership shape, keyed by the (globally unique) parameter variable name.
 pub struct BorrowIfied {
     pub program: RcProgram,
+    pub own_out: Set<Leaf>,
     pub param_owns: Map<FullName, OwnershipShape>,
 }
 
@@ -605,6 +637,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> BorrowIfied {
             globals,
             entry: prog.entry.clone(),
         },
+        own_out,
         param_owns,
     }
 }
@@ -1128,4 +1161,303 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Option<A
         cur = fields[idx].clone();
     }
     Some(cur)
+}
+
+// --- retain/release cancellation ---
+
+/// The pending retains at a program point: for each object (a reference-counting unit, keyed by its
+/// `root`), the stack of retains that have bumped it and not yet been un-bumped. A release un-bumps
+/// the most recent — the innermost bracket, which keeps the un-bump non-zeroing.
+type Pend = Map<Leaf, Vec<NodeId>>;
+
+/// A node's identity within one tree: the address of its expression, stable while the tree is
+/// borrowed. The analysis records which nodes to drop by identity, and the deletion pass, walking the
+/// same borrowed tree, recognizes them by the same identity.
+type NodeId = usize;
+
+fn node_id(node: &RcExprNode) -> NodeId {
+    node.expr.as_ref() as *const RcExpr as NodeId
+}
+
+/// Remove the net-zero retain/release brackets borrow-ification leaves across borrow calls: a retain
+/// is cancellable when, on every forward path, a release un-bumps it before the value is consumed.
+/// Cancelling it (and the releases it pairs with) keeps the value `Unique` for the uniqueness
+/// analysis. `own_out` is the owned parameter/capture units of `prog`'s functions, which decides each
+/// call's consume sites.
+pub fn cancel(prog: &RcProgram, own_out: &Set<Leaf>, type_env: &TypeEnv) -> RcProgram {
+    let cancel_body = |facts: &FuncFacts, body: &RcExprNode| {
+        let mut analysis = CancelAnalysis {
+            facts,
+            prog,
+            own_out,
+            type_env,
+            needed: Set::default(),
+            pairs: Map::default(),
+            all_retains: vec![],
+        };
+        analysis.walk(body, Pend::default(), true);
+        drop_nodes(body, &analysis.cancelled())
+    };
+
+    let funcs = prog
+        .funcs
+        .values()
+        .map(|f| {
+            let facts = FuncFacts::of(f);
+            let mut clone = f.clone();
+            clone.body = cancel_body(&facts, &f.body);
+            (f.name.clone(), clone)
+        })
+        .collect();
+    let globals = prog
+        .globals
+        .iter()
+        .map(|g| {
+            let facts = FuncFacts::body_only(&g.init);
+            RcGlobalInit {
+                symbol: g.symbol.clone(),
+                ty: g.ty.clone(),
+                init: cancel_body(&facts, &g.init),
+            }
+        })
+        .collect();
+    RcProgram {
+        funcs,
+        globals,
+        entry: prog.entry.clone(),
+    }
+}
+
+/// The forward must-analysis for one function: it decides which retain and release nodes to delete.
+struct CancelAnalysis<'a> {
+    facts: &'a FuncFacts,
+    prog: &'a RcProgram,
+    own_out: &'a Set<Leaf>,
+    type_env: &'a TypeEnv,
+    /// Retains that are load-bearing on some path, so they cannot be cancelled.
+    needed: Set<NodeId>,
+    /// The releases each retain is un-bumped by; they are deleted together with the retain.
+    pairs: Map<NodeId, Vec<NodeId>>,
+    /// Every retain the walk saw, so the cancellable retains are those never made `needed`.
+    all_retains: Vec<NodeId>,
+}
+
+impl<'a> CancelAnalysis<'a> {
+    /// The reference-counting unit a leaf belongs to, as an object identity: its `root`, clamped to
+    /// the unit. A leaf below an unboxed union keys to the union root, so a whole-union retain and a
+    /// payload consume land in the same bucket (without which a payload consume could not keep the
+    /// union retain needed, and a later union release would wrongly cancel it).
+    fn key(&self, var: &FullName, path: &[usize]) -> Leaf {
+        let (r, rp) = root(self.facts, self.type_env, var, path);
+        match self.facts.types.get(&r) {
+            Some(ty) => (r, clamp_unit(ty, &rp, self.type_env)),
+            None => (r, rp),
+        }
+    }
+
+    /// Walk a node forward, threading the pending-retain state. `leaf_mode` marks that a terminal
+    /// `Ret` here returns from the function — consuming its value and closing no bracket; inside a
+    /// match arm it is false, since the arm's `Ret` flows its value to the match binding. Returns the
+    /// pending state at the node's exit, so a match arm's exit can be merged into its continuation.
+    fn walk(&mut self, node: &RcExprNode, pend: Pend, leaf_mode: bool) -> Pend {
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+            self.walk_inner(node, pend, leaf_mode)
+        })
+    }
+
+    fn walk_inner(&mut self, node: &RcExprNode, mut pend: Pend, leaf_mode: bool) -> Pend {
+        match node.expr.as_ref() {
+            RcExpr::Retain(v, path, _, k) => {
+                let r = node_id(node);
+                self.all_retains.push(r);
+                self.pairs.entry(r).or_default();
+                pend.entry(self.key(&v.name, path)).or_default().push(r);
+                self.walk(k, pend, leaf_mode)
+            }
+            RcExpr::Release(v, path, _, k) => {
+                let o = self.key(&v.name, path);
+                if let Some(stack) = pend.get_mut(&o) {
+                    if let Some(r) = stack.pop() {
+                        self.pairs.entry(r).or_default().push(node_id(node));
+                    }
+                    if stack.is_empty() {
+                        pend.remove(&o);
+                    }
+                }
+                self.walk(k, pend, leaf_mode)
+            }
+            RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
+                let arm_exits: Vec<Pend> = arms
+                    .iter()
+                    .map(|arm| self.walk(&arm.body, pend.clone(), false))
+                    .collect();
+                let merged = self.merge(&pend, &arm_exits);
+                self.walk(k, merged, leaf_mode)
+            }
+            RcExpr::Let(x, rhs, k) => {
+                self.consume_rhs(&mut pend, rhs, &x.ty);
+                self.walk(k, pend, leaf_mode)
+            }
+            RcExpr::Destructure(container, _, k) => {
+                // The destructure consumes the container: a boxed container is released, and an
+                // unboxed container's leaves move into its fields with its other fields dropped.
+                for pi in boxed_leaves(&container.ty, self.type_env) {
+                    self.consume(&mut pend, &container.name, &pi);
+                }
+                self.walk(k, pend, leaf_mode)
+            }
+            RcExpr::Ret(_) => {
+                if leaf_mode {
+                    // A retain still pending at the function's return closes no bracket on this path.
+                    for stack in pend.values() {
+                        for &r in stack {
+                            self.needed.insert(r);
+                        }
+                    }
+                }
+                pend
+            }
+        }
+    }
+
+    /// Mark every retain the right-hand side consumes as needed.
+    fn consume_rhs(&mut self, pend: &mut Pend, rhs: &RcRhs, result_ty: &Arc<TypeNode>) {
+        let owns = |p: &RcVar, pi: &Path| {
+            self.own_out
+                .contains(&(p.name.clone(), clamp_unit(&p.ty, pi, self.type_env)))
+        };
+        let mut consumed = vec![];
+        rhs_consumes(
+            rhs,
+            result_ty,
+            self.facts,
+            self.prog,
+            self.type_env,
+            &owns,
+            &mut consumed,
+        );
+        for (var, path) in consumed {
+            self.consume(pend, &var, &path);
+        }
+    }
+
+    /// A consume of a leaf: every retain pending for its unit is load-bearing here.
+    fn consume(&mut self, pend: &mut Pend, var: &FullName, path: &[usize]) {
+        let o = self.key(var, path);
+        if let Some(stack) = pend.remove(&o) {
+            for r in stack {
+                self.needed.insert(r);
+            }
+        }
+    }
+
+    /// Merge match arms into their continuation: a retain pending in every arm's exit continues (a
+    /// single downstream release un-bumps it on all paths); a retain pending in some but not all arms
+    /// has a non-uniform fate and cannot be cleanly cancelled, so it is disqualified.
+    fn merge(&mut self, pend_in: &Pend, arm_exits: &[Pend]) -> Pend {
+        let n = arm_exits.len();
+        let mut arms_pending: Map<NodeId, usize> = Map::default();
+        for exit in arm_exits {
+            let mut seen: Set<NodeId> = Set::default();
+            for stack in exit.values() {
+                for &r in stack {
+                    if seen.insert(r) {
+                        *arms_pending.entry(r).or_default() += 1;
+                    }
+                }
+            }
+        }
+        for (&r, &count) in &arms_pending {
+            if count != n {
+                self.needed.insert(r);
+            }
+        }
+        // Keep the retains pending in all arms, in the pre-match order so release pairing stays
+        // innermost-first.
+        let mut merged = Pend::default();
+        for (o, stack) in pend_in {
+            let kept: Vec<NodeId> = stack
+                .iter()
+                .copied()
+                .filter(|r| arms_pending.get(r) == Some(&n))
+                .collect();
+            if !kept.is_empty() {
+                merged.insert(o.clone(), kept);
+            }
+        }
+        merged
+    }
+
+    /// The nodes to delete: every cancellable retain (one never made needed and paired by at least
+    /// one release) together with the releases it pairs with.
+    fn cancelled(&self) -> Set<NodeId> {
+        let mut out = Set::default();
+        for &r in &self.all_retains {
+            if self.needed.contains(&r) {
+                continue;
+            }
+            match self.pairs.get(&r) {
+                Some(releases) if !releases.is_empty() => {
+                    out.insert(r);
+                    out.extend(releases.iter().copied());
+                }
+                // A retain with no un-bump release is left in place to keep the counting balanced.
+                _ => {}
+            }
+        }
+        out
+    }
+}
+
+/// Rebuild a body with the analysis's cancelled retain and release nodes spliced out.
+fn drop_nodes(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || drop_nodes_inner(node, to_delete))
+}
+
+fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
+    match node.expr.as_ref() {
+        RcExpr::Retain(v, path, state, k) => {
+            let k = drop_nodes(k, to_delete);
+            if to_delete.contains(&node_id(node)) {
+                k
+            } else {
+                node_of(RcExpr::Retain(v.clone(), path.clone(), *state, k), &node.source)
+            }
+        }
+        RcExpr::Release(v, path, state, k) => {
+            let k = drop_nodes(k, to_delete);
+            if to_delete.contains(&node_id(node)) {
+                k
+            } else {
+                node_of(RcExpr::Release(v.clone(), path.clone(), *state, k), &node.source)
+            }
+        }
+        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
+            let arms = arms
+                .iter()
+                .map(|arm| MatchArm {
+                    variant: arm.variant,
+                    payload: arm.payload.clone(),
+                    body: drop_nodes(&arm.body, to_delete),
+                })
+                .collect();
+            node_of(
+                RcExpr::Let(
+                    x.clone(),
+                    RcRhs::Match(scrut.clone(), arms),
+                    drop_nodes(k, to_delete),
+                ),
+                &node.source,
+            )
+        }
+        RcExpr::Let(x, rhs, k) => node_of(
+            RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete)),
+            &node.source,
+        ),
+        RcExpr::Destructure(container, fields, k) => node_of(
+            RcExpr::Destructure(container.clone(), fields.clone(), drop_nodes(k, to_delete)),
+            &node.source,
+        ),
+        RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
+    }
 }

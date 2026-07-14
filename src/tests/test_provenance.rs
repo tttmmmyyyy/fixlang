@@ -169,21 +169,17 @@ mod integration_tests {
             "echo_arr should not have a borrow version",
         );
 
-        // `main` routes its non-tail, owned, non-last-use `tally(arr, ..)` call to the borrow version,
-        // and takes over releasing the array with a release right after the call.
+        // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
         // The main entry is `Main::main#<hash>#funptr1` (three `#`-segments); the lifted decap lambdas
         // have an extra segment.
         let main = func_block(&dump, "fn Main::main", |n| {
             n.split('#').count() == 3 && n.ends_with("#funptr1")
         });
-        let call_idx = main
-            .iter()
-            .position(|l| l.contains("= Main::tally") && l.contains("#borrow("))
-            .expect("main should call the tally borrow version");
         assert!(
-            main[call_idx + 1].trim_start().starts_with("release "),
-            "the tally borrow call should be followed by a release:\n{}",
-            main[call_idx + 1]
+            main.iter()
+                .any(|l| l.contains("= Main::tally") && l.contains("#borrow(")),
+            "main should call the tally borrow version:\n{}",
+            main.join("\n")
         );
 
         // The borrow clone drops the reference counting on its borrowed parameter: its body performs
@@ -197,6 +193,49 @@ mod integration_tests {
             "the tally borrow version should perform no reference counting:\n{}",
             tally_borrow.join("\n")
         );
+    }
+
+    /// The first argument variable of a `...#borrow(a, b, ...)` call on a dump line.
+    fn borrow_call_first_arg(line: &str) -> &str {
+        line.split("#borrow(")
+            .nth(1)
+            .and_then(|after| after.split([',', ')']).next())
+            .unwrap_or("")
+            .trim()
+    }
+
+    #[test]
+    fn test_cancel_removes_net_zero_bracket() {
+        let (_temp_dir, project_dir) = setup_test_env("ownership");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let main = func_block(&dump, "fn Main::main", |n| {
+            n.split('#').count() == 3 && n.ends_with("#funptr1")
+        });
+        let call = main
+            .iter()
+            .find(|l| l.contains("= Main::tally") && l.contains("#borrow("))
+            .expect("main should call the tally borrow version");
+        let arr = borrow_call_first_arg(call);
+
+        // Borrow-ification brackets the borrow call with a retain before it and a release after it;
+        // because nothing between them consumes the array, cancellation removes both, leaving no
+        // reference counting on the array in `main`.
+        for l in &main {
+            let t = l.trim_start();
+            for op in ["retain", "release"] {
+                assert!(
+                    t != format!("{} {}", op, arr) && !t.starts_with(&format!("{} {} ", op, arr)),
+                    "the array {} bracketing the borrow call should have been cancelled:\n{}",
+                    op,
+                    l
+                );
+            }
+        }
+
+        // With no retain left to demote it, the array stays `fresh` from its `fill`, so the following
+        // `set` receives a unique array — the elision the borrow-plus-cancel pipeline exists to enable.
+        assert_binding_prov(&dump, "arr", "[fresh]");
     }
 
     #[test]
