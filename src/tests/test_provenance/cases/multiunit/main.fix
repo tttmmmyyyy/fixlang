@@ -1,0 +1,17 @@
+module Main;
+
+// Consumes the whole unboxed pair (both boxed fields owned). Recursive to survive inlining.
+sink : (Array I64, Array I64) -> I64 -> I64;
+sink = |t, n| (
+    if n == 0 { t.@0.get_size + t.@1.get_size } else { sink(t, n - 1) }
+);
+
+main : IO ();
+main = (
+    let t = (Array::fill(2, 1), Array::fill(3, 2));
+    // `t` is used at two consuming calls, so it is non-last-use at the first: lowering emits a
+    // whole-value retain of `t`, which unit normalization splits into one retain per field.
+    let a = sink(t, 1);
+    let b = sink(t, 1);
+    println $ (a + b).to_string
+);

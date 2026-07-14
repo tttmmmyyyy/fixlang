@@ -21,6 +21,12 @@
 //!    release after the call for an owned value passed to a borrowed position, and a retain before it
 //!    for a borrowed value passed to an owning position.
 //!
+//! Borrow-ification and cancellation both work one reference-counting unit at a time, so
+//! `split_rc_units` first normalizes the lowered reference counting to that granularity: it
+//! decomposes a whole-value or subtree `Retain`/`Release` into one node per unit — a boxed leaf, a
+//! closure capture, or an unboxed-union root (a union is one unit, since a physical refcount
+//! operation on it must dispatch on the tag rather than name a variant).
+//!
 //! Borrow-ification leaves the caller with a retain before a borrow call and a release after it,
 //! bracketing the call with no consume between. `cancel` removes those net-zero brackets: a retain is
 //! cancellable when, on every forward path, a release un-bumps it before the value is consumed. That
@@ -1161,6 +1167,88 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Option<A
         cur = fields[idx].clone();
     }
     Some(cur)
+}
+
+// --- unit normalization ---
+
+/// Decompose every `Retain`/`Release` into one node per reference-counting unit its path covers, so
+/// borrow-ification and cancellation both see reference counting at unit granularity. A path that
+/// already names a single unit is unchanged; a whole-value retain on a fully-unboxed value (a no-op)
+/// disappears.
+pub fn split_rc_units(prog: &mut RcProgram, type_env: &TypeEnv) {
+    for func in prog.funcs.values_mut() {
+        func.body = split_body(&func.body, type_env);
+    }
+    for g in &mut prog.globals {
+        g.init = split_body(&g.init, type_env);
+    }
+}
+
+fn split_body(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || split_body_inner(node, type_env))
+}
+
+fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
+    match node.expr.as_ref() {
+        RcExpr::Retain(v, path, state, k) => {
+            let k = split_body(k, type_env);
+            split_rc(v, path, *state, false, k, &node.source, type_env)
+        }
+        RcExpr::Release(v, path, state, k) => {
+            let k = split_body(k, type_env);
+            split_rc(v, path, *state, true, k, &node.source, type_env)
+        }
+        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
+            let arms = arms
+                .iter()
+                .map(|arm| MatchArm {
+                    variant: arm.variant,
+                    payload: arm.payload.clone(),
+                    body: split_body(&arm.body, type_env),
+                })
+                .collect();
+            node_of(
+                RcExpr::Let(
+                    x.clone(),
+                    RcRhs::Match(scrut.clone(), arms),
+                    split_body(k, type_env),
+                ),
+                &node.source,
+            )
+        }
+        RcExpr::Let(x, rhs, k) => node_of(
+            RcExpr::Let(x.clone(), rhs.clone(), split_body(k, type_env)),
+            &node.source,
+        ),
+        RcExpr::Destructure(container, fields, k) => node_of(
+            RcExpr::Destructure(container.clone(), fields.clone(), split_body(k, type_env)),
+            &node.source,
+        ),
+        RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
+    }
+}
+
+/// Rebuild a `Retain`/`Release` as one node per unit under its path, preserving the state and span.
+fn split_rc(
+    v: &RcVar,
+    path: &Path,
+    state: RcState,
+    is_release: bool,
+    k: RcExprNode,
+    source: &Option<Span>,
+    type_env: &TypeEnv,
+) -> RcExprNode {
+    units_under(&v.ty, path, type_env)
+        .into_iter()
+        .rev()
+        .fold(k, |cont, unit| {
+            let expr = if is_release {
+                RcExpr::Release(v.clone(), unit, state, cont)
+            } else {
+                RcExpr::Retain(v.clone(), unit, state, cont)
+            };
+            node_of(expr, source)
+        })
 }
 
 // --- retain/release cancellation ---
