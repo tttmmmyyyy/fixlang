@@ -96,39 +96,139 @@ mod integration_tests {
         assert_binding_prov(&dump, "r", "[fresh]");
     }
 
-    /// Assert that the signature line of the function whose name starts with `fn_prefix` shows the
-    /// given text (used to check a parameter's inferred ownership).
-    fn assert_signature_contains(dump: &str, fn_prefix: &str, expected: &str) {
-        let line = dump
-            .lines()
-            .find(|l| l.starts_with(fn_prefix))
-            .unwrap_or_else(|| panic!("no function `{}` in the RC IR dump:\n{}", fn_prefix, dump));
+    /// The first signature line of a function whose name starts with `fn <name_prefix>` and whose
+    /// name segment (up to the first space) satisfies `name_pred`.
+    fn sig_line<'a>(dump: &'a str, name_prefix: &str, name_pred: impl Fn(&str) -> bool) -> &'a str {
+        dump.lines()
+            .find(|l| {
+                l.starts_with(name_prefix) && name_pred(l.split(['(', ' ']).nth(1).unwrap_or(""))
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "no matching `{}` function in the RC IR dump:\n{}",
+                    name_prefix, dump
+                )
+            })
+    }
+
+    /// Whether the dump has a function whose name starts with `fn <name_prefix>` and satisfies
+    /// `name_pred` on its name segment.
+    fn has_sig(dump: &str, name_prefix: &str, name_pred: impl Fn(&str) -> bool) -> bool {
+        dump.lines().any(|l| {
+            l.starts_with(name_prefix) && name_pred(l.split(['(', ' ']).nth(1).unwrap_or(""))
+        })
+    }
+
+    /// The body block of the first function whose signature satisfies the predicates: the lines from
+    /// that signature up to the blank line ending the function.
+    fn func_block<'a>(
+        dump: &'a str,
+        name_prefix: &str,
+        name_pred: impl Fn(&str) -> bool,
+    ) -> Vec<&'a str> {
+        let sig = sig_line(dump, name_prefix, name_pred);
+        let mut block = vec![sig];
+        for l in dump.lines().skip_while(|l| *l != sig).skip(1) {
+            if l.is_empty() {
+                break;
+            }
+            block.push(l);
+        }
+        block
+    }
+
+    #[test]
+    fn test_borrow_rewrite() {
+        let (_temp_dir, project_dir) = setup_test_env("ownership");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // `tally` only reads its array, so it is materialized in two versions: the all-`Own` baseline
+        // (its name unsuffixed) and a borrowing clone (`#borrow`) whose array parameter is `borrow`.
+        let tally_own = sig_line(&dump, "fn Main::tally", |n| !n.ends_with("#borrow"));
         assert!(
-            line.contains(expected),
-            "function `{}` should have `{}` in its signature, but it is:\n{}",
-            fn_prefix,
-            expected,
-            line
+            tally_own.contains("Std::Array Std::I64 [arg0] {own}"),
+            "the tally own version should have an owned array parameter:\n{}",
+            tally_own
+        );
+        let tally_borrow_sig = sig_line(&dump, "fn Main::tally", |n| n.ends_with("#borrow"));
+        assert!(
+            tally_borrow_sig.contains("Std::Array Std::I64 [arg0] {borrow}"),
+            "the tally borrow version should have a borrowed array parameter:\n{}",
+            tally_borrow_sig
+        );
+
+        // `echo_arr` returns its array argument, consuming it, so it stays a single all-`Own` version
+        // with no borrow clone.
+        assert!(
+            sig_line(&dump, "fn Main::echo_arr", |_| true)
+                .contains("Std::Array Std::I64 [arg0] {own}"),
+            "echo_arr should have an owned array parameter",
+        );
+        assert!(
+            !has_sig(&dump, "fn Main::echo_arr", |n| n.ends_with("#borrow")),
+            "echo_arr should not have a borrow version",
+        );
+
+        // `main` routes its non-tail, owned, non-last-use `tally(arr, ..)` call to the borrow version,
+        // and takes over releasing the array with a release right after the call.
+        // The main entry is `Main::main#<hash>#funptr1` (three `#`-segments); the lifted decap lambdas
+        // have an extra segment.
+        let main = func_block(&dump, "fn Main::main", |n| {
+            n.split('#').count() == 3 && n.ends_with("#funptr1")
+        });
+        let call_idx = main
+            .iter()
+            .position(|l| l.contains("= Main::tally") && l.contains("#borrow("))
+            .expect("main should call the tally borrow version");
+        assert!(
+            main[call_idx + 1].trim_start().starts_with("release "),
+            "the tally borrow call should be followed by a release:\n{}",
+            main[call_idx + 1]
+        );
+
+        // The borrow clone drops the reference counting on its borrowed parameter: its body performs
+        // no retain or release.
+        let tally_borrow = func_block(&dump, "fn Main::tally", |n| n.ends_with("#borrow"));
+        assert!(
+            tally_borrow
+                .iter()
+                .all(|l| !l.trim_start().starts_with("release ")
+                    && !l.trim_start().starts_with("retain ")),
+            "the tally borrow version should perform no reference counting:\n{}",
+            tally_borrow.join("\n")
         );
     }
 
     #[test]
-    fn test_borrow_inference_ownership() {
-        let (_temp_dir, project_dir) = setup_test_env("ownership");
+    fn test_borrow_union_no_double_release() {
+        let (_temp_dir, project_dir) = setup_test_env("union");
         let dump = emit_main_rc_ir(&project_dir);
 
-        // `tally` only reads its array (and its recursion passes it to a borrowing position), so the
-        // array parameter is inferred `borrow`.
-        assert_signature_contains(
-            &dump,
-            "fn Main::tally",
-            "Std::Array Std::I64 [arg0] {borrow}",
+        // `via_union` reads its array `p` (directly and through `some(p)`), so it has a borrow version
+        // whose array parameter is `borrow`.
+        assert!(
+            sig_line(&dump, "fn Main::via_union", |n| n.ends_with("#borrow"))
+                .contains("Std::Array Std::I64 [arg0] {borrow}"),
+            "via_union should have a borrow version with a borrowed array parameter",
         );
-        // `echo_arr` returns its array argument, consuming it, so the array parameter is `own`.
-        assert_signature_contains(
-            &dump,
-            "fn Main::echo_arr",
-            "Std::Array Std::I64 [arg0] {own}",
+
+        // The borrow version builds `some(p)` around the borrowed `p` and passes it to a borrowing
+        // position. Because the union only lays the borrowed payload in place (it does not own it),
+        // the version must perform no reference counting — in particular no release of the union,
+        // which would free the caller's still-owned array.
+        let via_borrow = func_block(&dump, "fn Main::via_union", |n| n.ends_with("#borrow"));
+        assert!(
+            via_borrow.iter().any(|l| l.contains("union_1(")),
+            "the via_union borrow version should build the union:\n{}",
+            via_borrow.join("\n")
+        );
+        assert!(
+            via_borrow
+                .iter()
+                .all(|l| !l.trim_start().starts_with("release ")
+                    && !l.trim_start().starts_with("retain ")),
+            "the via_union borrow version must not reference-count the borrowed value or its union:\n{}",
+            via_borrow.join("\n")
         );
     }
 }

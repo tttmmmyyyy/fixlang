@@ -16,7 +16,7 @@ use crate::{
     misc::{info_msg, warn_msg},
     optimization,
     rc_ir::{
-        borrow::param_ownership_map,
+        borrow::borrow_ify,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
@@ -62,11 +62,12 @@ fn dump_rc_ir(program: &Program, filter: &str) {
         .collect();
     let mut rc_program = lower_program(&type_env, &symbols, &all_program_symbols);
     insert_rc(&mut rc_program, &type_env);
+    let borrowed = borrow_ify(&rc_program, &type_env);
+    let rc_program = borrowed.program;
     let provs = analyze_program(&rc_program, &type_env);
-    let owns = param_ownership_map(&rc_program, &type_env);
     let ann = Annotations {
         provs: Some(&provs),
-        owns: Some(&owns),
+        owns: Some(&borrowed.param_owns),
     };
 
     // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
