@@ -7,15 +7,21 @@
 
 use crate::ast::name::FullName;
 use crate::misc::Map;
-use crate::rc_ir::ast::{Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar};
+use crate::rc_ir::ast::{
+    Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
+};
 use crate::rc_ir::provenance::Provenance;
 
-/// The optional per-variable provenance annotations for the dump.
-type Provs<'a> = Option<&'a Map<FullName, Provenance>>;
+/// The optional annotations for the dump: each variable's provenance, and each parameter's inferred
+/// ownership.
+#[derive(Clone, Copy, Default)]
+pub struct Annotations<'a> {
+    pub provs: Option<&'a Map<FullName, Provenance>>,
+    pub owns: Option<&'a Map<FullName, OwnershipShape>>,
+}
 
-/// Render a whole program, annotating each variable binding with its provenance when `provs` is
-/// given.
-pub fn program_to_string_annotated(prog: &RcProgram, provs: Provs) -> String {
+/// Render a whole program with the given annotations.
+pub fn program_to_string_annotated(prog: &RcProgram, ann: Annotations) -> String {
     let mut out = String::new();
     out.push_str(&format!("entry {}\n\n", prog.entry.name.to_string()));
 
@@ -23,13 +29,13 @@ pub fn program_to_string_annotated(prog: &RcProgram, provs: Provs) -> String {
     let mut funcs: Vec<&RcFunc> = prog.funcs.values().collect();
     funcs.sort_by(|a, b| a.name.name.to_string().cmp(&b.name.name.to_string()));
     for func in funcs {
-        out.push_str(&func_to_string(func, provs));
+        out.push_str(&func_to_string(func, ann));
         out.push('\n');
     }
 
     for glob in &prog.globals {
         out.push_str(&format!("global {}:\n", glob.symbol.to_string()));
-        out.push_str(&expr_to_string(&glob.init, 1, provs));
+        out.push_str(&expr_to_string(&glob.init, 1, ann));
         out.push('\n');
     }
 
@@ -38,15 +44,15 @@ pub fn program_to_string_annotated(prog: &RcProgram, provs: Provs) -> String {
 
 /// A function renders as its signature line (`fn name(params) cap -> ret:`) followed by its
 /// indented body.
-fn func_to_string(func: &RcFunc, provs: Provs) -> String {
+fn func_to_string(func: &RcFunc, ann: Annotations) -> String {
     let params = func
         .params
         .iter()
-        .map(|p| var_to_string(p, provs))
+        .map(|p| var_to_string(p, ann))
         .collect::<Vec<_>>()
         .join(", ");
     let cap = match &func.cap {
-        Some(cap) => format!(", cap {}", var_to_string(cap, provs)),
+        Some(cap) => format!(", cap {}", var_to_string(cap, ann)),
         None => String::new(),
     };
     let mut out = format!(
@@ -56,28 +62,52 @@ fn func_to_string(func: &RcFunc, provs: Provs) -> String {
         cap,
         func.ret_ty.to_string()
     );
-    out.push_str(&expr_to_string(&func.body, 1, provs));
+    out.push_str(&expr_to_string(&func.body, 1, ann));
     out
 }
 
 /// A variable renders as its name annotated with its type, its source name in a binding position
-/// when it has one, and its provenance when a provenance map is supplied.
-fn var_to_string(var: &RcVar, provs: Provs) -> String {
+/// when it has one, its provenance when a provenance map is supplied, and — for a parameter — its
+/// inferred ownership when an ownership map is supplied.
+fn var_to_string(var: &RcVar, ann: Annotations) -> String {
     let dbg = match &var.debug_name {
         Some(name) => format!(" (as {})", name),
         None => String::new(),
     };
-    let prov = match provs.and_then(|m| m.get(&var.name)) {
+    let prov = match ann.provs.and_then(|m| m.get(&var.name)) {
         Some(p) => format!(" [{}]", p.to_string()),
         None => String::new(),
     };
+    let own = match ann.owns.and_then(|m| m.get(&var.name)) {
+        Some(o) => format!(" {{{}}}", ownership_shape_to_string(o)),
+        None => String::new(),
+    };
     format!(
-        "{} : {}{}{}",
+        "{} : {}{}{}{}",
         var.name.to_string(),
         var.ty.to_string(),
         dbg,
-        prov
+        prov,
+        own
     )
+}
+
+/// Render an ownership shape: `own` / `borrow` for a boxed leaf, `u` where there is no boxed leaf,
+/// and a parenthesized list for an unboxed aggregate.
+fn ownership_shape_to_string(shape: &OwnershipShape) -> String {
+    match shape {
+        OwnershipShape::Unboxed => "u".to_string(),
+        OwnershipShape::Boxed(Ownership::Own) => "own".to_string(),
+        OwnershipShape::Boxed(Ownership::Borrow) => "borrow".to_string(),
+        OwnershipShape::UnboxedAgg(children) => {
+            let inner = children
+                .iter()
+                .map(ownership_shape_to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("({})", inner)
+        }
+    }
 }
 
 /// A variable in a position where only its identity matters (operands) renders as just its name.
@@ -92,17 +122,17 @@ fn indent(level: usize) -> String {
 
 /// A statement chain renders as one `let` / `retain` / `release` / `destructure` per line, indented
 /// at `level`, ending in `ret`.
-fn expr_to_string(node: &RcExprNode, level: usize, provs: Provs) -> String {
+fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
     let ind = indent(level);
     match node.expr.as_ref() {
         RcExpr::Let(var, rhs, cont) => {
             let mut out = format!(
                 "{}let {} = {}\n",
                 ind,
-                var_to_string(var, provs),
-                rhs_to_string(rhs, level, provs)
+                var_to_string(var, ann),
+                rhs_to_string(rhs, level, ann)
             );
-            out.push_str(&expr_to_string(cont, level, provs));
+            out.push_str(&expr_to_string(cont, level, ann));
             out
         }
         RcExpr::Retain(var, path, state, cont) => {
@@ -119,7 +149,7 @@ fn expr_to_string(node: &RcExprNode, level: usize, provs: Provs) -> String {
                 path_to_string(path),
                 state_to_string(state)
             );
-            out.push_str(&expr_to_string(cont, level, provs));
+            out.push_str(&expr_to_string(cont, level, ann));
             out
         }
         RcExpr::Release(var, path, state, cont) => {
@@ -136,13 +166,13 @@ fn expr_to_string(node: &RcExprNode, level: usize, provs: Provs) -> String {
                 path_to_string(path),
                 state_to_string(state)
             );
-            out.push_str(&expr_to_string(cont, level, provs));
+            out.push_str(&expr_to_string(cont, level, ann));
             out
         }
         RcExpr::Destructure(container, fields, cont) => {
             let binds = fields
                 .iter()
-                .map(|(idx, var)| format!(".{} -> {}", idx, var_to_string(var, provs)))
+                .map(|(idx, var)| format!(".{} -> {}", idx, var_to_string(var, ann)))
                 .collect::<Vec<_>>()
                 .join(", ");
             let mut out = format!(
@@ -151,7 +181,7 @@ fn expr_to_string(node: &RcExprNode, level: usize, provs: Provs) -> String {
                 var_name(container),
                 binds
             );
-            out.push_str(&expr_to_string(cont, level, provs));
+            out.push_str(&expr_to_string(cont, level, ann));
             out
         }
         RcExpr::Ret(var) => format!("{}ret {}\n", ind, var_name(var)),
@@ -159,7 +189,7 @@ fn expr_to_string(node: &RcExprNode, level: usize, provs: Provs) -> String {
 }
 
 /// A `let` right-hand side renders inline; a `match` expands to indented `case` arms.
-fn rhs_to_string(rhs: &RcRhs, level: usize, provs: Provs) -> String {
+fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
     match rhs {
         RcRhs::Var(var) => var_name(var),
         RcRhs::App(callee, args) => {
@@ -182,9 +212,9 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, provs: Provs) -> String {
                     "{}case {}({}):\n",
                     indent(level + 1),
                     variant,
-                    var_to_string(&arm.payload, provs)
+                    var_to_string(&arm.payload, ann)
                 ));
-                out.push_str(&expr_to_string(&arm.body, level + 2, provs));
+                out.push_str(&expr_to_string(&arm.body, level + 2, ann));
             }
             out.push_str(&format!("{}}}", indent(level)));
             out

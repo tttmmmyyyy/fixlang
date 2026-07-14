@@ -6,6 +6,7 @@
 //! representation.
 
 pub mod ast;
+pub mod borrow;
 pub mod codegen;
 pub mod lower;
 pub mod print;

@@ -95,4 +95,40 @@ mod integration_tests {
         // fresh result: the read-only recursion carries uniqueness through.
         assert_binding_prov(&dump, "r", "[fresh]");
     }
+
+    /// Assert that the signature line of the function whose name starts with `fn_prefix` shows the
+    /// given text (used to check a parameter's inferred ownership).
+    fn assert_signature_contains(dump: &str, fn_prefix: &str, expected: &str) {
+        let line = dump
+            .lines()
+            .find(|l| l.starts_with(fn_prefix))
+            .unwrap_or_else(|| panic!("no function `{}` in the RC IR dump:\n{}", fn_prefix, dump));
+        assert!(
+            line.contains(expected),
+            "function `{}` should have `{}` in its signature, but it is:\n{}",
+            fn_prefix,
+            expected,
+            line
+        );
+    }
+
+    #[test]
+    fn test_borrow_inference_ownership() {
+        let (_temp_dir, project_dir) = setup_test_env("ownership");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // `tally` only reads its array (and its recursion passes it to a borrowing position), so the
+        // array parameter is inferred `borrow`.
+        assert_signature_contains(
+            &dump,
+            "fn Main::tally",
+            "Std::Array Std::I64 [arg0] {borrow}",
+        );
+        // `echo_arr` returns its array argument, consuming it, so the array parameter is `own`.
+        assert_signature_contains(
+            &dump,
+            "fn Main::echo_arr",
+            "Std::Array Std::I64 [arg0] {own}",
+        );
+    }
 }

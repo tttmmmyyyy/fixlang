@@ -1,0 +1,6 @@
+[general]
+name = "prov-ownership"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

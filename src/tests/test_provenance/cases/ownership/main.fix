@@ -1,0 +1,22 @@
+module Main;
+
+// Read-only recursion: `arr` is only read (get_size, @), and the recursive self-call passes it to
+// its own first parameter, which converges to Borrow. So `arr` is inferred Borrow.
+tally : Array I64 -> I64 -> I64;
+tally = |arr, i| (
+    if i == arr.get_size { 0 } else { arr.@(i) + tally(arr, i + 1) }
+);
+
+// Returns its array argument: the return consumes it, so `arr` must be Own.
+echo_arr : Array I64 -> I64 -> Array I64;
+echo_arr = |arr, i| (
+    if i == 0 { arr } else { echo_arr(arr, i - 1) }
+);
+
+main : IO ();
+main = (
+    let arr = Array::fill(4, 1);
+    let a = tally(arr, 0);
+    let b = echo_arr(arr, 1).get_size;
+    println $ (a + b).to_string
+);

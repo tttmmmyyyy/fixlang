@@ -140,7 +140,7 @@ impl Provenance {
 
     /// The leaf source at path `π`, navigating through aggregates to the boxed leaf. An empty set if
     /// the path does not reach a boxed leaf.
-    fn leaf_at(&self, path: &[usize]) -> LeafSource {
+    pub fn leaf_at(&self, path: &[usize]) -> LeafSource {
         match self {
             Provenance::UnboxedAgg(children) => match path.split_first() {
                 Some((i, rest)) if *i < children.len() => children[*i].leaf_at(rest),
