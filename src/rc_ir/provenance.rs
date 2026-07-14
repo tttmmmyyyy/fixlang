@@ -14,17 +14,23 @@
 //! tracked, so a boxed value threaded through a tuple or an unboxed union (a loop state) keeps its
 //! provenance.
 //!
-//! This module builds the analysis up to intra-procedural precision: a function's parameters are
-//! seeded symbolically (`Arg`), primitive results are declared by `result_prov` and composed with
-//! the operands, and branches join by set union. Calls (`App`) are conservatively `Dyn` here;
-//! composing a call against the callee's effect is a later refinement.
+//! A function's parameters are seeded symbolically (`Arg`), primitive results are declared by
+//! `result_prov` and composed with the operands, and branches join by set union. Each function's
+//! effect — its result provenance, symbolic in its parameters — is computed to a fixed point (so
+//! recursion converges) and substituted at a direct call site; an indirect call is conservatively
+//! `Dyn`. A `Retain` demotes the retained variable's own leaves. Demoting the *other* variables that
+//! alias the same object — one reached by projecting the same unboxed-aggregate leaf — needs the
+//! shared object-identity (`root`) analysis, which the borrow-inference pass introduces; the demotion
+//! becomes root-based then.
 
 use crate::ast::inline_llvm::LLVMGenerator;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::misc::{Map, Set};
-use crate::rc_ir::ast::{MatchArm, Path, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
+use crate::rc_ir::ast::{
+    FuncRef, MatchArm, Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
+};
 use std::sync::Arc;
 
 /// The origin of one boxed leaf.
@@ -164,13 +170,19 @@ impl Provenance {
                         BaseSource::Dyn => {
                             out.insert(BaseSource::Dyn);
                         }
-                        BaseSource::Arg(j, sigma) => {
-                            if let Some(op) = operand_provs.get(*j) {
+                        BaseSource::Arg(j, sigma) => match operand_provs.get(*j) {
+                            Some(op) => {
                                 for s in op.leaf_at(sigma) {
                                     out.insert(s);
                                 }
                             }
-                        }
+                            // An argument index with no operand (a partial application, or a stray
+                            // `Arg` in a callee's effect) is resolved conservatively to `Dyn` rather
+                            // than dropped, which would wrongly leave the leaf `⊥` (unique).
+                            None => {
+                                out.insert(BaseSource::Dyn);
+                            }
+                        },
                     }
                 }
                 Provenance::Boxed(out)
@@ -383,14 +395,22 @@ impl Provenance {
 /// that records each variable's provenance at its binding point.
 struct Interp<'a> {
     type_env: &'a TypeEnv,
+    /// Each function's result provenance, symbolic in its parameters (`Arg`), used to compose a
+    /// direct call at its call site. Built to a fixed point before the recording pass.
+    effects: &'a Map<FuncRef, Provenance>,
+    /// The function each local closure value targets, so a call through it resolves to a direct
+    /// callee. Populated as `Closure` bindings are interpreted (a forward pass sees them first).
+    closure_targets: Map<FullName, FuncRef>,
     /// The provenance recorded at each variable's binding, for the dump. Names are globally unique.
     bindings: Map<FullName, Provenance>,
 }
 
 impl<'a> Interp<'a> {
-    fn new(type_env: &'a TypeEnv) -> Self {
+    fn new(type_env: &'a TypeEnv, effects: &'a Map<FuncRef, Provenance>) -> Self {
         Interp {
             type_env,
+            effects,
+            closure_targets: Map::default(),
             bindings: Map::default(),
         }
     }
@@ -433,6 +453,15 @@ impl<'a> Interp<'a> {
     ) -> (Provenance, Map<FullName, Provenance>) {
         match node.expr.as_ref() {
             RcExpr::Ret(x) => (self.operand(x, &env), env),
+            // A `match` needs its arms' exit environments joined for the continuation (a variable
+            // demoted on one arm but live after the match must stay demoted downstream), so it is
+            // handled separately from the other right-hand sides.
+            RcExpr::Let(x, RcRhs::Match(scrut, arms), cont) => {
+                let (result, exit_env) = self.interp_match(scrut, arms, &env);
+                env = exit_env;
+                self.record(x, &result, &mut env);
+                self.interp(cont, env)
+            }
             RcExpr::Let(x, rhs, cont) => {
                 let prov = self.interp_rhs(x, rhs, &env);
                 self.record(x, &prov, &mut env);
@@ -457,7 +486,8 @@ impl<'a> Interp<'a> {
         }
     }
 
-    /// The provenance produced by a `let`'s right-hand side.
+    /// The provenance produced by a `let`'s right-hand side (excluding `Match`, handled by the
+    /// caller for its environment join).
     fn interp_rhs(
         &mut self,
         result: &RcVar,
@@ -473,31 +503,78 @@ impl<'a> Interp<'a> {
                 let decl = result_prov(gen, &result.ty, &arg_tys, self.type_env);
                 decl.compose(&arg_provs)
             }
-            RcRhs::Closure(_, _) => {
-                // `{funptr, capture}`: the capture is a freshly allocated (or null) object.
+            RcRhs::Closure(fref, _) => {
+                // `{funptr, capture}`: the capture is a freshly allocated (or null) object. Remember
+                // which function this closure targets so a later call through it resolves directly.
+                self.closure_targets
+                    .insert(result.name.clone(), fref.clone());
                 Provenance::uniform(&result.ty, self.type_env, BaseSource::Fresh)
             }
-            RcRhs::App(_, _) => {
-                // Composing a call with the callee's effect is a later refinement; conservatively the
-                // result's boxed leaves are of unknown sharing.
-                Provenance::uniform(&result.ty, self.type_env, BaseSource::Dyn)
+            RcRhs::App(callee, args) => self.interp_app(result, callee, args, env),
+            RcRhs::Match(..) => {
+                unreachable!("a Match rhs is handled by interp_inner for its environment join")
             }
-            RcRhs::Match(scrut, arms) => self.interp_match(result, scrut, arms, env),
         }
     }
 
-    /// The provenance of a `match`: interpret each arm from the pre-branch environment and join the
-    /// arms' result provenances. (Carrying each arm's exit environment forward to the continuation is
-    /// a later refinement; here the match result is what downstream reads.)
+    /// The provenance of a call. A direct call — one whose callee resolves to a known function (a
+    /// closure value built here, or a top-level function referenced by name) — composes that
+    /// function's effect with the actual arguments. An indirect call, or a partial application whose
+    /// argument count does not match the callee's parameters, is conservatively `Dyn`.
+    fn interp_app(
+        &mut self,
+        result: &RcVar,
+        callee: &RcVar,
+        args: &[RcVar],
+        env: &Map<FullName, Provenance>,
+    ) -> Provenance {
+        let target = self.closure_targets.get(&callee.name).cloned().or_else(|| {
+            let fref = FuncRef {
+                name: callee.name.clone(),
+            };
+            self.effects.contains_key(&fref).then_some(fref)
+        });
+        if let Some(fref) = target {
+            if let Some(effect) = self.effects.get(&fref) {
+                // The effect is symbolic in the callee's parameters; substitute the actual
+                // arguments (`compose` resolves any unmatched parameter to `Dyn`, so an arity
+                // mismatch stays sound).
+                let arg_provs: Vec<Provenance> =
+                    args.iter().map(|a| self.operand(a, env)).collect();
+                return effect.compose(&arg_provs);
+            }
+        }
+        Provenance::uniform(&result.ty, self.type_env, BaseSource::Dyn)
+    }
+
+    /// Interpret a function body from its parameters (seeded symbolically as `Arg`) and return its
+    /// result provenance, recording each binding into `self.bindings`.
+    fn run_func(&mut self, func: &RcFunc) -> Provenance {
+        let mut env = Map::default();
+        for (i, p) in func.params.iter().enumerate() {
+            self.seed_param(p, i, &mut env);
+        }
+        if let Some(cap) = &func.cap {
+            // The capture sits just past the parameters in the argument numbering.
+            self.seed_param(cap, func.params.len(), &mut env);
+        }
+        let (result, _exit) = self.interp(&func.body, env);
+        result
+    }
+
+    /// Interpret a `match`: run each arm from the pre-branch environment, then join the arms' result
+    /// provenances and their exit environments pointwise. The joined exit environment carries a
+    /// demotion that happened on only one arm forward to the continuation (a variable made `Dyn` in
+    /// one branch must stay `Dyn` where the branches merge).
     fn interp_match(
         &mut self,
-        _result: &RcVar,
         scrut: &RcVar,
         arms: &[MatchArm],
         env: &Map<FullName, Provenance>,
-    ) -> Provenance {
+    ) -> (Provenance, Map<FullName, Provenance>) {
         let sprov = self.operand(scrut, env);
-        let mut joined: Option<Provenance> = None;
+        let mut joined_result: Option<Provenance> = None;
+        let mut joined_env: Option<Map<FullName, Provenance>> = None;
         for arm in arms {
             let mut arm_env = env.clone();
             // The payload is the variant's value (unboxed union) or the whole scrutinee (catch-all).
@@ -506,35 +583,81 @@ impl<'a> Interp<'a> {
                 None => sprov.clone(),
             };
             self.record(&arm.payload, &payload_prov, &mut arm_env);
-            let (arm_prov, _arm_exit) = self.interp(&arm.body, arm_env);
-            joined = Some(match joined {
+            let (arm_prov, arm_exit) = self.interp(&arm.body, arm_env);
+            joined_result = Some(match joined_result {
                 None => arm_prov,
                 Some(acc) => acc.join(&arm_prov),
             });
+            joined_env = Some(match joined_env {
+                None => arm_exit,
+                Some(acc) => join_envs(&acc, &arm_exit),
+            });
         }
-        joined.unwrap_or(Provenance::Unboxed)
+        (
+            joined_result.unwrap_or(Provenance::Unboxed),
+            joined_env.unwrap_or_else(|| env.clone()),
+        )
     }
+}
+
+/// Pointwise join of two environments: a variable present in both is joined; one present on only a
+/// single side (an arm-local binding, out of scope past the match) is kept as is.
+fn join_envs(
+    a: &Map<FullName, Provenance>,
+    b: &Map<FullName, Provenance>,
+) -> Map<FullName, Provenance> {
+    let mut out = a.clone();
+    for (k, vb) in b {
+        out.entry(k.clone())
+            .and_modify(|va| *va = va.join(vb))
+            .or_insert_with(|| vb.clone());
+    }
+    out
 }
 
 /// Analyze every function and global initializer of `prog`, returning each variable's provenance at
 /// its binding point (for the RC IR dump). Names are globally unique, so one flat map is unambiguous.
 pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> Map<FullName, Provenance> {
+    // Phase 1: compute each function's effect (its result provenance, symbolic in its parameters) to
+    // a fixed point. A direct call substitutes the callee's effect, so recursion needs iteration;
+    // the lattice is finite and the join is monotone, so it converges. Start each effect at `⊥`.
+    let mut effects: Map<FuncRef, Provenance> = prog
+        .funcs
+        .values()
+        .map(|f| {
+            (
+                f.name.clone(),
+                Provenance::uniform_bottom(&f.ret_ty, type_env),
+            )
+        })
+        .collect();
+    loop {
+        let mut next = effects.clone();
+        let mut changed = false;
+        for func in prog.funcs.values() {
+            let mut interp = Interp::new(type_env, &effects);
+            let result = interp.run_func(func);
+            let merged = effects[&func.name].join(&result);
+            if merged != effects[&func.name] {
+                next.insert(func.name.clone(), merged);
+                changed = true;
+            }
+        }
+        effects = next;
+        if !changed {
+            break;
+        }
+    }
+
+    // Phase 2: record every variable's provenance using the converged effects.
     let mut out = Map::default();
     for func in prog.funcs.values() {
-        let mut interp = Interp::new(type_env);
-        let mut env = Map::default();
-        for (i, p) in func.params.iter().enumerate() {
-            interp.seed_param(p, i, &mut env);
-        }
-        if let Some(cap) = &func.cap {
-            // The capture sits just past the parameters in the argument numbering.
-            interp.seed_param(cap, func.params.len(), &mut env);
-        }
-        let _ = interp.interp(&func.body, env);
+        let mut interp = Interp::new(type_env, &effects);
+        interp.run_func(func);
         out.extend(interp.bindings);
     }
     for glob in &prog.globals {
-        let mut interp = Interp::new(type_env);
+        let mut interp = Interp::new(type_env, &effects);
         let _ = interp.interp(&glob.init, Map::default());
         out.extend(interp.bindings);
     }
@@ -639,5 +762,26 @@ mod tests {
     fn bottom_leaf_renders_as_underscore() {
         assert_eq!(Provenance::Boxed(Set::default()).to_string(), "_");
         assert_eq!(fresh().to_string(), "fresh");
+    }
+
+    #[test]
+    fn join_envs_is_pointwise_and_keeps_one_sided_bindings() {
+        let x = FullName::local("x");
+        let y = FullName::local("y");
+        let z = FullName::local("z");
+        // `x` is fresh on one side, dyn on the other; `y` only on the left; `z` only on the right.
+        let mut a = Map::default();
+        a.insert(x.clone(), fresh());
+        a.insert(y.clone(), fresh());
+        let mut b = Map::default();
+        b.insert(x.clone(), dyn_());
+        b.insert(z.clone(), dyn_());
+
+        let joined = join_envs(&a, &b);
+        // A variable present on both sides is joined.
+        assert_eq!(joined[&x], fresh().join(&dyn_()));
+        // A variable present on only one side is kept as is.
+        assert_eq!(joined[&y], fresh());
+        assert_eq!(joined[&z], dyn_());
     }
 }

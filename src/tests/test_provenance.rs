@@ -16,13 +16,36 @@ mod integration_tests {
         path
     }
 
-    // Copy the test cases into a fresh temporary directory so parallel test runs do not conflict.
-    fn setup_test_env() -> (TempDir, PathBuf) {
+    // Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
+    // and return the directory of the named case project.
+    fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let dst = temp_dir.path().to_path_buf();
         copy_dir_recursive(&get_test_cases_dir(), &dst).expect("Failed to copy test cases");
-        let project_dir = dst.join("basic");
+        let project_dir = dst.join(case);
         (temp_dir, project_dir)
+    }
+
+    /// Build the case project with `--emit-rc-ir Main` and return the dumped RC IR of the `Main`
+    /// module.
+    fn emit_main_rc_ir(project_dir: &std::path::Path) -> String {
+        let output = fix_command()
+            .arg("build")
+            .arg("--emit-rc-ir")
+            .arg("Main")
+            .current_dir(project_dir)
+            .output()
+            .expect("Failed to execute fix build --emit-rc-ir");
+
+        if !output.status.success() {
+            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            panic!("fix build --emit-rc-ir failed");
+        }
+
+        let dump_path = project_dir.join(".fixlang/rc_ir.Main.txt");
+        std::fs::read_to_string(&dump_path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
     /// Assert that the binding named `source_name` (its `(as ...)` annotation) is annotated with the
@@ -49,25 +72,8 @@ mod integration_tests {
 
     #[test]
     fn test_provenance_dump_basic() {
-        let (_temp_dir, project_dir) = setup_test_env();
-
-        let output = fix_command()
-            .arg("build")
-            .arg("--emit-rc-ir")
-            .arg("Main")
-            .current_dir(&project_dir)
-            .output()
-            .expect("Failed to execute fix build --emit-rc-ir");
-
-        if !output.status.success() {
-            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-            panic!("fix build --emit-rc-ir failed");
-        }
-
-        let dump_path = project_dir.join(".fixlang/rc_ir.Main.txt");
-        let dump = std::fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e));
+        let (_temp_dir, project_dir) = setup_test_env("basic");
+        let dump = emit_main_rc_ir(&project_dir);
 
         // `Array::fill` and an array literal produce a fresh array.
         assert_binding_prov(&dump, "arr", "[fresh]");
@@ -77,5 +83,16 @@ mod integration_tests {
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
         // `s0` is dyn.
         assert_binding_prov(&dump, "pair", "[(fresh, dyn)]");
+    }
+
+    #[test]
+    fn test_provenance_interprocedural_composition() {
+        let (_temp_dir, project_dir) = setup_test_env("interproc");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // `echo_arr` returns its array argument unchanged, so its effect — computed to a fixed point
+        // over its recursion — is that argument. Calling it on a fresh array therefore composes to a
+        // fresh result: the read-only recursion carries uniqueness through.
+        assert_binding_prov(&dump, "r", "[fresh]");
     }
 }

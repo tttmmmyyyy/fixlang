@@ -1,0 +1,15 @@
+module Main;
+
+// A read-only recursion that returns its array argument unchanged. Its provenance effect is its
+// first argument, so a call composes to whatever the caller passes in.
+echo_arr : Array I64 -> I64 -> Array I64;
+echo_arr = |arr, i| (
+    if i == 0 { arr } else { echo_arr(arr, i - 1) }
+);
+
+main : IO ();
+main = (
+    let arr = Array::fill(3, 7);
+    let r = echo_arr(arr, 2);
+    println $ r.get_size.to_string
+);
