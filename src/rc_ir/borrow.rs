@@ -476,11 +476,19 @@ fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mu
         path.pop();
         return;
     }
-    if ty.is_box(type_env) || ty.is_union(type_env) {
+    // A punched array carries a moved-out hole at a run-time index, so its refcount traversal is a
+    // whole-value operation that skips that hole; it is one indivisible unit, not a struct to descend.
+    if ty.is_box(type_env) || ty.is_union(type_env) || ty.is_punched_array() {
         out.push(path.clone());
         return;
     }
+    let fields = ty.fields(type_env);
     for (i, fty) in ty.field_types(type_env).iter().enumerate() {
+        // A punched struct field is a hole (its value has moved out): the whole-value traversal skips
+        // it, so it names no unit.
+        if fields[i].is_punched {
+            continue;
+        }
         path.push(i);
         rc_units_go(fty, type_env, path, out);
         path.pop();

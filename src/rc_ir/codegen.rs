@@ -135,8 +135,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let obj = self.get_scoped_obj(&x.name);
                 self.build_tail(obj, tail)
             }
-            RcExpr::Retain(x, _path, _state, k) => {
+            RcExpr::Retain(x, path, _state, k) => {
                 let obj = self.get_scoped_obj_noretain(&x.name);
+                let obj = self.project_rc_unit(obj, path);
                 if x.nonnull {
                     // A statically non-null boxed value (a non-empty capture object): retain
                     // without the null check that a possibly-null capture object needs.
@@ -153,8 +154,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                 }
                 self.eval_rc_expr(k, tail, fn_map)
             }
-            RcExpr::Release(x, _path, _state, k) => {
+            RcExpr::Release(x, path, _state, k) => {
                 let obj = self.get_scoped_obj_noretain(&x.name);
+                let obj = self.project_rc_unit(obj, path);
                 if x.nonnull {
                     // A statically non-null boxed value (a non-empty capture object): release
                     // without the null check that a possibly-null capture object needs.
@@ -218,6 +220,27 @@ impl<'c, 'm> Generator<'c, 'm> {
                 res
             }
         }
+    }
+
+    /// Project the whole object `obj` down `path` to the sub-object naming one reference-counting
+    /// unit. Each index descends one unboxed struct/tuple field — or a closure's capture field — so
+    /// the path stops at the unit itself: a boxed leaf, an unboxed union, or a closure capture. The
+    /// empty path names the whole value, returning `obj` unchanged. The caller retains or releases
+    /// the returned sub-object as a whole, which reference-counts exactly that unit (a boxed leaf
+    /// directly, a union by tag dispatch).
+    fn project_rc_unit(&mut self, obj: Object<'c>, path: &[usize]) -> Object<'c> {
+        let mut cur = obj;
+        for &idx in path {
+            let field_ty = if cur.ty.is_closure() {
+                // The only unit path into a closure names its capture object, its second field.
+                make_dynamic_object_ty()
+            } else {
+                cur.ty.field_types(self.type_env())[idx].clone()
+            };
+            let val = cur.extract_field(self, idx as u32);
+            cur = Object::new(val, field_ty, self);
+        }
+        cur
     }
 
     /// Bind `obj` to `x` on the scope, emit its debug local variable, evaluate the continuation `k`,

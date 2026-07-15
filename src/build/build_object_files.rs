@@ -228,6 +228,7 @@ pub fn build_object_files<'c>(
                 let type_env = gc.type_env();
                 let mut p = lower_program(type_env, &unit_symbols, &all_symbols);
                 insert_rc(&mut p, type_env);
+                split_rc_units(&mut p, type_env);
                 p
             };
             gc.implement_rc_program(&rc_prog);
