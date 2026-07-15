@@ -87,6 +87,60 @@ pub fn test_unboxed_destructure_field_borrow() {
 }
 
 #[test]
+pub fn test_union_borrow_no_double_free() {
+    // A function builds `some(p)` around a borrowed array `p` and passes it to a borrowing position,
+    // then the caller reads the array again afterward. Building the union lays the borrowed payload
+    // in place rather than owning it, so borrow-ification must not release `p` through that union;
+    // otherwise the caller's later read is a use-after-free of its own array. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            peek_opt : Option (Array I64) -> I64 -> I64;
+            peek_opt = |o, n| if n == 0 { o.map(|a| a.@size).as_some_or(0) } else { peek_opt(o, n - 1) };
+
+            via_union : Array I64 -> I64 -> I64;
+            via_union = |p, n| if n == 0 { p.@size } else { peek_opt(some(p), 3) + via_union(p, n - 1) };
+
+            main : IO ();
+            main = (
+                let a = Array::fill(5, 7);
+                let r = via_union(a, 2);
+                assert_eq(|_|"via_union", r + a.@size + a.@(0), 15 + 5 + 7);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_cancel_match_arm_array_fate() {
+    // A borrowing call reads the array, then a match consumes it on one arm (`push_back`) and drops
+    // it on the other (returning a fresh array). Cancellation must respect the array's per-arm fate,
+    // keeping the release its lowering placed rather than over-cancelling it. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            tally : Array I64 -> I64 -> I64;
+            tally = |arr, i| if i == arr.@size { 0 } else { arr.@(i) + tally(arr, i + 1) };
+
+            choose : Array I64 -> Bool -> Array I64;
+            choose = |arr, keep| (
+                let n = tally(arr, 0);
+                if keep { arr.push_back(n) } else { Array::fill(1, n) }
+            );
+
+            main : IO ();
+            main = (
+                let r1 = choose(Array::fill(3, 2), true);
+                let r2 = choose(Array::fill(3, 5), false);
+                assert_eq(|_|"choose", r1.@size + r2.@size, 4 + 1);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_if_semicolon_in_let() {
     let source = r#"    
             module Main;
