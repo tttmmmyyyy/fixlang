@@ -272,7 +272,7 @@ fn leaf_source_to_string(ls: &LeafSource) -> String {
 /// clones and uniqueness checks), whereas a wrong `Fresh` would let a later pass drop a check on a
 /// shared value. So `Fresh` is declared only for the unambiguous allocators and force-unique array
 /// ops, `Arg` only for construction and projection through unboxed aggregates; everything else —
-/// including the subtler in-place and boxed-container ops — stays `Dyn` until refined with tests.
+/// including the subtler in-place and boxed-container ops — stays `Dyn`.
 pub fn result_prov(
     gen: &LLVMGenerator,
     result_ty: &Arc<TypeNode>,

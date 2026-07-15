@@ -1,6 +1,6 @@
-//! Borrow-ification over the RC IR (plan §2.1): rewriting `Own` parameters that a function only
+//! Borrow-ification over the RC IR: rewriting `Own` parameters that a function only
 //! reads to `Borrow`, so the caller keeps ownership across the call and no retain is needed before a
-//! non-last use — which is what keeps a value `Unique` for the uniqueness analysis (§3).
+//! non-last use — which is what keeps a value `Unique` for the uniqueness analysis.
 //!
 //! Lowering makes every parameter `Own` (the callee releases it). Borrow-ification has three parts:
 //!
@@ -30,7 +30,7 @@
 //! Borrow-ification leaves the caller with a retain before a borrow call and a release after it,
 //! bracketing the call with no consume between. `cancel` removes those net-zero brackets: a retain is
 //! cancellable when, on every forward path, a release un-bumps it before the value is consumed. That
-//! keeps the value `Unique` for the uniqueness analysis (§3), the reason borrow-ification exists. The
+//! keeps the value `Unique` for the uniqueness analysis, the reason borrow-ification exists. The
 //! cancellation shares the object-identity (`root`) and consume-site machinery with the inference and
 //! rewrite above, so all three read the same aliasing facts.
 
@@ -118,6 +118,8 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
 }
 
 impl FuncFacts {
+    /// The facts of a function: its parameters and capture as `Param` origins, plus the `Def` and
+    /// type of every variable bound in its body.
     fn of(func: &RcFunc) -> FuncFacts {
         let mut facts = FuncFacts::empty();
         for p in func.params.iter().chain(func.cap.iter()) {
@@ -895,6 +897,8 @@ fn rename_expr(node: &RcExprNode, rename: &Map<FullName, FullName>) -> RcExprNod
     }
 }
 
+/// A right-hand side with every variable occurrence (including `Llvm` operand names) rewritten
+/// through `rename`.
 fn rename_rhs(rhs: &RcRhs, rename: &Map<FullName, FullName>) -> RcRhs {
     match rhs {
         RcRhs::Var(v) => RcRhs::Var(rename_var(v, rename)),
@@ -1058,6 +1062,7 @@ impl<'a> RewriteCtx<'a> {
         })
     }
 
+    /// Whether this version owns the value at any of `arg`'s reference-counting units.
     fn any_owned_unit(&self, arg: &RcVar) -> bool {
         rc_units(&arg.ty, self.type_env)
             .iter()
@@ -1324,6 +1329,7 @@ type Pend = Map<Leaf, Vec<NodeId>>;
 /// same borrowed tree, recognizes them by the same identity.
 type NodeId = usize;
 
+/// The `NodeId` of a node: the address of its boxed `RcExpr`.
 fn node_id(node: &RcExprNode) -> NodeId {
     node.expr.as_ref() as *const RcExpr as NodeId
 }
