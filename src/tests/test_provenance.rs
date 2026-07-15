@@ -201,6 +201,35 @@ mod integration_tests {
     }
 
     #[test]
+    fn test_benefit_routing_by_last_use() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let main = func_block(&dump, "fn Main::main", |n| {
+            n.split('#').count() == 3 && n.ends_with("#funptr1")
+        });
+        let tally_calls: Vec<&&str> = main.iter().filter(|l| l.contains("= Main::tally")).collect();
+        let borrow_calls = tally_calls.iter().filter(|l| l.contains("#borrow(")).count();
+        let own_calls = tally_calls.len() - borrow_calls;
+
+        // The array read again after its call is owned but not at its last use, so routing to the
+        // borrow version removes a retain — that call goes to the borrow version. The array not used
+        // after its call is at its last use, so borrowing it would remove no retain and only delay
+        // its release — that call stays on the own version. Safe-only routing would send both to the
+        // borrow version.
+        assert_eq!(
+            borrow_calls, 1,
+            "the non-last-use call should route to the borrow version:\n{}",
+            main.join("\n")
+        );
+        assert_eq!(
+            own_calls, 1,
+            "the last-use call should stay on the own version:\n{}",
+            main.join("\n")
+        );
+    }
+
+    #[test]
     fn test_split_rc_into_units() {
         let (_temp_dir, project_dir) = setup_test_env("multiunit");
         let dump = emit_main_rc_ir(&project_dir);

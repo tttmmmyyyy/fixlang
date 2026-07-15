@@ -970,7 +970,7 @@ impl<'a> RewriteCtx<'a> {
     fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
-                let callee = self.route(x, callee, args);
+                let callee = self.route(x, callee, args, k);
                 let (before, after) = self.call_rc(&callee, args);
                 let k = prepend_rc(after, true, self.rewrite(k));
                 let app = node_of(
@@ -1015,15 +1015,16 @@ impl<'a> RewriteCtx<'a> {
         }
     }
 
-    /// Route a direct call: if the callee has a borrow version and routing to it is safe, retarget
-    /// the callee to that version; otherwise keep the original (the all-`Own` version, or an
-    /// indirect callee this leaves untouched).
-    fn route(&self, x: &RcVar, callee: &RcVar, args: &[RcVar]) -> RcVar {
+    /// Route a direct call: retarget the callee to its borrow version when that has a version and
+    /// routing to it is both safe and beneficial; otherwise keep the original (the all-`Own` version,
+    /// or an indirect callee this leaves untouched). `k` is the call's continuation, which the
+    /// benefit test reads to tell an argument's last use from a use that outlives the call.
+    fn route(&self, x: &RcVar, callee: &RcVar, args: &[RcVar], k: &RcExprNode) -> RcVar {
         let orig = FuncRef {
             name: callee.name.clone(),
         };
         if let Some(bref) = self.borrow_versions.get(&orig) {
-            if self.safe(x, args) {
+            if self.safe(x, args) && self.beneficial(bref, args, k) {
                 let mut c = callee.clone();
                 c.name = bref.name.clone();
                 return c;
@@ -1036,6 +1037,26 @@ impl<'a> RewriteCtx<'a> {
     /// owned argument — so the after-call release the borrow version needs never lands on a tail call.
     fn safe(&self, x: &RcVar, args: &[RcVar]) -> bool {
         !self.tail.contains(&x.name) || !args.iter().any(|a| self.any_owned_unit(a))
+    }
+
+    /// Whether routing this call to the borrow version removes a reference count it would otherwise
+    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows and
+    /// that would otherwise be retained: a borrowed value (which an owning callee makes the caller
+    /// retain before the call) or an owned value used again after the call (whose retain-before the
+    /// borrow cancels). An owned value at its last use is moved either way, so borrowing it removes no
+    /// retain and only delays its release; it is not a benefit.
+    fn beneficial(&self, bref: &FuncRef, args: &[RcVar], k: &RcExprNode) -> bool {
+        let bparams = self.callee_params.get(bref);
+        args.iter().enumerate().any(|(q, arg)| {
+            let last_use = !used_later(&arg.name, k);
+            rc_units(&arg.ty, self.type_env).iter().any(|unit| {
+                let callee_borrows = match bparams.and_then(|ps| ps.get(q)) {
+                    Some((pn, _)) => !self.own_out.contains(&(pn.clone(), unit.clone())),
+                    None => false,
+                };
+                callee_borrows && !(self.owns_unit(arg, unit) && last_use)
+            })
+        })
     }
 
     fn any_owned_unit(&self, arg: &RcVar) -> bool {
@@ -1138,6 +1159,35 @@ fn prepend_rc(items: Vec<(RcVar, Path)>, is_release: bool, k: RcExprNode) -> RcE
         };
         node_of(expr, &None)
     })
+}
+
+/// Whether the variable named `name` is used again in an expression subtree — any occurrence as a
+/// value: a move, a call callee or argument, an inline-LLVM operand, a closure capture, a match
+/// scrutinee, a destructured container, or the returned variable. A `Retain`/`Release` names its
+/// variable only for reference counting, not as a use, so those are transparent — which lets a call
+/// be recognized as an argument's last use even when the lowering brackets it with reference counts.
+fn used_later(name: &FullName, node: &RcExprNode) -> bool {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || match node.expr.as_ref() {
+        RcExpr::Ret(v) => v.name == *name,
+        RcExpr::Let(_, rhs, k) => rhs_uses(name, rhs) || used_later(name, k),
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => used_later(name, k),
+        RcExpr::Destructure(container, _, k) => container.name == *name || used_later(name, k),
+    })
+}
+
+/// Whether the variable named `name` occurs as a value in a right-hand side.
+fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
+    match rhs {
+        RcRhs::Var(v) => v.name == *name,
+        RcRhs::App(callee, args) => callee.name == *name || args.iter().any(|a| a.name == *name),
+        RcRhs::Closure(_, caps) => caps.iter().any(|c| c.name == *name),
+        RcRhs::Llvm(gen, args) => {
+            args.iter().any(|a| a.name == *name) || gen.free_vars().iter().any(|v| v == name)
+        }
+        RcRhs::Match(scrut, arms) => {
+            scrut.name == *name || arms.iter().any(|arm| used_later(name, &arm.body))
+        }
+    }
 }
 
 /// The reference-counting units under a path of a value's type: the units of the subtree the path
