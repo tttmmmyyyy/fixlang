@@ -44,7 +44,7 @@ use crate::rc_ir::ast::{
     FuncRef, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcGlobalInit,
     RcProgram, RcRhs, RcState, RcVar,
 };
-use crate::rc_ir::provenance::{result_prov, BaseSource};
+use crate::rc_ir::provenance::{result_prov, BaseSource, Provenance};
 use std::sync::Arc;
 
 /// A boxed leaf: a variable together with the path to one of its boxed leaves. Because RC IR names
@@ -399,8 +399,7 @@ fn passthrough_arg_leaves(
 }
 
 /// Collect every `Arg(i, path)` symbol appearing in a declared provenance.
-fn collect_arg_leaves(prov: &crate::rc_ir::provenance::Provenance, out: &mut Set<(usize, Path)>) {
-    use crate::rc_ir::provenance::Provenance;
+fn collect_arg_leaves(prov: &Provenance, out: &mut Set<(usize, Path)>) {
     match prov {
         Provenance::Unboxed => {}
         Provenance::UnboxedAgg(children) => {

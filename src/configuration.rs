@@ -11,7 +11,7 @@ use crate::elaboration::typecheckcache::{self, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::{platform_valgrind_supported, warn_msg, Finally, Map};
-use crate::preliminary_command::PreliminaryCommand;
+use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
 use inkwell::module::Linkage;
 use inkwell::OptimizationLevel;
@@ -669,7 +669,7 @@ impl Configuration {
     }
 
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
-        crate::preliminary_command::approve_and_run(self)
+        approve_and_run(self)
     }
 
     #[allow(dead_code)]
