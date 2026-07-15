@@ -52,7 +52,7 @@ pub struct BuildObjFilesResult {
 // Write the RC IR of the symbols selected by `filter` to a file under `.fixlang/`: a module name
 // dumps that module's symbols to `rc_ir.<module>.txt`, `all` dumps every symbol to `rc_ir.txt`.
 // Behind `--emit-rc-ir`, for compiler development.
-fn dump_rc_ir(program: &Program, filter: &str) {
+fn dump_rc_ir(program: &Program, filter: &str, config: &Configuration) {
     let type_env = program.type_env();
     let all_program_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
     let symbols: Vec<Symbol> = all_program_symbols
@@ -63,12 +63,19 @@ fn dump_rc_ir(program: &Program, filter: &str) {
     let mut rc_program = lower_program(&type_env, &symbols, &all_program_symbols);
     insert_rc(&mut rc_program, &type_env);
     split_rc_units(&mut rc_program, &type_env);
-    let borrowed = borrow_ify(&rc_program, &type_env);
-    let rc_program = cancel(&borrowed.program, &borrowed.own_out, &type_env);
+    // Reflect what code generation does at this optimization level: borrow-ify and cancel only when
+    // the borrow optimization is enabled (`Max` and above).
+    let param_owns = if config.enable_borrow_optimization() {
+        let borrowed = borrow_ify(&rc_program, &type_env);
+        rc_program = cancel(&borrowed.program, &borrowed.own_out, &type_env);
+        Some(borrowed.param_owns)
+    } else {
+        None
+    };
     let provs = analyze_program(&rc_program, &type_env);
     let ann = Annotations {
         provs: Some(&provs),
-        owns: Some(&borrowed.param_owns),
+        owns: param_owns.as_ref(),
     };
 
     // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
@@ -119,7 +126,7 @@ pub fn build_object_files<'c>(
 
     // Dump the RC IR for inspection when `--emit-rc-ir` is given.
     if let Some(filter) = &config.emit_rc_ir {
-        dump_rc_ir(&program, filter);
+        dump_rc_ir(&program, filter, config);
     }
 
     // Determine compilation units.
@@ -229,8 +236,12 @@ pub fn build_object_files<'c>(
                 let mut p = lower_program(type_env, &unit_symbols, &all_symbols);
                 insert_rc(&mut p, type_env);
                 split_rc_units(&mut p, type_env);
-                let borrowed = borrow_ify(&p, type_env);
-                cancel(&borrowed.program, &borrowed.own_out, type_env)
+                if config.enable_borrow_optimization() {
+                    let borrowed = borrow_ify(&p, type_env);
+                    cancel(&borrowed.program, &borrowed.own_out, type_env)
+                } else {
+                    p
+                }
             };
             gc.implement_rc_program(&rc_prog);
 
