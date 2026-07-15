@@ -229,7 +229,8 @@ pub fn build_object_files<'c>(
                 let mut p = lower_program(type_env, &unit_symbols, &all_symbols);
                 insert_rc(&mut p, type_env);
                 split_rc_units(&mut p, type_env);
-                p
+                let borrowed = borrow_ify(&p, type_env);
+                cancel(&borrowed.program, &borrowed.own_out, type_env)
             };
             gc.implement_rc_program(&rc_prog);
 

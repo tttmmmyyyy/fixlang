@@ -35,6 +35,29 @@ pub fn test0() {
 }
 
 #[test]
+pub fn test_loop_m_array_state_no_leak() {
+    // A monadic loop whose state carries a boxed array: `continue_m`/`break_m` wrap the state tuple
+    // in a `LoopState` union and pass it to `pure` at an owning position. Borrow-ification must treat
+    // that union as owned — its payload is an owned tuple — rather than borrowed, or it brackets the
+    // call with a retain that has no matching release and leaks the array. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr = *loop_m((Array::empty(10), 0), |(arr, i)|
+                    if i == 5 { break_m $ arr }
+                    else { continue_m $ (arr.push_back(i * i), i + 1) }
+                );
+                assert_eq(|_|"size", arr.@size, 5);;
+                assert_eq(|_|"elems", arr, [0, 1, 4, 9, 16]);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_if_semicolon_in_let() {
     let source = r#"    
             module Main;

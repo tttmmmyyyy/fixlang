@@ -40,6 +40,12 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .get_function(&func.name.name.to_string())
                 .unwrap_or_else(|| self.declare_rc_function(func));
             fn_map.insert(fref.clone(), fn_val);
+            // A borrow version is a funptr function that `declare_symbol` did not register (it is
+            // synthesized by borrow-ification, not an original symbol). Register its accessor so a
+            // direct call routed to it resolves like any other funptr global.
+            if func.fn_ty.is_funptr() && !self.global.contains_key(&func.name.name) {
+                self.add_global_object(func.name.name.clone(), fn_val, func.fn_ty.clone());
+            }
         }
 
         for (fref, func) in prog.funcs.iter() {

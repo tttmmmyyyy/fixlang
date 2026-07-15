@@ -1071,10 +1071,17 @@ impl<'a> RewriteCtx<'a> {
     fn owns_unit(&self, arg: &RcVar, unit: &Path) -> bool {
         let (r, rp) = root(&self.facts, self.type_env, &arg.name, unit);
         match self.facts.params.get(&r) {
-            Some(rty) => {
-                let ru = clamp_unit(rty, &rp, self.type_env);
-                self.own_out.contains(&(r, ru))
-            }
+            // The root path may name a subtree that spans several reference-counting units rather than
+            // one — a union built from an unboxed tuple roots to the tuple at the empty path, whose
+            // units are its fields. The value is owned only when every unit it covers is owned. Each
+            // covered path is clamped to its unit key, so a path that descends into a union variant
+            // keys to the union root the owned set records.
+            Some(rty) => units_under(rty, &rp, self.type_env)
+                .iter()
+                .all(|u| {
+                    self.own_out
+                        .contains(&(r.clone(), clamp_unit(rty, u, self.type_env)))
+                }),
             None => true,
         }
     }
