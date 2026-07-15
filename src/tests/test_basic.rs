@@ -200,6 +200,66 @@ pub fn test_unique_check_elim_branch_shared() {
 }
 
 #[test]
+pub fn test_unique_check_elim_specialized_shared_and_unique() {
+    // A function that mutates its array argument in place is specialized per caller: a unique caller
+    // gets a clone with the check dropped (writing in place), a shared caller keeps the checked
+    // version (which clones). Specialization must not corrupt the shared caller's other holder. Run
+    // under memcheck so a wrongly dropped check shows as corruption.
+    let source = r#"
+            module Main;
+
+            bump : Array I64 -> Array I64;
+            bump = |arr| arr.set(0, arr.@(0) + 100);
+
+            main : IO ();
+            main = (
+                let u = Array::fill(2, 1);
+                let u = bump(u);
+                assert_eq(|_|"unique caller", u.@(0), 101);;
+
+                let s = Array::fill(2, 5);
+                let keep = [s];
+                let s2 = bump(s);
+                assert_eq(|_|"shared caller mutated", s2.@(0), 105);;
+                assert_eq(|_|"shared caller original intact", keep.@(0).@(0), 5);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_specialized_loop_shared_entry() {
+    // An array threaded through a loop that increments each element. Entered unique, every iteration's
+    // set writes in place; entered shared, the first set clones (the loop's shared version) and the
+    // rest run in place on that fresh clone. Either way the loop's other holder stays untouched. Run
+    // under memcheck.
+    let source = r#"
+            module Main;
+
+            inc_all : Array I64 -> Array I64;
+            inc_all = |arr| loop((0, arr), |(i, a)|
+                if i == a.@size { break $ a }
+                else { continue $ (i + 1, a.set(i, a.@(i) + 1)) }
+            );
+
+            main : IO ();
+            main = (
+                let u = inc_all(Array::fill(3, 0));
+                assert_eq(|_|"unique loop", u.@(0) + u.@(1) + u.@(2), 3);;
+
+                let s = Array::fill(3, 10);
+                let keep = [s];
+                let r = inc_all(s);
+                assert_eq(|_|"shared loop result", r.@(0), 11);;
+                assert_eq(|_|"shared loop original intact", keep.@(0).@(0), 10);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_if_semicolon_in_let() {
     let source = r#"    
             module Main;

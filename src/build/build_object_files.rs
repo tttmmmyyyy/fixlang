@@ -23,7 +23,7 @@ use crate::{
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
         rc_insert::insert_rc,
-        unique_elim::elim_unique_checks,
+        unique_elim::specialize,
     },
     tool::stopwatch::StopWatch,
 };
@@ -54,9 +54,9 @@ pub struct BuildObjFilesResult {
 
 // Lower `symbols` to the RC IR and run the transformation pipeline code generation uses: reference
 // counting insertion, splitting to reference-counting units, and — when the borrow optimization is
-// enabled (`Max` and above) — borrow-ification, cancellation, and unique-check elimination. Returns
-// the transformed program and, when borrow-ification ran, each output version's parameter ownership
-// shapes.
+// enabled (`Max` and above) — borrow-ification, cancellation, and uniqueness-driven specialization
+// with unique-check elimination. Returns the transformed program and, when borrow-ification ran, each
+// output version's parameter ownership shapes.
 fn build_rc_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -68,8 +68,8 @@ fn build_rc_program(
     split_rc_units(&mut prog, type_env);
     if config.enable_borrow_optimization() {
         let borrowed = borrow_ify(&prog, type_env);
-        let mut prog = cancel(&borrowed.program, &borrowed.own_out, type_env);
-        elim_unique_checks(&mut prog, type_env);
+        let prog = cancel(&borrowed.program, &borrowed.own_out, type_env);
+        let prog = specialize(&prog, type_env);
         (prog, Some(borrowed.param_owns))
     } else {
         (prog, None)

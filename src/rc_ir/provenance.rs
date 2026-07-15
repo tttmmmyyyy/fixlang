@@ -395,15 +395,16 @@ impl Provenance {
 /// against the uniqueness of a function's inputs: `Fresh` resolves to `Unique`, `Dyn` to `Dynamic`,
 /// and `Arg(i, π)` to input `i`'s verdict at `π`. A two-point lattice with `Unique < Dynamic`, so a
 /// leaf sourced from several places is `Unique` only when every source is.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum CTRefCnt {
     Unique,
     Dynamic,
 }
 
 /// The resolved uniqueness of a whole value, shaped like the value's type (mirroring `Provenance`,
-/// with each boxed leaf a `CTRefCnt` instead of a leaf source).
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// with each boxed leaf a `CTRefCnt` instead of a leaf source). Specialization keys a function clone
+/// on its parameters' shapes, so it is `Hash`.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Uniqueness {
     Unboxed,
     UnboxedAgg(Vec<Uniqueness>),
@@ -422,6 +423,16 @@ impl Uniqueness {
             Uniqueness::Boxed(rc) => *rc,
             Uniqueness::Unboxed => CTRefCnt::Dynamic,
         }
+    }
+
+    /// The uniqueness shape of a value of type `ty` whose every boxed leaf is `Dynamic` — the input
+    /// uniqueness of a function whose caller supplies no static information (an entry point, an
+    /// indirectly reached function, or the baseline version of any function).
+    pub fn all_dynamic(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Uniqueness {
+        resolve(
+            &Provenance::uniform(ty, type_env, BaseSource::Dyn),
+            &[],
+        )
     }
 }
 
@@ -483,6 +494,10 @@ struct Interp<'a> {
     /// `Dyn` by an intervening `Retain` is seen as `Dyn` here — the flow-sensitive fact unique-check
     /// elimination needs to decide, per operation, whether the container is still unique.
     op_containers: Map<FullName, Provenance>,
+    /// For each call, keyed by its result variable, the provenance of each argument at the call's
+    /// program point. Specialization keys the callee's clone on these (resolved against the caller's
+    /// own input uniqueness), again taking the call-point value rather than the arguments' bindings.
+    call_args: Map<FullName, Vec<Provenance>>,
 }
 
 impl<'a> Interp<'a> {
@@ -493,6 +508,7 @@ impl<'a> Interp<'a> {
             closure_targets: Map::default(),
             bindings: Map::default(),
             op_containers: Map::default(),
+            call_args: Map::default(),
         }
     }
 
@@ -615,6 +631,12 @@ impl<'a> Interp<'a> {
         args: &[RcVar],
         env: &Map<FullName, Provenance>,
     ) -> Provenance {
+        // Snapshot the arguments' provenance at this call's program point, for specialization to key
+        // the callee's clone on (again, the call-point value rather than the arguments' bindings).
+        let arg_provs: Vec<Provenance> = args.iter().map(|a| self.operand(a, env)).collect();
+        self.call_args
+            .insert(result.name.clone(), arg_provs.clone());
+
         let target = self.closure_targets.get(&callee.name).cloned().or_else(|| {
             let fref = FuncRef {
                 name: callee.name.clone(),
@@ -626,8 +648,6 @@ impl<'a> Interp<'a> {
                 // The effect is symbolic in the callee's parameters; substitute the actual
                 // arguments (`compose` resolves any unmatched parameter to `Dyn`, so an arity
                 // mismatch stays sound).
-                let arg_provs: Vec<Provenance> =
-                    args.iter().map(|a| self.operand(a, env)).collect();
                 return effect.compose(&arg_provs);
             }
         }
@@ -710,6 +730,9 @@ pub struct Analysis {
     /// For each force-unique operation (keyed by its result variable), the container operand's
     /// provenance at the operation's program point, which unique-check elimination resolves.
     pub op_containers: Map<FullName, Provenance>,
+    /// For each call (keyed by its result variable), the arguments' provenance at the call's program
+    /// point, which specialization resolves to key the callee's clone.
+    pub call_args: Map<FullName, Vec<Provenance>>,
 }
 
 /// Analyze every function and global initializer of `prog`.
@@ -748,21 +771,25 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> Analysis {
     // Phase 2: record every variable's provenance using the converged effects.
     let mut bindings = Map::default();
     let mut op_containers = Map::default();
+    let mut call_args = Map::default();
     for func in prog.funcs.values() {
         let mut interp = Interp::new(type_env, &effects);
         interp.run_func(func);
         bindings.extend(interp.bindings);
         op_containers.extend(interp.op_containers);
+        call_args.extend(interp.call_args);
     }
     for glob in &prog.globals {
         let mut interp = Interp::new(type_env, &effects);
         let _ = interp.interp(&glob.init, Map::default());
         bindings.extend(interp.bindings);
         op_containers.extend(interp.op_containers);
+        call_args.extend(interp.call_args);
     }
     Analysis {
         bindings,
         op_containers,
+        call_args,
     }
 }
 
