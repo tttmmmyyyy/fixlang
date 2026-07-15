@@ -12,3 +12,4 @@ pub mod lower;
 pub mod print;
 pub mod provenance;
 pub mod rc_insert;
+pub mod unique_elim;

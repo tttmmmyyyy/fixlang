@@ -391,6 +391,80 @@ impl Provenance {
     }
 }
 
+/// The compile-time reference-count verdict for one boxed leaf, obtained by resolving its provenance
+/// against the uniqueness of a function's inputs: `Fresh` resolves to `Unique`, `Dyn` to `Dynamic`,
+/// and `Arg(i, π)` to input `i`'s verdict at `π`. A two-point lattice with `Unique < Dynamic`, so a
+/// leaf sourced from several places is `Unique` only when every source is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CTRefCnt {
+    Unique,
+    Dynamic,
+}
+
+/// The resolved uniqueness of a whole value, shaped like the value's type (mirroring `Provenance`,
+/// with each boxed leaf a `CTRefCnt` instead of a leaf source).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Uniqueness {
+    Unboxed,
+    UnboxedAgg(Vec<Uniqueness>),
+    Boxed(CTRefCnt),
+}
+
+impl Uniqueness {
+    /// The verdict at path `π`, navigating through aggregates to the boxed leaf. `Dynamic` if the
+    /// path does not reach a boxed leaf (the conservative default).
+    fn leaf_at(&self, path: &[usize]) -> CTRefCnt {
+        match self {
+            Uniqueness::UnboxedAgg(children) => match path.split_first() {
+                Some((i, rest)) if *i < children.len() => children[*i].leaf_at(rest),
+                _ => CTRefCnt::Dynamic,
+            },
+            Uniqueness::Boxed(rc) => *rc,
+            Uniqueness::Unboxed => CTRefCnt::Dynamic,
+        }
+    }
+}
+
+/// Resolve one leaf source against the input uniqueness: `Unique` unless some source is `Dynamic` (a
+/// `Dyn`, or an `Arg` reaching a `Dynamic` input leaf). An empty set (an absent union variant, the
+/// bottom of the lattice) resolves to `Unique`.
+fn resolve_leaf(ls: &LeafSource, inputs: &[Uniqueness]) -> CTRefCnt {
+    for src in ls {
+        let rc = match src {
+            BaseSource::Fresh => CTRefCnt::Unique,
+            BaseSource::Dyn => CTRefCnt::Dynamic,
+            BaseSource::Arg(i, path) => inputs
+                .get(*i)
+                .map_or(CTRefCnt::Dynamic, |u| u.leaf_at(path)),
+        };
+        if rc == CTRefCnt::Dynamic {
+            return CTRefCnt::Dynamic;
+        }
+    }
+    CTRefCnt::Unique
+}
+
+/// Resolve a provenance against the uniqueness of its function's inputs, mapping each boxed leaf to
+/// its `CTRefCnt` verdict. `inputs[i]` is the uniqueness of parameter `i`; a parameter beyond the end
+/// (an unspecialized function, whose inputs are unknown) leaves its `Arg` leaves `Dynamic`.
+pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
+    match prov {
+        Provenance::Unboxed => Uniqueness::Unboxed,
+        Provenance::UnboxedAgg(children) => {
+            Uniqueness::UnboxedAgg(children.iter().map(|c| resolve(c, inputs)).collect())
+        }
+        Provenance::Boxed(ls) => Uniqueness::Boxed(resolve_leaf(ls, inputs)),
+    }
+}
+
+/// Whether the boxed leaf at path `π` of a value with this provenance is statically `Unique`, given
+/// its function's input uniqueness. Passing no inputs treats every `Arg` leaf as `Dynamic`, the
+/// sound verdict for a function whose inputs are unknown (only its locally produced `Fresh` values
+/// are then unique).
+pub fn leaf_is_unique(prov: &Provenance, path: &[usize], inputs: &[Uniqueness]) -> bool {
+    resolve_leaf(&prov.leaf_at(path), inputs) == CTRefCnt::Unique
+}
+
 /// The provenance analysis of one function or global initializer: a forward abstract interpretation
 /// that records each variable's provenance at its binding point.
 struct Interp<'a> {
@@ -403,6 +477,12 @@ struct Interp<'a> {
     closure_targets: Map<FullName, FuncRef>,
     /// The provenance recorded at each variable's binding, for the dump. Names are globally unique.
     bindings: Map<FullName, Provenance>,
+    /// For each force-unique operation, keyed by its result variable, the provenance of its container
+    /// operand at the operation's program point. Unlike `bindings` (a value's provenance where it is
+    /// bound), this is read from the live environment at the operation, so a container demoted to
+    /// `Dyn` by an intervening `Retain` is seen as `Dyn` here — the flow-sensitive fact unique-check
+    /// elimination needs to decide, per operation, whether the container is still unique.
+    op_containers: Map<FullName, Provenance>,
 }
 
 impl<'a> Interp<'a> {
@@ -412,6 +492,7 @@ impl<'a> Interp<'a> {
             effects,
             closure_targets: Map::default(),
             bindings: Map::default(),
+            op_containers: Map::default(),
         }
     }
 
@@ -499,6 +580,12 @@ impl<'a> Interp<'a> {
             RcRhs::Llvm(gen, args) => {
                 let arg_provs: Vec<Provenance> =
                     args.iter().map(|a| self.operand(a, env)).collect();
+                // Snapshot the container operand of a force-unique operation at this program point,
+                // for unique-check elimination to resolve later.
+                if let Some((container_idx, _)) = gen.force_unique_target() {
+                    self.op_containers
+                        .insert(result.name.clone(), arg_provs[container_idx].clone());
+                }
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let decl = result_prov(gen, &result.ty, &arg_tys, self.type_env);
                 decl.compose(&arg_provs)
@@ -615,9 +702,18 @@ fn join_envs(
     out
 }
 
-/// Analyze every function and global initializer of `prog`, returning each variable's provenance at
-/// its binding point (for the RC IR dump). Names are globally unique, so one flat map is unambiguous.
-pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> Map<FullName, Provenance> {
+/// The result of analyzing a whole program. Names are globally unique, so each map is a single flat
+/// table keyed by variable name.
+pub struct Analysis {
+    /// Each variable's provenance at its binding point (for the RC IR dump annotation).
+    pub bindings: Map<FullName, Provenance>,
+    /// For each force-unique operation (keyed by its result variable), the container operand's
+    /// provenance at the operation's program point, which unique-check elimination resolves.
+    pub op_containers: Map<FullName, Provenance>,
+}
+
+/// Analyze every function and global initializer of `prog`.
+pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> Analysis {
     // Phase 1: compute each function's effect (its result provenance, symbolic in its parameters) to
     // a fixed point. A direct call substitutes the callee's effect, so recursion needs iteration;
     // the lattice is finite and the join is monotone, so it converges. Start each effect at `⊥`.
@@ -650,18 +746,24 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> Map<FullName, Pr
     }
 
     // Phase 2: record every variable's provenance using the converged effects.
-    let mut out = Map::default();
+    let mut bindings = Map::default();
+    let mut op_containers = Map::default();
     for func in prog.funcs.values() {
         let mut interp = Interp::new(type_env, &effects);
         interp.run_func(func);
-        out.extend(interp.bindings);
+        bindings.extend(interp.bindings);
+        op_containers.extend(interp.op_containers);
     }
     for glob in &prog.globals {
         let mut interp = Interp::new(type_env, &effects);
         let _ = interp.interp(&glob.init, Map::default());
-        out.extend(interp.bindings);
+        bindings.extend(interp.bindings);
+        op_containers.extend(interp.op_containers);
     }
-    out
+    Analysis {
+        bindings,
+        op_containers,
+    }
 }
 
 #[cfg(test)]

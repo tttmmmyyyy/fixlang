@@ -1,0 +1,16 @@
+module Main;
+
+// Exercises unique-check elimination dumped by `fix build --emit-rc-ir`:
+// - `set` on a locally fresh array is proven unique, so its force-unique check is dropped
+//   (rendered `Array::set [unique]`).
+// - `set` on an array read out of a boxed container is of unknown sharing, so the check is kept
+//   (rendered `Array::set`).
+main : IO ();
+main = (
+    let fresh = Array::fill(4, 0);
+    let fresh = fresh.set(1, 9);
+    let boxes = [[10], [20]];
+    let inner = boxes.@(0);
+    let inner = inner.set(0, 99);
+    println $ (fresh.@(1) + inner.@(0)).to_string
+);

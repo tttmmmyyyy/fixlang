@@ -348,4 +348,25 @@ mod integration_tests {
             via_borrow.join("\n")
         );
     }
+
+    #[test]
+    fn test_unique_check_elim_local_fresh() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // `set` on a locally fresh array is proven unique, so the dump drops its force-unique check
+        // (the operation renders `Array::set [unique]`).
+        assert!(
+            dump.contains("Array::set [unique]"),
+            "the set on a locally fresh array should have its force-unique check dropped:\n{}",
+            dump
+        );
+        // `set` on an array read out of a boxed container is of unknown sharing, so its check stays
+        // (a plain `Array::set(` with no `[unique]` marker).
+        assert!(
+            dump.contains("Array::set("),
+            "the set on an array of unknown sharing should keep its force-unique check:\n{}",
+            dump
+        );
+    }
 }

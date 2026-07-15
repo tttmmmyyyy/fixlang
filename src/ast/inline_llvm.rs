@@ -472,6 +472,45 @@ impl LLVMGenerator {
             _ => false,
         }
     }
+
+    /// For an operation that forces its container operand to be unique before mutating it in place,
+    /// the operand index of that container together with the path to the boxed leaf whose uniqueness
+    /// gates the force-unique. `None` if this operation performs no force-unique (or already elides
+    /// it). Reading a `Unique` verdict for that leaf lets `without_force_unique` drop the check.
+    pub fn force_unique_target(&self) -> Option<(usize, Vec<usize>)> {
+        match self {
+            // The array (operand 0) is force-uniqued in place.
+            LLVMGenerator::ArraySetBody(b) if b.force_unique => Some((0, vec![])),
+            LLVMGenerator::ArraySwapBody(b) if b.force_unique => Some((0, vec![])),
+            LLVMGenerator::ArrayPunchBody(b) if b.force_unique => Some((0, vec![])),
+            // The punched array is operand 1; its inner array is the boxed leaf at path `[0]`.
+            LLVMGenerator::PunchedArrayPlugBody(b) if b.force_unique => Some((1, vec![0])),
+            // The struct is force-uniqued in place. In `set` the value comes first (operand 0) and
+            // the struct is operand 1; in `punch`/`plug` the struct is operand 0.
+            LLVMGenerator::StructSetBody(b) if b.force_unique => Some((1, vec![])),
+            LLVMGenerator::StructPunchBody(b) if b.force_unique => Some((0, vec![])),
+            LLVMGenerator::StructPlugInBody(b) if b.force_unique => Some((0, vec![])),
+            _ => None,
+        }
+    }
+
+    /// A copy of this operation with its force-unique dropped: it mutates its container in place
+    /// without the runtime uniqueness check. Sound only where the container is statically unique, as
+    /// `force_unique_target` reports. A no-op on operations that carry no force-unique.
+    pub fn without_force_unique(&self) -> LLVMGenerator {
+        let mut g = self.clone();
+        match &mut g {
+            LLVMGenerator::ArraySetBody(b) => b.force_unique = false,
+            LLVMGenerator::ArraySwapBody(b) => b.force_unique = false,
+            LLVMGenerator::ArrayPunchBody(b) => b.force_unique = false,
+            LLVMGenerator::PunchedArrayPlugBody(b) => b.force_unique = false,
+            LLVMGenerator::StructSetBody(b) => b.force_unique = false,
+            LLVMGenerator::StructPunchBody(b) => b.force_unique = false,
+            LLVMGenerator::StructPlugInBody(b) => b.force_unique = false,
+            _ => {}
+        }
+        g
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

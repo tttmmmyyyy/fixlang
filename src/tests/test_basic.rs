@@ -141,6 +141,65 @@ pub fn test_cancel_match_arm_array_fate() {
 }
 
 #[test]
+pub fn test_unique_check_elim_fresh_and_shared() {
+    // Unique-check elimination drops the force-unique clone from a `set` whose array is proven
+    // unique. The elided sets here run in place on a locally fresh array and must still compute the
+    // right values; a `set` reached through a boxed container is of unknown sharing, so its check
+    // stays and clones, leaving the array's other holder untouched. Run under memcheck so a wrongly
+    // dropped clone (an in-place write into a shared array) shows up as corruption.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(3, 0);
+                let a = a.set(0, 10);
+                let a = a.set(1, 20);
+                let a = a.set(2, 30);
+                assert_eq(|_|"fresh sets", a.@(0) + a.@(1) + a.@(2), 60);;
+
+                let shared = Array::fill(2, 7);
+                let outer = [shared, shared];
+                let mutated = outer.@(0).set(0, 99);
+                let sibling = outer.@(1);
+                assert_eq(|_|"mutated", mutated.@(0), 99);;
+                assert_eq(|_|"sibling untouched", sibling.@(0), 7);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_branch_shared() {
+    // A fresh array is shared on only one branch of an `if` (stored into `keep`), then `set` after
+    // the branches merge. Because the provenance analysis joins the branches' exit environments, the
+    // array is possibly-shared at the `set`, so its force-unique check must stay: the `set` clones,
+    // leaving `keep`'s copy at its original value. Run for both branches under memcheck; eliding the
+    // check on the shared branch would corrupt `keep` (and double-free its array).
+    let source = r#"
+            module Main;
+
+            run : Bool -> I64;
+            run = |flag| (
+                let a = Array::fill(3, 0);
+                let keep = if flag { [a] } else { [] };
+                let a2 = a.set(0, 99);
+                let kept = if keep.get_size == 0 { 0 } else { keep.@(0).@(0) };
+                a2.@(0) + kept
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(|_|"flag true", run(true), 99);;
+                assert_eq(|_|"flag false", run(false), 99);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_if_semicolon_in_let() {
     let source = r#"    
             module Main;

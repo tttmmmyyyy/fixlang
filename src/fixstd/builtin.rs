@@ -2221,13 +2221,17 @@ pub struct InlineLLVMArraySetBody {
     array_name: FullName,
     idx_name: FullName,
     value_name: FullName,
+    // When true, clone the array first if it is shared, so the write lands in a uniquely owned
+    // array. Set false only where the array is statically known to be unique.
+    pub(crate) force_unique: bool,
 }
 
 impl InlineLLVMArraySetBody {
     pub fn name(&self) -> String {
         format!(
-            "{}.Array::set({}, {})",
+            "{}.Array::set{}({}, {})",
             self.array_name.to_string(),
+            if self.force_unique { "" } else { " [unique]" },
             self.idx_name.to_string(),
             self.value_name.to_string()
         )
@@ -2252,7 +2256,11 @@ impl InlineLLVMArraySetBody {
         let value = gc.get_scoped_obj(&self.value_name);
 
         // Force array to be unique
-        let array = make_array_unique(gc, array);
+        let array = if self.force_unique {
+            make_array_unique(gc, array)
+        } else {
+            array
+        };
 
         // Perform write and return. Bounds-check unless `--no-runtime-check` is set.
         let len = if gc.config.runtime_check() {
@@ -2282,6 +2290,7 @@ fn set_array_body(a: &str, array: &str, idx: &str, value: &str) -> Arc<ExprNode>
             array_name: array_str,
             idx_name: idx_str,
             value_name: value_str,
+            force_unique: true,
         }),
         type_tyapp(make_array_ty(), elem_ty),
         None,
@@ -2328,7 +2337,7 @@ pub struct InlineLLVMArraySwapBody {
     j_name: FullName,
     // When true, clone the array first if it is shared, so the swap writes into a uniquely
     // owned array. Set false only where the array is statically known to be unique.
-    force_unique: bool,
+    pub(crate) force_unique: bool,
     // When true, panic if `i` or `j` is out of range.
     bounds_checked: bool,
 }
@@ -2439,7 +2448,7 @@ pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMArrayPunchBody {
-    force_unique: bool,
+    pub(crate) force_unique: bool,
     idx_name: FullName,
     arr_name: FullName,
 }
@@ -2533,7 +2542,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMPunchedArrayPlugBody {
-    force_unique: bool,
+    pub(crate) force_unique: bool,
     elem_name: FullName,
     punched_name: FullName,
 }
@@ -3211,7 +3220,7 @@ impl BorrowsOperand for InlineLLVMCaptureProjectBody {
 pub struct InlineLLVMStructPunchBody {
     pub var_name: FullName,
     field_idx: usize,
-    force_unique: bool,
+    pub(crate) force_unique: bool,
 }
 
 impl InlineLLVMStructPunchBody {
@@ -3305,7 +3314,7 @@ pub struct InlineLLVMStructPlugInBody {
     punched_str_name: FullName,
     pub field_name: FullName,
     field_idx: usize,
-    force_unique: bool,
+    pub(crate) force_unique: bool,
 }
 
 impl InlineLLVMStructPlugInBody {
@@ -4134,14 +4143,18 @@ pub struct InlineLLVMStructSetBody {
     pub struct_name: FullName,
     field_count: u32,
     field_idx: u32,
+    // When true, clone the struct first if it is shared, so the write lands in a uniquely owned
+    // struct. Set false only where the struct is statically known to be unique.
+    pub(crate) force_unique: bool,
 }
 
 impl InlineLLVMStructSetBody {
     pub fn name(&self) -> String {
         format!(
-            "{}.set_{}({})",
+            "{}.set_{}{}({})",
             self.struct_name.to_string(),
             self.field_idx,
+            if self.force_unique { "" } else { " [unique]" },
             self.value_name.to_string()
         )
     }
@@ -4160,7 +4173,11 @@ impl InlineLLVMStructSetBody {
         let str = gc.get_scoped_obj(&self.struct_name);
 
         // Make struct object unique.
-        let str = make_struct_unique(gc, str);
+        let str = if self.force_unique {
+            make_struct_unique(gc, str)
+        } else {
+            str
+        };
 
         // Release old value
         let old_value = ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
@@ -4197,6 +4214,7 @@ pub fn struct_set(
                     struct_name: FullName::local(STRUCT_NAME),
                     field_count,
                     field_idx,
+                    force_unique: true,
                 }),
                 str_ty.clone(),
                 None,
