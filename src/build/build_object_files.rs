@@ -247,7 +247,8 @@ pub fn build_object_files<'c>(
             // LLVM. Every symbol is already declared above (prototypes + global registration, in
             // every unit), so only this unit's symbols are implemented and none is defined twice.
             let unit_symbols = unit.symbols().to_vec();
-            let (rc_prog, _) = build_rc_program(gc.type_env(), &unit_symbols, &all_symbols, &config);
+            let (rc_prog, _) =
+                build_rc_program(gc.type_env(), &unit_symbols, &all_symbols, &config);
             gc.implement_rc_program(&rc_prog);
 
             if is_main_unit {

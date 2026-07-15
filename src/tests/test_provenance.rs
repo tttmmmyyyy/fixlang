@@ -208,8 +208,14 @@ mod integration_tests {
         let main = func_block(&dump, "fn Main::main", |n| {
             n.split('#').count() == 3 && n.ends_with("#funptr1")
         });
-        let tally_calls: Vec<&&str> = main.iter().filter(|l| l.contains("= Main::tally")).collect();
-        let borrow_calls = tally_calls.iter().filter(|l| l.contains("#borrow(")).count();
+        let tally_calls: Vec<&&str> = main
+            .iter()
+            .filter(|l| l.contains("= Main::tally"))
+            .collect();
+        let borrow_calls = tally_calls
+            .iter()
+            .filter(|l| l.contains("#borrow("))
+            .count();
         let own_calls = tally_calls.len() - borrow_calls;
 
         // The array read again after its call is owned but not at its last use, so routing to the
@@ -218,12 +224,14 @@ mod integration_tests {
         // its release — that call stays on the own version. Safe-only routing would send both to the
         // borrow version.
         assert_eq!(
-            borrow_calls, 1,
+            borrow_calls,
+            1,
             "the non-last-use call should route to the borrow version:\n{}",
             main.join("\n")
         );
         assert_eq!(
-            own_calls, 1,
+            own_calls,
+            1,
             "the last-use call should stay on the own version:\n{}",
             main.join("\n")
         );
@@ -251,8 +259,13 @@ mod integration_tests {
             main.join("\n")
         );
         // Both name the same tuple variable (the text before the field path).
-        let var_of = |l: &str| l.trim().trim_start_matches("retain ").trim_end_matches(".0")
-            .trim_end_matches(".1").to_string();
+        let var_of = |l: &str| {
+            l.trim()
+                .trim_start_matches("retain ")
+                .trim_end_matches(".0")
+                .trim_end_matches(".1")
+                .to_string()
+        };
         assert_eq!(
             var_of(field0.unwrap()),
             var_of(field1.unwrap()),

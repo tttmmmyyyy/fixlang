@@ -1080,12 +1080,10 @@ impl<'a> RewriteCtx<'a> {
             // units are its fields. The value is owned only when every unit it covers is owned. Each
             // covered path is clamped to its unit key, so a path that descends into a union variant
             // keys to the union root the owned set records.
-            Some(rty) => units_under(rty, &rp, self.type_env)
-                .iter()
-                .all(|u| {
-                    self.own_out
-                        .contains(&(r.clone(), clamp_unit(rty, u, self.type_env)))
-                }),
+            Some(rty) => units_under(rty, &rp, self.type_env).iter().all(|u| {
+                self.own_out
+                    .contains(&(r.clone(), clamp_unit(rty, u, self.type_env)))
+            }),
             None => true,
         }
     }
@@ -1587,7 +1585,10 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             if to_delete.contains(&node_id(node)) {
                 k
             } else {
-                node_of(RcExpr::Retain(v.clone(), path.clone(), *state, k), &node.source)
+                node_of(
+                    RcExpr::Retain(v.clone(), path.clone(), *state, k),
+                    &node.source,
+                )
             }
         }
         RcExpr::Release(v, path, state, k) => {
@@ -1595,7 +1596,10 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             if to_delete.contains(&node_id(node)) {
                 k
             } else {
-                node_of(RcExpr::Release(v.clone(), path.clone(), *state, k), &node.source)
+                node_of(
+                    RcExpr::Release(v.clone(), path.clone(), *state, k),
+                    &node.source,
+                )
             }
         }
         RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
