@@ -458,11 +458,21 @@ fn resolve_leaf(ls: &LeafSource, inputs: &[Uniqueness]) -> CTRefCnt {
 /// Resolve a provenance against the uniqueness of its function's inputs, mapping each boxed leaf to
 /// its `CTRefCnt` verdict. `inputs[i]` is the uniqueness of parameter `i`; a parameter beyond the end
 /// (an unspecialized function, whose inputs are unknown) leaves its `Arg` leaves `Dynamic`.
+///
+/// An aggregate with no boxed leaf collapses to `Unboxed`: it carries no uniqueness, so the shape
+/// (which a provenance renders inconsistently — a constructed empty struct is an empty aggregate, the
+/// same struct as a parameter is `Unboxed`) must not make two otherwise equal specialization keys
+/// differ.
 pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
     match prov {
         Provenance::Unboxed => Uniqueness::Unboxed,
         Provenance::UnboxedAgg(children) => {
-            Uniqueness::UnboxedAgg(children.iter().map(|c| resolve(c, inputs)).collect())
+            let resolved: Vec<Uniqueness> = children.iter().map(|c| resolve(c, inputs)).collect();
+            if resolved.iter().all(|u| *u == Uniqueness::Unboxed) {
+                Uniqueness::Unboxed
+            } else {
+                Uniqueness::UnboxedAgg(resolved)
+            }
         }
         Provenance::Boxed(ls) => Uniqueness::Boxed(resolve_leaf(ls, inputs)),
     }
@@ -912,5 +922,27 @@ mod tests {
         // A variable present on only one side is kept as is.
         assert_eq!(joined[&y], fresh());
         assert_eq!(joined[&z], dyn_());
+    }
+
+    #[test]
+    fn resolve_collapses_an_all_unboxed_aggregate() {
+        // An aggregate with no boxed leaf resolves to `Unboxed`, so a constructed empty struct
+        // (an empty aggregate) and the same struct as a parameter (`Unboxed`) key the same.
+        assert_eq!(
+            resolve(&Provenance::UnboxedAgg(vec![]), &[]),
+            Uniqueness::Unboxed
+        );
+        assert_eq!(
+            resolve(
+                &Provenance::UnboxedAgg(vec![Provenance::Unboxed, Provenance::Unboxed]),
+                &[]
+            ),
+            Uniqueness::Unboxed
+        );
+        // An aggregate with a boxed leaf keeps its shape.
+        assert_eq!(
+            resolve(&Provenance::UnboxedAgg(vec![Provenance::Unboxed, fresh()]), &[]),
+            Uniqueness::UnboxedAgg(vec![Uniqueness::Unboxed, Uniqueness::Boxed(CTRefCnt::Unique)])
+        );
     }
 }
