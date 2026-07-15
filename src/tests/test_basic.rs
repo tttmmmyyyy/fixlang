@@ -200,6 +200,33 @@ pub fn test_unique_check_elim_branch_shared() {
 }
 
 #[test]
+pub fn test_unique_check_elim_reprojected_alias_shared() {
+    // An unboxed tuple's boxed field is projected into `keep` (which is stored twice, so it is
+    // shared) and re-projected into `m`, then `m` is mutated. `keep` and `m` name the same array, so
+    // the mutation must keep its check. Because reference counting retains the shared field on the
+    // container before projecting it, both projections read a shared value and the check stays; this
+    // guards that the container-level retain keeps re-projected aliases sound. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(3, 0);
+                let t = (a, 7);
+                let keep = t.@0;
+                let held = (keep, keep);
+                let m = t.@0;
+                let m2 = m.set(0, 99);
+                assert_eq(|_|"mutated", m2.@(0), 99);;
+                assert_eq(|_|"held.0 intact", held.@0.@(0), 0);;
+                assert_eq(|_|"held.1 intact", held.@1.@(0), 0);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_unique_check_elim_specialized_shared_and_unique() {
     // A function that mutates its array argument in place is specialized per caller: a unique caller
     // gets a clone with the check dropped (writing in place), a shared caller keeps the checked
