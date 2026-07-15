@@ -1451,11 +1451,22 @@ impl<'a> CancelAnalysis<'a> {
                 self.consume_rhs(&mut pend, rhs, &x.ty);
                 self.walk(k, pend, leaf_mode)
             }
-            RcExpr::Destructure(container, _, k) => {
-                // The destructure consumes the container: a boxed container is released, and an
-                // unboxed container's leaves move into its fields with its other fields dropped.
-                for pi in boxed_leaves(&container.ty, self.type_env) {
-                    self.consume(&mut pend, &container.name, &pi);
+            RcExpr::Destructure(container, fields, k) => {
+                if container.ty.is_box(self.type_env) {
+                    // A boxed container is released whole, so every boxed leaf is consumed.
+                    for pi in boxed_leaves(&container.ty, self.type_env) {
+                        self.consume(&mut pend, &container.name, &pi);
+                    }
+                } else {
+                    // An unboxed container moves each named field's leaves into its field variable,
+                    // which shares the field's root key, so a pending retain flows on to be cancelled
+                    // at the field's own release. Only a dropped (unnamed) field's leaves are consumed.
+                    let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
+                    for pi in boxed_leaves(&container.ty, self.type_env) {
+                        if pi.first().map_or(true, |i| !named.contains(i)) {
+                            self.consume(&mut pend, &container.name, &pi);
+                        }
+                    }
                 }
                 self.walk(k, pend, leaf_mode)
             }

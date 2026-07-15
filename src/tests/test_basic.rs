@@ -58,6 +58,35 @@ pub fn test_loop_m_array_state_no_leak() {
 }
 
 #[test]
+pub fn test_unboxed_destructure_field_borrow() {
+    // Destructure an unboxed tuple and pass a field array to a read-only (borrowing) call, then read
+    // it again. Cancellation lets the field's move through the destructure keep its retain pending
+    // and cancel across the borrow call; this checks that keeping it pending — rather than consuming
+    // it at the destructure — stays memory-safe. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            tally : Array I64 -> I64 -> I64;
+            tally = |arr, i| if i == arr.@size { 0 } else { arr.@(i) + tally(arr, i + 1) };
+
+            process : (Array I64, I64) -> I64;
+            process = |pair| (
+                let (arr, n) = pair;
+                let s = tally(arr, 0);
+                s + arr.@size + n
+            );
+
+            main : IO ();
+            main = (
+                let r = process((Array::fill(4, 7), 100));
+                assert_eq(|_|"process", r, 28 + 4 + 100);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_if_semicolon_in_let() {
     let source = r#"    
             module Main;
