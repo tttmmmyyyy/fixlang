@@ -200,6 +200,59 @@ pub fn test_unique_check_elim_branch_shared() {
 }
 
 #[test]
+pub fn test_unique_check_elim_chained_array_mod() {
+    // Chained `mod` on an array: `mod` completes through a `plug` that returns a uniquely owned
+    // array, so the second `mod`'s force-unique is dropped. A shared array keeps its check and
+    // clones, leaving its other holder untouched. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(3, 0);
+                let a = a.mod(0, |x| x + 1).mod(1, |x| x + 2);
+                assert_eq(|_|"chained mod", a.@(0) + a.@(1), 3);;
+
+                let s = Array::fill(2, 5);
+                let keep = [s];
+                let s2 = s.mod(0, |x| x + 90);
+                assert_eq(|_|"shared mod mutated", s2.@(0), 95);;
+                assert_eq(|_|"shared mod original intact", keep.@(0).@(0), 5);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_unique_check_elim_chained_struct_fields() {
+    // Chained field updates on a boxed struct: once the first update leaves the struct unique, the
+    // rest write in place with the check dropped (a struct `set`/`mod` returns a uniquely owned
+    // struct, so the result feeds the next update as unique). A shared struct keeps its check and
+    // clones, so its other holder is untouched. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            type Rec = box struct { x : I64, y : I64 };
+
+            main : IO ();
+            main = (
+                let r = Rec { x : 1, y : 2 };
+                let r = r.set_x(10).mod_y(|v| v + 20);
+                assert_eq(|_|"chained fresh", r.@x + r.@y, 32);;
+
+                let s = Rec { x : 5, y : 6 };
+                let keep = [s];
+                let s2 = s.set_x(99);
+                assert_eq(|_|"shared mutated", s2.@x, 99);;
+                assert_eq(|_|"shared original intact", keep.@(0).@x, 5);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_unique_check_elim_reprojected_alias_shared() {
     // An unboxed tuple's boxed field is projected into `keep` (which is stored twice, so it is
     // shared) and re-projected into `m`, then `m` is mutated. `keep` and `m` name the same array, so

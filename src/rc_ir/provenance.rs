@@ -283,12 +283,15 @@ pub fn result_prov(
     match gen {
         // Allocators and force-unique array ops: the result is a newly owned array (`set`/`swap`
         // return the same object when unique and a clone when shared, but either way uniquely owned).
+        // A `plug` likewise completes a `mod` into a uniquely owned array (its punch force-uniques),
+        // which lets a chain of `mod`s drop every check after the first.
         ArrayUnsafeFill(_)
         | ArrayUnsafeEmpty(_)
         | StringBuf(_)
         | ArrayLitBody(_)
         | ArraySetBody(_)
         | ArraySwapBody(_)
+        | PunchedArrayPlugBody(_)
         | ArrayForceUniqueBody(_)
         | ArrayPopBackNonemptyBody(_)
         | DestructorMake(_) => Provenance::uniform(result_ty, type_env, BaseSource::Fresh),
@@ -308,6 +311,15 @@ pub fn result_prov(
                         .collect(),
                 )
             }
+        }
+
+        // A boxed struct `set`, or the `plug` that completes a `mod`, leaves the struct uniquely
+        // owned — a `set` clones when shared and writes in place when unique, and a `mod` force-uniques
+        // in its punch, so either way the result's uniqueness does not depend on the input, like an
+        // array set. This is what lets a chain of field updates drop every check after the first. The
+        // unboxed cases have no uniqueness check to elide, so their conservative default suffices.
+        StructSetBody(_) | StructPlugInBody(_) if result_ty.is_box(type_env) => {
+            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
         }
 
         // Union variant construction: a boxed union is a fresh allocation; an unboxed union carries
