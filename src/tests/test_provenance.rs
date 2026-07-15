@@ -27,12 +27,17 @@ mod integration_tests {
     }
 
     /// Build the case project with `--emit-rc-ir Main` and return the dumped RC IR of the `Main`
-    /// module.
+    /// module. The build is pinned to the `max` optimization level: the borrow versions and the
+    /// routing these tests assert on exist only for uncurried funptr functions, which the higher
+    /// optimization levels produce — at `none` the same code stays as closures with no funptr
+    /// version to borrow. Pinning makes the dumped structure the same regardless of the ambient
+    /// `FIX_MAX_OPT_LEVEL` the test suite runs under.
     fn emit_main_rc_ir(project_dir: &std::path::Path) -> String {
         let output = fix_command()
             .arg("build")
             .arg("--emit-rc-ir")
             .arg("Main")
+            .env("FIX_MAX_OPT_LEVEL", "max")
             .current_dir(project_dir)
             .output()
             .expect("Failed to execute fix build --emit-rc-ir");
