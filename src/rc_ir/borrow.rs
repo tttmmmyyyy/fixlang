@@ -1126,24 +1126,14 @@ impl<'a> RewriteCtx<'a> {
     ) -> RcExprNode {
         let k = self.rewrite(k);
         if !self.is_borrow {
-            let expr = if is_release {
-                RcExpr::Release(v.clone(), path.clone(), state, k)
-            } else {
-                RcExpr::Retain(v.clone(), path.clone(), state, k)
-            };
-            return node_of(expr, source);
+            return rc_node(is_release, v.clone(), path.clone(), state, k, source);
         }
         let kept: Vec<Path> = units_under(&v.ty, path, self.type_env)
             .into_iter()
             .filter(|unit| self.owns_unit(v, unit))
             .collect();
         kept.into_iter().rev().fold(k, |cont, unit| {
-            let expr = if is_release {
-                RcExpr::Release(v.clone(), unit, state, cont)
-            } else {
-                RcExpr::Retain(v.clone(), unit, state, cont)
-            };
-            node_of(expr, source)
+            rc_node(is_release, v.clone(), unit, state, cont, source)
         })
     }
 }
@@ -1156,15 +1146,27 @@ fn node_of(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
     }
 }
 
+/// A `Release` (when `is_release`) or `Retain` of `var` at `path` wrapping continuation `k`.
+fn rc_node(
+    is_release: bool,
+    var: RcVar,
+    path: Path,
+    state: RcState,
+    k: RcExprNode,
+    source: &Option<Span>,
+) -> RcExprNode {
+    let expr = if is_release {
+        RcExpr::Release(var, path, state, k)
+    } else {
+        RcExpr::Retain(var, path, state, k)
+    };
+    node_of(expr, source)
+}
+
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
 fn prepend_rc(items: Vec<(RcVar, Path)>, is_release: bool, k: RcExprNode) -> RcExprNode {
     items.into_iter().rev().fold(k, |cont, (var, path)| {
-        let expr = if is_release {
-            RcExpr::Release(var, path, RcState::Unknown, cont)
-        } else {
-            RcExpr::Retain(var, path, RcState::Unknown, cont)
-        };
-        node_of(expr, &None)
+        rc_node(is_release, var, path, RcState::Unknown, cont, &None)
     })
 }
 
@@ -1307,12 +1309,7 @@ fn split_rc(
         .into_iter()
         .rev()
         .fold(k, |cont, unit| {
-            let expr = if is_release {
-                RcExpr::Release(v.clone(), unit, state, cont)
-            } else {
-                RcExpr::Retain(v.clone(), unit, state, cont)
-            };
-            node_of(expr, source)
+            rc_node(is_release, v.clone(), unit, state, cont, source)
         })
 }
 

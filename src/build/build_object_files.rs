@@ -2,7 +2,8 @@ use crate::{
     ast::{
         export_statement::ExportStatement,
         expr::ExprNode,
-        program::{Program, Symbol},
+        name::FullName,
+        program::{Program, Symbol, TypeEnv},
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
     configuration::{Configuration, FixOptimizationLevel, OutputFileType},
@@ -13,9 +14,10 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::Generator,
-    misc::{info_msg, warn_msg},
+    misc::{info_msg, warn_msg, Map},
     optimization,
     rc_ir::{
+        ast::{OwnershipShape, RcProgram},
         borrow::{borrow_ify, cancel, split_rc_units},
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
@@ -49,6 +51,30 @@ pub struct BuildObjFilesResult {
     pub obj_paths: Vec<PathBuf>,
 }
 
+// Lower `symbols` to the RC IR and run the transformation pipeline code generation uses: reference
+// counting insertion, splitting to reference-counting units, and — when the borrow optimization is
+// enabled (`Max` and above) — borrow-ification and cancellation. Returns the transformed program
+// and, when borrow-ification ran, each output version's parameter ownership shapes.
+fn build_rc_program(
+    type_env: &TypeEnv,
+    symbols: &[Symbol],
+    all_symbols: &[Symbol],
+    config: &Configuration,
+) -> (RcProgram, Option<Map<FullName, OwnershipShape>>) {
+    let mut prog = lower_program(type_env, symbols, all_symbols);
+    insert_rc(&mut prog, type_env);
+    split_rc_units(&mut prog, type_env);
+    if config.enable_borrow_optimization() {
+        let borrowed = borrow_ify(&prog, type_env);
+        (
+            cancel(&borrowed.program, &borrowed.own_out, type_env),
+            Some(borrowed.param_owns),
+        )
+    } else {
+        (prog, None)
+    }
+}
+
 // Write the RC IR of the symbols selected by `filter` to a file under `.fixlang/`: a module name
 // dumps that module's symbols to `rc_ir.<module>.txt`, `all` dumps every symbol to `rc_ir.txt`.
 // Behind `--emit-rc-ir`, for compiler development.
@@ -60,18 +86,8 @@ fn dump_rc_ir(program: &Program, filter: &str, config: &Configuration) {
         .filter(|s| filter == "all" || s.name.module() == filter)
         .cloned()
         .collect();
-    let mut rc_program = lower_program(&type_env, &symbols, &all_program_symbols);
-    insert_rc(&mut rc_program, &type_env);
-    split_rc_units(&mut rc_program, &type_env);
-    // Reflect what code generation does at this optimization level: borrow-ify and cancel only when
-    // the borrow optimization is enabled (`Max` and above).
-    let param_owns = if config.enable_borrow_optimization() {
-        let borrowed = borrow_ify(&rc_program, &type_env);
-        rc_program = cancel(&borrowed.program, &borrowed.own_out, &type_env);
-        Some(borrowed.param_owns)
-    } else {
-        None
-    };
+    let (rc_program, param_owns) =
+        build_rc_program(&type_env, &symbols, &all_program_symbols, config);
     let provs = analyze_program(&rc_program, &type_env);
     let ann = Annotations {
         provs: Some(&provs),
@@ -231,18 +247,7 @@ pub fn build_object_files<'c>(
             // LLVM. Every symbol is already declared above (prototypes + global registration, in
             // every unit), so only this unit's symbols are implemented and none is defined twice.
             let unit_symbols = unit.symbols().to_vec();
-            let rc_prog = {
-                let type_env = gc.type_env();
-                let mut p = lower_program(type_env, &unit_symbols, &all_symbols);
-                insert_rc(&mut p, type_env);
-                split_rc_units(&mut p, type_env);
-                if config.enable_borrow_optimization() {
-                    let borrowed = borrow_ify(&p, type_env);
-                    cancel(&borrowed.program, &borrowed.own_out, type_env)
-                } else {
-                    p
-                }
-            };
+            let (rc_prog, _) = build_rc_program(gc.type_env(), &unit_symbols, &all_symbols, &config);
             gc.implement_rc_program(&rc_prog);
 
             if is_main_unit {
