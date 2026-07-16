@@ -59,7 +59,11 @@ pub struct BuildObjFilesResult {
 // consults it only to type a global that a lowered function references as an LLVM operand, which under
 // separated compilation may be defined in another unit. So `all_symbols` must cover every symbol
 // anything in `symbols` can reference (`symbols` is a subset of it), while only `symbols` becomes code.
-fn lower_and_insert_rc(type_env: &TypeEnv, symbols: &[Symbol], all_symbols: &[Symbol]) -> RcProgram {
+fn lower_and_insert_rc(
+    type_env: &TypeEnv,
+    symbols: &[Symbol],
+    all_symbols: &[Symbol],
+) -> RcProgram {
     let mut prog = lower_program(type_env, symbols, all_symbols);
     insert_rc(&mut prog, type_env);
     prog
@@ -77,12 +81,11 @@ fn optimize_rc_program(
 ) -> RcProgram {
     split_rc_units(&mut prog, type_env);
     if config.enable_borrow_optimization() {
-        let prog = borrow_ify(&prog, type_env);
-        let prog = cancel(&prog, type_env);
-        specialize(&prog, type_env)
-    } else {
-        prog
+        prog = borrow_ify(&prog, type_env);
+        prog = cancel(&prog, type_env);
+        prog = specialize(&prog, type_env);
     }
+    prog
 }
 
 // Write the RC IR of the symbols selected by `filter` to a file under `.fixlang/`: a module name
