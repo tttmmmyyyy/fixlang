@@ -1,0 +1,30 @@
+module Main;
+
+import Std::{
+    I64, IO, Debug::assert_eq, Monad::pure, Tuple2::{@0, @1}
+};
+
+// Allocation / refcount stress: build a full binary tree and count its nodes.
+// Each `node` is a heap-allocated (boxed) value, so building and dropping the tree
+// exercises the allocator and reference counting rather than arrays.
+type Tree = box union { leaf: (), node: (Tree, Tree) };
+
+make : I64 -> Tree;
+make = |d| (
+    if d == 0 { Tree::leaf() }
+    else { Tree::node $ (make(d - 1), make(d - 1)) }
+);
+
+check : Tree -> I64;
+check = |t| (
+    match t {
+        leaf(_) => 1,
+        node(lr) => 1 + check(lr.@0) + check(lr.@1)
+    }
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"binary_trees", check(make(20)), 2097151);;
+    pure()
+);

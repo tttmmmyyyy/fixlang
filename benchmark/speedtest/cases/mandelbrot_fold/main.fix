@@ -1,0 +1,37 @@
+module Main;
+
+import Std::{
+    loop, I64, IO, F64, Debug::assert_eq, Iterator::{fold, range},
+    LoopState::{break, continue}, Monad::pure, Tuple2::@0
+};
+
+// Same computation as `mandelbrot`, but the (break-free) grid loops use
+// `range(_).fold` instead of `loop`. `in_set` keeps `loop` because it breaks early
+// on escape. Pairs with `mandelbrot` to track the fold-based grid style.
+in_set : F64 -> F64 -> I64;
+in_set = |cr, ci| (
+    loop((0, 0.0, 0.0), |(iter, zr, zi)|
+        if iter == 50 { break $ 1 };
+        if zr * zr + zi * zi > 4.0 { break $ 0 };
+        let zr2 = zr * zr - zi * zi + cr;
+        let zi2 = 2.0 * zr * zi + ci;
+        continue $ (iter + 1, zr2, zi2)
+    )
+);
+
+mandel : I64 -> I64;
+mandel = |n| (
+    let step = 0.0025;
+    range(0, n).fold((0, -1.0), |_py, (count, ci)|
+        let (row, _) = range(0, n).fold((0, -2.0), |_px, (c, cr)|
+            (c + in_set(cr, ci), cr + step)
+        );
+        (count + row, ci + step)
+    ).@0
+);
+
+main : IO ();
+main = (
+    assert_eq(|_|"mandelbrot_fold", mandel(1500), 254662);;
+    pure()
+);

@@ -1,0 +1,27 @@
+module Main;
+
+import Std::{
+    loop, Array, I64, IO, Array::{fill, set, @}, Debug::assert_eq,
+    LoopState::{break, continue}, Monad::pure
+};
+
+// Tight in-place array read+write: `arr.set(i, arr.@(i) + 1)` over a 1000-element
+// array, repeated many times. The array is only ever held by the loop state, so
+// `set` takes the unique-reference (in-place) path. Isolates the per-element
+// bounds-check and uniqueness-check cost that borrow inference and unique-check
+// elimination remove.
+main : IO ();
+main = (
+    let iters = 200000;
+    let arr = Array::fill(1000, 0);
+    let arr = loop((0, arr), |(k, arr)|
+        if k == iters { break $ arr };
+        let arr = loop((0, arr), |(i, arr)|
+            if i == 1000 { break $ arr };
+            continue $ (i + 1, arr.set(i, arr.@(i) + 1))
+        );
+        continue $ (k + 1, arr)
+    );
+    assert_eq(|_|"arrayrw", arr.@(0), 200000);;
+    pure()
+);
