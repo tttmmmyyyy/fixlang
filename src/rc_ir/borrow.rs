@@ -41,16 +41,12 @@ use crate::ast::types::TypeNode;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcGlobalInit,
-    RcProgram, RcRhs, RcState, RcVar,
+    FuncRef, Leaf, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc,
+    RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
 use crate::rc_ir::provenance::{result_prov, BaseSource, Provenance};
 use crate::rc_ir::rename::{collect_binders, fresh_rename, rename_expr, rename_var};
 use std::sync::Arc;
-
-/// A boxed leaf: a variable together with the path to one of its boxed leaves. Because RC IR names
-/// are globally unique, it identifies the leaf across a whole program.
-type Leaf = (FullName, Path);
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `root`).
 enum Def {
@@ -524,18 +520,11 @@ fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
 
 // --- borrow-ification ---
 
-/// The result of borrow-ification: the rewritten program, the owned parameter/capture units of every
-/// output version (which `cancel` reads to find each call's consume sites), and — for the RC IR dump
-/// — each version's parameter ownership shape, keyed by the (globally unique) parameter variable name.
-pub struct BorrowIfied {
-    pub program: RcProgram,
-    pub own_out: Set<Leaf>,
-    pub param_owns: Map<FullName, OwnershipShape>,
-}
-
 /// Borrow-ify a program: materialize a borrowing version of every function with a borrowable
-/// parameter, route each direct call to a version, and rewrite the reference counting accordingly.
-pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> BorrowIfied {
+/// parameter, route each direct call to a version, rewrite the reference counting accordingly, and
+/// annotate every output version with the parameter/capture units it owns (`RcFunc::owned_units`,
+/// which `cancel` reads to find each call's consume sites and the RC IR dump reads for its shapes).
+pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let ownerships = infer_ownership(prog, type_env);
 
     // The funptr functions that get a borrow version, and the name of that version. Only funptr
@@ -636,26 +625,53 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> BorrowIfied {
         })
         .collect();
 
-    // The dump annotation: each output version's parameter shapes, from `own_out`.
-    let mut param_owns: Map<FullName, OwnershipShape> = Map::default();
-    for func in funcs.values() {
+    // Annotate every version with the parameter/capture units it owns, from `own_out`.
+    for func in funcs.values_mut() {
+        let mut owned = Set::default();
         for p in func.params.iter().chain(func.cap.iter()) {
-            param_owns.insert(
+            for unit in rc_units(&p.ty, type_env) {
+                let leaf = (p.name.clone(), unit);
+                if own_out.contains(&leaf) {
+                    owned.insert(leaf);
+                }
+            }
+        }
+        func.owned_units = owned;
+    }
+
+    RcProgram {
+        funcs,
+        globals,
+        entry: prog.entry.clone(),
+    }
+}
+
+/// The owned parameter/capture units of every function, gathered from their ownership annotations
+/// (`RcFunc::owned_units`).
+fn all_owned_units(prog: &RcProgram) -> Set<Leaf> {
+    prog.funcs
+        .values()
+        .flat_map(|f| f.owned_units.iter().cloned())
+        .collect()
+}
+
+/// Each parameter/capture variable's ownership shape, derived from the functions' ownership
+/// annotations. The RC IR dump reads it to annotate parameters; it is not needed for code generation.
+pub fn param_ownership_shapes(
+    prog: &RcProgram,
+    type_env: &TypeEnv,
+) -> Map<FullName, OwnershipShape> {
+    let own_out = all_owned_units(prog);
+    let mut shapes = Map::default();
+    for func in prog.funcs.values() {
+        for p in func.params.iter().chain(func.cap.iter()) {
+            shapes.insert(
                 p.name.clone(),
                 shape_from_own(&p.name, &p.ty, &own_out, type_env),
             );
         }
     }
-
-    BorrowIfied {
-        program: RcProgram {
-            funcs,
-            globals,
-            entry: prog.entry.clone(),
-        },
-        own_out,
-        param_owns,
-    }
+    shapes
 }
 
 /// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
@@ -809,6 +825,7 @@ fn clone_func(
             ret_ty: func.ret_ty.clone(),
             body,
             source: func.source.clone(),
+            owned_units: Set::default(),
         },
         rename,
     )
@@ -1217,14 +1234,15 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// Remove the net-zero retain/release brackets borrow-ification leaves across borrow calls: a retain
 /// is cancellable when, on every forward path, a release un-bumps it before the value is consumed.
 /// Cancelling it (and the releases it pairs with) keeps the value `Unique` for the uniqueness
-/// analysis. `own_out` is the owned parameter/capture units of `prog`'s functions, which decides each
-/// call's consume sites.
-pub fn cancel(prog: &RcProgram, own_out: &Set<Leaf>, type_env: &TypeEnv) -> RcProgram {
+/// analysis. Each call's consume sites are decided by the owned parameter/capture units the functions
+/// carry (`RcFunc::owned_units`, set by borrow-ification).
+pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
+    let own_out = all_owned_units(prog);
     let cancel_body = |facts: &FuncFacts, body: &RcExprNode| {
         let mut analysis = CancelAnalysis {
             facts,
             prog,
-            own_out,
+            own_out: &own_out,
             type_env,
             needed: Set::default(),
             pairs: Map::default(),

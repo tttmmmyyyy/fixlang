@@ -2,7 +2,6 @@ use crate::{
     ast::{
         export_statement::ExportStatement,
         expr::ExprNode,
-        name::FullName,
         program::{Program, Symbol, TypeEnv},
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
@@ -14,11 +13,11 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::Generator,
-    misc::{info_msg, warn_msg, Map},
+    misc::{info_msg, warn_msg},
     optimization,
     rc_ir::{
-        ast::{OwnershipShape, RcProgram},
-        borrow::{borrow_ify, cancel, split_rc_units},
+        ast::RcProgram,
+        borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
@@ -52,27 +51,37 @@ pub struct BuildObjFilesResult {
     pub obj_paths: Vec<PathBuf>,
 }
 
-// Lower `symbols` to the RC IR and run the transformation pipeline code generation uses: reference
-// counting insertion, splitting to reference-counting units, and — when the borrow optimization is
-// enabled (`Max` and above) — borrow-ification, cancellation, and uniqueness-driven specialization
-// with unique-check elimination. Returns the transformed program and, when borrow-ification ran, each
-// output version's parameter ownership shapes.
-fn build_rc_program(
-    type_env: &TypeEnv,
-    symbols: &[Symbol],
-    all_symbols: &[Symbol],
-    config: &Configuration,
-) -> (RcProgram, Option<Map<FullName, OwnershipShape>>) {
+// Lower `symbols` to the RC IR and insert reference counting. This is the mandatory step that both
+// code generation and the RC IR dump build on; the optimizations are separate (`optimize_rc_program`).
+//
+// The two symbol sets play different roles. `symbols` is the set to lower and generate code for — one
+// compilation unit, or the whole program. `all_symbols` is every symbol in the program; lowering
+// consults it only to type a global that a lowered function references as an LLVM operand, which under
+// separated compilation may be defined in another unit. So `all_symbols` must cover every symbol
+// anything in `symbols` can reference (`symbols` is a subset of it), while only `symbols` becomes code.
+fn lower_and_insert_rc(type_env: &TypeEnv, symbols: &[Symbol], all_symbols: &[Symbol]) -> RcProgram {
     let mut prog = lower_program(type_env, symbols, all_symbols);
     insert_rc(&mut prog, type_env);
+    prog
+}
+
+// Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
+// read-only parameters, cancel the reference counting a borrow makes net-zero, and specialize
+// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
+// parameter ownership on the functions (`RcFunc::owned_units`); read it back with
+// `param_ownership_shapes` where needed (the RC IR dump), so it stays out of this pass's return.
+fn optimize_rc_program(
+    mut prog: RcProgram,
+    type_env: &TypeEnv,
+    config: &Configuration,
+) -> RcProgram {
     split_rc_units(&mut prog, type_env);
     if config.enable_borrow_optimization() {
-        let borrowed = borrow_ify(&prog, type_env);
-        let prog = cancel(&borrowed.program, &borrowed.own_out, type_env);
-        let prog = specialize(&prog, type_env);
-        (prog, Some(borrowed.param_owns))
+        let prog = borrow_ify(&prog, type_env);
+        let prog = cancel(&prog, type_env);
+        specialize(&prog, type_env)
     } else {
-        (prog, None)
+        prog
     }
 }
 
@@ -87,12 +96,16 @@ fn dump_rc_ir(program: &Program, filter: &str, config: &Configuration) {
         .filter(|s| filter == "all" || s.name.module() == filter)
         .cloned()
         .collect();
-    let (rc_program, param_owns) =
-        build_rc_program(&type_env, &symbols, &all_program_symbols, config);
+    let rc_program = lower_and_insert_rc(&type_env, &symbols, &all_program_symbols);
+    let rc_program = optimize_rc_program(rc_program, &type_env, config);
     let provs = analyze_program(&rc_program, &type_env).bindings;
+    // Ownership shapes exist only where borrow-ification ran; read them back off the functions.
+    let owns = config
+        .enable_borrow_optimization()
+        .then(|| param_ownership_shapes(&rc_program, &type_env));
     let ann = Annotations {
         provs: Some(&provs),
-        owns: param_owns.as_ref(),
+        owns: owns.as_ref(),
     };
 
     // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
@@ -248,8 +261,8 @@ pub fn build_object_files<'c>(
             // LLVM. Every symbol is already declared above (prototypes + global registration, in
             // every unit), so only this unit's symbols are implemented and none is defined twice.
             let unit_symbols = unit.symbols().to_vec();
-            let (rc_prog, _) =
-                build_rc_program(gc.type_env(), &unit_symbols, &all_symbols, &config);
+            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &all_symbols);
+            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &config);
             gc.implement_rc_program(&rc_prog);
 
             if is_main_unit {

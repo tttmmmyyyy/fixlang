@@ -18,7 +18,7 @@ use crate::fixstd::builtin::{
     make_dynamic_object_ty, InlineLLVMArrayLitBody, InlineLLVMCaptureProjectBody,
     InlineLLVMFFICallBody, InlineLLVMMakeStructBody,
 };
-use crate::misc::Map;
+use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
@@ -270,6 +270,7 @@ impl<'a> Lowerer<'a> {
             ret_ty: lam_ty.get_lambda_dst(),
             body: body_expr,
             source: lam.source.clone(),
+            owned_units: Set::default(),
         }
     }
 

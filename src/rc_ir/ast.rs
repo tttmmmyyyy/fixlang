@@ -3,7 +3,7 @@
 use crate::ast::inline_llvm::LLVMGenerator;
 use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
-use crate::misc::Map;
+use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
 use std::sync::Arc;
 
@@ -59,7 +59,16 @@ pub struct RcFunc {
     pub ret_ty: Arc<TypeNode>,
     pub body: RcExprNode,
     pub source: Option<Span>,
+    /// The reference-counting units this version owns among its parameters and capture — the
+    /// ownership annotation borrow-ification writes, one `(parameter-name, unit-path)` per owned
+    /// unit. Empty until borrow-ification runs (every parameter is owned by default). `cancel` reads
+    /// it to find each call's consume sites, and the RC IR dump derives each parameter's ownership
+    /// shape from it.
+    pub owned_units: Set<Leaf>,
 }
+
+/// A reference-counting unit of a function's parameter or capture: its `(variable-name, path)`.
+pub type Leaf = (FullName, Path);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
 /// variable its final `Ret` returns, so it is read from that variable rather than stored here.
