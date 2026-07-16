@@ -7,6 +7,7 @@ pub fn test_external_project_math() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-math.git",
         "fixlang-math",
+        None,
     );
 }
 
@@ -15,6 +16,7 @@ pub fn test_external_project_hashmap() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-hashmap.git",
         "fixlang-hashmap",
+        None,
     );
 }
 
@@ -23,6 +25,7 @@ pub fn test_external_project_hashset() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-hashset.git",
         "fixlang-hashset",
+        None,
     );
 }
 
@@ -31,6 +34,7 @@ pub fn test_external_project_random() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-random.git",
         "fixlang-random",
+        None,
     );
 }
 
@@ -39,6 +43,7 @@ pub fn test_external_project_time() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-time.git",
         "fixlang-time",
+        None,
     );
 }
 
@@ -47,6 +52,7 @@ pub fn test_external_project_character() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-character.git",
         "fixlang-character",
+        None,
     );
 }
 
@@ -55,6 +61,7 @@ pub fn test_external_project_subprocess() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-subprocess.git",
         "fixlang-subprocess",
+        None,
     );
 }
 
@@ -63,6 +70,7 @@ pub fn test_external_project_regexp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-regexp.git",
         "fixlang-regexp",
+        None,
     );
 }
 
@@ -75,6 +83,7 @@ pub fn test_external_project_asynctask() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-asynctask.git",
         "fixlang-asynctask",
+        None,
     );
 }
 
@@ -83,6 +92,7 @@ pub fn test_external_project_gmp() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-gmp.git",
         "fixlang-gmp",
+        None,
     );
 }
 
@@ -91,6 +101,7 @@ pub fn test_external_project_mpfr() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-mpfr.git",
         "fixlang-mpfr",
+        None,
     );
 }
 
@@ -99,6 +110,7 @@ pub fn test_external_project_misc_algos() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-misc-algos.git",
         "fixlang-misc-algos",
+        None,
     );
 }
 
@@ -107,6 +119,7 @@ pub fn test_external_project_binary_heap() {
     test_external_project(
         "https://github.com/tttmmmyyyy/fixlang-binary-heap.git",
         "fixlang-binary-heap",
+        None,
     );
 }
 
@@ -116,10 +129,17 @@ pub fn test_external_project_cp_library() {
         // Skip this test when the optimization level is low since it takes too long time.
         return;
     }
-    test_external_project("https://github.com/tttmmmyyyy/cp-library", "cp-library");
+    // Pin the cp-library revision that builds against this compiler's standard library
+    // (`fix_version = 1.5.0`), matching the revision the in-repo speedtest cases use.
+    test_external_project(
+        "https://github.com/tttmmmyyyy/cp-library",
+        "cp-library",
+        Some("7a3e4a22af2c630b6a2ee4cfff64a7e2c08b22b6"),
+    );
 }
 
-pub fn test_external_project(url: &str, test_name: &str) {
+/// Clone `url`, check out `git_ref` (the default branch when `None`), and run `fix test`.
+pub fn test_external_project(url: &str, test_name: &str, git_ref: Option<&str>) {
     println!("Testing external project: {}", url);
 
     // Recreate working directory for this test.
@@ -142,6 +162,24 @@ pub fn test_external_project(url: &str, test_name: &str) {
         .unwrap()
         .to_string()
         .replace(".git", "");
+    let repo_dir = work_dir.join(dir_name);
+
+    // Check out the requested revision.
+    if let Some(git_ref) = git_ref {
+        let output = Command::new("git")
+            .arg("checkout")
+            .arg(git_ref)
+            .current_dir(&repo_dir)
+            .output()
+            .expect("Failed to run git checkout.");
+        assert!(
+            output.status.success(),
+            "Failed to check out \"{}\" of \"{}\":\n{}",
+            git_ref,
+            url,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     // Run `fix test`. `--allow-preliminary-commands` is supplied because this test is
     // non-interactive and some external projects legitimately ship `preliminary_commands`
@@ -149,7 +187,7 @@ pub fn test_external_project(url: &str, test_name: &str) {
     let mut cmd = fix_command();
     cmd.arg("test")
         .arg("--allow-preliminary-commands")
-        .current_dir(work_dir.join(dir_name));
+        .current_dir(&repo_dir);
 
     // Inherit all environment variables from the parent process
     cmd.envs(env::vars());
