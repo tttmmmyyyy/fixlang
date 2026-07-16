@@ -354,13 +354,27 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim");
         let dump = emit_main_rc_ir(&project_dir);
 
-        // `set` on a locally fresh array is proven unique, so the dump drops its force-unique check
-        // (the operation renders `Array::set [unique]`).
-        assert!(
-            dump.contains("Array::set [unique]"),
-            "the set on a locally fresh array should have its force-unique check dropped:\n{}",
-            dump
-        );
+        // Each operation on a locally fresh (proven unique) value renders its dropped check as a
+        // `[unique]` marker. Asserting the markers guards against silent *under*-elimination: a
+        // regression that stops dropping a check would still pass the memcheck correctness tests
+        // (which run the same whether or not elimination fires), but fails here.
+        for elided in [
+            // An array `set`.
+            "Array::set [unique]",
+            // An array `swap`.
+            "Array::swap [unique]",
+            // A generic `act`, whose `unsafe_is_unique` folds to the constant `true`.
+            "is_unique[unique]",
+            // A boxed-struct field `set` (field 0).
+            "set_0 [unique]",
+        ] {
+            assert!(
+                dump.contains(elided),
+                "the operation on a locally fresh value should render `{}`:\n{}",
+                elided,
+                dump
+            );
+        }
         // `set` on an array read out of a boxed container is of unknown sharing, so its check stays
         // (a plain `Array::set(` with no `[unique]` marker).
         assert!(

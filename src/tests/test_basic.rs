@@ -369,6 +369,34 @@ pub fn test_unique_check_elim_generic_act() {
 }
 
 #[test]
+pub fn test_unique_check_elim_swap_fresh_and_shared() {
+    // Unique-check elimination drops the force-unique clone from `Array::swap` whose array is proven
+    // unique: the swap exchanges the two elements in place. A shared array keeps its check and clones,
+    // so its other holder keeps the original order. Run under memcheck so a wrongly dropped clone (an
+    // in-place swap into a shared array) shows up as corruption of the other holder.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(4, 0);
+                let a = a.set(0, 10).set(1, 20).set(2, 30).set(3, 40);
+                let a = a.swap(0, 3);
+                assert_eq(|_|"fresh swap", a.@(0) * 1000 + a.@(3), 40010);;
+
+                let s = Array::fill(2, 0);
+                let s = s.set(0, 7).set(1, 9);
+                let keep = [s];
+                let s2 = s.swap(0, 1);
+                assert_eq(|_|"shared swap mutated", s2.@(0) * 10 + s2.@(1), 97);;
+                assert_eq(|_|"shared swap original intact", keep.@(0).@(0) * 10 + keep.@(0).@(1), 79);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_if_semicolon_in_let() {
     let source = r#"    
             module Main;

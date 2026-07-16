@@ -1,16 +1,28 @@
 module Main;
 
-// Exercises unique-check elimination dumped by `fix build --emit-rc-ir`:
-// - `set` on a locally fresh array is proven unique, so its force-unique check is dropped
-//   (rendered `Array::set [unique]`).
-// - `set` on an array read out of a boxed container is of unknown sharing, so the check is kept
-//   (rendered `Array::set`).
+// Exercises unique-check elimination dumped by `fix build --emit-rc-ir`. Each operation on a locally
+// fresh (provably unique) value has its runtime uniqueness check dropped, which the dump renders with
+// a `[unique]` marker; an operation on a value read out of a boxed container is of unknown sharing, so
+// its check is kept and no marker appears.
+// - `Array::set` on a fresh array -> `Array::set [unique]`; on a boxed-container element -> `Array::set`.
+// - `Array::swap` on a fresh array -> `Array::swap [unique]`.
+// - a generic `Array::act` on a fresh array -> its `unsafe_is_unique` folds to `is_unique[unique]`.
+// - a boxed-struct field `set` on a fresh struct -> `set_0 [unique]`.
+type Rec = box struct { x : I64, y : I64 };
+
 main : IO ();
 main = (
     let fresh = Array::fill(4, 0);
     let fresh = fresh.set(1, 9);
+    let fresh = fresh.swap(0, 3);
+    let acted = fresh.act(2, |v| Option::some(v + 1)).as_some;
+
+    let rec = Rec { x : 1, y : 2 };
+    let rec = rec.set_x(10);
+
     let boxes = [[10], [20]];
     let inner = boxes.@(0);
     let inner = inner.set(0, 99);
-    println $ (fresh.@(1) + inner.@(0)).to_string
+
+    println $ (acted.@(2) + rec.@x + inner.@(0)).to_string
 );

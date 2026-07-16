@@ -2345,12 +2345,13 @@ pub struct InlineLLVMArraySwapBody {
 impl InlineLLVMArraySwapBody {
     pub fn name(&self) -> String {
         format!(
-            "Array::{}({}, {}, {})",
+            "Array::{}{}({}, {}, {})",
             if self.bounds_checked {
                 "swap"
             } else {
                 "unsafe_swap_bounds_unchecked"
             },
+            if self.force_unique { "" } else { " [unique]" },
             self.i_name.to_string(),
             self.j_name.to_string(),
             self.array_name.to_string()
