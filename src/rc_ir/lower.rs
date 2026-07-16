@@ -85,6 +85,10 @@ struct Lowerer<'a> {
     scope: Map<FullName, Vec<RcVar>>,
     // The type of each top-level symbol, to type a global referenced as an LLVM operand.
     symbol_types: Map<FullName, Arc<TypeNode>>,
+    // The top-level symbol currently being lowered, with a per-symbol counter: each lifted lambda is
+    // named `<symbol>::closure{N}` so it carries its source module (like a top-level function's name).
+    current_origin: Option<FullName>,
+    closure_counter: u64,
 }
 
 impl<'a> Lowerer<'a> {
@@ -95,6 +99,8 @@ impl<'a> Lowerer<'a> {
             funcs: Map::default(),
             scope: Map::default(),
             symbol_types: Map::default(),
+            current_origin: None,
+            closure_counter: 0,
         }
     }
 
@@ -112,11 +118,18 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn fresh_func(&mut self, hint: &str) -> FuncRef {
-        self.fresh_counter += 1;
-        FuncRef {
-            name: FullName::local(&format!("{}#{}", hint, self.fresh_counter)),
-        }
+    /// Name a lifted lambda `<current top-level symbol>::closure{N}`, so its name carries the source
+    /// module (matching how a top-level function's name does) and a debugger shows a meaningful name.
+    fn fresh_closure_ref(&mut self) -> FuncRef {
+        let ns = self
+            .current_origin
+            .as_ref()
+            .expect("a lambda is lowered while a top-level symbol is being lowered")
+            .to_namespace();
+        // The `#` cannot appear in a source name, so `<symbol>::closure#N` never collides with one.
+        let name = FullName::new(&ns, &format!("closure#{}", self.closure_counter));
+        self.closure_counter += 1;
+        FuncRef { name }
     }
 
     // --- environment ---
@@ -171,6 +184,8 @@ impl<'a> Lowerer<'a> {
     // --- symbols ---
 
     fn lower_symbol(&mut self, sym: &Symbol) -> SymbolLowering {
+        self.current_origin = Some(sym.name.clone());
+        self.closure_counter = 0;
         let expr = sym.expr.as_ref().expect("symbol has no expression");
         if sym.ty.is_funptr() {
             // A funptr symbol is a top-level function whose expression is a (possibly multi-param)
@@ -414,7 +429,7 @@ impl<'a> Lowerer<'a> {
             .zip(cap_vals.iter().cloned())
             .collect();
 
-        let func_ref = self.fresh_func("lambda");
+        let func_ref = self.fresh_closure_ref();
         let rc_func = self.lower_lambda_as_function(expr, func_ref.clone(), captures);
         self.funcs.insert(func_ref.clone(), rc_func);
 
