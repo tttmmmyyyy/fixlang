@@ -449,10 +449,7 @@ impl Uniqueness {
     /// uniqueness of a function whose caller supplies no static information (an entry point, an
     /// indirectly reached function, or the baseline version of any function).
     pub fn all_dynamic(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Uniqueness {
-        resolve(
-            &Provenance::uniform(ty, type_env, BaseSource::Dyn),
-            &[],
-        )
+        resolve(&Provenance::uniform(ty, type_env, BaseSource::Dyn), &[])
     }
 }
 
@@ -963,8 +960,14 @@ mod tests {
         );
         // An aggregate with a boxed leaf keeps its shape.
         assert_eq!(
-            resolve(&Provenance::UnboxedAgg(vec![Provenance::Unboxed, fresh()]), &[]),
-            Uniqueness::UnboxedAgg(vec![Uniqueness::Unboxed, Uniqueness::Boxed(CTRefCnt::Unique)])
+            resolve(
+                &Provenance::UnboxedAgg(vec![Provenance::Unboxed, fresh()]),
+                &[]
+            ),
+            Uniqueness::UnboxedAgg(vec![
+                Uniqueness::Unboxed,
+                Uniqueness::Boxed(CTRefCnt::Unique)
+            ])
         );
     }
 }

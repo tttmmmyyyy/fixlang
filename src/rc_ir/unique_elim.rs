@@ -232,12 +232,18 @@ impl<'a> Specializer<'a> {
             RcExpr::Let(x, rhs, k) => {
                 RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_body(k, inputs))
             }
-            RcExpr::Retain(v, path, state, k) => {
-                RcExpr::Retain(v.clone(), path.clone(), *state, self.rewrite_body(k, inputs))
-            }
-            RcExpr::Release(v, path, state, k) => {
-                RcExpr::Release(v.clone(), path.clone(), *state, self.rewrite_body(k, inputs))
-            }
+            RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
+                v.clone(),
+                path.clone(),
+                *state,
+                self.rewrite_body(k, inputs),
+            ),
+            RcExpr::Release(v, path, state, k) => RcExpr::Release(
+                v.clone(),
+                path.clone(),
+                *state,
+                self.rewrite_body(k, inputs),
+            ),
             RcExpr::Destructure(container, fields, k) => RcExpr::Destructure(
                 container.clone(),
                 fields.clone(),
@@ -278,10 +284,9 @@ impl<'a> Specializer<'a> {
     /// canonical key, leaving the callee unspecialized.
     fn callee_key(&self, call: &RcVar, g: &RcFunc, inputs: &[Uniqueness]) -> Key {
         match self.analysis.call_args.get(&call.name) {
-            Some(arg_provs) if arg_provs.len() == g.params.len() => arg_provs
-                .iter()
-                .map(|prov| resolve(prov, inputs))
-                .collect(),
+            Some(arg_provs) if arg_provs.len() == g.params.len() => {
+                arg_provs.iter().map(|prov| resolve(prov, inputs)).collect()
+            }
             _ => self.canonical_key_of(g),
         }
     }
@@ -350,36 +355,34 @@ fn scan_body(
     callees: &mut Vec<FuncRef>,
     has_unique_check: &mut bool,
 ) {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        match node.expr.as_ref() {
-            RcExpr::Let(_, rhs, k) => {
-                match rhs {
-                    RcRhs::Llvm(gen, _) => {
-                        if gen.unique_check_operand().is_some() {
-                            *has_unique_check = true;
-                        }
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || match node.expr.as_ref() {
+        RcExpr::Let(_, rhs, k) => {
+            match rhs {
+                RcRhs::Llvm(gen, _) => {
+                    if gen.unique_check_operand().is_some() {
+                        *has_unique_check = true;
                     }
-                    RcRhs::App(callee, _) => {
-                        let cref = FuncRef {
-                            name: callee.name.clone(),
-                        };
-                        if prog.funcs.contains_key(&cref) {
-                            callees.push(cref);
-                        }
-                    }
-                    RcRhs::Match(_, arms) => {
-                        for arm in arms {
-                            scan_body(&arm.body, prog, callees, has_unique_check);
-                        }
-                    }
-                    RcRhs::Var(_) | RcRhs::Closure(..) => {}
                 }
-                scan_body(k, prog, callees, has_unique_check);
+                RcRhs::App(callee, _) => {
+                    let cref = FuncRef {
+                        name: callee.name.clone(),
+                    };
+                    if prog.funcs.contains_key(&cref) {
+                        callees.push(cref);
+                    }
+                }
+                RcRhs::Match(_, arms) => {
+                    for arm in arms {
+                        scan_body(&arm.body, prog, callees, has_unique_check);
+                    }
+                }
+                RcRhs::Var(_) | RcRhs::Closure(..) => {}
             }
-            RcExpr::Retain(_, _, _, k)
-            | RcExpr::Release(_, _, _, k)
-            | RcExpr::Destructure(_, _, k) => scan_body(k, prog, callees, has_unique_check),
-            RcExpr::Ret(_) => {}
+            scan_body(k, prog, callees, has_unique_check);
         }
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Destructure(_, _, k) => {
+            scan_body(k, prog, callees, has_unique_check)
+        }
+        RcExpr::Ret(_) => {}
     })
 }
