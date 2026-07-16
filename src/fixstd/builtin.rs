@@ -2267,11 +2267,11 @@ pub struct InlineLLVMArraySetBody {
 impl InlineLLVMArraySetBody {
     pub fn name(&self) -> String {
         format!(
-            "{}.Array::set{}({}, {})",
-            self.array_name.to_string(),
+            "Array::set{}({}, {}, {})",
             if self.force_unique { "" } else { " [unique]" },
             self.idx_name.to_string(),
-            self.value_name.to_string()
+            self.value_name.to_string(),
+            self.array_name.to_string()
         )
     }
 
@@ -2330,58 +2330,39 @@ impl UniqueCheck for InlineLLVMArraySetBody {
     }
 }
 
-// Implementation of Array::set built-in function.
-// is_unique_mode - if true, generate code that calls abort when given array is shared.
-fn set_array_body(a: &str, array: &str, idx: &str, value: &str) -> Arc<ExprNode> {
-    let elem_ty = type_tyvar_star(a);
-
-    let array_str = FullName::local(array);
-    let idx_str = FullName::local(idx);
-    let value_str = FullName::local(value);
-
-    expr_llvm(
+// `Array::set` built-in function.
+pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let elem_ty = type_tyvar_star("a");
+    let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
+    let body = expr_llvm(
         LLVMGenerator::ArraySetBody(InlineLLVMArraySetBody {
-            array_name: array_str,
-            idx_name: idx_str,
-            value_name: value_str,
+            array_name: FullName::local("array"),
+            idx_name: FullName::local("idx"),
+            value_name: FullName::local("value"),
             force_unique: true,
         }),
-        type_tyapp(make_array_ty(), elem_ty),
+        array_ty.clone(),
         None,
-    )
-}
-
-// Array::set built-in function.
-pub fn set_array_common() -> (Arc<ExprNode>, Arc<Scheme>) {
+    );
     let expr = expr_abs(
         vec![var_local("idx")],
         expr_abs(
             vec![var_local("value")],
-            expr_abs(
-                vec![var_local("array")],
-                set_array_body("a", "array", "idx", "value"),
-                None,
-            ),
+            expr_abs(vec![var_local("array")], body, None),
             None,
         ),
         None,
     );
-    let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
     let scm = Scheme::generalize(
         &[],
         vec![],
         vec![],
         type_fun(
             make_i64_ty(),
-            type_fun(type_tyvar_star("a"), type_fun(array_ty.clone(), array_ty)),
+            type_fun(elem_ty, type_fun(array_ty.clone(), array_ty)),
         ),
     );
     (expr, scm)
-}
-
-// `Array::set` built-in function.
-pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-    set_array_common()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -5078,7 +5059,7 @@ pub struct InlineLLVMIsUniqueFunctionBody {
 impl InlineLLVMIsUniqueFunctionBody {
     pub fn name(&self) -> String {
         let mark = if self.assume_unique { "[unique]" } else { "" };
-        format!("{}.is_unique{}", self.var_name.to_string(), mark)
+        format!("is_unique{}({})", mark, self.var_name.to_string())
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
