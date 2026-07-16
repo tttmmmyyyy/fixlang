@@ -186,7 +186,10 @@ impl<'a> Specializer<'a> {
                 .owned_units
                 .iter()
                 .map(|(n, unit)| {
-                    (rename.get(n).cloned().unwrap_or_else(|| n.clone()), unit.clone())
+                    (
+                        rename.get(n).cloned().unwrap_or_else(|| n.clone()),
+                        unit.clone(),
+                    )
                 })
                 .collect(),
         }
