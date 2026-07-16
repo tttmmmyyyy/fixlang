@@ -1,7 +1,7 @@
-//! Fresh renaming of RC IR local variables, shared by the passes that clone functions
-//! (borrow-ification and uniqueness-driven specialization). Because RC IR names are globally unique,
-//! a clone must give every binder a fresh name so the clone's names do not collide with the
-//! original's; `marker` distinguishes each cloning pass's fresh names from the others'.
+//! Fresh renaming of RC IR local variables, shared by the passes that clone functions. Because RC IR
+//! names are globally unique, a clone must give every binder a fresh name so the clone's names do not
+//! collide with the original's; `marker` distinguishes each cloning pass's fresh names from the
+//! others'.
 
 use crate::ast::name::FullName;
 use crate::misc::Map;

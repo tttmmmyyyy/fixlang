@@ -82,6 +82,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     }
 }
 
+/// The mutable state of the specialization pass: the program and analysis it reads, and the clones
+/// it accumulates as it walks the reachable `(function, key)` pairs.
 struct Specializer<'a> {
     prog: &'a RcProgram,
     type_env: &'a TypeEnv,
@@ -182,12 +184,16 @@ impl<'a> Specializer<'a> {
         }
     }
 
+    /// Rewrite a function body under `inputs` (the uniqueness of the enclosing clone's inputs),
+    /// growing the stack for deeply nested bodies.
     fn rewrite_body(&mut self, node: &RcExprNode, inputs: &[Uniqueness]) -> RcExprNode {
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
             self.rewrite_body_inner(node, inputs)
         })
     }
 
+    /// Rewrite one expression node under `inputs`: route its direct calls to specialized clones and
+    /// elide the uniqueness checks `inputs` make provable, recursing into continuations and match arms.
     fn rewrite_body_inner(&mut self, node: &RcExprNode, inputs: &[Uniqueness]) -> RcExprNode {
         let expr = match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
