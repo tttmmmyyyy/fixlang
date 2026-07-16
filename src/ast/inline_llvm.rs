@@ -101,6 +101,25 @@ pub trait BorrowsOperand {
     }
 }
 
+/// The runtime uniqueness branch a force-unique operation (or `is_unique`) carries: which container
+/// operand it tests, and how to drop the branch when that container is statically unique. Ops with
+/// no such branch use the defaults. Kept beside each body so a new built-in classifies itself.
+pub trait UniqueCheck: Clone {
+    /// For an op that branches on whether a container operand is unique at run time, that operand's
+    /// index together with the path to the boxed leaf whose uniqueness the branch tests. `None` (the
+    /// default) for an op that carries no such branch. Reading a `Unique` verdict for that leaf lets
+    /// `assuming_unique` drop the branch.
+    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+        None
+    }
+    /// A copy of this op with its runtime uniqueness branch dropped: a force-unique op mutates its
+    /// container in place without the check, and `is_unique` returns the constant `true`. The default
+    /// returns an unchanged copy. Sound only where the container is statically unique.
+    fn assuming_unique(&self) -> Self {
+        self.clone()
+    }
+}
+
 impl LLVMGenerator {
     pub fn generate<'c, 'm, 'b>(
         &self,
@@ -473,49 +492,249 @@ impl LLVMGenerator {
         }
     }
 
-    /// For an operation that branches on whether a container operand is unique at run time, the
-    /// operand index of that container together with the path to the boxed leaf whose uniqueness the
-    /// branch tests. A force-unique op (which clones the container when shared before mutating it in
-    /// place) and `is_unique` (which reports the verdict) both carry such a branch. `None` if this
-    /// operation carries no such branch (or already elides it). Reading a `Unique` verdict for that
-    /// leaf lets `assuming_unique` drop the branch.
+    /// The container operand and leaf path whose runtime uniqueness this operation branches on, or
+    /// `None` if it carries no such branch. Dispatches uniformly to each body's `UniqueCheck` impl, so
+    /// a new built-in must classify itself rather than defaulting silently.
     pub fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         match self {
-            // The array (operand 0) is force-uniqued in place.
-            LLVMGenerator::ArraySetBody(b) if b.force_unique => Some((0, vec![])),
-            LLVMGenerator::ArraySwapBody(b) if b.force_unique => Some((0, vec![])),
-            LLVMGenerator::ArrayPunchBody(b) if b.force_unique => Some((0, vec![])),
-            // The punched array is operand 1; its inner array is the boxed leaf at path `[0]`.
-            LLVMGenerator::PunchedArrayPlugBody(b) if b.force_unique => Some((1, vec![0])),
-            // The struct is force-uniqued in place. In `set` the value comes first (operand 0) and
-            // the struct is operand 1; in `punch`/`plug` the struct is operand 0.
-            LLVMGenerator::StructSetBody(b) if b.force_unique => Some((1, vec![])),
-            LLVMGenerator::StructPunchBody(b) if b.force_unique => Some((0, vec![])),
-            LLVMGenerator::StructPlugInBody(b) if b.force_unique => Some((0, vec![])),
-            // `is_unique` (operand 0) tests its argument's uniqueness to fill in the returned flag.
-            LLVMGenerator::IsUniqueFunctionBody(b) if !b.assume_unique => Some((0, vec![])),
-            _ => None,
+            LLVMGenerator::IntLit(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatLit(x) => x.unique_check_operand(),
+            LLVMGenerator::NullPtrLit(x) => x.unique_check_operand(),
+            LLVMGenerator::StringBuf(x) => x.unique_check_operand(),
+            LLVMGenerator::FixBody(x) => x.unique_check_operand(),
+            LLVMGenerator::CastIntegralBody(x) => x.unique_check_operand(),
+            LLVMGenerator::CastFloatBody(x) => x.unique_check_operand(),
+            LLVMGenerator::CastIntToFloatBody(x) => x.unique_check_operand(),
+            LLVMGenerator::CastFloatToIntBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ShiftBody(x) => x.unique_check_operand(),
+            LLVMGenerator::BitwiseOperationBody(x) => x.unique_check_operand(),
+            LLVMGenerator::BitNotBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayUnsafeFill(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayUnsafeEmpty(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
+                x.unique_check_operand()
+            }
+            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArraySetBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArraySwapBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayPunchBody(x) => x.unique_check_operand(),
+            LLVMGenerator::PunchedArrayPlugBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayForceUniqueBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayGetPtrBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayGetSizeBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayGetCapacityBody(x) => x.unique_check_operand(),
+            LLVMGenerator::StructGetBody(x) => x.unique_check_operand(),
+            LLVMGenerator::StructSetBody(x) => x.unique_check_operand(),
+            LLVMGenerator::StructPunchBody(x) => x.unique_check_operand(),
+            LLVMGenerator::StructPlugInBody(x) => x.unique_check_operand(),
+            LLVMGenerator::MakeUnionBody(x) => x.unique_check_operand(),
+            LLVMGenerator::UnionAsBody(x) => x.unique_check_operand(),
+            LLVMGenerator::UnionIsBody(x) => x.unique_check_operand(),
+            LLVMGenerator::UnionModBody(x) => x.unique_check_operand(),
+            LLVMGenerator::UndefinedFunctionBody(x) => x.unique_check_operand(),
+            LLVMGenerator::HoleFunctionBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IsUniqueFunctionBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntNegBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatNegBody(x) => x.unique_check_operand(),
+            LLVMGenerator::BoolNegBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntEqBody(x) => x.unique_check_operand(),
+            LLVMGenerator::PtrEqBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatEqBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntLessThanBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatLessThanBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntLessThanOrEqBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatLessThanOrEqBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntAddBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatAddBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntSubBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatSubBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntMulBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatMulBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntDivBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FloatDivBody(x) => x.unique_check_operand(),
+            LLVMGenerator::IntRemBody(x) => x.unique_check_operand(),
+            LLVMGenerator::MarkThreadedFunctionBody(x) => x.unique_check_operand(),
+            LLVMGenerator::BoxedToRetainedPtrIOS(x) => x.unique_check_operand(),
+            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => x.unique_check_operand(),
+            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => {
+                x.unique_check_operand()
+            }
+            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.unique_check_operand(),
+            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.unique_check_operand(),
+            LLVMGenerator::WithRetainedFunctionBody(x) => x.unique_check_operand(),
+            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.unique_check_operand(),
+            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayPopBackNonemptyBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => {
+                x.unique_check_operand()
+            }
+            LLVMGenerator::IOStateUnsafeCreate(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayCheckRange(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayCheckSize(x) => x.unique_check_operand(),
+            LLVMGenerator::DestructorMake(x) => x.unique_check_operand(),
+            LLVMGenerator::MakeStructBody(x) => x.unique_check_operand(),
+            LLVMGenerator::ArrayLitBody(x) => x.unique_check_operand(),
+            LLVMGenerator::FFICallBody(x) => x.unique_check_operand(),
+            LLVMGenerator::CaptureProjectBody(x) => x.unique_check_operand(),
         }
     }
 
-    /// A copy of this operation with its runtime uniqueness branch dropped: a force-unique op mutates
-    /// its container in place without the check, and `is_unique` returns the constant `true`. Sound
-    /// only where the container is statically unique, as `unique_check_operand` reports. A no-op on
-    /// operations that carry no such branch.
+    /// This operation with its runtime uniqueness branch dropped, per each body's `UniqueCheck` impl.
+    /// Sound only where the container is statically unique, as `unique_check_operand` reports.
     pub fn assuming_unique(&self) -> LLVMGenerator {
-        let mut g = self.clone();
-        match &mut g {
-            LLVMGenerator::ArraySetBody(b) => b.force_unique = false,
-            LLVMGenerator::ArraySwapBody(b) => b.force_unique = false,
-            LLVMGenerator::ArrayPunchBody(b) => b.force_unique = false,
-            LLVMGenerator::PunchedArrayPlugBody(b) => b.force_unique = false,
-            LLVMGenerator::StructSetBody(b) => b.force_unique = false,
-            LLVMGenerator::StructPunchBody(b) => b.force_unique = false,
-            LLVMGenerator::StructPlugInBody(b) => b.force_unique = false,
-            LLVMGenerator::IsUniqueFunctionBody(b) => b.assume_unique = true,
-            _ => {}
+        match self {
+            LLVMGenerator::IntLit(x) => LLVMGenerator::IntLit(x.assuming_unique()),
+            LLVMGenerator::FloatLit(x) => LLVMGenerator::FloatLit(x.assuming_unique()),
+            LLVMGenerator::NullPtrLit(x) => LLVMGenerator::NullPtrLit(x.assuming_unique()),
+            LLVMGenerator::StringBuf(x) => LLVMGenerator::StringBuf(x.assuming_unique()),
+            LLVMGenerator::FixBody(x) => LLVMGenerator::FixBody(x.assuming_unique()),
+            LLVMGenerator::CastIntegralBody(x) => {
+                LLVMGenerator::CastIntegralBody(x.assuming_unique())
+            }
+            LLVMGenerator::CastFloatBody(x) => LLVMGenerator::CastFloatBody(x.assuming_unique()),
+            LLVMGenerator::CastIntToFloatBody(x) => {
+                LLVMGenerator::CastIntToFloatBody(x.assuming_unique())
+            }
+            LLVMGenerator::CastFloatToIntBody(x) => {
+                LLVMGenerator::CastFloatToIntBody(x.assuming_unique())
+            }
+            LLVMGenerator::ShiftBody(x) => LLVMGenerator::ShiftBody(x.assuming_unique()),
+            LLVMGenerator::BitwiseOperationBody(x) => {
+                LLVMGenerator::BitwiseOperationBody(x.assuming_unique())
+            }
+            LLVMGenerator::BitNotBody(x) => LLVMGenerator::BitNotBody(x.assuming_unique()),
+            LLVMGenerator::ArrayUnsafeFill(x) => {
+                LLVMGenerator::ArrayUnsafeFill(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayUnsafeEmpty(x) => {
+                LLVMGenerator::ArrayUnsafeEmpty(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
+                LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(
+                    x.assuming_unique(),
+                )
+            }
+            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => {
+                LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => {
+                LLVMGenerator::ArrayUnsafeSetSizeBody(x.assuming_unique())
+            }
+            LLVMGenerator::ArraySetBody(x) => LLVMGenerator::ArraySetBody(x.assuming_unique()),
+            LLVMGenerator::ArraySwapBody(x) => LLVMGenerator::ArraySwapBody(x.assuming_unique()),
+            LLVMGenerator::ArrayPunchBody(x) => LLVMGenerator::ArrayPunchBody(x.assuming_unique()),
+            LLVMGenerator::PunchedArrayPlugBody(x) => {
+                LLVMGenerator::PunchedArrayPlugBody(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayForceUniqueBody(x) => {
+                LLVMGenerator::ArrayForceUniqueBody(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayGetPtrBody(x) => {
+                LLVMGenerator::ArrayGetPtrBody(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayGetSizeBody(x) => {
+                LLVMGenerator::ArrayGetSizeBody(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayGetCapacityBody(x) => {
+                LLVMGenerator::ArrayGetCapacityBody(x.assuming_unique())
+            }
+            LLVMGenerator::StructGetBody(x) => LLVMGenerator::StructGetBody(x.assuming_unique()),
+            LLVMGenerator::StructSetBody(x) => LLVMGenerator::StructSetBody(x.assuming_unique()),
+            LLVMGenerator::StructPunchBody(x) => {
+                LLVMGenerator::StructPunchBody(x.assuming_unique())
+            }
+            LLVMGenerator::StructPlugInBody(x) => {
+                LLVMGenerator::StructPlugInBody(x.assuming_unique())
+            }
+            LLVMGenerator::MakeUnionBody(x) => LLVMGenerator::MakeUnionBody(x.assuming_unique()),
+            LLVMGenerator::UnionAsBody(x) => LLVMGenerator::UnionAsBody(x.assuming_unique()),
+            LLVMGenerator::UnionIsBody(x) => LLVMGenerator::UnionIsBody(x.assuming_unique()),
+            LLVMGenerator::UnionModBody(x) => LLVMGenerator::UnionModBody(x.assuming_unique()),
+            LLVMGenerator::UndefinedFunctionBody(x) => {
+                LLVMGenerator::UndefinedFunctionBody(x.assuming_unique())
+            }
+            LLVMGenerator::HoleFunctionBody(x) => {
+                LLVMGenerator::HoleFunctionBody(x.assuming_unique())
+            }
+            LLVMGenerator::IsUniqueFunctionBody(x) => {
+                LLVMGenerator::IsUniqueFunctionBody(x.assuming_unique())
+            }
+            LLVMGenerator::IntNegBody(x) => LLVMGenerator::IntNegBody(x.assuming_unique()),
+            LLVMGenerator::FloatNegBody(x) => LLVMGenerator::FloatNegBody(x.assuming_unique()),
+            LLVMGenerator::BoolNegBody(x) => LLVMGenerator::BoolNegBody(x.assuming_unique()),
+            LLVMGenerator::IntEqBody(x) => LLVMGenerator::IntEqBody(x.assuming_unique()),
+            LLVMGenerator::PtrEqBody(x) => LLVMGenerator::PtrEqBody(x.assuming_unique()),
+            LLVMGenerator::FloatEqBody(x) => LLVMGenerator::FloatEqBody(x.assuming_unique()),
+            LLVMGenerator::IntLessThanBody(x) => {
+                LLVMGenerator::IntLessThanBody(x.assuming_unique())
+            }
+            LLVMGenerator::FloatLessThanBody(x) => {
+                LLVMGenerator::FloatLessThanBody(x.assuming_unique())
+            }
+            LLVMGenerator::IntLessThanOrEqBody(x) => {
+                LLVMGenerator::IntLessThanOrEqBody(x.assuming_unique())
+            }
+            LLVMGenerator::FloatLessThanOrEqBody(x) => {
+                LLVMGenerator::FloatLessThanOrEqBody(x.assuming_unique())
+            }
+            LLVMGenerator::IntAddBody(x) => LLVMGenerator::IntAddBody(x.assuming_unique()),
+            LLVMGenerator::FloatAddBody(x) => LLVMGenerator::FloatAddBody(x.assuming_unique()),
+            LLVMGenerator::IntSubBody(x) => LLVMGenerator::IntSubBody(x.assuming_unique()),
+            LLVMGenerator::FloatSubBody(x) => LLVMGenerator::FloatSubBody(x.assuming_unique()),
+            LLVMGenerator::IntMulBody(x) => LLVMGenerator::IntMulBody(x.assuming_unique()),
+            LLVMGenerator::FloatMulBody(x) => LLVMGenerator::FloatMulBody(x.assuming_unique()),
+            LLVMGenerator::IntDivBody(x) => LLVMGenerator::IntDivBody(x.assuming_unique()),
+            LLVMGenerator::FloatDivBody(x) => LLVMGenerator::FloatDivBody(x.assuming_unique()),
+            LLVMGenerator::IntRemBody(x) => LLVMGenerator::IntRemBody(x.assuming_unique()),
+            LLVMGenerator::MarkThreadedFunctionBody(x) => {
+                LLVMGenerator::MarkThreadedFunctionBody(x.assuming_unique())
+            }
+            LLVMGenerator::BoxedToRetainedPtrIOS(x) => {
+                LLVMGenerator::BoxedToRetainedPtrIOS(x.assuming_unique())
+            }
+            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => {
+                LLVMGenerator::BoxedFromRetainedPtrIOS(x.assuming_unique())
+            }
+            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => {
+                LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x.assuming_unique())
+            }
+            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => {
+                LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x.assuming_unique())
+            }
+            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => {
+                LLVMGenerator::GetBoxedDataPtrFunctionBody(x.assuming_unique())
+            }
+            LLVMGenerator::WithRetainedFunctionBody(x) => {
+                LLVMGenerator::WithRetainedFunctionBody(x.assuming_unique())
+            }
+            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => {
+                LLVMGenerator::UnsafeMutateBoxedInternalBody(x.assuming_unique())
+            }
+            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => {
+                LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayPopBackNonemptyBody(x) => {
+                LLVMGenerator::ArrayPopBackNonemptyBody(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => {
+                LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x.assuming_unique())
+            }
+            LLVMGenerator::IOStateUnsafeCreate(x) => {
+                LLVMGenerator::IOStateUnsafeCreate(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayCheckRange(x) => {
+                LLVMGenerator::ArrayCheckRange(x.assuming_unique())
+            }
+            LLVMGenerator::ArrayCheckSize(x) => LLVMGenerator::ArrayCheckSize(x.assuming_unique()),
+            LLVMGenerator::DestructorMake(x) => LLVMGenerator::DestructorMake(x.assuming_unique()),
+            LLVMGenerator::MakeStructBody(x) => LLVMGenerator::MakeStructBody(x.assuming_unique()),
+            LLVMGenerator::ArrayLitBody(x) => LLVMGenerator::ArrayLitBody(x.assuming_unique()),
+            LLVMGenerator::FFICallBody(x) => LLVMGenerator::FFICallBody(x.assuming_unique()),
+            LLVMGenerator::CaptureProjectBody(x) => {
+                LLVMGenerator::CaptureProjectBody(x.assuming_unique())
+            }
         }
-        g
     }
 }
 
