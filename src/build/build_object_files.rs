@@ -31,7 +31,7 @@ use inkwell::{
     context::Context,
     module::Module,
     passes::PassBuilderOptions,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine},
+    targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     values::BasicValue,
     AddressSpace, OptimizationLevel,
 };
@@ -322,7 +322,7 @@ fn load_build_object_files_cache(
     if !Path::new(&cache_path).exists() {
         return None;
     }
-    let file = std::fs::File::open(&cache_path);
+    let file = fs::File::open(&cache_path);
     if let Err(e) = file {
         warn_msg(&format!(
             "Failed to open object files cache \"{}\": {}.",
@@ -372,7 +372,7 @@ fn save_build_object_files_cache(
         return;
     }
     let cache_path = format!("{}/{}.json", UNITS_CACHE_PATH, hash);
-    let file = std::fs::File::create(&cache_path);
+    let file = fs::File::create(&cache_path);
     if let Err(e) = file {
         warn_msg(&format!(
             "Failed to create object files cache \"{}\": {}.",
@@ -460,7 +460,7 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
     let tmp_file_path =
         obj_path.with_extension(rand::thread_rng().gen::<u64>().to_string() + ".tmp");
     target_machine
-        .write_to_file(&module, inkwell::targets::FileType::Object, &tmp_file_path)
+        .write_to_file(&module, FileType::Object, &tmp_file_path)
         .map_err(|e| {
             panic_with_msg(&format!(
                 "Failed to write to file \"{}\": {}",
@@ -512,7 +512,7 @@ fn optimize_and_verify<'c>(
     // Get passes.
     let passes = match &config.llvm_passes_file {
         None => include_str!("llvm_passes.txt").to_string(),
-        Some(file) => std::fs::read_to_string(file).unwrap(),
+        Some(file) => fs::read_to_string(file).unwrap(),
     };
     let passes = passes
         .lines()

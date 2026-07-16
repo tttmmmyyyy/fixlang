@@ -23,6 +23,7 @@
 //! remove the unreachable ones); specialization only adds the more specific clones the call sites
 //! reach.
 
+use crate::ast::inline_llvm::LLVMGenerator;
 use crate::ast::program::TypeEnv;
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
@@ -285,9 +286,9 @@ impl<'a> Specializer<'a> {
     fn maybe_elide(
         &self,
         result: &RcVar,
-        gen: &crate::ast::inline_llvm::LLVMGenerator,
+        gen: &LLVMGenerator,
         inputs: &[Uniqueness],
-    ) -> crate::ast::inline_llvm::LLVMGenerator {
+    ) -> LLVMGenerator {
         let Some((_, path)) = gen.unique_check_operand() else {
             return gen.clone();
         };

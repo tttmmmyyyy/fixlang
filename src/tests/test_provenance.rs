@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
     fn get_test_cases_dir() -> PathBuf {
@@ -32,7 +32,7 @@ mod integration_tests {
     /// optimization levels produce — at `none` the same code stays as closures with no funptr
     /// version to borrow. Pinning makes the dumped structure the same regardless of the ambient
     /// `FIX_MAX_OPT_LEVEL` the test suite runs under.
-    fn emit_main_rc_ir(project_dir: &std::path::Path) -> String {
+    fn emit_main_rc_ir(project_dir: &Path) -> String {
         let output = fix_command()
             .arg("build")
             .arg("--emit-rc-ir")
