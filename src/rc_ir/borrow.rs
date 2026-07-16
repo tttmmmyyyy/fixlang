@@ -522,8 +522,9 @@ fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
 
 /// Borrow-ify a program: materialize a borrowing version of every function with a borrowable
 /// parameter, route each direct call to a version, rewrite the reference counting accordingly, and
-/// annotate every output version with the parameter/capture units it owns (`RcFunc::owned_units`,
-/// which `cancel` reads to find each call's consume sites and the RC IR dump reads for its shapes).
+/// annotate every output version with the parameter/capture units it borrows (`RcFunc::borrowed_units`,
+/// whose owned complement `cancel` reads to find each call's consume sites and the RC IR dump reads
+/// for its shapes).
 pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let ownerships = infer_ownership(prog, type_env);
 
@@ -625,18 +626,18 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         })
         .collect();
 
-    // Annotate every version with the parameter/capture units it owns, from `own_out`.
+    // Annotate every version with the parameter/capture units it borrows (those not in `own_out`).
     for func in funcs.values_mut() {
-        let mut owned = Set::default();
+        let mut borrowed = Set::default();
         for p in func.params.iter().chain(func.cap.iter()) {
             for unit in rc_units(&p.ty, type_env) {
                 let leaf = (p.name.clone(), unit);
-                if own_out.contains(&leaf) {
-                    owned.insert(leaf);
+                if !own_out.contains(&leaf) {
+                    borrowed.insert(leaf);
                 }
             }
         }
-        func.owned_units = owned;
+        func.borrowed_units = borrowed;
     }
 
     RcProgram {
@@ -646,13 +647,21 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     }
 }
 
-/// The owned parameter/capture units of every function, gathered from their ownership annotations
-/// (`RcFunc::owned_units`).
-fn all_owned_units(prog: &RcProgram) -> Set<Leaf> {
-    prog.funcs
-        .values()
-        .flat_map(|f| f.owned_units.iter().cloned())
-        .collect()
+/// The owned parameter/capture units of every function: each version's units minus the ones it
+/// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
+fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<Leaf> {
+    let mut owned = Set::default();
+    for func in prog.funcs.values() {
+        for p in func.params.iter().chain(func.cap.iter()) {
+            for unit in rc_units(&p.ty, type_env) {
+                let leaf = (p.name.clone(), unit);
+                if !func.borrowed_units.contains(&leaf) {
+                    owned.insert(leaf);
+                }
+            }
+        }
+    }
+    owned
 }
 
 /// Each parameter/capture variable's ownership shape, derived from the functions' ownership
@@ -661,7 +670,7 @@ pub fn param_ownership_shapes(
     prog: &RcProgram,
     type_env: &TypeEnv,
 ) -> Map<FullName, OwnershipShape> {
-    let own_out = all_owned_units(prog);
+    let own_out = all_owned_units(prog, type_env);
     let mut shapes = Map::default();
     for func in prog.funcs.values() {
         for p in func.params.iter().chain(func.cap.iter()) {
@@ -825,7 +834,7 @@ fn clone_func(
             ret_ty: func.ret_ty.clone(),
             body,
             source: func.source.clone(),
-            owned_units: Set::default(),
+            borrowed_units: Set::default(),
         },
         rename,
     )
@@ -1234,10 +1243,10 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// Remove the net-zero retain/release brackets borrow-ification leaves across borrow calls: a retain
 /// is cancellable when, on every forward path, a release un-bumps it before the value is consumed.
 /// Cancelling it (and the releases it pairs with) keeps the value `Unique` for the uniqueness
-/// analysis. Each call's consume sites are decided by the owned parameter/capture units the functions
-/// carry (`RcFunc::owned_units`, set by borrow-ification).
+/// analysis. Each call's consume sites are decided by the parameter/capture units the functions own —
+/// the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
 pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
-    let own_out = all_owned_units(prog);
+    let own_out = all_owned_units(prog, type_env);
     let cancel_body = |facts: &FuncFacts, body: &RcExprNode| {
         let mut analysis = CancelAnalysis {
             facts,

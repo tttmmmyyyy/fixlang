@@ -285,7 +285,7 @@ impl<'a> Lowerer<'a> {
             ret_ty: lam_ty.get_lambda_dst(),
             body: body_expr,
             source: lam.source.clone(),
-            owned_units: Set::default(),
+            borrowed_units: Set::default(),
         }
     }
 

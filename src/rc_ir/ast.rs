@@ -59,15 +59,16 @@ pub struct RcFunc {
     pub ret_ty: Arc<TypeNode>,
     pub body: RcExprNode,
     pub source: Option<Span>,
-    /// The reference-counting units this version owns among its parameters and capture: one
-    /// `(parameter-name, unit-path)` per owned unit. Borrow-ification writes it — an original version
-    /// owns every unit, a borrow version only its inferred subset. `cancel` reads it to find each
-    /// call's consume sites, and the RC IR dump derives each parameter's ownership shape from it.
+    /// The reference-counting units this version borrows among its parameters and capture — the units
+    /// it does not own, one `(parameter-name, unit-path)` each. Everything not listed is owned, so the
+    /// empty set is the all-owning default. Borrow-ification writes it: an original version borrows
+    /// nothing, a borrow version borrows its inferred read-only units.
     ///
-    /// Empty before borrow-ification, and unread until then: the earlier pipeline owns every
-    /// parameter uniformly (the discipline `insert_rc` establishes), so there ownership is implicit
-    /// in the reference counting rather than recorded here.
-    pub owned_units: Set<Leaf>,
+    /// The empty default is correct at every stage — before borrow-ification every parameter is owned
+    /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
+    /// `cancel` and the RC IR dump read the owned complement (via `all_owned_units`) for each call's
+    /// consume sites and each parameter's ownership shape.
+    pub borrowed_units: Set<Leaf>,
 }
 
 /// A reference-counting unit of a function's parameter or capture: its `(variable-name, path)`.

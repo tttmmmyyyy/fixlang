@@ -182,8 +182,8 @@ impl<'a> Specializer<'a> {
             body: rename_expr(&body, &rename),
             source: func.source.clone(),
             // Carry the ownership annotation, remapping its parameter keys through the same renaming.
-            owned_units: func
-                .owned_units
+            borrowed_units: func
+                .borrowed_units
                 .iter()
                 .map(|(n, unit)| {
                     (

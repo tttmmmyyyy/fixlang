@@ -73,8 +73,8 @@ fn lower_and_insert_rc(
 // Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
 // read-only parameters, cancel the reference counting a borrow makes net-zero, and specialize
 // functions by input uniqueness to elide unique checks. Borrow-ification records each version's
-// parameter ownership on the functions (`RcFunc::owned_units`); read it back with
-// `param_ownership_shapes` where needed (the RC IR dump), so it stays out of this pass's return.
+// borrowed parameters on the functions (`RcFunc::borrowed_units`); read the owned complement back
+// with `param_ownership_shapes` where needed (the RC IR dump), so it stays out of this pass's return.
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
