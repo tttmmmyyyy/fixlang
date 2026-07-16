@@ -473,11 +473,13 @@ impl LLVMGenerator {
         }
     }
 
-    /// For an operation that forces its container operand to be unique before mutating it in place,
-    /// the operand index of that container together with the path to the boxed leaf whose uniqueness
-    /// gates the force-unique. `None` if this operation performs no force-unique (or already elides
-    /// it). Reading a `Unique` verdict for that leaf lets `without_force_unique` drop the check.
-    pub fn force_unique_target(&self) -> Option<(usize, Vec<usize>)> {
+    /// For an operation that branches on whether a container operand is unique at run time, the
+    /// operand index of that container together with the path to the boxed leaf whose uniqueness the
+    /// branch tests. A force-unique op (which clones the container when shared before mutating it in
+    /// place) and `is_unique` (which reports the verdict) both carry such a branch. `None` if this
+    /// operation carries no such branch (or already elides it). Reading a `Unique` verdict for that
+    /// leaf lets `assuming_unique` drop the branch.
+    pub fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         match self {
             // The array (operand 0) is force-uniqued in place.
             LLVMGenerator::ArraySetBody(b) if b.force_unique => Some((0, vec![])),
@@ -490,14 +492,17 @@ impl LLVMGenerator {
             LLVMGenerator::StructSetBody(b) if b.force_unique => Some((1, vec![])),
             LLVMGenerator::StructPunchBody(b) if b.force_unique => Some((0, vec![])),
             LLVMGenerator::StructPlugInBody(b) if b.force_unique => Some((0, vec![])),
+            // `is_unique` (operand 0) tests its argument's uniqueness to fill in the returned flag.
+            LLVMGenerator::IsUniqueFunctionBody(b) if !b.assume_unique => Some((0, vec![])),
             _ => None,
         }
     }
 
-    /// A copy of this operation with its force-unique dropped: it mutates its container in place
-    /// without the runtime uniqueness check. Sound only where the container is statically unique, as
-    /// `force_unique_target` reports. A no-op on operations that carry no force-unique.
-    pub fn without_force_unique(&self) -> LLVMGenerator {
+    /// A copy of this operation with its runtime uniqueness branch dropped: a force-unique op mutates
+    /// its container in place without the check, and `is_unique` returns the constant `true`. Sound
+    /// only where the container is statically unique, as `unique_check_operand` reports. A no-op on
+    /// operations that carry no such branch.
+    pub fn assuming_unique(&self) -> LLVMGenerator {
         let mut g = self.clone();
         match &mut g {
             LLVMGenerator::ArraySetBody(b) => b.force_unique = false,
@@ -507,6 +512,7 @@ impl LLVMGenerator {
             LLVMGenerator::StructSetBody(b) => b.force_unique = false,
             LLVMGenerator::StructPunchBody(b) => b.force_unique = false,
             LLVMGenerator::StructPlugInBody(b) => b.force_unique = false,
+            LLVMGenerator::IsUniqueFunctionBody(b) => b.assume_unique = true,
             _ => {}
         }
         g

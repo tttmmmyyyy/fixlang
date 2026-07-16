@@ -4883,11 +4883,15 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIsUniqueFunctionBody {
     var_name: FullName,
+    /// Set where the caller has proven the argument statically unique: the runtime uniqueness check
+    /// is then known to succeed, so it is dropped and the returned flag is the constant `true`.
+    pub(crate) assume_unique: bool,
 }
 
 impl InlineLLVMIsUniqueFunctionBody {
     pub fn name(&self) -> String {
-        format!("{}.is_unique", self.var_name.to_string())
+        let mark = if self.assume_unique { "[unique]" } else { "" };
+        format!("{}.is_unique{}", self.var_name.to_string(), mark)
     }
 
     pub fn free_vars(&mut self) -> Vec<&mut FullName> {
@@ -4910,7 +4914,7 @@ impl InlineLLVMIsUniqueFunctionBody {
         let ret = create_obj(ret_ty.clone(), &vec![], None, gc, Some("ret@is_unique"));
 
         // Get whether argument is unique.
-        let is_unique = if obj.is_box(gc.type_env()) {
+        let is_unique = if !self.assume_unique && obj.is_box(gc.type_env()) {
             let obj_ptr = obj.value.into_pointer_value();
             let current_bb = gc.builder().get_insert_block().unwrap();
             let current_func = current_bb.get_parent().unwrap();
@@ -4937,7 +4941,8 @@ impl InlineLLVMIsUniqueFunctionBody {
             flag.add_incoming(&[(&flag_unique_bb, unique_bb), (&flag_shared_bb, shared_bb)]);
             flag.as_basic_value().into_int_value()
         } else {
-            // If the object is unboxed, it is always unique.
+            // An unboxed object is always unique, and where the caller proved the argument unique the
+            // check is known to succeed; either way the flag is the constant `true`.
             bool_ty.const_int(1, false)
         };
         let bool_val = make_bool_ty().get_struct_type(gc, &vec![]).get_undef();
@@ -4974,6 +4979,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_llvm(
             LLVMGenerator::IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody {
                 var_name: FullName::local(VAR_NAME),
+                assume_unique: false,
             }),
             ret_type,
             None,

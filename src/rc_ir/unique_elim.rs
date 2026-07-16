@@ -3,7 +3,10 @@
 //! An operation that force-uniques its container before mutating it in place (`Array::set`, `swap`,
 //! `mod`/`act` via punch and plug, struct `set`/`mod`) carries a runtime check that clones the
 //! container when it is shared. Where the provenance analysis proves the container statically
-//! `Unique` at the operation, that check is redundant and this pass drops it.
+//! `Unique` at the operation, that check is redundant and this pass drops it. The same holds for
+//! `is_unique`, which reports a container's uniqueness at run time: where the container is provably
+//! `Unique` the pass replaces it with the constant `true`, so the back end folds away the branch it
+//! guarded (as in a generic `act`, whose unique arm then mutates in place without any check).
 //!
 //! A container's uniqueness usually depends on its function's inputs (an array threaded through a
 //! loop is unique exactly when the loop was entered with a unique array). To resolve that, the pass
@@ -82,10 +85,10 @@ struct Specializer<'a> {
     prog: &'a RcProgram,
     type_env: &'a TypeEnv,
     analysis: Analysis,
-    /// The functions worth specializing: those whose body reaches a force-unique operation, directly
-    /// or through a direct call. A function that reaches none (a read-only function) is the same under
-    /// every key, so specializing it would only make redundant clones; its calls route to its
-    /// canonical version.
+    /// The functions worth specializing: those whose body reaches a uniqueness check (a force-unique
+    /// op or `is_unique`), directly or through a direct call. A function that reaches none (a read-only
+    /// function) is the same under every key, so specializing it would only make redundant clones; its
+    /// calls route to its canonical version.
     beneficial: Set<FuncRef>,
     /// The fresh name of each non-canonical clone `(function, key)`.
     clone_names: Map<(FuncRef, Key), FuncRef>,
@@ -276,14 +279,16 @@ impl<'a> Specializer<'a> {
         }
     }
 
-    /// Drop the force-unique check from a mutation whose container this clone's inputs make unique.
+    /// Drop the runtime uniqueness check from an operation whose checked container this clone's inputs
+    /// make unique — a force-unique mutation loses its clone-when-shared, and an `is_unique` becomes
+    /// the constant `true`, which lets the back end fold the branch it guarded.
     fn maybe_elide(
         &self,
         result: &RcVar,
         gen: &crate::ast::inline_llvm::LLVMGenerator,
         inputs: &[Uniqueness],
     ) -> crate::ast::inline_llvm::LLVMGenerator {
-        let Some((_, path)) = gen.force_unique_target() else {
+        let Some((_, path)) = gen.unique_check_operand() else {
             return gen.clone();
         };
         let unique = self
@@ -292,25 +297,25 @@ impl<'a> Specializer<'a> {
             .get(&result.name)
             .map_or(false, |prov| leaf_is_unique(prov, &path, inputs));
         if unique {
-            gen.without_force_unique()
+            gen.assuming_unique()
         } else {
             gen.clone()
         }
     }
 }
 
-/// The functions whose body reaches a force-unique operation — directly, or through a direct call to
-/// another such function. Only these are worth specializing; the rest are the same under every key.
-/// A least fixed point over the direct-call graph.
+/// The functions whose body reaches a uniqueness check (a force-unique op or `is_unique`) — directly,
+/// or through a direct call to another such function. Only these are worth specializing; the rest are
+/// the same under every key. A least fixed point over the direct-call graph.
 fn beneficial_funcs(prog: &RcProgram) -> Set<FuncRef> {
-    // Each function's direct callees, and whether its own body performs a force-unique operation.
+    // Each function's direct callees, and whether its own body performs a uniqueness check.
     let mut callees: Map<FuncRef, Vec<FuncRef>> = Map::default();
     let mut beneficial: Set<FuncRef> = Set::default();
     for (fref, func) in &prog.funcs {
         let mut cs = vec![];
-        let mut has_force_unique = false;
-        scan_body(&func.body, prog, &mut cs, &mut has_force_unique);
-        if has_force_unique {
+        let mut has_unique_check = false;
+        scan_body(&func.body, prog, &mut cs, &mut has_unique_check);
+        if has_unique_check {
             beneficial.insert(fref.clone());
         }
         callees.insert(fref.clone(), cs);
@@ -331,21 +336,20 @@ fn beneficial_funcs(prog: &RcProgram) -> Set<FuncRef> {
     beneficial
 }
 
-/// Collect a body's direct callees (functions of `prog`) and whether it performs a force-unique
-/// operation.
+/// Collect a body's direct callees (functions of `prog`) and whether it performs a uniqueness check.
 fn scan_body(
     node: &RcExprNode,
     prog: &RcProgram,
     callees: &mut Vec<FuncRef>,
-    has_force_unique: &mut bool,
+    has_unique_check: &mut bool,
 ) {
     stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         match node.expr.as_ref() {
             RcExpr::Let(_, rhs, k) => {
                 match rhs {
                     RcRhs::Llvm(gen, _) => {
-                        if gen.force_unique_target().is_some() {
-                            *has_force_unique = true;
+                        if gen.unique_check_operand().is_some() {
+                            *has_unique_check = true;
                         }
                     }
                     RcRhs::App(callee, _) => {
@@ -358,16 +362,16 @@ fn scan_body(
                     }
                     RcRhs::Match(_, arms) => {
                         for arm in arms {
-                            scan_body(&arm.body, prog, callees, has_force_unique);
+                            scan_body(&arm.body, prog, callees, has_unique_check);
                         }
                     }
                     RcRhs::Var(_) | RcRhs::Closure(..) => {}
                 }
-                scan_body(k, prog, callees, has_force_unique);
+                scan_body(k, prog, callees, has_unique_check);
             }
             RcExpr::Retain(_, _, _, k)
             | RcExpr::Release(_, _, _, k)
-            | RcExpr::Destructure(_, _, k) => scan_body(k, prog, callees, has_force_unique),
+            | RcExpr::Destructure(_, _, k) => scan_body(k, prog, callees, has_unique_check),
             RcExpr::Ret(_) => {}
         }
     })

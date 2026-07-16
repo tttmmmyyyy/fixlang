@@ -322,6 +322,14 @@ pub fn result_prov(
             Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
         }
 
+        // `is_unique` returns `(Bool, a)` with the argument unchanged as the second component, yet its
+        // result stays the conservative `Dyn` so the borrow pass treats the argument as consumed. That
+        // consuming treatment is what makes `is_unique` detect sharing: a later use of the argument
+        // forces a retain, so the container reads as shared at the check, and the fold (which keys on
+        // the operand through `op_containers`) correctly stays off. Declaring the argument a
+        // passthrough here would suppress that retain and report a shared container as unique.
+        IsUniqueFunctionBody(_) => Provenance::uniform(result_ty, type_env, BaseSource::Dyn),
+
         // Union variant construction: a boxed union is a fresh allocation; an unboxed union carries
         // the operand's provenance in the constructed variant's slot and bottom (an empty set) in the
         // others.
@@ -510,11 +518,12 @@ struct Interp<'a> {
     closure_targets: Map<FullName, FuncRef>,
     /// The provenance recorded at each variable's binding, for the dump. Names are globally unique.
     bindings: Map<FullName, Provenance>,
-    /// For each force-unique operation, keyed by its result variable, the provenance of its container
-    /// operand at the operation's program point. Unlike `bindings` (a value's provenance where it is
-    /// bound), this is read from the live environment at the operation, so a container demoted to
-    /// `Dyn` by an intervening `Retain` is seen as `Dyn` here — the flow-sensitive fact unique-check
-    /// elimination needs to decide, per operation, whether the container is still unique.
+    /// For each operation that branches on a container's uniqueness (a force-unique op or `is_unique`),
+    /// keyed by its result variable, the provenance of that container operand at the operation's
+    /// program point. Unlike `bindings` (a value's provenance where it is bound), this is read from the
+    /// live environment at the operation, so a container demoted to `Dyn` by an intervening `Retain` is
+    /// seen as `Dyn` here — the flow-sensitive fact unique-check elimination needs to decide, per
+    /// operation, whether the container is still unique.
     op_containers: Map<FullName, Provenance>,
     /// For each call, keyed by its result variable, the provenance of each argument at the call's
     /// program point. Specialization keys the callee's clone on these (resolved against the caller's
@@ -618,9 +627,9 @@ impl<'a> Interp<'a> {
             RcRhs::Llvm(gen, args) => {
                 let arg_provs: Vec<Provenance> =
                     args.iter().map(|a| self.operand(a, env)).collect();
-                // Snapshot the container operand of a force-unique operation at this program point,
-                // for unique-check elimination to resolve later.
-                if let Some((container_idx, _)) = gen.force_unique_target() {
+                // Snapshot the checked container operand of a uniqueness-branching operation at this
+                // program point, for unique-check elimination to resolve later.
+                if let Some((container_idx, _)) = gen.unique_check_operand() {
                     self.op_containers
                         .insert(result.name.clone(), arg_provs[container_idx].clone());
                 }
@@ -749,8 +758,9 @@ fn join_envs(
 pub struct Analysis {
     /// Each variable's provenance at its binding point (for the RC IR dump annotation).
     pub bindings: Map<FullName, Provenance>,
-    /// For each force-unique operation (keyed by its result variable), the container operand's
-    /// provenance at the operation's program point, which unique-check elimination resolves.
+    /// For each operation that branches on a container's uniqueness (a force-unique op or `is_unique`,
+    /// keyed by its result variable), that container operand's provenance at the operation's program
+    /// point, which unique-check elimination resolves.
     pub op_containers: Map<FullName, Provenance>,
     /// For each call (keyed by its result variable), the arguments' provenance at the call's program
     /// point, which specialization resolves to key the callee's clone.

@@ -340,6 +340,35 @@ pub fn test_unique_check_elim_specialized_loop_shared_entry() {
 }
 
 #[test]
+pub fn test_unique_check_elim_generic_act() {
+    // A generic `act` (here with the `Option` functor, which has no functor-specialized variant)
+    // decides at run time whether its array is unique and takes an in-place arm when it is. Where the
+    // array is proven unique, that runtime check folds away and the in-place arm always runs — it must
+    // still compute the right values. Where the array is shared (a second holder retained across the
+    // call), the check stays and the shared arm clones, leaving the other holder untouched. Run under
+    // memcheck so a wrongly dropped check (an in-place write into a shared array) shows as corruption.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let a = Array::fill(3, 0);
+                let a = a.set(0, 10).set(1, 20).set(2, 30);
+                let a = a.act(1, |x| Option::some(x + 5)).as_some;
+                assert_eq(|_|"unique act", a.@(0) + a.@(1) + a.@(2), 65);;
+
+                let s = Array::fill(2, 7);
+                let keep = [s];
+                let s2 = s.act(0, |x| Option::some(x + 90)).as_some;
+                assert_eq(|_|"shared act mutated", s2.@(0), 97);;
+                assert_eq(|_|"shared act original intact", keep.@(0).@(0), 7);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_if_semicolon_in_let() {
     let source = r#"    
             module Main;
