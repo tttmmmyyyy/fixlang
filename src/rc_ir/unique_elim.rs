@@ -104,7 +104,11 @@ impl<'a> Specializer<'a> {
     /// The all-`Dynamic` key of a function: nothing is known about its inputs' uniqueness. The clone
     /// on this key keeps the original name.
     fn canonical_key(&self, fref: &FuncRef) -> Key {
-        let func = &self.prog.funcs[fref];
+        self.canonical_key_of(&self.prog.funcs[fref])
+    }
+
+    /// The all-`Dynamic` key built from a function's parameter types.
+    fn canonical_key_of(&self, func: &RcFunc) -> Key {
         func.params
             .iter()
             .map(|p| Uniqueness::all_dynamic(&p.ty, self.type_env))
@@ -271,11 +275,7 @@ impl<'a> Specializer<'a> {
                 .iter()
                 .map(|prov| resolve(prov, inputs))
                 .collect(),
-            _ => g
-                .params
-                .iter()
-                .map(|p| Uniqueness::all_dynamic(&p.ty, self.type_env))
-                .collect(),
+            _ => self.canonical_key_of(g),
         }
     }
 
