@@ -30,8 +30,9 @@ use std::sync::Arc;
 impl<'c, 'm> Generator<'c, 'm> {
     /// Generate LLVM code for the functions and global initializers of `prog` — one compilation
     /// unit's worth. Every top-level symbol has already been declared (by `declare_symbol`, run for
-    /// all symbols in every unit), so those declarations are reused; only this unit's lifted lambdas
-    /// are declared here, and only `prog`'s functions and globals are implemented.
+    /// all symbols in every unit), so those declarations are reused; only the functions synthesized
+    /// after that — lifted lambdas, and at higher optimization levels the borrow and specialization
+    /// versions — are declared here, and only `prog`'s functions and globals are implemented.
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
         let mut fn_map: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
@@ -40,12 +41,6 @@ impl<'c, 'm> Generator<'c, 'm> {
                 .get_function(&func.name.name.to_string())
                 .unwrap_or_else(|| self.declare_rc_function(func));
             fn_map.insert(fref.clone(), fn_val);
-            // A borrow version is a funptr function that `declare_symbol` did not register (it is
-            // synthesized by borrow-ification, not an original symbol). Register its accessor so a
-            // direct call routed to it resolves like any other funptr global.
-            if func.fn_ty.is_funptr() && !self.global.contains_key(&func.name.name) {
-                self.add_global_object(func.name.name.clone(), fn_val, func.fn_ty.clone());
-            }
         }
 
         for (fref, func) in prog.funcs.iter() {
@@ -57,8 +52,12 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Declare the LLVM function for an `RcFunc` (signature from its arrow type). Funptr functions
-    /// get external linkage under separated compilation; closure functions are always internal.
+    /// Declare the LLVM function for an `RcFunc` (signature from its arrow type) and, for a funptr
+    /// function, register its global accessor so a direct call by name resolves it. This is the
+    /// funptr analogue of `declare_symbol` for the functions born after declaration — lifted lambdas,
+    /// and the borrow and specialization versions synthesized while optimizing — which `declare_symbol`
+    /// never saw. Funptr functions get external linkage under separated compilation; closure functions
+    /// are always internal.
     fn declare_rc_function(&mut self, func: &RcFunc) -> FunctionValue<'c> {
         let fn_ty = lambda_function_type(&func.fn_ty, self);
         let name = func.name.name.to_string();
@@ -71,6 +70,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         if self.has_di() {
             let fn_name = fn_val.get_name().to_str().unwrap().to_string();
             fn_val.set_subprogram(self.create_debug_subprogram(&fn_name, func.source.clone()));
+        }
+        if func.fn_ty.is_funptr() {
+            self.add_global_object(func.name.name.clone(), fn_val, func.fn_ty.clone());
         }
         fn_val
     }
