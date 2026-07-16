@@ -48,7 +48,7 @@ mod integration_tests {
             panic!("fix build --emit-rc-ir failed");
         }
 
-        let dump_path = project_dir.join(".fixlang/rc_ir.Main.txt");
+        let dump_path = project_dir.join(".fixlang/rc_ir.Main.post.txt");
         std::fs::read_to_string(&dump_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }

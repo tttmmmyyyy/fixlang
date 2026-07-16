@@ -2,6 +2,7 @@ use crate::{
     ast::{
         export_statement::ExportStatement,
         expr::ExprNode,
+        name::FullName,
         program::{Program, Symbol, TypeEnv},
     },
     build::{compile_unit::CompileUnit, cpu_features::CpuFeatures},
@@ -88,32 +89,55 @@ fn optimize_rc_program(
     prog
 }
 
-// Write the RC IR of the symbols selected by `filter` to a file under `.fixlang/`: a module name
-// dumps that module's symbols to `rc_ir.<module>.txt`, `all` dumps every symbol to `rc_ir.txt`.
-// Behind `--emit-rc-ir`, for compiler development.
-fn dump_rc_ir(program: &Program, filter: &str, config: &Configuration) {
-    let type_env = program.type_env();
-    let all_program_symbols: Vec<Symbol> = program.symbols.values().cloned().collect();
-    let symbols: Vec<Symbol> = all_program_symbols
-        .iter()
-        .filter(|s| filter == "all" || s.name.module() == filter)
-        .cloned()
-        .collect();
-    let rc_program = lower_and_insert_rc(&type_env, &symbols, &all_program_symbols);
-    let rc_program = optimize_rc_program(rc_program, &type_env, config);
-    let provs = analyze_program(&rc_program, &type_env).bindings;
-    // Ownership shapes exist only where borrow-ification ran; read them back off the functions.
-    let owns = config
-        .enable_borrow_optimization()
-        .then(|| param_ownership_shapes(&rc_program, &type_env));
+// Write the `stage` (`pre` or `post` optimization) RC IR of the module selected by `filter` to a file
+// under `.fixlang/`: `rc_ir.<module>.<stage>.txt`, or `rc_ir.<stage>.txt` for `all`. Behind
+// `--emit-rc-ir`, for compiler development. `rc_program` is the whole program at that stage; the module
+// filter is applied here, on the RC IR, so the dumped functions carry the whole-program context that
+// code generation actually compiles.
+fn dump_rc_ir(
+    rc_program: &RcProgram,
+    type_env: &TypeEnv,
+    filter: &str,
+    stage: &str,
+    config: &Configuration,
+) {
+    // Provenance and ownership are optimization-analysis outputs, so only the post-optimization dump
+    // carries them; the pre-optimization dump shows the plain lowered RC IR.
+    let post = stage == "post";
+    let provs = post.then(|| analyze_program(rc_program, type_env).bindings);
+    let owns = (post && config.enable_borrow_optimization())
+        .then(|| param_ownership_shapes(rc_program, type_env));
     let ann = Annotations {
-        provs: Some(&provs),
+        provs: provs.as_ref(),
         owns: owns.as_ref(),
+    };
+
+    // Keep the functions and globals of the selected module. Every function name carries its source
+    // module in its top namespace component — a top-level name, a `<function>::closure{N}` lambda, or a
+    // clone of either. Annotations stay computed over the whole program, so a kept function's
+    // provenance and ownership still resolve.
+    let in_module = |name: &FullName| {
+        filter == "all" || name.namespace.names.first().map(String::as_str) == Some(filter)
+    };
+    let selected = RcProgram {
+        funcs: rc_program
+            .funcs
+            .iter()
+            .filter(|(r, _)| in_module(&r.name))
+            .map(|(r, f)| (r.clone(), f.clone()))
+            .collect(),
+        globals: rc_program
+            .globals
+            .iter()
+            .filter(|g| in_module(&g.symbol))
+            .cloned()
+            .collect(),
+        entry: rc_program.entry.clone(),
     };
 
     // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
     let file_name = if filter == "all" {
-        "rc_ir.txt".to_string()
+        format!("rc_ir.{}.txt", stage)
     } else {
         let module: String = filter
             .chars()
@@ -125,10 +149,10 @@ fn dump_rc_ir(program: &Program, filter: &str, config: &Configuration) {
                 }
             })
             .collect();
-        format!("rc_ir.{}.txt", module)
+        format!("rc_ir.{}.{}.txt", module, stage)
     };
     let path = PathBuf::from(DOT_FIXLANG).join(file_name);
-    if let Err(e) = fs::write(&path, program_to_string_annotated(&rc_program, ann)) {
+    if let Err(e) = fs::write(&path, program_to_string_annotated(&selected, ann)) {
         panic_with_msg(&format!(
             "Failed to write RC IR to `{}`: {}",
             path.display(),
@@ -157,9 +181,16 @@ pub fn build_object_files<'c>(
     // Run optimizations.
     optimization::optimization::run(&mut program, &config);
 
-    // Dump the RC IR for inspection when `--emit-rc-ir` is given.
+    // Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
+    // generation does at `Max`), dumping it before and after the optimizations, then filter to the
+    // requested module in each dump.
     if let Some(filter) = &config.emit_rc_ir {
-        dump_rc_ir(&program, filter, config);
+        let type_env = program.type_env();
+        let all_syms: Vec<Symbol> = program.symbols.values().cloned().collect();
+        let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms);
+        dump_rc_ir(&base, &type_env, filter, "pre", config);
+        let optimized = optimize_rc_program(base, &type_env, config);
+        dump_rc_ir(&optimized, &type_env, filter, "post", config);
     }
 
     // Determine compilation units.
