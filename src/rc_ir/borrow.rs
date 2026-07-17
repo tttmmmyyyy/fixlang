@@ -34,17 +34,18 @@
 //! cancellation shares the object-identity (`root`) and consume-site machinery with the inference and
 //! rewrite above, so all three read the same aliasing facts.
 
-use crate::ast::inline_llvm::LLVMGenerator;
+use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
+use crate::fixstd::builtin::InlineLLVMMakeUnionBody;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     FuncRef, Leaf, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc,
     RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
 };
-use crate::rc_ir::provenance::{result_prov, BaseSource, Provenance};
+use crate::rc_ir::provenance::{BaseSource, Provenance};
 use crate::rc_ir::rename::{collect_binders, fresh_rename, rename_expr, rename_var};
 use std::sync::Arc;
 
@@ -56,7 +57,7 @@ enum Def {
     Move(RcVar),
     /// `let x = op(args)`: an alias when the result leaf is a pure projection of one argument,
     /// otherwise a producer. Carries the result type to consult `result_prov`.
-    Llvm(LLVMGenerator, Vec<RcVar>, Arc<TypeNode>),
+    Llvm(Box<dyn LLVMGen>, Vec<RcVar>, Arc<TypeNode>),
     /// `let x = f(args)` or a closure or a match — an opaque producer.
     Producer,
     /// A `destructure` field: field `idx` of the container.
@@ -211,13 +212,13 @@ fn root_inner(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usi
             // active variant, which the projection rule below already aliases through `result_prov`.
             if path.is_empty()
                 && !args.is_empty()
-                && matches!(gen, LLVMGenerator::MakeUnionBody(_))
+                && gen.as_any().is::<InlineLLVMMakeUnionBody>()
                 && !result_ty.is_box(type_env)
             {
                 return root(facts, type_env, &args[0].name, &[]);
             }
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-            let decl = result_prov(gen, result_ty, &arg_tys, type_env);
+            let decl = gen.result_prov(result_ty, &arg_tys, type_env);
             // A result leaf that is a single `Arg(j, p)` is a pure projection of argument `j`'s leaf
             // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
             // several sources) is a producer, stopping here.
@@ -345,7 +346,7 @@ fn rhs_consumes<F: Fn(&RcVar, &Path) -> bool>(
             }
         }
         RcRhs::Llvm(gen, args) => {
-            let passthrough = passthrough_arg_leaves(gen, result_ty, args, type_env);
+            let passthrough = passthrough_arg_leaves(&**gen, result_ty, args, type_env);
             for (i, a) in args.iter().enumerate() {
                 if gen.borrows_operand(i) {
                     continue;
@@ -385,13 +386,13 @@ fn resolve_callee_params<'a>(
 /// The `(arg index, leaf path)` pairs an LLVM op passes through unchanged to its result — the pure
 /// projections declared by `result_prov` as `Arg(i, path)`.
 fn passthrough_arg_leaves(
-    gen: &LLVMGenerator,
+    gen: &dyn LLVMGen,
     result_ty: &Arc<TypeNode>,
     args: &[RcVar],
     type_env: &TypeEnv,
 ) -> Set<(usize, Path)> {
     let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-    let decl = result_prov(gen, result_ty, &arg_tys, type_env);
+    let decl = gen.result_prov(result_ty, &arg_tys, type_env);
     let mut out = Set::default();
     collect_arg_leaves(&decl, &mut out);
     out

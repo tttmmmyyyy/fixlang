@@ -200,7 +200,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // An inline-LLVM op may itself be in tail position (e.g. `FixBody`) and may diverge
                 // (e.g. the panic/undefined ops); in both cases `generate` returns `None`.
                 let llvm_tail = self.tail_fuses(x, k, tail);
-                match gen.generate(self, &x.ty, llvm_tail) {
+                match gen.generate_tail(self, &x.ty, llvm_tail) {
                     None => None,
                     Some(obj) => self.bind_and_continue(x, obj, k, tail, fn_map),
                 }

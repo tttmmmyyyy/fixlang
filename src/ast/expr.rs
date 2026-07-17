@@ -1,4 +1,4 @@
-use crate::ast::inline_llvm::{InlineLLVM, LLVMGenerator};
+use crate::ast::inline_llvm::{InlineLLVM, LLVMGen};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::program::{EndNode, TypeEnv};
@@ -1580,7 +1580,11 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
     var_var(FullName::local(var_name))
 }
 
-pub fn expr_llvm(generator: LLVMGenerator, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
+pub fn expr_llvm(
+    generator: Box<dyn LLVMGen>,
+    ty: Arc<TypeNode>,
+    src: Option<Span>,
+) -> Arc<ExprNode> {
     Arc::new(Expr::LLVM(Arc::new(InlineLLVM {
         generator,
         generic_ty: ty,

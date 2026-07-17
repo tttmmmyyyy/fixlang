@@ -1,746 +1,95 @@
 use crate::ast::name::FullName;
+use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::fixstd::builtin::*;
 use crate::generator::{Generator, Object};
+use crate::rc_ir::provenance::{BaseSource, Provenance};
+use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::sync::Arc;
 
-#[derive(Clone, Serialize, Deserialize)]
-pub enum LLVMGenerator {
-    IntLit(InlineLLVMIntLit),
-    FloatLit(InlineLLVMFloatLit),
-    NullPtrLit(InlineLLVMNullPtrLit),
-    StringBuf(InlineLLVMStringBuf),
-    FixBody(InlineLLVMFixBody),
-    CastIntegralBody(InlineLLVMCastIntegralBody),
-    CastFloatBody(InlineLLVMCastFloatBody),
-    CastIntToFloatBody(InlineLLVMCastIntToFloatBody),
-    CastFloatToIntBody(InlineLLVMCastFloatToIntBody),
-    ShiftBody(InlineLLVMShiftBody),
-    BitwiseOperationBody(InlineLLVMBitwiseOperationBody),
-    BitNotBody(InlineLLVMBitNotBody),
-    ArrayUnsafeFill(InlineLLVMArrayUnsafeFill),
-    ArrayUnsafeEmpty(InlineLLVMArrayUnsafeEmpty),
-    ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(
-        InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased,
-    ),
-    ArrayUnsafeGetBoundsUnchecked(InlineLLVMArrayUnsafeGetBoundsUnchecked),
-    ArrayUnsafeSetSizeBody(InlineLLVMArrayUnsafeSetSizeBody),
-    ArraySetBody(InlineLLVMArraySetBody),
-    ArraySwapBody(InlineLLVMArraySwapBody),
-    ArrayPunchBody(InlineLLVMArrayPunchBody),
-    PunchedArrayPlugBody(InlineLLVMPunchedArrayPlugBody),
-    ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody),
-    ArrayGetPtrBody(InlineLLVMArrayGetPtrBody),
-    ArrayGetSizeBody(InlineLLVMArrayGetSizeBody),
-    ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody),
-    ArrayCheckRange(InlineLLVMArrayCheckRange),
-    ArrayCheckSize(InlineLLVMArrayCheckSize),
-    StructGetBody(InlineLLVMStructGetBody),
-    StructSetBody(InlineLLVMStructSetBody),
-    StructPunchBody(InlineLLVMStructPunchBody),
-    StructPlugInBody(InlineLLVMStructPlugInBody),
-    MakeUnionBody(InlineLLVMMakeUnionBody),
-    UnionAsBody(InlineLLVMUnionAsBody),
-    UnionIsBody(InlineLLVMUnionIsBody),
-    UnionModBody(InlineLLVMUnionModBody),
-    UndefinedFunctionBody(InlineLLVMUndefinedInternalBody),
-    HoleFunctionBody(InlineLLVMHoleBody),
-    IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody),
-    IntNegBody(InlineLLVMIntNegBody),
-    FloatNegBody(InlineLLVMFloatNegBody),
-    BoolNegBody(InlineLLVMBoolNegBody),
-    IntEqBody(InlineLLVMIntEqBody),
-    PtrEqBody(InlineLLVMPtrEqBody),
-    FloatEqBody(InlineLLVMFloatEqBody),
-    IntLessThanBody(InlineLLVMIntLessThanBody),
-    FloatLessThanBody(InlineLLVMFloatLessThanBody),
-    IntLessThanOrEqBody(InlineLLVMIntLessThanOrEqBody),
-    FloatLessThanOrEqBody(InlineLLVMFloatLessThanOrEqBody),
-    IntAddBody(InlineLLVMIntAddBody),
-    FloatAddBody(InlineLLVMFloatAddBody),
-    IntSubBody(InlineLLVMIntSubBody),
-    FloatSubBody(InlineLLVMFloatSubBody),
-    IntMulBody(InlineLLVMIntMulBody),
-    FloatMulBody(InlineLLVMFloatMulBody),
-    IntDivBody(InlineLLVMIntDivBody),
-    FloatDivBody(InlineLLVMFloatDivBody),
-    IntRemBody(InlineLLVMIntRemBody),
-    MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody),
-    BoxedToRetainedPtrIOS(InlineLLVMBoxedToRetainedPtrIOS),
-    BoxedFromRetainedPtrIOS(InlineLLVMBoxedFromRetainedPtrIOS),
-    GetReleaseFunctionOfBoxedValueFunctionBody(
-        InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody,
-    ),
-    GetRetainFunctionOfBoxedValueFunctionBody(InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody),
-    GetBoxedDataPtrFunctionBody(InlineLLVMGetBoxedDataPtrFunctionBody),
-    WithRetainedFunctionBody(InlineLLVMWithRetainedFunctionBody),
-    UnsafeMutateBoxedInternalBody(InlineLLVMUnsafeMutateBoxedInternalFunctionBody),
-    UnsafeMutateBoxedIOSInternalBody(InlineLLVMUnsafeMutateBoxedIOSInternalBody),
-    ArrayPopBackNonemptyBody(InlineLLVMArrayPopBackNonemptyBody),
-    ArrayUnsafeGetLinearBoundsUncheckedUnretained(
-        InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained,
-    ),
-    IOStateUnsafeCreate(InlineLLVMIOStateUnsafeCreate),
-    DestructorMake(InlineLLVMDestructorMake),
-    MakeStructBody(InlineLLVMMakeStructBody),
-    ArrayLitBody(InlineLLVMArrayLitBody),
-    FFICallBody(InlineLLVMFFICallBody),
-    CaptureProjectBody(InlineLLVMCaptureProjectBody),
-}
+/// One inline-LLVM builtin operation. Each builtin is a struct that implements this trait; an
+/// `InlineLLVM` holds a `Box<dyn LLVMGen>`. `typetag` serializes the trait object (tagged by op) so
+/// the typecheck cache round-trips it.
+#[typetag::serde(tag = "op")]
+pub trait LLVMGen: DynClone + Send + Sync {
+    /// Emit the op's code and return its value.
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c>;
 
-/// Whether an inline-LLVM built-in only *borrows* operand `i` (reads it without taking
-/// ownership) rather than *owning* it (consuming it — moved into the result, released
-/// internally, or force-unique-returned). Owning every operand is the default; the read-getters
-/// override this. RC-IR insertion releases a borrowed operand after its last use and retains an
-/// owned one before a non-last use.
-pub trait BorrowsOperand {
-    /// Returns `true` if operand `i` is only borrowed; the default owns every operand.
-    fn borrows_operand(&self, _i: usize) -> bool {
-        false
-    }
-}
-
-/// The runtime uniqueness branch a force-unique operation (or `is_unique`) carries: which container
-/// operand it tests, and how to drop the branch when that container is statically unique. Ops with
-/// no such branch use the defaults. Kept beside each body so a new built-in classifies itself.
-pub trait UniqueCheck: Clone {
-    /// For an op that branches on whether a container operand is unique at run time, that operand's
-    /// index together with the path to the boxed leaf whose uniqueness the branch tests. `None` (the
-    /// default) for an op that carries no such branch. Reading a `Unique` verdict for that leaf lets
-    /// `assuming_unique` drop the branch.
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
-        None
-    }
-    /// A copy of this op with its runtime uniqueness branch dropped: a force-unique op mutates its
-    /// container in place without the check, and `is_unique` returns the constant `true`. The default
-    /// returns an unchanged copy. Sound only where the container is statically unique.
-    fn assuming_unique(&self) -> Self {
-        self.clone()
-    }
-}
-
-impl LLVMGenerator {
-    pub fn generate<'c, 'm, 'b>(
+    /// Emit the op, threading `tail` for a possible tail return. The default computes `generate` and
+    /// returns it, building the tail return when `tail`. `fix` overrides this to emit a real tail call.
+    fn generate_tail<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
         ty: &Arc<TypeNode>,
         tail: bool,
     ) -> Option<Object<'c>> {
-        let obj = match self {
-            LLVMGenerator::IntLit(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatLit(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::NullPtrLit(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::StringBuf(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FixBody(x) => x.generate(gc, ty, tail),
-            LLVMGenerator::CastIntegralBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::CastFloatBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::CastIntToFloatBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::CastFloatToIntBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ShiftBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::BitwiseOperationBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::BitNotBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayUnsafeFill(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayUnsafeEmpty(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
-                Some(x.generate(gc, ty))
-            }
-            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArraySetBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArraySwapBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayPunchBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::PunchedArrayPlugBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayForceUniqueBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayGetPtrBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayGetSizeBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayGetCapacityBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::StructGetBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::StructSetBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::MakeUnionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::UnionAsBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::UnionIsBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::UnionModBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::UndefinedFunctionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::HoleFunctionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IsUniqueFunctionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntNegBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatNegBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::BoolNegBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntEqBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::PtrEqBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatEqBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntLessThanBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatLessThanBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntLessThanOrEqBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatLessThanOrEqBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntAddBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatAddBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntSubBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatSubBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntMulBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatMulBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntDivBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FloatDivBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IntRemBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::BoxedToRetainedPtrIOS(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::MarkThreadedFunctionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => {
-                Some(x.generate(gc, ty))
-            }
-            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::StructPunchBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::StructPlugInBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::WithRetainedFunctionBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayPopBackNonemptyBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => {
-                Some(x.generate(gc, ty))
-            }
-            LLVMGenerator::ArrayCheckRange(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayCheckSize(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::IOStateUnsafeCreate(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::DestructorMake(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::MakeStructBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::ArrayLitBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::FFICallBody(x) => Some(x.generate(gc, ty)),
-            LLVMGenerator::CaptureProjectBody(x) => Some(x.generate(gc, ty)),
-        };
-        match obj {
-            None => {
-                // If the object is None, the it is already returned since `tail` is true.
-                assert!(tail);
-                None
-            }
-            Some(obj) => {
-                // If the object has not been returned yet,
-                if tail {
-                    // If tail, then build the return instruction.
-                    gc.build_tail(obj, true);
-                    None
-                } else {
-                    Some(obj)
-                }
-            }
+        let obj = self.generate(gc, ty);
+        if tail {
+            gc.build_tail(obj, true);
+            None
+        } else {
+            Some(obj)
         }
     }
 
-    pub fn free_vars(&self) -> Vec<FullName> {
-        self.clone()
+    /// The mutable free-variable references (for renaming).
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName>;
+
+    /// The free variables by value.
+    fn free_vars(&self) -> Vec<FullName> {
+        dyn_clone::clone_box(self)
             .free_vars_mut()
             .into_iter()
-            .map(|name| (*name).clone())
+            .map(|n| (*n).clone())
             .collect()
     }
 
-    pub fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        match self {
-            LLVMGenerator::IntLit(x) => x.free_vars(),
-            LLVMGenerator::FloatLit(x) => x.free_vars(),
-            LLVMGenerator::NullPtrLit(x) => x.free_vars(),
-            LLVMGenerator::StringBuf(x) => x.free_vars(),
-            LLVMGenerator::FixBody(x) => x.free_vars(),
-            LLVMGenerator::CastIntegralBody(x) => x.free_vars(),
-            LLVMGenerator::CastFloatBody(x) => x.free_vars(),
-            LLVMGenerator::CastIntToFloatBody(x) => x.free_vars(),
-            LLVMGenerator::CastFloatToIntBody(x) => x.free_vars(),
-            LLVMGenerator::ShiftBody(x) => x.free_vars(),
-            LLVMGenerator::BitwiseOperationBody(x) => x.free_vars(),
-            LLVMGenerator::BitNotBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeFill(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeEmpty(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.free_vars(),
-            LLVMGenerator::ArraySetBody(x) => x.free_vars(),
-            LLVMGenerator::ArraySwapBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayPunchBody(x) => x.free_vars(),
-            LLVMGenerator::PunchedArrayPlugBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayForceUniqueBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayGetPtrBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayGetSizeBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayGetCapacityBody(x) => x.free_vars(),
-            LLVMGenerator::StructGetBody(x) => x.free_vars(),
-            LLVMGenerator::StructSetBody(x) => x.free_vars(),
-            LLVMGenerator::StructPunchBody(x) => x.free_vars(),
-            LLVMGenerator::StructPlugInBody(x) => x.free_vars(),
-            LLVMGenerator::MakeUnionBody(x) => x.free_vars(),
-            LLVMGenerator::UnionAsBody(x) => x.free_vars(),
-            LLVMGenerator::UnionIsBody(x) => x.free_vars(),
-            LLVMGenerator::UnionModBody(x) => x.free_vars(),
-            LLVMGenerator::UndefinedFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::HoleFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::IsUniqueFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::IntNegBody(x) => x.free_vars(),
-            LLVMGenerator::FloatNegBody(x) => x.free_vars(),
-            LLVMGenerator::BoolNegBody(x) => x.free_vars(),
-            LLVMGenerator::IntEqBody(x) => x.free_vars(),
-            LLVMGenerator::PtrEqBody(x) => x.free_vars(),
-            LLVMGenerator::FloatEqBody(x) => x.free_vars(),
-            LLVMGenerator::IntLessThanBody(x) => x.free_vars(),
-            LLVMGenerator::FloatLessThanBody(x) => x.free_vars(),
-            LLVMGenerator::IntLessThanOrEqBody(x) => x.free_vars(),
-            LLVMGenerator::FloatLessThanOrEqBody(x) => x.free_vars(),
-            LLVMGenerator::IntAddBody(x) => x.free_vars(),
-            LLVMGenerator::FloatAddBody(x) => x.free_vars(),
-            LLVMGenerator::IntSubBody(x) => x.free_vars(),
-            LLVMGenerator::FloatSubBody(x) => x.free_vars(),
-            LLVMGenerator::IntMulBody(x) => x.free_vars(),
-            LLVMGenerator::FloatMulBody(x) => x.free_vars(),
-            LLVMGenerator::IntDivBody(x) => x.free_vars(),
-            LLVMGenerator::FloatDivBody(x) => x.free_vars(),
-            LLVMGenerator::IntRemBody(x) => x.free_vars(),
-            LLVMGenerator::MarkThreadedFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::BoxedToRetainedPtrIOS(x) => x.free_vars(),
-            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => x.free_vars(),
-            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::WithRetainedFunctionBody(x) => x.free_vars(),
-            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.free_vars(),
-            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayPopBackNonemptyBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.free_vars(),
-            LLVMGenerator::IOStateUnsafeCreate(x) => x.free_vars(),
-            LLVMGenerator::ArrayCheckRange(x) => x.free_vars(),
-            LLVMGenerator::ArrayCheckSize(x) => x.free_vars(),
-            LLVMGenerator::DestructorMake(x) => x.free_vars(),
-            LLVMGenerator::MakeStructBody(x) => x.free_vars(),
-            LLVMGenerator::ArrayLitBody(x) => x.free_vars(),
-            LLVMGenerator::FFICallBody(x) => x.free_vars(),
-            LLVMGenerator::CaptureProjectBody(x) => x.free_vars(),
-        }
+    /// A display name (used by dumps and pretty-printing).
+    fn name(&self) -> String;
+
+    /// Whether this op is a primitive literal.
+    fn is_primitve_literal(&self) -> bool {
+        false
     }
 
-    /// Whether operand `i` is only *borrowed* (read without taking ownership) rather than *owned*
-    /// (consumed — moved into the result, released internally, or force-unique-returned). Dispatches
-    /// uniformly to each body's `BorrowsOperand` impl: owning is the trait default and the
-    /// read-getters override it, so a new built-in cannot silently get the wrong reference counting.
-    /// RC-IR insertion emits an explicit `Release` after the last use of a borrowed operand, and a
-    /// `Retain` before a non-last use of an owned one.
-    pub fn borrows_operand(&self, i: usize) -> bool {
-        match self {
-            LLVMGenerator::IntLit(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatLit(x) => x.borrows_operand(i),
-            LLVMGenerator::NullPtrLit(x) => x.borrows_operand(i),
-            LLVMGenerator::StringBuf(x) => x.borrows_operand(i),
-            LLVMGenerator::FixBody(x) => x.borrows_operand(i),
-            LLVMGenerator::CastIntegralBody(x) => x.borrows_operand(i),
-            LLVMGenerator::CastFloatBody(x) => x.borrows_operand(i),
-            LLVMGenerator::CastIntToFloatBody(x) => x.borrows_operand(i),
-            LLVMGenerator::CastFloatToIntBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ShiftBody(x) => x.borrows_operand(i),
-            LLVMGenerator::BitwiseOperationBody(x) => x.borrows_operand(i),
-            LLVMGenerator::BitNotBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayUnsafeFill(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayUnsafeEmpty(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
-                x.borrows_operand(i)
-            }
-            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArraySetBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArraySwapBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayPunchBody(x) => x.borrows_operand(i),
-            LLVMGenerator::PunchedArrayPlugBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayForceUniqueBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayGetPtrBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayGetSizeBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayGetCapacityBody(x) => x.borrows_operand(i),
-            LLVMGenerator::StructGetBody(x) => x.borrows_operand(i),
-            LLVMGenerator::StructSetBody(x) => x.borrows_operand(i),
-            LLVMGenerator::StructPunchBody(x) => x.borrows_operand(i),
-            LLVMGenerator::StructPlugInBody(x) => x.borrows_operand(i),
-            LLVMGenerator::MakeUnionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::UnionAsBody(x) => x.borrows_operand(i),
-            LLVMGenerator::UnionIsBody(x) => x.borrows_operand(i),
-            LLVMGenerator::UnionModBody(x) => x.borrows_operand(i),
-            LLVMGenerator::UndefinedFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::HoleFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IsUniqueFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntNegBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatNegBody(x) => x.borrows_operand(i),
-            LLVMGenerator::BoolNegBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntEqBody(x) => x.borrows_operand(i),
-            LLVMGenerator::PtrEqBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatEqBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntLessThanBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatLessThanBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntLessThanOrEqBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatLessThanOrEqBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntAddBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatAddBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntSubBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatSubBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntMulBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatMulBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntDivBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FloatDivBody(x) => x.borrows_operand(i),
-            LLVMGenerator::IntRemBody(x) => x.borrows_operand(i),
-            LLVMGenerator::MarkThreadedFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::BoxedToRetainedPtrIOS(x) => x.borrows_operand(i),
-            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => x.borrows_operand(i),
-            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::WithRetainedFunctionBody(x) => x.borrows_operand(i),
-            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.borrows_operand(i),
-            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayPopBackNonemptyBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.borrows_operand(i),
-            LLVMGenerator::IOStateUnsafeCreate(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayCheckRange(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayCheckSize(x) => x.borrows_operand(i),
-            LLVMGenerator::DestructorMake(x) => x.borrows_operand(i),
-            LLVMGenerator::MakeStructBody(x) => x.borrows_operand(i),
-            LLVMGenerator::ArrayLitBody(x) => x.borrows_operand(i),
-            LLVMGenerator::FFICallBody(x) => x.borrows_operand(i),
-            LLVMGenerator::CaptureProjectBody(x) => x.borrows_operand(i),
-        }
+    /// Whether operand `i` is only borrowed (read without taking ownership). Default: every operand
+    /// is owned.
+    fn borrows_operand(&self, _i: usize) -> bool {
+        false
     }
 
-    pub fn name(&self) -> String {
-        let raw_name = match self {
-            LLVMGenerator::IsUniqueFunctionBody(x) => x.name(),
-            LLVMGenerator::IntNegBody(x) => x.name(),
-            LLVMGenerator::FloatNegBody(x) => x.name(),
-            LLVMGenerator::BoolNegBody(x) => x.name(),
-            LLVMGenerator::IntEqBody(x) => x.name(),
-            LLVMGenerator::PtrEqBody(x) => x.name(),
-            LLVMGenerator::FloatEqBody(x) => x.name(),
-            LLVMGenerator::IntLessThanBody(x) => x.name(),
-            LLVMGenerator::FloatLessThanBody(x) => x.name(),
-            LLVMGenerator::IntLessThanOrEqBody(x) => x.name(),
-            LLVMGenerator::FloatLessThanOrEqBody(x) => x.name(),
-            LLVMGenerator::IntAddBody(x) => x.name(),
-            LLVMGenerator::FloatAddBody(x) => x.name(),
-            LLVMGenerator::IntSubBody(x) => x.name(),
-            LLVMGenerator::FloatSubBody(x) => x.name(),
-            LLVMGenerator::IntMulBody(x) => x.name(),
-            LLVMGenerator::FloatMulBody(x) => x.name(),
-            LLVMGenerator::IntDivBody(x) => x.name(),
-            LLVMGenerator::FloatDivBody(x) => x.name(),
-            LLVMGenerator::IntRemBody(x) => x.name(),
-            LLVMGenerator::MarkThreadedFunctionBody(x) => x.name(),
-            LLVMGenerator::BoxedToRetainedPtrIOS(x) => x.name(),
-            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => x.name(),
-            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => x.name(),
-            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.name(),
-            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.name(),
-            LLVMGenerator::WithRetainedFunctionBody(x) => x.name(),
-            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.name(),
-            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.name(),
-            LLVMGenerator::ArrayPopBackNonemptyBody(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => x.name(),
-            LLVMGenerator::IOStateUnsafeCreate(x) => x.name(),
-            LLVMGenerator::IntLit(x) => x.name(),
-            LLVMGenerator::FloatLit(x) => x.name(),
-            LLVMGenerator::NullPtrLit(x) => x.name(),
-            LLVMGenerator::StringBuf(x) => x.name(),
-            LLVMGenerator::FixBody(x) => x.name(),
-            LLVMGenerator::CastIntegralBody(x) => x.name(),
-            LLVMGenerator::CastFloatBody(x) => x.name(),
-            LLVMGenerator::CastIntToFloatBody(x) => x.name(),
-            LLVMGenerator::CastFloatToIntBody(x) => x.name(),
-            LLVMGenerator::ShiftBody(x) => x.name(),
-            LLVMGenerator::BitwiseOperationBody(x) => x.name(),
-            LLVMGenerator::BitNotBody(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeFill(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeEmpty(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.name(),
-            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.name(),
-            LLVMGenerator::ArraySetBody(x) => x.name(),
-            LLVMGenerator::ArraySwapBody(x) => x.name(),
-            LLVMGenerator::ArrayPunchBody(x) => x.name(),
-            LLVMGenerator::PunchedArrayPlugBody(x) => x.name(),
-            LLVMGenerator::ArrayForceUniqueBody(x) => x.name(),
-            LLVMGenerator::ArrayGetPtrBody(x) => x.name(),
-            LLVMGenerator::ArrayGetSizeBody(x) => x.name(),
-            LLVMGenerator::ArrayGetCapacityBody(x) => x.name(),
-            LLVMGenerator::StructGetBody(x) => x.name(),
-            LLVMGenerator::StructSetBody(x) => x.name(),
-            LLVMGenerator::StructPunchBody(x) => x.name(),
-            LLVMGenerator::StructPlugInBody(x) => x.name(),
-            LLVMGenerator::MakeUnionBody(x) => x.name(),
-            LLVMGenerator::UnionAsBody(x) => x.name(),
-            LLVMGenerator::UnionIsBody(x) => x.name(),
-            LLVMGenerator::UnionModBody(x) => x.name(),
-            LLVMGenerator::UndefinedFunctionBody(x) => x.name(),
-            LLVMGenerator::HoleFunctionBody(x) => x.name(),
-            LLVMGenerator::ArrayCheckRange(x) => x.name(),
-            LLVMGenerator::ArrayCheckSize(x) => x.name(),
-            LLVMGenerator::DestructorMake(x) => x.name(),
-            LLVMGenerator::MakeStructBody(x) => x.name(),
-            LLVMGenerator::ArrayLitBody(x) => x.name(),
-            LLVMGenerator::FFICallBody(x) => x.name(),
-            LLVMGenerator::CaptureProjectBody(x) => x.name(),
-        };
-        format!("LLVM<{}>", raw_name)
+    /// The container operand index and boxed-leaf path whose runtime uniqueness this op branches on.
+    /// Default: the op carries no such branch.
+    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+        None
     }
 
-    pub fn is_primitve_literal(&self) -> bool {
-        match self {
-            LLVMGenerator::IntLit(_) => true,
-            LLVMGenerator::FloatLit(_) => true,
-            LLVMGenerator::NullPtrLit(_) => true,
-            LLVMGenerator::StringBuf(_) => true,
-            _ => false,
-        }
+    /// This op with its runtime uniqueness branch dropped. Only an op that reports a branch through
+    /// `unique_check_operand` is asked to drop it, and every such op overrides this method; an op with
+    /// no branch is never routed here.
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        unreachable!("assuming_unique called on an op that carries no uniqueness branch")
     }
 
-    /// The container operand and leaf path whose runtime uniqueness this operation branches on, or
-    /// `None` if it carries no such branch. Dispatches uniformly to each body's `UniqueCheck` impl, so
-    /// a new built-in must classify itself rather than defaulting silently.
-    pub fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
-        match self {
-            LLVMGenerator::IntLit(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatLit(x) => x.unique_check_operand(),
-            LLVMGenerator::NullPtrLit(x) => x.unique_check_operand(),
-            LLVMGenerator::StringBuf(x) => x.unique_check_operand(),
-            LLVMGenerator::FixBody(x) => x.unique_check_operand(),
-            LLVMGenerator::CastIntegralBody(x) => x.unique_check_operand(),
-            LLVMGenerator::CastFloatBody(x) => x.unique_check_operand(),
-            LLVMGenerator::CastIntToFloatBody(x) => x.unique_check_operand(),
-            LLVMGenerator::CastFloatToIntBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ShiftBody(x) => x.unique_check_operand(),
-            LLVMGenerator::BitwiseOperationBody(x) => x.unique_check_operand(),
-            LLVMGenerator::BitNotBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayUnsafeFill(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayUnsafeEmpty(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
-                x.unique_check_operand()
-            }
-            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArraySetBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArraySwapBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayPunchBody(x) => x.unique_check_operand(),
-            LLVMGenerator::PunchedArrayPlugBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayForceUniqueBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayGetPtrBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayGetSizeBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayGetCapacityBody(x) => x.unique_check_operand(),
-            LLVMGenerator::StructGetBody(x) => x.unique_check_operand(),
-            LLVMGenerator::StructSetBody(x) => x.unique_check_operand(),
-            LLVMGenerator::StructPunchBody(x) => x.unique_check_operand(),
-            LLVMGenerator::StructPlugInBody(x) => x.unique_check_operand(),
-            LLVMGenerator::MakeUnionBody(x) => x.unique_check_operand(),
-            LLVMGenerator::UnionAsBody(x) => x.unique_check_operand(),
-            LLVMGenerator::UnionIsBody(x) => x.unique_check_operand(),
-            LLVMGenerator::UnionModBody(x) => x.unique_check_operand(),
-            LLVMGenerator::UndefinedFunctionBody(x) => x.unique_check_operand(),
-            LLVMGenerator::HoleFunctionBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IsUniqueFunctionBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntNegBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatNegBody(x) => x.unique_check_operand(),
-            LLVMGenerator::BoolNegBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntEqBody(x) => x.unique_check_operand(),
-            LLVMGenerator::PtrEqBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatEqBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntLessThanBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatLessThanBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntLessThanOrEqBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatLessThanOrEqBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntAddBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatAddBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntSubBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatSubBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntMulBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatMulBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntDivBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FloatDivBody(x) => x.unique_check_operand(),
-            LLVMGenerator::IntRemBody(x) => x.unique_check_operand(),
-            LLVMGenerator::MarkThreadedFunctionBody(x) => x.unique_check_operand(),
-            LLVMGenerator::BoxedToRetainedPtrIOS(x) => x.unique_check_operand(),
-            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => x.unique_check_operand(),
-            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => {
-                x.unique_check_operand()
-            }
-            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => x.unique_check_operand(),
-            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => x.unique_check_operand(),
-            LLVMGenerator::WithRetainedFunctionBody(x) => x.unique_check_operand(),
-            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => x.unique_check_operand(),
-            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayPopBackNonemptyBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => {
-                x.unique_check_operand()
-            }
-            LLVMGenerator::IOStateUnsafeCreate(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayCheckRange(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayCheckSize(x) => x.unique_check_operand(),
-            LLVMGenerator::DestructorMake(x) => x.unique_check_operand(),
-            LLVMGenerator::MakeStructBody(x) => x.unique_check_operand(),
-            LLVMGenerator::ArrayLitBody(x) => x.unique_check_operand(),
-            LLVMGenerator::FFICallBody(x) => x.unique_check_operand(),
-            LLVMGenerator::CaptureProjectBody(x) => x.unique_check_operand(),
-        }
+    /// The provenance of this op's result. Default: conservatively `Dyn` on every boxed leaf.
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
     }
 
-    /// This operation with its runtime uniqueness branch dropped, per each body's `UniqueCheck` impl.
-    /// Sound only where the container is statically unique, as `unique_check_operand` reports.
-    pub fn assuming_unique(&self) -> LLVMGenerator {
-        match self {
-            LLVMGenerator::IntLit(x) => LLVMGenerator::IntLit(x.assuming_unique()),
-            LLVMGenerator::FloatLit(x) => LLVMGenerator::FloatLit(x.assuming_unique()),
-            LLVMGenerator::NullPtrLit(x) => LLVMGenerator::NullPtrLit(x.assuming_unique()),
-            LLVMGenerator::StringBuf(x) => LLVMGenerator::StringBuf(x.assuming_unique()),
-            LLVMGenerator::FixBody(x) => LLVMGenerator::FixBody(x.assuming_unique()),
-            LLVMGenerator::CastIntegralBody(x) => {
-                LLVMGenerator::CastIntegralBody(x.assuming_unique())
-            }
-            LLVMGenerator::CastFloatBody(x) => LLVMGenerator::CastFloatBody(x.assuming_unique()),
-            LLVMGenerator::CastIntToFloatBody(x) => {
-                LLVMGenerator::CastIntToFloatBody(x.assuming_unique())
-            }
-            LLVMGenerator::CastFloatToIntBody(x) => {
-                LLVMGenerator::CastFloatToIntBody(x.assuming_unique())
-            }
-            LLVMGenerator::ShiftBody(x) => LLVMGenerator::ShiftBody(x.assuming_unique()),
-            LLVMGenerator::BitwiseOperationBody(x) => {
-                LLVMGenerator::BitwiseOperationBody(x.assuming_unique())
-            }
-            LLVMGenerator::BitNotBody(x) => LLVMGenerator::BitNotBody(x.assuming_unique()),
-            LLVMGenerator::ArrayUnsafeFill(x) => {
-                LLVMGenerator::ArrayUnsafeFill(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayUnsafeEmpty(x) => {
-                LLVMGenerator::ArrayUnsafeEmpty(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(x) => {
-                LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(
-                    x.assuming_unique(),
-                )
-            }
-            LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x) => {
-                LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayUnsafeSetSizeBody(x) => {
-                LLVMGenerator::ArrayUnsafeSetSizeBody(x.assuming_unique())
-            }
-            LLVMGenerator::ArraySetBody(x) => LLVMGenerator::ArraySetBody(x.assuming_unique()),
-            LLVMGenerator::ArraySwapBody(x) => LLVMGenerator::ArraySwapBody(x.assuming_unique()),
-            LLVMGenerator::ArrayPunchBody(x) => LLVMGenerator::ArrayPunchBody(x.assuming_unique()),
-            LLVMGenerator::PunchedArrayPlugBody(x) => {
-                LLVMGenerator::PunchedArrayPlugBody(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayForceUniqueBody(x) => {
-                LLVMGenerator::ArrayForceUniqueBody(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayGetPtrBody(x) => {
-                LLVMGenerator::ArrayGetPtrBody(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayGetSizeBody(x) => {
-                LLVMGenerator::ArrayGetSizeBody(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayGetCapacityBody(x) => {
-                LLVMGenerator::ArrayGetCapacityBody(x.assuming_unique())
-            }
-            LLVMGenerator::StructGetBody(x) => LLVMGenerator::StructGetBody(x.assuming_unique()),
-            LLVMGenerator::StructSetBody(x) => LLVMGenerator::StructSetBody(x.assuming_unique()),
-            LLVMGenerator::StructPunchBody(x) => {
-                LLVMGenerator::StructPunchBody(x.assuming_unique())
-            }
-            LLVMGenerator::StructPlugInBody(x) => {
-                LLVMGenerator::StructPlugInBody(x.assuming_unique())
-            }
-            LLVMGenerator::MakeUnionBody(x) => LLVMGenerator::MakeUnionBody(x.assuming_unique()),
-            LLVMGenerator::UnionAsBody(x) => LLVMGenerator::UnionAsBody(x.assuming_unique()),
-            LLVMGenerator::UnionIsBody(x) => LLVMGenerator::UnionIsBody(x.assuming_unique()),
-            LLVMGenerator::UnionModBody(x) => LLVMGenerator::UnionModBody(x.assuming_unique()),
-            LLVMGenerator::UndefinedFunctionBody(x) => {
-                LLVMGenerator::UndefinedFunctionBody(x.assuming_unique())
-            }
-            LLVMGenerator::HoleFunctionBody(x) => {
-                LLVMGenerator::HoleFunctionBody(x.assuming_unique())
-            }
-            LLVMGenerator::IsUniqueFunctionBody(x) => {
-                LLVMGenerator::IsUniqueFunctionBody(x.assuming_unique())
-            }
-            LLVMGenerator::IntNegBody(x) => LLVMGenerator::IntNegBody(x.assuming_unique()),
-            LLVMGenerator::FloatNegBody(x) => LLVMGenerator::FloatNegBody(x.assuming_unique()),
-            LLVMGenerator::BoolNegBody(x) => LLVMGenerator::BoolNegBody(x.assuming_unique()),
-            LLVMGenerator::IntEqBody(x) => LLVMGenerator::IntEqBody(x.assuming_unique()),
-            LLVMGenerator::PtrEqBody(x) => LLVMGenerator::PtrEqBody(x.assuming_unique()),
-            LLVMGenerator::FloatEqBody(x) => LLVMGenerator::FloatEqBody(x.assuming_unique()),
-            LLVMGenerator::IntLessThanBody(x) => {
-                LLVMGenerator::IntLessThanBody(x.assuming_unique())
-            }
-            LLVMGenerator::FloatLessThanBody(x) => {
-                LLVMGenerator::FloatLessThanBody(x.assuming_unique())
-            }
-            LLVMGenerator::IntLessThanOrEqBody(x) => {
-                LLVMGenerator::IntLessThanOrEqBody(x.assuming_unique())
-            }
-            LLVMGenerator::FloatLessThanOrEqBody(x) => {
-                LLVMGenerator::FloatLessThanOrEqBody(x.assuming_unique())
-            }
-            LLVMGenerator::IntAddBody(x) => LLVMGenerator::IntAddBody(x.assuming_unique()),
-            LLVMGenerator::FloatAddBody(x) => LLVMGenerator::FloatAddBody(x.assuming_unique()),
-            LLVMGenerator::IntSubBody(x) => LLVMGenerator::IntSubBody(x.assuming_unique()),
-            LLVMGenerator::FloatSubBody(x) => LLVMGenerator::FloatSubBody(x.assuming_unique()),
-            LLVMGenerator::IntMulBody(x) => LLVMGenerator::IntMulBody(x.assuming_unique()),
-            LLVMGenerator::FloatMulBody(x) => LLVMGenerator::FloatMulBody(x.assuming_unique()),
-            LLVMGenerator::IntDivBody(x) => LLVMGenerator::IntDivBody(x.assuming_unique()),
-            LLVMGenerator::FloatDivBody(x) => LLVMGenerator::FloatDivBody(x.assuming_unique()),
-            LLVMGenerator::IntRemBody(x) => LLVMGenerator::IntRemBody(x.assuming_unique()),
-            LLVMGenerator::MarkThreadedFunctionBody(x) => {
-                LLVMGenerator::MarkThreadedFunctionBody(x.assuming_unique())
-            }
-            LLVMGenerator::BoxedToRetainedPtrIOS(x) => {
-                LLVMGenerator::BoxedToRetainedPtrIOS(x.assuming_unique())
-            }
-            LLVMGenerator::BoxedFromRetainedPtrIOS(x) => {
-                LLVMGenerator::BoxedFromRetainedPtrIOS(x.assuming_unique())
-            }
-            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x) => {
-                LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(x.assuming_unique())
-            }
-            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x) => {
-                LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(x.assuming_unique())
-            }
-            LLVMGenerator::GetBoxedDataPtrFunctionBody(x) => {
-                LLVMGenerator::GetBoxedDataPtrFunctionBody(x.assuming_unique())
-            }
-            LLVMGenerator::WithRetainedFunctionBody(x) => {
-                LLVMGenerator::WithRetainedFunctionBody(x.assuming_unique())
-            }
-            LLVMGenerator::UnsafeMutateBoxedInternalBody(x) => {
-                LLVMGenerator::UnsafeMutateBoxedInternalBody(x.assuming_unique())
-            }
-            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x) => {
-                LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayPopBackNonemptyBody(x) => {
-                LLVMGenerator::ArrayPopBackNonemptyBody(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x) => {
-                LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(x.assuming_unique())
-            }
-            LLVMGenerator::IOStateUnsafeCreate(x) => {
-                LLVMGenerator::IOStateUnsafeCreate(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayCheckRange(x) => {
-                LLVMGenerator::ArrayCheckRange(x.assuming_unique())
-            }
-            LLVMGenerator::ArrayCheckSize(x) => LLVMGenerator::ArrayCheckSize(x.assuming_unique()),
-            LLVMGenerator::DestructorMake(x) => LLVMGenerator::DestructorMake(x.assuming_unique()),
-            LLVMGenerator::MakeStructBody(x) => LLVMGenerator::MakeStructBody(x.assuming_unique()),
-            LLVMGenerator::ArrayLitBody(x) => LLVMGenerator::ArrayLitBody(x.assuming_unique()),
-            LLVMGenerator::FFICallBody(x) => LLVMGenerator::FFICallBody(x.assuming_unique()),
-            LLVMGenerator::CaptureProjectBody(x) => {
-                LLVMGenerator::CaptureProjectBody(x.assuming_unique())
-            }
-        }
-    }
+    /// Downcast hook, for the few passes that special-case a concrete op.
+    fn as_any(&self) -> &dyn Any;
 }
+dyn_clone::clone_trait_object!(LLVMGen);
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVM {
-    pub generator: LLVMGenerator,
+    pub generator: Box<dyn LLVMGen>,
     // The type of this LLVM expression.
     //
     // For example, in `@ : I64 -> Array a -> a = |i, arr| LLVM<Array::@(i, arr)>;`, the `generic_ty` of the InlineLLVM `LLVM<arr.Array::@(i, arr)>` is `a`.

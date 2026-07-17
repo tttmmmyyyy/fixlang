@@ -3,10 +3,11 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    inline_llvm::{BorrowsOperand, LLVMGenerator, UniqueCheck},
+    inline_llvm::LLVMGen,
     name::{FullName, Name, NameSpace},
     pattern::PatternNode,
     predicate::Predicate,
+    program::TypeEnv,
     qual_pred::QualPred,
     traits::{TraitId, TraitImpl},
     typedecl::{Field, Struct, TypeDeclValue, TypeDefn},
@@ -37,11 +38,14 @@ use crate::misc::{make_map, Map, Set};
 use crate::object::{create_obj, ObjectFieldType};
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
+use crate::rc_ir::ast::Path;
+use crate::rc_ir::provenance::{BaseSource, Provenance};
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::sync::Arc;
 
 // Implement built-in functions, types, etc.
@@ -638,20 +642,9 @@ pub struct InlineLLVMIntLit {
     val: i64, // Since `serde_pickle` only supports i64 and not u64, we use i64 here.
 }
 
-impl InlineLLVMIntLit {
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![]
-    }
-
-    pub fn name(&self) -> String {
-        format!("int({})", self.val)
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntLit {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
             &vec![],
@@ -667,19 +660,26 @@ impl InlineLLVMIntLit {
         let value = int_ty.const_int(self.val as u64, false);
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!("int({})", self.val)
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![]
+    }
+
+    fn is_primitve_literal(&self) -> bool {
+        true
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-impl BorrowsOperand for InlineLLVMIntLit {}
-
-impl UniqueCheck for InlineLLVMIntLit {}
-
 pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(
-        LLVMGenerator::IntLit(InlineLLVMIntLit { val: val as i64 }),
-        ty,
-        source,
-    )
-    .global_to_absolute()
+    expr_llvm(Box::new(InlineLLVMIntLit { val: val as i64 }), ty, source).global_to_absolute()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -687,20 +687,9 @@ pub struct InlineLLVMFloatLit {
     val: f64,
 }
 
-impl InlineLLVMFloatLit {
-    pub fn name(&self) -> String {
-        format!("float({})", self.val)
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatLit {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
             &vec![],
@@ -716,51 +705,60 @@ impl InlineLLVMFloatLit {
         let value = float_ty.const_float(self.val);
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!("float({})", self.val)
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![]
+    }
+
+    fn is_primitve_literal(&self) -> bool {
+        true
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
-impl BorrowsOperand for InlineLLVMFloatLit {}
-
-impl UniqueCheck for InlineLLVMFloatLit {}
-
 pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(
-        LLVMGenerator::FloatLit(InlineLLVMFloatLit { val }),
-        ty,
-        source,
-    )
+    expr_llvm(Box::new(InlineLLVMFloatLit { val }), ty, source)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMNullPtrLit {}
 
-impl InlineLLVMNullPtrLit {
-    pub fn name(&self) -> String {
-        "nullptr".to_string()
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMNullPtrLit {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("nullptr"));
         let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
         let value = ptr_ty.const_null();
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        "nullptr".to_string()
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![]
+    }
+
+    fn is_primitve_literal(&self) -> bool {
+        true
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMNullPtrLit {}
-
-impl UniqueCheck for InlineLLVMNullPtrLit {}
 
 pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     expr_llvm(
-        LLVMGenerator::NullPtrLit(InlineLLVMNullPtrLit {}),
+        Box::new(InlineLLVMNullPtrLit {}),
         make_ptr_ty().set_source(source.clone()),
         source,
     )
@@ -812,20 +810,9 @@ pub struct InlineLLVMStringBuf {
     string: String,
 }
 
-impl InlineLLVMStringBuf {
-    pub fn name(&self) -> String {
-        format!("string_buf(\"{}\")", self.string)
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMStringBuf {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let string_ptr = gc.add_global_string(&self.string).as_pointer_value();
         let len_with_null_terminator = gc
             .context
@@ -833,11 +820,32 @@ impl InlineLLVMStringBuf {
             .const_int(self.string.as_bytes().len() as u64 + 1, false);
         make_byte_array_copy(gc, string_ptr, len_with_null_terminator)
     }
+
+    fn name(&self) -> String {
+        format!("string_buf(\"{}\")", self.string)
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![]
+    }
+
+    fn is_primitve_literal(&self) -> bool {
+        true
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMStringBuf {}
-
-impl UniqueCheck for InlineLLVMStringBuf {}
 
 pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
     let array_ty = make_array_ty().set_source(source.clone());
@@ -848,7 +856,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
         vec![(
             "_data".to_string(),
             expr_llvm(
-                LLVMGenerator::StringBuf(InlineLLVMStringBuf { string }),
+                Box::new(InlineLLVMStringBuf { string }),
                 byte_array_ty,
                 source.clone(),
             ),
@@ -867,20 +875,13 @@ pub struct InlineLLVMFixBody {
     cap_name: FullName,
 }
 
-impl InlineLLVMFixBody {
-    pub fn name(&self) -> String {
-        format!(
-            "fix({}, {})",
-            self.f_str.to_string(),
-            self.x_str.to_string()
-        )
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFixBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        self.generate_tail(gc, ty, false).unwrap()
     }
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.x_str, &mut self.f_str, &mut self.cap_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
+    fn generate_tail<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
         _ty: &Arc<TypeNode>,
@@ -910,18 +911,30 @@ impl InlineLLVMFixBody {
         let f_fixf = gc.apply_lambda(f, vec![fixf], false).unwrap();
         gc.apply_lambda(f_fixf, vec![x], tail)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "fix({}, {})",
+            self.f_str.to_string(),
+            self.x_str.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.x_str, &mut self.f_str, &mut self.cap_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFixBody {}
-
-impl UniqueCheck for InlineLLVMFixBody {}
 
 fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_str = FullName::local(f);
     let x_str = FullName::local(x);
     let cap_name = FullName::local(CAP_NAME);
     expr_llvm(
-        LLVMGenerator::FixBody(InlineLLVMFixBody {
+        Box::new(InlineLLVMFixBody {
             x_str,
             f_str,
             cap_name,
@@ -955,25 +968,9 @@ pub struct InlineLLVMCastIntegralBody {
     is_target_signed: bool,
 }
 
-impl InlineLLVMCastIntegralBody {
-    pub fn name(&self) -> String {
-        format!(
-            "cast_int({}, {}, {})",
-            self.from_name.to_string(),
-            self.is_source_signed,
-            self.is_target_signed
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.from_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        to_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMCastIntegralBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
 
@@ -1005,11 +1002,24 @@ impl InlineLLVMCastIntegralBody {
         );
         obj.insert_field(gc, 0, to_val)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "cast_int({}, {}, {})",
+            self.from_name.to_string(),
+            self.is_source_signed,
+            self.is_target_signed
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.from_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMCastIntegralBody {}
-
-impl UniqueCheck for InlineLLVMCastIntegralBody {}
 
 // Cast function of integrals
 //
@@ -1033,7 +1043,7 @@ pub fn cast_between_integral_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_llvm(
-            LLVMGenerator::CastIntegralBody(InlineLLVMCastIntegralBody {
+            Box::new(InlineLLVMCastIntegralBody {
                 from_name,
                 is_target_signed,
                 is_source_signed,
@@ -1051,20 +1061,9 @@ pub struct InlineLLVMCastFloatBody {
     from_name: FullName,
 }
 
-impl InlineLLVMCastFloatBody {
-    pub fn name(&self) -> String {
-        format!("cast_float({})", self.from_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.from_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        to_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMCastFloatBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let from_val = gc
             .get_scoped_obj_field(&self.from_name, 0)
@@ -1093,11 +1092,19 @@ impl InlineLLVMCastFloatBody {
         );
         obj.insert_field(gc, 0, to_val)
     }
+
+    fn name(&self) -> String {
+        format!("cast_float({})", self.from_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.from_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMCastFloatBody {}
-
-impl UniqueCheck for InlineLLVMCastFloatBody {}
 
 // Cast function of integrals
 //
@@ -1117,7 +1124,7 @@ pub fn cast_between_float_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_llvm(
-            LLVMGenerator::CastFloatBody(InlineLLVMCastFloatBody {
+            Box::new(InlineLLVMCastFloatBody {
                 from_name: FullName::local(FROM_NAME),
             }),
             to,
@@ -1134,24 +1141,9 @@ pub struct InlineLLVMCastIntToFloatBody {
     is_signed: bool,
 }
 
-impl InlineLLVMCastIntToFloatBody {
-    pub fn name(&self) -> String {
-        format!(
-            "cast_int_to_float({}, {})",
-            self.from_name.to_string(),
-            self.is_signed
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.from_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        to_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMCastIntToFloatBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
 
@@ -1188,11 +1180,23 @@ impl InlineLLVMCastIntToFloatBody {
         );
         obj.insert_field(gc, 0, to_val)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "cast_int_to_float({}, {})",
+            self.from_name.to_string(),
+            self.is_signed
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.from_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMCastIntToFloatBody {}
-
-impl UniqueCheck for InlineLLVMCastIntToFloatBody {}
 
 // Cast function from int to float.
 pub fn cast_int_to_float_function(
@@ -1211,7 +1215,7 @@ pub fn cast_int_to_float_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_llvm(
-            LLVMGenerator::CastIntToFloatBody(InlineLLVMCastIntToFloatBody {
+            Box::new(InlineLLVMCastIntToFloatBody {
                 from_name: FullName::local(FROM_NAME),
                 is_signed,
             }),
@@ -1229,24 +1233,9 @@ pub struct InlineLLVMCastFloatToIntBody {
     is_signed: bool,
 }
 
-impl InlineLLVMCastFloatToIntBody {
-    pub fn name(&self) -> String {
-        format!(
-            "cast_float_to_int({}, {})",
-            self.from_name.to_string(),
-            self.is_signed
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.from_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        to_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMCastFloatToIntBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let from_val = gc
             .get_scoped_obj_field(&self.from_name, 0)
@@ -1288,11 +1277,23 @@ impl InlineLLVMCastFloatToIntBody {
         );
         obj.insert_field(gc, 0, to_val)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "cast_float_to_int({}, {})",
+            self.from_name.to_string(),
+            self.is_signed
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.from_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMCastFloatToIntBody {}
-
-impl UniqueCheck for InlineLLVMCastFloatToIntBody {}
 
 // Cast function from int to float.
 pub fn cast_float_to_int_function(
@@ -1311,7 +1312,7 @@ pub fn cast_float_to_int_function(
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
         expr_llvm(
-            LLVMGenerator::CastFloatToIntBody(InlineLLVMCastFloatToIntBody {
+            Box::new(InlineLLVMCastFloatToIntBody {
                 from_name: FullName::local(FROM_NAME),
                 is_signed,
             }),
@@ -1330,25 +1331,9 @@ pub struct InlineLLVMShiftBody {
     is_left: bool,
 }
 
-impl InlineLLVMShiftBody {
-    pub fn name(&self) -> String {
-        format!(
-            "shift_{}({}, {})",
-            if self.is_left { "left" } else { "right" },
-            self.value_name.to_string(),
-            self.n_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.value_name, &mut self.n_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMShiftBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let val = gc
             .get_scoped_obj_field(&self.value_name, 0)
@@ -1372,11 +1357,24 @@ impl InlineLLVMShiftBody {
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@shift_function"));
         obj.insert_field(gc, 0, to_val)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "shift_{}({}, {})",
+            if self.is_left { "left" } else { "right" },
+            self.value_name.to_string(),
+            self.n_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.value_name, &mut self.n_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMShiftBody {}
-
-impl UniqueCheck for InlineLLVMShiftBody {}
 
 // Shift functions
 pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -1394,7 +1392,7 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
         expr_abs(
             vec![var_local(VALUE_NAME)],
             expr_llvm(
-                LLVMGenerator::ShiftBody(InlineLLVMShiftBody {
+                Box::new(InlineLLVMShiftBody {
                     value_name: FullName::local(VALUE_NAME),
                     n_name: FullName::local(N_NAME),
                     is_left,
@@ -1434,25 +1432,9 @@ pub struct InlineLLVMBitwiseOperationBody {
     op_type: BitOperationType,
 }
 
-impl InlineLLVMBitwiseOperationBody {
-    pub fn name(&self) -> String {
-        format!(
-            "bit_{}({}, {})",
-            self.op_type.to_string(),
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMBitwiseOperationBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let lhs = gc.get_scoped_obj_field(&self.lhs_name, 0).into_int_value();
         let rhs = gc.get_scoped_obj_field(&self.rhs_name, 0).into_int_value();
@@ -1483,11 +1465,24 @@ impl InlineLLVMBitwiseOperationBody {
         );
         obj.insert_field(gc, 0, val)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "bit_{}({}, {})",
+            self.op_type.to_string(),
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMBitwiseOperationBody {}
-
-impl UniqueCheck for InlineLLVMBitwiseOperationBody {}
 
 pub fn bitwise_operation_function(
     ty: Arc<TypeNode>,
@@ -1507,7 +1502,7 @@ pub fn bitwise_operation_function(
         expr_abs(
             vec![var_local(RHS_NAME)],
             expr_llvm(
-                LLVMGenerator::BitwiseOperationBody(InlineLLVMBitwiseOperationBody {
+                Box::new(InlineLLVMBitwiseOperationBody {
                     lhs_name: FullName::local(LHS_NAME),
                     rhs_name: FullName::local(RHS_NAME),
                     op_type,
@@ -1527,20 +1522,9 @@ pub struct InlineLLVMBitNotBody {
     operand_name: FullName,
 }
 
-impl InlineLLVMBitNotBody {
-    pub fn name(&self) -> String {
-        format!("bit_not({})", self.operand_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.operand_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMBitNotBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let lhs = gc
             .get_scoped_obj_field(&self.operand_name, 0)
@@ -1556,11 +1540,19 @@ impl InlineLLVMBitNotBody {
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@bit_not"));
         obj.insert_field(gc, 0, val)
     }
+
+    fn name(&self) -> String {
+        format!("bit_not({})", self.operand_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.operand_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMBitNotBody {}
-
-impl UniqueCheck for InlineLLVMBitNotBody {}
 
 pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const OPERAND_NAME: &str = "operand";
@@ -1574,7 +1566,7 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(OPERAND_NAME)],
         expr_llvm(
-            LLVMGenerator::BitNotBody(InlineLLVMBitNotBody {
+            Box::new(InlineLLVMBitNotBody {
                 operand_name: FullName::local(OPERAND_NAME),
             }),
             ty,
@@ -1591,24 +1583,9 @@ pub struct InlineLLVMArrayUnsafeFill {
     value_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeFill {
-    pub fn name(&self) -> String {
-        format!(
-            "{ARRAY_NAME}::{ARRAY_UNSAFE_FILL_NAME}({}, {})",
-            self.size_name.to_string(),
-            self.value_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.size_name, &mut self.value_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayUnsafeFill {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
         let value = gc.get_scoped_obj(&self.value_name);
         let array = create_obj(
@@ -1623,18 +1600,39 @@ impl InlineLLVMArrayUnsafeFill {
         ObjectFieldType::initialize_array_buf_by_value(gc, size, buf, value);
         array
     }
+
+    fn name(&self) -> String {
+        format!(
+            "{ARRAY_NAME}::{ARRAY_UNSAFE_FILL_NAME}({}, {})",
+            self.size_name.to_string(),
+            self.value_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.size_name, &mut self.value_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMArrayUnsafeFill {}
-
-impl UniqueCheck for InlineLLVMArrayUnsafeFill {}
 
 // Implementation of Array::fill built-in function.
 fn fill_array_body(a: &str, size: &str, value: &str) -> Arc<ExprNode> {
     let size_name = FullName::local(size);
     let value_name = FullName::local(value);
     expr_llvm(
-        LLVMGenerator::ArrayUnsafeFill(InlineLLVMArrayUnsafeFill {
+        Box::new(InlineLLVMArrayUnsafeFill {
             size_name,
             value_name,
         }),
@@ -1675,25 +1673,9 @@ pub struct InlineLLVMArrayUnsafeEmpty {
     capacity_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeEmpty {
-    pub fn name(&self) -> String {
-        format!(
-            "{}::{}({})",
-            ARRAY_NAME,
-            ARRAY_UNSAFE_EMPTY_NAME,
-            self.capacity_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.capacity_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        arr_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, arr_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get capacity
         let cap = gc
             .get_scoped_obj_field(&self.capacity_name, 0)
@@ -1715,11 +1697,33 @@ impl InlineLLVMArrayUnsafeEmpty {
         let cap = gc.context.i64_type().const_zero();
         array.insert_field(gc, ARRAY_LEN_IDX, cap)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "{}::{}({})",
+            ARRAY_NAME,
+            ARRAY_UNSAFE_EMPTY_NAME,
+            self.capacity_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.capacity_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMArrayUnsafeEmpty {}
-
-impl UniqueCheck for InlineLLVMArrayUnsafeEmpty {}
 
 // Make an empty array.
 pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -1732,7 +1736,7 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(CAPACITY_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayUnsafeEmpty(InlineLLVMArrayUnsafeEmpty {
+            Box::new(InlineLLVMArrayUnsafeEmpty {
                 capacity_name: FullName::local(CAPACITY_NAME),
             }),
             array_ty.clone(),
@@ -1751,26 +1755,9 @@ pub struct InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
     value_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
-    pub fn name(&self) -> String {
-        format!(
-            "Array::{}({}, {}, {})",
-            ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED,
-            self.idx_name.to_string(),
-            self.value_name.to_string(),
-            self.arr_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.idx_name, &mut self.value_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.arr_name);
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
@@ -1783,11 +1770,25 @@ impl InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
         ObjectFieldType::write_to_array_buf(gc, None, array_buf, idx, value, false);
         array
     }
+
+    fn name(&self) -> String {
+        format!(
+            "Array::{}({}, {}, {})",
+            ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED,
+            self.idx_name.to_string(),
+            self.value_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name, &mut self.value_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {}
-
-impl UniqueCheck for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {}
 
 // Set an element to an array, with no uniqueness checking and without releasing the old value.
 pub fn array_unsafe_set_bounds_uniqueness_unchecked_unreleased() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -1806,7 +1807,7 @@ pub fn array_unsafe_set_bounds_uniqueness_unchecked_unreleased() -> (Arc<ExprNod
             expr_abs(
                 vec![var_local(ARR_NAME)],
                 expr_llvm(
-                    LLVMGenerator::ArrayUnsafeSetBoundsUniquenessUncheckedUnreleased(
+                    Box::new(
                         InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
                             arr_name: FullName::local(ARR_NAME),
                             idx_name: FullName::local(IDX_NAME),
@@ -1841,25 +1842,9 @@ pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
     idx_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeGetBoundsUnchecked {
-    pub fn name(&self) -> String {
-        format!(
-            "Array::{}({}, {})",
-            ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
-            self.idx_name.to_string(),
-            self.arr_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.idx_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         // // let array = gc.get_var_retained_if_used_later(&self.arr_name);
         // let array = gc.get_scoped_obj_noretain(&self.arr_name);
@@ -1886,15 +1871,28 @@ impl InlineLLVMArrayUnsafeGetBoundsUnchecked {
 
         elem
     }
-}
 
-impl BorrowsOperand for InlineLLVMArrayUnsafeGetBoundsUnchecked {
+    fn name(&self) -> String {
+        format!(
+            "Array::{}({}, {})",
+            ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
+            self.idx_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name]
+    }
+
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMArrayUnsafeGetBoundsUnchecked {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 // Gets a value from an array, without bounds checking
 pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -1910,12 +1908,10 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_llvm(
-                LLVMGenerator::ArrayUnsafeGetBoundsUnchecked(
-                    InlineLLVMArrayUnsafeGetBoundsUnchecked {
-                        arr_name: FullName::local(ARR_NAME),
-                        idx_name: FullName::local(IDX_NAME),
-                    },
-                ),
+                Box::new(InlineLLVMArrayUnsafeGetBoundsUnchecked {
+                    arr_name: FullName::local(ARR_NAME),
+                    idx_name: FullName::local(IDX_NAME),
+                }),
                 elem_tyvar.clone(),
                 None,
             ),
@@ -1940,30 +1936,9 @@ pub struct InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
     idx_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
-    pub fn name(&self) -> String {
-        format!(
-            "Array::{}{}({}, {})",
-            ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-            if self.force_unique {
-                "_forceunique"
-            } else {
-                ""
-            },
-            self.idx_name.to_string(),
-            self.arr_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.idx_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argments
         let mut array = gc.get_scoped_obj(&self.arr_name);
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
@@ -1997,11 +1972,29 @@ impl InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
 
         res
     }
+
+    fn name(&self) -> String {
+        format!(
+            "Array::{}{}({}, {})",
+            ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
+            if self.force_unique {
+                "_forceunique"
+            } else {
+                ""
+            },
+            self.idx_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {}
-
-impl UniqueCheck for InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {}
 
 // Gets a value from an array, without bounds checking and retaining the returned value.
 // Type: I64 -> Array a -> (Array a, a)
@@ -2019,13 +2012,11 @@ pub fn array_unsafe_get_linear_bounds_unchecked_unretained(
     let expr = expr_abs_many(
         vec![var_local(IDX_NAME), var_local(ARR_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayUnsafeGetLinearBoundsUncheckedUnretained(
-                InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
-                    force_unique,
-                    arr_name: FullName::local(ARR_NAME),
-                    idx_name: FullName::local(IDX_NAME),
-                },
-            ),
+            Box::new(InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
+                force_unique,
+                arr_name: FullName::local(ARR_NAME),
+                idx_name: FullName::local(IDX_NAME),
+            }),
             res_ty.clone(),
             None,
         ),
@@ -2045,20 +2036,9 @@ pub struct InlineLLVMArrayPopBackNonemptyBody {
     arr_name: FullName,
 }
 
-impl InlineLLVMArrayPopBackNonemptyBody {
-    pub fn name(&self) -> String {
-        format!("Array::_pop_back_nonempty({})", self.arr_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayPopBackNonemptyBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Force the array to be unique before shrinking it in place.
         let array = gc.get_scoped_obj(&self.arr_name);
         let array = make_array_unique(gc, array);
@@ -2077,11 +2057,28 @@ impl InlineLLVMArrayPopBackNonemptyBody {
         gc.release(elem);
         array.insert_field(gc, ARRAY_LEN_IDX, last_idx)
     }
+
+    fn name(&self) -> String {
+        format!("Array::_pop_back_nonempty({})", self.arr_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMArrayPopBackNonemptyBody {}
-
-impl UniqueCheck for InlineLLVMArrayPopBackNonemptyBody {}
 
 // Drops the last element of a non-empty array and shrinks its length by one.
 // The caller must ensure the array is non-empty.
@@ -2096,7 +2093,7 @@ pub fn array_pop_back_nonempty() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayPopBackNonemptyBody(InlineLLVMArrayPopBackNonemptyBody {
+            Box::new(InlineLLVMArrayPopBackNonemptyBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
             array_ty.clone(),
@@ -2115,8 +2112,17 @@ pub struct InlineLLVMArrayUnsafeSetSizeBody {
     len_name: FullName,
 }
 
-impl InlineLLVMArrayUnsafeSetSizeBody {
-    pub fn name(&self) -> String {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        // Get argments
+        let array = gc.get_scoped_obj(&self.arr_name);
+        let length = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
+
+        array.insert_field(gc, ARRAY_LEN_IDX, length)
+    }
+
+    fn name(&self) -> String {
         format!(
             "{}.Array::unsafe_set_size({})",
             self.arr_name.to_string(),
@@ -2124,26 +2130,14 @@ impl InlineLLVMArrayUnsafeSetSizeBody {
         )
     }
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.len_name]
     }
 
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        // Get argments
-        let array = gc.get_scoped_obj(&self.arr_name);
-        let length = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
-
-        array.insert_field(gc, ARRAY_LEN_IDX, length)
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
-
-impl BorrowsOperand for InlineLLVMArrayUnsafeSetSizeBody {}
-
-impl UniqueCheck for InlineLLVMArrayUnsafeSetSizeBody {}
 
 // Set the length of an array, with no uniqueness checking, no validation of size argument.
 pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -2162,10 +2156,7 @@ pub fn unsafe_set_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(ARR_NAME)],
             expr_llvm(
-                LLVMGenerator::ArrayUnsafeSetSizeBody(InlineLLVMArrayUnsafeSetSizeBody {
-                    arr_name,
-                    len_name,
-                }),
+                Box::new(InlineLLVMArrayUnsafeSetSizeBody { arr_name, len_name }),
                 array_ty.clone(),
                 None,
             ),
@@ -2264,30 +2255,9 @@ pub struct InlineLLVMArraySetBody {
     pub(crate) force_unique: bool,
 }
 
-impl InlineLLVMArraySetBody {
-    pub fn name(&self) -> String {
-        format!(
-            "Array::set{}({}, {}, {})",
-            if self.force_unique { "" } else { " [unique]" },
-            self.idx_name.to_string(),
-            self.value_name.to_string(),
-            self.array_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![
-            &mut self.array_name,
-            &mut self.idx_name,
-            &mut self.value_name,
-        ]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArraySetBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.array_name);
         let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
@@ -2310,12 +2280,25 @@ impl InlineLLVMArraySetBody {
         ObjectFieldType::write_to_array_buf(gc, len, array_buf, idx, value, true);
         array
     }
-}
 
-impl BorrowsOperand for InlineLLVMArraySetBody {}
+    fn name(&self) -> String {
+        format!(
+            "Array::set{}({}, {}, {})",
+            if self.force_unique { "" } else { " [unique]" },
+            self.idx_name.to_string(),
+            self.value_name.to_string(),
+            self.array_name.to_string()
+        )
+    }
 
-impl UniqueCheck for InlineLLVMArraySetBody {
-    // The array (operand 0) is force-uniqued in place.
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![
+            &mut self.array_name,
+            &mut self.idx_name,
+            &mut self.value_name,
+        ]
+    }
+
     fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         if self.force_unique {
             Some((0, vec![]))
@@ -2323,10 +2306,24 @@ impl UniqueCheck for InlineLLVMArraySetBody {
             None
         }
     }
-    fn assuming_unique(&self) -> Self {
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
-        c
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -2335,7 +2332,7 @@ pub fn set_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let elem_ty = type_tyvar_star("a");
     let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
     let body = expr_llvm(
-        LLVMGenerator::ArraySetBody(InlineLLVMArraySetBody {
+        Box::new(InlineLLVMArraySetBody {
             array_name: FullName::local("array"),
             idx_name: FullName::local("idx"),
             value_name: FullName::local("value"),
@@ -2377,31 +2374,9 @@ pub struct InlineLLVMArraySwapBody {
     bounds_checked: bool,
 }
 
-impl InlineLLVMArraySwapBody {
-    pub fn name(&self) -> String {
-        format!(
-            "Array::{}{}({}, {}, {})",
-            if self.bounds_checked {
-                "swap"
-            } else {
-                "unsafe_swap_bounds_unchecked"
-            },
-            if self.force_unique { "" } else { " [unique]" },
-            self.i_name.to_string(),
-            self.j_name.to_string(),
-            self.array_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.array_name, &mut self.i_name, &mut self.j_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArraySwapBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let array = gc.get_scoped_obj(&self.array_name);
         let i = gc.get_scoped_obj_field(&self.i_name, 0).into_int_value();
@@ -2434,12 +2409,26 @@ impl InlineLLVMArraySwapBody {
         ObjectFieldType::write_to_array_buf(gc, len, array_buf, j, elem_i, false);
         array
     }
-}
 
-impl BorrowsOperand for InlineLLVMArraySwapBody {}
+    fn name(&self) -> String {
+        format!(
+            "Array::{}{}({}, {}, {})",
+            if self.bounds_checked {
+                "swap"
+            } else {
+                "unsafe_swap_bounds_unchecked"
+            },
+            if self.force_unique { "" } else { " [unique]" },
+            self.i_name.to_string(),
+            self.j_name.to_string(),
+            self.array_name.to_string()
+        )
+    }
 
-impl UniqueCheck for InlineLLVMArraySwapBody {
-    // The array (operand 0) is force-uniqued in place.
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.array_name, &mut self.i_name, &mut self.j_name]
+    }
+
     fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         if self.force_unique {
             Some((0, vec![]))
@@ -2447,16 +2436,30 @@ impl UniqueCheck for InlineLLVMArraySwapBody {
             None
         }
     }
-    fn assuming_unique(&self) -> Self {
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
-        c
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
 fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let body = expr_llvm(
-        LLVMGenerator::ArraySwapBody(InlineLLVMArraySwapBody {
+        Box::new(InlineLLVMArraySwapBody {
             array_name: FullName::local("array"),
             i_name: FullName::local("i"),
             j_name: FullName::local("j"),
@@ -2505,29 +2508,9 @@ pub struct InlineLLVMArrayPunchBody {
     arr_name: FullName,
 }
 
-impl InlineLLVMArrayPunchBody {
-    pub fn name(&self) -> String {
-        format!(
-            "PunchedArray::_unsafe_punch_bounds{}({}, {})",
-            if self.force_unique {
-                "_unchecked"
-            } else {
-                "_uniqueness_unchecked"
-            },
-            self.idx_name.to_string(),
-            self.arr_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.idx_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayPunchBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // ret_ty = (PunchedArray a, a)
         let mut array = gc.get_scoped_obj(&self.arr_name);
         let idx_obj = gc.get_scoped_obj(&self.idx_name);
@@ -2554,12 +2537,24 @@ impl InlineLLVMArrayPunchBody {
         let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &elem);
         res
     }
-}
 
-impl BorrowsOperand for InlineLLVMArrayPunchBody {}
+    fn name(&self) -> String {
+        format!(
+            "PunchedArray::_unsafe_punch_bounds{}({}, {})",
+            if self.force_unique {
+                "_unchecked"
+            } else {
+                "_uniqueness_unchecked"
+            },
+            self.idx_name.to_string(),
+            self.arr_name.to_string(),
+        )
+    }
 
-impl UniqueCheck for InlineLLVMArrayPunchBody {
-    // The array (operand 0) is force-uniqued in place.
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name, &mut self.idx_name]
+    }
+
     fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         if self.force_unique {
             Some((0, vec![]))
@@ -2567,10 +2562,15 @@ impl UniqueCheck for InlineLLVMArrayPunchBody {
             None
         }
     }
-    fn assuming_unique(&self) -> Self {
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
-        c
+        Box::new(c)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -2590,7 +2590,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(IDX_NAME), var_local(ARR_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayPunchBody(InlineLLVMArrayPunchBody {
+            Box::new(InlineLLVMArrayPunchBody {
                 force_unique,
                 idx_name: FullName::local(IDX_NAME),
                 arr_name: FullName::local(ARR_NAME),
@@ -2615,29 +2615,9 @@ pub struct InlineLLVMPunchedArrayPlugBody {
     punched_name: FullName,
 }
 
-impl InlineLLVMPunchedArrayPlugBody {
-    pub fn name(&self) -> String {
-        format!(
-            "PunchedArray::_unsafe_plug_bounds{}({}, {})",
-            if self.force_unique {
-                "_unchecked"
-            } else {
-                "_uniqueness_unchecked"
-            },
-            self.elem_name.to_string(),
-            self.punched_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.elem_name, &mut self.punched_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let elem = gc.get_scoped_obj(&self.elem_name);
         let punched = gc.get_scoped_obj(&self.punched_name);
 
@@ -2656,12 +2636,24 @@ impl InlineLLVMPunchedArrayPlugBody {
         ObjectFieldType::write_to_array_buf(gc, None, buf, idx, elem, false);
         array
     }
-}
 
-impl BorrowsOperand for InlineLLVMPunchedArrayPlugBody {}
+    fn name(&self) -> String {
+        format!(
+            "PunchedArray::_unsafe_plug_bounds{}({}, {})",
+            if self.force_unique {
+                "_unchecked"
+            } else {
+                "_uniqueness_unchecked"
+            },
+            self.elem_name.to_string(),
+            self.punched_name.to_string(),
+        )
+    }
 
-impl UniqueCheck for InlineLLVMPunchedArrayPlugBody {
-    // The punched array is operand 1; its inner array is the boxed leaf at path [0].
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.elem_name, &mut self.punched_name]
+    }
+
     fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         if self.force_unique {
             Some((1, vec![0]))
@@ -2669,10 +2661,24 @@ impl UniqueCheck for InlineLLVMPunchedArrayPlugBody {
             None
         }
     }
-    fn assuming_unique(&self) -> Self {
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
-        c
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -2690,7 +2696,7 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(ELEM_NAME), var_local(PUNCHED_NAME)],
         expr_llvm(
-            LLVMGenerator::PunchedArrayPlugBody(InlineLLVMPunchedArrayPlugBody {
+            Box::new(InlineLLVMPunchedArrayPlugBody {
                 force_unique,
                 elem_name: FullName::local(ELEM_NAME),
                 punched_name: FullName::local(PUNCHED_NAME),
@@ -2713,20 +2719,9 @@ pub struct InlineLLVMArrayForceUniqueBody {
     arr_name: FullName,
 }
 
-impl InlineLLVMArrayForceUniqueBody {
-    pub fn name(&self) -> String {
-        format!("{}.Array::force_unique", self.arr_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayForceUniqueBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.arr_name);
 
@@ -2735,11 +2730,28 @@ impl InlineLLVMArrayForceUniqueBody {
 
         array
     }
+
+    fn name(&self) -> String {
+        format!("{}.Array::force_unique", self.arr_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMArrayForceUniqueBody {}
-
-impl UniqueCheck for InlineLLVMArrayForceUniqueBody {}
 
 pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     const ARR_NAME: &str = "arr";
@@ -2751,7 +2763,7 @@ pub fn force_unique_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayForceUniqueBody(InlineLLVMArrayForceUniqueBody {
+            Box::new(InlineLLVMArrayForceUniqueBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
             array_ty.clone(),
@@ -2769,8 +2781,18 @@ pub struct InlineLLVMArrayCheckRange {
     size_name: FullName,
 }
 
-impl InlineLLVMArrayCheckRange {
-    pub fn name(&self) -> String {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayCheckRange {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        if gc.config.runtime_check() {
+            let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
+            let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
+            ObjectFieldType::panic_if_out_of_range(gc, size, idx);
+        }
+        gc.get_scoped_obj(&self.idx_name)
+    }
+
+    fn name(&self) -> String {
         format!(
             "Array::{}({}, {})",
             ARRAY_CHECK_RANGE,
@@ -2779,27 +2801,14 @@ impl InlineLLVMArrayCheckRange {
         )
     }
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.idx_name, &mut self.size_name]
     }
 
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        if gc.config.runtime_check() {
-            let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
-            let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
-            ObjectFieldType::panic_if_out_of_range(gc, size, idx);
-        }
-        gc.get_scoped_obj(&self.idx_name)
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
-
-impl BorrowsOperand for InlineLLVMArrayCheckRange {}
-
-impl UniqueCheck for InlineLLVMArrayCheckRange {}
 
 // _check_range : I64 -> I64 -> I64
 pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -2809,7 +2818,7 @@ pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(IDX_NAME), var_local(SIZE_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayCheckRange(InlineLLVMArrayCheckRange {
+            Box::new(InlineLLVMArrayCheckRange {
                 idx_name: FullName::local(IDX_NAME),
                 size_name: FullName::local(SIZE_NAME),
             }),
@@ -2831,8 +2840,17 @@ pub struct InlineLLVMArrayCheckSize {
     size_name: FullName,
 }
 
-impl InlineLLVMArrayCheckSize {
-    pub fn name(&self) -> String {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayCheckSize {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        if gc.config.runtime_check() {
+            let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
+            ObjectFieldType::panic_if_size_negative(gc, size);
+        }
+        gc.get_scoped_obj(&self.size_name)
+    }
+
+    fn name(&self) -> String {
         format!(
             "Array::{}({})",
             ARRAY_CHECK_SIZE,
@@ -2840,26 +2858,14 @@ impl InlineLLVMArrayCheckSize {
         )
     }
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.size_name]
     }
 
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        if gc.config.runtime_check() {
-            let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
-            ObjectFieldType::panic_if_size_negative(gc, size);
-        }
-        gc.get_scoped_obj(&self.size_name)
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
-
-impl BorrowsOperand for InlineLLVMArrayCheckSize {}
-
-impl UniqueCheck for InlineLLVMArrayCheckSize {}
 
 // _check_size : I64 -> I64
 pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -2868,7 +2874,7 @@ pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(SIZE_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayCheckSize(InlineLLVMArrayCheckSize {
+            Box::new(InlineLLVMArrayCheckSize {
                 size_name: FullName::local(SIZE_NAME),
             }),
             make_i64_ty(),
@@ -2884,20 +2890,9 @@ pub struct InlineLLVMArrayGetPtrBody {
     arr_name: FullName,
 }
 
-impl InlineLLVMArrayGetPtrBody {
-    pub fn name(&self) -> String {
-        format!("{}.Array::get_data_ptr", self.arr_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayGetPtrBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argment
         let array = gc.get_scoped_obj_noretain(&self.arr_name);
 
@@ -2914,15 +2909,23 @@ impl InlineLLVMArrayGetPtrBody {
         );
         obj.insert_field(gc, 0, ptr)
     }
-}
 
-impl BorrowsOperand for InlineLLVMArrayGetPtrBody {
+    fn name(&self) -> String {
+        format!("{}.Array::get_data_ptr", self.arr_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
+    }
+
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMArrayGetPtrBody {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 // `get_ptr` function for Array.
 pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -2935,7 +2938,7 @@ pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayGetPtrBody(InlineLLVMArrayGetPtrBody {
+            Box::new(InlineLLVMArrayGetPtrBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
             make_ptr_ty(),
@@ -2957,24 +2960,9 @@ pub struct InlineLLVMArrayGetSizeBody {
     arr_name: FullName,
 }
 
-impl InlineLLVMArrayGetSizeBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.Array::{}",
-            self.arr_name.to_string(),
-            ARRAY_GET_SIZE_NAME
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayGetSizeBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
         let len = array_obj.extract_field(gc, ARRAY_LEN_IDX).into_int_value();
@@ -2982,15 +2970,27 @@ impl InlineLLVMArrayGetSizeBody {
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("length_of_arr"));
         int_obj.insert_field(gc, 0, len)
     }
-}
 
-impl BorrowsOperand for InlineLLVMArrayGetSizeBody {
+    fn name(&self) -> String {
+        format!(
+            "{}.Array::{}",
+            self.arr_name.to_string(),
+            ARRAY_GET_SIZE_NAME
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
+    }
+
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMArrayGetSizeBody {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 // `get_size` built-in function for Array.
 pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -2999,7 +2999,7 @@ pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayGetSizeBody(InlineLLVMArrayGetSizeBody {
+            Box::new(InlineLLVMArrayGetSizeBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
             make_i64_ty(),
@@ -3017,20 +3017,9 @@ pub struct InlineLLVMArrayGetCapacityBody {
     arr_name: FullName,
 }
 
-impl InlineLLVMArrayGetCapacityBody {
-    pub fn name(&self) -> String {
-        format!("{}.Array::get_capacity", self.arr_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayGetCapacityBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
         let len = array_obj.extract_field(gc, ARRAY_CAP_IDX).into_int_value();
@@ -3038,15 +3027,23 @@ impl InlineLLVMArrayGetCapacityBody {
         let int_obj = create_obj(make_i64_ty(), &vec![], None, gc, Some("cap_of_arr"));
         int_obj.insert_field(gc, 0, len)
     }
-}
 
-impl BorrowsOperand for InlineLLVMArrayGetCapacityBody {
+    fn name(&self) -> String {
+        format!("{}.Array::get_capacity", self.arr_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.arr_name]
+    }
+
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMArrayGetCapacityBody {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 // `Array::get_capacity : Array a -> I64` built-in function.
 pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -3055,7 +3052,7 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
         expr_llvm(
-            LLVMGenerator::ArrayGetCapacityBody(InlineLLVMArrayGetCapacityBody {
+            Box::new(InlineLLVMArrayGetCapacityBody {
                 arr_name: FullName::local(ARR_NAME),
             }),
             make_i64_ty(),
@@ -3075,39 +3072,64 @@ pub struct InlineLLVMStructGetBody {
 }
 
 impl InlineLLVMStructGetBody {
-    pub fn name(&self) -> String {
-        format!("{}.@{}", self.var_name.to_string(), self.field_idx)
-    }
-
     /// The index of the field this operation reads.
     pub fn field_index(&self) -> usize {
         self.field_idx
     }
+}
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMStructGetBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get struct object.
         let str = gc.get_scoped_obj(&self.var_name);
         ObjectFieldType::get_struct_fields(gc, &str, &[self.field_idx as u32])[0].clone()
     }
+
+    fn name(&self) -> String {
+        format!("{}.@{}", self.var_name.to_string(), self.field_idx)
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // From a boxed container the field is `Dyn` (contents not tracked); from an unboxed
+        // container it is a pure projection carrying the container's leaf at that field.
+        let container_boxed = arg_tys.first().map_or(true, |t| t.is_box(type_env));
+        if container_boxed {
+            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        } else {
+            let field = self.field_index();
+            Provenance::build_shape(
+                result_ty,
+                type_env,
+                &|sigma: &Path| {
+                    let mut p = vec![field];
+                    p.extend_from_slice(sigma);
+                    Provenance::leaf(BaseSource::Arg(0, p))
+                },
+                &mut vec![],
+            )
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMStructGetBody {}
-
-impl UniqueCheck for InlineLLVMStructGetBody {}
 
 // `get` built-in function for a given struct.
 pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>) -> Arc<ExprNode> {
     let var_name_clone = FullName::local(var_name);
     expr_llvm(
-        LLVMGenerator::StructGetBody(InlineLLVMStructGetBody {
+        Box::new(InlineLLVMStructGetBody {
             var_name: var_name_clone,
             field_idx,
         }),
@@ -3141,8 +3163,19 @@ pub struct InlineLLVMMakeStructBody {
     pub field_names: Vec<FullName>,
 }
 
-impl InlineLLVMMakeStructBody {
-    pub fn name(&self) -> String {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMMakeStructBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let mut str_obj = create_obj(ty.clone(), &vec![], None, gc, Some("allocate_MakeStruct"));
+        let offset = if ty.is_box(gc.type_env()) { 1 } else { 0 };
+        for (i, name) in self.field_names.iter().enumerate() {
+            let field_obj = gc.get_scoped_obj_noretain(name);
+            str_obj = str_obj.insert_field(gc, i as u32 + offset, field_obj.value);
+        }
+        str_obj
+    }
+
+    fn name(&self) -> String {
         format!(
             "make_struct({})",
             self.field_names
@@ -3153,28 +3186,36 @@ impl InlineLLVMMakeStructBody {
         )
     }
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         self.field_names.iter_mut().collect()
     }
 
-    pub fn generate<'c, 'm, 'b>(
+    fn result_prov(
         &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        let mut str_obj = create_obj(ty.clone(), &vec![], None, gc, Some("allocate_MakeStruct"));
-        let offset = if ty.is_box(gc.type_env()) { 1 } else { 0 };
-        for (i, name) in self.field_names.iter().enumerate() {
-            let field_obj = gc.get_scoped_obj_noretain(name);
-            str_obj = str_obj.insert_field(gc, i as u32 + offset, field_obj.value);
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // A boxed struct is a fresh allocation; an unboxed struct is its fields laid out, so each
+        // field carries the corresponding operand's provenance.
+        if result_ty.is_box(type_env) {
+            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        } else {
+            let fields = result_ty.field_types(type_env);
+            Provenance::UnboxedAgg(
+                fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, fty)| Provenance::arg_passthrough(fty, type_env, i))
+                    .collect(),
+            )
         }
-        str_obj
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
-
-impl BorrowsOperand for InlineLLVMMakeStructBody {}
-
-impl UniqueCheck for InlineLLVMMakeStructBody {}
 
 // Allocate an array whose length equals the number of operands and fill it with them. The array
 // type is the value type of the enclosing expression. This is the RC IR counterpart of the
@@ -3184,27 +3225,9 @@ pub struct InlineLLVMArrayLitBody {
     pub elem_names: Vec<FullName>,
 }
 
-impl InlineLLVMArrayLitBody {
-    pub fn name(&self) -> String {
-        format!(
-            "array_lit[{}]",
-            self.elem_names
-                .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        self.elem_names.iter_mut().collect()
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMArrayLitBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let len = gc
             .context
             .i64_type()
@@ -3219,11 +3242,35 @@ impl InlineLLVMArrayLitBody {
         }
         array
     }
+
+    fn name(&self) -> String {
+        format!(
+            "array_lit[{}]",
+            self.elem_names
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        self.elem_names.iter_mut().collect()
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMArrayLitBody {}
-
-impl UniqueCheck for InlineLLVMArrayLitBody {}
 
 // Call a C function. This is the RC IR counterpart of the `Expr::FFICall` AST node. `arg_names` are
 // the operands; when `is_io`, the last one is the input `IOState` token, which establishes the
@@ -3238,24 +3285,9 @@ pub struct InlineLLVMFFICallBody {
     pub arg_names: Vec<FullName>,
 }
 
-impl InlineLLVMFFICallBody {
-    pub fn name(&self) -> String {
-        format!(
-            "FFI_CALL{}[{}]",
-            if self.is_io { "_IOS" } else { "" },
-            self.fun_name
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        self.arg_names.iter_mut().collect()
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFFICallBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The return object's type is the value type of this expression: `(IOState, ret)` when
         // `is_io`, else `ret`.
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("allocate_CallC"));
@@ -3280,11 +3312,23 @@ impl InlineLLVMFFICallBody {
             self.is_io,
         )
     }
+
+    fn name(&self) -> String {
+        format!(
+            "FFI_CALL{}[{}]",
+            if self.is_io { "_IOS" } else { "" },
+            self.fun_name
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        self.arg_names.iter_mut().collect()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFFICallBody {}
-
-impl UniqueCheck for InlineLLVMFFICallBody {}
 
 // Project a captured value out of a lifted closure's capture object, retaining it (a retain-getter).
 // Lowering emits this at the entry of a lifted closure function to bind each captured variable.
@@ -3296,31 +3340,28 @@ pub struct InlineLLVMCaptureProjectBody {
     pub cap_tys: Vec<Arc<TypeNode>>,
 }
 
-impl InlineLLVMCaptureProjectBody {
-    pub fn name(&self) -> String {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMCaptureProjectBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        gc.build_capture_project(&self.cap_name, self.cap_idx, &self.cap_tys, ty)
+    }
+
+    fn name(&self) -> String {
         format!("{}.#cap.{}", self.cap_name.to_string(), self.cap_idx)
     }
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.cap_name]
     }
 
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        gc.build_capture_project(&self.cap_name, self.cap_idx, &self.cap_tys, ty)
-    }
-}
-
-impl BorrowsOperand for InlineLLVMCaptureProjectBody {
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMCaptureProjectBody {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMStructPunchBody {
@@ -3329,25 +3370,9 @@ pub struct InlineLLVMStructPunchBody {
     pub(crate) force_unique: bool,
 }
 
-impl InlineLLVMStructPunchBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.#punch{}_{}",
-            self.var_name.to_string(),
-            if self.force_unique { "_fu" } else { "" },
-            self.field_idx
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMStructPunchBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the argument object (the struct value).
         let mut str = gc.get_scoped_obj(&self.var_name);
 
@@ -3366,12 +3391,20 @@ impl InlineLLVMStructPunchBody {
 
         pair
     }
-}
 
-impl BorrowsOperand for InlineLLVMStructPunchBody {}
+    fn name(&self) -> String {
+        format!(
+            "{}.#punch{}_{}",
+            self.var_name.to_string(),
+            if self.force_unique { "_fu" } else { "" },
+            self.field_idx
+        )
+    }
 
-impl UniqueCheck for InlineLLVMStructPunchBody {
-    // The struct (operand 0) is force-uniqued in place.
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
     fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         if self.force_unique {
             Some((0, vec![]))
@@ -3379,10 +3412,15 @@ impl UniqueCheck for InlineLLVMStructPunchBody {
             None
         }
     }
-    fn assuming_unique(&self) -> Self {
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
-        c
+        Box::new(c)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -3418,7 +3456,7 @@ pub fn struct_punch(
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_llvm(
-            LLVMGenerator::StructPunchBody(InlineLLVMStructPunchBody {
+            Box::new(InlineLLVMStructPunchBody {
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
                 force_unique,
@@ -3439,22 +3477,9 @@ pub struct InlineLLVMStructPlugInBody {
     pub(crate) force_unique: bool,
 }
 
-impl InlineLLVMStructPlugInBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.#plug_in_{}{}({})",
-            self.punched_str_name.to_string(),
-            if self.force_unique { "_fu" } else { "" },
-            self.field_idx,
-            self.field_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.punched_str_name, &mut self.field_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
+#[typetag::serde]
+impl LLVMGen for InlineLLVMStructPlugInBody {
+    fn generate<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
         struct_ty: &Arc<TypeNode>,
@@ -3477,12 +3502,21 @@ impl InlineLLVMStructPlugInBody {
 
         str
     }
-}
 
-impl BorrowsOperand for InlineLLVMStructPlugInBody {}
+    fn name(&self) -> String {
+        format!(
+            "{}.#plug_in_{}{}({})",
+            self.punched_str_name.to_string(),
+            if self.force_unique { "_fu" } else { "" },
+            self.field_idx,
+            self.field_name.to_string(),
+        )
+    }
 
-impl UniqueCheck for InlineLLVMStructPlugInBody {
-    // The struct (operand 0) is force-uniqued in place.
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.punched_str_name, &mut self.field_name]
+    }
+
     fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         if self.force_unique {
             Some((0, vec![]))
@@ -3490,10 +3524,34 @@ impl UniqueCheck for InlineLLVMStructPlugInBody {
             None
         }
     }
-    fn assuming_unique(&self) -> Self {
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
-        c
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // A boxed struct `set`, or the `plug` that completes a `mod`, leaves the struct uniquely
+        // owned — a `set` clones when shared and writes in place when unique, and a `mod`
+        // force-uniques in its punch, so either way the result's uniqueness does not depend on the
+        // input, like an array set. This is what lets a chain of field updates drop every check
+        // after the first. The unboxed cases have no uniqueness check to elide, so the conservative
+        // `Dyn` default suffices.
+        if result_ty.is_box(type_env) {
+            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        } else {
+            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -3522,7 +3580,7 @@ pub fn struct_plug_in(
         expr_abs(
             vec![var_local(FIELD_NAME)],
             expr_llvm(
-                LLVMGenerator::StructPlugInBody(InlineLLVMStructPlugInBody {
+                Box::new(InlineLLVMStructPlugInBody {
                     punched_str_name: FullName::local(PUNCHED_STR_NAME),
                     field_name: FullName::local(FIELD_NAME),
                     field_idx: field_idx as usize,
@@ -4286,26 +4344,9 @@ pub struct InlineLLVMStructSetBody {
     pub(crate) force_unique: bool,
 }
 
-impl InlineLLVMStructSetBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.set_{}{}({})",
-            self.struct_name.to_string(),
-            self.field_idx,
-            if self.force_unique { "" } else { " [unique]" },
-            self.value_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.value_name, &mut self.struct_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _str_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMStructSetBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _str_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let value = gc.get_scoped_obj(&self.value_name);
         let str = gc.get_scoped_obj(&self.struct_name);
@@ -4324,12 +4365,21 @@ impl InlineLLVMStructSetBody {
         // Set new value
         ObjectFieldType::move_into_struct_field(gc, str, self.field_idx as u32, &value)
     }
-}
 
-impl BorrowsOperand for InlineLLVMStructSetBody {}
+    fn name(&self) -> String {
+        format!(
+            "{}.set_{}{}({})",
+            self.struct_name.to_string(),
+            self.field_idx,
+            if self.force_unique { "" } else { " [unique]" },
+            self.value_name.to_string()
+        )
+    }
 
-impl UniqueCheck for InlineLLVMStructSetBody {
-    // The struct is operand 1 (the value is operand 0), force-uniqued in place.
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.value_name, &mut self.struct_name]
+    }
+
     fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         if self.force_unique {
             Some((1, vec![]))
@@ -4337,10 +4387,34 @@ impl UniqueCheck for InlineLLVMStructSetBody {
             None
         }
     }
-    fn assuming_unique(&self) -> Self {
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.force_unique = false;
-        c
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // A boxed struct `set`, or the `plug` that completes a `mod`, leaves the struct uniquely
+        // owned — a `set` clones when shared and writes in place when unique, and a `mod`
+        // force-uniques in its punch, so either way the result's uniqueness does not depend on the
+        // input, like an array set. This is what lets a chain of field updates drop every check
+        // after the first. The unboxed cases have no uniqueness check to elide, so the conservative
+        // `Dyn` default suffices.
+        if result_ty.is_box(type_env) {
+            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        } else {
+            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -4363,7 +4437,7 @@ pub fn struct_set(
         expr_abs(
             vec![var_local(STRUCT_NAME)],
             expr_llvm(
-                LLVMGenerator::StructSetBody(InlineLLVMStructSetBody {
+                Box::new(InlineLLVMStructSetBody {
                     value_name: FullName::local(VALUE_NAME),
                     struct_name: FullName::local(STRUCT_NAME),
                     field_count,
@@ -4392,24 +4466,15 @@ pub struct InlineLLVMMakeUnionBody {
 }
 
 impl InlineLLVMMakeUnionBody {
-    pub fn name(&self) -> String {
-        format!("union_{}({})", self.field_idx, self.field_name.to_string())
-    }
-
     /// The index of the variant this operation constructs.
     pub fn variant_index(&self) -> usize {
         self.field_idx
     }
+}
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.field_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMMakeUnionBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get field values.
         let field = gc.get_scoped_obj(&self.field_name);
 
@@ -4432,11 +4497,48 @@ impl InlineLLVMMakeUnionBody {
         // Set value.
         ObjectFieldType::set_union_value(gc, obj, field)
     }
+
+    fn name(&self) -> String {
+        format!("union_{}({})", self.field_idx, self.field_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.field_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // A boxed union is a fresh allocation; an unboxed union carries the operand's provenance in
+        // the constructed variant's slot and bottom (an empty set) in the others.
+        if result_ty.is_box(type_env) {
+            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        } else {
+            let variants = result_ty.field_types(type_env);
+            let active = self.variant_index();
+            Provenance::UnboxedAgg(
+                variants
+                    .iter()
+                    .enumerate()
+                    .map(|(k, vty)| {
+                        if k == active {
+                            Provenance::arg_passthrough(vty, type_env, 0)
+                        } else {
+                            Provenance::uniform_bottom(vty, type_env)
+                        }
+                    })
+                    .collect(),
+            )
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMMakeUnionBody {}
-
-impl UniqueCheck for InlineLLVMMakeUnionBody {}
 
 // constructor function for a given union.
 pub fn union_new_body(
@@ -4449,7 +4551,7 @@ pub fn union_new_body(
     let name_cloned = name.clone();
     let field_name_cloned = FullName::local(field_name);
     expr_llvm(
-        LLVMGenerator::MakeUnionBody(InlineLLVMMakeUnionBody {
+        Box::new(InlineLLVMMakeUnionBody {
             field_name: field_name_cloned,
             generated_union_name: name_cloned,
             field_idx,
@@ -4515,24 +4617,15 @@ pub struct InlineLLVMUnionAsBody {
 }
 
 impl InlineLLVMUnionAsBody {
-    pub fn name(&self) -> String {
-        format!("{}.as_{}", self.union_arg_name.to_string(), self.field_idx)
-    }
-
     /// The index of the variant whose payload this operation reads.
     pub fn variant_index(&self) -> usize {
         self.field_idx
     }
+}
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.union_arg_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMUnionAsBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get union object.
         let obj = gc.get_scoped_obj(&self.union_arg_name);
 
@@ -4551,11 +4644,45 @@ impl InlineLLVMUnionAsBody {
         // If tag match, return the field value.
         ObjectFieldType::get_union_value(gc, obj, &elem_ty)
     }
+
+    fn name(&self) -> String {
+        format!("{}.as_{}", self.union_arg_name.to_string(), self.field_idx)
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.union_arg_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // From a boxed union the payload is `Dyn`; from an unboxed union it is a pure projection
+        // carrying the scrutinee's leaf at that variant.
+        let union_boxed = arg_tys.first().map_or(true, |t| t.is_box(type_env));
+        if union_boxed {
+            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        } else {
+            let variant = self.variant_index();
+            Provenance::build_shape(
+                result_ty,
+                type_env,
+                &|sigma: &Path| {
+                    let mut p = vec![variant];
+                    p.extend_from_slice(sigma);
+                    Provenance::leaf(BaseSource::Arg(0, p))
+                },
+                &mut vec![],
+            )
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMUnionAsBody {}
-
-impl UniqueCheck for InlineLLVMUnionAsBody {}
 
 // `as_{field}` built-in function for a given union.
 pub fn union_as_body(
@@ -4565,7 +4692,7 @@ pub fn union_as_body(
 ) -> Arc<ExprNode> {
     let union_arg_name = FullName::local(union_arg_name);
     expr_llvm(
-        LLVMGenerator::UnionAsBody(InlineLLVMUnionAsBody {
+        Box::new(InlineLLVMUnionAsBody {
             union_arg_name,
             field_idx,
         }),
@@ -4600,20 +4727,9 @@ pub struct InlineLLVMUnionIsBody {
     field_idx: usize,
 }
 
-impl InlineLLVMUnionIsBody {
-    pub fn name(&self) -> String {
-        format!("{}.is_{}", self.union_arg_name.to_string(), self.field_idx)
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.union_arg_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMUnionIsBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get union object.
         let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
 
@@ -4647,20 +4763,28 @@ impl InlineLLVMUnionIsBody {
         let ret = ret.insert_field(gc, 0, match_bool.as_basic_value_enum());
         ret
     }
-}
 
-impl BorrowsOperand for InlineLLVMUnionIsBody {
+    fn name(&self) -> String {
+        format!("{}.is_{}", self.union_arg_name.to_string(), self.field_idx)
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.union_arg_name]
+    }
+
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMUnionIsBody {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 // `is_{field}` built-in function for a given union.
 pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
     expr_llvm(
-        LLVMGenerator::UnionIsBody(InlineLLVMUnionIsBody {
+        Box::new(InlineLLVMUnionIsBody {
             union_arg_name: FullName::local(union_arg_name),
             field_idx,
         }),
@@ -4676,25 +4800,9 @@ pub struct InlineLLVMUnionModBody {
     field_idx: u32,
 }
 
-impl InlineLLVMUnionModBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.mod_{}({})",
-            self.union_name.to_string(),
-            self.field_idx,
-            self.modifier_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.union_name, &mut self.modifier_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        union_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMUnionModBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, union_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let obj = gc.get_scoped_obj(&self.union_name);
         let modifier = gc.get_scoped_obj(&self.modifier_name);
@@ -4765,11 +4873,24 @@ impl InlineLLVMUnionModBody {
         phi.add_incoming(&[(&match_val, match_bb), (&mismatch_val, mismatch_bb)]);
         Object::new(phi.as_basic_value(), union_ty.clone(), gc)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "{}.mod_{}({})",
+            self.union_name.to_string(),
+            self.field_idx,
+            self.modifier_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.union_name, &mut self.modifier_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMUnionModBody {}
-
-impl UniqueCheck for InlineLLVMUnionModBody {}
 
 pub fn union_mod_function(
     _union_name: &FullName,
@@ -4789,7 +4910,7 @@ pub fn union_mod_function(
         expr_abs(
             vec![var_local(UNION_NAME)],
             expr_llvm(
-                LLVMGenerator::UnionModBody(InlineLLVMUnionModBody {
+                Box::new(InlineLLVMUnionModBody {
                     union_name: FullName::local(UNION_NAME),
                     modifier_name: FullName::local(MODIFIER_NAME),
                     field_idx,
@@ -4816,20 +4937,9 @@ pub struct InlineLLVMUndefinedInternalBody {
     msg_name: FullName,
 }
 
-impl InlineLLVMUndefinedInternalBody {
-    pub fn name(&self) -> String {
-        format!("_undefined_internal({})", self.msg_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.msg_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMUndefinedInternalBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         if gc.config.runtime_check() {
             // Runtime check is enabled.
             // Print the message and abort the program.
@@ -4869,11 +4979,19 @@ impl InlineLLVMUndefinedInternalBody {
         // Return undefined value.
         Object::undef(ty.clone(), gc)
     }
+
+    fn name(&self) -> String {
+        format!("_undefined_internal({})", self.msg_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.msg_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMUndefinedInternalBody {}
-
-impl UniqueCheck for InlineLLVMUndefinedInternalBody {}
 
 // `_undefined_internal` built-in function
 pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -4883,7 +5001,7 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(UNDEFINED_ARG_NAME)],
         expr_llvm(
-            LLVMGenerator::UndefinedFunctionBody(InlineLLVMUndefinedInternalBody {
+            Box::new(InlineLLVMUndefinedInternalBody {
                 msg_name: FullName::local(UNDEFINED_ARG_NAME),
             }),
             type_tyvar_star(A_NAME),
@@ -4911,25 +5029,9 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMHoleBody {}
 
-impl InlineLLVMHoleBody {
-    /// Stable identifier used as the LLVM symbol name for this body.
-    pub fn name(&self) -> String {
-        "#hole".to_string()
-    }
-
-    /// No captured names — `#hole` is a closed nullary builtin.
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![]
-    }
-
-    /// Emit LLVM IR for a hole reference: an `unreachable` followed by
-    /// a fresh block that returns an undefined value of the expected
-    /// type, keeping the surrounding function well-formed.
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMHoleBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         gc.builder().build_unreachable().unwrap();
         let current_func = gc
             .builder()
@@ -4943,11 +5045,19 @@ impl InlineLLVMHoleBody {
         gc.builder().position_at_end(unreachable_bb);
         Object::undef(ty.clone(), gc)
     }
+
+    fn name(&self) -> String {
+        "#hole".to_string()
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMHoleBody {}
-
-impl UniqueCheck for InlineLLVMHoleBody {}
 
 /// `Std::#hole : a` — placeholder generated when the parser accepts
 /// an empty expression position (e.g. `let x = 10; ` with no body).
@@ -4956,7 +5066,7 @@ impl UniqueCheck for InlineLLVMHoleBody {}
 pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
     let expr = expr_llvm(
-        LLVMGenerator::HoleFunctionBody(InlineLLVMHoleBody {}),
+        Box::new(InlineLLVMHoleBody {}),
         type_tyvar_star(A_NAME),
         None,
     );
@@ -4970,24 +5080,9 @@ pub struct InlineLLVMWithRetainedFunctionBody {
     x_name: FullName,
 }
 
-impl InlineLLVMWithRetainedFunctionBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.with_retained({})",
-            self.f_name.to_string(),
-            self.x_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.f_name, &mut self.x_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the argument "f".
         let f = gc.get_scoped_obj(&self.f_name);
 
@@ -5006,11 +5101,23 @@ impl InlineLLVMWithRetainedFunctionBody {
         // Return the result.
         ret
     }
+
+    fn name(&self) -> String {
+        format!(
+            "{}.with_retained({})",
+            self.f_name.to_string(),
+            self.x_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.f_name, &mut self.x_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMWithRetainedFunctionBody {}
-
-impl UniqueCheck for InlineLLVMWithRetainedFunctionBody {}
 
 // `with_retained : (a -> b) -> a -> b` built-in function
 pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -5025,7 +5132,7 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(WITH_RETAINED_X_ARG_NAME)],
             expr_llvm(
-                LLVMGenerator::WithRetainedFunctionBody(InlineLLVMWithRetainedFunctionBody {
+                Box::new(InlineLLVMWithRetainedFunctionBody {
                     f_name: FullName::local(WITH_RETAINED_F_ARG_NAME),
                     x_name: FullName::local(WITH_RETAINED_X_ARG_NAME),
                 }),
@@ -5056,21 +5163,9 @@ pub struct InlineLLVMIsUniqueFunctionBody {
     pub(crate) assume_unique: bool,
 }
 
-impl InlineLLVMIsUniqueFunctionBody {
-    pub fn name(&self) -> String {
-        let mark = if self.assume_unique { "[unique]" } else { "" };
-        format!("is_unique{}({})", mark, self.var_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let bool_ty = ObjectFieldType::I8
             .to_basic_type(gc, vec![])
             .into_int_type();
@@ -5126,12 +5221,16 @@ impl InlineLLVMIsUniqueFunctionBody {
 
         ret
     }
-}
 
-impl BorrowsOperand for InlineLLVMIsUniqueFunctionBody {}
+    fn name(&self) -> String {
+        let mark = if self.assume_unique { "[unique]" } else { "" };
+        format!("is_unique{}({})", mark, self.var_name.to_string())
+    }
 
-impl UniqueCheck for InlineLLVMIsUniqueFunctionBody {
-    // `is_unique` tests operand 0's uniqueness to fill in the returned flag.
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
     fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
         if self.assume_unique {
             None
@@ -5139,10 +5238,31 @@ impl UniqueCheck for InlineLLVMIsUniqueFunctionBody {
             Some((0, vec![]))
         }
     }
-    fn assuming_unique(&self) -> Self {
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
         let mut c = self.clone();
         c.assume_unique = true;
-        c
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // `is_unique` returns `(Bool, a)` with the argument unchanged as the second component, yet
+        // its result stays the conservative `Dyn` so the borrow pass treats the argument as
+        // consumed. That consuming treatment is what makes `is_unique` detect sharing: a later use
+        // of the argument forces a retain, so the container reads as shared at the check, and the
+        // fold (which keys on the operand through `op_containers`) correctly stays off. Declaring
+        // the argument a passthrough here would suppress that retain and report a shared container
+        // as unique.
+        Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -5161,7 +5281,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_llvm(
-            LLVMGenerator::IsUniqueFunctionBody(InlineLLVMIsUniqueFunctionBody {
+            Box::new(InlineLLVMIsUniqueFunctionBody {
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
             }),
@@ -5179,24 +5299,9 @@ pub struct InlineLLVMBoxedToRetainedPtrIOS {
     ios_name: FullName,
 }
 
-impl InlineLLVMBoxedToRetainedPtrIOS {
-    pub fn name(&self) -> String {
-        format!(
-            "boxed_to_retained_ptr({}, {})",
-            self.val_name.to_string(),
-            self.ios_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.val_name, &mut self.ios_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument
         let obj = gc.get_scoped_obj(&self.val_name);
         assert!(obj.is_box(gc.type_env()));
@@ -5229,11 +5334,23 @@ impl InlineLLVMBoxedToRetainedPtrIOS {
 
         // Since the object should be retained by calling this function, we do not release `obj`.
     }
+
+    fn name(&self) -> String {
+        format!(
+            "boxed_to_retained_ptr({}, {})",
+            self.val_name.to_string(),
+            self.ios_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.val_name, &mut self.ios_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMBoxedToRetainedPtrIOS {}
-
-impl UniqueCheck for InlineLLVMBoxedToRetainedPtrIOS {}
 
 pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
@@ -5254,7 +5371,7 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(VAL_NAME), var_local(IOS_NAME)],
         expr_llvm(
-            LLVMGenerator::BoxedToRetainedPtrIOS(InlineLLVMBoxedToRetainedPtrIOS {
+            Box::new(InlineLLVMBoxedToRetainedPtrIOS {
                 val_name: FullName::local(VAL_NAME),
                 ios_name: FullName::local(IOS_NAME),
             }),
@@ -5271,24 +5388,9 @@ pub struct InlineLLVMBoxedFromRetainedPtrIOS {
     ios_name: FullName,
 }
 
-impl InlineLLVMBoxedFromRetainedPtrIOS {
-    pub fn name(&self) -> String {
-        format!(
-            "boxed_from_retained_ptr_ios({}, {})",
-            self.ptr_name.to_string(),
-            self.ios_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.ptr_name, &mut self.ios_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument.
         let ptr = gc.get_scoped_obj(&self.ptr_name);
         let ios = gc.get_scoped_obj(&self.ios_name);
@@ -5309,11 +5411,23 @@ impl InlineLLVMBoxedFromRetainedPtrIOS {
 
         ret
     }
+
+    fn name(&self) -> String {
+        format!(
+            "boxed_from_retained_ptr_ios({}, {})",
+            self.ptr_name.to_string(),
+            self.ios_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.ptr_name, &mut self.ios_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMBoxedFromRetainedPtrIOS {}
-
-impl UniqueCheck for InlineLLVMBoxedFromRetainedPtrIOS {}
 
 pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
@@ -5335,7 +5449,7 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(PTR_NAME), var_local(IOS_NAME)],
         expr_llvm(
-            LLVMGenerator::BoxedFromRetainedPtrIOS(InlineLLVMBoxedFromRetainedPtrIOS {
+            Box::new(InlineLLVMBoxedFromRetainedPtrIOS {
                 ptr_name: FullName::local(PTR_NAME),
                 ios_name: FullName::local(IOS_NAME),
             }),
@@ -5351,20 +5465,9 @@ pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
 }
 
-impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
-    pub fn name(&self) -> String {
-        format!("{}.get_ptr_to_release_func", self.var_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument
         let arg = gc.get_scoped_obj_noretain(&self.var_name);
 
@@ -5414,15 +5517,23 @@ impl InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         );
         ret.insert_field(gc, 0, func_ptr)
     }
-}
 
-impl BorrowsOperand for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+    fn name(&self) -> String {
+        format!("{}.get_ptr_to_release_func", self.var_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TARGET_TY_NAME: &str = "a";
@@ -5440,11 +5551,9 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_llvm(
-            LLVMGenerator::GetReleaseFunctionOfBoxedValueFunctionBody(
-                InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
-                    var_name: FullName::local(VAR_NAME),
-                },
-            ),
+            Box::new(InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+                var_name: FullName::local(VAR_NAME),
+            }),
             ret_type,
             None,
         ),
@@ -5458,20 +5567,9 @@ pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     var_name: FullName,
 }
 
-impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
-    pub fn name(&self) -> String {
-        format!("{}.get_ptr_to_retain_func", self.var_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument
         let arg = gc.get_scoped_obj_noretain(&self.var_name);
 
@@ -5521,15 +5619,23 @@ impl InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         );
         ret.insert_field(gc, 0, func_ptr)
     }
-}
 
-impl BorrowsOperand for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+    fn name(&self) -> String {
+        format!("{}.get_ptr_to_retain_func", self.var_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TARGET_TYPE_NAME: &str = "a";
@@ -5546,11 +5652,9 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_llvm(
-            LLVMGenerator::GetRetainFunctionOfBoxedValueFunctionBody(
-                InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
-                    var_name: FullName::local(VAR_NAME),
-                },
-            ),
+            Box::new(InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+                var_name: FullName::local(VAR_NAME),
+            }),
             ret_type,
             None,
         ),
@@ -5564,20 +5668,9 @@ pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
     var_name: FullName,
 }
 
-impl InlineLLVMGetBoxedDataPtrFunctionBody {
-    pub fn name(&self) -> String {
-        format!("{}.get_data_ptr", self.var_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument.
         let obj = gc.get_scoped_obj_noretain(&self.var_name);
         assert!(obj.ty.is_box(gc.type_env()));
@@ -5595,15 +5688,23 @@ impl InlineLLVMGetBoxedDataPtrFunctionBody {
         );
         ret.insert_field(gc, 0, data_ptr)
     }
-}
 
-impl BorrowsOperand for InlineLLVMGetBoxedDataPtrFunctionBody {
+    fn name(&self) -> String {
+        format!("{}.get_data_ptr", self.var_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
     fn borrows_operand(&self, i: usize) -> bool {
         i == 0
     }
-}
 
-impl UniqueCheck for InlineLLVMGetBoxedDataPtrFunctionBody {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 fn get_data_pointer_from_boxed_value<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
@@ -5638,7 +5739,7 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_llvm(
-            LLVMGenerator::GetBoxedDataPtrFunctionBody(InlineLLVMGetBoxedDataPtrFunctionBody {
+            Box::new(InlineLLVMGetBoxedDataPtrFunctionBody {
                 var_name: FullName::local(VAR_NAME),
             }),
             ret_type,
@@ -5655,24 +5756,9 @@ pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     io_act_name: FullName,
 }
 
-impl InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
-    pub fn name(&self) -> String {
-        format!(
-            "{}.mutate_boxed({})",
-            self.val_name.to_string(),
-            self.io_act_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.val_name, &mut self.io_act_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
         let val = gc.get_scoped_obj(&self.val_name);
@@ -5704,11 +5790,23 @@ impl InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 
         res
     }
+
+    fn name(&self) -> String {
+        format!(
+            "{}.mutate_boxed({})",
+            self.val_name.to_string(),
+            self.io_act_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.val_name, &mut self.io_act_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {}
-
-impl UniqueCheck for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {}
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
 pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -5733,12 +5831,10 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(
             vec![var_local(VAL_NAME)],
             expr_llvm(
-                LLVMGenerator::UnsafeMutateBoxedInternalBody(
-                    InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
-                        val_name: FullName::local(VAL_NAME),
-                        io_act_name: FullName::local(IO_ACT_NAME),
-                    },
-                ),
+                Box::new(InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
+                    val_name: FullName::local(VAL_NAME),
+                    io_act_name: FullName::local(IO_ACT_NAME),
+                }),
                 ab_ty,
                 None,
             ),
@@ -5756,29 +5852,9 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     iostate_name: FullName,
 }
 
-impl InlineLLVMUnsafeMutateBoxedIOSInternalBody {
-    pub fn name(&self) -> String {
-        format!(
-            "_mutate_boxed_ios_internal({}, {}, {})",
-            self.io_act_name.to_string(),
-            self.val_name.to_string(),
-            self.iostate_name.to_string(),
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![
-            &mut self.val_name,
-            &mut self.io_act_name,
-            &mut self.iostate_name,
-        ]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let io_act = gc.get_scoped_obj(&self.io_act_name);
         let val = gc.get_scoped_obj(&self.val_name);
@@ -5820,11 +5896,28 @@ impl InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 
         res
     }
+
+    fn name(&self) -> String {
+        format!(
+            "_mutate_boxed_ios_internal({}, {}, {})",
+            self.io_act_name.to_string(),
+            self.val_name.to_string(),
+            self.iostate_name.to_string(),
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![
+            &mut self.val_name,
+            &mut self.io_act_name,
+            &mut self.iostate_name,
+        ]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMUnsafeMutateBoxedIOSInternalBody {}
-
-impl UniqueCheck for InlineLLVMUnsafeMutateBoxedIOSInternalBody {}
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> IOState -> (IOState, (a, b))
 pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -5854,13 +5947,11 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
             var_local(IOSTATE_NAME),
         ],
         expr_llvm(
-            LLVMGenerator::UnsafeMutateBoxedIOSInternalBody(
-                InlineLLVMUnsafeMutateBoxedIOSInternalBody {
-                    io_act_name: FullName::local(IO_ACT_NAME),
-                    val_name: FullName::local(VAL_NAME),
-                    iostate_name: FullName::local(IOSTATE_NAME),
-                },
-            ),
+            Box::new(InlineLLVMUnsafeMutateBoxedIOSInternalBody {
+                io_act_name: FullName::local(IO_ACT_NAME),
+                val_name: FullName::local(VAL_NAME),
+                iostate_name: FullName::local(IOSTATE_NAME),
+            }),
             ret_ty,
             None,
         ),
@@ -5871,37 +5962,30 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMIOStateUnsafeCreate {}
 
-impl InlineLLVMIOStateUnsafeCreate {
-    pub fn name(&self) -> String {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
+        create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
+    }
+
+    fn name(&self) -> String {
         "IOState::_unsafe_create".to_string()
     }
 
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![]
     }
 
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
-        create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
-
-impl BorrowsOperand for InlineLLVMIOStateUnsafeCreate {}
-
-impl UniqueCheck for InlineLLVMIOStateUnsafeCreate {}
 
 // IOState::_unsafe_create : IOState
 pub fn make_iostate_unsafe_create() -> (Arc<ExprNode>, Arc<Scheme>) {
     let ios_ty = make_iostate_ty();
     let scm = Scheme::generalize(&[], vec![], vec![], ios_ty.clone());
-    let expr = expr_llvm(
-        LLVMGenerator::IOStateUnsafeCreate(InlineLLVMIOStateUnsafeCreate {}),
-        ios_ty,
-        None,
-    );
+    let expr = expr_llvm(Box::new(InlineLLVMIOStateUnsafeCreate {}), ios_ty, None);
     (expr, scm)
 }
 
@@ -5912,20 +5996,9 @@ pub struct InlineLLVMDestructorMake {
     ios: FullName,
 }
 
-impl InlineLLVMDestructorMake {
-    pub fn name(&self) -> String {
-        "Std::FFI::Destructor::_make".to_string()
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.value, &mut self.dtor, &mut self.ios]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMDestructorMake {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let value = gc.get_scoped_obj(&self.value); // a
         let dtor = gc.get_scoped_obj(&self.dtor); // a -> IOState -> (IOState, a)
@@ -5962,11 +6035,28 @@ impl InlineLLVMDestructorMake {
 
         ret_obj
     }
+
+    fn name(&self) -> String {
+        "Std::FFI::Destructor::_make".to_string()
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.value, &mut self.dtor, &mut self.ios]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMDestructorMake {}
-
-impl UniqueCheck for InlineLLVMDestructorMake {}
 
 // Std::FFI::Destructor::_make : a -> (a -> IOState -> (IOState, a)) -> IOState -> (IOState, Destructor a);
 pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -5998,7 +6088,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
             var_local(IOS_NAME),
         ],
         expr_llvm(
-            LLVMGenerator::DestructorMake(InlineLLVMDestructorMake {
+            Box::new(InlineLLVMDestructorMake {
                 value: FullName::local(VAR_NAME),
                 dtor: FullName::local(DTOR_NAME),
                 ios: FullName::local(IOS_NAME),
@@ -6055,20 +6145,9 @@ pub struct InlineLLVMMarkThreadedFunctionBody {
     var_name: FullName,
 }
 
-impl InlineLLVMMarkThreadedFunctionBody {
-    pub fn name(&self) -> String {
-        format!("{}.mark_threaded", self.var_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ret_ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Check if the `threaded` compiler flag is true.
         if !gc.config.threaded {
             panic_with_msg(
@@ -6080,11 +6159,19 @@ impl InlineLLVMMarkThreadedFunctionBody {
         gc.mark_threaded(obj.clone());
         obj
     }
+
+    fn name(&self) -> String {
+        format!("{}.mark_threaded", self.var_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.var_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMMarkThreadedFunctionBody {}
-
-impl UniqueCheck for InlineLLVMMarkThreadedFunctionBody {}
 
 pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const TYPE_NAME: &str = "a";
@@ -6099,7 +6186,7 @@ pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_llvm(
-            LLVMGenerator::MarkThreadedFunctionBody(InlineLLVMMarkThreadedFunctionBody {
+            Box::new(InlineLLVMMarkThreadedFunctionBody {
                 var_name: FullName::local(VAR_NAME),
             }),
             obj_type,
@@ -6114,7 +6201,7 @@ pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub fn infinity_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let ty = make_floating_ty(type_name).unwrap();
     let expr = expr_llvm(
-        LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: f64::INFINITY }),
+        Box::new(InlineLLVMFloatLit { val: f64::INFINITY }),
         ty.clone(),
         None,
     );
@@ -6129,7 +6216,7 @@ pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let ty = make_floating_ty(type_name).unwrap();
     let expr = expr_llvm(
-        LLVMGenerator::FloatLit(InlineLLVMFloatLit { val: nan_val }),
+        Box::new(InlineLLVMFloatLit { val: nan_val }),
         ty.clone(),
         None,
     );
@@ -6144,7 +6231,7 @@ pub fn unary_opeartor_instance(
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
     result_ty: Arc<TypeNode>,
-    generator: LLVMGenerator,
+    generator: Box<dyn LLVMGen>,
 ) -> TraitImpl {
     TraitImpl {
         qual_pred: QualPred {
@@ -6178,7 +6265,7 @@ pub fn binary_opeartor_instance(
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
     result_ty: Arc<TypeNode>,
-    generator: LLVMGenerator,
+    generator: Box<dyn LLVMGen>,
 ) -> TraitImpl {
     TraitImpl {
         qual_pred: QualPred {
@@ -6223,24 +6310,9 @@ pub struct InlineLLVMIntEqBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntEqBody {
-    pub fn name(&self) -> String {
-        format!(
-            "int_eq({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntEqBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
@@ -6268,11 +6340,23 @@ impl InlineLLVMIntEqBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "int_eq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntEqBody {}
-
-impl UniqueCheck for InlineLLVMIntEqBody {}
 
 pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6280,7 +6364,7 @@ pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::IntEqBody(InlineLLVMIntEqBody {
+        Box::new(InlineLLVMIntEqBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6293,24 +6377,9 @@ pub struct InlineLLVMPtrEqBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMPtrEqBody {
-    pub fn name(&self) -> String {
-        format!(
-            "ptr_eq({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMPtrEqBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_pointer_value();
@@ -6351,11 +6420,23 @@ impl InlineLLVMPtrEqBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "ptr_eq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMPtrEqBody {}
-
-impl UniqueCheck for InlineLLVMPtrEqBody {}
 
 pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6363,7 +6444,7 @@ pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitImpl {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::PtrEqBody(InlineLLVMPtrEqBody {
+        Box::new(InlineLLVMPtrEqBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6376,24 +6457,9 @@ pub struct InlineLLVMFloatEqBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMFloatEqBody {
-    pub fn name(&self) -> String {
-        format!(
-            "float_eq({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatEqBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_float_value();
@@ -6421,11 +6487,23 @@ impl InlineLLVMFloatEqBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "float_eq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFloatEqBody {}
-
-impl UniqueCheck for InlineLLVMFloatEqBody {}
 
 pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6433,7 +6511,7 @@ pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::FloatEqBody(InlineLLVMFloatEqBody {
+        Box::new(InlineLLVMFloatEqBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6455,24 +6533,9 @@ pub struct InlineLLVMIntLessThanBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntLessThanBody {
-    pub fn name(&self) -> String {
-        format!(
-            "int_lt({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntLessThanBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs_obj.extract_field(gc, 0).into_int_value();
@@ -6512,11 +6575,23 @@ impl InlineLLVMIntLessThanBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "int_lt({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntLessThanBody {}
-
-impl UniqueCheck for InlineLLVMIntLessThanBody {}
 
 pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6524,7 +6599,7 @@ pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::IntLessThanBody(InlineLLVMIntLessThanBody {
+        Box::new(InlineLLVMIntLessThanBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6537,24 +6612,9 @@ pub struct InlineLLVMFloatLessThanBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMFloatLessThanBody {
-    pub fn name(&self) -> String {
-        format!(
-            "float_lt({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatLessThanBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
@@ -6587,11 +6647,23 @@ impl InlineLLVMFloatLessThanBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "float_lt({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFloatLessThanBody {}
-
-impl UniqueCheck for InlineLLVMFloatLessThanBody {}
 
 pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6599,7 +6671,7 @@ pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::FloatLessThanBody(InlineLLVMFloatLessThanBody {
+        Box::new(InlineLLVMFloatLessThanBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6621,24 +6693,9 @@ pub struct InlineLLVMIntLessThanOrEqBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntLessThanOrEqBody {
-    pub fn name(&self) -> String {
-        format!(
-            "int_leq({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let is_singed = lhs.ty.toplevel_tycon().unwrap().is_singned_intger();
@@ -6676,11 +6733,23 @@ impl InlineLLVMIntLessThanOrEqBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "int_leq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntLessThanOrEqBody {}
-
-impl UniqueCheck for InlineLLVMIntLessThanOrEqBody {}
 
 pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6688,7 +6757,7 @@ pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl 
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::IntLessThanOrEqBody(InlineLLVMIntLessThanOrEqBody {
+        Box::new(InlineLLVMIntLessThanOrEqBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6701,24 +6770,9 @@ pub struct InlineLLVMFloatLessThanOrEqBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMFloatLessThanOrEqBody {
-    pub fn name(&self) -> String {
-        format!(
-            "float_leq({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatLessThanOrEqBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
@@ -6751,11 +6805,23 @@ impl InlineLLVMFloatLessThanOrEqBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "float_leq({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFloatLessThanOrEqBody {}
-
-impl UniqueCheck for InlineLLVMFloatLessThanOrEqBody {}
 
 pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6763,7 +6829,7 @@ pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitImp
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
         ty,
         make_bool_ty(),
-        LLVMGenerator::FloatLessThanOrEqBody(InlineLLVMFloatLessThanOrEqBody {
+        Box::new(InlineLLVMFloatLessThanOrEqBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6785,24 +6851,9 @@ pub struct InlineLLVMIntAddBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntAddBody {
-    pub fn name(&self) -> String {
-        format!(
-            "int_add({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntAddBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -6820,11 +6871,23 @@ impl InlineLLVMIntAddBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "int_add({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntAddBody {}
-
-impl UniqueCheck for InlineLLVMIntAddBody {}
 
 pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6832,7 +6895,7 @@ pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &ADD_TRAIT_ADD_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntAddBody(InlineLLVMIntAddBody {
+        Box::new(InlineLLVMIntAddBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6845,24 +6908,9 @@ pub struct InlineLLVMFloatAddBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMFloatAddBody {
-    pub fn name(&self) -> String {
-        format!(
-            "float_add({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatAddBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
@@ -6880,11 +6928,23 @@ impl InlineLLVMFloatAddBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "float_add({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFloatAddBody {}
-
-impl UniqueCheck for InlineLLVMFloatAddBody {}
 
 pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6892,7 +6952,7 @@ pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &ADD_TRAIT_ADD_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatAddBody(InlineLLVMFloatAddBody {
+        Box::new(InlineLLVMFloatAddBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6914,24 +6974,9 @@ pub struct InlineLLVMIntSubBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntSubBody {
-    pub fn name(&self) -> String {
-        format!(
-            "int_sub({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntSubBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -6949,11 +6994,23 @@ impl InlineLLVMIntSubBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "int_sub({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntSubBody {}
-
-impl UniqueCheck for InlineLLVMIntSubBody {}
 
 pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -6961,7 +7018,7 @@ pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntSubBody(InlineLLVMIntSubBody {
+        Box::new(InlineLLVMIntSubBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -6974,24 +7031,9 @@ pub struct InlineLLVMFloatSubBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMFloatSubBody {
-    pub fn name(&self) -> String {
-        format!(
-            "float_sub({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatSubBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
@@ -7009,11 +7051,23 @@ impl InlineLLVMFloatSubBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "float_sub({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFloatSubBody {}
-
-impl UniqueCheck for InlineLLVMFloatSubBody {}
 
 pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -7021,7 +7075,7 @@ pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatSubBody(InlineLLVMFloatSubBody {
+        Box::new(InlineLLVMFloatSubBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -7043,24 +7097,9 @@ pub struct InlineLLVMIntMulBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntMulBody {
-    pub fn name(&self) -> String {
-        format!(
-            "int_mul({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntMulBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -7078,11 +7117,23 @@ impl InlineLLVMIntMulBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "int_mul({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntMulBody {}
-
-impl UniqueCheck for InlineLLVMIntMulBody {}
 
 pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -7090,7 +7141,7 @@ pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntMulBody(InlineLLVMIntMulBody {
+        Box::new(InlineLLVMIntMulBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -7103,24 +7154,9 @@ pub struct InlineLLVMFloatMulBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMFloatMulBody {
-    pub fn name(&self) -> String {
-        format!(
-            "float_mul({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatMulBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
@@ -7138,11 +7174,23 @@ impl InlineLLVMFloatMulBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "float_mul({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFloatMulBody {}
-
-impl UniqueCheck for InlineLLVMFloatMulBody {}
 
 pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -7150,7 +7198,7 @@ pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatMulBody(InlineLLVMFloatMulBody {
+        Box::new(InlineLLVMFloatMulBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -7172,24 +7220,9 @@ pub struct InlineLLVMIntDivBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntDivBody {
-    pub fn name(&self) -> String {
-        format!(
-            "int_div({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntDivBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -7215,11 +7248,23 @@ impl InlineLLVMIntDivBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "int_div({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntDivBody {}
-
-impl UniqueCheck for InlineLLVMIntDivBody {}
 
 pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -7227,7 +7272,7 @@ pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntDivBody(InlineLLVMIntDivBody {
+        Box::new(InlineLLVMIntDivBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -7240,24 +7285,9 @@ pub struct InlineLLVMFloatDivBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMFloatDivBody {
-    pub fn name(&self) -> String {
-        format!(
-            "float_div({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatDivBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_float_value();
@@ -7275,11 +7305,23 @@ impl InlineLLVMFloatDivBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "float_div({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFloatDivBody {}
-
-impl UniqueCheck for InlineLLVMFloatDivBody {}
 
 pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -7287,7 +7329,7 @@ pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatDivBody(InlineLLVMFloatDivBody {
+        Box::new(InlineLLVMFloatDivBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -7309,24 +7351,9 @@ pub struct InlineLLVMIntRemBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntRemBody {
-    pub fn name(&self) -> String {
-        format!(
-            "int_rem({}, {})",
-            self.lhs_name.to_string(),
-            self.rhs_name.to_string()
-        )
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.lhs_name, &mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntRemBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let lhs_val = lhs.extract_field(gc, 0).into_int_value();
@@ -7352,11 +7379,23 @@ impl InlineLLVMIntRemBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!(
+            "int_rem({}, {})",
+            self.lhs_name.to_string(),
+            self.rhs_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.lhs_name, &mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntRemBody {}
-
-impl UniqueCheck for InlineLLVMIntRemBody {}
 
 pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     binary_opeartor_instance(
@@ -7364,7 +7403,7 @@ pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntRemBody(InlineLLVMIntRemBody {
+        Box::new(InlineLLVMIntRemBody {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -7385,20 +7424,9 @@ pub struct InlineLLVMIntNegBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMIntNegBody {
-    pub fn name(&self) -> String {
-        format!("int_neg({})", self.rhs_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMIntNegBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
         let value = gc
@@ -7414,11 +7442,19 @@ impl InlineLLVMIntNegBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!("int_neg({})", self.rhs_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMIntNegBody {}
-
-impl UniqueCheck for InlineLLVMIntNegBody {}
 
 pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     unary_opeartor_instance(
@@ -7426,7 +7462,7 @@ pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::IntNegBody(InlineLLVMIntNegBody {
+        Box::new(InlineLLVMIntNegBody {
             rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
         }),
     )
@@ -7437,20 +7473,9 @@ pub struct InlineLLVMFloatNegBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMFloatNegBody {
-    pub fn name(&self) -> String {
-        format!("float_neg({})", self.rhs_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMFloatNegBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
 
@@ -7467,11 +7492,19 @@ impl InlineLLVMFloatNegBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!("float_neg({})", self.rhs_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMFloatNegBody {}
-
-impl UniqueCheck for InlineLLVMFloatNegBody {}
 
 pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
     unary_opeartor_instance(
@@ -7479,7 +7512,7 @@ pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         ty.clone(),
         ty,
-        LLVMGenerator::FloatNegBody(InlineLLVMFloatNegBody {
+        Box::new(InlineLLVMFloatNegBody {
             rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
         }),
     )
@@ -7499,20 +7532,9 @@ pub struct InlineLLVMBoolNegBody {
     rhs_name: FullName,
 }
 
-impl InlineLLVMBoolNegBody {
-    pub fn name(&self) -> String {
-        format!("bool_neg({})", self.rhs_name.to_string())
-    }
-
-    pub fn free_vars(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.rhs_name]
-    }
-
-    pub fn generate<'c, 'm, 'b>(
-        &self,
-        gc: &mut Generator<'c, 'm>,
-        _ty: &Arc<TypeNode>,
-    ) -> Object<'c> {
+#[typetag::serde]
+impl LLVMGen for InlineLLVMBoolNegBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
@@ -7537,11 +7559,19 @@ impl InlineLLVMBoolNegBody {
         );
         obj.insert_field(gc, 0, value)
     }
+
+    fn name(&self) -> String {
+        format!("bool_neg({})", self.rhs_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.rhs_name]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
-
-impl BorrowsOperand for InlineLLVMBoolNegBody {}
-
-impl UniqueCheck for InlineLLVMBoolNegBody {}
 
 pub fn not_trait_instance_bool() -> TraitImpl {
     unary_opeartor_instance(
@@ -7549,7 +7579,7 @@ pub fn not_trait_instance_bool() -> TraitImpl {
         &NOT_TRAIT_OP_NAME.to_string(),
         make_bool_ty(),
         make_bool_ty(),
-        LLVMGenerator::BoolNegBody(InlineLLVMBoolNegBody {
+        Box::new(InlineLLVMBoolNegBody {
             rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
         }),
     )

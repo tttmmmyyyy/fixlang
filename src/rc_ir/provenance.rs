@@ -23,7 +23,6 @@
 //! shared object-identity (`root`) analysis, which the borrow-inference pass introduces; the demotion
 //! becomes root-based then.
 
-use crate::ast::inline_llvm::LLVMGenerator;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
@@ -61,7 +60,7 @@ pub enum Provenance {
 
 impl Provenance {
     /// The singleton leaf-source `{src}`.
-    fn leaf(src: BaseSource) -> LeafSource {
+    pub fn leaf(src: BaseSource) -> LeafSource {
         let mut s = Set::default();
         s.insert(src);
         s
@@ -70,7 +69,7 @@ impl Provenance {
     /// Build the provenance shape of a value of type `ty`, calling `leaf(path)` for the leaf source
     /// of each boxed leaf. Fully-unboxed values become `Unboxed` (no boxed leaf to track); a closure
     /// becomes `{funptr, capture}` with the capture a single boxed leaf.
-    fn build_shape(
+    pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
         leaf: &dyn Fn(&Path) -> LeafSource,
@@ -102,7 +101,7 @@ impl Provenance {
     }
 
     /// The provenance whose every boxed leaf is `src`.
-    fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: BaseSource) -> Provenance {
+    pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: BaseSource) -> Provenance {
         Provenance::build_shape(
             ty,
             type_env,
@@ -113,7 +112,7 @@ impl Provenance {
 
     /// The provenance whose every boxed leaf at path `π` is `Arg(arg_index, π)` — the whole value of
     /// input `arg_index` carried through unchanged.
-    fn arg_passthrough(ty: &Arc<TypeNode>, type_env: &TypeEnv, arg_index: usize) -> Provenance {
+    pub fn arg_passthrough(ty: &Arc<TypeNode>, type_env: &TypeEnv, arg_index: usize) -> Provenance {
         Provenance::build_shape(
             ty,
             type_env,
@@ -265,148 +264,9 @@ fn leaf_source_to_string(ls: &LeafSource) -> String {
     parts.join(" | ")
 }
 
-/// The declared result provenance of a primitive operation, before composition with the operands.
-/// Leaves may be symbolic `Arg(i, σ)`, resolved against the operands by `Provenance::compose`.
-///
-/// The safe default is `Dyn` for every boxed leaf: `Dyn` is conservative (it only ever keeps more
-/// clones and uniqueness checks), whereas a wrong `Fresh` would let a later pass drop a check on a
-/// shared value. So `Fresh` is declared only for the unambiguous allocators and force-unique array
-/// ops, `Arg` only for construction and projection through unboxed aggregates; everything else —
-/// including the subtler in-place and boxed-container ops — stays `Dyn`.
-pub fn result_prov(
-    gen: &LLVMGenerator,
-    result_ty: &Arc<TypeNode>,
-    arg_tys: &[Arc<TypeNode>],
-    type_env: &TypeEnv,
-) -> Provenance {
-    use LLVMGenerator::*;
-    match gen {
-        // Allocators and force-unique array ops: the result is a newly owned array (`set`/`swap`
-        // return the same object when unique and a clone when shared, but either way uniquely owned).
-        // A `plug` likewise completes a `mod` into a uniquely owned array (its punch force-uniques),
-        // which lets a chain of `mod`s drop every check after the first.
-        ArrayUnsafeFill(_)
-        | ArrayUnsafeEmpty(_)
-        | StringBuf(_)
-        | ArrayLitBody(_)
-        | ArraySetBody(_)
-        | ArraySwapBody(_)
-        | PunchedArrayPlugBody(_)
-        | ArrayForceUniqueBody(_)
-        | ArrayPopBackNonemptyBody(_)
-        | DestructorMake(_) => Provenance::uniform(result_ty, type_env, BaseSource::Fresh),
-
-        // Struct construction: a boxed struct is a fresh allocation; an unboxed struct is its fields
-        // laid out, so each field carries the corresponding operand's provenance.
-        MakeStructBody(_) => {
-            if result_ty.is_box(type_env) {
-                Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-            } else {
-                let fields = result_ty.field_types(type_env);
-                Provenance::UnboxedAgg(
-                    fields
-                        .iter()
-                        .enumerate()
-                        .map(|(i, fty)| Provenance::arg_passthrough(fty, type_env, i))
-                        .collect(),
-                )
-            }
-        }
-
-        // A boxed struct `set`, or the `plug` that completes a `mod`, leaves the struct uniquely
-        // owned — a `set` clones when shared and writes in place when unique, and a `mod` force-uniques
-        // in its punch, so either way the result's uniqueness does not depend on the input, like an
-        // array set. This is what lets a chain of field updates drop every check after the first. The
-        // unboxed cases have no uniqueness check to elide, so their conservative default suffices.
-        StructSetBody(_) | StructPlugInBody(_) if result_ty.is_box(type_env) => {
-            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-        }
-
-        // `is_unique` returns `(Bool, a)` with the argument unchanged as the second component, yet its
-        // result stays the conservative `Dyn` so the borrow pass treats the argument as consumed. That
-        // consuming treatment is what makes `is_unique` detect sharing: a later use of the argument
-        // forces a retain, so the container reads as shared at the check, and the fold (which keys on
-        // the operand through `op_containers`) correctly stays off. Declaring the argument a
-        // passthrough here would suppress that retain and report a shared container as unique.
-        IsUniqueFunctionBody(_) => Provenance::uniform(result_ty, type_env, BaseSource::Dyn),
-
-        // Union variant construction: a boxed union is a fresh allocation; an unboxed union carries
-        // the operand's provenance in the constructed variant's slot and bottom (an empty set) in the
-        // others.
-        MakeUnionBody(b) => {
-            if result_ty.is_box(type_env) {
-                Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-            } else {
-                let variants = result_ty.field_types(type_env);
-                let active = b.variant_index();
-                Provenance::UnboxedAgg(
-                    variants
-                        .iter()
-                        .enumerate()
-                        .map(|(k, vty)| {
-                            if k == active {
-                                Provenance::arg_passthrough(vty, type_env, 0)
-                            } else {
-                                Provenance::uniform_bottom(vty, type_env)
-                            }
-                        })
-                        .collect(),
-                )
-            }
-        }
-
-        // Struct field read: from a boxed container the field is `Dyn` (contents not tracked); from
-        // an unboxed container it is a pure projection carrying the container's leaf at that field.
-        StructGetBody(b) => {
-            let container_boxed = arg_tys.first().map_or(true, |t| t.is_box(type_env));
-            if container_boxed {
-                Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
-            } else {
-                let field = b.field_index();
-                Provenance::build_shape(
-                    result_ty,
-                    type_env,
-                    &|sigma: &Path| {
-                        let mut p = vec![field];
-                        p.extend_from_slice(sigma);
-                        Provenance::leaf(BaseSource::Arg(0, p))
-                    },
-                    &mut vec![],
-                )
-            }
-        }
-
-        // Union payload read: from a boxed union the payload is `Dyn`; from an unboxed union it is a
-        // pure projection carrying the scrutinee's leaf at that variant.
-        UnionAsBody(b) => {
-            let union_boxed = arg_tys.first().map_or(true, |t| t.is_box(type_env));
-            if union_boxed {
-                Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
-            } else {
-                let variant = b.variant_index();
-                Provenance::build_shape(
-                    result_ty,
-                    type_env,
-                    &|sigma: &Path| {
-                        let mut p = vec![variant];
-                        p.extend_from_slice(sigma);
-                        Provenance::leaf(BaseSource::Arg(0, p))
-                    },
-                    &mut vec![],
-                )
-            }
-        }
-
-        // Every other operation: conservatively `Dyn` on boxed leaves (`Unboxed` where there are
-        // none). This covers arithmetic, comparisons, casts, boxed-container getters, `mark_*`, FFI,
-        // and the in-place ops whose passthrough precision is deferred.
-        _ => Provenance::uniform(result_ty, type_env, BaseSource::Dyn),
-    }
-}
-
 impl Provenance {
     /// The provenance whose every boxed leaf is bottom (the empty set) — an absent union variant.
-    fn uniform_bottom(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
+    pub fn uniform_bottom(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
         Provenance::build_shape(ty, type_env, &|_| Set::default(), &mut vec![])
     }
 }
@@ -631,7 +491,7 @@ impl<'a> Interp<'a> {
                         .insert(result.name.clone(), arg_provs[container_idx].clone());
                 }
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-                let decl = result_prov(gen, &result.ty, &arg_tys, self.type_env);
+                let decl = gen.result_prov(&result.ty, &arg_tys, self.type_env);
                 decl.compose(&arg_provs)
             }
             RcRhs::Closure(fref, _) => {

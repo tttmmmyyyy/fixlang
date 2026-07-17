@@ -1,6 +1,6 @@
 //! The RC IR data types.
 
-use crate::ast::inline_llvm::LLVMGenerator;
+use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
 use crate::misc::{Map, Set};
@@ -143,7 +143,7 @@ pub enum RcRhs {
     Closure(FuncRef, Vec<RcVar>),
     /// A built-in operation (arithmetic, projection getters, set/mod, construction, fill, literals,
     /// FFI, and so on), reusing the existing inline-LLVM generators.
-    Llvm(LLVMGenerator, Vec<RcVar>),
+    Llvm(Box<dyn LLVMGen>, Vec<RcVar>),
     /// The sole branching construct (booleans included). It always appears as the right-hand side
     /// of a `Let`.
     Match(RcVar, Vec<MatchArm>),

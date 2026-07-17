@@ -8,7 +8,7 @@
 //! retain baked into the boxed capture getter, per the retain-getter model.
 
 use crate::ast::expr::{Expr, ExprNode, Var};
-use crate::ast::inline_llvm::{InlineLLVM, LLVMGenerator};
+use crate::ast::inline_llvm::InlineLLVM;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::program::{Symbol, TypeEnv};
@@ -249,7 +249,7 @@ impl<'a> Lowerer<'a> {
             self.bind(&FullName::local(CAP_NAME), cap_var.clone());
             let cap_tys: Vec<Arc<TypeNode>> = captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
-                let gen = LLVMGenerator::CaptureProjectBody(InlineLLVMCaptureProjectBody {
+                let gen = Box::new(InlineLLVMCaptureProjectBody {
                     cap_name: cap_var.name.clone(),
                     cap_idx: i,
                     cap_tys: cap_tys.clone(),
@@ -586,7 +586,7 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|(_, _, e)| self.lower_to_var(e, bindings))
             .collect();
-        let gen = LLVMGenerator::MakeStructBody(InlineLLVMMakeStructBody {
+        let gen = Box::new(InlineLLVMMakeStructBody {
             field_names: field_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("struct", ty, source.clone());
@@ -609,7 +609,7 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|e| self.lower_to_var(e, bindings))
             .collect();
-        let gen = LLVMGenerator::ArrayLitBody(InlineLLVMArrayLitBody {
+        let gen = Box::new(InlineLLVMArrayLitBody {
             elem_names: elem_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("array", ty, source.clone());
@@ -639,7 +639,7 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|arg| self.lower_to_var(arg, bindings))
             .collect();
-        let gen = LLVMGenerator::FFICallBody(InlineLLVMFFICallBody {
+        let gen = Box::new(InlineLLVMFFICallBody {
             fun_name: fun_name.clone(),
             ret_tycon: ret_tycon.clone(),
             param_tycons: param_tycons.to_vec(),
