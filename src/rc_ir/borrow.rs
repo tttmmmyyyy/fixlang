@@ -42,8 +42,8 @@ use crate::fixstd::builtin::InlineLLVMMakeUnionBody;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FuncRef, Leaf, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc,
-    RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
+    FuncRef, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcGlobalInit,
+    RcProgram, RcRhs, RcState, RcUnit, RcVar,
 };
 use crate::rc_ir::provenance::{BaseSource, Provenance};
 use crate::rc_ir::rename::{collect_binders, fresh_rename, rename_expr, rename_var};
@@ -79,7 +79,7 @@ struct FuncFacts {
 /// The result of borrow inference: which parameter leaves are `Own` (all others are `Borrow`), keyed
 /// by the parameter variable's name and the leaf path.
 struct Ownerships {
-    own: Set<Leaf>,
+    own: Set<RcUnit>,
 }
 
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
@@ -92,7 +92,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
         .map(|f| (f.name.clone(), FuncFacts::of(f)))
         .collect();
 
-    let mut own: Set<Leaf> = Set::default();
+    let mut own: Set<RcUnit> = Set::default();
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
@@ -194,13 +194,13 @@ fn collect_defs(node: &RcExprNode, facts: &mut FuncFacts) {
 /// The object a leaf originates from: follow alias edges (move-binds, pure projections, unboxed-union
 /// payloads) back to the producing variable and path. The returned variable is a parameter when the
 /// leaf ultimately comes from an input.
-fn root(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Leaf {
+fn root(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> RcUnit {
     stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         root_inner(facts, type_env, var, path)
     })
 }
 
-fn root_inner(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Leaf {
+fn root_inner(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> RcUnit {
     let here = || (var.clone(), path.to_vec());
     match facts.defs.get(var) {
         None | Some(Def::Param) | Some(Def::Producer) => here(),
@@ -271,9 +271,9 @@ fn collect_consumes(
     node: &RcExprNode,
     facts: &FuncFacts,
     prog: &RcProgram,
-    own: &Set<Leaf>,
+    own: &Set<RcUnit>,
     type_env: &TypeEnv,
-    out: &mut Vec<Leaf>,
+    out: &mut Vec<RcUnit>,
 ) {
     let owns = |p: &RcVar, pi: &Path| own.contains(&(p.name.clone(), pi.clone()));
     collect_consumes_go(node, facts, prog, type_env, &owns, out);
@@ -285,7 +285,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &Path) -> bool>(
     prog: &RcProgram,
     type_env: &TypeEnv,
     owns: &F,
-    out: &mut Vec<Leaf>,
+    out: &mut Vec<RcUnit>,
 ) {
     match node.expr.as_ref() {
         RcExpr::Ret(x) => push_leaves(&x.name, &x.ty, type_env, out),
@@ -318,7 +318,7 @@ fn rhs_consumes<F: Fn(&RcVar, &Path) -> bool>(
     prog: &RcProgram,
     type_env: &TypeEnv,
     owns: &F,
-    out: &mut Vec<Leaf>,
+    out: &mut Vec<RcUnit>,
 ) {
     match rhs {
         RcRhs::Var(_) | RcRhs::Match(..) => {}
@@ -418,7 +418,7 @@ fn collect_arg_leaves(prov: &Provenance, out: &mut Set<(usize, Path)>) {
 }
 
 /// Push every boxed leaf of a value onto `out`.
-fn push_leaves(var: &FullName, ty: &Arc<TypeNode>, type_env: &TypeEnv, out: &mut Vec<Leaf>) {
+fn push_leaves(var: &FullName, ty: &Arc<TypeNode>, type_env: &TypeEnv, out: &mut Vec<RcUnit>) {
     for p in boxed_leaves(ty, type_env) {
         out.push((var.clone(), p));
     }
@@ -541,7 +541,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
     // The owned parameter units of every output version, keyed by the version's own parameter names:
     // an original (`f_own`) owns all of them, a borrow clone (`f_borrow`) owns the inferred subset.
-    let mut own_out: Set<Leaf> = Set::default();
+    let mut own_out: Set<RcUnit> = Set::default();
     let mut counter: u64 = 0;
     let mut clones: Vec<(FuncRef, RcFunc, Map<FullName, FullName>)> = vec![];
     for func in prog.funcs.values() {
@@ -650,7 +650,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
-fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<Leaf> {
+fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<RcUnit> {
     let mut owned = Set::default();
     for func in prog.funcs.values() {
         for p in func.params.iter().chain(func.cap.iter()) {
@@ -715,13 +715,13 @@ fn param_name_tys(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
 fn shape_from_own(
     var: &FullName,
     ty: &Arc<TypeNode>,
-    own_out: &Set<Leaf>,
+    own_out: &Set<RcUnit>,
     type_env: &TypeEnv,
 ) -> OwnershipShape {
     fn go(
         var: &FullName,
         ty: &Arc<TypeNode>,
-        own_out: &Set<Leaf>,
+        own_out: &Set<RcUnit>,
         type_env: &TypeEnv,
         path: &mut Path,
     ) -> OwnershipShape {
@@ -848,7 +848,7 @@ fn clone_func(
 struct RewriteCtx<'a> {
     type_env: &'a TypeEnv,
     is_borrow: bool,
-    own_out: &'a Set<Leaf>,
+    own_out: &'a Set<RcUnit>,
     borrow_versions: &'a Map<FuncRef, FuncRef>,
     callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
     tail: Set<FullName>,
@@ -859,7 +859,7 @@ impl<'a> RewriteCtx<'a> {
     fn new(
         func: &RcFunc,
         is_borrow: bool,
-        own_out: &'a Set<Leaf>,
+        own_out: &'a Set<RcUnit>,
         borrow_versions: &'a Map<FuncRef, FuncRef>,
         callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
         type_env: &'a TypeEnv,
@@ -1229,7 +1229,7 @@ fn split_rc(
 /// The pending retains at a program point: for each object (a reference-counting unit, keyed by its
 /// `root`), the stack of retains that have bumped it and not yet been un-bumped. A release un-bumps
 /// the most recent — the innermost bracket, which keeps the un-bump non-zeroing.
-type Pend = Map<Leaf, Vec<NodeId>>;
+type Pend = Map<RcUnit, Vec<NodeId>>;
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is
 /// borrowed. The analysis records which nodes to drop by identity, and the deletion pass, walking the
@@ -1295,7 +1295,7 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 struct CancelAnalysis<'a> {
     facts: &'a FuncFacts,
     prog: &'a RcProgram,
-    own_out: &'a Set<Leaf>,
+    own_out: &'a Set<RcUnit>,
     type_env: &'a TypeEnv,
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
     needed: Set<NodeId>,
@@ -1310,7 +1310,7 @@ impl<'a> CancelAnalysis<'a> {
     /// the unit. A leaf below an unboxed union keys to the union root, so a whole-union retain and a
     /// payload consume land in the same bucket (without which a payload consume could not keep the
     /// union retain needed, and a later union release would wrongly cancel it).
-    fn key(&self, var: &FullName, path: &[usize]) -> Leaf {
+    fn key(&self, var: &FullName, path: &[usize]) -> RcUnit {
         let (r, rp) = root(self.facts, self.type_env, var, path);
         match self.facts.types.get(&r) {
             Some(ty) => (r, clamp_unit(ty, &rp, self.type_env)),

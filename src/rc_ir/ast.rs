@@ -68,11 +68,11 @@ pub struct RcFunc {
     /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
     /// `cancel` and the RC IR dump read the owned complement (via `all_owned_units`) for each call's
     /// consume sites and each parameter's ownership shape.
-    pub borrowed_units: Set<Leaf>,
+    pub borrowed_units: Set<RcUnit>,
 }
 
 /// A reference-counting unit of a function's parameter or capture: its `(variable-name, path)`.
-pub type Leaf = (FullName, Path);
+pub type RcUnit = (FullName, Path);
 
 /// An RC IR expression together with its source span. An expression's value type is that of the
 /// variable its final `Ret` returns, so it is read from that variable rather than stored here.
