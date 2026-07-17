@@ -2124,9 +2124,9 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
 
     fn name(&self) -> String {
         format!(
-            "{}.Array::unsafe_set_size({})",
-            self.arr_name.to_string(),
-            self.len_name.to_string()
+            "Array::unsafe_set_size({}, {})",
+            self.len_name.to_string(),
+            self.arr_name.to_string()
         )
     }
 
@@ -2732,7 +2732,7 @@ impl LLVMGen for InlineLLVMArrayForceUniqueBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.Array::force_unique", self.arr_name.to_string())
+        format!("Array::force_unique({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2911,7 +2911,7 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.Array::get_data_ptr", self.arr_name.to_string())
+        format!("Array::get_data_ptr({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2973,9 +2973,9 @@ impl LLVMGen for InlineLLVMArrayGetSizeBody {
 
     fn name(&self) -> String {
         format!(
-            "{}.Array::{}",
-            self.arr_name.to_string(),
-            ARRAY_GET_SIZE_NAME
+            "Array::{}({})",
+            ARRAY_GET_SIZE_NAME,
+            self.arr_name.to_string()
         )
     }
 
@@ -3029,7 +3029,7 @@ impl LLVMGen for InlineLLVMArrayGetCapacityBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.Array::get_capacity", self.arr_name.to_string())
+        format!("Array::get_capacity({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3087,7 +3087,7 @@ impl LLVMGen for InlineLLVMStructGetBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.@{}", self.var_name.to_string(), self.field_idx)
+        format!("@{}({})", self.field_idx, self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3347,7 +3347,7 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.#cap.{}", self.cap_name.to_string(), self.cap_idx)
+        format!("#cap.{}({})", self.cap_idx, self.cap_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3394,10 +3394,10 @@ impl LLVMGen for InlineLLVMStructPunchBody {
 
     fn name(&self) -> String {
         format!(
-            "{}.#punch{}_{}",
-            self.var_name.to_string(),
+            "#punch{}_{}({})",
             if self.force_unique { "_fu" } else { "" },
-            self.field_idx
+            self.field_idx,
+            self.var_name.to_string()
         )
     }
 
@@ -3505,11 +3505,11 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
 
     fn name(&self) -> String {
         format!(
-            "{}.#plug_in_{}{}({})",
-            self.punched_str_name.to_string(),
+            "#plug_in_{}{}({}, {})",
             if self.force_unique { "_fu" } else { "" },
             self.field_idx,
             self.field_name.to_string(),
+            self.punched_str_name.to_string(),
         )
     }
 
@@ -4368,11 +4368,11 @@ impl LLVMGen for InlineLLVMStructSetBody {
 
     fn name(&self) -> String {
         format!(
-            "{}.set_{}{}({})",
-            self.struct_name.to_string(),
+            "set_{}{}({}, {})",
             self.field_idx,
             if self.force_unique { "" } else { " [unique]" },
-            self.value_name.to_string()
+            self.value_name.to_string(),
+            self.struct_name.to_string()
         )
     }
 
@@ -4547,7 +4547,7 @@ pub fn union_new_body(
     field_name: &Name,
     field_idx: usize,
 ) -> Arc<ExprNode> {
-    let name = format!("{}.new_{}", union_name.to_string(), field_name);
+    let name = format!("new_{}({})", field_name, union_name.to_string());
     let name_cloned = name.clone();
     let field_name_cloned = FullName::local(field_name);
     expr_llvm(
@@ -4646,7 +4646,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.as_{}", self.union_arg_name.to_string(), self.field_idx)
+        format!("as_{}({})", self.field_idx, self.union_arg_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -4765,7 +4765,7 @@ impl LLVMGen for InlineLLVMUnionIsBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.is_{}", self.union_arg_name.to_string(), self.field_idx)
+        format!("is_{}({})", self.field_idx, self.union_arg_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -4876,10 +4876,10 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
     fn name(&self) -> String {
         format!(
-            "{}.mod_{}({})",
-            self.union_name.to_string(),
+            "mod_{}({}, {})",
             self.field_idx,
-            self.modifier_name.to_string()
+            self.modifier_name.to_string(),
+            self.union_name.to_string()
         )
     }
 
@@ -5104,9 +5104,9 @@ impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
 
     fn name(&self) -> String {
         format!(
-            "{}.with_retained({})",
-            self.f_name.to_string(),
-            self.x_name.to_string()
+            "with_retained({}, {})",
+            self.x_name.to_string(),
+            self.f_name.to_string()
         )
     }
 
@@ -5519,7 +5519,7 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.get_ptr_to_release_func", self.var_name.to_string())
+        format!("get_ptr_to_release_func({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5621,7 +5621,7 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.get_ptr_to_retain_func", self.var_name.to_string())
+        format!("get_ptr_to_retain_func({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5690,7 +5690,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.get_data_ptr", self.var_name.to_string())
+        format!("get_data_ptr({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5793,9 +5793,9 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 
     fn name(&self) -> String {
         format!(
-            "{}.mutate_boxed({})",
-            self.val_name.to_string(),
-            self.io_act_name.to_string()
+            "mutate_boxed({}, {})",
+            self.io_act_name.to_string(),
+            self.val_name.to_string()
         )
     }
 
@@ -6161,7 +6161,7 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("{}.mark_threaded", self.var_name.to_string())
+        format!("mark_threaded({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
