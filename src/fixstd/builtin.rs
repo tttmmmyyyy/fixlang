@@ -38,7 +38,7 @@ use crate::misc::{make_map, Map, Set};
 use crate::object::{create_obj, ObjectFieldType};
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::Path;
+use crate::rc_ir::ast::{Path, UniqueCheckOperand};
 use crate::rc_ir::provenance::{BaseSource, Provenance};
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, IntValue, PointerValue};
@@ -2299,9 +2299,9 @@ impl LLVMGen for InlineLLVMArraySetBody {
         ]
     }
 
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some((0, vec![]))
+            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
         } else {
             None
         }
@@ -2429,9 +2429,9 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         vec![&mut self.array_name, &mut self.i_name, &mut self.j_name]
     }
 
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some((0, vec![]))
+            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
         } else {
             None
         }
@@ -2555,9 +2555,9 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
 
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some((0, vec![]))
+            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
         } else {
             None
         }
@@ -2654,9 +2654,9 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         vec![&mut self.elem_name, &mut self.punched_name]
     }
 
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some((1, vec![0]))
+            Some(UniqueCheckOperand { container_index: 1, path: vec![0] })
         } else {
             None
         }
@@ -3405,9 +3405,9 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         vec![&mut self.var_name]
     }
 
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some((0, vec![]))
+            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
         } else {
             None
         }
@@ -3517,9 +3517,9 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         vec![&mut self.punched_str_name, &mut self.field_name]
     }
 
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some((0, vec![]))
+            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
         } else {
             None
         }
@@ -4380,9 +4380,9 @@ impl LLVMGen for InlineLLVMStructSetBody {
         vec![&mut self.value_name, &mut self.struct_name]
     }
 
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some((1, vec![]))
+            Some(UniqueCheckOperand { container_index: 1, path: vec![] })
         } else {
             None
         }
@@ -5231,11 +5231,11 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         vec![&mut self.var_name]
     }
 
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.assume_unique {
             None
         } else {
-            Some((0, vec![]))
+            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
         }
     }
 

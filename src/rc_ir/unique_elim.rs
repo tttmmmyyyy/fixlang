@@ -311,14 +311,14 @@ impl<'a> Specializer<'a> {
         gen: &Box<dyn LLVMGen>,
         inputs: &[Uniqueness],
     ) -> Box<dyn LLVMGen> {
-        let Some((_, path)) = gen.unique_check_operand() else {
+        let Some(uc) = gen.unique_check_operand() else {
             return gen.clone();
         };
         let unique = self
             .analysis
             .op_containers
             .get(&result.name)
-            .map_or(false, |prov| leaf_is_unique(prov, &path, inputs));
+            .map_or(false, |prov| leaf_is_unique(prov, &uc.path, inputs));
         if unique {
             gen.assuming_unique()
         } else {

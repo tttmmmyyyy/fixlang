@@ -2,6 +2,7 @@ use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
+use crate::rc_ir::ast::UniqueCheckOperand;
 use crate::rc_ir::provenance::{BaseSource, Provenance};
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
@@ -59,9 +60,9 @@ pub trait LLVMGen: DynClone + Send + Sync {
         false
     }
 
-    /// The container operand index and boxed-leaf path whose runtime uniqueness this op branches on.
+    /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on.
     /// Default: the op carries no such branch.
-    fn unique_check_operand(&self) -> Option<(usize, Vec<usize>)> {
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         None
     }
 

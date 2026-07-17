@@ -486,9 +486,9 @@ impl<'a> Interp<'a> {
                     args.iter().map(|a| self.operand(a, env)).collect();
                 // Snapshot the checked container operand of a uniqueness-branching operation at this
                 // program point, for unique-check elimination to resolve later.
-                if let Some((container_idx, _)) = gen.unique_check_operand() {
+                if let Some(uc) = gen.unique_check_operand() {
                     self.op_containers
-                        .insert(result.name.clone(), arg_provs[container_idx].clone());
+                        .insert(result.name.clone(), arg_provs[uc.container_index].clone());
                 }
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let decl = gen.result_prov(&result.ty, &arg_tys, self.type_env);

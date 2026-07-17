@@ -116,6 +116,14 @@ pub enum RcExpr {
 /// tag.
 pub type Path = Vec<usize>;
 
+/// The boxed leaf whose runtime uniqueness an inline-LLVM op branches on: which operand carries the
+/// container, and the path to the leaf within that operand's value. Unlike `RcUnit`, `container_index`
+/// is an operand slot (resolved against the op's arguments), not a bound variable name.
+pub struct UniqueCheckOperand {
+    pub container_index: usize,
+    pub path: Path,
+}
+
 /// One arm of a `Match`: the variant it matches, the variable its payload is bound to, and the arm
 /// body, whose value is its final `Ret`. `variant` is `Some(tag)` for a variant arm, whose payload
 /// is that variant's value; it is `None` for a catch-all arm, whose payload is the whole scrutinee.
