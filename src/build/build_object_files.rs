@@ -162,6 +162,21 @@ fn dump_rc_ir(
     info_msg(&format!("RC IR written to {}.", path.display()));
 }
 
+// Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
+// generation does at `Max`), then write it before and after the optimizations, filtered to the
+// requested module in each dump.
+fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
+    let Some(filter) = &config.emit_rc_ir else {
+        return;
+    };
+    let type_env = program.type_env();
+    let all_syms: Vec<Symbol> = program.symbols.values().cloned().collect();
+    let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms);
+    dump_rc_ir(&base, &type_env, filter, "pre", config);
+    let optimized = optimize_rc_program(base, &type_env, config);
+    dump_rc_ir(&optimized, &type_env, filter, "post", config);
+}
+
 // Compile the program, and returns the path of object files to be linked.
 pub fn build_object_files<'c>(
     mut program: Program,
@@ -181,17 +196,7 @@ pub fn build_object_files<'c>(
     // Run optimizations.
     optimization::optimization::run(&mut program, &config);
 
-    // Dump the RC IR for inspection when `--emit-rc-ir` is given. Lower the whole program (as code
-    // generation does at `Max`), dumping it before and after the optimizations, then filter to the
-    // requested module in each dump.
-    if let Some(filter) = &config.emit_rc_ir {
-        let type_env = program.type_env();
-        let all_syms: Vec<Symbol> = program.symbols.values().cloned().collect();
-        let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms);
-        dump_rc_ir(&base, &type_env, filter, "pre", config);
-        let optimized = optimize_rc_program(base, &type_env, config);
-        dump_rc_ir(&optimized, &type_env, filter, "post", config);
-    }
+    dump_rc_ir_stages(&program, config);
 
     // Determine compilation units.
     let mut units = vec![];
