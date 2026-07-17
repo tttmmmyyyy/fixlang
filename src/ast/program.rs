@@ -2561,7 +2561,11 @@ impl Program {
         dependency
     }
 
-    // Calculate a hash value of a module which is affected by source codes of all dependent modules.
+    // Calculate a hash value of a module, affected by the source codes of all dependent modules and
+    // by the compiler build. It keys the type-checking cache (both the batch compiler and the LSP), so
+    // the compiler build must be included: a cached typed expression is serialized in a format the
+    // compiler defines, and a differently-built compiler may define it differently — reading such a
+    // cache back would misinterpret it. `build_time_utc!()` changes with every compiler build.
     pub fn module_dependency_hash(&self, module: &Name) -> Result<String, Errors> {
         let mut dependent_module_names = self
             .dependent_modules(module)
@@ -2573,6 +2577,7 @@ impl Program {
         for mod_name in &dependent_module_names {
             concatenated_source_hashes += &self.find_mod(mod_name).unwrap().source.input.hash()?;
         }
+        concatenated_source_hashes += build_time::build_time_utc!();
         Ok(format!("{:x}", md5::compute(concatenated_source_hashes)))
     }
 

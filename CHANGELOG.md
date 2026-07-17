@@ -26,6 +26,7 @@
 - LSP: Errors whose cause is not in any source file (e.g. a missing source file or an incompatible `fix_version` declared in `fixproj.toml`) are now anchored to `fixproj.toml` so editors display them. Previously such location-less diagnostics were published against the project directory, which editors cannot attach a diagnostic to, so the message was silently dropped (appearing as an empty/invisible error).
 - `fix run` and `fix test` no longer crash on startup in debug builds of `fix` (released builds were unaffected).
 - `fix test` now accepts the `--no-runtime-check` flag, like `fix build` and `fix run`.
+- The type-checking cache is now invalidated when the compiler itself changes, not only when the source changes. Its key previously depended only on the source code, so a cache written by an earlier `fix` whose internal serialization format differed could be read back and misinterpreted by a newer `fix` — for example, hanging the build after an upgrade. Such caches are now regenerated instead.
 
 ## [1.4.0] - 2026-06-22
 
