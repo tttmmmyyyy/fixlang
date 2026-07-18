@@ -104,7 +104,7 @@ pub(crate) fn rename_expr(node: &RcExprNode, rename: &Map<FullName, FullName>) -
 
 /// A right-hand side with every variable occurrence (including `Llvm` operand names) rewritten
 /// through `rename`.
-pub(crate) fn rename_rhs(rhs: &RcRhs, rename: &Map<FullName, FullName>) -> RcRhs {
+fn rename_rhs(rhs: &RcRhs, rename: &Map<FullName, FullName>) -> RcRhs {
     match rhs {
         RcRhs::Var(v) => RcRhs::Var(rename_var(v, rename)),
         RcRhs::App(callee, args) => RcRhs::App(
