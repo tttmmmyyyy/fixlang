@@ -213,7 +213,10 @@ folds the check). So:
   handles.
 - **inline-single-use = essential for `loop`, optional for `fold`/`to_iter`** (their union
   is already co-located; LLVM inlines the small callback).
-- **SROA-of-params = insurance**, for nested/awkward aggregates LLVM will not scalarize.
+- **SROA-of-params = essential when the loop state holds a boxed pointer** (`to_iter.fold`'s
+  `{arr,idx}`, arrayrw's `(i,arr)`), where it hoists that pointer out so the borrow pass can
+  borrow it read-only and kill the per-iteration RC churn that otherwise blocks LLVM; **not
+  needed for all-scalar loop state** (`range.fold`). Confirmed by the pre-experiment below.
 - **copy-prop + DCE = glue**: needed for the Fix-side fixpoint to see through renamings and
   stay clean, but LLVM does the final cleanup, so they do not change the end result.
 Implement the core first, measure against the ceiling, and add inline/SROA/glue only where a
@@ -229,8 +232,36 @@ scalar parameter), and
 - the `--no-runtime-check` arrayrw showed vectorization follows once the check is gone (there
   even with the union still present).
 So union removal alone should let LLVM fold the check and vectorize, with no SROA. If a case
-does not, that identifies the specific shape (likely a *nested* aggregate) that needs SROA as
-insurance.
+does not, that identifies the specific shape that needs SROA.
+
+**Pre-experiment result (hand-written Fix through the real `-O max` pipeline).** Rather than
+implement the simplifier, the target shapes were written directly as explicit tail-recursive
+Fix functions (which lower to the union-free forms the simplifier would produce) and compiled,
+inspecting the optimized LLVM IR. This exercises the real `insert_rc`, which turned out to be
+decisive:
+
+| shape (hand-written) | loop-carried state | boxed ptr in state? | check | vectorized |
+| --- | --- | --- | --- | --- |
+| scalar params | `arr` separate; `i`, `acc` scalar | no | folded | yes |
+| all-scalar struct (= `range.fold`) | `arr` separate borrowed; `{next,end}` scalar struct | no | folded | yes |
+| boxed-ptr struct (= `to_iter.fold`) | `{arr, idx}` threaded | **yes** | **kept** | **no** |
+
+The determining factor is **whether the loop-carried aggregate holds a boxed pointer**. When it
+does (`{arr, idx}`), the boxed `arr` is threaded through the rebuilt struct each iteration, and
+`insert_rc` places per-iteration reference-count operations on it (load refcount, branch,
+maybe free) — that RC churn is what blocks LLVM's SCEV/vectorizer, so the check survives. When
+the array is instead a separate borrowed parameter and the threaded state is all-scalar
+(`range.fold`'s `RangeIterator {next,end}`), there is no churn and LLVM folds the check and
+vectorizes.
+
+So the refined conclusion, correcting the "SROA = insurance for nested aggregates" note above:
+**SROA is essential exactly when the loop state holds a boxed pointer** — `to_iter.fold`
+(`ArrayIterator {arr,idx}`) and the `loop`/arrayrw `(i, arr)` state — where its job is to hoist
+that pointer out into a separate parameter the borrow pass can then borrow read-only,
+eliminating the churn. **SROA is not needed when the loop state is all-scalar** — `range.fold`,
+and any `loop` whose state carries no boxed value. (For `to_iter`/arrayrw the equivalent effect
+might also be reachable by teaching the borrow pass to borrow a boxed leaf through the threaded
+struct, without a full SROA; to be decided when implementing.)
 
 ## 9. Verification
 
