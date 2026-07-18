@@ -1,0 +1,30 @@
+module Main;
+
+import Std::{
+    Array, I64, IO, Array::{from_map, @, @size}, Debug::assert_eq, Iterator::{fold, range},
+    Monad::pure
+};
+
+// Reads every element of the array by index via `range(0, @size).fold`, summing
+// them. The array is a *capture* of the fold callback, so the loop-carried state
+// is all-scalar: the `RangeIterator {next, end}` plus the accumulator, with no
+// boxed pointer threaded through the state. This is the read idiom whose loop
+// state carries no boxed value, so removing the `Option`/`RangeIterator` union
+// alone (no scalar-replacement of a boxed parameter) exposes the scalar
+// induction variable, letting LLVM prove `arr.@size` loop-invariant, fold the
+// per-element bounds check, and vectorize the read loop.
+//
+// Contrast: `sum_by_loop_arr` reaches the same read via the `loop` idiom (whose
+// body is a separate function needing inline), and `sum_by_fold` via
+// `to_iter.fold` (whose `ArrayIterator {arr, idx}` threads a boxed pointer).
+sum_by_range_fold : Array I64 -> I64;
+sum_by_range_fold = |arr| (
+    Iterator::range(0, arr.@size).fold(0, |i, acc| acc + arr.@(i))
+);
+
+main : IO ();
+main = (
+    let arr = Array::from_map(100000, |i| i);
+    assert_eq(|_|"sum_by_range_fold", sum_by_range_fold(arr), 4999950000);;
+    pure()
+);
