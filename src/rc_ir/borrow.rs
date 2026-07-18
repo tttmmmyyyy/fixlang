@@ -38,6 +38,7 @@ use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
+use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::fixstd::builtin::InlineLLVMMakeUnionBody;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
@@ -437,7 +438,7 @@ fn boxed_leaves_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out:
         return;
     }
     if ty.is_closure() {
-        path.push(1);
+        path.push(CLOSURE_CAPTURE_IDX as usize);
         out.push(path.clone());
         path.pop();
         return;
@@ -470,7 +471,7 @@ fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mu
         return;
     }
     if ty.is_closure() {
-        path.push(1);
+        path.push(CLOSURE_CAPTURE_IDX as usize);
         out.push(path.clone());
         path.pop();
         return;
@@ -736,7 +737,7 @@ fn shape_from_own(
             return OwnershipShape::Unboxed;
         }
         if ty.is_closure() {
-            path.push(1);
+            path.push(CLOSURE_CAPTURE_IDX as usize);
             let cap = owned(path);
             path.pop();
             return OwnershipShape::UnboxedAgg(vec![

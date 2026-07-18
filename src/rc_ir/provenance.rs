@@ -26,6 +26,7 @@
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
+use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
@@ -80,7 +81,7 @@ impl Provenance {
         }
         if ty.is_closure() {
             // A closure lowers to `{funptr, capture-pointer}`; only the capture is a boxed leaf.
-            path.push(1);
+            path.push(CLOSURE_CAPTURE_IDX as usize);
             let cap = Provenance::Boxed(leaf(path));
             path.pop();
             return Provenance::UnboxedAgg(vec![Provenance::Unboxed, cap]);
