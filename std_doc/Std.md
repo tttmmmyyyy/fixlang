@@ -3610,6 +3610,10 @@ Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::I64] Std::I64 -> Std
 
 Create an iterator that generates a range of numbers with a step.
 
+`range_step(a, b, s)` yields `a, a + s, a + 2*s, ...`, stopping before it would pass `b`:
+values stay below `b` when `s > 0` and above `b` when `s < 0`. It is empty when `s` points
+away from `b`. `s` must not be 0.
+
 ##### Parameters
 
 * `start` - The start of the range.

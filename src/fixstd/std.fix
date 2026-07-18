@@ -1874,8 +1874,11 @@ namespace Iterator {
 
     impl ArrayIterator a : Iterator {
         type Item (ArrayIterator a) = a;
+        // Stop with `idx >= arr.@size` (not `idx == arr.@size`) so the loop guard is `idx < arr.@size`,
+        // the same condition as the bounds check inside `arr.@(idx)`. LLVM then proves the check
+        // redundant and vectorizes the read loop; see `RangeIterator` for the full rationale.
         advance : ArrayIterator a -> Option (ArrayIterator a, a) = |ArrayIterator { arr : arr, idx : idx }| (
-            if idx == arr.@size { none() };
+            if idx >= arr.@size { none() };
             let v = arr.@(idx);
             some((ArrayIterator { arr: arr, idx: idx + 1 }, v))
         );
@@ -1914,27 +1917,30 @@ namespace Iterator {
 
     impl RangeIterator : Iterator {
         type Item RangeIterator = I64;
+        // Stop when `next` reaches `end` via `>=`, and let `range` pass `end` through unclamped
+        // (below). The loop guard is then `next < end`, syntactically the same as the array bounds
+        // check `i < arr.@size` when iterating `range(0, arr.@size)`, so LLVM proves the per-element
+        // check redundant and vectorizes the loop. Testing `next == end` instead would force `range`
+        // to clamp `end` to `start` for empty ranges, and that clamp lowers to a `select` on the size
+        // that hides the equality and blocks the vectorization.
         advance = |RangeIterator { next : next, end : end }| (
-            if next == end { Option::none() }
+            if next >= end { Option::none() }
             else { Option::some $ (RangeIterator { next: next + 1, end: end }, next) }
         );
     }
 
     // Create an iterator that generates a range of numbers.
-    // 
+    //
     // `range(a, b)` generates a range of numbers from `a` to `b - 1`.
-    // 
+    //
     // If `a` is greater than or equal to `b`, the iterator will an empty iterator.
-    // 
+    //
     // # Parameters
     //
     // * `start` - The start of the range.
     // * `end` - The end of the range.
     range : [?it : Iterator, Item ?it = I64] I64 -> I64 -> ?it;
     range = |start, end| (
-        if start >= end {
-            RangeIterator { next: start, end: start } // Return an empty iterator.
-        };
         RangeIterator { next: start, end: end }
     );
 
@@ -1942,14 +1948,24 @@ namespace Iterator {
 
     impl RangeStepIterator : Iterator {
         type Item RangeStepIterator = I64;
+        // Stop when `next` reaches `end` from the stepping direction (`>=` counting up, `<=` counting
+        // down), which leaves `end` equal to the caller's bound: `range_step` no longer has to round
+        // `end` to an exact multiple of `step` to make a `next == end` test terminate. This keeps the
+        // loop guard aligned with an array bounds check so LLVM can vectorize; see `RangeIterator` for
+        // the full rationale. `step` is loop-invariant, so the direction test hoists out of the loop.
         advance = |RangeStepIterator { next : next, end : end, step : step }| (
-            if next == end { Option::none() }
-            else { Option::some $ (RangeStepIterator { next: next + step, end: end, step: step }, next) }
+            let finished = if step >= 0 { next >= end } else { next <= end };
+            if finished { Option::none() };
+            Option::some $ (RangeStepIterator { next: next + step, end: end, step: step }, next)
         );
     }
 
     // Create an iterator that generates a range of numbers with a step.
-    // 
+    //
+    // `range_step(a, b, s)` yields `a, a + s, a + 2*s, ...`, stopping before it would pass `b`:
+    // values stay below `b` when `s > 0` and above `b` when `s < 0`. It is empty when `s` points
+    // away from `b`. `s` must not be 0.
+    //
     // # Parameters
     //
     // * `start` - The start of the range.
@@ -1957,19 +1973,7 @@ namespace Iterator {
     // * `step` - The step of the range.
     range_step : [?it : Iterator, Item ?it = I64] I64 -> I64 -> I64 -> ?it;
     range_step = |start, end, step| (
-        if (step > 0 && (start - end) > 0) || (step < 0 && (start - end) < 0) {
-            RangeStepIterator { next: start, end: start, step: step } // Return an empty iterator.
-        };
-        // Adjust end so that `start + n * step == end` for some integer `n` (when `step` is not 0).
-        let end = if step == 0 { 
-            undefined("[range_step] step must not be 0!")
-        } else if step > 0 {
-            // step > 0
-            start + (end - start + step - 1) / step * step
-        } else {
-            // step < 0
-            start + (start - end - step - 1) / (-step) * step
-        };
+        if step == 0 { undefined("[range_step] step must not be 0!") };
         RangeStepIterator { next: start, end: end, step: step }
     );
 

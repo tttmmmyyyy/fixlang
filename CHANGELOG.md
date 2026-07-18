@@ -17,6 +17,12 @@
 
 - Added `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which swap the two elements of an array at given indices. `swap` bounds-checks the indices; `unsafe_swap_bounds_unchecked` omits that check (the caller must ensure the indices are in range).
 
+### Changed
+
+#### Std
+
+- The counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` now stop when the index reaches the bound (`>=` for an ascending range, `<=` for a descending `range_step`) instead of testing equality for the exact bound. Iterating any valid range yields the same elements as before; the change also makes an iterator whose index starts past its bound terminate immediately (previously such a hand-constructed iterator could overrun), and removes the end-clamping that `range`/`range_step` applied. Because the loop guard now coincides with the array bounds condition, the compiler can prove the per-element bounds check redundant, so read loops built on `range(0, arr.@size).fold` and `arr.to_iter.fold` are optimized to the same code as the equivalent hand-written index loop.
+
 ### Fixed
 
 #### Tool
