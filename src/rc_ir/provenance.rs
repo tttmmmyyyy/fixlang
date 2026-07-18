@@ -69,9 +69,10 @@ impl Provenance {
 
     /// Build the provenance shape of a value of type `ty`. `leaf` is called once for each boxed leaf,
     /// receiving the path to that leaf — the sequence of field indices from the root of `ty` down to
-    /// it — so `leaf` can tell which leaf it is describing (e.g. to record `Arg(i, path)`).
-    /// Fully-unboxed values become `Unboxed` (no boxed leaf to track); a closure becomes
-    /// `{funptr, capture}` with the capture a single boxed leaf.
+    /// it — so `leaf` can tell which leaf it is describing (e.g. to record `Arg(i, path)`). The shape
+    /// mirrors the type: a scalar (no fields) becomes `Unboxed`, an unboxed aggregate expands into an
+    /// `UnboxedAgg` over its fields (a union's variants' payloads) even when it holds no boxed leaf,
+    /// and a closure becomes `{funptr, capture}` with the capture a single boxed leaf.
     pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -86,9 +87,6 @@ impl Provenance {
             leaf: &dyn Fn(&Path) -> LeafSource,
             path: &mut Path,
         ) -> Provenance {
-            if ty.is_fully_unboxed(type_env) {
-                return Provenance::Unboxed;
-            }
             if ty.is_closure() {
                 // A closure lowers to `{funptr, capture-pointer}`; only the capture is a boxed leaf.
                 path.push(CLOSURE_CAPTURE_IDX as usize);
@@ -99,9 +97,14 @@ impl Provenance {
             if ty.is_box(type_env) {
                 return Provenance::Boxed(leaf(path));
             }
-            // An unboxed aggregate (struct, tuple, or unboxed union) that contains a boxed leaf:
-            // recurse into its fields (for a union, its variants' payloads).
+            // Expand every unboxed aggregate (struct, tuple, or unboxed union) into its fields (for a
+            // union, its variants' payloads), even when it holds no boxed leaf, so a value's shape
+            // always mirrors its type. Only a scalar (an unboxed leaf with no fields) becomes
+            // `Unboxed`. Normalizing to this expanded shape keeps `join` total without a fallback.
             let fields = ty.field_types(type_env);
+            if fields.is_empty() {
+                return Provenance::Unboxed;
+            }
             let mut children = Vec::with_capacity(fields.len());
             for (i, fty) in fields.iter().enumerate() {
                 path.push(i);
@@ -136,22 +139,35 @@ impl Provenance {
             (Provenance::Boxed(a), Provenance::Boxed(b)) => {
                 Provenance::Boxed(a.union(b).cloned().collect())
             }
-            // Mismatched shapes never arise from a well-typed program: both sides of a join have the
-            // same type. Falling back to the left side keeps the analysis total.
-            _ => self.clone(),
+            // Both sides of a branch merge have the same type, and a provenance's shape now mirrors
+            // its type exactly (`build_shape` expands every aggregate; a value read from a boxed
+            // container is a `Boxed` leaf), so the arms above are exhaustive. A mismatch would be a
+            // bug in the analysis, not valid input; fail loudly rather than silently returning a wrong
+            // provenance, which feeds unique-check elimination and could mask a miscompile.
+            _ => unreachable!(
+                "Provenance::join on mismatched shapes: {:?} vs {:?}",
+                self, other
+            ),
         }
     }
 
-    /// The leaf source at path `π`, navigating through aggregates to the boxed leaf. An empty set if
-    /// the path does not reach a boxed leaf.
+    /// The leaf source at path `π`, navigating through aggregates to the boxed leaf. An empty set when
+    /// `π` ends at a position that is not a single boxed leaf — an aggregate root or a scalar,
+    /// including an `Arg(j, [])` source ("the whole of operand `j`") composed against an aggregate
+    /// operand. A non-empty `π` that runs off the end of an aggregate or continues past a boxed or
+    /// scalar leaf is inconsistent with the value's type — since a provenance's shape mirrors its
+    /// type, that cannot happen for a well-formed query.
     pub fn leaf_at(&self, path: &[usize]) -> LeafSource {
-        match self {
-            Provenance::UnboxedAgg(children) => match path.split_first() {
-                Some((i, rest)) if *i < children.len() => children[*i].leaf_at(rest),
-                _ => Set::default(),
-            },
-            Provenance::Boxed(ls) => ls.clone(),
-            Provenance::Unboxed => Set::default(),
+        match (self, path.split_first()) {
+            (Provenance::UnboxedAgg(children), Some((i, rest))) if *i < children.len() => {
+                children[*i].leaf_at(rest)
+            }
+            (Provenance::Boxed(ls), None) => ls.clone(),
+            (Provenance::UnboxedAgg(_) | Provenance::Unboxed, None) => Set::default(),
+            (_, Some(_)) => unreachable!(
+                "Provenance::leaf_at: path {:?} inconsistent with shape {:?}",
+                path, self
+            ),
         }
     }
 
@@ -195,11 +211,18 @@ impl Provenance {
     }
 
     /// The child provenance at index `i` of an unboxed aggregate; `Unboxed` if this is not an
-    /// aggregate with that child (a boxed container's contents are not tracked).
+    /// aggregate with that child (a boxed container's contents are not tracked, a scalar has no
+    /// child). A `Boxed`/`Unboxed` receiver is a real case (projecting a field out of a boxed
+    /// container); an in-range index is required only when the receiver is an aggregate.
     fn project(&self, i: usize) -> Provenance {
         match self {
             Provenance::UnboxedAgg(children) if i < children.len() => children[i].clone(),
-            _ => Provenance::Unboxed,
+            // A field index must be in range for a well-typed projection of an aggregate.
+            Provenance::UnboxedAgg(children) => {
+                unreachable!("project: field index {} out of range ({} children)", i, children.len())
+            }
+            // A boxed container's contents are not tracked; a scalar has no child.
+            Provenance::Boxed(_) | Provenance::Unboxed => Provenance::Unboxed,
         }
     }
 
@@ -214,7 +237,11 @@ impl Provenance {
                     cs[*i] = cs[*i].demote(rest);
                     Provenance::UnboxedAgg(cs)
                 }
-                _ => self.clone(),
+                // A non-empty path descends only through unboxed aggregates; reaching a boxed or
+                // scalar leaf, or an out-of-range index, means the path is inconsistent with the
+                // value's type — a bug. (Swallowing it would leave a leaf that should demote to `Dyn`
+                // still `Fresh`/`Arg`, i.e. wrongly unique.)
+                _ => unreachable!("demote: path {:?} inconsistent with shape {:?}", path, self),
             },
         }
     }
@@ -297,16 +324,21 @@ pub enum Uniqueness {
 }
 
 impl Uniqueness {
-    /// The verdict at path `π`, navigating through aggregates to the boxed leaf. `Dynamic` if the
-    /// path does not reach a boxed leaf (the conservative default).
+    /// The verdict at path `π`. `Dynamic` (the conservative default) when `π` ends at a position that
+    /// is not a single boxed leaf — an aggregate root or a scalar. A non-empty `π` that runs off the
+    /// end of an aggregate or past a boxed/scalar leaf is inconsistent with the value's type, which
+    /// cannot happen for a well-formed query. (Mirrors `Provenance::leaf_at`.)
     fn leaf_at(&self, path: &[usize]) -> CTRefCnt {
-        match self {
-            Uniqueness::UnboxedAgg(children) => match path.split_first() {
-                Some((i, rest)) if *i < children.len() => children[*i].leaf_at(rest),
-                _ => CTRefCnt::Dynamic,
-            },
-            Uniqueness::Boxed(rc) => *rc,
-            Uniqueness::Unboxed => CTRefCnt::Dynamic,
+        match (self, path.split_first()) {
+            (Uniqueness::UnboxedAgg(children), Some((i, rest))) if *i < children.len() => {
+                children[*i].leaf_at(rest)
+            }
+            (Uniqueness::Boxed(rc), None) => *rc,
+            (Uniqueness::UnboxedAgg(_) | Uniqueness::Unboxed, None) => CTRefCnt::Dynamic,
+            (_, Some(_)) => unreachable!(
+                "Uniqueness::leaf_at: path {:?} inconsistent with shape {:?}",
+                path, self
+            ),
         }
     }
 
@@ -579,9 +611,17 @@ impl<'a> Interp<'a> {
         let mut joined_env: Option<Map<FullName, Provenance>> = None;
         for arm in arms {
             let mut arm_env = env.clone();
-            // The payload is the variant's value (unboxed union) or the whole scrutinee (catch-all).
+            // The payload is the variant's value (a tagged arm) or the whole scrutinee (catch-all). A
+            // variant payload of an unboxed union is projected from the scrutinee's expanded shape; of
+            // a boxed union it is read out of the shared container, so its every boxed leaf is `Dyn`.
             let payload_prov = match arm.variant {
-                Some(tag) => sprov.project(tag),
+                Some(tag) => {
+                    if scrut.ty.is_box(self.type_env) {
+                        Provenance::uniform(&arm.payload.ty, self.type_env, BaseSource::Dyn)
+                    } else {
+                        sprov.project(tag)
+                    }
+                }
                 None => sprov.clone(),
             };
             self.record(&arm.payload, &payload_prov, &mut arm_env);
