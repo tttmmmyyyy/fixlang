@@ -151,16 +151,23 @@ impl Provenance {
         }
     }
 
-    /// The leaf source at path `π`, navigating through aggregates to the boxed leaf. An empty set if
-    /// the path does not reach a boxed leaf.
+    /// The leaf source at path `π`, navigating through aggregates to the boxed leaf. An empty set when
+    /// `π` ends at a position that is not a single boxed leaf — an aggregate root or a scalar,
+    /// including an `Arg(j, [])` source ("the whole of operand `j`") composed against an aggregate
+    /// operand. A non-empty `π` that runs off the end of an aggregate or continues past a boxed or
+    /// scalar leaf is inconsistent with the value's type — since a provenance's shape mirrors its
+    /// type, that cannot happen for a well-formed query.
     pub fn leaf_at(&self, path: &[usize]) -> LeafSource {
-        match self {
-            Provenance::UnboxedAgg(children) => match path.split_first() {
-                Some((i, rest)) if *i < children.len() => children[*i].leaf_at(rest),
-                _ => Set::default(),
-            },
-            Provenance::Boxed(ls) => ls.clone(),
-            Provenance::Unboxed => Set::default(),
+        match (self, path.split_first()) {
+            (Provenance::UnboxedAgg(children), Some((i, rest))) if *i < children.len() => {
+                children[*i].leaf_at(rest)
+            }
+            (Provenance::Boxed(ls), None) => ls.clone(),
+            (Provenance::UnboxedAgg(_) | Provenance::Unboxed, None) => Set::default(),
+            (_, Some(_)) => unreachable!(
+                "Provenance::leaf_at: path {:?} inconsistent with shape {:?}",
+                path, self
+            ),
         }
     }
 
