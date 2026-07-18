@@ -1,0 +1,34 @@
+module Main;
+
+import Std::{
+    Array, I64, IO, Array::{from_map, to_iter}, Debug::assert_eq,
+    Iterator::loop_iter_s, LoopState::{break, continue}, Monad::pure
+};
+
+// Reads every element via `to_iter.loop_iter_s`, summing them. `loop_iter_s` is
+// the `loop_iter` variant that returns a `LoopState` (so an early `break` value
+// can differ in type from the threaded state and propagate to the caller); here
+// the caller immediately matches that returned `LoopState`. This exercises the
+// same `ArrayIterator {arr, idx}` + `Option` iterator plumbing as `sum_by_fold` /
+// `sum_by_loop_iter`, plus the extra outer `LoopState` the caller must cancel —
+// a direct case-of-known-constructor / case-of-case target on the returned union.
+// The `break` arm never fires (elements are non-negative), so the loop runs to
+// completion and returns `continue(sum)`.
+sum_by_loop_iter_s : Array I64 -> I64;
+sum_by_loop_iter_s = |arr| (
+    let result = arr.to_iter.loop_iter_s(0, |x, sum|
+        if x < 0 { break $ -1 };
+        continue $ sum + x
+    );
+    match result {
+        continue(sum) => sum,
+        break(v) => v
+    }
+);
+
+main : IO ();
+main = (
+    let arr = Array::from_map(100000, |i| i);
+    assert_eq(|_|"sum_by_loop_iter_s", sum_by_loop_iter_s(arr), 4999950000);;
+    pure()
+);
