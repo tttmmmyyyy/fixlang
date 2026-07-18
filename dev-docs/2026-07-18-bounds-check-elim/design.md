@@ -3,6 +3,77 @@
 Status: design only, not implemented. Targets the RC IR back end on branch
 `unique-check-elim`, alongside the existing unique-check elimination.
 
+## 0. Revised direction (2026-07-18): cooperate with LLVM instead of a bespoke pass
+
+An experiment settled the approach. The decisive question was whether stock LLVM
+O3 can eliminate the check on its own; it can, and what blocks it in Fix is not
+the check itself but the loop-state representation.
+
+Method: build a read loop `Iterator::range(0, arr.@size).fold(0, |i, acc| acc + arr.@(i))`
+at `-O max --emit-llvm` and inspect the optimized IR; then run hand-written LLVM
+IR through `opt -passes='default<O3>'` (LLVM 17, `LLVM_SYS_170_PREFIX`) varying
+only the shape of the loop-carried induction variable.
+
+Findings:
+
+- Fix's emitted loop keeps the bounds check (`icmp ult idx, size` guarding a call
+  to `fixruntime_index_out_of_range`) and stays scalar. The size operand is
+  already loop-invariant (a `get_size` load hoisted out of the loop) — so size
+  invariance is not the blocker for a read loop.
+- The blocker is the induction variable. Fix threads the loop-carried state (the
+  iterator plus the `LoopState`/`Option` continuation) as a **tagged union**
+  `{i8, [3 x i64]}` — a tag byte plus an `[N x i64]` payload, reconstructed each
+  iteration by `insertvalue` and a `select` on the tag. The index lives inside
+  that payload.
+- Reproduced in isolation with hand-written IR:
+  - a **scalar** induction variable (`i = phi i64`) -> O3 eliminates the check
+    entirely;
+  - a plain small struct `{i64, i64}` IV -> O3 still eliminates it (LLVM
+    scalarizes small structs);
+  - the **tagged-union `{i8, [3 x i64]}`** IV (Fix's shape) -> O3 leaves the
+    check. This matches the real Fix IR.
+
+Conclusion: the induction variable is hidden from LLVM's scalar-evolution analysis
+by the union-typed loop state. Removing the check in RC IR (the bespoke pass in
+Sections 5-6 below) would recover the direct check cost but **not** unblock
+vectorization, because the aggregate IV would still defeat `LoopVectorize`. The
+higher-leverage move is to make the loop-carried induction variable a scalar and
+let stock O3 do both the check elimination and the vectorization.
+
+Preferred plan — two cooperating transforms, both lighter than the range analysis:
+
+1. **Loop-state scalarization (main lever).** For a self-recursive loop function
+   whose parameters are unboxed aggregates or the `LoopState`/`Option`
+   continuation union, carry the leaves as separate scalar parameters (scalar
+   replacement of aggregate/union parameters), and let the union tag drive a
+   branch rather than being threaded as a value (it already is an `RcRhs::Match`
+   at the RC IR level; the issue is that codegen first materializes it as a
+   `{i8,[N x i64]}` value). After LLVM loop-formation the index is a scalar phi
+   `{0,+,1}`, which SCEV analyzes: it folds the check and enables vectorization.
+   This is a general win beyond BCE and overlaps the recursion-TCO / loop-form
+   work.
+2. **Invariant-size hoisting (needed for write loops).** When `get_size` is
+   called on an array provably size-equal to the loop's original array (threaded
+   through the size-preserving `set`/`mod`/`punch`/`plug`, traced with
+   `borrow.rs::root`), replace it with one loop-invariant size binding hoisted
+   before the loop. This is the `get_size`-invariance idea; it is size-CSE via
+   root tracing, far lighter than the range domain, and it is what a write loop
+   (where the array pointer changes each iteration) needs so LLVM can relate the
+   scalar IV to the bound.
+
+Together (1) and (2) hand the actual bounds-check elimination and vectorization to
+LLVM's mature machinery. The interprocedural range analysis in Sections 5-6 is
+retained below as the fallback for cases the LLVM-cooperating approach does not
+cover (index unrelated to a size, non-loop checks), and to document the problem
+shape; it is no longer the first choice.
+
+Open validation: prototype loop-state scalarization on the real Fix loop and
+confirm O3 then removes the check and vectorizes end-to-end (the scalar result is
+proven on hand-written IR; the remaining risk is fully lowering Fix's union state
+to scalar phis).
+
+The sections below are the original bespoke-pass design, kept as the fallback.
+
 ## 1. Goal and motivation
 
 Remove the runtime array bounds check when the compiler can prove the index is
