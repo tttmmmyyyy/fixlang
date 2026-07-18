@@ -13,4 +13,5 @@ pub mod print;
 pub mod provenance;
 pub mod rc_insert;
 pub mod rename;
+pub mod simplify;
 pub mod unique_elim;

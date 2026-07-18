@@ -23,6 +23,7 @@ use crate::{
         print::{program_to_string_annotated, Annotations},
         provenance::analyze_program,
         rc_insert::insert_rc,
+        simplify::simplify,
         unique_elim::specialize,
     },
     tool::stopwatch::StopWatch,
@@ -64,8 +65,14 @@ fn lower_and_insert_rc(
     type_env: &TypeEnv,
     symbols: &[Symbol],
     all_symbols: &[Symbol],
+    config: &Configuration,
 ) -> RcProgram {
     let mut prog = lower_program(type_env, symbols, all_symbols);
+    // Simplify the plain lowered term (case-of-known-constructor / case-of-case) before reference
+    // counting is inserted, so `insert_rc` computes optimal counts over the already-simplified code.
+    if config.enable_simplify() {
+        simplify(&mut prog);
+    }
     insert_rc(&mut prog, type_env);
     prog
 }
@@ -171,7 +178,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     };
     let type_env = program.type_env();
     let all_syms: Vec<Symbol> = program.symbols.values().cloned().collect();
-    let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms);
+    let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms, config);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
     let optimized = optimize_rc_program(base, &type_env, config);
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
@@ -300,7 +307,7 @@ pub fn build_object_files<'c>(
             // LLVM. Every symbol is already declared above (prototypes + global registration, in
             // every unit), so only this unit's symbols are implemented and none is defined twice.
             let unit_symbols = unit.symbols().to_vec();
-            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &all_symbols);
+            let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &all_symbols, &config);
             let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &config);
             gc.implement_rc_program(&rc_prog);
 

@@ -161,3 +161,22 @@ fn rename_rhs(rhs: &RcRhs, rename: &Map<FullName, FullName>) -> RcRhs {
         ),
     }
 }
+
+/// Substitute variable occurrences through `subst` in a deep clone of `node`, leaving binders and
+/// structure otherwise intact — a partial-map application of the same rewrite `rename_expr` performs.
+/// The simplifier uses it to replace a match-arm payload with the operands of the constructor it
+/// matched (case-of-known-constructor) and a match result with an inner arm's value (case-of-case);
+/// those substituends are never re-bound within the substituted expression, so a partial map suffices.
+pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>) -> RcExprNode {
+    rename_expr(node, subst)
+}
+
+/// A deep clone of an arbitrary expression with every bound variable given a fresh globally-unique
+/// name (like `fresh_rename_function`, but for a sub-expression rather than a whole function). Free
+/// variables — those bound outside `node` — are left unchanged. The simplifier uses it when
+/// case-of-case duplicates a match into several arms, so each copy's binders stay unique.
+pub(crate) fn clone_fresh(node: &RcExprNode, marker: &str, counter: &mut u64) -> RcExprNode {
+    let mut rename: Map<FullName, FullName> = Map::default();
+    collect_binders(node, marker, &mut rename, counter);
+    rename_expr(node, &rename)
+}

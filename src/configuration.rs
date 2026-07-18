@@ -577,6 +577,13 @@ impl Configuration {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
     }
 
+    /// The RC-IR term simplifier (case-of-known-constructor, case-of-case) runs at `Max` and above.
+    /// It composes with the same decapturing that borrow-ification needs — a specialized loop's body
+    /// is a known function whose union it can cancel — so it shares that opt-level threshold.
+    pub fn enable_simplify(&self) -> bool {
+        self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Max
+    }
+
     pub fn enable_simplify_symbol_names(&self) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= FixOptimizationLevel::Experimental
     }
