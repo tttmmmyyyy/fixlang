@@ -58,18 +58,20 @@ The essential core. Delivers `range.fold` (all-scalar state) read-loop vectoriza
   folded, and vectorization on the all-scalar (`range.fold`) case. `loop` and `to_iter` do not
   fully land yet (need Phase 2 inline and Phase 3 SROA respectively).
 
-## Phase 2 — inline-single-use + copy-prop + DCE
+## Phase 2 — inline-single-use
 
-Completes the `loop` idiom and cleans up the fixpoint.
+Completes the `loop` idiom by merging a `loop` body into its driver.
 
 - **inline-single-use**: inline a funptr function called exactly once into its call site
   (substitute args for params, alpha-rename via `rename.rs`). This merges a `loop` body into its
   driver so Phase 1's passes then remove the `LoopState` union.
-- **copy-prop**: `Let(x, Var(y), k)` -> substitute `y` (glue so later passes see through
-  renamings).
-- **DCE**: drop any `Let`/`Destructure` whose bound variable(s) are unused — with **no per-op
-  effect predicate** (Fix is pure except `eval`); `Eval` nodes (Phase 0) are the only forcing to
-  preserve, and they are not `Let`s, so DCE needs no special case.
+- **copy-prop / DCE — not needed at Max (measured), so omitted.** The AST-level `let_elimination`
+  copy-propagates before lowering: a rename-heavy program has 100 `let x = y` copies in the RC IR at
+  `-O basic` but 0 at `-O max`, and the post-simplify IR carries no dead bindings (a
+  `range.fold`/`to_iter.fold` program: 199 let-bindings, 0 single-use). The Phase-1 rewrites already
+  see clean, copy-free ANF. Add these only if a future lowering change lets copies reach the RC IR
+  at Max. (`Let(x, Var(y), k)` -> substitute `y`; drop any unused `Let`/`Destructure` — with no
+  per-op effect predicate, since Fix is pure except the dedicated `Eval` node.)
 - **Measure**: the `loop` idiom (e.g. an explicit index loop) now removes its union; all-scalar
   loop state vectorizes.
 

@@ -191,7 +191,7 @@ is the `get_size`-invariance idea, realized as a rewrite rather than an analysis
 
 ## 8. Phasing
 
-- **Phase 1 — case-of-known-constructor + copy-prop + DCE + case-of-case.** Immediately
+- **Phase 1 — case-of-known-constructor (union and struct) + case-of-case.** Immediately
   useful on all code (unwraps `Option`/`Result`/tuple plumbing), independent of BCE.
   Measure the suite-wide instruction change.
 - **Phase 2 — inline single-use (body into driver).** Enables the union cancellation on
@@ -217,9 +217,15 @@ folds the check). So:
   `{arr,idx}`, arrayrw's `(i,arr)`), where it hoists that pointer out so the borrow pass can
   borrow it read-only and kill the per-iteration RC churn that otherwise blocks LLVM; **not
   needed for all-scalar loop state** (`range.fold`). Confirmed by the pre-experiment below.
-- **copy-prop + DCE = glue**: needed for the Fix-side fixpoint to see through renamings and
-  stay clean, but LLVM does the final cleanup, so they do not change the end result.
-Implement the core first, measure against the ceiling, and add inline/SROA/glue only where a
+- **copy-prop + DCE = not needed at Max (measured).** The AST-level `let_elimination` already
+  copy-propagates before lowering, so no `let x = y` copy reaches the RC IR at Max (a rename-heavy
+  program has 100 such copies at `-O basic` but 0 at `-O max`), and the post-simplify IR carries no
+  dead bindings (a `range.fold`/`to_iter.fold` program: 199 let-bindings, 0 single-use, 0 copies).
+  The simplifier's own rewrites introduce neither — payload substitution renames in place, and a
+  just-built empty struct is cancelled by destructure-of-struct rather than left for DCE. So the
+  RC-IR simplifier omits copy-prop and DCE; the constructor-cancelling rewrites already see clean,
+  copy-free ANF. Revisit only if a future lowering change lets copies reach the RC IR at Max.
+Implement the core first, measure against the ceiling, and add inline/SROA only where a
 case fails to vectorize.
 
 **Agreed first experiment (no SROA).** Build only case-of-case + case-of-known-constructor
