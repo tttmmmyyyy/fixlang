@@ -219,6 +219,19 @@ folds the check). So:
 Implement the core first, measure against the ceiling, and add inline/SROA/glue only where a
 case fails to vectorize.
 
+**Agreed first experiment (no SROA).** Build only case-of-case + case-of-known-constructor
+plus the copy-prop/DCE glue (no SROA-of-params, no Fix-side inline), and run it on a
+`fold`/`to_iter` read loop. Expectation, already supported by the existing `opt -O3`
+experiments: removing the union leaves a *single-level* plain struct as the loop-carried
+state (`RangeIterator {next,end}` / `ArrayIterator {arr,idx}`; the accumulator is a separate
+scalar parameter), and
+- `agg_iv.ll` showed LLVM scalarizes a plain `{i64,i64}` phi and folds the check, while
+- the `--no-runtime-check` arrayrw showed vectorization follows once the check is gone (there
+  even with the union still present).
+So union removal alone should let LLVM fold the check and vectorize, with no SROA. If a case
+does not, that identifies the specific shape (likely a *nested* aggregate) that needs SROA as
+insurance.
+
 ## 9. Verification
 
 - Correctness: identical program outputs on the speedtest suite and the test suites at
