@@ -3107,16 +3107,11 @@ impl LLVMGen for InlineLLVMStructGetBody {
             Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
         } else {
             let field = self.field_index();
-            Provenance::build_shape(
-                result_ty,
-                type_env,
-                &|sigma: &Path| {
-                    let mut p = vec![field];
-                    p.extend_from_slice(sigma);
-                    Provenance::leaf(BaseSource::Arg(0, p))
-                },
-                &mut vec![],
-            )
+            Provenance::build_shape(result_ty, type_env, &|sigma: &Path| {
+                let mut p = vec![field];
+                p.extend_from_slice(sigma);
+                Provenance::leaf(BaseSource::Arg(0, p))
+            })
         }
     }
 
@@ -4666,16 +4661,11 @@ impl LLVMGen for InlineLLVMUnionAsBody {
             Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
         } else {
             let variant = self.variant_index();
-            Provenance::build_shape(
-                result_ty,
-                type_env,
-                &|sigma: &Path| {
-                    let mut p = vec![variant];
-                    p.extend_from_slice(sigma);
-                    Provenance::leaf(BaseSource::Arg(0, p))
-                },
-                &mut vec![],
-            )
+            Provenance::build_shape(result_ty, type_env, &|sigma: &Path| {
+                let mut p = vec![variant];
+                p.extend_from_slice(sigma);
+                Provenance::leaf(BaseSource::Arg(0, p))
+            })
         }
     }
 

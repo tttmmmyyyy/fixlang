@@ -26,6 +26,7 @@
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
+use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
@@ -66,59 +67,63 @@ impl Provenance {
         s
     }
 
-    /// Build the provenance shape of a value of type `ty`, calling `leaf(path)` for the leaf source
-    /// of each boxed leaf. Fully-unboxed values become `Unboxed` (no boxed leaf to track); a closure
-    /// becomes `{funptr, capture}` with the capture a single boxed leaf.
+    /// Build the provenance shape of a value of type `ty`. `leaf` is called once for each boxed leaf,
+    /// receiving the path to that leaf — the sequence of field indices from the root of `ty` down to
+    /// it — so `leaf` can tell which leaf it is describing (e.g. to record `Arg(i, path)`).
+    /// Fully-unboxed values become `Unboxed` (no boxed leaf to track); a closure becomes
+    /// `{funptr, capture}` with the capture a single boxed leaf.
     pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
         leaf: &dyn Fn(&Path) -> LeafSource,
-        path: &mut Path,
     ) -> Provenance {
-        if ty.is_fully_unboxed(type_env) {
-            return Provenance::Unboxed;
+        // The recursion accumulates the field indices from the root into `path`, which is what `leaf`
+        // is handed at each boxed leaf. It always starts empty, so it stays internal here rather than
+        // being a caller-facing parameter.
+        fn go(
+            ty: &Arc<TypeNode>,
+            type_env: &TypeEnv,
+            leaf: &dyn Fn(&Path) -> LeafSource,
+            path: &mut Path,
+        ) -> Provenance {
+            if ty.is_fully_unboxed(type_env) {
+                return Provenance::Unboxed;
+            }
+            if ty.is_closure() {
+                // A closure lowers to `{funptr, capture-pointer}`; only the capture is a boxed leaf.
+                path.push(CLOSURE_CAPTURE_IDX as usize);
+                let cap = Provenance::Boxed(leaf(path));
+                path.pop();
+                return Provenance::UnboxedAgg(vec![Provenance::Unboxed, cap]);
+            }
+            if ty.is_box(type_env) {
+                return Provenance::Boxed(leaf(path));
+            }
+            // An unboxed aggregate (struct, tuple, or unboxed union) that contains a boxed leaf:
+            // recurse into its fields (for a union, its variants' payloads).
+            let fields = ty.field_types(type_env);
+            let mut children = Vec::with_capacity(fields.len());
+            for (i, fty) in fields.iter().enumerate() {
+                path.push(i);
+                children.push(go(fty, type_env, leaf, path));
+                path.pop();
+            }
+            Provenance::UnboxedAgg(children)
         }
-        if ty.is_closure() {
-            // A closure lowers to `{funptr, capture-pointer}`; only the capture is a boxed leaf.
-            path.push(1);
-            let cap = Provenance::Boxed(leaf(path));
-            path.pop();
-            return Provenance::UnboxedAgg(vec![Provenance::Unboxed, cap]);
-        }
-        if ty.is_box(type_env) {
-            return Provenance::Boxed(leaf(path));
-        }
-        // An unboxed aggregate (struct, tuple, or unboxed union) that contains a boxed leaf: recurse
-        // into its fields (for a union, its variants' payloads).
-        let fields = ty.field_types(type_env);
-        let mut children = Vec::with_capacity(fields.len());
-        for (i, fty) in fields.iter().enumerate() {
-            path.push(i);
-            children.push(Provenance::build_shape(fty, type_env, leaf, path));
-            path.pop();
-        }
-        Provenance::UnboxedAgg(children)
+        go(ty, type_env, leaf, &mut Vec::new())
     }
 
     /// The provenance whose every boxed leaf is `src`.
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: BaseSource) -> Provenance {
-        Provenance::build_shape(
-            ty,
-            type_env,
-            &|_| Provenance::leaf(src.clone()),
-            &mut vec![],
-        )
+        Provenance::build_shape(ty, type_env, &|_| Provenance::leaf(src.clone()))
     }
 
     /// The provenance whose every boxed leaf at path `π` is `Arg(arg_index, π)` — the whole value of
     /// input `arg_index` carried through unchanged.
     pub fn arg_passthrough(ty: &Arc<TypeNode>, type_env: &TypeEnv, arg_index: usize) -> Provenance {
-        Provenance::build_shape(
-            ty,
-            type_env,
-            &|path: &Path| Provenance::leaf(BaseSource::Arg(arg_index, path.clone())),
-            &mut vec![],
-        )
+        Provenance::build_shape(ty, type_env, &|path: &Path| {
+            Provenance::leaf(BaseSource::Arg(arg_index, path.clone()))
+        })
     }
 
     /// Pointwise join (branch merge): union the leaf sources, recurse into aggregates.
@@ -267,7 +272,7 @@ fn leaf_source_to_string(ls: &LeafSource) -> String {
 impl Provenance {
     /// The provenance whose every boxed leaf is bottom (the empty set) — an absent union variant.
     pub fn uniform_bottom(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
-        Provenance::build_shape(ty, type_env, &|_| Set::default(), &mut vec![])
+        Provenance::build_shape(ty, type_env, &|_| Set::default())
     }
 }
 

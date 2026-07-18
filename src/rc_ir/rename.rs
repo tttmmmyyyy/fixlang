@@ -1,15 +1,39 @@
-//! Fresh renaming of RC IR local variables, shared by the passes that clone functions. Because RC IR
-//! names are globally unique, a clone must give every binder a fresh name so the clone's names do not
-//! collide with the original's; `marker` distinguishes each cloning pass's fresh names from the
-//! others'.
+//! Fresh renaming of RC IR local variables for the passes that clone functions (`borrow`,
+//! `unique_elim`). Because RC IR names are globally unique, a clone must give every binder a fresh
+//! name so the clone's names do not collide with the original's. The single entry point,
+//! `fresh_rename_function`, clones a function's parameters, capture, and body this way; `marker`
+//! distinguishes each cloning pass's fresh names from the others'.
 
 use crate::ast::name::FullName;
 use crate::misc::Map;
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
 
+/// Clone a function's parameters, capture, and body, giving every bound variable (parameters,
+/// capture, `let` bindings, destructure fields, match-arm payloads) a fresh globally-unique name and
+/// rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
+/// callers use to remap side tables and to route recursive references. `marker` distinguishes this
+/// cloning pass's fresh names from the others'.
+pub(crate) fn fresh_rename_function(
+    params: &[RcVar],
+    cap: &Option<RcVar>,
+    body: &RcExprNode,
+    marker: &str,
+    counter: &mut u64,
+) -> (Vec<RcVar>, Option<RcVar>, RcExprNode, Map<FullName, FullName>) {
+    let mut rename: Map<FullName, FullName> = Map::default();
+    for p in params.iter().chain(cap.iter()) {
+        fresh_rename(&p.name, marker, &mut rename, counter);
+    }
+    collect_binders(body, marker, &mut rename, counter);
+    let new_params = params.iter().map(|p| rename_var(p, &rename)).collect();
+    let new_cap = cap.as_ref().map(|c| rename_var(c, &rename));
+    let new_body = rename_expr(body, &rename);
+    (new_params, new_cap, new_body, rename)
+}
+
 /// Assign `name` a fresh globally-unique name (unless it already has one), suffixed with `marker`
 /// and a counter.
-pub(crate) fn fresh_rename(
+fn fresh_rename(
     name: &FullName,
     marker: &str,
     rename: &mut Map<FullName, FullName>,
@@ -25,7 +49,7 @@ pub(crate) fn fresh_rename(
 }
 
 /// Record a fresh name for every variable bound in a function body.
-pub(crate) fn collect_binders(
+fn collect_binders(
     node: &RcExprNode,
     marker: &str,
     rename: &mut Map<FullName, FullName>,
@@ -57,7 +81,7 @@ pub(crate) fn collect_binders(
 
 /// A variable with its name rewritten through `rename` (unchanged if it names a global rather than a
 /// local binder).
-pub(crate) fn rename_var(var: &RcVar, rename: &Map<FullName, FullName>) -> RcVar {
+fn rename_var(var: &RcVar, rename: &Map<FullName, FullName>) -> RcVar {
     let mut v = var.clone();
     if let Some(n) = rename.get(&var.name) {
         v.name = n.clone();
@@ -67,7 +91,7 @@ pub(crate) fn rename_var(var: &RcVar, rename: &Map<FullName, FullName>) -> RcVar
 
 /// A deep clone of an expression with every variable occurrence rewritten through `rename`. The
 /// operand names embedded in an `Llvm` generator are rewritten too, since they name the same locals.
-pub(crate) fn rename_expr(node: &RcExprNode, rename: &Map<FullName, FullName>) -> RcExprNode {
+fn rename_expr(node: &RcExprNode, rename: &Map<FullName, FullName>) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => RcExpr::Let(
             rename_var(x, rename),
@@ -105,7 +129,7 @@ pub(crate) fn rename_expr(node: &RcExprNode, rename: &Map<FullName, FullName>) -
 
 /// A right-hand side with every variable occurrence (including `Llvm` operand names) rewritten
 /// through `rename`.
-pub(crate) fn rename_rhs(rhs: &RcRhs, rename: &Map<FullName, FullName>) -> RcRhs {
+fn rename_rhs(rhs: &RcRhs, rename: &Map<FullName, FullName>) -> RcRhs {
     match rhs {
         RcRhs::Var(v) => RcRhs::Var(rename_var(v, rename)),
         RcRhs::App(callee, args) => RcRhs::App(

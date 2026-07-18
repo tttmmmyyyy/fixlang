@@ -38,6 +38,7 @@ use crate::ast::inline_llvm::LLVMGen;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
+use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::fixstd::builtin::InlineLLVMMakeUnionBody;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
@@ -46,7 +47,7 @@ use crate::rc_ir::ast::{
     RcProgram, RcRhs, RcState, RcUnit, RcVar,
 };
 use crate::rc_ir::provenance::{BaseSource, Provenance};
-use crate::rc_ir::rename::{collect_binders, fresh_rename, rename_expr, rename_var};
+use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `root`).
@@ -439,7 +440,7 @@ fn boxed_leaves_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out:
         return;
     }
     if ty.is_closure() {
-        path.push(1);
+        path.push(CLOSURE_CAPTURE_IDX as usize);
         out.push(path.clone());
         path.pop();
         return;
@@ -472,7 +473,7 @@ fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mu
         return;
     }
     if ty.is_closure() {
-        path.push(1);
+        path.push(CLOSURE_CAPTURE_IDX as usize);
         out.push(path.clone());
         path.pop();
         return;
@@ -738,7 +739,7 @@ fn shape_from_own(
             return OwnershipShape::Unboxed;
         }
         if ty.is_closure() {
-            path.push(1);
+            path.push(CLOSURE_CAPTURE_IDX as usize);
             let cap = owned(path);
             path.pop();
             return OwnershipShape::UnboxedAgg(vec![
@@ -820,15 +821,8 @@ fn clone_func(
     new_ref: FuncRef,
     counter: &mut u64,
 ) -> (RcFunc, Map<FullName, FullName>) {
-    let mut rename: Map<FullName, FullName> = Map::default();
-    for p in func.params.iter().chain(func.cap.iter()) {
-        fresh_rename(&p.name, "b", &mut rename, counter);
-    }
-    collect_binders(&func.body, "b", &mut rename, counter);
-
-    let params = func.params.iter().map(|p| rename_var(p, &rename)).collect();
-    let cap = func.cap.as_ref().map(|c| rename_var(c, &rename));
-    let body = rename_expr(&func.body, &rename);
+    let (params, cap, body, rename) =
+        fresh_rename_function(&func.params, &func.cap, &func.body, "b", counter);
     (
         RcFunc {
             name: new_ref,
