@@ -69,9 +69,10 @@ impl Provenance {
 
     /// Build the provenance shape of a value of type `ty`. `leaf` is called once for each boxed leaf,
     /// receiving the path to that leaf — the sequence of field indices from the root of `ty` down to
-    /// it — so `leaf` can tell which leaf it is describing (e.g. to record `Arg(i, path)`).
-    /// Fully-unboxed values become `Unboxed` (no boxed leaf to track); a closure becomes
-    /// `{funptr, capture}` with the capture a single boxed leaf.
+    /// it — so `leaf` can tell which leaf it is describing (e.g. to record `Arg(i, path)`). The shape
+    /// mirrors the type: a scalar (no fields) becomes `Unboxed`, an unboxed aggregate expands into an
+    /// `UnboxedAgg` over its fields (a union's variants' payloads) even when it holds no boxed leaf,
+    /// and a closure becomes `{funptr, capture}` with the capture a single boxed leaf.
     pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -86,9 +87,6 @@ impl Provenance {
             leaf: &dyn Fn(&Path) -> LeafSource,
             path: &mut Path,
         ) -> Provenance {
-            if ty.is_fully_unboxed(type_env) {
-                return Provenance::Unboxed;
-            }
             if ty.is_closure() {
                 // A closure lowers to `{funptr, capture-pointer}`; only the capture is a boxed leaf.
                 path.push(CLOSURE_CAPTURE_IDX as usize);
@@ -99,9 +97,14 @@ impl Provenance {
             if ty.is_box(type_env) {
                 return Provenance::Boxed(leaf(path));
             }
-            // An unboxed aggregate (struct, tuple, or unboxed union) that contains a boxed leaf:
-            // recurse into its fields (for a union, its variants' payloads).
+            // Expand every unboxed aggregate (struct, tuple, or unboxed union) into its fields (for a
+            // union, its variants' payloads), even when it holds no boxed leaf, so a value's shape
+            // always mirrors its type. Only a scalar (an unboxed leaf with no fields) becomes
+            // `Unboxed`. Normalizing to this expanded shape keeps `join` total without a fallback.
             let fields = ty.field_types(type_env);
+            if fields.is_empty() {
+                return Provenance::Unboxed;
+            }
             let mut children = Vec::with_capacity(fields.len());
             for (i, fty) in fields.iter().enumerate() {
                 path.push(i);
@@ -136,9 +139,15 @@ impl Provenance {
             (Provenance::Boxed(a), Provenance::Boxed(b)) => {
                 Provenance::Boxed(a.union(b).cloned().collect())
             }
-            // Mismatched shapes never arise from a well-typed program: both sides of a join have the
-            // same type. Falling back to the left side keeps the analysis total.
-            _ => self.clone(),
+            // Both sides of a branch merge have the same type, and a provenance's shape now mirrors
+            // its type exactly (`build_shape` expands every aggregate; a value read from a boxed
+            // container is a `Boxed` leaf), so the arms above are exhaustive. A mismatch would be a
+            // bug in the analysis, not valid input; fail loudly rather than silently returning a wrong
+            // provenance, which feeds unique-check elimination and could mask a miscompile.
+            _ => unreachable!(
+                "Provenance::join on mismatched shapes: {:?} vs {:?}",
+                self, other
+            ),
         }
     }
 
@@ -577,9 +586,17 @@ impl<'a> Interp<'a> {
         let mut joined_env: Option<Map<FullName, Provenance>> = None;
         for arm in arms {
             let mut arm_env = env.clone();
-            // The payload is the variant's value (unboxed union) or the whole scrutinee (catch-all).
+            // The payload is the variant's value (a tagged arm) or the whole scrutinee (catch-all). A
+            // variant payload of an unboxed union is projected from the scrutinee's expanded shape; of
+            // a boxed union it is read out of the shared container, so its every boxed leaf is `Dyn`.
             let payload_prov = match arm.variant {
-                Some(tag) => sprov.project(tag),
+                Some(tag) => {
+                    if scrut.ty.is_box(self.type_env) {
+                        Provenance::uniform(&arm.payload.ty, self.type_env, BaseSource::Dyn)
+                    } else {
+                        sprov.project(tag)
+                    }
+                }
                 None => sprov.clone(),
             };
             self.record(&arm.payload, &payload_prov, &mut arm_env);
