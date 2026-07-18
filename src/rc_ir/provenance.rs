@@ -210,19 +210,21 @@ impl Provenance {
         }
     }
 
-    /// The child provenance at index `i` of an unboxed aggregate; `Unboxed` if this is not an
-    /// aggregate with that child (a boxed container's contents are not tracked, a scalar has no
-    /// child). A `Boxed`/`Unboxed` receiver is a real case (projecting a field out of a boxed
-    /// container); an in-range index is required only when the receiver is an aggregate.
+    /// The provenance of field `i` of an unboxed aggregate. Only an unboxed aggregate is projected: a
+    /// field read out of a boxed container is handled by the caller (its leaves become `Dyn`), and a
+    /// scalar has no field.
     fn project(&self, i: usize) -> Provenance {
         match self {
-            Provenance::UnboxedAgg(children) if i < children.len() => children[i].clone(),
-            // A field index must be in range for a well-typed projection of an aggregate.
             Provenance::UnboxedAgg(children) => {
-                unreachable!("project: field index {} out of range ({} children)", i, children.len())
+                assert!(
+                    i < children.len(),
+                    "project: field index {} out of range ({} children)",
+                    i,
+                    children.len()
+                );
+                children[i].clone()
             }
-            // A boxed container's contents are not tracked; a scalar has no child.
-            Provenance::Boxed(_) | Provenance::Unboxed => Provenance::Unboxed,
+            _ => unreachable!("project: receiver {:?} is not an unboxed aggregate", self),
         }
     }
 
@@ -498,9 +500,18 @@ impl<'a> Interp<'a> {
             }
             RcExpr::Release(_, _, _, cont) => self.interp(cont, env),
             RcExpr::Destructure(container, fields, cont) => {
+                // Destructuring a boxed container retains each field out of the shared allocation, so
+                // every field's boxed leaf is `Dyn` (the same read-out-of-a-shared-box rule as a boxed
+                // union's payload in `interp_match`). An unboxed container's fields carry the tracked
+                // provenance projected from the container.
+                let boxed = container.ty.is_box(self.type_env);
                 let cprov = self.operand(container, &env);
                 for (idx, fv) in fields {
-                    let fprov = cprov.project(*idx);
+                    let fprov = if boxed {
+                        Provenance::uniform(&fv.ty, self.type_env, BaseSource::Dyn)
+                    } else {
+                        cprov.project(*idx)
+                    };
                     self.record(fv, &fprov, &mut env);
                 }
                 self.interp(cont, env)
@@ -817,8 +828,6 @@ mod tests {
         let agg = Provenance::UnboxedAgg(vec![fresh(), dyn_()]);
         assert_eq!(agg.project(0), fresh());
         assert_eq!(agg.project(1), dyn_());
-        // Projecting a boxed leaf's contents is not tracked.
-        assert_eq!(fresh().project(0), Provenance::Unboxed);
     }
 
     #[test]
