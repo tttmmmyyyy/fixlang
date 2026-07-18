@@ -39,19 +39,41 @@ expose it is to scalarize the loop-carried state.
 
 ### Follow-up experiment (2026-07-18): the check itself is the vectorization barrier
 
-A `--no-runtime-check` measurement corrected the conclusion above. Building the
+A `--no-runtime-check` measurement corrected the conclusion above. Building all 30
 speedtest cases twice (with and without the flag, `-O experimental`, cachegrind Ir)
-shows the bounds check costs far more than its branch — it **blocks vectorization**:
+shows the bounds check costs far more than its branch — it **blocks vectorization**.
+This is the ceiling (all checks removed unconditionally); a correct BCE recovers the
+provable subset, which for array iteration is the bulk. Reductions by case:
 
 | case | Ir with check | Ir no check | reduction |
 | --- | --- | --- | --- |
 | arrayrw / arrayrw_fn | 2.40e9 | 1.21e8 | -95.0% (19.9x) |
 | prime_table | 1.46e7 | 8.47e6 | -41.8% |
+| nbody | 1.95e9 | 1.13e9 | -41.7% |
+| random_state | 6.30e8 | 3.78e8 | -40.0% |
+| gen_random_array | 7.60e6 | 4.65e6 | -38.7% |
+| nbody_fold | 2.01e9 | 1.23e9 | -38.7% |
 | array_mod | 1.32e6 | 9.19e5 | -30.4% |
+| cp_lib_prime_list | 6.78e9 | 5.08e9 | -25.0% |
+| sum_by_fold_cap | 8.19e5 | 6.19e5 | -24.4% |
+| cp_lib_lsegtree | 1.31e9 | 9.89e8 | -24.3% |
+| cp_lib_segtree | 1.10e8 | 8.35e7 | -24.0% |
+| fannkuch | 3.68e9 | 2.93e9 | -20.6% |
+| sum_by_loop_iter_cap | 1.02e6 | 8.19e5 | -19.6% |
+| cp_lib_unionfind | 9.85e7 | 8.06e7 | -18.1% |
+| cp_lib_dijkstra | 1.67e8 | 1.37e8 | -17.9% |
+| sum_by_fold | 1.32e6 | 1.12e6 | -15.2% |
 | bounds_check_indexable | 1.06e8 | 9.04e7 | -14.5% |
 | sum_by_loop_iter | 1.82e6 | 1.62e6 | -11.0% |
-| index_syntax / sort | ~4e8 / 1.2e8 | | ~-4% |
-| mandelbrot (control) | 5.14e8 | 5.14e8 | 0.0% |
+| cp_lib_scc / conv_zp / bipartite | | | -3.9% .. -6.7% |
+| index_syntax / sort | | | ~-4% |
+| sum_by_loop_arr / sum_by_loop / sum_by_fix | | | ~0% (already optimal) |
+| mandelbrot / mandelbrot_fold / binary_trees (controls) | | | 0.0% |
+| **TOTAL (30 cases)** | **2.54e10** | **1.60e10** | **-36.8% (1.58x)** |
+
+So roughly a third of the suite's instructions are bounds checks, and the array-heavy
+and competitive-programming (`cp_lib_*`, 18-25%) workloads gain broadly, not just
+arrayrw.
 
 Inspecting arrayrw's optimized IR: **with** the check, 0 vector instructions and 14
 panic calls; **without** the check, 39 vector instructions and 0 panic calls — and
@@ -61,12 +83,12 @@ sufficient; loop-state scalarization is not a prerequisite for vectorization.** 
 earlier claim that a bespoke check-removal "would not unblock vectorization" was
 wrong.
 
-Caveats on the numbers: Ir is instruction count, so a 20x figure overstates the
-wall-clock gain for a memory-bandwidth-bound streaming loop like arrayrw (compute-
-bound loops such as prime_table track Ir more closely); and `--no-runtime-check`
-removes every check unconditionally (an upper bound), whereas a correct BCE removes
-only the provable ones — though the hot array-iteration checks are exactly the
-provable ones.
+Caveats on the numbers: Ir is instruction count, so the largest figures overstate the
+wall-clock gain for memory-bandwidth-bound streaming loops like arrayrw (compute-bound
+loops such as nbody / prime_table track Ir more closely); the zero-effect controls
+(mandelbrot, binary_trees, the scalar sums) confirm the measurement is not noise; and
+`sum_by_loop_arr` at ~0% shows a read loop whose check LLVM already eliminates today,
+so BCE is not needed everywhere.
 
 ### Revised conclusion
 
