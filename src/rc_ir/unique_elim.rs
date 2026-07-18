@@ -183,10 +183,12 @@ impl<'a> Specializer<'a> {
                 .borrowed_units
                 .iter()
                 .map(|(n, unit)| {
-                    (
-                        rename.get(n).cloned().unwrap_or_else(|| n.clone()),
-                        unit.clone(),
-                    )
+                    // Every `borrowed_units` key is a parameter or capture name, and
+                    // `fresh_rename_function` renames all of those, so the lookup always hits.
+                    let renamed = rename.get(n).cloned().unwrap_or_else(|| {
+                        unreachable!("borrowed_units key {:?} is not a renamed parameter/capture", n)
+                    });
+                    (renamed, unit.clone())
                 })
                 .collect(),
         }
@@ -237,7 +239,9 @@ impl<'a> Specializer<'a> {
             }
             // `Var` and `Closure` need no routing (a closure's target keeps its original name, whose
             // all-`Dynamic` version is always kept), so their right-hand sides pass through unchanged.
-            RcExpr::Let(x, rhs, k) => {
+            // Listed explicitly (not a catch-all) so a new `RcRhs` that might need routing fails to
+            // compile here instead of silently passing through.
+            RcExpr::Let(x, rhs @ (RcRhs::Var(_) | RcRhs::Closure(_, _)), k) => {
                 RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_body(k, inputs))
             }
             RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
@@ -291,11 +295,15 @@ impl<'a> Specializer<'a> {
     /// the caller's own input uniqueness. An arity mismatch (a partial application) resolves to the
     /// canonical key, leaving the callee unspecialized.
     fn callee_key(&self, call: &RcVar, g: &RcFunc, inputs: &[Uniqueness]) -> Key {
-        match self.analysis.call_args.get(&call.name) {
-            Some(arg_provs) if arg_provs.len() == g.params.len() => {
-                arg_provs.iter().map(|prov| resolve(prov, inputs)).collect()
-            }
-            _ => self.canonical_key_of(g),
+        // `interp_app` records `call_args` for every call, so the entry always exists.
+        let arg_provs = self.analysis.call_args.get(&call.name).unwrap_or_else(|| {
+            unreachable!("call_args has no entry for the call {:?}", call.name)
+        });
+        if arg_provs.len() == g.params.len() {
+            arg_provs.iter().map(|prov| resolve(prov, inputs)).collect()
+        } else {
+            // An arity mismatch (a partial application) resolves to the canonical key.
+            self.canonical_key_of(g)
         }
     }
 
@@ -311,11 +319,12 @@ impl<'a> Specializer<'a> {
         let Some(uc) = gen.unique_check_operand() else {
             return gen.clone();
         };
-        let unique = self
-            .analysis
-            .op_containers
-            .get(&result.name)
-            .map_or(false, |prov| leaf_is_unique(prov, &uc.path, inputs));
+        // `interp_rhs` records `op_containers` for exactly the ops that carry a `unique_check_operand`
+        // — the same condition the `let Some(uc)` guard above passed — so the entry always exists.
+        let container_prov = self.analysis.op_containers.get(&result.name).unwrap_or_else(|| {
+            unreachable!("op_containers has no entry for the unique-check op {:?}", result.name)
+        });
+        let unique = leaf_is_unique(container_prov, &uc.path, inputs);
         if unique {
             gen.assuming_unique()
         } else {

@@ -222,10 +222,11 @@ fn root_inner(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usi
             let decl = gen.result_prov(result_ty, &arg_tys, type_env);
             // A result leaf that is a single `Arg(j, p)` is a pure projection of argument `j`'s leaf
             // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
-            // several sources) is a producer, stopping here.
+            // several sources) is a producer, stopping here. An `Llvm` op is never partially applied,
+            // so a well-formed `result_prov` names only real argument indices (`args[j]` else panics).
             match single_arg(&decl.leaf_at(path)) {
-                Some((j, p)) if j < args.len() => root(facts, type_env, &args[j].name, &p),
-                _ => here(),
+                Some((j, p)) => root(facts, type_env, &args[j].name, &p),
+                None => here(),
             }
         }
         Some(Def::Field(container, idx)) => {
@@ -336,8 +337,10 @@ fn rhs_consumes<F: Fn(&RcVar, &Path) -> bool>(
             let callee_params = resolve_callee_params(callee, facts, prog);
             for (i, a) in args.iter().enumerate() {
                 for pi in boxed_leaves(&a.ty, type_env) {
+                    // `i` ranges over the arguments and `args.len() <= params.len()` (no over-
+                    // application), so `params[i]` is in range.
                     let owns_pos = match &callee_params {
-                        Some(params) => params.get(i).map_or(true, |p| owns(p, &pi)),
+                        Some(params) => owns(&params[i], &pi),
                         None => true,
                     };
                     if owns_pos {
@@ -510,10 +513,14 @@ fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
             // A boxed value (including a boxed union) and an unboxed union are each one unit.
             break;
         }
+        // Here `cur` is an unboxed struct/tuple, so a well-formed unit/root path index is in range.
         let fields = cur.field_types(type_env);
-        if idx >= fields.len() {
-            break;
-        }
+        assert!(
+            idx < fields.len(),
+            "clamp_unit: path index {} out of range ({} fields)",
+            idx,
+            fields.len()
+        );
         out.push(idx);
         cur = fields[idx].clone();
     }
@@ -956,8 +963,10 @@ impl<'a> RewriteCtx<'a> {
         args.iter().enumerate().any(|(q, arg)| {
             let last_use = !used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
-                let callee_borrows = match bparams.and_then(|ps| ps.get(q)) {
-                    Some((pn, _)) => !self.own_out.contains(&(pn.clone(), unit.clone())),
+                // `q` is in range since `args.len() <= params.len()`; a callee with no borrow version
+                // (`None`) offers no borrow to benefit from.
+                let callee_borrows = match bparams {
+                    Some(ps) => !self.own_out.contains(&(ps[q].0.clone(), unit.clone())),
                     None => false,
                 };
                 callee_borrows && !(self.owns_unit(arg, unit) && last_use)
@@ -1002,10 +1011,11 @@ impl<'a> RewriteCtx<'a> {
         let mut after = vec![];
         for (q, arg) in args.iter().enumerate() {
             for unit in rc_units(&arg.ty, self.type_env) {
-                // An unresolved (indirect) callee owns every position (the all-`Own` ABI).
-                let callee_owns = match cparams.and_then(|ps| ps.get(q)) {
-                    Some((pn, _)) => self.own_out.contains(&(pn.clone(), unit.clone())),
+                // An unresolved (indirect) callee owns every position (the all-`Own` ABI); a resolved
+                // one is indexed by `q`, which is in range since `args.len() <= params.len()`.
+                let callee_owns = match cparams {
                     None => true,
+                    Some(ps) => self.own_out.contains(&(ps[q].0.clone(), unit.clone())),
                 };
                 let arg_owned = self.owns_unit(arg, &unit);
                 if !callee_owns && arg_owned {
@@ -1132,10 +1142,14 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Option<A
         {
             return None;
         }
+        // Here `cur` is an unboxed struct/tuple, so a well-formed unit/root path index is in range.
         let fields = cur.field_types(type_env);
-        if idx >= fields.len() {
-            return None;
-        }
+        assert!(
+            idx < fields.len(),
+            "subtree_type: path index {} out of range ({} fields)",
+            idx,
+            fields.len()
+        );
         cur = fields[idx].clone();
     }
     Some(cur)
@@ -1334,9 +1348,10 @@ impl<'a> CancelAnalysis<'a> {
             RcExpr::Release(v, path, _, k) => {
                 let o = self.key(&v.name, path);
                 if let Some(stack) = pend.get_mut(&o) {
-                    if let Some(r) = stack.pop() {
-                        self.pairs.entry(r).or_default().push(node_id(node));
-                    }
+                    // A stack kept in `pend` is never empty (emptied stacks are removed below), so a
+                    // pending retain to pair with is always present.
+                    let r = stack.pop().expect("a stack kept in `pend` is non-empty");
+                    self.pairs.entry(r).or_default().push(node_id(node));
                     if stack.is_empty() {
                         pend.remove(&o);
                     }
@@ -1367,7 +1382,12 @@ impl<'a> CancelAnalysis<'a> {
                     // at the field's own release. Only a dropped (unnamed) field's leaves are consumed.
                     let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
                     for pi in boxed_leaves(&container.ty, self.type_env) {
-                        if pi.first().map_or(true, |i| !named.contains(i)) {
+                        // A boxed leaf of an unboxed container starts with a field/capture index, so
+                        // its path is non-empty; the leaf is consumed unless that field is named.
+                        let field = pi
+                            .first()
+                            .expect("a boxed leaf of an unboxed container has a non-empty path");
+                        if !named.contains(field) {
                             self.consume(&mut pend, &container.name, &pi);
                         }
                     }

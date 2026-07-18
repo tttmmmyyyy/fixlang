@@ -211,11 +211,18 @@ impl Provenance {
     }
 
     /// The child provenance at index `i` of an unboxed aggregate; `Unboxed` if this is not an
-    /// aggregate with that child (a boxed container's contents are not tracked).
+    /// aggregate with that child (a boxed container's contents are not tracked, a scalar has no
+    /// child). A `Boxed`/`Unboxed` receiver is a real case (projecting a field out of a boxed
+    /// container); an in-range index is required only when the receiver is an aggregate.
     fn project(&self, i: usize) -> Provenance {
         match self {
             Provenance::UnboxedAgg(children) if i < children.len() => children[i].clone(),
-            _ => Provenance::Unboxed,
+            // A field index must be in range for a well-typed projection of an aggregate.
+            Provenance::UnboxedAgg(children) => {
+                unreachable!("project: field index {} out of range ({} children)", i, children.len())
+            }
+            // A boxed container's contents are not tracked; a scalar has no child.
+            Provenance::Boxed(_) | Provenance::Unboxed => Provenance::Unboxed,
         }
     }
 
@@ -230,7 +237,11 @@ impl Provenance {
                     cs[*i] = cs[*i].demote(rest);
                     Provenance::UnboxedAgg(cs)
                 }
-                _ => self.clone(),
+                // A non-empty path descends only through unboxed aggregates; reaching a boxed or
+                // scalar leaf, or an out-of-range index, means the path is inconsistent with the
+                // value's type — a bug. (Swallowing it would leave a leaf that should demote to `Dyn`
+                // still `Fresh`/`Arg`, i.e. wrongly unique.)
+                _ => unreachable!("demote: path {:?} inconsistent with shape {:?}", path, self),
             },
         }
     }
@@ -313,16 +324,21 @@ pub enum Uniqueness {
 }
 
 impl Uniqueness {
-    /// The verdict at path `π`, navigating through aggregates to the boxed leaf. `Dynamic` if the
-    /// path does not reach a boxed leaf (the conservative default).
+    /// The verdict at path `π`. `Dynamic` (the conservative default) when `π` ends at a position that
+    /// is not a single boxed leaf — an aggregate root or a scalar. A non-empty `π` that runs off the
+    /// end of an aggregate or past a boxed/scalar leaf is inconsistent with the value's type, which
+    /// cannot happen for a well-formed query. (Mirrors `Provenance::leaf_at`.)
     fn leaf_at(&self, path: &[usize]) -> CTRefCnt {
-        match self {
-            Uniqueness::UnboxedAgg(children) => match path.split_first() {
-                Some((i, rest)) if *i < children.len() => children[*i].leaf_at(rest),
-                _ => CTRefCnt::Dynamic,
-            },
-            Uniqueness::Boxed(rc) => *rc,
-            Uniqueness::Unboxed => CTRefCnt::Dynamic,
+        match (self, path.split_first()) {
+            (Uniqueness::UnboxedAgg(children), Some((i, rest))) if *i < children.len() => {
+                children[*i].leaf_at(rest)
+            }
+            (Uniqueness::Boxed(rc), None) => *rc,
+            (Uniqueness::UnboxedAgg(_) | Uniqueness::Unboxed, None) => CTRefCnt::Dynamic,
+            (_, Some(_)) => unreachable!(
+                "Uniqueness::leaf_at: path {:?} inconsistent with shape {:?}",
+                path, self
+            ),
         }
     }
 
