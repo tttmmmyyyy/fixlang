@@ -28,11 +28,31 @@ substitution — accidental complexity that ANF removes entirely. (Do this work 
 which is the hard, error-prone case. Simplify first, then let `insert_rc` compute optimal RC
 over the result.)
 
-**Type- and representation-directed transformations stay on the AST.** Typeclass/functor
-specialization (`optimize_act`), newtype unwrapping (`unwrap_newtype`), higher-kinded-tyvar
-elimination (`remove_hktvs`), closure conversion (`decapturing`), and uncurrying
-(`uncurry`) need the type environment, instances, and HKT structure that lowering consumes —
-and several must run before lowering anyway. They cannot move to the RC IR.
+**The dividing line is NOT "uses types."** The RC IR carries a monomorphic
+`Arc<TypeNode>` on every variable and passes receive `&TypeEnv`, so type-directed dispatch
+works there too. And the current AST passes are not lowering prerequisites — lowering
+absorbs `TyAnno` (it lowers through it) and lambda-lifts capturing closures itself, so
+`remove_tyanno` and `decapturing` are optimizations/normalizations placed on the AST by
+convenience, not necessity. Even a type-*directed* optimization like `optimize_act` (swap
+`act` at functor `Identity`/`Const`/`Tuple2` for a specialized implementation) is really a
+term rewrite — read the monomorphic functor type, change the call target — which the RC IR
+supports; it lives on the AST because it uses the instantiation-time `require_instantiation`
+mechanism, not because it needs the AST.
+
+**The genuinely narrow reasons to keep a pass on the AST:**
+
+1. **Wholesale type-representation rewrites** that mutate the `type_env` / tycons — newtype
+   unwrapping (`unwrap_newtype`), HKT-tyvar normalization (`remove_hktvs`). Possible on the
+   RC IR, but the AST version is more centralized (RC IR spreads types across every
+   variable, so a consistent rewrite is more bookkeeping).
+2. **Needs structure lowering erases** — nested-lambda scope (closure conversion's one
+   angle), un-resolved typeclass constraints, un-desugared `If` / high-level match patterns.
+   RC IR has none of these.
+3. **Ordering clusters and instantiation-time mechanisms** — `remove_hktvs` feeds
+   `unwrap_newtype`; `optimize_act` uses `require_instantiation` during the AST phase.
+
+So most transformations — including type-directed ones that only *read* a type — can live on
+the RC IR. What stays on the AST is the short list above, not "everything type-directed."
 
 ## Consequences
 
