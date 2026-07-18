@@ -8,7 +8,9 @@
 //!   to the value that built it. The construction and the match/destructure both vanish.
 //! - **case-of-case**: a `match` whose scrutinee is itself a `match` (in tail position) floats into
 //!   the inner arms, bringing each inner arm's freshly built constructor next to the outer match so
-//!   case-of-known-constructor can cancel it.
+//!   case-of-known-constructor can cancel it. It fires all-or-nothing — only when every inner arm's
+//!   result is a union the arm builds and a specific outer arm matches, so the floated match cancels
+//!   in every arm and the outer match is redistributed rather than duplicated.
 //!
 //! Composed, they cancel the `Option`/`LoopState`/tuple union a loop builds and immediately matches
 //! each iteration, exposing the scalar loop state underneath — which is what lets the back end form a
@@ -20,6 +22,10 @@
 //! only when the value it removes is consumed exactly once, so no boxed payload gains a second
 //! reference (which would force a copy). Every substitution renames variables only — no computation is
 //! moved — so no boxed value's lifetime is extended.
+//!
+//! The fixpoint terminates: case-of-known-constructor and destructure-of-struct each remove a node,
+//! and the all-or-nothing case-of-case guard keeps every float a net cancellation, so the term does
+//! not grow without bound. A per-body rewrite budget (`rewrite_budget`) backs this up as a hard limit.
 
 use crate::ast::name::FullName;
 use crate::fixstd::builtin::{InlineLLVMMakeStructBody, InlineLLVMMakeUnionBody};
@@ -31,39 +37,52 @@ use crate::rc_ir::rename::{clone_fresh, substitute_expr};
 /// The marker for fresh names the case-of-case clone mints, keeping them distinct from other passes'.
 const MARKER: &str = "cc";
 
+/// Rewriting state threaded through a body's fixpoint: a supply of fresh-name suffixes (unique across
+/// the whole program) and a per-body rewrite budget. The budget is a halting backstop — the
+/// constructor guard on case-of-case already keeps every rewrite productive, so the budget only
+/// guarantees termination against an unforeseen non-terminating interaction, never limits real work.
+struct Ctx {
+    fresh: u64,
+    budget: u64,
+}
+
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
 pub fn simplify(prog: &mut RcProgram) {
-    let mut counter: u64 = 0;
+    let mut ctx = Ctx {
+        fresh: 0,
+        budget: 0,
+    };
     for func in prog.funcs.values_mut() {
-        func.body = simplify_to_fixpoint(&func.body, &mut counter);
+        func.body = simplify_to_fixpoint(&func.body, &mut ctx);
     }
     for g in &mut prog.globals {
-        g.init = simplify_to_fixpoint(&g.init, &mut counter);
+        g.init = simplify_to_fixpoint(&g.init, &mut ctx);
     }
 }
 
-/// Apply the rewrites over a body until a pass makes no change.
-fn simplify_to_fixpoint(node: &RcExprNode, counter: &mut u64) -> RcExprNode {
+/// Apply the rewrites over a body until a pass makes no change (or the budget is spent).
+fn simplify_to_fixpoint(node: &RcExprNode, ctx: &mut Ctx) -> RcExprNode {
+    ctx.budget = rewrite_budget(node);
     let mut cur = node.clone();
     loop {
         let mut changed = false;
-        cur = rewrite(&cur, counter, &mut changed);
+        cur = rewrite(&cur, ctx, &mut changed);
         if !changed {
             return cur;
         }
     }
 }
 
-fn rewrite(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
+fn rewrite(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode {
     // The continuation chain recurses deeply for a large function; grow the stack on demand.
     stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        let node = rewrite_children(node, counter, changed);
-        try_local(&node, counter, changed)
+        let node = rewrite_children(node, ctx, changed);
+        try_local(&node, ctx, changed)
     })
 }
 
 /// Rebuild a node with `rewrite` applied to its sub-expressions (match arms and the continuation).
-fn rewrite_children(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
+fn rewrite_children(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode {
     let expr = match node.expr.as_ref() {
         RcExpr::Ret(v) => RcExpr::Ret(v.clone()),
         RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
@@ -72,49 +91,76 @@ fn rewrite_children(node: &RcExprNode, counter: &mut u64, changed: &mut bool) ->
                 .map(|arm| MatchArm {
                     variant: arm.variant,
                     payload: arm.payload.clone(),
-                    body: rewrite(&arm.body, counter, changed),
+                    body: rewrite(&arm.body, ctx, changed),
                 })
                 .collect();
             RcExpr::Let(
                 x.clone(),
                 RcRhs::Match(scrut.clone(), arms),
-                rewrite(k, counter, changed),
+                rewrite(k, ctx, changed),
             )
         }
-        RcExpr::Let(x, rhs, k) => {
-            RcExpr::Let(x.clone(), rhs.clone(), rewrite(k, counter, changed))
+        RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), rewrite(k, ctx, changed)),
+        RcExpr::Destructure(container, fields, k) => {
+            RcExpr::Destructure(container.clone(), fields.clone(), rewrite(k, ctx, changed))
         }
-        RcExpr::Destructure(container, fields, k) => RcExpr::Destructure(
-            container.clone(),
-            fields.clone(),
-            rewrite(k, counter, changed),
-        ),
-        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), rewrite(k, counter, changed)),
+        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), rewrite(k, ctx, changed)),
         RcExpr::Retain(v, path, state, k) => {
-            RcExpr::Retain(v.clone(), path.clone(), *state, rewrite(k, counter, changed))
+            RcExpr::Retain(v.clone(), path.clone(), *state, rewrite(k, ctx, changed))
         }
         RcExpr::Release(v, path, state, k) => {
-            RcExpr::Release(v.clone(), path.clone(), *state, rewrite(k, counter, changed))
+            RcExpr::Release(v.clone(), path.clone(), *state, rewrite(k, ctx, changed))
         }
     };
     node_of(expr, &node.source)
 }
 
-/// Try the local rewrites at `node`. Returns the rewritten node and sets `changed` if one fired.
-fn try_local(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
+/// Try the local rewrites at `node`. Returns the rewritten node and sets `changed` if one fired. Once
+/// the body's budget is spent no rewrite fires, so the fixpoint reaches a no-change pass and stops.
+fn try_local(node: &RcExprNode, ctx: &mut Ctx, changed: &mut bool) -> RcExprNode {
+    if ctx.budget == 0 {
+        return node.clone();
+    }
     if let Some(rewritten) = case_of_known_union(node) {
+        ctx.budget -= 1;
         *changed = true;
         return rewritten;
     }
     if let Some(rewritten) = destructure_of_struct(node) {
+        ctx.budget -= 1;
         *changed = true;
         return rewritten;
     }
-    if let Some(rewritten) = case_of_case(node, counter) {
+    if let Some(rewritten) = case_of_case(node, &mut ctx.fresh) {
+        ctx.budget -= 1;
         *changed = true;
         return rewritten;
     }
     node.clone()
+}
+
+/// The rewrite budget for a body: a halting backstop sized far above any legitimate need, so it never
+/// limits real simplification but still bounds the total number of rewrites.
+fn rewrite_budget(node: &RcExprNode) -> u64 {
+    const BASE: u64 = 1024;
+    const PER_NODE: u64 = 64;
+    BASE + PER_NODE * node_count(node)
+}
+
+/// The number of expression nodes in `node`.
+fn node_count(node: &RcExprNode) -> u64 {
+    let cont = match node.expr.as_ref() {
+        RcExpr::Ret(_) => return 1,
+        RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
+            return 1 + arms.iter().map(|a| node_count(&a.body)).sum::<u64>() + node_count(k);
+        }
+        RcExpr::Let(_, _, k)
+        | RcExpr::Destructure(_, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k) => k,
+    };
+    1 + node_count(cont)
 }
 
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
@@ -172,15 +218,26 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
 /// outer match is cloned with fresh binders per arm (so names stay unique) and its scrutinee replaced
 /// by the value that inner arm produces — bringing that value (a freshly built constructor) next to
 /// the outer match for case-of-known-constructor to cancel on the next pass.
+///
+/// It fires all-or-nothing: only when *every* inner arm's result is a union built in that arm and
+/// matched by a specific outer arm, so case-of-known-constructor cancels the floated match in every
+/// arm and the outer match is redistributed rather than left duplicated. That keeps each rewrite a net
+/// simplification and bounds the total, so the fixpoint cannot diverge.
 fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let RcExpr::Let(s, RcRhs::Match(inner_scrut, inner_arms), k) = node.expr.as_ref() else {
         return None;
     };
     // The continuation must be exactly a tail match on `s`: `let m = match s {..}; ret m`.
-    let RcExpr::Let(m, RcRhs::Match(outer_scrut, _), k2) = k.expr.as_ref() else {
+    let RcExpr::Let(m, RcRhs::Match(outer_scrut, outer_arms), k2) = k.expr.as_ref() else {
         return None;
     };
     if outer_scrut.name != s.name || !is_ret_of(k2, &m.name) || count_value_uses(&s.name, k) != 1 {
+        return None;
+    }
+    if !inner_arms
+        .iter()
+        .all(|arm| arm_result_cancels_outer(&arm.body, outer_arms))
+    {
         return None;
     }
     // Float the outer match `k` into each inner arm's tail, cloned with fresh binders per arm and its
@@ -214,6 +271,41 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
 /// Whether `node` is exactly `ret name`.
 fn is_ret_of(node: &RcExprNode, name: &FullName) -> bool {
     matches!(node.expr.as_ref(), RcExpr::Ret(v) if v.name == *name)
+}
+
+/// Whether floating `outer_arms` (a union match) into an inner arm whose body is `body` will cancel:
+/// the arm must end in a union it builds and immediately returns, and `outer_arms` must have a
+/// specific arm for that union's tag. Together these are exactly what case-of-known-constructor needs
+/// to collapse the floated match, so the guard predicts the cancellation faithfully.
+fn arm_result_cancels_outer(body: &RcExprNode, outer_arms: &[MatchArm]) -> bool {
+    match arm_tail_union_tag(body) {
+        Some(tag) => outer_arms.iter().any(|a| a.variant == Some(tag)),
+        None => false,
+    }
+}
+
+/// If `body`'s tail is `let r = make_union(payload); ret r` — a union built and immediately returned —
+/// the constructor's tag. Requiring the construction to abut the `ret` is what makes the union abut the
+/// floated match, which is the adjacency case-of-known-constructor needs; it also makes `r` single-use
+/// (bound then returned), so the floated match consumes it linearly.
+fn arm_tail_union_tag(body: &RcExprNode) -> Option<usize> {
+    match body.expr.as_ref() {
+        RcExpr::Let(r, rhs, k) => {
+            if !is_ret_of(k, &r.name) {
+                return arm_tail_union_tag(k);
+            }
+            let RcRhs::Llvm(gen, args) = rhs else {
+                return None;
+            };
+            let make = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
+            (args.len() == 1).then(|| make.variant_index())
+        }
+        RcExpr::Destructure(_, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k) => arm_tail_union_tag(k),
+        RcExpr::Ret(_) => None,
+    }
 }
 
 /// Replace the terminal `ret r` of `node` with `f(r)`, threading through the continuation chain. A

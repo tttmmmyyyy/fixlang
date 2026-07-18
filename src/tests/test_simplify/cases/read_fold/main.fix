@@ -1,0 +1,15 @@
+module Main;
+
+// A read loop over an array's own indices, expressed with `range(0, size).fold`. `range`'s `advance`
+// builds an `Option` that `fold` immediately matches each iteration; the RC-IR simplifier cancels that
+// union, leaving the plain two-scalar `RangeIterator` as the loop-carried state.
+sum_by_range_fold : Array I64 -> I64;
+sum_by_range_fold = |arr| (
+    Iterator::range(0, arr.@size).fold(0, |i, acc| acc + arr.@(i))
+);
+
+main : IO ();
+main = (
+    let arr = Array::from_map(100, |i| i);
+    println $ sum_by_range_fold(arr).to_string
+);
