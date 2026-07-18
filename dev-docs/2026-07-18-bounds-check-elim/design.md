@@ -33,46 +33,62 @@ Findings:
   - the **tagged-union `{i8, [3 x i64]}`** IV (Fix's shape) -> O3 leaves the
     check. This matches the real Fix IR.
 
-Conclusion: the induction variable is hidden from LLVM's scalar-evolution analysis
-by the union-typed loop state. Removing the check in RC IR (the bespoke pass in
-Sections 5-6 below) would recover the direct check cost but **not** unblock
-vectorization, because the aggregate IV would still defeat `LoopVectorize`. The
-higher-leverage move is to make the loop-carried induction variable a scalar and
-let stock O3 do both the check elimination and the vectorization.
+First conclusion (later corrected — see below): the induction variable is hidden
+from LLVM's scalar-evolution analysis by the union-typed loop state, and the way to
+expose it is to scalarize the loop-carried state.
 
-Preferred plan — two cooperating transforms, both lighter than the range analysis:
+### Follow-up experiment (2026-07-18): the check itself is the vectorization barrier
 
-1. **Loop-state scalarization (main lever).** For a self-recursive loop function
-   whose parameters are unboxed aggregates or the `LoopState`/`Option`
-   continuation union, carry the leaves as separate scalar parameters (scalar
-   replacement of aggregate/union parameters), and let the union tag drive a
-   branch rather than being threaded as a value (it already is an `RcRhs::Match`
-   at the RC IR level; the issue is that codegen first materializes it as a
-   `{i8,[N x i64]}` value). After LLVM loop-formation the index is a scalar phi
-   `{0,+,1}`, which SCEV analyzes: it folds the check and enables vectorization.
-   This is a general win beyond BCE and overlaps the recursion-TCO / loop-form
-   work.
-2. **Invariant-size hoisting (needed for write loops).** When `get_size` is
-   called on an array provably size-equal to the loop's original array (threaded
-   through the size-preserving `set`/`mod`/`punch`/`plug`, traced with
-   `borrow.rs::root`), replace it with one loop-invariant size binding hoisted
-   before the loop. This is the `get_size`-invariance idea; it is size-CSE via
-   root tracing, far lighter than the range domain, and it is what a write loop
-   (where the array pointer changes each iteration) needs so LLVM can relate the
-   scalar IV to the bound.
+A `--no-runtime-check` measurement corrected the conclusion above. Building the
+speedtest cases twice (with and without the flag, `-O experimental`, cachegrind Ir)
+shows the bounds check costs far more than its branch — it **blocks vectorization**:
 
-Together (1) and (2) hand the actual bounds-check elimination and vectorization to
-LLVM's mature machinery. The interprocedural range analysis in Sections 5-6 is
-retained below as the fallback for cases the LLVM-cooperating approach does not
-cover (index unrelated to a size, non-loop checks), and to document the problem
-shape; it is no longer the first choice.
+| case | Ir with check | Ir no check | reduction |
+| --- | --- | --- | --- |
+| arrayrw / arrayrw_fn | 2.40e9 | 1.21e8 | -95.0% (19.9x) |
+| prime_table | 1.46e7 | 8.47e6 | -41.8% |
+| array_mod | 1.32e6 | 9.19e5 | -30.4% |
+| bounds_check_indexable | 1.06e8 | 9.04e7 | -14.5% |
+| sum_by_loop_iter | 1.82e6 | 1.62e6 | -11.0% |
+| index_syntax / sort | ~4e8 / 1.2e8 | | ~-4% |
+| mandelbrot (control) | 5.14e8 | 5.14e8 | 0.0% |
 
-Open validation: prototype loop-state scalarization on the real Fix loop and
-confirm O3 then removes the check and vectorizes end-to-end (the scalar result is
-proven on hand-written IR; the remaining risk is fully lowering Fix's union state
-to scalar phis).
+Inspecting arrayrw's optimized IR: **with** the check, 0 vector instructions and 14
+panic calls; **without** the check, 39 vector instructions and 0 panic calls — and
+the loop state is still the tagged union. So once the panic-call branch is gone,
+LLVM scalarizes the union phi and vectorizes on its own. **Removing the check is
+sufficient; loop-state scalarization is not a prerequisite for vectorization.** The
+earlier claim that a bespoke check-removal "would not unblock vectorization" was
+wrong.
 
-The sections below are the original bespoke-pass design, kept as the fallback.
+Caveats on the numbers: Ir is instruction count, so a 20x figure overstates the
+wall-clock gain for a memory-bandwidth-bound streaming loop like arrayrw (compute-
+bound loops such as prime_table track Ir more closely); and `--no-runtime-check`
+removes every check unconditionally (an upper bound), whereas a correct BCE removes
+only the provable ones — though the hot array-iteration checks are exactly the
+provable ones.
+
+### Revised conclusion
+
+Both routes reach the same endpoint (no check -> LLVM vectorizes), so both are
+viable and neither strictly dominates:
+
+- **(A) Bespoke RC-IR BCE (Sections 5-6).** Fix proves `0 <= idx < size` and removes
+  the check; LLVM then scalarizes and vectorizes. Deterministic, uniform across read
+  and write loops (Fix does the proof), and — now confirmed — it does capture the
+  vectorization win. Cost: the interprocedural range analysis.
+- **(B) Loop-state scalarization + invariant-size hoist.** Expose a scalar induction
+  variable (scalar replacement of the aggregate/`LoopState` parameters) and hoist the
+  invariant size (`get_size` CSE via `borrow.rs::root`), then let LLVM's SCEV prove
+  and fold the check. Offloads the safety proof to LLVM; cost: the loop-lowering
+  change (overlaps recursion-TCO) plus the size-hoist, and a dependence on LLVM
+  heuristics. Scalarization is also a general win beyond BCE.
+
+Recommended next step: prototype **(A)** first — it is self-contained and its payoff
+is now measured — while keeping **(B)** in mind, since loop-state scalarization helps
+LLVM broadly (not only BCE) and the two compose.
+
+The sections below detail approach (A).
 
 ## 1. Goal and motivation
 
