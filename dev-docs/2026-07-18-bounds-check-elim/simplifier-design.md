@@ -70,6 +70,27 @@ Why this stage:
   body is a direct `App` to a known function — ready for the body-into-driver inline.
 - **Closest to codegen**, and reuses `rc_ir/rename.rs`.
 
+Full pipeline ordering:
+
+```
+lower_program                    (RcProgram, no RC nodes)
+[SIMPLIFIER: inline / case-of-case / case-of-known-constructor / copy-prop / DCE / SROA, to fixpoint]
+insert_rc                        (adds Retain/Release)
+split_rc_units
+borrow_ify                       ┐
+cancel                           ├ RC-specific (require RC nodes) — Max only
+specialize (unique_elim)         ┘
+```
+
+The simplifier is a distinct stage *before* `insert_rc`, and thus before
+`borrow_ify`/`cancel`/`specialize` (which must run after RC insertion because they read
+and rewrite `Retain`/`Release`). This ordering is a benefit, not just a separation: the
+simplifier hands the RC passes fewer, simpler, already-scalarized functions (SROA'd scalar
+params make `specialize`'s per-parameter keys scalar, and `borrow_ify`'s read-only-leaf
+inference simpler). Cross-opportunities in the other direction (a `specialize` clone
+exposing new simplifications) are not captured by this run-once-before design; revisit only
+if measurement shows it matters.
+
 Alternative considered: extend the AST simplifier (add case-of-known-constructor and
 SROA there, reusing the mature AST inliner). Rejected as the primary home because the
 non-ANF AST makes constructor-tracing and SROA materially harder, though the AST inliner
@@ -86,7 +107,13 @@ the others.
 1. **Inline single-use / small functions.** Inline a funptr function at a call site when
    it is called once (always beneficial) or is small. The load-bearing case: the loop
    **body** is called exactly once by the loop **driver**, so inline it in — this brings
-   the body's constructor build and the driver's `match` into one function.
+   the body's constructor build and the driver's `match` into one function. This is a NEW
+   RC-level pass, not the existing AST inliner: the AST inliner runs *before* decapturing
+   (so it cannot see the specialized-loop structure decapturing creates) and operates on a
+   different IR type. A minimal "inline a funptr called exactly once" pass suffices; it is
+   not a re-implementation of the cost-based AST inliner. Essential for the `loop` idiom
+   (body is a separate function); optional for `fold`/`to_iter` (see the idiom-coverage
+   section: their union is already co-located, and LLVM inlines the small callback).
 2. **Case-of-case.** When a `match` scrutinizes a variable bound to another `match` (or an
    `if`, already a `Bool` match), float the outer `match` into the inner arms. This is how
    the driver's `match` on the body's result meets the `continue`/`break` constructors the
@@ -99,8 +126,13 @@ the others.
      bind each field variable directly to the corresponding `fi`. The struct construction
      and destructure both disappear.
 4. **Copy propagation + dead-binding elimination.** `let x = y` -> substitute `y`; drop
-   any `let`/`MakeUnion`/`MakeStruct` whose result is now unused. Cleanup that both tidies
-   the output and unblocks further constructor cancellation.
+   any `let` whose bound variable is unused. Cleanup that both tidies the output and
+   unblocks further constructor cancellation. **Effect handling is trivial in Fix**: the
+   language has no side effects except `eval`, and aborts (out-of-range, etc.) are not
+   guaranteed effects — so an unused `let` is dropped regardless of what its RHS is (no
+   per-op purity/abort predicate). The one thing to preserve is `eval`-forcing, which the
+   dedicated `Eval` node carries explicitly (see the effects section); DCE keeps `Eval`
+   nodes and drops everything else that is unused, with no special case.
 5. **Scalar replacement of aggregate parameters (SROA of params).** When a funptr
    function's parameter is an unboxed aggregate that the body only ever `Destructure`s, and
    every call site passes a value built by a `MakeStruct` (or otherwise splittable),
@@ -164,11 +196,28 @@ is the `get_size`-invariance idea, realized as a rewrite rather than an analysis
   Measure the suite-wide instruction change.
 - **Phase 2 — inline single-use (body into driver).** Enables the union cancellation on
   loops.
-- **Phase 3 — SROA of aggregate parameters.** Exposes the scalar induction variable;
-  expect the arrayrw-class vectorization win to appear here.
+- **Phase 3 — SROA of aggregate parameters.** Exposes the scalar induction variable.
+  **May prove unnecessary** — see the pass-necessity note below: the confirmed hard
+  blocker is the *union*, which phases 1-2 remove; LLVM's own SROA scalarizes the residual
+  *plain* struct. Add SROA only for the shapes LLVM leaves aggregated.
 - **Phase 4 — size normalization.** Extends the win to write loops.
 
 Ship and measure after each phase against the `--no-runtime-check` ceiling.
+
+**Pass necessity (evidence-based, measure-first).** Hand-written-IR `opt -O3` experiments
+show the *union* representation (`{i8,[N x i64]}` + tag `select`) is what LLVM cannot see
+through, while a *plain* aggregate phi (`{i64,i64}`) LLVM scalarizes on its own (it then
+folds the check). So:
+- **Essential core = case-of-case + case-of-known-constructor** (remove the union). Once the
+  union is gone the residual loop state is a plain iterator/tuple struct that LLVM's SROA
+  handles.
+- **inline-single-use = essential for `loop`, optional for `fold`/`to_iter`** (their union
+  is already co-located; LLVM inlines the small callback).
+- **SROA-of-params = insurance**, for nested/awkward aggregates LLVM will not scalarize.
+- **copy-prop + DCE = glue**: needed for the Fix-side fixpoint to see through renamings and
+  stay clean, but LLVM does the final cleanup, so they do not change the end result.
+Implement the core first, measure against the ceiling, and add inline/SROA/glue only where a
+case fails to vectorize.
 
 ## 9. Verification
 
@@ -194,3 +243,66 @@ Ship and measure after each phase against the `--no-runtime-check` ceiling.
   confirm termination on nested loops.
 - **Ordering vs `specialize`/`borrow_ify`.** Decide by measurement whether the simplifier
   runs once before RC insertion, or also interleaves with the RC-level passes.
+
+## 11. Idiom coverage: `loop`, `range.fold`, `to_iter.fold`
+
+All three iteration idioms share one shape — a self-recursive driver, the induction
+variable buried in an aggregate parameter, and a union built and matched across the
+recursion — so the same passes apply. The differences (confirmed from real lowered RC IR)
+make `fold`/`to_iter` *easier* than `loop`:
+
+| idiom | accumulator | aggregate holding the index | union to cancel | body separate? |
+| --- | --- | --- | --- | --- |
+| `loop` | inside the state tuple `(i, acc)` | state tuple `(i, acc)` | `LoopState` (continue/break) | **yes** — needs inline-single-use |
+| `range.fold` | already a scalar parameter | `RangeIterator {next, end}` | `Option` (from `advance`) | no |
+| `to_iter.fold` | already a scalar parameter | `ArrayIterator {arr, idx}` | `Option` (from `advance`) | no |
+
+Key observation from the real `to_iter` fold driver: `advance` is **already inlined into
+the fold driver**, so the `Option` is built (`union_0`/`union_1`) *and* matched in one
+function. `case-of-case + case-of-known-constructor` therefore apply directly, with **no
+inline-single-use needed** for the union. The accumulator is already a scalar parameter;
+only the iterator struct (`RangeIterator`/`ArrayIterator`) needs splitting for the index to
+become a scalar recursive parameter. For `range`, the `_check_range` lives in the user
+callback (a separate function LLVM inlines); for `to_iter` it lives in the driver. The
+`loop` idiom is the one that genuinely needs inline-single-use, because its body is a
+separate function.
+
+Net: the sequence covers all three; `loop` needs the full set, `fold`/`to_iter` need less
+(union already co-located, accumulator already scalar).
+
+## 12. Effects, `eval`, and the dedicated `Eval` node
+
+**Fix has no side effects except `eval`.** Evaluation is not guaranteed: aborts
+(out-of-range, `undefined`, division-by-zero) are not effects the optimizer must preserve,
+and IO effects are captured by data dependency (the `IOState` is threaded, so an IO action's
+result is used and never dead). The one construct that forces evaluation is `eval`, and even
+its guarantee is weak: `eval x; y` forces `x` **at least once if `y` is used**, zero times if
+`y` is discarded, and duplication (evaluating more than once) is allowed.
+
+Consequence for the simplifier: **no per-op purity/abort predicate is needed.** DCE drops any
+unused binding freely. The only thing to preserve is `eval`-forcing.
+
+The hazard is that lowering dissolves `eval` into the binding stream: `lower_eval` emits the
+side's bindings and discards the result, so `eval arr.@(i)` becomes an unused `_check_range` /
+`_unsafe_get` chain — which a naive DCE would drop, losing the force. (The existing AST
+`let_elimination` avoids this only because `eval` is a distinct `Expr::Eval` node at the AST
+level; the hazard is *born* in lowering.)
+
+**Decision: add a dedicated `RcExpr::Eval(RcVar, RcExprNode)` node** (rather than a flagged
+`Let` or a naming convention). Rationale:
+- It is consistent with `RcExpr`'s statement-node design — a peer of `Retain`/`Release`/
+  `Destructure` (do something to a var, continue).
+- DCE stays exception-free: `Eval` is not a `Let`, so "drop unused `let`s" needs no special
+  case for "unused but must keep."
+- Correctness by construction: `Let`/`Match`-rewriting passes (case-of-known-constructor,
+  copy-prop, inline, SROA) forward through `Eval` and cannot mistreat it. A `Let`+marker
+  would put the preservation burden on every such pass forever.
+- Clear per-stage meaning: `insert_rc` treats `Eval(x)` as a use of `x` (a release point like
+  `Release`); codegen emits nothing (the value is already materialized); the weak semantics
+  make it a normal reachability root (droppable if its continuation is dead) and duplication-
+  safe (case-of-case may copy it into branches).
+
+Cost: one arm per `RcExpr` match across ~8 files (`lower`, `rc_insert`, `borrow`, `provenance`,
+`unique_elim`, `rename`, `codegen`, `print`) plus the new simplifier — each a mechanical
+"recurse into the continuation," mirroring `Release`. `lower_eval` changes to always emit
+`Eval(side_var, cont)` (today it only materializes the global-reference case).
