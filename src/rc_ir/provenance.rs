@@ -459,7 +459,9 @@ impl<'a> Interp<'a> {
                 }
                 self.interp(cont, env)
             }
-            RcExpr::Release(_, _, _, cont) => self.interp(cont, env),
+            // `Eval` only observes its variable; like a release it creates no lasting alias, so the
+            // provenance environment is unchanged.
+            RcExpr::Release(_, _, _, cont) | RcExpr::Eval(_, cont) => self.interp(cont, env),
             RcExpr::Destructure(container, fields, cont) => {
                 let cprov = self.operand(container, &env);
                 for (idx, fv) in fields {

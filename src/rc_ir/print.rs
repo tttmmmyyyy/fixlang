@@ -184,6 +184,11 @@ fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
             out.push_str(&expr_to_string(cont, level, ann));
             out
         }
+        RcExpr::Eval(var, cont) => {
+            let mut out = format!("{}eval {}\n", ind, var_name(var));
+            out.push_str(&expr_to_string(cont, level, ann));
+            out
+        }
         RcExpr::Ret(var) => format!("{}ret {}\n", ind, var_name(var)),
     }
 }

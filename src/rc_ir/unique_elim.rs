@@ -260,6 +260,7 @@ impl<'a> Specializer<'a> {
                 fields.clone(),
                 self.rewrite_body(k, inputs),
             ),
+            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), self.rewrite_body(k, inputs)),
             RcExpr::Ret(v) => RcExpr::Ret(v.clone()),
         };
         RcExprNode {
@@ -391,9 +392,10 @@ fn scan_body(
             }
             scan_body(k, prog, callees, has_unique_check);
         }
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Destructure(_, _, k) => {
-            scan_body(k, prog, callees, has_unique_check)
-        }
+        RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k)
+        | RcExpr::Destructure(_, _, k)
+        | RcExpr::Eval(_, k) => scan_body(k, prog, callees, has_unique_check),
         RcExpr::Ret(_) => {}
     })
 }

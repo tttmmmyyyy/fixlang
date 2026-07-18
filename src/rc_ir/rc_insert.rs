@@ -128,10 +128,36 @@ impl<'a> FuncRc<'a> {
             RcExpr::Destructure(container, fields, cont) => {
                 self.process_destructure(container, fields, cont, source, live_after)
             }
+            RcExpr::Eval(x, cont) => self.process_eval(x, cont, source, live_after),
             RcExpr::Retain(..) | RcExpr::Release(..) => {
                 panic!("RC insertion runs on a skeleton that has no Retain/Release nodes yet")
             }
         }
+    }
+
+    /// An `eval x; cont`. `Eval` observes `x` without consuming it (a borrow), so — like a borrowed
+    /// operand at its last use — `x` is released after the eval iff it is a local that needs reference
+    /// counting and is dead in the continuation.
+    fn process_eval(
+        &self,
+        x: RcVar,
+        cont: RcExprNode,
+        source: Option<Span>,
+        live_after: &Set<FullName>,
+    ) -> (RcExprNode, Set<FullName>) {
+        let (cont, live_cont) = self.process(cont, live_after);
+        let cont = if x.name.is_local() && !live_cont.contains(&x.name) && self.needs_rc(&x) {
+            build_releases(vec![x.clone()], cont)
+        } else {
+            cont
+        };
+        let node = RcExprNode {
+            expr: Box::new(RcExpr::Eval(x.clone(), cont)),
+            source,
+        };
+        let mut live_before = live_cont;
+        insert_local(&mut live_before, &x.name);
+        (node, live_before)
     }
 
     /// A `let x = rhs; cont` whose `rhs` is not a `Match` (the `Match` case is `process_match`).
@@ -460,7 +486,7 @@ fn collect_refs_bound(node: &RcExprNode, refs: &mut Set<FullName>, bound: &mut S
             }
             collect_refs_bound(k, refs, bound);
         }
-        RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) => {
+        RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) | RcExpr::Eval(v, k) => {
             insert_local(refs, &v.name);
             collect_refs_bound(k, refs, bound);
         }
@@ -515,7 +541,7 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
             }
             collect_vars(k, vars);
         }
-        RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) => {
+        RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) | RcExpr::Eval(v, k) => {
             note_var(vars, v);
             collect_vars(k, vars);
         }

@@ -48,7 +48,7 @@ pub(crate) fn collect_binders(
             }
             collect_binders(k, marker, rename, counter);
         }
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k) => {
             collect_binders(k, marker, rename, counter)
         }
         RcExpr::Ret(_) => {}
@@ -94,6 +94,7 @@ pub(crate) fn rename_expr(node: &RcExprNode, rename: &Map<FullName, FullName>) -
                 .collect(),
             rename_expr(k, rename),
         ),
+        RcExpr::Eval(v, k) => RcExpr::Eval(rename_var(v, rename), rename_expr(k, rename)),
         RcExpr::Ret(v) => RcExpr::Ret(rename_var(v, rename)),
     };
     RcExprNode {

@@ -174,6 +174,14 @@ impl<'c, 'm> Generator<'c, 'm> {
                 }
                 self.eval_rc_expr(k, tail, fn_map)
             }
+            RcExpr::Eval(x, k) => {
+                // Observe `x` to force its evaluation for effect, then discard it: reading a global
+                // runs its call-once initializer; a local is already computed. No reference-count
+                // operation and no value are produced here — a preceding `Retain` or following
+                // `Release` carries any reference counting.
+                let _ = self.get_scoped_obj_noretain(&x.name);
+                self.eval_rc_expr(k, tail, fn_map)
+            }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
                 let match_tail = self.tail_fuses(x, k, tail);
                 let obj = self.eval_rc_match(x, scrut, arms, match_tail, fn_map);

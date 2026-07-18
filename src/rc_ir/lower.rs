@@ -30,6 +30,7 @@ use std::sync::Arc;
 enum Binding {
     Let(RcVar, RcRhs, Option<Span>),
     Destructure(RcVar, Vec<(usize, RcVar)>, Option<Span>),
+    Eval(RcVar, Option<Span>),
 }
 
 /// The result of lowering one AST symbol.
@@ -168,6 +169,10 @@ impl<'a> Lowerer<'a> {
                 },
                 Binding::Destructure(container, fields, source) => RcExprNode {
                     expr: Box::new(RcExpr::Destructure(container, fields, cont)),
+                    source,
+                },
+                Binding::Eval(var, source) => RcExprNode {
+                    expr: Box::new(RcExpr::Eval(var, cont)),
                     source,
                 },
             })
@@ -662,15 +667,13 @@ impl<'a> Lowerer<'a> {
         main: &ExprNode,
         bindings: &mut Vec<Binding>,
     ) -> RcVar {
-        // The side value is evaluated for its effect and discarded. A compound side is forced by the
-        // bindings it emits, and a local variable is already evaluated; but a reference to a global
-        // value lowers to a bare atom that emits nothing, so materialize it here to force the global's
-        // initializer to run (which may have effects — e.g. an `undefined`-valued global).
+        // The side value is evaluated for its effect and discarded. An explicit `Eval` node forces it
+        // in every case: a compound side is computed by the bindings it emits, a local is already
+        // computed, and a reference to a global value — which lowers to a bare atom that emits nothing —
+        // has its call-once initializer run when the node observes it (that initializer may have an
+        // effect, e.g. an `undefined`-valued global).
         let side_var = self.lower_to_var(side, bindings);
-        if !side_var.name.is_local() {
-            let forced = self.fresh_var("eval", side_var.ty.clone(), None);
-            bindings.push(Binding::Let(forced, RcRhs::Var(side_var), None));
-        }
+        bindings.push(Binding::Eval(side_var, side.source.clone()));
         self.lower_to_var(main, bindings)
     }
 

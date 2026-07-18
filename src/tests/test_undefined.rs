@@ -38,3 +38,25 @@ pub fn test_undefined_reached() {
     config.no_runtime_check = false;
     test_source_fail(&source, config, "Undefined reached");
 }
+
+#[test]
+pub fn test_undefined_reached_via_global_eval() {
+    // `eval`-ing a global whose initializer aborts must run that initializer. A bare global
+    // reference computes nothing of its own, so forcing it — the effect `eval` guarantees — is what
+    // triggers the abort.
+    let source = r#"
+        module Main;
+
+        g : I64;
+        g = undefined("Undefined reached");
+
+        main : IO ();
+        main = (
+            eval g;
+            pure()
+        );
+    "#;
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    test_source_fail(&source, config, "Undefined reached");
+}

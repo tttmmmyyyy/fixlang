@@ -104,6 +104,13 @@ pub enum RcExpr {
     /// per-field getters) lets that retain be decided once, from the container's liveness after the
     /// destructure, and placed before the extraction.
     Destructure(RcVar, Vec<(usize, RcVar)>, RcExprNode),
+    /// Force the variable's value for its effect and discard it, then continue — the RC IR form of the
+    /// source `eval e0; e1`. Forcing a local is a no-op (it is already computed); forcing a global
+    /// runs its call-once initializer, whose evaluation may have an effect (e.g. an `undefined`-valued
+    /// global). It performs no reference-count operation itself: the variable is only observed, so a
+    /// following `Release` disposes it when it is dead. A distinct node — rather than a binding whose
+    /// result is unused — keeps a value forced for effect from being indistinguishable from dead code.
+    Eval(RcVar, RcExprNode),
     /// The sole terminator: the value of this expression (a function body or a match arm) is this
     /// variable.
     Ret(RcVar),

@@ -187,7 +187,9 @@ fn collect_defs(node: &RcExprNode, facts: &mut FuncFacts) {
             }
             collect_defs(k, facts);
         }
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => collect_defs(k, facts),
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k) => {
+            collect_defs(k, facts)
+        }
     }
 }
 
@@ -301,7 +303,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &Path) -> bool>(
             collect_consumes_go(k, facts, prog, type_env, owns, out);
         }
         RcExpr::Destructure(_, _, k) => collect_consumes_go(k, facts, prog, type_env, owns, out),
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k) => {
             collect_consumes_go(k, facts, prog, type_env, owns, out)
         }
     }
@@ -789,9 +791,10 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
             }
             mark_tail(k, in_tail, out);
         }
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Destructure(_, _, k) => {
-            mark_tail(k, in_tail, out)
-        }
+        RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k)
+        | RcExpr::Destructure(_, _, k)
+        | RcExpr::Eval(_, k) => mark_tail(k, in_tail, out),
         RcExpr::Ret(_) => {}
     }
 }
@@ -923,6 +926,7 @@ impl<'a> RewriteCtx<'a> {
                 RcExpr::Destructure(container.clone(), fields.clone(), self.rewrite(k)),
                 &node.source,
             ),
+            RcExpr::Eval(v, k) => node_of(RcExpr::Eval(v.clone(), self.rewrite(k)), &node.source),
             RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
         }
     }
@@ -1092,6 +1096,9 @@ fn used_later(name: &FullName, node: &RcExprNode) -> bool {
         RcExpr::Let(_, rhs, k) => rhs_uses(name, rhs) || used_later(name, k),
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => used_later(name, k),
         RcExpr::Destructure(container, _, k) => container.name == *name || used_later(name, k),
+        // `Eval` observes its variable, so — unlike the transparent reference-count nodes — it counts
+        // as a use.
+        RcExpr::Eval(v, k) => v.name == *name || used_later(name, k),
     })
 }
 
@@ -1200,6 +1207,10 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
         ),
         RcExpr::Destructure(container, fields, k) => node_of(
             RcExpr::Destructure(container.clone(), fields.clone(), split_body(k, type_env)),
+            &node.source,
+        ),
+        RcExpr::Eval(v, k) => node_of(
+            RcExpr::Eval(v.clone(), split_body(k, type_env)),
             &node.source,
         ),
         RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
@@ -1380,6 +1391,9 @@ impl<'a> CancelAnalysis<'a> {
                 }
                 self.walk(k, pend, leaf_mode)
             }
+            // `Eval` neither consumes, retains, nor releases; it is transparent to the pending-retain
+            // state (any release inserted after it is a separate `Release` node).
+            RcExpr::Eval(_, k) => self.walk(k, pend, leaf_mode),
             RcExpr::Ret(_) => {
                 if leaf_mode {
                     // A retain still pending at the function's return closes no bracket on this path.
@@ -1536,6 +1550,10 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
         ),
         RcExpr::Destructure(container, fields, k) => node_of(
             RcExpr::Destructure(container.clone(), fields.clone(), drop_nodes(k, to_delete)),
+            &node.source,
+        ),
+        RcExpr::Eval(v, k) => node_of(
+            RcExpr::Eval(v.clone(), drop_nodes(k, to_delete)),
             &node.source,
         ),
         RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
