@@ -67,6 +67,19 @@ impl Provenance {
         s
     }
 
+    /// Build an unboxed-aggregate provenance, collapsing an empty aggregate to `Unboxed`. A
+    /// provenance's shape mirrors its type, and a fieldless value is a scalar (`Unboxed`). Normalizing
+    /// the empty case here gives a fieldless value one representation whether it is seeded from its
+    /// type (`build_shape`) or assembled field by field (a struct/union constructor's `result_prov`),
+    /// which is what keeps `join` total on same-typed operands.
+    pub fn unboxed_agg(children: Vec<Provenance>) -> Provenance {
+        if children.is_empty() {
+            Provenance::Unboxed
+        } else {
+            Provenance::UnboxedAgg(children)
+        }
+    }
+
     /// Build the provenance shape of a value of type `ty`. `leaf` is called once for each boxed leaf,
     /// receiving the path to that leaf — the sequence of field indices from the root of `ty` down to
     /// it — so `leaf` can tell which leaf it is describing (e.g. to record `Arg(i, path)`). The shape
@@ -99,19 +112,17 @@ impl Provenance {
             }
             // Expand every unboxed aggregate (struct, tuple, or unboxed union) into its fields (for a
             // union, its variants' payloads), even when it holds no boxed leaf, so a value's shape
-            // always mirrors its type. Only a scalar (an unboxed leaf with no fields) becomes
-            // `Unboxed`. Normalizing to this expanded shape keeps `join` total without a fallback.
+            // always mirrors its type. A scalar (an unboxed leaf with no fields) becomes `Unboxed` via
+            // the empty-aggregate collapse in `unboxed_agg`. Normalizing to this expanded shape keeps
+            // `join` total without a fallback.
             let fields = ty.field_types(type_env);
-            if fields.is_empty() {
-                return Provenance::Unboxed;
-            }
             let mut children = Vec::with_capacity(fields.len());
             for (i, fty) in fields.iter().enumerate() {
                 path.push(i);
                 children.push(go(fty, type_env, leaf, path));
                 path.pop();
             }
-            Provenance::UnboxedAgg(children)
+            Provenance::unboxed_agg(children)
         }
         go(ty, type_env, leaf, &mut Vec::new())
     }
@@ -375,10 +386,9 @@ fn resolve_leaf(ls: &LeafSource, inputs: &[Uniqueness]) -> CTRefCnt {
 /// its `CTRefCnt` verdict. `inputs[i]` is the uniqueness of parameter `i`; a parameter beyond the end
 /// (an unspecialized function, whose inputs are unknown) leaves its `Arg` leaves `Dynamic`.
 ///
-/// An aggregate with no boxed leaf collapses to `Unboxed`: it carries no uniqueness, so the shape
-/// (which a provenance renders inconsistently — a constructed empty struct is an empty aggregate, the
-/// same struct as a parameter is `Unboxed`) must not make two otherwise equal specialization keys
-/// differ.
+/// An aggregate with no boxed leaf collapses to `Unboxed`: it carries no uniqueness, so a
+/// specialization key built from the resolved shape reflects only the boxed leaves and ignores how
+/// the unboxed structure nests.
 pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
     match prov {
         Provenance::Unboxed => Uniqueness::Unboxed,
@@ -831,6 +841,22 @@ mod tests {
     }
 
     #[test]
+    fn unboxed_agg_collapses_empty_to_scalar() {
+        // A fieldless value gets one shape whether seeded from its type (`build_shape` -> `Unboxed`)
+        // or assembled by a constructor (an empty field list), so the two representations join
+        // without tripping `join`'s shape-mismatch panic.
+        assert_eq!(Provenance::unboxed_agg(vec![]), Provenance::Unboxed);
+        assert_eq!(
+            Provenance::unboxed_agg(vec![fresh(), dyn_()]),
+            Provenance::UnboxedAgg(vec![fresh(), dyn_()])
+        );
+        assert_eq!(
+            Provenance::unboxed_agg(vec![]).join(&Provenance::Unboxed),
+            Provenance::Unboxed
+        );
+    }
+
+    #[test]
     fn bottom_leaf_renders_as_underscore() {
         assert_eq!(Provenance::Boxed(Set::default()).to_string(), "_");
         assert_eq!(fresh().to_string(), "fresh");
@@ -859,8 +885,8 @@ mod tests {
 
     #[test]
     fn resolve_collapses_an_all_unboxed_aggregate() {
-        // An aggregate with no boxed leaf resolves to `Unboxed`, so a constructed empty struct
-        // (an empty aggregate) and the same struct as a parameter (`Unboxed`) key the same.
+        // A boxed-leaf-free aggregate resolves to `Unboxed`, so a value's uniqueness key reflects
+        // only its boxed leaves and same-typed values key alike whatever their unboxed structure.
         assert_eq!(
             resolve(&Provenance::UnboxedAgg(vec![]), &[]),
             Uniqueness::Unboxed

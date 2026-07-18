@@ -3197,7 +3197,7 @@ impl LLVMGen for InlineLLVMMakeStructBody {
             Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
         } else {
             let fields = result_ty.field_types(type_env);
-            Provenance::UnboxedAgg(
+            Provenance::unboxed_agg(
                 fields
                     .iter()
                     .enumerate()
@@ -4514,7 +4514,7 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         } else {
             let variants = result_ty.field_types(type_env);
             let active = self.variant_index();
-            Provenance::UnboxedAgg(
+            Provenance::unboxed_agg(
                 variants
                     .iter()
                     .enumerate()
