@@ -337,18 +337,18 @@ pub enum Uniqueness {
 }
 
 impl Uniqueness {
-    /// The verdict at path `π`. `Dynamic` (the conservative default) when `π` ends at a position that
-    /// is not a single boxed leaf — an aggregate root or a scalar. A non-empty `π` that runs off the
-    /// end of an aggregate or past a boxed/scalar leaf is inconsistent with the value's type, which
-    /// cannot happen for a well-formed query. (Mirrors `Provenance::leaf_at`.)
+    /// The `CTRefCnt` of the boxed leaf at path `π`. Called only by `resolve_leaf`, to resolve an
+    /// `Arg(i, σ)` source against input `i`'s uniqueness; `σ` addresses a boxed leaf, so `π` navigates
+    /// aggregates and ends at a `Boxed`. Any other shape at the end of `π` — an aggregate root, a
+    /// scalar, or a leaf the path runs past — is inconsistent with the value's type and cannot arise
+    /// from a well-formed query.
     fn leaf_at(&self, path: &[usize]) -> CTRefCnt {
         match (self, path.split_first()) {
             (Uniqueness::UnboxedAgg(children), Some((i, rest))) if *i < children.len() => {
                 children[*i].leaf_at(rest)
             }
             (Uniqueness::Boxed(rc), None) => *rc,
-            (Uniqueness::UnboxedAgg(_) | Uniqueness::Unboxed, None) => CTRefCnt::Dynamic,
-            (_, Some(_)) => unreachable!(
+            _ => unreachable!(
                 "Uniqueness::leaf_at: path {:?} inconsistent with shape {:?}",
                 path, self
             ),
