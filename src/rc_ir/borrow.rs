@@ -46,7 +46,7 @@ use crate::rc_ir::ast::{
     RcProgram, RcRhs, RcState, RcUnit, RcVar,
 };
 use crate::rc_ir::provenance::{BaseSource, Provenance};
-use crate::rc_ir::rename::{collect_binders, fresh_rename, rename_expr, rename_var};
+use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
 /// What binds a variable, enough to trace a leaf back to the object that produced it (its `root`).
@@ -817,15 +817,8 @@ fn clone_func(
     new_ref: FuncRef,
     counter: &mut u64,
 ) -> (RcFunc, Map<FullName, FullName>) {
-    let mut rename: Map<FullName, FullName> = Map::default();
-    for p in func.params.iter().chain(func.cap.iter()) {
-        fresh_rename(&p.name, "b", &mut rename, counter);
-    }
-    collect_binders(&func.body, "b", &mut rename, counter);
-
-    let params = func.params.iter().map(|p| rename_var(p, &rename)).collect();
-    let cap = func.cap.as_ref().map(|c| rename_var(c, &rename));
-    let body = rename_expr(&func.body, &rename);
+    let (params, cap, body, rename) =
+        fresh_rename_function(&func.params, &func.cap, &func.body, "b", counter);
     (
         RcFunc {
             name: new_ref,

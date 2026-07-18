@@ -30,7 +30,7 @@ use crate::rc_ir::ast::{
     FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::provenance::{analyze_program, leaf_is_unique, resolve, Analysis, Uniqueness};
-use crate::rc_ir::rename::{collect_binders, fresh_rename, rename_expr, rename_var};
+use crate::rc_ir::rename::fresh_rename_function;
 use std::collections::VecDeque;
 
 /// The input-uniqueness a function clone is specialized on: the uniqueness of each parameter.
@@ -168,18 +168,15 @@ impl<'a> Specializer<'a> {
         if name == *fref {
             return RcFunc { body, ..func };
         }
-        let mut rename = Map::default();
-        for p in func.params.iter().chain(func.cap.iter()) {
-            fresh_rename(&p.name, "u", &mut rename, &mut self.counter);
-        }
-        collect_binders(&body, "u", &mut rename, &mut self.counter);
+        let (params, cap, body, rename) =
+            fresh_rename_function(&func.params, &func.cap, &body, "u", &mut self.counter);
         RcFunc {
             name,
             fn_ty: func.fn_ty.clone(),
-            params: func.params.iter().map(|p| rename_var(p, &rename)).collect(),
-            cap: func.cap.as_ref().map(|c| rename_var(c, &rename)),
+            params,
+            cap,
             ret_ty: func.ret_ty.clone(),
-            body: rename_expr(&body, &rename),
+            body,
             source: func.source.clone(),
             // Carry the ownership annotation, remapping its parameter keys through the same renaming.
             borrowed_units: func
