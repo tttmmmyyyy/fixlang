@@ -257,6 +257,40 @@ insurance.
 - **Ordering vs `specialize`/`borrow_ify`.** Decide by measurement whether the simplifier
   runs once before RC insertion, or also interleaves with the RC-level passes.
 
+## 10b. Reference-counting / clone discipline
+
+Fix uses copy-on-write reference counting: a boxed value is mutated in place while its RC
+is 1, and cloned when a mutation meets RC >= 2. The AST `let_elimination` / `inline_local`
+passes guard carefully against **extending a boxed value's lifetime**, because a longer live
+range can push RC to 2 at a mutation and force a clone. The same discipline must hold here,
+in two forms:
+
+- **Delayed-evaluation lifetime extension does not arise in this simplifier.** That hazard —
+  `let_elimination`'s reason for its `FreeOccurrenceProbe` guards — comes from substituting a
+  *compound* `e0` into a later use, moving `e0`'s evaluation and extending the lifetime of the
+  boxed values it references. In ANF every compound is already `let`-bound at its evaluation
+  point (pinned), and this simplifier only ever renames *variables* (copy-prop, and the payload
+  bindings that case-of-known-constructor introduces). Renaming a variable does not move a
+  computation, so referenced boxed values do not shift. All substitutions here are
+  `let_elimination`'s safe-and-improving case 1. (This is a direct benefit of ANF, and why the
+  AST pass needs the guards and this one does not.)
+- **Reference *duplication* is the form that does apply, and needs a single-use guard.** If
+  case-of-known-constructor fired on a constructor whose result is used more than once, or
+  inline-single-use fired on a function used more than once, a boxed payload/capture would gain
+  a second reference (RC 2 -> clone). So both fire **only when the constructed value / callee is
+  consumed exactly once (linear)** — which is also inherent to the rewrite (a construction still
+  used elsewhere cannot be removed). Loop state is always linear (built, then destructured on the
+  next turn), so the loop rewrites fire.
+
+Because the simplifier runs **before `insert_rc`**, it never produces incorrect RC (insert_rc
+computes it afterward); the worst case is a structure whose liveness forces an extra clone — a
+performance regression, not a bug. The in-place-mutation invariant (e.g. `arr` at RC 1 for
+`arr.set`) should be preserved or improved, since the passes only *remove* RC-neutral plumbing
+(union/struct wrap and unwrap are moves) — but this must be measured, not assumed. Verification:
+clone-count / speedtest regression checks (a spurious clone shows up as both), plus adversarial
+tests (a multiply-used constructor; a boxed value live across the rewritten region; a `set` loop
+staying in-place after scalarization).
+
 ## 11. Idiom coverage: `loop`, `range.fold`, `to_iter.fold`
 
 All three iteration idioms share one shape — a self-recursive driver, the induction
