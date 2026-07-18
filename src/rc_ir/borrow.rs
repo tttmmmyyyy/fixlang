@@ -46,7 +46,7 @@ use crate::rc_ir::ast::{
     FuncRef, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcGlobalInit,
     RcProgram, RcRhs, RcState, RcUnit, RcVar,
 };
-use crate::rc_ir::provenance::{BaseSource, Provenance};
+use crate::rc_ir::provenance::{boxed_leaf_paths, BaseSource, Provenance};
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
@@ -404,18 +404,10 @@ fn passthrough_arg_leaves(
 
 /// Collect every `Arg(i, path)` symbol appearing in a declared provenance.
 fn collect_arg_leaves(prov: &Provenance, out: &mut Set<(usize, Path)>) {
-    match prov {
-        Provenance::Unboxed => {}
-        Provenance::UnboxedAgg(children) => {
-            for c in children {
-                collect_arg_leaves(c, out);
-            }
-        }
-        Provenance::Boxed(ls) => {
-            for s in ls {
-                if let BaseSource::Arg(i, p) = s {
-                    out.insert((*i, p.clone()));
-                }
+    for ls in prov.leaves() {
+        for s in ls {
+            if let BaseSource::Arg(i, p) = s {
+                out.insert((*i, p.clone()));
             }
         }
     }
@@ -431,30 +423,7 @@ fn push_leaves(var: &FullName, ty: &Arc<TypeNode>, type_env: &TypeEnv, out: &mut
 /// The paths of every boxed leaf of a type: the whole value if boxed, the capture of a closure, or
 /// each boxed leaf of an unboxed aggregate.
 fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
-    let mut out = vec![];
-    boxed_leaves_go(ty, type_env, &mut vec![], &mut out);
-    out
-}
-
-fn boxed_leaves_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mut Vec<Path>) {
-    if ty.is_fully_unboxed(type_env) {
-        return;
-    }
-    if ty.is_closure() {
-        path.push(CLOSURE_CAPTURE_IDX as usize);
-        out.push(path.clone());
-        path.pop();
-        return;
-    }
-    if ty.is_box(type_env) {
-        out.push(path.clone());
-        return;
-    }
-    for (i, fty) in ty.field_types(type_env).iter().enumerate() {
-        path.push(i);
-        boxed_leaves_go(fty, type_env, path, out);
-        path.pop();
-    }
+    boxed_leaf_paths(ty, type_env)
 }
 
 // --- reference-counting units ---
