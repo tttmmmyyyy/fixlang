@@ -311,18 +311,19 @@ CLAUDE.md is explicit: validate at boundaries (user input, external APIs, file I
 
 A catch-all or fallback that absorbs a case the author believes cannot occur — `_ => self.clone()`, `unwrap_or(default)`, a silent clamp, "return the left side" at a merge, an early `return` on a "shouldn't happen" shape — trades a loud failure for a silent wrong answer. If the case truly is impossible, the fallback is dead code lending false confidence. If a bug elsewhere ever makes it reachable, the fallback *swallows that bug*: execution continues with a plausible-but-wrong value instead of stopping where the invariant broke. In correctness-critical code — an analysis feeding codegen, a type checker, an optimizer — that wrong value becomes a miscompile surfacing far from its cause.
 
-The tell is a **comment asserting an invariant right next to a silent fallback that contradicts it**: "both sides have the same type, so this can't arise — fall back to the left", "shapes never mismatch — keep the function total". The comment says the branch is unreachable; the code quietly handles it anyway. One of the two is wrong.
+This comes in two shapes. The **easy-to-spot** one is a comment asserting the invariant right next to a fallback that contradicts it — "both sides have the same type, so this can't arise — fall back to the left", "shapes never mismatch — keep the function total": the comment says the branch is unreachable, the code quietly handles it anyway, so one of the two is wrong. The **more common and more dangerous** one carries *no* comment at all — a bare `_ => default`, an `unwrap_or(0)`, a `.get(i).copied().unwrap_or(...)` — where the author never flagged the assumption. A missing comment is not reassurance; it usually means the reachability was never even considered. So do not scan only for contradicting comments: treat **every** catch-all and silent default as a question — *which concrete case does this absorb, and can it actually occur?*
 
 ```rust
-// Wrong — the comment claims it can't happen, but the fallback hides it if it does.
+// Both are suspect. The first at least announces its assumption; the second hides it entirely.
 match (self, other) {
     (Foo(a), Foo(b)) => Foo(a.merge(b)),
     // Mismatched shapes never arise from a well-typed program.
     _ => self.clone(),
 }
+let elem = arr.get(i).copied().unwrap_or(0);   // is `i` out of range ever a real case, or a bug?
 ```
 
-**Apply**: replace the fallback with `unreachable!("… {:?} vs {:?}", a, b)` (or `panic!` / `debug_assert!`) so a violated invariant fails at its origin with the offending values in the message. Crucially, **verify the "impossible" claim rather than trusting it** — exercise the code, or temporarily make the arm panic and run the suite. An invariant an author asserts in a comment is often actually reachable; when the arm fires, you have found a real bug (this is one of the higher-yield checks — a swallowed case is exactly where latent bugs hide). Fix the upstream cause, and *then* the arm is genuinely unreachable.
+**Apply**: replace the fallback with `unreachable!("… {:?} vs {:?}", a, b)` (or `panic!` / `debug_assert!`) so a violated invariant fails at its origin with the offending values in the message. Crucially, **verify that the absorbed case really is impossible rather than trusting it** — exercise the code, or temporarily make the arm panic and run the suite. The case is often actually reachable; when the arm fires, you have found a real bug (this is one of the higher-yield checks — a swallowed case is exactly where latent bugs hide). Fix the upstream cause, and *then* the arm is genuinely unreachable.
 **Keep** the fallback only when the case turns out to be a **supported input** the caller legitimately reaches — and then document the concrete scenario, not a vague "just in case".
 **Report only** when converting to a hard failure could crash on inputs you cannot prove absent — flag it for the author to confirm the invariant.
 
