@@ -3191,20 +3191,13 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // A boxed struct is a fresh allocation; an unboxed struct is its fields laid out, so each
-        // field carries the corresponding operand's provenance.
-        if result_ty.is_box(type_env) {
-            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-        } else {
-            let fields = result_ty.field_types(type_env);
-            Provenance::UnboxedAgg(
-                fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, fty)| Provenance::arg_passthrough(fty, type_env, i))
-                    .collect(),
-            )
-        }
+        // A boxed struct is a fresh allocation (its single boxed leaf is at the root path). An
+        // unboxed struct lays out its fields, so field `i`'s boxed leaves carry constructor operand
+        // `i` (the path's head is the field index, its tail the position within that field).
+        Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
+            None => Provenance::leaf(BaseSource::Fresh),
+            Some((i, rest)) => Provenance::leaf(BaseSource::Arg(*i, rest.to_vec())),
+        })
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -4507,27 +4500,16 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // A boxed union is a fresh allocation; an unboxed union carries the operand's provenance in
-        // the constructed variant's slot and bottom (an empty set) in the others.
-        if result_ty.is_box(type_env) {
-            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-        } else {
-            let variants = result_ty.field_types(type_env);
-            let active = self.variant_index();
-            Provenance::UnboxedAgg(
-                variants
-                    .iter()
-                    .enumerate()
-                    .map(|(k, vty)| {
-                        if k == active {
-                            Provenance::arg_passthrough(vty, type_env, 0)
-                        } else {
-                            Provenance::uniform_bottom(vty, type_env)
-                        }
-                    })
-                    .collect(),
-            )
-        }
+        // A boxed union is a fresh allocation (its single boxed leaf is at the root path). An unboxed
+        // union lays out its variants: the constructed variant's boxed leaves carry the sole operand,
+        // the other variants' leaves are bottom (an empty set). The path's head is the variant index,
+        // its tail the position within that variant's payload.
+        let active = self.variant_index();
+        Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
+            None => Provenance::leaf(BaseSource::Fresh),
+            Some((k, rest)) if *k == active => Provenance::leaf(BaseSource::Arg(0, rest.to_vec())),
+            Some(_) => Set::default(),
+        })
     }
 
     fn as_any(&self) -> &dyn Any {

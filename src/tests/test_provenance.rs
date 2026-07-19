@@ -87,7 +87,7 @@ mod integration_tests {
         assert_binding_prov(&dump, "s0", "[dyn]");
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
         // `s0` is dyn.
-        assert_binding_prov(&dump, "pair", "[(fresh, dyn)]");
+        assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=dyn}]");
     }
 
     #[test]

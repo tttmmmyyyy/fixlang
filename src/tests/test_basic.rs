@@ -253,6 +253,55 @@ pub fn test_unique_check_elim_chained_struct_fields() {
 }
 
 #[test]
+pub fn test_unique_check_elim_destructured_boxed_field_shared() {
+    // Destructuring a shared boxed struct reads its fields out of the shared allocation, so a
+    // destructured boxed field is itself shared: mutating it must keep its force-unique check and
+    // clone, leaving the struct's other holder untouched. A field read out of a boxed container has
+    // `Dyn` provenance (like a boxed union's payload), not the box's own provenance; eliding the
+    // check here would corrupt `keep` and double-free its array. Run under memcheck.
+    let source = r#"
+            module Main;
+
+            type S = box struct { data : Array I64 };
+
+            main : IO ();
+            main = (
+                let s = S { data : Array::fill(3, 0) };
+                let keep = [s];
+                let S { data : data } = s;
+                let data = data.set(0, 99);
+                assert_eq(|_|"extracted mutated", data.@(0), 99);;
+                assert_eq(|_|"shared holder intact", keep.@(0).@data.@(0), 0);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
+pub fn test_fieldless_value_merged_across_branch_compiles() {
+    // A function returning a fieldless value (`()`) whose branches merge a unit-typed call result
+    // with a `()` literal. The two sides once carried different provenance shapes — one seeded from
+    // the type, one built by a constructor — and merging them aborted the provenance analysis' branch
+    // join at Max ("mismatched shapes: Unboxed vs UnboxedAgg([])"). Compiling and running this at Max
+    // guards that a fieldless value has a single provenance representation.
+    let source = r#"
+            module Main;
+
+            dbg : Bool -> String -> ();
+            dbg = |cond, msg| if cond { debug_eprintln(msg) } else { () };
+
+            main : IO ();
+            main = (
+                eval dbg(false, "x");
+                eval dbg(true, "y");
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_unique_check_elim_reprojected_alias_shared() {
     // An unboxed tuple's boxed field is projected into `keep` (which is stored twice, so it is
     // shared) and re-projected into `m`, then `m` is mutated. `keep` and `m` name the same array, so
