@@ -204,12 +204,17 @@ free-or-decrement**(`build_release_mark_nonnull_boxed_with`)、(3) **`is_unique`
 判定で残す)。redesign では (1) が Array の `_storage` に移るだけ。
 
 **削除したいのは Fix レベルの「呼び出し側が事前に手動 unique を保証する」primitive**:
-`_unsafe_set_bounds_uniqueness_unchecked_unreleased`(+ その前の `_unsafe_force_unique`、std の
-from_map/push_back/reserve/append/resize が使う)と、**punch/plug の uniqueness-unchecked 版
-`_unsafe_punch/plug_bounds_uniqueness_unchecked`**(mod/act が使う)。これらは (1) の COW check を **skip する**
-ために存在した。unique-check-elim が safe 版の check を確実に畳む今、呼び出し側を **COW 内蔵の safe op
-(`make_array_unique`、punch/plug は force_unique=true の COW 版)に置き換えれば削除できる**(§11.3、surviving
-unsafe RMW primitive 削除計画。上の増加専用の `_unsafe_grow_size`(§3.1)もこのパターンの一例)。
+`_unsafe_set_bounds_uniqueness_unchecked_unreleased`(from_map/push_back/reserve/append/resize)、**その前に置く
+`_unsafe_force_unique`**(上記 + sort_by/reverse — いずれも in-place mutation の前処理)、**punch/plug の
+uniqueness-unchecked 版 `_unsafe_punch/plug_bounds_uniqueness_unchecked`**(mod/act)。これらは (1) の COW check を
+**skip する**ために存在した。**特に `_unsafe_force_unique` は redundant なだけでなく危険**: doc
+(`std_array_force_unique.md`)のとおり将来 CSE(共通部分式除去)が入ると壊れる — `f(x); f(x)` の inline 後に生じる
+2つの `x._unsafe_force_unique` を CSE が1つに纏めると、2つ目の consumer が non-unique な配列を掴んで破壊する
+(inline/CSE の抑止に依存する)。unique-check-elim が safe 版の check を確実に畳む今、呼び出し側を **COW 内蔵の
+safe op(`make_array_unique`、punch/plug は force_unique=true の COW 版、sort/reverse は COW 内蔵 `swap`)に
+置き換えれば削除でき、かつ CSE-safe になる**(COW が mutate op の codegen 内にあり各 mutate が新しい配列 value を
+線形に返すので、同一 `x` への `force_unique(x)` の重複が生じず CSE が纏める対象が無い)。§11.3、surviving unsafe
+RMW primitive 削除計画。上の増加専用の `_unsafe_grow_size`(§3.1)もこのパターンの一例。
 
 **punch/plug も例外にしない。** `act` の「action 失敗時に書き戻しも clone も走らせない」保証(`act` の doc)を
 担保しているのは *punch/plug が unchecked なこと* ではなく、`act` の `if unique { punch/plug } else { read + set }`
