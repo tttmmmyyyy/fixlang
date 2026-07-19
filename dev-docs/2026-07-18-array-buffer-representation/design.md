@@ -434,67 +434,109 @@ green を保つよう段階化する:
 する対象の完全一覧。各項に契約(何をするか + `_unsafe_` の場合は caller が守るべき前提)を付す。末尾 §13.3 に
 survey が surface した2つの設計ギャップを記す。
 
-### 13.1 InlineLLVM / builtin / codegen
+### 13.1 InlineLLVM / builtin / codegen — 実装・フラグ・borrow 属性
 
-現行はすべて Array を boxed とみなし buffer を `gep_boxed(ARRAY_BUF_IDX)`、len/cap を
-`extract/insert_field(ARRAY_LEN_IDX|ARRAY_CAP_IDX)` で触る。変更系の re-target は共通で **buffer -> `arr.@_storage`
-の Storage buf、len/cap -> value の `_size`/`_cap` field**。
+各項目について **実装形態**(Fix-src の式 / InlineLLVM の疑似コード)、**force-unique 分岐**(unique-check-elim が
+COW を畳むための「force unique しない」機構)、**borrow 化属性**(`borrows_operand` / `result_prov`)を示す。
 
-**追加:**
+**属性の語彙**(`src/ast/inline_llvm.rs::LLVMGen`、consume 判定は `rc_ir/borrow.rs`・`provenance.rs`・
+`unique_elim.rs`):
+- **force-unique 分岐**: op が `unique_check_operand() -> Some { container_index, path }` で「どの operand(slot)の
+  どの boxed leaf の uniqueness で COW するか」を報告し、`assuming_unique()` が **その分岐を落とした(COW 無しの)版**
+  を返す。unique-check-elim がその leaf を Unique と証明したとき op を `assuming_unique()` に差し替える。実体は body の
+  `force_unique: bool` フィールド。**この分岐を持つ op だけが COW を畳める(= 求められている「force unique しない」
+  フラグ)。**
+- **borrows_operand(i)**: operand i を borrow(consume しない)か。default は全 operand consume。`borrow.rs` は
+  `borrows_operand(i)` か result_prov に `Arg(i, ·)` として現れる operand のみ非 consume とする。
+- **result_prov**: 結果の各 boxed leaf の provenance — `Fresh`(新規 unique)/ `Arg(k, path)`(operand k の passthrough
+  alias。`root()` が alias とみなし retain を省く)/ `Dyn`(保守的)。
+- redesign 共通: buffer は `arr.@_storage`(Storage boxed leaf = path `[0]`)、size/cap は value field 読み。COW helper
+  `make_array_unique` は `make_storage_unique` になり要素数を value `_size` から読む。以前 flat boxed array で
+  `path:[]`/`Fresh` だったものは Storage leaf(path `[0]`)を指すよう再表現する。
 
-| 名前 | 契約(+ caller 前提) |
-| --- | --- |
-| `Storage::_unsafe_allocate : I64 -> Storage a` | cap 要素分 malloc、refcount 1、未初期化。cap は保存しない。caller: 露出する分だけ後で書く |
-| `Storage::_unsafe_get : I64 -> Storage a -> a` | 要素 read、**retain する**。bounds unchecked。caller: idx 範囲内・スロット初期化済み |
-| `Storage::_unsafe_get_unretained : I64 -> Storage a -> a` | 要素 read、**retain しない**借用ビュー。caller: 保持・release 不可、Storage 生存中のみ有効 |
-| `Storage::_unsafe_initialize : I64 -> a -> Storage a -> Storage a` | 未初期化スロットへ write、旧要素 release せず、uniqueness check せず。caller: スロット未初期化・Storage unique・idx 範囲内・value 所有権を渡す |
-| `Array::_unsafe_is_storage_unique : Array a -> (Bool, Array a)` | `_storage` の refcount を retain せず覗く。`result_prov` は `Dyn`(is_unique と同じ trap)。COW/BCE 判定用 |
-| `truncate` の in-place shrink body(現状 Fix-source の pop_back ループ -> InlineLLVM 化。**shrink_size は追加しない**) | `n >= _size` は no-op、そうでなければ COW if shared + 切り詰め要素 `[n, _size)` を release + value `_size = n`。unique-check-elim + unboxed release で `Array U8`/unique では「`_size` 下げ」に畳む。`String::from_bytes` 等の shrink 経路は `truncate` を呼ぶ |
-| (型)`Storage a : boxed primitive` | ControlBlock + 生要素 FAM。`ty_to_object_ty`/`create_obj`/`STORAGE_BUF_IDX(=1)` を新設。cap store は無し |
-| `Boxed` instance | Array の hardcoded Boxed instance を **Storage a** へ移す |
-| `Array` tycon | boxed primitive -> `unbox struct { _storage, _size, _cap }`。`@_storage`/`@_size`/`@_cap` を自動生成 |
+**(1) force-unique 分岐あり — COW を畳める(`unique_check_operand`/`assuming_unique` + `force_unique` field)**
 
-**変更(re-target。特記のみ記載):**
+- **`set`**(`InlineLLVMArraySetBody`、InlineLLVM)— 疑似: `if force_unique { arr = make_storage_unique(arr) }`;
+  `if runtime_check() { check idx < _size }`; `write(arr.@_storage, idx, value, release_old=true)`; `ret arr`。
+  force-unique: `unique_check_operand = Some{0, [0]}`(operand 0 = arr の Storage leaf)、`assuming_unique` で
+  `force_unique=false`。bounds は `runtime_check()` gate(field でない)。borrows: なし(arr[0]・value[2] consume)。
+  prov: `Fresh`(Storage leaf)。**上書き + 旧要素 release はここに内在**。
+- **`swap` / `unsafe_swap_bounds_unchecked`**(`InlineLLVMArraySwapBody`、InlineLLVM)— 2スロットを noretain read して
+  cross-write(release 無し)。フィールド **`force_unique: bool` + `bounds_checked: bool`**(bounds_checked は
+  registration 固定・非 fold、swap=true / unsafe=false)。force-unique: `Some{0,[0]}`。borrows: なし。prov: `Fresh`。
+- **`punch`**(`InlineLLVMArrayPunchBody`、InlineLLVM)— `(PunchedArray a, a)` を返す。`if force_unique {
+  make_storage_unique }`; `elem = noretain_read(idx)`(hole を残す、size 不変); `ret (PunchedArray{_arr:arr, _idx:idx},
+  elem)`。force-unique: `Some{0,[0]}`。borrows: なし。prov: 現状 default `Dyn`(要 override 検討)。redesign では
+  `mod`/`act` が使う COW 版のみ残す(no-COW 版削除)。
+- **`plug`**(`InlineLLVMPunchedArrayPlugBody`、InlineLLVM)— `PunchedArray{_arr,_idx}` を分解、`if force_unique {
+  make_storage_unique_with_hole(_arr, Some(idx)) }`; `write(idx, elem, release_old=false)`; `ret arr`。
+  force-unique: `Some{container_index:1, path:[0]}`(operand 1 = punched 内の `_arr` leaf)。**redesign では Array が
+  struct になるので path が深くなり `[0(_arr), 0(_storage)]` で Storage leaf に届く**。borrows: なし(elem[0]・
+  punched[1] consume)。prov: `Fresh`。
+- **`unsafe_is_unique`**(`InlineLLVMIsUniqueFunctionBody`、InlineLLVM)— `(Bool, a)`。`if !assume_unique &&
+  obj.is_box { flag = build_branch_by_is_unique(obj) } else { flag = const true }`。フィールド `assume_unique: bool`。
+  force-unique: `unique_check_operand = Some{0, []}` iff `!assume_unique`; `assuming_unique` が `assume_unique=true`
+  (flag が const true に畳み、`if unique{}else{}` を back end が消す)。borrows: **なし(operand 0 を意図的に consume)**。
+  prov: **`Dyn` 固定(TRAP)** — 第2成分は引数そのものだが passthrough にすると「後続 use が arg を shared に読ませる
+  retain」を抑止し fold が誤って on になる。**Dyn を保つ**。redesign: `[a:Boxed]` 追加。Array には下記
+  `_unsafe_is_storage_unique` を使う。
+- **NEW `_unsafe_grow_size`**(`_unsafe_set_size` から改名、InlineLLVM)— 旧 body は `insert_field(LEN, n)` のみで
+  COW 無し。**redesign で force-unique 分岐を新設**(`force_unique` field + `unique_check_operand=Some{0,[0]}` +
+  `assuming_unique`)— value `_size` を n に伸ばす前に Storage を COW。理由: `_size` を書くのは unique な `_storage` に
+  だけ(§3.1)。畳めるので provably-unique では同性能。borrows: なし。prov: `Fresh`。
+- **NEW `truncate`**(現状 Fix-source の pop_back ループ -> InlineLLVM 化)— `if n >= _size { ret arr }`; `if
+  force_unique { make_storage_unique }`; `release_range(arr.@_storage, [n,_size))`; `ret arr{_size=n}`。force-unique
+  分岐あり(`Some{0,[0]}`、畳める)。borrows: なし。prov: `Fresh`。§13.3-1。
+- **NEW `mutate_elements` / `_io`**(専用 InlineLLVM)— `if force_unique { make_storage_unique }`; `ptr =
+  data_ptr(arr.@_storage)`; `r = act(ptr)`; `ret (arr, r)`。force-unique 分岐あり(`Some{0,[0]}`)。§13.3-2。
 
-| 名前 | 契約 + 変更点 |
-| --- | --- |
-| `set`(`InlineLLVMArraySetBody`) | bounds-checked write + 旧要素 release + 内部 COW(unique-check-elim が畳む)。**上書き+release はここに内在**。COW は Storage を clone |
-| `swap` / `unsafe_swap_bounds_unchecked`(`InlineLLVMArraySwapBody`) | 2スロット read+cross-store、要素 release 無し、内部 COW |
-| `punch`(`InlineLLVMArrayPunchBody`) | 要素を hole へ move out(noretain)、size 不変、内部 COW。`force_unique` は常時 true に collapse |
-| `plug`(`InlineLLVMPunchedArrayPlugBody`) | hole へ write back(release 無し)、内部 COW。`force_unique` 常時 true |
-| `get_data_pointer_from_boxed_value` | boxed payload ポインタ。`is_array` 分岐 -> Storage(`STORAGE_BUF_IDX`) |
-| `unsafe_is_unique`(`InlineLLVMIsUniqueFunctionBody`) | `(Bool,a)` 返す。scheme に **`[a:Boxed]` 追加**(unbox Array を弾く)。body 不変、unbox 枝(const-true)は dead に |
-| `make_array_unique` / `_with_hole` | clone-if-shared(hole skip 可)。Storage の uniqueness で分岐、`_cap` 分の Storage を確保し `_size` 要素 copy |
-| array literal(`InlineLLVMArrayLitBody`) | `Storage(len)` 確保 + 要素 write、value struct 構築 |
-| `_unsafe_empty_capacity_unchecked` | **-> Fix-src** の struct 構築(InlineLLVM 削除、`Storage::_unsafe_allocate` を使う) |
-| `_unsafe_get_bounds_unchecked` | retain read、borrow。-> re-target または Fix-src(`Storage::_unsafe_get`) |
-| `_unsafe_get_linear_bounds_unchecked_unretained`(+`_forceunique`) | `(Array,a)` noretain read、`force_unique` COW。-> `Storage::_unsafe_get_unretained` へ |
-| `make_byte_array_copy`(codegen helper) | `Array U8` 確保 + memcpy。Storage へ(string literal 等が使う) |
-| `_undefined_internal` | `Array U8` メッセージの C-str を print+abort。msg buffer -> `@_storage` |
-| `_mutate_boxed_internal` / `get_funptr_*` | `is_array` 分岐が Array で unreachable に(Storage 経由へ) |
-| object.rs layout codegen | `ty_to_object_ty`(Array arm -> unbox struct)、`create_obj`、`size_of`、`build_traverse`(Array/punched arm を **value `_size` 駆動**へ)、debug-info(`<array size>`/`<array buffer>`) |
+**(2) COW 固定(畳めない)**
 
-**削除:**
+- **`_unsafe_pop_back_nonempty`**(`_pop_back_nonempty` から改名、InlineLLVM)— `arr = make_storage_unique(arr)`
+  (**無条件**、`unique_check_operand` override 無し = 非 fold); `last = _size-1`; `elem = noretain_read(last)`;
+  `release(elem)`; `_size = last`。borrows: なし。prov: `Fresh`。empty で UB。
 
-| 名前 | 理由 / 置換 |
-| --- | --- |
-| `_unsafe_force_unique` | CSE 脆弱で危険(§3.3)。置換: mutator 内蔵 COW + `_unsafe_is_storage_unique` |
-| `_unsafe_set_bounds_uniqueness_unchecked_unreleased` | uniqueness-check-less mutate 撤廃。置換: `Storage::_unsafe_initialize` |
-| `_unsafe_punch/plug_bounds_uniqueness_unchecked`(no-COW 版) | COW 版に一本化(§3.3。`force_unique` param が消える) |
-| `_unsafe_fill_size_unchecked`(`array_unsafe_fill`) | `fill` を Fix-src 化(実測で InlineLLVM と同値) |
-| `@size` / `@capacity`(`InlineLLVMArrayGetSize/Capacity Body`) | value field 読みへ(Fix-src wrapper `arr.@_size`/`@_cap`) |
-| `_get_ptr`(既に deprecated) | `borrow_boxed` / `borrow_elements` へ |
+**(3) COW/uniqueness 分岐なし(caller が unique 保証、または read-only)**
 
-**改名:**
+- **`_unsafe_get_bounds_unchecked`**(InlineLLVM)— `arr = noretain(arr)`(borrow); `elem = retaining_read(
+  arr.@_storage, idx)`。**borrows: operand 0 = borrow**。prov: `Dyn`(共有 container から retain 済み要素)。存続。
+- **NEW `Storage::_unsafe_get`**(InlineLLVM)— slot を retain read。**borrows: operand 0(Storage)= borrow**。
+  prov: `Dyn`。
+- **NEW `Storage::_unsafe_get_unretained`**(InlineLLVM)— slot を noretain read。**borrows: operand 0 = borrow**。
+  prov: `Dyn`。
+- **NEW `Storage::_unsafe_initialize`**(InlineLLVM)— `write(idx, value, release_old=false)`(未初期化スロット、
+  COW 無し = caller が unique 保証)。borrows: なし(Storage・value consume)。prov: Storage leaf 記述。旧
+  `_unsafe_set_bounds_uniqueness_unchecked_unreleased` の置換。
+- **NEW `Storage::_unsafe_allocate`**(InlineLLVM)— 指定 cap の boxed Storage を確保(未初期化, refcount 1, cap は
+  保存しない)。prov: `Fresh`。COW 無し。
+- **`_unsafe_empty_capacity_unchecked`**(InlineLLVM 存続 or Fix-src)— `Array { _storage:
+  Storage::_unsafe_allocate(cap), _size:0, _cap:cap }`。prov: `Fresh`。
+- **`_check_range` / `_check_size`**(InlineLLVM、存続不変)— 純 I64 guard(`runtime_check()` gate)。属性なし。
+- **array literal**(`InlineLLVMArrayLitBody`、InlineLLVM 存続)— `Storage(len) 確保`; 各 elem を noretain write
+  (release 無し); `Array{_storage,_size=len,_cap=len}`。borrows: 全 element consume。prov: `Fresh`。
+- **`@size` / `@capacity`**: body 削除 -> **Fix-src** `|arr| arr.@_size` / `|arr| arr.@_cap`(= `InlineLLVMStructGetBody`)。
+  struct が unbox なので `@_storage` は `Arg(0,[0])`(passthrough alias -> borrow.rs が alias 化、余計な retain 無し)、
+  `@_size`/`@_cap` は scalar(prov 空、register 読み)。
 
-| old -> new | 変更 |
-| --- | --- |
-| `_unsafe_set_size` -> `_unsafe_grow_size` | 増加専用(`n >= _size`)+ 内部 COW。新スロット `[old_size..n)` は未初期化 |
-| `_pop_back_nonempty` -> `_unsafe_pop_back_nonempty` | `_unsafe_` 付与(empty で UB)。唯一の size 減少経路(要素 release + `_size -= 1`) |
+**(4) codegen helper(Rust、非 LLVMGen)**
 
-**不変で再利用:** `ObjectFieldType` の buffer helpers(`read/write/clone/release_or_mark_array_buf` 等 — buffer と size を
-引数で受け layout 非依存)、`_check_range`/`_check_size`、`make_struct_union_unique`、`with_retained`、retained-ptr 系。
-caller が buffer を `@_storage` gep で、size を value `_size` で得るよう変わるだけ。
+- **`make_array_unique` / `_with_hole`** -> **`make_storage_unique`**: `build_branch_by_is_unique(storage)`; shared 枝で
+  `_cap` 分の Storage を確保し value `_size` 個を `clone_array_buf`(各要素 retain、hole 版は1スロット skip)して元を
+  release。上記 force-unique 分岐すべてが経由。
+- **`get_data_pointer_from_boxed_value` / `_get_boxed_ptr`**: `is_array` 分岐を Storage(`STORAGE_BUF_IDX`)へ。
+  `_get_boxed_ptr` は borrow(`borrows_operand(0)=true`)。`borrow_boxed` / FFI は `@_storage` 経由。
+- **`InlineLLVMStructGetBody` / `MakeStructBody`**: 新 unbox Array value の `@_storage`/`@_size`/`@_cap` 参照と構築に
+  使う。unbox struct の get は `Arg(0, [field]++)` の passthrough、make は field i の leaf に operand i を通す
+  (`mutate_elements` の in-place rebuild が正しく alias する)。
+
+**(5) 削除**(理由は前掲): `_unsafe_force_unique`、`_unsafe_set_bounds_uniqueness_unchecked_unreleased`(->
+`Storage::_unsafe_initialize`)、`_unsafe_get_linear_bounds_unchecked_unretained`(両変種)、punch/plug の
+uniqueness-unchecked(no-COW)版、`array_unsafe_fill`(fill -> Fix-src)、`@size`/`@capacity` body(-> field 読み)、
+`_get_ptr`。
+
+**(6) 型・登録の変更**(op ではないが必要): `Storage a` tycon を新設(boxed primitive、`ty_to_object_ty`/
+`create_obj`/`STORAGE_BUF_IDX` を追加)、hardcoded `Boxed` instance を Array から **Storage** へ移す、`Array` tycon を
+`unbox struct { _storage, _size, _cap }` 化(`@_storage`/`@_size`/`@_cap` を自動生成)。詳細は §2/§7。
 
 ### 13.2 std.fix Fix 関数・trait instance(public シグネチャは特記以外すべて不変)
 
