@@ -128,9 +128,11 @@ redesign では `_size` が value にあるので、**共有された `_storage`
 heap len なら共有 len を書き換える別の誤り。redesign の方が危険)。
 これを op 自身で保証する:
 
-- `_unsafe_set_size` は実際 **増加専用**にしか使われていない(from_map/fill/reserve/push_back/append は
+- `_unsafe_set_size` は要素側 Array ではほぼ **増加専用**(from_map/fill/reserve/push_back/append は
   alloc/reserve 後に size を伸ばす)。**減少は `_pop_back_nonempty` が担い、要素を release してから len を
-  直接書く**(`_unsafe_set_size` を使わない。truncate は pop_back のループ)。
+  直接書く**(`_unsafe_set_size` を使わない。truncate は pop_back のループ)。**ただし例外: `Array U8` の一部
+  String/bytes 経路(`String::from_bytes` 等)は真の shrink を行う** — unboxed で要素 release 不要なので健全だが
+  grow-only では表せない。この扱いは未決(§13.3-1)。
 - そこで **増加専用の `_unsafe_grow_size`(「未初期化スロットへ size を伸ばす」、`n >= _size`)に置き換え、
   内部で unique check(= COW、shared なら clone)する**(名前を grow-only に合わせる — 現行 `_unsafe_set_size`
   は増加しかしない)。すると「呼び出し側が事前に unique を保証する」footgun が消え(op 自身が unique な `_storage`
@@ -425,3 +427,126 @@ green を保つよう段階化する:
 - **(c) generic な custom-traversal ヘルパに `len` を渡す**(既存の hole path
   `build_release_mark_nonnull_boxed_with`)。採用案(Array value が release を駆動)の実装手段であって別モデル
   ではないので、独立の選択肢としては扱わない。
+
+## 13. 付録: 影響を受ける関数・InlineLLVM の全一覧(契約付き)
+
+`std.fix` / `builtin.rs` / `stdlib.rs` / `object.rs` を通読して棚卸しした、本再設計が **追加 / 変更 / 削除 / 改名**
+する対象の完全一覧。各項に契約(何をするか + `_unsafe_` の場合は caller が守るべき前提)を付す。末尾 §13.3 に
+survey が surface した2つの設計ギャップを記す。
+
+### 13.1 InlineLLVM / builtin / codegen
+
+現行はすべて Array を boxed とみなし buffer を `gep_boxed(ARRAY_BUF_IDX)`、len/cap を
+`extract/insert_field(ARRAY_LEN_IDX|ARRAY_CAP_IDX)` で触る。変更系の re-target は共通で **buffer -> `arr.@_storage`
+の Storage buf、len/cap -> value の `_size`/`_cap` field**。
+
+**追加:**
+
+| 名前 | 契約(+ caller 前提) |
+| --- | --- |
+| `Storage::_unsafe_allocate : I64 -> Storage a` | cap 要素分 malloc、refcount 1、未初期化。cap は保存しない。caller: 露出する分だけ後で書く |
+| `Storage::_unsafe_get : I64 -> Storage a -> a` | 要素 read、**retain する**。bounds unchecked。caller: idx 範囲内・スロット初期化済み |
+| `Storage::_unsafe_get_unretained : I64 -> Storage a -> a` | 要素 read、**retain しない**借用ビュー。caller: 保持・release 不可、Storage 生存中のみ有効 |
+| `Storage::_unsafe_initialize : I64 -> a -> Storage a -> Storage a` | 未初期化スロットへ write、旧要素 release せず、uniqueness check せず。caller: スロット未初期化・Storage unique・idx 範囲内・value 所有権を渡す |
+| `Array::_unsafe_is_storage_unique : Array a -> (Bool, Array a)` | `_storage` の refcount を retain せず覗く。`result_prov` は `Dyn`(is_unique と同じ trap)。COW/BCE 判定用 |
+| (型)`Storage a : boxed primitive` | ControlBlock + 生要素 FAM。`ty_to_object_ty`/`create_obj`/`STORAGE_BUF_IDX(=1)` を新設。cap store は無し |
+| `Boxed` instance | Array の hardcoded Boxed instance を **Storage a** へ移す |
+| `Array` tycon | boxed primitive -> `unbox struct { _storage, _size, _cap }`。`@_storage`/`@_size`/`@_cap` を自動生成 |
+
+**変更(re-target。特記のみ記載):**
+
+| 名前 | 契約 + 変更点 |
+| --- | --- |
+| `set`(`InlineLLVMArraySetBody`) | bounds-checked write + 旧要素 release + 内部 COW(unique-check-elim が畳む)。**上書き+release はここに内在**。COW は Storage を clone |
+| `swap` / `unsafe_swap_bounds_unchecked`(`InlineLLVMArraySwapBody`) | 2スロット read+cross-store、要素 release 無し、内部 COW |
+| `punch`(`InlineLLVMArrayPunchBody`) | 要素を hole へ move out(noretain)、size 不変、内部 COW。`force_unique` は常時 true に collapse |
+| `plug`(`InlineLLVMPunchedArrayPlugBody`) | hole へ write back(release 無し)、内部 COW。`force_unique` 常時 true |
+| `get_data_pointer_from_boxed_value` | boxed payload ポインタ。`is_array` 分岐 -> Storage(`STORAGE_BUF_IDX`) |
+| `unsafe_is_unique`(`InlineLLVMIsUniqueFunctionBody`) | `(Bool,a)` 返す。scheme に **`[a:Boxed]` 追加**(unbox Array を弾く)。body 不変、unbox 枝(const-true)は dead に |
+| `make_array_unique` / `_with_hole` | clone-if-shared(hole skip 可)。Storage の uniqueness で分岐、`_cap` 分の Storage を確保し `_size` 要素 copy |
+| array literal(`InlineLLVMArrayLitBody`) | `Storage(len)` 確保 + 要素 write、value struct 構築 |
+| `_unsafe_empty_capacity_unchecked` | **-> Fix-src** の struct 構築(InlineLLVM 削除、`Storage::_unsafe_allocate` を使う) |
+| `_unsafe_get_bounds_unchecked` | retain read、borrow。-> re-target または Fix-src(`Storage::_unsafe_get`) |
+| `_unsafe_get_linear_bounds_unchecked_unretained`(+`_forceunique`) | `(Array,a)` noretain read、`force_unique` COW。-> `Storage::_unsafe_get_unretained` へ |
+| `make_byte_array_copy`(codegen helper) | `Array U8` 確保 + memcpy。Storage へ(string literal 等が使う) |
+| `_undefined_internal` | `Array U8` メッセージの C-str を print+abort。msg buffer -> `@_storage` |
+| `_mutate_boxed_internal` / `get_funptr_*` | `is_array` 分岐が Array で unreachable に(Storage 経由へ) |
+| object.rs layout codegen | `ty_to_object_ty`(Array arm -> unbox struct)、`create_obj`、`size_of`、`build_traverse`(Array/punched arm を **value `_size` 駆動**へ)、debug-info(`<array size>`/`<array buffer>`) |
+
+**削除:**
+
+| 名前 | 理由 / 置換 |
+| --- | --- |
+| `_unsafe_force_unique` | CSE 脆弱で危険(§3.3)。置換: mutator 内蔵 COW + `_unsafe_is_storage_unique` |
+| `_unsafe_set_bounds_uniqueness_unchecked_unreleased` | uniqueness-check-less mutate 撤廃。置換: `Storage::_unsafe_initialize` |
+| `_unsafe_punch/plug_bounds_uniqueness_unchecked`(no-COW 版) | COW 版に一本化(§3.3。`force_unique` param が消える) |
+| `_unsafe_fill_size_unchecked`(`array_unsafe_fill`) | `fill` を Fix-src 化(実測で InlineLLVM と同値) |
+| `@size` / `@capacity`(`InlineLLVMArrayGetSize/Capacity Body`) | value field 読みへ(Fix-src wrapper `arr.@_size`/`@_cap`) |
+| `_get_ptr`(既に deprecated) | `borrow_boxed` / `borrow_elements` へ |
+
+**改名:**
+
+| old -> new | 変更 |
+| --- | --- |
+| `_unsafe_set_size` -> `_unsafe_grow_size` | 増加専用(`n >= _size`)+ 内部 COW。新スロット `[old_size..n)` は未初期化 |
+| `_pop_back_nonempty` -> `_unsafe_pop_back_nonempty` | `_unsafe_` 付与(empty で UB)。唯一の size 減少経路(要素 release + `_size -= 1`) |
+
+**不変で再利用:** `ObjectFieldType` の buffer helpers(`read/write/clone/release_or_mark_array_buf` 等 — buffer と size を
+引数で受け layout 非依存)、`_check_range`/`_check_size`、`make_struct_union_unique`、`with_retained`、retained-ptr 系。
+caller が buffer を `@_storage` gep で、size を value `_size` で得るよう変わるだけ。
+
+### 13.2 std.fix Fix 関数・trait instance(public シグネチャは特記以外すべて不変)
+
+**追加(Fix-source):**
+
+| 名前 | 契約 |
+| --- | --- |
+| `Array::borrow_elements : (Ptr -> b) -> Array a -> b` | 要素先頭 Ptr を callback に借用(`arr.@_storage.borrow_boxed` へ委譲)。`array.borrow_boxed` の後継。ポインタは callback 中のみ有効、書き換え不可 |
+| `Array::borrow_elements_io` | IO 版 |
+| `Array::mutate_elements` | Ptr 経由 mutate(`@_storage.mutate_boxed` 委譲、COW-clone を Array に rewrap)。§13.3-2 の retain 問題あり |
+| `Array::mutate_elements_io` | IO 版 |
+| Array 用 uniqueness assert(名前 TBD) | `_unsafe_is_storage_unique` ベース。`arr.assert_unique` の後継 |
+
+**変更:**
+
+- builder(`_unsafe_force_unique` 撤去 + `_unsafe_set_size`->`_unsafe_grow_size` + unreleased write -> `Storage::_unsafe_initialize`): `append`, `from_map`, `reserve`, `push_back`, `resize`
+- `fill`: 削除プリミティブ -> **Fix-source**(`Storage::_unsafe_initialize` ループ)
+- `mod`/`act`(punch/plug の no-COW -> COW、`unsafe_is_unique` -> `_unsafe_is_storage_unique`、act の分岐構造は維持): `mod`, `_unsafe_act_bounds_unchecked_identity`, `_unsafe_act_bounds_unchecked_tuple2`, `_unsafe_act_bounds_unchecked`
+- `sort_by`, `reverse`: `_unsafe_force_unique` 撤去(COW `swap` が make-unique 済み)
+- `pop_back`: 呼ぶ先が `_unsafe_pop_back_nonempty` に改名
+- `@size`/`@capacity`: Rust InlineLLVM -> Fix-src wrapper。`get_size`/`get_capacity` alias は不変
+- `_unsafe_empty_capacity_unchecked`: Fix-src struct 構築(`empty` は name/contract 不変)
+- String C-interop(`_data.@_storage` 経由へ、sig 不変): `_get_c_str`, `borrow_c_str`, `_unsafe_from_c_str`, `unsafe_from_c_str_ptr`(`_io`), `String::from_bytes`
+- IO byte 関数(`mutate/borrow_boxed` -> `_elements`): `_read_line_inner`, `read_n_bytes`, `write_bytes`
+- `assert_unique`: **`[a:Boxed]` 制約追加**(`arr.assert_unique` は compile error 化 -> Array 版へ誘導)
+- 数値 trait instance(`mutate/borrow_boxed` -> `_elements`、`_unsafe_set_size` -> `_unsafe_grow_size`): `ToBytes`/`FromBytes`/`ToString` の U8..F64 一式(+ `to_string_exp`/`_precision`)
+
+**削除:**
+
+- Rust 登録プリミティブ: `_unsafe_force_unique`, `_unsafe_set_bounds_uniqueness_unchecked_unreleased`, punch/plug の uniqueness-unchecked 版, `_unsafe_fill_size_unchecked`
+- trait instance: **`impl Array a : Boxed`**(-> Storage a へ)。**user-visible break**: `array.borrow_boxed` / `array.boxed_to_retained_ptr` が型エラー -> `borrow_elements` か自作 boxed 型でラップ
+- `unsafe_is_unique` の unbox 枝(const-true)が `[a:Boxed]` 追加で dead
+
+**改名(呼び出し側更新):**
+
+- `_unsafe_set_size` -> `_unsafe_grow_size`。呼び出し: `append`/`from_map`/`push_back`/`reserve`/`resize`/`read_n_bytes`/`_unsafe_from_c_str`/`unsafe_from_c_str_ptr`(`_io`)/`String::from_bytes`/数値 `to_bytes` 一式
+- `_pop_back_nonempty` -> `_unsafe_pop_back_nonempty`。呼び出し: `pop_back`
+
+**不変(変更された callee を通すだけ):** `@`, `get_first`/`get_last`, `is_empty`, `find_by`, `get_sub`, `dedup`, `empty`,
+`act`, `truncate`, `from_iter`/`to_iter`, sort 内部一式(`_introsort`/`_heap*`/`_insertion*`/`_mergesort*`/`sort`/`sort_stable*`)、
+全 Array trait impl(`Zero`/`Add`/`Eq`/`LessThan`/`Functor`/`Monad`/`ToString`/`Indexable`)、FFI 定義
+(`mutate_boxed`/`borrow_boxed`/retained-ptr — Array を受けなくなるだけ)、`Destructor::mutate_unique_io`(box なので `[a:Boxed]` OK)、
+String の大半、PunchedArray 型(新レイアウトを継承、punch/plug/traverse の Rust body だけ retarget)。
+
+### 13.3 要検討(survey が surface した設計ギャップ)
+
+1. **grow-only 改名が String の shrink 経路と衝突する。** `_unsafe_grow_size`(前提 `n >= _size`)は
+   `String::from_bytes`(null terminator の後にバイトが続くと真の shrink)や `_unsafe_from_c_str` の一部・数値
+   `to_string` の over-allocate 経路を表せない。これらは `Array U8`(unboxed = 要素 release 不要, leak-safe)だが、
+   size を縮める手段が要る。**§3.1 の「`_unsafe_set_size` は増加専用」は `Array U8` 経路では不正確**。選択肢:
+   (a) `Array U8` 用の shrink プリミティブ(release 不要の `_size` 縮小)を別に用意、(b) buffer を exact size で
+   構築して shrink を不要にする、(c) `truncate` 経由。**要決定。**
+2. **`mutate_elements` の `@_storage` retain。** `arr.@_storage` は `_storage` を retain するので、naive な
+   `@_storage.mutate_boxed(f)` は常に shared と見なし clone する(§3.3 の `unsafe_is_unique` と同じ hazard)。
+   `mutate_elements`/`mutate_elements_io` は borrow 化された `@_storage`(または専用 builtin)が要る。
+   `borrow_elements` は borrow のみなので問題なし。
