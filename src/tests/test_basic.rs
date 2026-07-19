@@ -279,6 +279,29 @@ pub fn test_unique_check_elim_destructured_boxed_field_shared() {
 }
 
 #[test]
+pub fn test_fieldless_value_merged_across_branch_compiles() {
+    // A function returning a fieldless value (`()`) whose branches merge a unit-typed call result
+    // with a `()` literal. The two sides once carried different provenance shapes — one seeded from
+    // the type, one built by a constructor — and merging them aborted the provenance analysis' branch
+    // join at Max ("mismatched shapes: Unboxed vs UnboxedAgg([])"). Compiling and running this at Max
+    // guards that a fieldless value has a single provenance representation.
+    let source = r#"
+            module Main;
+
+            dbg : Bool -> String -> ();
+            dbg = |cond, msg| if cond { debug_eprintln(msg) } else { () };
+
+            main : IO ();
+            main = (
+                eval dbg(false, "x");
+                eval dbg(true, "y");
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_unique_check_elim_reprojected_alias_shared() {
     // An unboxed tuple's boxed field is projected into `keep` (which is stored twice, so it is
     // shared) and re-projected into `m`, then `m` is mutated. `keep` and `m` name the same array, so
