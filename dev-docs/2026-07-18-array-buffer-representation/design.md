@@ -204,16 +204,20 @@ free-or-decrement**(`build_release_mark_nonnull_boxed_with`)、(3) **`is_unique`
 判定で残す)。redesign では (1) が Array の `_storage` に移るだけ。
 
 **削除したいのは Fix レベルの「呼び出し側が事前に手動 unique を保証する」primitive**:
-`_unsafe_set_bounds_uniqueness_unchecked_unreleased` と、その前に置く `_unsafe_force_unique`(std の
-from_map/push_back/reserve/append/resize が使う)。これらは (1) の COW check を **skip する**ために存在した。
-unique-check-elim が safe 版の check を確実に畳む今、std builder を **safe な Array op(COW 内蔵 =
-`make_array_unique`)に置き換えれば削除できる**(§11.3、surviving unsafe RMW primitive 削除計画。上の
-増加専用の `_unsafe_grow_size`(§3.1)もこのパターンの一例)。
+`_unsafe_set_bounds_uniqueness_unchecked_unreleased`(+ その前の `_unsafe_force_unique`、std の
+from_map/push_back/reserve/append/resize が使う)と、**punch/plug の uniqueness-unchecked 版
+`_unsafe_punch/plug_bounds_uniqueness_unchecked`**(mod/act が使う)。これらは (1) の COW check を **skip する**
+ために存在した。unique-check-elim が safe 版の check を確実に畳む今、呼び出し側を **COW 内蔵の safe op
+(`make_array_unique`、punch/plug は force_unique=true の COW 版)に置き換えれば削除できる**(§11.3、surviving
+unsafe RMW primitive 削除計画。上の増加専用の `_unsafe_grow_size`(§3.1)もこのパターンの一例)。
 
-**例外: punch/plug ペア(`_unsafe_punch/plug_bounds_uniqueness_unchecked`)は残す。** `act` は `if unique`
-枝で punch(所有権ごと要素を取り出し)し、書き戻しを functor の `map` の中の plug に置くことで、**action が
-失敗(例: Option None)したとき書き戻しも clone も走らない**保証(`act` の doc)を実現している。plug を
-check ありにするとこの no-clone-on-fail が壊れうるので、uniqueness-unchecked のまま残す。
+**punch/plug も例外にしない。** `act` の「action 失敗時に書き戻しも clone も走らせない」保証(`act` の doc)を
+担保しているのは *punch/plug が unchecked なこと* ではなく、`act` の `if unique { punch/plug } else { read + set }`
+という **分岐構造**である。punch は unique 枝でだけ呼ばれ(unique な配列にしか当たらない)、COW 版 punch でも実際には
+clone しない(provable なら畳み、実行時 unique なら COW check が no-clone に落ちる)。shared は `else` の遅延 clone
+(成功時のみ `set`)へ行き punch を呼ばない。よって COW 版に寄せても no-clone-on-fail は保たれ、unique-check-elim が
+unique 枝の冗長 check を畳む。コスト: 非 provable かつ runtime-unique の時だけ punch の COW check が1回冗長に走るが
+安く、clone が実際に起きる場面では clone コストが支配的。
 
 注: `unreleased`(未初期化スロットへの書き込み)の unsafe さは uniqueness とは直交で残り、
 `Storage::_unsafe_initialize` 側に集約される。
@@ -293,9 +297,9 @@ borrow / provenance / unique-check-elim はどこで値が unique か shared か
 この外部不変条件を op から検証できず、解析の uniqueness モデルが実体とズレると shared 配列への write(miscompile)を
 招く。check を op 内に持てば入力が何であれ健全(shared なら clone)で、optimizer の fold は純粋に安全な簡約になる。
 上書き + 旧要素 release は InlineLLVM(`set`/`swap`)の body の codegen が Storage の生ストレージへ直接行う
-(Fix レベルの Storage write プリミティブは無い、§4)。punch/plug は、囲む safe op の unique 枝(既に uniqueness を
-確定済み)の中でだけ動く生の部品なので可。「bulk op は Fix-source を基本」(§4)は fill/reserve のコピーの話で、
-per-element の in-place mutator は InlineLLVM に残す。
+(Fix レベルの Storage write プリミティブは無い、§4)。`mod`/`act` が使う punch/plug も COW 内蔵の版に寄せる
+(uniqueness-unchecked 版は削除、§3.3)ので、この規則に例外は無い。「bulk op は Fix-source を基本」(§4)は
+fill/reserve のコピーの話で、per-element の in-place mutator は InlineLLVM に残す。
 
 ## 6. PunchedArray
 
@@ -404,8 +408,9 @@ green を保つよう段階化する:
    「呼び出し側が事前に unique を保証する」primitive を、自前で unique-check する safe 版に寄せる(unique-check-elim
    が provably-unique で畳んで同性能)。size 書き込み(`_unsafe_force_unique` + 旧 `_unsafe_set_size`)は §3.1 の
    `_unsafe_grow_size` が内部 check 化して既にこの一例。fill が Fix-source で InlineLLVM と同値だった実証と同じ
-   方向で、redesign を機に unsafe API の表面積を縮める(削除対象は §3.3)。前提は §3.3(is_unique)と §3.1
-   (unique-only な size 書き込み)が正しく効くこと。surviving unsafe RMW primitive の削除計画に接続する。
+   方向で、redesign を機に unsafe API の表面積を縮める(削除対象は §3.3。punch/plug の uniqueness-unchecked 版も
+   含む = 例外なし)。前提は §3.3(is_unique)と §3.1(unique-only な size 書き込み)が正しく効くこと。surviving
+   unsafe RMW primitive の削除計画に接続する。
 
 ## 12. あとがき: 検討して退けた案
 
