@@ -240,7 +240,10 @@ check ありにするとこの no-clone-on-fail が壊れうるので、uniquene
   担い(§5)、この op はその契約下の生の indexed write。
 - `Storage::_unsafe_initialize : I64 -> a -> Storage a -> Storage a` — release **せず** に書き込む(live value を
   持たないスロットへの初回書き込み。fresh capacity を埋める用)。`_unsafe_set`(上書き + 旧要素 release)と対。
-- FFI 用の data-pointer accessor(`Storage` の生要素先頭ポインタ)。capacity は `Array` value の
+- FFI のデータポインタ(`Storage` の生要素先頭)は **generic `_get_boxed_ptr : [a : Boxed] a -> Ptr`** で取れる
+  (`Storage` は Boxed)。専用 accessor は新設しない。redesign で要るのは codegen 側で
+  `get_data_pointer_from_boxed_value` の array 分岐を `Storage` の buf レイアウトに合わせることだけ(§7)。
+  `borrow_boxed` / `mutate_boxed` も同じく generic のまま `Storage` に効く。capacity は `Array` value の
   `_cap` が持つので、`Storage` に capacity op は置かない。
 
 **bulk op は Fix-source を基本とし、measurement で回帰するものだけ InlineLLVM を残す**。`fill` は Fix-source の
