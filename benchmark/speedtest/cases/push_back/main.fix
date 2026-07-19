@@ -1,0 +1,24 @@
+module Main;
+
+import Std::{
+    Array, I64, IO, Array::{empty, push_back, @}, Debug::assert_eq,
+    Iterator::{fold, range}, Monad::pure
+};
+
+// Incremental build: append N elements with `push_back`, the array threaded
+// through the fold accumulator. Capacity is reserved up front so no reallocation
+// happens, isolating the per-iteration metadata cost. Each `push_back` reads
+// `@capacity` (its grow check) and `@size` and writes the new size; today these
+// are heap fields in the same allocation as the element buffer, so a store into
+// the buffer aliases them and they are reloaded/rewritten every iteration.
+build_by_push : I64 -> Array I64;
+build_by_push = |n| (
+    Iterator::range(0, n).fold(Array::empty(n), |i, arr| arr.push_back(i))
+);
+
+main : IO ();
+main = (
+    let arr = build_by_push(100000);
+    assert_eq(|_|"push_back", arr.@(99999), 99999);;
+    pure()
+);
