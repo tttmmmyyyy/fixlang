@@ -1119,6 +1119,18 @@ impl TypeNode {
             .all(|field_ty| field_ty.is_fully_unboxed(type_env))
     }
 
+    /// Whether a value of this type is one indivisible reference-counting unit — counted as a whole by
+    /// a custom traverser rather than by descending into its fields. This holds for a boxed value, an
+    /// unboxed union (only its active variant is live, so a refcount operation must dispatch on the tag
+    /// rather than name a variant's leaf), and a punched array (its traversal skips the moved-out hole
+    /// at a run-time index). A type whose reference counting is a whole-value operation belongs here.
+    ///
+    /// The caller must have already handled a closure, whose capture is the unit: this asserts the type
+    /// is not a closure (via `is_union`).
+    pub fn is_rc_unit_root(&self, type_env: &TypeEnv) -> bool {
+        self.is_box(type_env) || self.is_union(type_env) || self.is_punched_array()
+    }
+
     // Create new type node with default info.
     fn new(ty: Type) -> Self {
         Self {

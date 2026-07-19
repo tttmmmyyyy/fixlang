@@ -428,10 +428,11 @@ fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
 
 // --- reference-counting units ---
 
-/// The reference-counting units of a value's type: the boxed value, the capture of a closure, or
-/// each unit of an unboxed struct/tuple. Unlike `boxed_leaves`, it stops at the root of an unboxed
-/// union — a union is one unit, since only its active variant is live and a refcount operation on it
-/// must dispatch on the tag rather than name a variant's leaf unconditionally.
+/// The reference-counting units of a value's type: the capture of a closure, or each unit root
+/// (`is_rc_unit_root`) — a boxed value, an unboxed union, or a punched array — reached by descending
+/// its unboxed structs/tuples. Unlike `boxed_leaves`, it stops at a unit root rather than expanding it
+/// into the inner boxed leaves (e.g. an unboxed union is one unit, since only its active variant is
+/// live and a refcount operation must dispatch on the tag rather than name a variant's leaf).
 fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
@@ -448,9 +449,7 @@ fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mu
         path.pop();
         return;
     }
-    // A punched array carries a moved-out hole at a run-time index, so its refcount traversal is a
-    // whole-value operation that skips that hole; it is one indivisible unit, not a struct to descend.
-    if ty.is_box(type_env) || ty.is_union(type_env) || ty.is_punched_array() {
+    if ty.is_rc_unit_root(type_env) {
         out.push(path.clone());
         return;
     }
