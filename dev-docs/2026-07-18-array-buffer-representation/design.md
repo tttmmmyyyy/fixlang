@@ -105,6 +105,17 @@ object にある(`build_traverse` の `Array` arm: `size = extract_field(ARRAY_L
 refcount 1 -> 0)は常に正しい `[0.._size)` に対して要素 release を駆動する。これが成り立つのは、コア設計に
 **zero-copy slice がない**からこそである。
 
+**この不変条件は「`_size` を変える op はすべて unique な `_buf` にだけ適用される」ことに依存する。**
+`_unsafe_set_size`(および push_back/pop_back/truncate/resize/append)は現状すべて、直前に
+`_unsafe_force_unique` するか `Array::empty`(fresh)/`reserve`(fresh copy)で作った配列にのみ適用される
+(append も両分岐で unique 化済み)。redesign では `_size` が value にあるので、**共有された `_buf` に
+`_unsafe_set_size` すると、その holder だけ `_size` が食い違い §3.2 の leak を生む**(現状の heap len なら
+共有 len を書き換える別の誤り。redesign の方が危険)。よって `_unsafe_set_size` の契約を **unique-only**
+(`_buf` が unique な配列にだけ)と明示し、**移行時に全呼び出し箇所が unique-gate されていることを監査する**
+(主要箇所は確認済み。bytes/string builder は実装時に確認)。`_size` は value の field になるので
+`_unsafe_set_size` は薄い field-setter になるが、生の field 書き込みを散らすより unsafe + unique-only の
+シグナルを残すため named で保持する。
+
 ### 3.2 Zero-copy slice — 先送り
 
 `_size` を value に置くと、共有 `_buf` + より小さい `_size` の slice が「作れてしまう」。これは §3.1 を壊す:
