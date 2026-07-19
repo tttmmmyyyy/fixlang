@@ -168,7 +168,10 @@ per-unit の retain/release とも uniqueness 判定とも噛み合う。`Punche
 なお「不可分 unit 境界」の判定は現状 `is_box`/`is_union`/`is_punched_array` の disjunction が各パスに散在している
 (しかも `clamp_unit` は `is_punched_array` を含まないなど不揃い)。`is_array()` を各所へ足して回る shotgun surgery
 を避け、**「custom traverser を持つ不可分 RC unit か」を表す名前付き述語を1つ導入して既存の判定を寄せる**方針とする
-(実装時に `clamp_unit` の不揃いが本質か latent bug かを見極めてから統一する)。
+(実装時に `clamp_unit` の不揃いが本質か latent bug かを見極めてから統一する)。この統一リファクタと `clamp_unit`
+不揃いの調査は、**RC/provenance 機構の本拠である `unique-check-elim` ブランチ側で行う**(redesign と独立した
+cleanup で、両ブランチが同じ述語箇所を触る conflict も避けられる)。redesign(bce)は統一後の述語に `Array`
+(unbox)を1行足すだけにし、`unique-check-elim` のマージでリファクタを取り込む。
 
 ### 3.4 `unsafe_is_unique` は Array の unbox 化で壊れる — 要修正
 
