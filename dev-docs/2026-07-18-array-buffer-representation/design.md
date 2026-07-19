@@ -227,8 +227,12 @@ check ありにするとこの no-clone-on-fail が壊れうるので、uniquene
 
 - `Storage::_unsafe_allocate : I64 -> Storage a` — 指定要素数ぶんの領域を確保、未初期化、refcount 1。
   要素数は malloc サイズの計算に使うだけで `Storage` には保存しない(`Array` の `_cap` が覚える)。
-- `Storage::_unsafe_get : I64 -> Storage a -> a` — 要素読み出し(bounds unchecked)。read-fold 用に
-  `_unretained` 版。
+- `Storage::_unsafe_get : I64 -> Storage a -> a` — 要素読み出し(bounds unchecked)。返り値を **retain する**
+  (boxed 要素なら refcount +1、caller が所有・release する)。通常の read(`@` 等)用。
+- `Storage::_unsafe_get_unretained`(read-fold 用の非 retain 版)— 同じ読み出しだが **retain しない**借用ビューを
+  返す。retain/release のコストが無い代わりに、caller は保持・release してはいけない(`Storage` が生きていて未変更の
+  間だけ有効)。`Array String` のような boxed 要素の合計ループで毎要素 retain/release を避けるための最適化。
+  現行の `_unsafe_get_linear_bounds_unchecked_unretained` に対応(配列を一緒に返して借用中の所有権を引き回す形)。
 - `Storage::_unsafe_initialize : I64 -> a -> Storage a -> Storage a` — release **せず** に書き込む(live value を
   持たないスロットへの初回書き込み。fresh capacity を埋める用)。builder(from_map/reserve/append/fill)が呼ぶ。
 
