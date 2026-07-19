@@ -334,6 +334,10 @@ Fix-source を基本」(§4)は fill/reserve のコピーの話で、per-element
   pointer に往復させると `_size`/`_cap` が失われる**(現状は Array 自体が boxed で len/cap も heap にあるため
   往復で保存される)。よって retained-ptr の往復は `Buffer` 単位(生 storage)に限られ、完全な Array を
   opaque pointer として保持したい FFI は `_size`/`_cap` を別途持ち運ぶ必要がある。これは新しい設計上の制約。
+  **`borrow_elements` と違い、Array 版の retained-ptr ヘルパは用意しない**(box が無いので `Buffer` しか渡せず
+  誤解を招く)。完全な Array を C に opaque に渡したいユーザーは、**Array を自作の boxed 型で包んで対処する**
+  (包めば Boxed になり `boxed_to_retained_ptr` が使え、`_size`/`_cap` も box 内フィールドとして保存される) —
+  または `Buffer` の retained-ptr に `_size`/`_cap` を別送する。ユーザー側で対処する方針。
 - **String**: `String = unbox struct { _data : Array U8 }` の C-interop chain(`_get_c_str`、
   `_unsafe_from_c_str`、`borrow_c_str`)は `Array U8 : Boxed` に依存するので `_data.@_buf`(`Buffer U8`)を
   通す。C 文字列ポインタ = `Buffer U8` の storage ポインタ。数値の `to_bytes`/`from_bytes`(Array U8 に
