@@ -62,7 +62,7 @@ pub struct Provenance(Map<Path, LeafSource>);
 /// down to each boxed leaf. A closure lowers to `{funptr, capture-pointer}`, so its one boxed leaf is
 /// the capture; a boxed value is a single leaf at the current path; an unboxed aggregate (struct,
 /// tuple, or union) recurses into its fields (a union's variants' payloads); a fully unboxed value
-/// has none. This is the single "type → shape" enumeration the provenance and borrow analyses share.
+/// has none. It is the single source of truth for which of a type's paths are boxed leaves.
 pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
     fn go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mut Vec<Path>) {
         if ty.is_fully_unboxed(type_env) {
@@ -295,8 +295,7 @@ pub struct Uniqueness(BTreeMap<Path, CTRefCnt>);
 
 impl Uniqueness {
     /// The `CTRefCnt` of the boxed leaf at path `π`, or `Dynamic` (the conservative default) when `π`
-    /// is not a boxed leaf of this value. Called by `resolve_leaf` to resolve an `Arg(i, σ)` source
-    /// against input `i`'s uniqueness, where `σ` addresses a boxed leaf of input `i`.
+    /// is not a boxed leaf of this value.
     fn leaf_at(&self, path: &[usize]) -> CTRefCnt {
         self.0.get(path).copied().unwrap_or(CTRefCnt::Dynamic)
     }
