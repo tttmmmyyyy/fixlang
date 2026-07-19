@@ -323,8 +323,12 @@ Fix-source を基本」(§4)は fill/reserve のコピーの話で、per-element
   - **`String` の公開 API(`_get_c_str`/`borrow_c_str`)は不変** — 内部で `s.@_data.@_buf` に経路変更するだけ。
     String FFI ユーザーは影響なし。std の byte-array FFI(to/from_bytes)も `bs.@_buf.borrow_boxed` に内部変更。
   - **ユーザーが Array に直接 `array.borrow_boxed(...)` している箇所は壊れる**(Array が Boxed でない)。
-    緩和: `arr.@_buf.borrow_boxed(f)` へ委譲する **`Array` 用 FFI ヘルパを用意**すれば `array.borrow_boxed(f)`
-    のユーザーコードも透過的に動く。ユーザー自作の boxed 構造体への borrow_boxed は不変(まだ Boxed)。
+    Array 専用の FFI ヘルパ **`Array::borrow_elements`(+ `borrow_elements_io` / 可変版 `mutate_elements` /
+    `mutate_elements_io`)** を用意する。内部で `arr.@_buf.borrow_boxed(f)` に委譲する(`String::borrow_c_str` が
+    `str.@_data.borrow_boxed(f)` へ委譲するのと同じパターン)。**名前を `borrow_boxed` にしないのは、Array が
+    Boxed でなくなり "boxed" が事実に反するため**(`borrow_c_str` が中身を表す名前にしているのと同趣旨)。よって
+    ユーザー FFI コードは `array.borrow_boxed` -> `array.borrow_elements` の書き換えが要る(Array が Boxed を外れる
+    user-visible break の一部、許容)。ユーザー自作の boxed 構造体への `borrow_boxed` は不変(まだ Boxed)。
 - **retained ポインタ**(`boxed_to_retained_ptr` / `boxed_from_retained_ptr`): retained pointer は **box
   (= Buffer)しか捕捉しない**。Array の `_size`/`_cap` は value にあって box に無いので、**Array を retained
   pointer に往復させると `_size`/`_cap` が失われる**(現状は Array 自体が boxed で len/cap も heap にあるため
@@ -387,7 +391,8 @@ green を保つよう段階化する:
    ユーザーへ漏れると、要素寿命 (b) の「ユーザーは `Array` しか持たず裸の `Buffer` を持たない」不変条件(§3)が
    壊れる(`Buffer` の destructor は生メモリを free するだけで要素 release は Array の `_size` が駆動するので、
    Array より長生きした裸 `Buffer` は use-after-free)。FFI の公開面は §7 の scoped な Array borrow ヘルパ
-   (コールバック中だけ有効な `Ptr` を渡す)だけにする。仮に public 化するなら item 1 の slice count モデルが要る。
+   (`Array::borrow_elements` 系、コールバック中だけ有効な `Ptr` を渡す)だけにする。仮に public 化するなら
+   item 1 の slice count モデルが要る。
 4. **決定(採用した方向) — 事前手動 unique-check を要する unsafe 関数を減らす。** `_uniqueness_unchecked` 系の
    「呼び出し側が事前に unique を保証する」primitive を、自前で unique-check する safe 版に寄せる(unique-check-elim
    が provably-unique で畳んで同性能)。size 書き込み(`_unsafe_force_unique` + 旧 `_unsafe_set_size`)は §3.1 の
