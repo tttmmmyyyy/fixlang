@@ -234,7 +234,10 @@ check ありにするとこの no-clone-on-fail が壊れうるので、uniquene
 - `Buffer::_unsafe_get : I64 -> Buffer a -> a` — 要素読み出し(bounds unchecked)。read-fold 用に
   `_unretained` 版。
 - `Buffer::_unsafe_set : I64 -> a -> Buffer a -> Buffer a` — 要素書き込み、旧占有者を **release** する
-  (初期化済み slot 向け)。
+  (初期化済み slot 向け)。**内部で unique 化(COW)はしない** — COW clone は `_size` 個の live 要素の複製
+  であり、その `_size` は `Array` value 側にあって `Buffer` は持たないので、Buffer 単体では正しく clone
+  できない(§3)。unique 化と bounds check(どちらも `_size` を要る)は呼び出し側の safe な `Array::set` が
+  担い(§5)、この op はその契約下の生の indexed write。
 - `Buffer::_unsafe_initialize : I64 -> a -> Buffer a -> Buffer a` — release **せず** に書き込む(live value を
   持たないスロットへの初回書き込み。fresh capacity を埋める用)。`_unsafe_set`(上書き + 旧要素 release)と対。
 - FFI 用の data-pointer accessor(`Buffer` の生 storage 先頭ポインタ)。capacity は `Array` value の
