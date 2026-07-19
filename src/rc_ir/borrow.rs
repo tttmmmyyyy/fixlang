@@ -466,8 +466,9 @@ fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mu
     }
 }
 
-/// Truncate a leaf path to its reference-counting unit: the path up to the first unboxed union it
-/// enters (a union subtree is one unit). Paths that stay within unboxed structs are unchanged.
+/// Truncate a leaf path to its reference-counting unit: the path down to the first unit root
+/// (`is_rc_unit_root`) it reaches — an unboxed union or a punched array, whose subtree is one unit.
+/// Paths that stay within unboxed structs are unchanged.
 fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
     let mut out = vec![];
     let mut cur = ty.clone();
@@ -477,8 +478,9 @@ fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
             out.push(idx);
             break;
         }
-        if cur.is_box(type_env) || cur.is_union(type_env) {
-            // A boxed value (including a boxed union) and an unboxed union are each one unit.
+        if cur.is_rc_unit_root(type_env) {
+            // A boxed value, an unboxed union, or a punched array is one unit; a leaf below it (a
+            // boxed leaf under a union variant, or the punched array's inner array) keys to its root.
             break;
         }
         // Here `cur` is an unboxed struct/tuple, so a well-formed unit/root path index is in range.
@@ -720,7 +722,7 @@ fn shape_from_own(
                 OwnershipShape::Boxed(cap),
             ]);
         }
-        if ty.is_box(type_env) || ty.is_union(type_env) {
+        if ty.is_rc_unit_root(type_env) {
             return OwnershipShape::Boxed(owned(path));
         }
         let fields = ty.field_types(type_env);
@@ -1099,15 +1101,11 @@ fn units_under(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Vec<Path>
 }
 
 /// The type of the subtree a path names, descending only unboxed structs; `None` once the path
-/// reaches a unit boundary (a boxed value, a union, a closure, or a fully-unboxed leaf).
+/// reaches a closure, a unit root (`is_rc_unit_root`), or a fully-unboxed leaf.
 fn subtree_type(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
     let mut cur = ty.clone();
     for &idx in path {
-        if cur.is_closure()
-            || cur.is_box(type_env)
-            || cur.is_union(type_env)
-            || cur.is_fully_unboxed(type_env)
-        {
+        if cur.is_closure() || cur.is_rc_unit_root(type_env) || cur.is_fully_unboxed(type_env) {
             return None;
         }
         // Here `cur` is an unboxed struct/tuple, so a well-formed unit/root path index is in range.
