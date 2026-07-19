@@ -1,9 +1,30 @@
 # Bounds-Check Elimination (BCE) — Design
 
-Status: design only, not implemented. Targets the RC IR back end on branch
-`unique-check-elim`, alongside the existing unique-check elimination.
+## Outcome
 
-## 0. Revised direction (2026-07-18): cooperate with LLVM instead of a bespoke pass
+The **read-loop** half shipped, via route (B) below (cooperate with LLVM), not the bespoke
+analysis (A) this document then details:
+
+- **Iterator termination** (`std.fix`): counting iterators stop on `>=`/`<=` instead of `==`,
+  so `range`/`range_step` drop the clamp `select` that severed the `idx < size` proof.
+- **RC-IR term simplifier** (`src/rc_ir/simplify.rs`, `simplifier-design.md`): case-of-known-
+  constructor + case-of-case remove the `Option`/`RangeIterator` union, exposing the scalar
+  loop state so LLVM folds the check and vectorizes the read loop. Iterated to a fixpoint with
+  an all-or-nothing case-of-case guard and a rewrite budget for termination.
+
+Both were needed together (union removal alone or the clamp removal alone does not fold the
+check). The **write-loop** half is deferred to the Array/Buffer representation redesign
+(`../2026-07-18-array-buffer-representation/design.md`), because its blocker is `get_size`
+being a heap load, which is a representation problem, not an analysis one.
+
+The bespoke interprocedural range analysis (route A, Sections 5-6) was **not** built: the
+simplifier subsumed the read idioms, and the representation redesign covers the write idioms.
+It remains the fallback for checks neither reaches (indices unrelated to a size, non-loop
+checks).
+
+The sections below record the design exploration that led here.
+
+## 0. Revised direction: cooperate with LLVM instead of a bespoke pass
 
 An experiment settled the approach. The decisive question was whether stock LLVM
 O3 can eliminate the check on its own; it can, and what blocks it in Fix is not
