@@ -181,11 +181,18 @@ per-unit の retain/release とも uniqueness 判定とも噛み合う。`Punche
 (refcount >= 2)でも無条件に `true` を返す。** すると `mod`/`act`/COW の `if is_unique { in-place } else
 { clone }` が常に in-place を選び、**共有 buffer を破壊(データ破損)**する。redesign の重大な破損点。
 
-修正: **Array の is_unique は `_buf`(§3.3 の RC-unit-root の boxed leaf)の refcount を読む。** 「unboxed は
-常に unique」は scalar/全 unboxed 集約にだけ正しく、boxed leaf を持つ unbox struct(Array)には効かない。
-ランタイム版(この InlineLLVM)と、unique-check-elim の static fold(provably-unique なら is_unique を
-const-`true` に畳む)の両方を、Array の `_buf` の refcount/provenance に基づくよう直す。§3.3 で導入する
-RC-unit-root 述語を is_unique 判定にも使うのが自然。
+修正(generic `unsafe_is_unique` に Array 特別扱いを入れない): **`Array` 専用のビルトイン
+`Array::_unsafe_is_unique : Array a -> (Bool, Array a)` を追加**し、value の `_buf` の refcount を
+**retain せずにその場で覗く**。`act` など Array の COW 判定はこれを使う。generic `unsafe_is_unique` は
+現状のまま触らない — boxed 型(`Destructor`〔mutate_unique_io〕、FFI の gmp/mpfr 等、generic `assert_unique`)に
+`is_box` で効き続けるので **不要にはならない**。unbox な Array *value* に generic を呼ぶと `const true`
+(値としては常に unique)を返すが、COW 判定は Array 専用版を使うので破壊は起きない。
+
+- `arr.@_buf.unsafe_is_unique` と書く案は不可: `@_buf` が `_buf` を **retain する**ので、borrow 化されない
+  限り refcount >= 2 になり大抵 false を返す。専用ビルトインなら Array value を受けて `_buf` を extract せずに
+  refcount を読めるので確実。
+- unique-check-elim の static fold は Array 専用版に適用(`_buf` が provably-unique なら const-`true` に畳む)。
+  ランタイム版(`InlineLLVMIsUniqueFunctionBody` 相当を Array 用に)と fold の両方を用意する。
 
 is_unique 分岐(`build_branch_by_is_unique`、**Rust/コンパイラ側のコード**)の用途は3つ: (1) **COW mutate**
 (`make_array_unique_with_hole`〔set/mod/swap/punch〕、`make_struct_union_unique`)、(2) **release の
