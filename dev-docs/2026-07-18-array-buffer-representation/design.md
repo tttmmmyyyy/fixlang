@@ -194,6 +194,14 @@ per-unit の retain/release とも uniqueness 判定とも噛み合う。`Punche
   refcount を読めるので確実。
 - unique-check-elim の static fold は Array 専用版に適用(`_buf` が provably-unique なら const-`true` に畳む)。
   ランタイム版(`InlineLLVMIsUniqueFunctionBody` 相当を Array 用に)と fold の両方を用意する。
+- さらに **generic `unsafe_is_unique` に `[a : Boxed]` 制約を付ける**(現状は無制約で unboxed に `const true`
+  を返す)。こうすると Array を unbox にした瞬間 `arr.unsafe_is_unique` が **型エラー**になり、silent な
+  誤 const-true を型システムが弾いて `Array::unsafe_is_buffer_unique` へ誘導できる。`else { const true }` 枝は
+  dead になり除去可。現状 unboxed 型に呼んでいる箇所は無い(`assert_unique` も Array=boxed にしか使われて
+  いない)ので今は無害で、intended な破壊は redesign で Array が unbox になる時だけ。波及: `assert_unique :
+  Lazy String -> a -> a` も `unsafe_is_unique` を呼ぶので `[a : Boxed]` になり、redesign 後 `arr.assert_unique`
+  は型エラー(本来 arr には誤答なので望ましい破壊)。Array 用の uniqueness assert(`unsafe_is_buffer_unique`
+  ベース)を別途用意する。
 
 is_unique 分岐(`build_branch_by_is_unique`、**Rust/コンパイラ側のコード**)の用途は3つ: (1) **COW mutate**
 (`make_array_unique_with_hole`〔set/mod/swap/punch〕、`make_struct_union_unique`)、(2) **release の
