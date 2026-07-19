@@ -167,13 +167,20 @@ per-unit の retain/release とも uniqueness 判定とも噛み合う。`Punche
 const-`true` に畳む)の両方を、Array の `_buf` の refcount/provenance に基づくよう直す。§3.3 で導入する
 RC-unit-root 述語を is_unique 判定にも使うのが自然。
 
-is_unique 分岐(`build_branch_by_is_unique`)の用途は3つ: (1) **COW mutate**(`make_array_unique_with_hole`
-の Array clone-if-shared〔set/mod/swap/punch〕、`make_struct_union_unique`)、(2) **release の
-free-or-decrement**(`build_release_mark_nonnull_boxed_with`)、(3) **`is_unique` 関数**(Fix に bool を公開、
-`act` 等)。unique-check-elim が畳めるのは (1)(3)(provably-unique で in-place / const-true に)。(2) の release
-check は「今 free すべきか」の基本判定で対象外・残す。redesign では (1) が Array の `_buf` に移るだけ。
-**「減らせる」= (1) の check を SKIP する `_uniqueness_unchecked` 系 unsafe primitive を、check ありの safe 版に
-寄せて unique-check-elim に消させる**こと(§11.4。上の増加専用 set_size もその一例)。
+is_unique 分岐(`build_branch_by_is_unique`、**Rust/コンパイラ側のコード**)の用途は3つ: (1) **COW mutate**
+(`make_array_unique_with_hole`〔set/mod/swap/punch〕、`make_struct_union_unique`)、(2) **release の
+free-or-decrement**(`build_release_mark_nonnull_boxed_with`)、(3) **`is_unique` 関数**。これらは削除対象では
+なく **COW/release の機構そのもの**で、unique-check-elim が (1)(3) を **コンパイル時に畳んで消す**((2) は基本
+判定で残す)。redesign では (1) が Array の `_buf` に移るだけ。
+
+**削除したいのは Fix レベルの「呼び出し側が事前に手動 unique を保証する」primitive**:
+`_unsafe_set_bounds_uniqueness_unchecked_unreleased`、`_unsafe_punch/plug_bounds_uniqueness_unchecked`、
+それらの前に置く `_unsafe_force_unique`(std の from_map/push_back/reserve/append/resize/mod/act が使う)。
+これらは (1) の COW check を **skip する**ために存在した。unique-check-elim が safe 版の check を確実に畳む今、
+std builder を **safe な Array op(COW 内蔵 = `make_array_unique`)に置き換えれば、これらの Fix primitive を
+削除できる**(§11.4、surviving unsafe RMW primitive 削除計画。上の増加専用 set_size もこのパターンの一例)。
+注: `unreleased`(未初期化スロットへの書き込み)の unsafe さは uniqueness とは直交で残り、
+`Buffer::_unsafe_set_uninitialized` 側に集約される。
 
 ## 4. `Buffer` primitive API
 
