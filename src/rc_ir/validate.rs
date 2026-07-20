@@ -1,0 +1,239 @@
+//! Debug-only well-formedness checks for the RC IR.
+//!
+//! [`validate`] runs after each RC-IR-rewriting pass during compiler development (gated on
+//! `Configuration::develop_mode`; it is never run in a normal `fix` build). It catches a malformed
+//! rewrite — one that leaves a dangling variable use or duplicates a binding name — at the pass that
+//! produced it, on any input. That closes a gap the runtime checks leave: valgrind and a uniqueness
+//! assertion need a triggering input and reachable code, whereas this is static and total.
+//!
+//! It checks the structural invariants of the RC IR (§1.1): within each function every bound name is
+//! unique (no shadowing) and every variable use resolves to a binding in scope, or to a global — a
+//! function or a global value, both referenceable by name (a direct call's callee is a function
+//! name, not a local binding). Reference-count balance, use-after-consume, and closure
+//! capture/projection order are follow-ups: they need the ownership and consume model, and must be
+//! validated against the whole test suite to stay free of false positives.
+
+use crate::ast::name::FullName;
+use crate::misc::Set;
+use crate::rc_ir::ast::{RcExpr, RcExprNode, RcProgram, RcRhs};
+
+/// Check the well-formedness of every function and global, panicking on the first violation. A
+/// violation is an internal compiler error — the RC IR is malformed — so it aborts rather than
+/// returns. `stage` names the pass just run, so a failure points at the culprit.
+///
+/// `symbol_names` is every symbol name in the whole program. A use naming one refers to a global
+/// function or value (a direct call's callee, a funptr atom, or a global operand) — one this
+/// compilation unit may not define, since separated compilation splits the program across units — and
+/// code generation materializes it, so it is always in scope. Local names are globally-unique fresh
+/// names, so admitting the symbol names never masks a dangling local.
+pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, stage: &str) {
+    // The globally-referenceable names: every program symbol, plus this program's own functions and
+    // globals — which include the clones borrow-ification and specialization mint (not program
+    // symbols) and any unit-local function.
+    let mut globals = symbol_names.clone();
+    for f in prog.funcs.keys() {
+        globals.insert(f.name.clone());
+    }
+    for g in &prog.globals {
+        globals.insert(g.symbol.clone());
+    }
+
+    for func in prog.funcs.values() {
+        let mut v = Validator::new(stage, &globals, func.name.name.to_string());
+        for p in func.params.iter().chain(func.cap.iter()) {
+            v.bind(&p.name);
+        }
+        v.check_expr(&func.body);
+    }
+    for g in &prog.globals {
+        let mut v = Validator::new(stage, &globals, g.symbol.to_string());
+        v.check_expr(&g.init);
+    }
+}
+
+/// The per-function state: the names bound anywhere in the function (`seen`, for uniqueness) and the
+/// names currently in scope (`scope`, for use resolution).
+struct Validator<'a> {
+    stage: &'a str,
+    globals: &'a Set<FullName>,
+    location: String,
+    seen: Set<FullName>,
+    scope: Set<FullName>,
+}
+
+impl<'a> Validator<'a> {
+    fn new(stage: &'a str, globals: &'a Set<FullName>, location: String) -> Self {
+        Validator {
+            stage,
+            globals,
+            location,
+            seen: Set::default(),
+            scope: Set::default(),
+        }
+    }
+
+    /// Introduce a binding: it must be unique within the function (§1.1-3), and it enters scope.
+    fn bind(&mut self, name: &FullName) {
+        if !self.seen.insert(name.clone()) {
+            panic!(
+                "[RC IR validate] {}: duplicate binding `{}` in `{}`",
+                self.stage,
+                name.to_string(),
+                self.location
+            );
+        }
+        self.scope.insert(name.clone());
+    }
+
+    /// A variable use must resolve to a binding in scope or to a global (a function or global value).
+    fn use_var(&self, name: &FullName) {
+        if !self.scope.contains(name) && !self.globals.contains(name) {
+            panic!(
+                "[RC IR validate] {}: use of unbound variable `{}` in `{}`",
+                self.stage,
+                name.to_string(),
+                self.location
+            );
+        }
+    }
+
+    fn check_expr(&mut self, node: &RcExprNode) {
+        stacker::maybe_grow(64 * 1024, 1024 * 1024, || self.check_expr_inner(node));
+    }
+
+    fn check_expr_inner(&mut self, node: &RcExprNode) {
+        match node.expr.as_ref() {
+            RcExpr::Let(x, rhs, k) => {
+                self.check_rhs(rhs);
+                self.bind(&x.name);
+                self.check_expr(k);
+                self.scope.remove(&x.name);
+            }
+            RcExpr::Retain(v, _, _, k) | RcExpr::Release(v, _, _, k) => {
+                self.use_var(&v.name);
+                self.check_expr(k);
+            }
+            RcExpr::Destructure(container, fields, k) => {
+                self.use_var(&container.name);
+                for (_, field) in fields {
+                    self.bind(&field.name);
+                }
+                self.check_expr(k);
+                for (_, field) in fields {
+                    self.scope.remove(&field.name);
+                }
+            }
+            RcExpr::Ret(v) => self.use_var(&v.name),
+        }
+    }
+
+    fn check_rhs(&mut self, rhs: &RcRhs) {
+        match rhs {
+            RcRhs::Var(y) => self.use_var(&y.name),
+            RcRhs::App(callee, args) => {
+                self.use_var(&callee.name);
+                for a in args {
+                    self.use_var(&a.name);
+                }
+            }
+            RcRhs::Closure(_, caps) => {
+                for c in caps {
+                    self.use_var(&c.name);
+                }
+            }
+            RcRhs::Llvm(_, args) => {
+                for a in args {
+                    self.use_var(&a.name);
+                }
+            }
+            RcRhs::Match(scrutinee, arms) => {
+                self.use_var(&scrutinee.name);
+                // Each arm's payload is in scope only within that arm's body, so bind it, check the
+                // body, and unbind it before the next sibling arm.
+                for arm in arms {
+                    self.bind(&arm.payload.name);
+                    self.check_expr(&arm.body);
+                    self.scope.remove(&arm.payload.name);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixstd::builtin::make_i64_ty;
+    use crate::rc_ir::ast::{RcExpr, RcVar};
+
+    fn var(name: &str) -> RcVar {
+        RcVar {
+            name: FullName::local(name),
+            ty: make_i64_ty(),
+            source: None,
+            debug_name: None,
+            nonnull: false,
+        }
+    }
+
+    fn node(expr: RcExpr) -> RcExprNode {
+        RcExprNode {
+            expr: Box::new(expr),
+            source: None,
+        }
+    }
+
+    /// Check `body` as a function whose only bindings in scope on entry are `params`.
+    fn check(body: &RcExprNode, params: &[&str]) {
+        let globals = Set::default();
+        let mut v = Validator::new("test", &globals, "f".to_string());
+        for p in params {
+            v.bind(&FullName::local(p));
+        }
+        v.check_expr(body);
+    }
+
+    #[test]
+    fn accepts_well_formed() {
+        // let x = p; ret x   (p is a parameter)
+        let body = node(RcExpr::Let(
+            var("x"),
+            RcRhs::Var(var("p")),
+            node(RcExpr::Ret(var("x"))),
+        ));
+        check(&body, &["p"]);
+    }
+
+    #[test]
+    #[should_panic(expected = "use of unbound variable")]
+    fn rejects_unbound_use() {
+        // ret y   (y is never bound)
+        check(&node(RcExpr::Ret(var("y"))), &[]);
+    }
+
+    #[test]
+    #[should_panic(expected = "duplicate binding")]
+    fn rejects_duplicate_binding() {
+        // let x = p; let x = p; ret x   (x bound twice)
+        let inner = node(RcExpr::Let(
+            var("x"),
+            RcRhs::Var(var("p")),
+            node(RcExpr::Ret(var("x"))),
+        ));
+        let body = node(RcExpr::Let(var("x"), RcRhs::Var(var("p")), inner));
+        check(&body, &["p"]);
+    }
+
+    #[test]
+    fn accepts_use_of_a_global_name() {
+        // let r = call g(); ret r   where g is a global (not a local binding)
+        let globals: Set<FullName> = [FullName::local("g")].into_iter().collect();
+        let mut v = Validator::new("test", &globals, "f".to_string());
+        let body = node(RcExpr::Let(
+            var("r"),
+            RcRhs::App(var("g"), vec![]),
+            node(RcExpr::Ret(var("r"))),
+        ));
+        v.check_expr(&body);
+    }
+}

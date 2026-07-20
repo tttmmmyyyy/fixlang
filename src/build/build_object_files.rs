@@ -14,7 +14,7 @@ use crate::{
         runtime::{self, BuildMode},
     },
     generator::Generator,
-    misc::{info_msg, warn_msg},
+    misc::{info_msg, warn_msg, Set},
     optimization,
     rc_ir::{
         ast::RcProgram,
@@ -78,13 +78,32 @@ fn lower_and_insert_rc(
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
+    all_symbols: &[Symbol],
     config: &Configuration,
 ) -> RcProgram {
+    // The whole program's symbol names, for the debug-only validator to recognize global references
+    // (a unit may reference a symbol another unit defines). Built only when the validator runs.
+    let symbol_names: Set<FullName> = if config.develop_mode {
+        all_symbols.iter().map(|s| s.name.clone()).collect()
+    } else {
+        Set::default()
+    };
+    let validate = |prog: &RcProgram, stage: &str| {
+        if config.develop_mode {
+            crate::rc_ir::validate::validate(prog, &symbol_names, stage);
+        }
+    };
+
+    validate(&prog, "after insert_rc");
     split_rc_units(&mut prog, type_env);
+    validate(&prog, "after split_rc_units");
     if config.enable_borrow_optimization() {
         prog = borrow_ify(&prog, type_env);
+        validate(&prog, "after borrow_ify");
         prog = cancel(&prog, type_env);
+        validate(&prog, "after cancel");
         prog = specialize(&prog, type_env);
+        validate(&prog, "after specialize");
     }
     prog
 }
@@ -173,7 +192,7 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     let all_syms: Vec<Symbol> = program.symbols.values().cloned().collect();
     let base = lower_and_insert_rc(&type_env, &all_syms, &all_syms);
     dump_rc_ir(&base, &type_env, filter, "pre", config);
-    let optimized = optimize_rc_program(base, &type_env, config);
+    let optimized = optimize_rc_program(base, &type_env, &all_syms, config);
     dump_rc_ir(&optimized, &type_env, filter, "post", config);
 }
 
@@ -301,7 +320,7 @@ pub fn build_object_files<'c>(
             // every unit), so only this unit's symbols are implemented and none is defined twice.
             let unit_symbols = unit.symbols().to_vec();
             let rc_prog = lower_and_insert_rc(gc.type_env(), &unit_symbols, &all_symbols);
-            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &config);
+            let rc_prog = optimize_rc_program(rc_prog, gc.type_env(), &all_symbols, &config);
             gc.implement_rc_program(&rc_prog);
 
             if is_main_unit {
