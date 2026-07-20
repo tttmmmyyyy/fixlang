@@ -133,6 +133,12 @@ impl Provenance {
         Provenance::build_shape(ty, type_env, &|_| Provenance::leaf(src.clone()))
     }
 
+    /// The provenance of the result of an operation that produces one uniquely owned value among
+    /// values of unknown sharing: every boxed leaf under `path` is `Fresh`, every other leaf `Dyn`.
+    pub fn fresh_under(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &[usize]) -> Provenance {
+        Provenance::uniform(ty, type_env, BaseSource::Dyn).set_leaves_under(path, BaseSource::Fresh)
+    }
+
     /// The provenance whose every boxed leaf at path `π` is `Arg(arg_index, π)` — the whole value of
     /// input `arg_index` carried through unchanged.
     pub fn arg_passthrough(ty: &Arc<TypeNode>, type_env: &TypeEnv, arg_index: usize) -> Provenance {
@@ -633,10 +639,18 @@ impl<'a> Interp<'a> {
         let Some((value, path)) = self.unique_flags.get(&scrut.name) else {
             return env;
         };
-        if let Some(prov) = env.get(&value.name) {
-            let refined = prov.set_leaves_under(path, BaseSource::Fresh);
-            env.insert(value.name.clone(), refined);
-        }
+        // The flag and the value are bound by one `Destructure` upstream of this `match`, so the value
+        // is in scope here.
+        let refined = env
+            .get(&value.name)
+            .unwrap_or_else(|| {
+                unreachable!(
+                    "the value paired with an is_unique flag is unbound at the match on that flag: {}",
+                    value.name.to_string()
+                )
+            })
+            .set_leaves_under(path, BaseSource::Fresh);
+        env.insert(value.name.clone(), refined);
         env
     }
 

@@ -2604,15 +2604,10 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         // keeps a later uniqueness check honest (see `InlineLLVMIsUniqueFunctionBody::result_prov`).
         // The cost is that a `plug` fed by an explicit `_unsafe_punch_bounds_uniqueness_unchecked`
         // keeps its check.
-        Provenance::build_shape(result_ty, type_env, &|path| {
-            let punched_array = path.first() == Some(&PUNCHED_ARRAY_FIELD);
-            let src = if punched_array && self.force_unique {
-                BaseSource::Fresh
-            } else {
-                BaseSource::Dyn
-            };
-            Provenance::leaf(src)
-        })
+        if !self.force_unique {
+            return Provenance::uniform(result_ty, type_env, BaseSource::Dyn);
+        }
+        Provenance::fresh_under(result_ty, type_env, &[PUNCHED_ARRAY_FIELD])
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3484,16 +3479,10 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         // value the struct no longer owns; it names nothing, so `Dyn` says the least about it.
         let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
         if punched_ty.is_box(type_env) {
-            let fresh_punched = self.force_unique;
-            return Provenance::build_shape(result_ty, type_env, &|path| {
-                let punched_struct = path.first() == Some(&PUNCHED_STRUCT_FIELD);
-                let src = if punched_struct && fresh_punched {
-                    BaseSource::Fresh
-                } else {
-                    BaseSource::Dyn
-                };
-                Provenance::leaf(src)
-            });
+            if !self.force_unique {
+                return Provenance::uniform(result_ty, type_env, BaseSource::Dyn);
+            }
+            return Provenance::fresh_under(result_ty, type_env, &[PUNCHED_STRUCT_FIELD]);
         }
         Provenance::build_shape(result_ty, type_env, &|path| {
             // A boxed leaf of the result descends through the field or through the punched struct.
@@ -3505,11 +3494,15 @@ impl LLVMGen for InlineLLVMStructPunchBody {
                 p.extend_from_slice(rest);
                 return Provenance::leaf(BaseSource::Arg(0, p));
             }
-            match rest.split_first() {
-                Some((field, _)) if *field != self.field_idx => {
-                    Provenance::leaf(BaseSource::Arg(0, rest.to_vec()))
-                }
-                _ => Provenance::leaf(BaseSource::Dyn),
+            // The punched struct is unboxed here, so a boxed leaf of it also starts with a field
+            // index.
+            let (field, _) = rest
+                .split_first()
+                .expect("a boxed leaf of an unboxed punched struct has a non-empty path");
+            if *field == self.field_idx {
+                Provenance::leaf(BaseSource::Dyn)
+            } else {
+                Provenance::leaf(BaseSource::Arg(0, rest.to_vec()))
             }
         })
     }
@@ -5950,7 +5943,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         // clones it when shared and is given it unique otherwise — the same reasoning as an array set,
         // and what lets an operation on the value that follows drop its check. The action's result
         // comes out of an indirect call and stays `Dyn`.
-        mutate_boxed_result_prov(result_ty, type_env, &[MUTATE_BOXED_VALUE_FIELD])
+        Provenance::fresh_under(result_ty, type_env, &[MUTATE_BOXED_VALUE_FIELD])
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5978,23 +5971,6 @@ fn force_unique_boxed<'c, 'm>(
     } else {
         make_struct_union_unique(gc, val)
     }
-}
-
-/// The result provenance of a `mutate_boxed`: the value it returns at `value_path` is uniquely owned,
-/// and everything else it returns is of unknown sharing.
-fn mutate_boxed_result_prov(
-    result_ty: &Arc<TypeNode>,
-    type_env: &TypeEnv,
-    value_path: &[usize],
-) -> Provenance {
-    Provenance::build_shape(result_ty, type_env, &|path| {
-        let src = if path == value_path {
-            BaseSource::Fresh
-        } else {
-            BaseSource::Dyn
-        };
-        Provenance::leaf(src)
-    })
 }
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
@@ -6127,7 +6103,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     ) -> Provenance {
         // As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`, with the pair this op returns
         // wrapped in the `IOState` it threads.
-        mutate_boxed_result_prov(
+        Provenance::fresh_under(
             result_ty,
             type_env,
             &[MUTATE_BOXED_IOS_PAIR_FIELD, MUTATE_BOXED_VALUE_FIELD],
