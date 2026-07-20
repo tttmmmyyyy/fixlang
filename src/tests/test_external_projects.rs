@@ -1,4 +1,4 @@
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{fs, path::PathBuf, process::Command};
 
 use crate::{constants::COMPILER_TEST_WORKING_PATH, env_vars, tests::test_util::fix_command};
 
@@ -150,9 +150,6 @@ pub fn test_external_project(url: &str, test_name: &str) {
     cmd.arg("test")
         .arg("--allow-preliminary-commands")
         .current_dir(work_dir.join(dir_name));
-
-    // Inherit all environment variables from the parent process
-    cmd.envs(env::vars());
 
     let output = cmd.output().expect("Failed to run fix test.");
 
