@@ -3101,8 +3101,9 @@ impl LLVMGen for InlineLLVMStructGetBody {
         type_env: &TypeEnv,
     ) -> Provenance {
         // From a boxed container the field is `Dyn` (contents not tracked); from an unboxed
-        // container it is a pure projection carrying the container's leaf at that field.
-        let container_boxed = arg_tys.first().map_or(true, |t| t.is_box(type_env));
+        // container it is a pure projection carrying the container's leaf at that field. A field
+        // getter takes exactly the container, so `arg_tys[0]` is it.
+        let container_boxed = arg_tys[0].is_box(type_env);
         if container_boxed {
             Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
         } else {
@@ -4637,8 +4638,9 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         type_env: &TypeEnv,
     ) -> Provenance {
         // From a boxed union the payload is `Dyn`; from an unboxed union it is a pure projection
-        // carrying the scrutinee's leaf at that variant.
-        let union_boxed = arg_tys.first().map_or(true, |t| t.is_box(type_env));
+        // carrying the scrutinee's leaf at that variant. `as` takes exactly the union, so
+        // `arg_tys[0]` is it.
+        let union_boxed = arg_tys[0].is_box(type_env);
         if union_boxed {
             Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
         } else {

@@ -147,9 +147,10 @@ impl Provenance {
     }
 
     /// The leaf source recorded for the boxed leaf at path `π`, or the empty set when `π` is not a
-    /// boxed leaf of this value (an aggregate root or a scalar, e.g. an `Arg(j, [])` source — "the
-    /// whole of operand `j`" — composed against an aggregate operand). The empty set is the bottom of
-    /// the lattice, so an absent leaf resolves to `Unique`, matching a recorded `⊥`.
+    /// boxed leaf of this value — a scalar, or an aggregate queried at a non-leaf path such as its
+    /// root `[]` (which `root` does to test whether the whole value is a single boxed leaf). The empty
+    /// set is the bottom of the lattice, so an absent leaf resolves to `Unique`, matching a recorded
+    /// `⊥`.
     pub fn leaf_at(&self, path: &[usize]) -> LeafSource {
         self.0.get(path).cloned().unwrap_or_default()
     }
@@ -294,10 +295,13 @@ pub enum CTRefCnt {
 pub struct Uniqueness(BTreeMap<Path, CTRefCnt>);
 
 impl Uniqueness {
-    /// The `CTRefCnt` of the boxed leaf at path `π`, or `Dynamic` (the conservative default) when `π`
-    /// is not a boxed leaf of this value.
+    /// The `CTRefCnt` of the boxed leaf at path `π`. `π` is always a boxed leaf of this shape: the only
+    /// caller (`resolve_leaf`) resolves an `Arg`'s path, which addresses a boxed leaf of the input's
+    /// type — so a miss is a malformed provenance, not a case to default away.
     fn leaf_at(&self, path: &[usize]) -> CTRefCnt {
-        self.0.get(path).copied().unwrap_or(CTRefCnt::Dynamic)
+        self.0.get(path).copied().unwrap_or_else(|| {
+            unreachable!("path {:?} is not a boxed leaf of the uniqueness shape", path)
+        })
     }
 
     /// The uniqueness shape of a value of type `ty` whose every boxed leaf is `Dynamic` — the input
@@ -316,9 +320,18 @@ fn resolve_leaf(ls: &LeafSource, inputs: &[Uniqueness]) -> CTRefCnt {
         let rc = match src {
             BaseSource::Fresh => CTRefCnt::Unique,
             BaseSource::Dyn => CTRefCnt::Dynamic,
+            // `Arg(i, path)` names input `i`, which `resolve` always supplies (a parameter per key,
+            // plus the capture), so the index is in range; an out-of-range index is malformed.
             BaseSource::Arg(i, path) => inputs
                 .get(*i)
-                .map_or(CTRefCnt::Dynamic, |u| u.leaf_at(path)),
+                .unwrap_or_else(|| {
+                    unreachable!(
+                        "Arg names input {} but resolve was given {} inputs",
+                        i,
+                        inputs.len()
+                    )
+                })
+                .leaf_at(path),
         };
         if rc == CTRefCnt::Dynamic {
             return CTRefCnt::Dynamic;
@@ -328,8 +341,10 @@ fn resolve_leaf(ls: &LeafSource, inputs: &[Uniqueness]) -> CTRefCnt {
 }
 
 /// Resolve a provenance against the uniqueness of its function's inputs, mapping each boxed leaf to
-/// its `CTRefCnt` verdict. `inputs[i]` is the uniqueness of parameter `i`; a parameter beyond the end
-/// (an unspecialized function, whose inputs are unknown) leaves its `Arg` leaves `Dynamic`.
+/// its `CTRefCnt` verdict. `inputs` must give the uniqueness of every input the provenance's `Arg`
+/// leaves name — a parameter per index, plus the capture past them (an unspecialized function's are
+/// all `Dynamic`). A provenance with no `Arg` leaf (e.g. an all-`Dyn` one) references none, so it
+/// needs no inputs.
 ///
 /// A value with no boxed leaf resolves to the empty map, so a specialization key built from the
 /// resolved uniqueness reflects only the boxed leaves and ignores how the unboxed structure nests.
@@ -343,9 +358,7 @@ pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
 }
 
 /// Whether the boxed leaf at path `π` of a value with this provenance is statically `Unique`, given
-/// its function's input uniqueness. Passing no inputs treats every `Arg` leaf as `Dynamic`, the
-/// sound verdict for a function whose inputs are unknown (only its locally produced `Fresh` values
-/// are then unique).
+/// its function's input uniqueness.
 pub fn leaf_is_unique(prov: &Provenance, path: &[usize], inputs: &[Uniqueness]) -> bool {
     resolve_leaf(&prov.leaf_at(path), inputs) == CTRefCnt::Unique
 }
@@ -592,9 +605,12 @@ impl<'a> Interp<'a> {
                 Some(acc) => join_envs(&acc, &arm_exit),
             });
         }
+        // A match has at least one arm (an `if` lowers to two, a union match to one per variant), so
+        // the fold ran; an empty match would leave the result shape-less, which code generation also
+        // rejects.
         (
-            joined_result.unwrap_or_else(Provenance::empty),
-            joined_env.unwrap_or_else(|| env.clone()),
+            joined_result.unwrap_or_else(|| unreachable!("a match has at least one arm")),
+            joined_env.unwrap_or_else(|| unreachable!("a match has at least one arm")),
         )
     }
 }

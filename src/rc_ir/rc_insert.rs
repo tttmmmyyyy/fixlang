@@ -273,10 +273,13 @@ impl<'a> FuncRc<'a> {
             let mut head = vec![];
             for n in &used_in_any {
                 if !used.contains(n) && !used_after.contains(n) {
-                    if let Some(v) = self.vars.get(n) {
-                        if self.needs_rc(v) {
-                            head.push(v.clone());
-                        }
+                    // A free local of an arm is bound in the enclosing scope, so it is a known variable.
+                    let v = self
+                        .vars
+                        .get(n)
+                        .expect("a free local of a match arm is bound in the enclosing scope");
+                    if self.needs_rc(v) {
+                        head.push(v.clone());
                     }
                 }
             }

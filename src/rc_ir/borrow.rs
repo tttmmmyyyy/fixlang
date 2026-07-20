@@ -929,16 +929,14 @@ impl<'a> RewriteCtx<'a> {
     /// borrow cancels). An owned value at its last use is moved either way, so borrowing it removes no
     /// retain and only delays its release; it is not a benefit.
     fn beneficial(&self, bref: &FuncRef, args: &[RcVar], k: &RcExprNode) -> bool {
-        let bparams = self.callee_params.get(bref);
+        // `bref` is a borrow version, and `borrow_ify` registers every version's parameters, so it is a
+        // key here.
+        let bparams = &self.callee_params[bref];
         args.iter().enumerate().any(|(q, arg)| {
             let last_use = !used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
-                // `q` is in range since `args.len() <= params.len()`; a callee with no borrow version
-                // (`None`) offers no borrow to benefit from.
-                let callee_borrows = match bparams {
-                    Some(ps) => !self.own_out.contains(&(ps[q].0.clone(), unit.clone())),
-                    None => false,
-                };
+                // `q` is in range since `args.len() <= params.len()`.
+                let callee_borrows = !self.own_out.contains(&(bparams[q].0.clone(), unit.clone()));
                 callee_borrows && !(self.owns_unit(arg, unit) && last_use)
             })
         })
