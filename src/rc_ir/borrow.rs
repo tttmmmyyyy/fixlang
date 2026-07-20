@@ -302,11 +302,43 @@ fn collect_consumes_go<F: Fn(&RcVar, &Path) -> bool>(
             }
             collect_consumes_go(k, facts, prog, type_env, owns, out);
         }
-        RcExpr::Destructure(_, _, k) => collect_consumes_go(k, facts, prog, type_env, owns, out),
+        RcExpr::Destructure(container, fields, k) => {
+            for pi in destructure_consumes(container, fields, type_env) {
+                out.push((container.name.clone(), pi));
+            }
+            collect_consumes_go(k, facts, prog, type_env, owns, out)
+        }
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
             collect_consumes_go(k, facts, prog, type_env, owns, out)
         }
     }
+}
+
+/// The container leaves a `Destructure` consumes. A boxed container is released whole, so every boxed
+/// leaf of it goes; an unboxed container moves each named field's leaves into that field's variable,
+/// an alias whose consume is attributed to the field variable, so only a dropped (unnamed) field's
+/// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`), and
+/// every reader of the consume model shares it.
+fn destructure_consumes(
+    container: &RcVar,
+    fields: &[(usize, RcVar)],
+    type_env: &TypeEnv,
+) -> Vec<Path> {
+    let leaves = boxed_leaves(&container.ty, type_env);
+    if container.ty.is_box(type_env) {
+        return leaves;
+    }
+    let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
+    leaves
+        .into_iter()
+        .filter(|pi| {
+            // A boxed leaf of an unboxed container starts with a field index, so its path is non-empty.
+            let field = pi
+                .first()
+                .expect("a boxed leaf of an unboxed container has a non-empty path");
+            !named.contains(field)
+        })
+        .collect()
 }
 
 /// The leaves an `App`, `Llvm`, or `Closure` right-hand side consumes: an owning argument position
@@ -1335,26 +1367,8 @@ impl<'a> CancelAnalysis<'a> {
                 self.walk(k, pend, leaf_mode)
             }
             RcExpr::Destructure(container, fields, k) => {
-                if container.ty.is_box(self.type_env) {
-                    // A boxed container is released whole, so every boxed leaf is consumed.
-                    for pi in boxed_leaves(&container.ty, self.type_env) {
-                        self.consume(&mut pend, &container.name, &pi);
-                    }
-                } else {
-                    // An unboxed container moves each named field's leaves into its field variable,
-                    // which shares the field's root key, so a pending retain flows on to be cancelled
-                    // at the field's own release. Only a dropped (unnamed) field's leaves are consumed.
-                    let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
-                    for pi in boxed_leaves(&container.ty, self.type_env) {
-                        // A boxed leaf of an unboxed container starts with a field/capture index, so
-                        // its path is non-empty; the leaf is consumed unless that field is named.
-                        let field = pi
-                            .first()
-                            .expect("a boxed leaf of an unboxed container has a non-empty path");
-                        if !named.contains(field) {
-                            self.consume(&mut pend, &container.name, &pi);
-                        }
-                    }
+                for pi in destructure_consumes(container, fields, self.type_env) {
+                    self.consume(&mut pend, &container.name, &pi);
                 }
                 self.walk(k, pend, leaf_mode)
             }
