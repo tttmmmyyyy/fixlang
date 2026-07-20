@@ -29,6 +29,8 @@ P0.5-P3 は概ね plan どおり実装済み。健全性に関わる真のバグ
 
 ## Tier 3: plan ドキュメントの陳腐化（コードが正・plan 未更新）
 
+**更新（2026-07-20 同日）: 下記 3 件はいずれも plan の該当箇所に `[実装メモ 2026-07-20]` を追記して解消済み**（§1.2 の enum 直後 / §3.1 / §4.1、および §8 の unbox getter パリティ項目）。
+
 - **`RcExpr::Destructure` ノードが存在するが §1.2 は「getter 列に lower」と記す**（§1.2 enum・§1 の destructure 記述・impl-notes が stale。コードは専用ノードで解決済み。§8 の「unbox getter パリティ未解決・要解消」も解決済み）。
 - **provenance 表現が leaf-map にリファクタ**（§3.1 は旧 enum `Boxed/UnboxedAgg/Unboxed` を図示、コードは `Provenance = Map<Path, LeafSource>` / `Uniqueness = BTreeMap<Path, CTRefCnt>`。挙動等価・単体テスト有り）。
 - **α-merge（構造ハッシュ併合）が LLVM backend（MergeFunctions/ICF）へ委譲**され RC IR 上には無い（§4.1/§10/§7-P3 が RC IR 併合を chosen として記述 = stale）。
@@ -54,4 +56,4 @@ P0.5-P3 は概ね plan どおり実装済み。健全性に関わる真のバグ
 1. plan §3.2 に container-retain 機構の記述を追記（Tier 1、コード修正不要）。
 2. RC IR validator の追加（Tier 2、デバッグ時の健全性網）。**-> (i)+use-in-scope は 2026-07-20 実装済み。残る (ii)/(iii)/(iv) が follow-up。**
 3. punch の `result_prov` 明示化 or plan §3.3 表の更新（Tier 2、精度/整合）。
-4. plan の陳腐化箇所（§1.2 Destructure / §3.1 leaf-map / §4.1 α-merge 委譲）を実装に合わせて更新（Tier 3）。
+4. plan の陳腐化箇所（§1.2 Destructure / §3.1 leaf-map / §4.1 α-merge 委譲）を実装に合わせて更新（Tier 3）。**-> 2026-07-20 実装メモとして追記済み。**

@@ -6,7 +6,7 @@
 //! produced it, on any input. That closes a gap the runtime checks leave: valgrind and a uniqueness
 //! assertion need a triggering input and reachable code, whereas this is static and total.
 //!
-//! It checks the structural invariants of the RC IR (§1.1): within each function every bound name is
+//! It checks the structural invariants of the RC IR: within each function every bound name is
 //! unique (no shadowing) and every variable use resolves to a binding in scope, or to a global — a
 //! function or a global value, both referenceable by name (a direct call's callee is a function
 //! name, not a local binding). Reference-count balance, use-after-consume, and closure
@@ -72,7 +72,7 @@ impl<'a> Validator<'a> {
         }
     }
 
-    /// Introduce a binding: it must be unique within the function (§1.1-3), and it enters scope.
+    /// Introduce a binding: it must be unique within the function, and it enters scope.
     fn bind(&mut self, name: &FullName) {
         if !self.seen.insert(name.clone()) {
             panic!(
