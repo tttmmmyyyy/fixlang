@@ -2699,6 +2699,7 @@ namespace String {
     // To avoid this problem, you should use `borrow_c_str` or `borrow_c_str_io` instead.
     _get_c_str : String -> Ptr;
     _get_c_str = |s| s.@_data._get_boxed_ptr;
+    DEPRECATED[_get_c_str, "This function returns a dangling pointer if it is the last use of the string. Use `borrow_c_str` or `borrow_c_str_io` instead."];
 
     // Create a string from C string (i.e., null-terminated byte array).
     // 

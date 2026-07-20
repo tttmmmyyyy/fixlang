@@ -468,7 +468,10 @@ generic(`_get_boxed_ptr`、`mutate_boxed`/`borrow_boxed`、`boxed_to_retained_pt
   同じ。ポインタは callback 中のみ有効・`borrow_elements` は書き換え不可・`mutate_elements` は COW 後に可変。
   - **`String` の公開 API(`_get_c_str`/`borrow_c_str`)は不変** — 内部を `_data`(= `Array U8`)の `borrow_elements`
     経由へ差し替えるだけ。String FFI ユーザーは影響なし。std の byte-array FFI(to/from_bytes)も
-    `borrow_elements`/`mutate_elements` へ内部変更。
+    `borrow_elements`/`mutate_elements` へ内部変更。**`_get_c_str` は既に deprecated 済み**(dangling を返す危険関数、
+    `borrow_c_str` へ誘導。redesign と独立に std.fix でマーク)。redesign 後の実装は
+    **`s.@_data.borrow_elements(|ptr| ptr)`**(scoped borrow から ptr を漏らす = 従来どおり dangling し得るので deprecated
+    が妥当)。`_get_ptr` 直接版は削除済み(§13.1(5))なので、raw ptr は borrow_elements から漏らす形になる。
   - 名前を `borrow_boxed` にしないのは、Array が Boxed でなく "boxed" が事実に反するため(`borrow_c_str` が中身を
     表す名前にしているのと同趣旨)。ユーザー自作の boxed 構造体への `borrow_boxed` は不変(まだ Boxed)。
 - **retained ポインタ**(`boxed_to_retained_ptr` / `boxed_from_retained_ptr`): storage は Boxed 値でないうえ Array の

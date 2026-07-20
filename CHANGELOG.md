@@ -22,6 +22,7 @@
 #### Std
 
 - The counting iterators produced by `Iterator::range`, `Iterator::range_step`, and `Array::to_iter` now stop when the index reaches the bound (`>=` for an ascending range, `<=` for a descending `range_step`) instead of testing equality for the exact bound. Iterating any valid range yields the same elements as before; the change also makes an iterator whose index starts past its bound terminate immediately (previously such a hand-constructed iterator could overrun), and removes the end-clamping that `range`/`range_step` applied. Because the loop guard now coincides with the array bounds condition, the compiler can prove the per-element bounds check redundant, so read loops built on `range(0, arr.@size).fold` and `arr.to_iter.fold` are optimized to the same code as the equivalent hand-written index loop.
+- `String::_get_c_str` is now deprecated. It returns a raw pointer into the string's byte buffer that dangles once the string is released, so using it correctly requires keeping the string alive by hand. Use `borrow_c_str` or `borrow_c_str_io`, which scope the pointer to a callback and keep the string alive for the callback's duration.
 
 ### Fixed
 
