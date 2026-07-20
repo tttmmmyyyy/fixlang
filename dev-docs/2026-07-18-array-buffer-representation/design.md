@@ -377,7 +377,7 @@ reserve の storage コピーは retain-per-slot の別パターンなので、F
 | `@capacity`(`extract_field(ARRAY_CAP_IDX)`) | `arr.@_cap` — register 読み出し | Fix-src(`arr.@_cap` の field 参照) |
 | `_unsafe_get_bounds_unchecked` | `arr.@_storage` を直接 retaining read | **InlineLLVM**(read。borrow 化で `_storage` の retain を除く。unretained 版は作らない、§4) |
 | `set`(make_unique, check, write, 旧要素 release) | `_storage` を unique 化(COW)+ `_check_range(i, _size)` + write(旧要素 release)を1 body で | **InlineLLVM**(現行 `InlineLLVMArraySetBody` を `Storage` 上へ re-target。in-place mutator ルール) |
-| `_unsafe_set_bounds_uniqueness_unchecked_unreleased` | `Array::_unsafe_initialize`(未初期化スロットへ線形 write) | **InlineLLVM**(Array レベル、COW/release なし、§4) |
+| `_unsafe_set_bounds_uniqueness_unchecked_unreleased` | `Array::_unsafe_initialize`(未初期化スロットへ write、threaded) | **InlineLLVM**(Array レベル、COW/release なし、§4) |
 | `_unsafe_set_size` | `_unsafe_grow_size`(増加専用)へ改名: 内部 unique check(COW、optimizer 除去)+ value `_size` を伸ばす(新スロット未初期化)。減少は `_pop_back_nonempty` が release+shrink | **InlineLLVM**(in-place、内部 COW) |
 | `_unsafe_empty_capacity_unchecked(cap)` | storage box を内部 alloc し `Array { _storage, _size:0, _cap:cap }` を構築 | **InlineLLVM**(storage alloc は codegen 内部、§4) |
 | `_unsafe_fill_size_unchecked(n, x)` | `_unsafe_empty_capacity_unchecked(n)` 確保, `Array::_unsafe_initialize` の loop で埋め(最適化器が InlineLLVM 同等にする) | Fix-src |
