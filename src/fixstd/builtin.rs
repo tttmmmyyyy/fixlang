@@ -1755,6 +1755,11 @@ pub struct InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
     value_name: FullName,
 }
 
+// This op returns the array it was given, so `result_prov` could declare it a passthrough; it keeps
+// the conservative `Dyn` default for the reason `InlineLLVMIsUniqueFunctionBody::result_prov` gives —
+// a passthrough also declares the argument unconsumed, and the retain that would suppress is what
+// keeps a later uniqueness check honest. What that costs: a checked operation on the array this
+// returns, such as a `set` after a fill loop, keeps its check.
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
@@ -2112,6 +2117,9 @@ pub struct InlineLLVMArrayUnsafeSetSizeBody {
     len_name: FullName,
 }
 
+// This op returns the array it was given with a new size, so its `result_prov` keeps the conservative
+// `Dyn` default for the same reason (and at the same cost) as
+// `InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased`.
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
@@ -2578,10 +2586,42 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         Box::new(c)
     }
 
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // The result is `(PunchedArray a, a)`: the array with a hole, and the element moved out of it.
+        // Force-uniquing clones the array when it is shared, so the punched array is uniquely owned;
+        // that is what lets the `plug` completing the update drop its own check. The element is moved
+        // out without a retain, so another holder of it may still be live: its leaves stay `Dyn`, since
+        // calling them `Fresh` would let a later in-place update overwrite shared data.
+        //
+        // Without force-uniquing the punched array is exactly as shared as the argument was, which a
+        // passthrough declaration could carry through. It stays `Dyn` because a passthrough also tells
+        // the borrow pass that the argument is not consumed, and the retain that would suppress is what
+        // keeps a later uniqueness check honest (see `InlineLLVMIsUniqueFunctionBody::result_prov`).
+        // The cost is that a `plug` fed by an explicit `_unsafe_punch_bounds_uniqueness_unchecked`
+        // keeps its check.
+        Provenance::build_shape(result_ty, type_env, &|path| {
+            let punched_array = path.first() == Some(&PUNCHED_ARRAY_FIELD);
+            let src = if punched_array && self.force_unique {
+                BaseSource::Fresh
+            } else {
+                BaseSource::Dyn
+            };
+            Provenance::leaf(src)
+        })
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The index of the punched array in the result of an array punch, `(PunchedArray a, a)`.
+const PUNCHED_ARRAY_FIELD: usize = 0;
 
 // Moves the element at `idx` out of an array (without bounds checking), leaving a hole, and
 // returns the punched array together with the moved-out element.
@@ -3423,10 +3463,39 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         Box::new(c)
     }
 
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // The result is `(field, punched struct)`. Force-uniquing clones a shared boxed struct, so the
+        // punched struct it returns is uniquely owned; that is what lets the `plug_in` completing the
+        // update drop its own check. The field is moved out without a retain, so another holder of it
+        // may still be live and its leaves stay `Dyn`. An unboxed struct is force-uniqued by doing
+        // nothing (its fields keep whatever sharing they had), so its leaves stay `Dyn` too, as do the
+        // leaves of a struct punched without force-uniquing — for the reason
+        // `InlineLLVMArrayPunchBody::result_prov` gives.
+        let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
+        let fresh_punched = self.force_unique && punched_ty.is_box(type_env);
+        Provenance::build_shape(result_ty, type_env, &|path| {
+            let punched_struct = path.first() == Some(&PUNCHED_STRUCT_FIELD);
+            let src = if punched_struct && fresh_punched {
+                BaseSource::Fresh
+            } else {
+                BaseSource::Dyn
+            };
+            Provenance::leaf(src)
+        })
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The index of the punched struct in the result of a struct punch, `(field, punched struct)`.
+const PUNCHED_STRUCT_FIELD: usize = 1;
 
 // Field punching function for a given struct.
 //

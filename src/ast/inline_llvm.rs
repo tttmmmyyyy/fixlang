@@ -56,6 +56,8 @@ pub trait LLVMGen: DynClone + Send + Sync {
 
     /// Whether operand `i` is only borrowed (read without taking ownership). Default: every operand
     /// is owned.
+    ///
+    /// The default is the conservative answer; see `result_prov` for what an op that keeps it records.
     fn borrows_operand(&self, _i: usize) -> bool {
         false
     }
@@ -74,6 +76,11 @@ pub trait LLVMGen: DynClone + Send + Sync {
     }
 
     /// The provenance of this op's result. Default: conservatively `Dyn` on every boxed leaf.
+    ///
+    /// The conservative default is always sound, so an op that leaves it (here or in
+    /// `borrows_operand`) where a more precise declaration is possible says in a comment why it does
+    /// and what it gives up. What a default costs shows up only in a benchmark, so recording it is what
+    /// keeps a deliberate choice from reading like an oversight.
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
