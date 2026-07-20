@@ -383,4 +383,46 @@ mod integration_tests {
             dump
         );
     }
+
+    #[test]
+    fn test_unique_check_elim_shared_loop_entry() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_shared_loop");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // Specialization clones the loop body per input uniqueness, so a loop entered with a shared
+        // array pays the uniqueness check on its first iteration only: that check clones the array,
+        // and the clone the loop then runs on is fresh, which the version reached with it writes in
+        // place. The case has one source-level `set`, so seeing it in both forms — and in two
+        // different functions — is that split. Assert both: without the checked version the first
+        // write would corrupt the array's other holder, and without the `[unique]` version every
+        // iteration would re-check a value already proven unique.
+        let mut checked = vec![];
+        let mut elided = vec![];
+        let mut current = "";
+        for line in dump.lines() {
+            if line.starts_with("fn ") {
+                current = line;
+            } else if line.contains("Array::set [unique]") {
+                elided.push(current);
+            } else if line.contains("Array::set(") {
+                checked.push(current);
+            }
+        }
+        assert!(
+            !checked.is_empty(),
+            "the loop version entered with the shared array should keep its check:\n{}",
+            dump
+        );
+        assert!(
+            !elided.is_empty(),
+            "the loop version reached with the freshly cloned array should drop its check:\n{}",
+            dump
+        );
+        assert!(
+            checked.iter().all(|f| !elided.contains(f)),
+            "the checked and the elided set should live in different clones of the loop body, but \
+             a function holds both:\n{}",
+            dump
+        );
+    }
 }

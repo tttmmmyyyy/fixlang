@@ -1,0 +1,20 @@
+module Main;
+
+// A mutation loop entered with a shared array. Specialization clones the loop per input uniqueness:
+// the clone entered with the array of unknown sharing keeps its `set` check, so that first `set`
+// clones the array, and the clone reached with the fresh array that `set` returned drops the check
+// and writes in place. So the single source-level `set` appears in the dump in both forms, and only
+// the first iteration pays for the check.
+inc_all : Array I64 -> Array I64;
+inc_all = |arr| loop((0, arr), |(i, a)|
+    if i == a.@size { break $ a };
+    continue $ (i + 1, a.set(i, a.@(i) + 1))
+);
+
+main : IO ();
+main = (
+    let shared = Array::fill(4, 10);
+    let keep = [shared];
+    let done = inc_all(shared);
+    println $ (done.@(0) + keep.@(0).@(0)).to_string
+);
