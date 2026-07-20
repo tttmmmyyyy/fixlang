@@ -214,6 +214,26 @@ main = (
 }
 
 #[test]
+pub fn test_string_from_bytes_keeps_argument() {
+    let source = r##"
+module Main;
+
+main: IO ();
+main = (
+    // The byte array is still owned by the caller, so `from_bytes` leaves it as it is.
+    let arr = ['a', 'b', '\0', 'd', 'e'];
+    let s : Result ErrMsg String = arr.from_bytes;
+    assert_eq(|_|"string", s.as_ok, "ab");;
+    assert_eq(|_|"size", arr.@size, 5);;
+    assert_eq(|_|"elements", arr, ['a', 'b', '\0', 'd', 'e']);;
+
+    pure()
+);
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_string_starts_with() {
     let source = r##"
 module Main;

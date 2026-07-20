@@ -2770,8 +2770,10 @@ namespace String {
     _get_c_str = |s| s.@_data._get_boxed_ptr;
 
     // Create a string from C string (i.e., null-terminated byte array).
-    // 
+    //
     // If the byte array doesn't include `\0`, this function causes undefined behavior.
+    //
+    // The byte array must be unshared: this function updates its length in place.
     _unsafe_from_c_str : Array U8 -> String;
     _unsafe_from_c_str = |buf| (
         // Calculate length.
@@ -3294,7 +3296,7 @@ impl String : FromBytes {
         if null_idx == buf_n { Result::err("The byte array doesn't include a null terminator.") };
 
         // Create a string.
-        let buf = buf._unsafe_set_size(null_idx + 1);
+        let buf = buf.truncate(null_idx + 1);
         Result::ok $ String { _data : buf }
     );
 }
