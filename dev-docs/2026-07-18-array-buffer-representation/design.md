@@ -244,23 +244,38 @@ descend しない — その unit の retain/release は値全体の(custom)trav
 boxed leaf として**単独で RC** してしまう -> Storage の free-only destructor が走り要素を leak する。これが §3 の
 coupling の機構的な正体。
 
-**解決 = 新 `Array` を上記の不可分 unit 境界に加える**(`is_box || is_union || is_punched_array || is_array()`
-相当)。追加先は `rc_units_go`、`clamp_unit`、`codegen::project_rc_unit`(全体 `{_storage,_size,_cap}` を projection
-して custom traverser が `_size` を読めるようにする)、`provenance::build_shape`。こうすると `Array` は path `[]`
-の1 unit になり、retain/release/mark がすべて Array の custom traverser 経由(value の `_size` 駆動)になって、
-`_storage` が単独で RC されることはない。**これは `PunchedArray` が既に取っている扱いそのもの**で、
-unique-check-elim / borrow / provenance / codegen は「custom traverser 型を1 unit として扱う」機構を既に持つ。
+**解決 = 新 `Array` を上記の不可分 unit 境界に加える**。こうすると `Array` は path `[]` の 1 unit になり、
+retain/release/mark がすべて Array の custom traverser 経由(value の `_size` 駆動)になって、`_storage` が単独で
+RC されることはない。**これは `PunchedArray` が既に取っている扱いそのもの**で、unique-check-elim / borrow /
+provenance / codegen は「custom traverser 型を 1 unit として扱う」機構を既に持つ。
 
 uniqueness(`set` の make_unique)は「`Array` unit = その `_storage` の refcount が unique か」で判定でき、provenance が
 追う `_storage` leaf を `clamp_unit` が `Array` unit に丸めて突き合わせる(現行の union/is_box と同じ経路)。よって
 per-unit の retain/release とも uniqueness 判定とも噛み合う。`PunchedArray` 自身は、custom traverser が読む値が
-「内側 array の heap `len`」から「内側 `Array` の value `_size`」に変わるだけで、依然1 unit・hole skip のまま。
+「内側 array の heap `len`」から「内側 `Array` の value `_size`」に変わるだけで、依然 1 unit・hole skip のまま。
 
-なお「不可分 unit 境界」の判定は現状 `is_box`/`is_union`/`is_punched_array` の disjunction が各パスに散在している
-(しかも `clamp_unit` は `is_punched_array` を含まないなど不揃い)。`is_array()` を各所へ足して回る shotgun surgery
-を避け、**「custom traverser を持つ不可分 RC unit か」を表す名前付き述語を1つ導入して既存の判定を寄せる**方針とする
-(実装時に `clamp_unit` の不揃いが本質か latent bug かを見極めてから統一する)。この述語統一は redesign と独立した
-cleanup であり、redesign 側は統一後の述語に `Array`(unbox)を1行足す。
+**反転後、型レベルの `field_types` は値レイアウトを表さなくなる。** `field_types(Array a)` は **要素型**を返す
+(`types.rs` のコメント「For Array, return the element type」)。現行は `Array` が `is_box` なので型を辿る walker が
+全部そこで止まり、この食い違いが露出していない。反転すると露出する。よって不変条件を 1 つ置く:
+**型を辿って値のレイアウトを記述する walker は、`Array` を必ず不可分 unit として止める。** 直す箇所は 3 つ。
+
+- **`TypeNode::is_rc_unit_root` に `is_array()` を足す。** この述語は既に導入済みで、`rc_units_go` / `clamp_unit` /
+  ownership shape / `subtree_type` が経由するので、これで揃う。
+- **`TypeNode::is_fully_unboxed` を `rc_units` の上に定義し直す**(「RC unit を 1 つも持たない」)。現在の
+  `is_fully_unboxed` は `is_box` でなければ `field_types` を再帰するので、反転後は `Array U8` / `String` /
+  `Array (Array I64)` を含む**すべての `Array`** を「RC 不要」と判定してしまう。この述語は
+  `rc_insert::needs_rc`(retain/release ノードを出さない)、`object::create_traverser`(custom traverser を
+  生成しない)、`borrow.rs` の 2 箇所、`provenance::boxed_leaf_paths` で load-bearing で、**しかも `borrow.rs` では
+  `is_rc_unit_root` の判定より前に early return する**。放置すると storage が解放されず(全 `String` が leak)、
+  retain が出ないので COW が発動せず(`let b = a.set(..)` が `a` を破壊)、`reserve` の realloc で use-after-free に
+  なる。`is_array()` で早期 return する形にすると 2 つの述語が別々の再帰を持ち続けて再び乖離し得るので、
+  **定義を 1 本にする**(`rc_units` は `src/rc_ir/borrow.rs`、`is_fully_unboxed` は `src/ast/types.rs` にあるが、
+  層をまたぐことより定義の一本化を優先する)。`rc_units` は `Vec` を確保するので、短絡する
+  `has_rc_unit(ty) -> bool` を同じ走査から作り、`is_fully_unboxed = !has_rc_unit` とする。
+- **`provenance::boxed_leaf_paths` に `Array` で止まる分岐を独立に足す**(`is_box` の枝と同形で、その時点の path を
+  1 leaf として push)。この関数は union を variant へ展開する必要があるため `is_rc_unit_root` を意図的に
+  使っておらず、述語の統一では届かない。定義を一本化した `is_fully_unboxed` だけでは、`Array U8` が
+  「fully unboxed ではない」を通過した後に `field_types` = `[U8]` へ descend して leaf ゼロになる。
 
 ### 3.3 `unsafe_is_unique` は Array の unbox 化で壊れる — 要修正
 
@@ -635,7 +650,10 @@ generic(`_get_boxed_ptr`、`mutate_boxed`/`borrow_boxed`、`boxed_to_retained_pt
    述語(§3.2)、layout-constant 箇所すべて(`investigation-notes.md` §8)を一斉に更新。`Array a : Boxed` instance を
    削除、`@size`/`@capacity` を extractvalue 版へ、`String`/FFI chain(§7)と PunchedArray(§6)を書き換える。
    **`Array` を boxed のまま storage を内包する中間形は作らない** — その形でしか動かないコードを書いて捨てる
-   ことになるため、反転は 1 コミットで行う。
+   ことになるため、反転は 1 コミットで行う。あわせて **型を辿る walker を掃除する**: `field_types` の呼び出し箇所を
+   1 つずつ「要素型の取得(そのままでよい。`field_types(..)[0]` の形が大半)」と「値レイアウトの走査(`Array` で
+   止める)」に分類する。後者は §3.2 の 3 箇所と `codegen::project_rc_unit`(path が常に `[]` なら到達しないので、
+   §13.1 の assert で担保する)。
 4. **Debug info**(§8)。
 5. **検証**:
    - 全 opt レベルで `cargo test --release`。array/string/punched-array/FFI の test。
