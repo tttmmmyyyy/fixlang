@@ -22,6 +22,7 @@ P0.5-P3 は概ね plan どおり実装済み。健全性に関わる真のバグ
 ## Tier 2: 真のギャップ（plan が今フェーズで期待、未実装 / 未記録逸脱）
 
 - **RC IR validator（[#14], §9.0/P1）が無い**: `validate(RcProgram)` 相当のデバッグ専用 well-formedness チェッカ（名前一意性・use-after-consume・root ごとの参照バランス）が `src/rc_ir/` に存在しない。plan は各 RC 変換後に走らせる「過剰 retain リークの網」と位置づけていた。
+  - **更新（2026-07-20 同日）: 部分実装済み。** `src/rc_ir/validate.rs::validate` を追加し、`config.develop_mode` gate で `optimize_rc_program` の各パス直後に実行（通常ビルドでは走らない）。検査は **(i) 束縛名の関数内一意 + use-in-scope** まで。**(ii) use-after-consume・(iii) 参照収支・(iv) closure 捕捉順は未実装**（ownership/consume モデルを要し false-positive 検証が重いため follow-up）。全 opt suite で false-positive ゼロ + validator の unit テスト（malformation 検出）を確認済み。
 - **uniqueness assert ビルドが無い（valgrind で代替）**: unique 判定値が実行時に共有だった時に abort するモードは未実装（`set_sanitize_memory` はコメントアウト）。`develop_mode` の valgrind MemCheck + 共有値テストで実質代替。plan の明示的な網は未構築で未記録。
 - **`InlineLLVMArrayPunchBody` に `result_prov` が無く既定の全 `Dyn`（未記録逸脱）**: plan §3.3 は punch の内側 array 末端 = `Boxed({Fresh})` と宣言するが、実装は override 無しで既定 Dyn。std の全 flow（mod/act は非 fu plug = チェック無し、汎用 act の fu-plug は map 共有で必ずチェック残留）では elision に影響せず健全・実質無害。plan 表との乖離が未記録なだけ。
 - **`pop_back` が force-unique 除去対象になっていない（軽微）**: `InlineLLVMArrayPopBackNonemptyBody` は `make_array_unique` 無条件、`unique_check_operand`/`assuming_unique` 無し。P0.7 の「各 atomic op に force_unique を付け §4 除去対象に揃える」目標から漏れ。
@@ -51,6 +52,6 @@ P0.5-P3 は概ね plan どおり実装済み。健全性に関わる真のバグ
 ## 対処優先度（提案・未実施）
 
 1. plan §3.2 に container-retain 機構の記述を追記（Tier 1、コード修正不要）。
-2. RC IR validator の追加（Tier 2、デバッグ時の健全性網）。
+2. RC IR validator の追加（Tier 2、デバッグ時の健全性網）。**-> (i)+use-in-scope は 2026-07-20 実装済み。残る (ii)/(iii)/(iv) が follow-up。**
 3. punch の `result_prov` 明示化 or plan §3.3 表の更新（Tier 2、精度/整合）。
 4. plan の陳腐化箇所（§1.2 Destructure / §3.1 leaf-map / §4.1 α-merge 委譲）を実装に合わせて更新（Tier 3）。
