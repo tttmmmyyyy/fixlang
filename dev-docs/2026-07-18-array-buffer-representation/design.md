@@ -391,7 +391,7 @@ reserve の storage コピーは retain-per-slot の別パターンなので、F
 | `_unsafe_set_bounds_uniqueness_unchecked_unreleased` | `Array::_unsafe_initialize`(未初期化スロットへ write、threaded) | **InlineLLVM**(Array レベル、COW/release なし、§4) |
 | `_unsafe_set_size` | `_unsafe_grow_size`(増加専用)へ改名: 内部 unique check(COW、optimizer 除去)+ value `_size` を伸ばす(新スロット未初期化)。減少は `_pop_back_nonempty` が release+shrink | **InlineLLVM**(in-place、内部 COW) |
 | `_unsafe_empty_capacity_unchecked(cap)` | `#ArrayStorage` を内部 alloc し Array 値 `{ SubObject(#ArrayStorage), 0, cap }` を構築 | **InlineLLVM**(storage alloc は codegen 内部、§4) |
-| `_unsafe_fill_size_unchecked(n, x)` | `_unsafe_empty_capacity_unchecked(n)` 確保, `Array::_unsafe_initialize` の loop で埋め(最適化器が InlineLLVM 同等にする) | Fix-src |
+| `_unsafe_fill_size_unchecked(n, x)` | **削除** — `fill` がループを直接持つ(`_unsafe_empty_capacity_unchecked(n)` + `_unsafe_initialize` loop + size 設定)ので中間ラッパ不要 | 削除(`fill` に inline、§13.2) |
 | `_pop_back_nonempty` | **`_unsafe_pop_back_nonempty` へ改名**(empty で呼ぶと `last_idx = -1` の範囲外読み出し + ゴミを boxed 要素として release する UB = memory-unsafe なので、規約どおり `_unsafe_` を付ける)。`_storage` を unique 化, 末尾要素を noretain read して release, value `_size -= 1`(empty check は caller の `pop_back` が担う) | **InlineLLVM**(in-place、COW) |
 | array literal `[..]` | `_storage` 確保, 埋め, `_size = len, _cap = len` | compiler lowering(既存の array-literal codegen を `Storage` allocate + initialize に向ける) |
 
@@ -673,7 +673,7 @@ hardcoded `Array a : Boxed` instance を **削除**、`Array` を不可分 unit 
 **変更:**
 
 - builder(`_unsafe_force_unique` 撤去 + `_unsafe_set_size`->`_unsafe_grow_size` + unreleased write -> `Array::_unsafe_initialize`): `append`, `from_map`, `reserve`, `push_back`, `resize`
-- `fill`: 削除プリミティブ -> **Fix-source**(`Array::_unsafe_initialize` ループ)
+- `fill`: `_unsafe_fill_size_unchecked` を **inline** した Fix-source(`_check_size` + `_unsafe_empty_capacity_unchecked` + `_unsafe_initialize` loop + size 設定)に。`_unsafe_fill_size_unchecked` は削除
 - `mod`/`act`(punch/plug の no-COW -> COW、`unsafe_is_unique` -> `_unsafe_is_storage_unique`、act の分岐構造は維持): `mod`, `_unsafe_act_bounds_unchecked_identity`, `_unsafe_act_bounds_unchecked_tuple2`, `_unsafe_act_bounds_unchecked`
 - `sort_by`, `reverse`: `_unsafe_force_unique` 撤去(COW `swap` が make-unique 済み)
 - `pop_back`: 呼ぶ先が `_unsafe_pop_back_nonempty` に改名
