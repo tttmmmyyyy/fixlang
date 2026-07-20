@@ -17,7 +17,7 @@ hoist/畳まれて vectorize する(write-loop BCE)。read-loop BCE は既に別
 **確定した設計判断**(詳細は各節):
 - **storage は内部 tycon `#ArrayStorage`(`#DynamicObject` 流)** — `#`-prefix でユーザーが名前を書けず(漏れない)、
   `Boxed` instance も持たない。ユーザーにも std にも storage 型は現れず、Fix インターフェースは `Array` のもの
-  (public/private・safe/unsafe)だけ(§2.2/§4/§11.2)
+  (public/private・safe/unsafe)だけ(§2.2/§4/§11.1)
 - `Array` は primitive を維持。値 unbox `{ SubObject(#ArrayStorage), size, cap }`、`#ArrayStorage` は
   `{ ControlBlock, buffer }`。クロージャ `{ 関数ポインタ, SubObject(#DynamicObject) }` と構造が並行で RC も同経路
   (placeholder-ty hack なし、§2.2)
@@ -29,9 +29,9 @@ hoist/畳まれて vectorize する(write-loop BCE)。read-loop BCE は既に別
 - bulk op(fill 等)は Fix-source(最適化器がベクトル化して InlineLLVM と同等になる、§4)
 - FFI ポインタ系は Array の InlineLLVM ヘルパ経由。retained-ptr は size/cap を運べない(§7)
 - Fix レベルの uniqueness-check-less な mutate primitive は全廃し、mutate は全て COW 内包 + 値として純粋に揃える
-  (`_unsafe_force_unique` / unreleased write / punch-plug の uniqueness-unchecked 版を削除、§5/§3.3/§11.3)
+  (`_unsafe_force_unique` / unreleased write / punch-plug の uniqueness-unchecked 版を削除、§5/§3.3/§11.2)
 
-**進め方**: tests green を保つ5段階の移行(§9)。実装は設計確定後。
+**進め方**: 表現の反転は 1 コミットで行い、それと独立に検証できる作業を前後に分ける(§9)。実装は設計確定後。
 
 **やらないこと**: zero-copy slice(要素寿命の健全性が「全 sharer が同一 `_size`」に依存するため、§3.1)。
 
@@ -66,7 +66,7 @@ Array a  (primitive tycon)   // 値レイアウト: unbox { storage : SubObject(
 `#ArrayStorage` の指す heap object は refcount と生要素だけを持ち、メタ情報(size/cap)は value 側にある。
 `#ArrayStorage` は `#DynamicObject` と同じ **内部 tycon**(`#`-prefix によりユーザーが名前を書けない)で、`Boxed`
 instance を持たない。so ユーザーにも std にも storage 型は現れず、Fix インターフェースは `Array` のものだけ(§2.2、
-§11.2)。value の field 0 を **`SubObject`**(生 `Ptr` でなく)にすることで、storage の RC がクロージャの capture と
+§11.1)。value の field 0 を **`SubObject`**(生 `Ptr` でなく)にすることで、storage の RC がクロージャの capture と
 同じ経路(フィールドの本物の ty で `Object` を作り直す)に載り、placeholder-ty hack が要らない(§2.2(4))。
 
 すると `@size = extractvalue(arr, 1)`、`@capacity = extractvalue(arr, 2)` はどちらも **register 読み出し**。write
@@ -230,7 +230,7 @@ heap len なら共有 len を書き換える別の誤り。redesign の方が危
   内部で unique check(= COW、shared なら clone)する**(名前を grow-only に合わせる — 現行 `_unsafe_set_size`
   は増加しかしない)。すると「呼び出し側が事前に unique を保証する」footgun が消え(op 自身が unique な `_storage`
   にしか size を書かない)、その内部 check は unique-check-elim が provably-unique で畳んで同性能にする
-  (§11.3 の方向)。呼び出し側の `_unsafe_force_unique` は畳み込める。残る unsafe 契約は「新スロット
+  (§11.2 の方向)。呼び出し側の `_unsafe_force_unique` は畳み込める。残る unsafe 契約は「新スロット
   `[old_size..n)` は未初期化(呼び出し側が埋める)」「`n <= _cap`」のみ。
 
 ### 3.2 RC-unit 機構との整合(PunchedArray と同じ特別扱い)
@@ -518,29 +518,44 @@ generic(`_get_boxed_ptr`、`mutate_boxed`/`borrow_boxed`、`boxed_to_retained_pt
 `Array` の debug 型は 3 field の value struct(storage pointer、size i64、cap i64)になり、FAM/
 `DEBUG_ARRAY_ASSUMED_LEN` の要素配列記述は `#ArrayStorage` の debug 型へ移る。
 
-## 9. 段階的移行(tests を green に保つ)
+## 9. 実装の進め方
 
-素朴にやると、この変更は ~40 の layout-constant 箇所と型/FFI/RC/debug 機構を一度に触る。commit 間で suite が
-green を保つよう段階化する:
+素朴にやると、この変更は ~40 の layout-constant 箇所と型/FFI/RC/debug 機構を一度に触る。表現の反転(step 3)は
+一度に行い、それと独立に検証できる作業を前後に分ける。
 
-1. **`#ArrayStorage` 内部 tycon を導入**: tycon 登録 + レイアウト arm `{ ControlBlock, buffer }`(§2.2(3))+ 非
+0. **baseline を取る。** 実装に入る前の tip で **speedtest を全ケース実行**し、cachegrind の Ir とウォール
+   クロックを記録する。step 5 の比較対象なので、コードを触る前に取ること。
+
+1. **表現と独立な unsafe primitive の整理**(§3.3/§5)。現行の boxed レイアウトのまま実装・検証でき、
+   ここで書いた op の body は反転後に storage 経由へ retarget するだけで作り直しにならない:
+   - `InlineLLVMArrayPunchBody` に `result_prov` を実装(§3.3)。`InlineLLVMStructPunchBody` も同様。
+   - `Array::_unsafe_push_back_capacity_unchecked`(§4)と `Array::unsafe_set_bounds_unchecked`(§13.1)を追加。
+   - builder(`append`/`from_map`/`reserve`/`push_back`/`resize`)、`sort_by`/`reverse`、`mod`/`act` を
+     COW 内蔵 op へ移行。
+   - `_unsafe_force_unique` / `_unsafe_set_bounds_uniqueness_unchecked_unreleased` / punch・plug の
+     uniqueness-unchecked 版を削除。cp-library を移行し、`test_external_project_cp_library` の pin を更新する。
+   - 検証: `cargo test --release`、および `mod`/`act` と builder のマイクロベンチで uniqueness check が
+     増えていないこと(`--emit-rc-ir all` の post dump の `[unique]` マーカーと LLVM IR)。
+2. **`#ArrayStorage` 内部 tycon を導入**: tycon 登録 + レイアウト arm `{ ControlBlock, buffer }`(§2.2(3))+ 非
    traverse な要素 FAM variant + free-only RC + alloc / 要素 read / 未初期化 write / data-pointer の codegen ヘルパ。
    まだ `Array` からは未使用(dead-code 警告が「配線待ち」を示す)。`#ArrayStorage` はユーザーが名前を書けないので
-   Fix レベルの直接 unit-test はできず、stage 2 の Array op 経由で検証する(必要なら小さな InlineLLVM smoke)。
-2. **`Array` の InlineLLVM body を storage codegen 経由に付け替える**。`Array` の object shape を *まだ現行 boxed*
-   のままにできれば(storage を内部に持つ中間形)、ABI 反転前に既存 test で storage op を検証する。中間形が
-   表現できなければ stage 3 に畳む。
+   Fix レベルの直接 unit-test はできず、step 3 の Array op 経由で検証する(必要なら小さな InlineLLVM smoke)。
 3. **`Array` の値レイアウトを unbox `{ SubObject(#ArrayStorage), size, cap }` に反転**(§2.2)。`ty_to_object_ty` の
    `Array` arm、`to_embedded_type`、`create_obj`、`size_of`、custom `build_traverse` arm(§3/§2.2(4))、不可分 unit
    述語(§3.2)、layout-constant 箇所すべて(`investigation-notes.md` §8)を一斉に更新。`Array a : Boxed` instance を
    削除、`@size`/`@capacity` を extractvalue 版へ、`String`/FFI chain(§7)と PunchedArray(§6)を書き換える。
+   **`Array` を boxed のまま storage を内包する中間形は作らない** — その形でしか動かないコードを書いて捨てる
+   ことになるため、反転は 1 コミットで行う。
 4. **Debug info**(§8)。
-5. **検証**: 全 opt レベルで `cargo test --release`。array/string/punched-array/FFI の test。minilib +
-   project_euler を memcheck 下で。要素 release を `_size` で駆動する点が最もリスクが高い変更 —
-   shared/unique/COW/pop/resize/punch を跨いだ adversarial な memcheck。その後、write-loop の speedtest
-   (`array_mod`、`arrayrw`、`write_by_range_fold`、`prime_table`、`push_back`)を再設計前 baseline と比較し、
-   畳まれた check と vector op を LLVM IR で確認する。`push_back` は容量チェック `_size < _cap` が register に
-   なることの、`write_by_range_fold` は bounds check が畳まれることの、それぞれ測定点。
+5. **検証**:
+   - 全 opt レベルで `cargo test --release`。array/string/punched-array/FFI の test。
+   - minilib + project_euler を memcheck 下で。要素 release を `_size` で駆動する点が最もリスクが高い変更 —
+     shared/unique/COW/pop/resize/punch を跨いだ adversarial な memcheck。
+   - **speedtest を全ケース実行し、step 0 の baseline と比較する。** 判定は (a) 劣化しているケースが無いこと、
+     (b) write-loop 系で高速化が出ていること。個別の測定点: `push_back` は容量チェック `_size < _cap` が
+     register になること、`write_by_range_fold` は bounds check が畳まれること、`array_mod` / `arrayrw` /
+     `prime_table` は畳まれた check と vector op が LLVM IR に出ること。劣化ケースが出たら、§10 が挙げる
+     by-value ABI と入れ子配列のメモリ増(要素あたり 1 word -> 3 word)を疑う。
 
 ## 10. ABI と性能
 
@@ -551,14 +566,12 @@ green を保つよう段階化する:
   `{ptr, i64, i64}` を渡す — ABI が太る。retain/release/traverser の signature と closure ABI も波及する。
   bounds-check/容量チェックの利点が array-heavy コードでは支配的なはず。array 非依存コードと入れ子配列は
   小さな by-value/メモリコストを払う。仮定せず測る。
-- **リスク**: 要素の寿命(§3)が正しさに直結する部分 — count を誤ると leak か double-free。step 9.5 の段階的
+- **リスク**: 要素の寿命(§3)が正しさに直結する部分 — count を誤ると leak か double-free。§9 step 5 の
   memcheck がその番人。
 
-## 11. 方針・未決事項
+## 11. 方針
 
-1. **未決** — step 2 の可否。`Array` を boxed のまま `Storage` を内包する中間段が作れるか、それとも反転は atomic で
-   なければならない(step 2 を step 3 に畳む)か。実装時に判断する。
-2. **決定 — storage は内部 tycon `#ArrayStorage`(`#DynamicObject` 流)。`#`-prefix でユーザーが名前を書けず、
+1. **決定 — storage は内部 tycon `#ArrayStorage`(`#DynamicObject` 流)。`#`-prefix でユーザーが名前を書けず、
    `Boxed` instance も持たない。Fix 露出は `Array` インターフェースだけ(§2.2/§4)。** 生ストレージ op(allocate /
    get / 未初期化 write / data-ptr)は `Array` の InlineLLVM body の codegen 内に閉じる。**`#ArrayStorage` を
    ユーザーが名前で書けないので「裸の storage 値」を Fix コードで作れず、ユーザーへ漏れようがない** — これが要素
@@ -568,7 +581,7 @@ green を保つよう段階化する:
    Array borrow ヘルパ(`Array::borrow_elements` 系、コールバック中だけ有効な `Ptr` を渡す)だけにする。これにより
    plan §8(2)(a) 型の composable な隠れ穴 primitive(unretained element getter 等)が Fix レベルに存在しなくなる。
    `#ArrayStorage` にすることで、raw `Ptr` フィールドで要った placeholder-ty hack も消える(§2.2(4))。
-3. **決定 — Fix レベルの uniqueness-check-less な mutate primitive を全廃する(§5)。** 対象は
+2. **決定 — Fix レベルの uniqueness-check-less な mutate primitive を全廃する(§5)。** 対象は
    `_unsafe_force_unique`、`_unsafe_set_bounds_uniqueness_unchecked_unreleased`、punch/plug の
    uniqueness-unchecked 版。移行先は COW を内包した op(`set`/`swap`/`unsafe_set_bounds_unchecked`/
    `_unsafe_grow_size`/`_unsafe_truncate_bounds_unchecked`/force-unique 版 punch/plug)と、
@@ -667,7 +680,7 @@ COW を畳むための「force unique しない」機構)、**borrow 化属性**
   旧 `_unsafe_set_bounds_uniqueness_unchecked_unreleased` の後継(Array レベル、§4)。
 - **NEW `unsafe_set_bounds_unchecked`**(`InlineLLVMArraySetBody` の `bounds_checked: false` 版)— COW + write +
   旧要素 release。bounds check だけ省く。`unsafe_swap_bounds_unchecked` と対で、cp-library のような
-  「範囲が自明な in-place 書き込みループ」の移行先(§11.3)。force-unique: `Some{0,[0]}`。prov: `Fresh`。
+  「範囲が自明な in-place 書き込みループ」の移行先(§11.2)。force-unique: `Some{0,[0]}`。prov: `Fresh`。
 - **`_unsafe_empty_capacity_unchecked`**(InlineLLVM)— `#ArrayStorage` を内部 alloc し Array 値
   `{ SubObject(#ArrayStorage), 0, cap }` を構築。borrows: なし。prov: `Fresh`。storage alloc は codegen 内部(Fix 関数化しない)。
 - **`_check_range` / `_check_size`**(InlineLLVM、存続不変)— 純 I64 guard(`runtime_check()` gate)。属性なし。
