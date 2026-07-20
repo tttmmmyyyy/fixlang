@@ -152,11 +152,16 @@ RC-inert(非 traverse)な `ObjectFieldType` variant を1つ設ける**: 現行 `
 hack は不要**。
 - **retain = generic**: unbox `Array` の retain が field 0(`SubObject(#ArrayStorage)`)を retain = storage の
   refcount を +1(shallow、COW で要素は共有のまま)。custom コード不要。
-- **release / mark = custom**: `#ArrayStorage` を generic release すると free-only destructor が要素を残して漏らすので、
-  `Array` value に custom `build_traverse` arm を置く — value field 1(size)を読み、storage buffer の `[0..size)` を
-  解放してから field 0 の `SubObject(#ArrayStorage)` を **generic に** `build_release_mark`(refcount -1、unique なら
-  free)。`#DynamicObject` が「captures を解放 -> 自身を free」するのと同じ骨格で、既存の `ObjectFieldType::Array`
-  custom traverse arm(value から length を読んで loop)が雛形になる。
+- **release / mark = custom**: `#ArrayStorage` を generic に release すると free-only destructor が要素を残して漏らす。
+  そこで `Array` value に custom `build_traverse` arm を置き、**storage の `Object` を
+  `build_release_mark_nonnull_boxed_with(storage, work, traverse_refs)` に渡して、`traverse_refs` クロージャの中で
+  value の `_size` を読んで `[0.._size)` を解放する**。refcount の減算と destruction 分岐は共通機構が持ち、
+  **`traverse_refs` は refcount が 1 -> 0 に落ちるときだけ呼ばれる**ので、共有されている配列の要素は解放されない
+  (要素解放を自分で書いて `build_release_mark` を呼ぶ形にすると、refcount を見る前に無条件解放することになり、
+  boxed 要素を持つ共有配列で use-after-free になる)。`#DynamicObject` が「captures を解放 -> 自身を free」するのと
+  同じ骨格で、現行 `ObjectFieldType::Array` の custom traverse arm(value から length を読んで loop)と PunchedArray の
+  hole-skip arm(同じヘルパに hole を飛ばすクロージャを渡す)が雛形になる。mark work では共通機構が `traverse_refs` を
+  無条件に呼ぶので、mark 側も同じ形で正しい。
 - **clone(COW)**: 新 `#ArrayStorage` を alloc し `[0..size)` を retain コピー、value field 0 を差し替え。
 
 retain が generic に回るので、field 0 を生 `Ptr` にした場合の「全 unboxed と誤判定 -> RC を何も出さず leak」問題は
