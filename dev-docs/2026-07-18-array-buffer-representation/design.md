@@ -129,14 +129,11 @@ field 0 は生 `Ptr` = generic RC の対象外。refcount と要素寿命は (4)
 
 size/cap を持たない。この ObjectType は `elem_ty` から組む codegen ヘルパ `array_storage_object_ty(elem_ty)` で
 得る(`name` は debug 用の任意文字列で、tycon 参照は無い)。要素バッファは現行の `ObjectFieldType::Array(elem)`
-が担う FAM 機構を再利用する。ただし現行 `Array` variant は「capacity i64 + FAM」を兼ねる(`to_basic_type` が
-i64 を返し `to_struct_type` が FAM を append)ので、storage には capacity スロットが要らない分の整理が要る:
-- **採用案**: redesign 後は旧 boxed-array レイアウトが消え、`ObjectFieldType::Array` の利用先は storage object
-  だけになる。so この variant を **「ControlBlock/header を前提としない純 FAM」に整理し直す**(余剰の
-  capacity i64 を落とす)。storage は `{ ControlBlock, buffer }` の 2 field でぴったり。
-- **低リスク退避**: 触る match arm を最小化したいなら、余剰 i64 を残したまま再利用してもよい(storage が
-  `{ ControlBlock, i64(未使用), buffer }` になり 8 byte/array を無駄にするだけ。正しさには影響しない)。実装時に
-  どちらへ倒すか決める。
+が担う FAM 機構を再利用する。現行の `Array` variant は「capacity i64 + FAM」を兼ねる(`to_basic_type` が i64 を
+返し `to_struct_type` が FAM を append)ので、これを **「ControlBlock/header を前提としない純 FAM」に整理し直す**
+(capacity i64 を落とし、名前も buffer を表す変種へ改める)。storage は `{ ControlBlock, buffer }` ちょうど 2 field
+になる。整理には `to_basic_type` / `to_struct_type` / `size_of` / traverse / debug の各 match arm を触るが、
+redesign 後この variant の利用先は storage object だけなので迷いなく行える。
 
 **(4) RC = custom 不可分 unit**: field 0 が生 `Ptr` なので、generic RC はこの値を「全 unboxed = RC 不要」と見なし
 **何も出さない**(`build_retain` / `build_traverse` の `Ptr`/`I64` arm が no-op)。放置すると leak/二重解放。so
@@ -360,8 +357,8 @@ release はその body の codegen が行い、Fix ソースから「storage へ
 `_unsafe_empty_capacity_unchecked` + `_unsafe_initialize` ループの Fix-source で書け、最適化器がループを
 ベクトル化して InlineLLVM `fill` と同等のコードになる。よって `fill` は Fix-source にし、InlineLLVM の
 `array_unsafe_fill` は削除する。COW clone /
-reserve の storage コピーは retain-per-slot の別パターンなので、実装時に測って判断する(`clone_array_buf` を
-storage に retarget して残すのが安全側の初期値)。
+reserve の storage コピーは retain-per-slot の別パターンなので、Fix-source 化を測定で確かめ、ベクトル化が届かず
+回帰する場合のみ `clone_array_buf` を storage に retarget した InlineLLVM を残す。
 
 これらは現行 `Array` の InlineLLVM body(`_unsafe_get_bounds_unchecked`、
 `_unsafe_set_bounds_uniqueness_unchecked_unreleased`、`_unsafe_empty_capacity_unchecked`、`create_obj`)と 1 対 1 に
