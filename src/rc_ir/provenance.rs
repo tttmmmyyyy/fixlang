@@ -300,7 +300,10 @@ impl Uniqueness {
     /// type — so a miss is a malformed provenance, not a case to default away.
     fn leaf_at(&self, path: &[usize]) -> CTRefCnt {
         self.0.get(path).copied().unwrap_or_else(|| {
-            unreachable!("path {:?} is not a boxed leaf of the uniqueness shape", path)
+            unreachable!(
+                "path {:?} is not a boxed leaf of the uniqueness shape",
+                path
+            )
         })
     }
 

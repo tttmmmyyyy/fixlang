@@ -186,7 +186,10 @@ impl<'a> Specializer<'a> {
                     // Every `borrowed_units` key is a parameter or capture name, and
                     // `fresh_rename_function` renames all of those, so the lookup always hits.
                     let renamed = rename.get(n).cloned().unwrap_or_else(|| {
-                        unreachable!("borrowed_units key {:?} is not a renamed parameter/capture", n)
+                        unreachable!(
+                            "borrowed_units key {:?} is not a renamed parameter/capture",
+                            n
+                        )
                     });
                     (renamed, unit.clone())
                 })
@@ -296,9 +299,10 @@ impl<'a> Specializer<'a> {
     /// canonical key, leaving the callee unspecialized.
     fn callee_key(&self, call: &RcVar, g: &RcFunc, inputs: &[Uniqueness]) -> Key {
         // `interp_app` records `call_args` for every call, so the entry always exists.
-        let arg_provs = self.analysis.call_args.get(&call.name).unwrap_or_else(|| {
-            unreachable!("call_args has no entry for the call {:?}", call.name)
-        });
+        let arg_provs =
+            self.analysis.call_args.get(&call.name).unwrap_or_else(|| {
+                unreachable!("call_args has no entry for the call {:?}", call.name)
+            });
         if arg_provs.len() == g.params.len() {
             arg_provs.iter().map(|prov| resolve(prov, inputs)).collect()
         } else {
@@ -321,9 +325,16 @@ impl<'a> Specializer<'a> {
         };
         // `interp_rhs` records `op_containers` for exactly the ops that carry a `unique_check_operand`
         // — the same condition the `let Some(uc)` guard above passed — so the entry always exists.
-        let container_prov = self.analysis.op_containers.get(&result.name).unwrap_or_else(|| {
-            unreachable!("op_containers has no entry for the unique-check op {:?}", result.name)
-        });
+        let container_prov = self
+            .analysis
+            .op_containers
+            .get(&result.name)
+            .unwrap_or_else(|| {
+                unreachable!(
+                    "op_containers has no entry for the unique-check op {:?}",
+                    result.name
+                )
+            });
         let unique = leaf_is_unique(container_prov, &uc.path, inputs);
         if unique {
             gen.assuming_unique()

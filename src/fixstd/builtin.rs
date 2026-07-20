@@ -2301,7 +2301,10 @@ impl LLVMGen for InlineLLVMArraySetBody {
 
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
+            Some(UniqueCheckOperand {
+                container_index: 0,
+                path: vec![],
+            })
         } else {
             None
         }
@@ -2431,7 +2434,10 @@ impl LLVMGen for InlineLLVMArraySwapBody {
 
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
+            Some(UniqueCheckOperand {
+                container_index: 0,
+                path: vec![],
+            })
         } else {
             None
         }
@@ -2557,7 +2563,10 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
+            Some(UniqueCheckOperand {
+                container_index: 0,
+                path: vec![],
+            })
         } else {
             None
         }
@@ -2656,7 +2665,10 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
 
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some(UniqueCheckOperand { container_index: 1, path: vec![0] })
+            Some(UniqueCheckOperand {
+                container_index: 1,
+                path: vec![0],
+            })
         } else {
             None
         }
@@ -3396,7 +3408,10 @@ impl LLVMGen for InlineLLVMStructPunchBody {
 
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
+            Some(UniqueCheckOperand {
+                container_index: 0,
+                path: vec![],
+            })
         } else {
             None
         }
@@ -3508,7 +3523,10 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
 
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
+            Some(UniqueCheckOperand {
+                container_index: 0,
+                path: vec![],
+            })
         } else {
             None
         }
@@ -4371,7 +4389,10 @@ impl LLVMGen for InlineLLVMStructSetBody {
 
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
-            Some(UniqueCheckOperand { container_index: 1, path: vec![] })
+            Some(UniqueCheckOperand {
+                container_index: 1,
+                path: vec![],
+            })
         } else {
             None
         }
@@ -5209,7 +5230,10 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         if self.assume_unique {
             None
         } else {
-            Some(UniqueCheckOperand { container_index: 0, path: vec![] })
+            Some(UniqueCheckOperand {
+                container_index: 0,
+                path: vec![],
+            })
         }
     }
 
