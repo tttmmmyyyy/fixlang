@@ -304,11 +304,43 @@ fn collect_consumes_go<F: Fn(&RcVar, &Path) -> bool>(
             }
             collect_consumes_go(k, facts, prog, type_env, owns, out);
         }
-        RcExpr::Destructure(_, _, k) => collect_consumes_go(k, facts, prog, type_env, owns, out),
+        RcExpr::Destructure(container, fields, k) => {
+            for pi in destructure_consumes(container, fields, type_env) {
+                out.push((container.name.clone(), pi));
+            }
+            collect_consumes_go(k, facts, prog, type_env, owns, out)
+        }
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k) => {
             collect_consumes_go(k, facts, prog, type_env, owns, out)
         }
     }
+}
+
+/// The container leaves a `Destructure` consumes. A boxed container is released whole, so every boxed
+/// leaf of it goes; an unboxed container moves each named field's leaves into that field's variable,
+/// an alias whose consume is attributed to the field variable, so only a dropped (unnamed) field's
+/// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`), and
+/// every reader of the consume model shares it.
+fn destructure_consumes(
+    container: &RcVar,
+    fields: &[(usize, RcVar)],
+    type_env: &TypeEnv,
+) -> Vec<Path> {
+    let leaves = boxed_leaves(&container.ty, type_env);
+    if container.ty.is_box(type_env) {
+        return leaves;
+    }
+    let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
+    leaves
+        .into_iter()
+        .filter(|pi| {
+            // A boxed leaf of an unboxed container starts with a field index, so its path is non-empty.
+            let field = pi
+                .first()
+                .expect("a boxed leaf of an unboxed container has a non-empty path");
+            !named.contains(field)
+        })
+        .collect()
 }
 
 /// The leaves an `App`, `Llvm`, or `Closure` right-hand side consumes: an owning argument position
@@ -430,10 +462,11 @@ fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
 
 // --- reference-counting units ---
 
-/// The reference-counting units of a value's type: the boxed value, the capture of a closure, or
-/// each unit of an unboxed struct/tuple. Unlike `boxed_leaves`, it stops at the root of an unboxed
-/// union — a union is one unit, since only its active variant is live and a refcount operation on it
-/// must dispatch on the tag rather than name a variant's leaf unconditionally.
+/// The reference-counting units of a value's type: the capture of a closure, or each unit root
+/// (`is_rc_unit_root`) — a boxed value, an unboxed union, or a punched array — reached by descending
+/// its unboxed structs/tuples. Unlike `boxed_leaves`, it stops at a unit root rather than expanding it
+/// into the inner boxed leaves (e.g. an unboxed union is one unit, since only its active variant is
+/// live and a refcount operation must dispatch on the tag rather than name a variant's leaf).
 fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
@@ -450,9 +483,7 @@ fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mu
         path.pop();
         return;
     }
-    // A punched array carries a moved-out hole at a run-time index, so its refcount traversal is a
-    // whole-value operation that skips that hole; it is one indivisible unit, not a struct to descend.
-    if ty.is_box(type_env) || ty.is_union(type_env) || ty.is_punched_array() {
+    if ty.is_rc_unit_root(type_env) {
         out.push(path.clone());
         return;
     }
@@ -469,8 +500,9 @@ fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mu
     }
 }
 
-/// Truncate a leaf path to its reference-counting unit: the path up to the first unboxed union it
-/// enters (a union subtree is one unit). Paths that stay within unboxed structs are unchanged.
+/// Truncate a leaf path to its reference-counting unit: the path down to the first unit root
+/// (`is_rc_unit_root`) it reaches — an unboxed union or a punched array, whose subtree is one unit.
+/// Paths that stay within unboxed structs are unchanged.
 fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
     let mut out = vec![];
     let mut cur = ty.clone();
@@ -480,8 +512,9 @@ fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
             out.push(idx);
             break;
         }
-        if cur.is_box(type_env) || cur.is_union(type_env) {
-            // A boxed value (including a boxed union) and an unboxed union are each one unit.
+        if cur.is_rc_unit_root(type_env) {
+            // A boxed value, an unboxed union, or a punched array is one unit; a leaf below it (a
+            // boxed leaf under a union variant, or the punched array's inner array) keys to its root.
             break;
         }
         // Here `cur` is an unboxed struct/tuple, so a well-formed unit/root path index is in range.
@@ -723,7 +756,7 @@ fn shape_from_own(
                 OwnershipShape::Boxed(cap),
             ]);
         }
-        if ty.is_box(type_env) || ty.is_union(type_env) {
+        if ty.is_rc_unit_root(type_env) {
             return OwnershipShape::Boxed(owned(path));
         }
         let fields = ty.field_types(type_env);
@@ -932,16 +965,14 @@ impl<'a> RewriteCtx<'a> {
     /// borrow cancels). An owned value at its last use is moved either way, so borrowing it removes no
     /// retain and only delays its release; it is not a benefit.
     fn beneficial(&self, bref: &FuncRef, args: &[RcVar], k: &RcExprNode) -> bool {
-        let bparams = self.callee_params.get(bref);
+        // `bref` is a borrow version, and `borrow_ify` registers every version's parameters, so it is a
+        // key here.
+        let bparams = &self.callee_params[bref];
         args.iter().enumerate().any(|(q, arg)| {
             let last_use = !used_later(&arg.name, k);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
-                // `q` is in range since `args.len() <= params.len()`; a callee with no borrow version
-                // (`None`) offers no borrow to benefit from.
-                let callee_borrows = match bparams {
-                    Some(ps) => !self.own_out.contains(&(ps[q].0.clone(), unit.clone())),
-                    None => false,
-                };
+                // `q` is in range since `args.len() <= params.len()`.
+                let callee_borrows = !self.own_out.contains(&(bparams[q].0.clone(), unit.clone()));
                 callee_borrows && !(self.owns_unit(arg, unit) && last_use)
             })
         })
@@ -1107,15 +1138,11 @@ fn units_under(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Vec<Path>
 }
 
 /// The type of the subtree a path names, descending only unboxed structs; `None` once the path
-/// reaches a unit boundary (a boxed value, a union, a closure, or a fully-unboxed leaf).
+/// reaches a closure, a unit root (`is_rc_unit_root`), or a fully-unboxed leaf.
 fn subtree_type(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
     let mut cur = ty.clone();
     for &idx in path {
-        if cur.is_closure()
-            || cur.is_box(type_env)
-            || cur.is_union(type_env)
-            || cur.is_fully_unboxed(type_env)
-        {
+        if cur.is_closure() || cur.is_rc_unit_root(type_env) || cur.is_fully_unboxed(type_env) {
             return None;
         }
         // Here `cur` is an unboxed struct/tuple, so a well-formed unit/root path index is in range.
@@ -1351,26 +1378,8 @@ impl<'a> CancelAnalysis<'a> {
                 self.walk(k, pend, leaf_mode)
             }
             RcExpr::Destructure(container, fields, k) => {
-                if container.ty.is_box(self.type_env) {
-                    // A boxed container is released whole, so every boxed leaf is consumed.
-                    for pi in boxed_leaves(&container.ty, self.type_env) {
-                        self.consume(&mut pend, &container.name, &pi);
-                    }
-                } else {
-                    // An unboxed container moves each named field's leaves into its field variable,
-                    // which shares the field's root key, so a pending retain flows on to be cancelled
-                    // at the field's own release. Only a dropped (unnamed) field's leaves are consumed.
-                    let named: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
-                    for pi in boxed_leaves(&container.ty, self.type_env) {
-                        // A boxed leaf of an unboxed container starts with a field/capture index, so
-                        // its path is non-empty; the leaf is consumed unless that field is named.
-                        let field = pi
-                            .first()
-                            .expect("a boxed leaf of an unboxed container has a non-empty path");
-                        if !named.contains(field) {
-                            self.consume(&mut pend, &container.name, &pi);
-                        }
-                    }
+                for pi in destructure_consumes(container, fields, self.type_env) {
+                    self.consume(&mut pend, &container.name, &pi);
                 }
                 self.walk(k, pend, leaf_mode)
             }

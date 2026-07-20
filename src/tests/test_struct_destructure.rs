@@ -1,4 +1,5 @@
-// Memory-safety tests for struct-pattern destructuring of a boxed struct with boxed fields.
+// Memory-safety tests for struct-pattern destructuring of a boxed struct with boxed fields, and for a
+// parameter whose only use is such a destructure.
 // Destructuring extracts the fields with `get_struct_fields`, whose boxed-container path retains
 // each extracted field and releases the container. With boxed fields, a field the continuation
 // drops, and a container still used after the destructure, must leave every value released exactly
@@ -51,6 +52,34 @@ main : IO () = (
 );
 "#;
 
+    // A destructure consumes its container, so a function whose only use of a boxed parameter is to
+    // destructure it consumes that parameter and cannot borrow it. Ownership inference must see that
+    // consume: a version that borrowed the parameter would release a container it does not own, and
+    // the caller's value would die while it still holds it. The recursion keeps the callee from being
+    // inlined into the caller, so the call goes through the inferred parameter ownership.
+    const DESTRUCTURED_PARAMETER_SOURCE: &str = r#"
+module Main;
+
+type BoxPair = box struct { a : Array I64, b : Array I64 };
+
+sum_heads : I64 -> BoxPair -> I64 = |n, p| (
+    if n <= 0 {
+        let BoxPair { a: x, b: y } = p;
+        x.@(0) + y.@(0)
+    } else {
+        sum_heads(n - 1, p)
+    }
+);
+
+main : IO () = (
+    let p = BoxPair { a: [1, 2], b: [10, 20] };
+    assert_eq(|_|"first call", sum_heads(2, p), 11);;
+    assert_eq(|_|"second call", sum_heads(2, p), 11);;
+    assert_eq(|_|"container intact", p.@a.@(1) + p.@b.@(1), 22);;
+    pure()
+);
+"#;
+
     #[test]
     pub fn test_boxed_struct_destructure_correctness() {
         test_source(BOXED_DESTRUCTURE_SOURCE, Configuration::develop_mode());
@@ -68,5 +97,24 @@ main : IO () = (
         let mut config = Configuration::develop_mode();
         config.set_valgrind(ValgrindTool::MemCheck);
         test_source(BOXED_DESTRUCTURE_SOURCE, config);
+    }
+
+    #[test]
+    pub fn test_destructured_parameter_correctness() {
+        test_source(DESTRUCTURED_PARAMETER_SOURCE, Configuration::develop_mode());
+    }
+
+    #[test]
+    pub fn test_destructured_parameter_memory_safety() {
+        if !platform_valgrind_supported() {
+            eprintln!(
+                "Skipping {}: Valgrind not available on this platform.",
+                function_name!()
+            );
+            return;
+        }
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::MemCheck);
+        test_source(DESTRUCTURED_PARAMETER_SOURCE, config);
     }
 }

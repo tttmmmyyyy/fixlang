@@ -1,0 +1,35 @@
+module Main;
+
+import Std::{
+    loop, Array, I64, IO, Array::{fill, set, @}, Debug::assert_eq,
+    LoopState::{break, continue}, Monad::pure
+};
+
+// The same in-place read+write hot loop as `arrayrw_fn`, entered with a *shared*
+// array: a second holder keeps the original alive across the loop. Specialization
+// clones the loop per input uniqueness, so the version entered with the array of
+// unknown sharing keeps its `set` check and clones the array once, and the version
+// reached with that fresh clone writes in place. Sharing should therefore cost one
+// array copy, not a uniqueness check per element — compare with `arrayrw_fn`,
+// which is the same work entered unique.
+sweep : Array I64 -> Array I64;
+sweep = |arr| (
+    loop((0, arr), |(i, arr)|
+        if i == 1000 { break $ arr };
+        continue $ (i + 1, arr.set(i, arr.@(i) + 1))
+    )
+);
+
+main : IO ();
+main = (
+    let iters = 200000;
+    let arr = Array::fill(1000, 0);
+    let keep = [arr];
+    let arr = loop((0, arr), |(k, arr)|
+        if k == iters { break $ arr };
+        continue $ (k + 1, sweep(arr))
+    );
+    assert_eq(|_|"arrayrw_shared", arr.@(0), 200000);;
+    assert_eq(|_|"arrayrw_shared original", keep.@(0).@(0), 0);;
+    pure()
+);

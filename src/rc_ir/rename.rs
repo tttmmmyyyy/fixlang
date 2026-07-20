@@ -19,7 +19,12 @@ pub(crate) fn fresh_rename_function(
     body: &RcExprNode,
     marker: &str,
     counter: &mut u64,
-) -> (Vec<RcVar>, Option<RcVar>, RcExprNode, Map<FullName, FullName>) {
+) -> (
+    Vec<RcVar>,
+    Option<RcVar>,
+    RcExprNode,
+    Map<FullName, FullName>,
+) {
     let mut rename: Map<FullName, FullName> = Map::default();
     for p in params.iter().chain(cap.iter()) {
         fresh_rename(&p.name, marker, &mut rename, counter);

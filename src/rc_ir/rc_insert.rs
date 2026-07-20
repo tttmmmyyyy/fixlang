@@ -274,13 +274,17 @@ impl<'a> FuncRc<'a> {
         let mut used_after = live_cont.clone();
         used_after.remove(&x.name);
 
-        // Free local variables each arm uses (from the enclosing scope), for dead-branch releases.
+        // The local variables live at an arm's head: those some arm uses from the enclosing scope,
+        // plus those live after the match. The match consumes the scrutinee at an arm's head — a
+        // variant arm releases the container, and otherwise the payload carries the scrutinee away —
+        // so this, rather than the liveness after the match, is the liveness that follows that
+        // consumption. Both the dead-branch releases and the scrutinee retain read it.
         let arm_used: Vec<Set<FullName>> =
             arms.iter().map(|arm| self.arm_free_locals(arm)).collect();
-        let mut used_in_any: Set<FullName> = Set::default();
+        let mut live_at_arm_head: Set<FullName> = used_after.clone();
         for u in &arm_used {
             for n in u {
-                used_in_any.insert(n.clone());
+                live_at_arm_head.insert(n.clone());
             }
         }
 
@@ -297,12 +301,15 @@ impl<'a> FuncRc<'a> {
             // Dead-branch (rule c): variables used in another arm but not this one, and dead after
             // the match, are released at this arm's head.
             let mut head = vec![];
-            for n in &used_in_any {
+            for n in &live_at_arm_head {
                 if !used.contains(n) && !used_after.contains(n) {
-                    if let Some(v) = self.vars.get(n) {
-                        if self.needs_rc(v) {
-                            head.push(v.clone());
-                        }
+                    // A free local of an arm is bound in the enclosing scope, so it is a known variable.
+                    let v = self
+                        .vars
+                        .get(n)
+                        .expect("a free local of a match arm is bound in the enclosing scope");
+                    if self.needs_rc(v) {
+                        head.push(v.clone());
                     }
                 }
             }
@@ -345,8 +352,12 @@ impl<'a> FuncRc<'a> {
             )),
             source,
         };
-        // The scrutinee is owned: retain it before the match if it is used after the match.
-        let node = self.retain_if_live(&scrut, &used_after, node);
+        // The scrutinee is owned, and the match consumes it at an arm's head, so a use of it inside an
+        // arm body is a use after that consumption just as a use after the match is: retain it when
+        // either occurs. One reference covers both — an arm that uses the scrutinee consumes the extra
+        // reference, an arm that does not releases it by the dead-branch rule above, and an arm whose
+        // body uses a scrutinee that also outlives the match retains it again at that use.
+        let node = self.retain_if_live(&scrut, &live_at_arm_head, node);
 
         let mut live_before = live_before_arms;
         live_before.remove(&x.name);
