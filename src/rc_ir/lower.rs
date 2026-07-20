@@ -13,7 +13,7 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::program::{Symbol, TypeEnv};
 use crate::ast::types::{TyCon, TypeNode};
-use crate::constants::CAP_NAME;
+use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
     make_dynamic_object_ty, InlineLLVMArrayLitBody, InlineLLVMCaptureProjectBody,
     InlineLLVMFFICallBody, InlineLLVMMakeStructBody,
@@ -467,17 +467,17 @@ impl<'a> Lowerer<'a> {
         source: Option<Span>,
         bindings: &mut Vec<Binding>,
     ) -> RcVar {
-        // Desugar to a match on the Bool union: `_true` (tag 1) -> then, `_false` (tag 0) -> else.
+        // Desugar to a match on the Bool union.
         let cond_var = self.lower_to_var(cond, bindings);
         let payload_tys = cond_var.ty.field_types(self.type_env);
         let then_arm = MatchArm {
-            variant: Some(1),
-            payload: self.fresh_var("unit", payload_tys[1].clone(), None),
+            variant: Some(BOOL_TRUE_TAG),
+            payload: self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None),
             body: self.lower_body(then_expr),
         };
         let else_arm = MatchArm {
-            variant: Some(0),
-            payload: self.fresh_var("unit", payload_tys[0].clone(), None),
+            variant: Some(BOOL_FALSE_TAG),
+            payload: self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None),
             body: self.lower_body(else_expr),
         };
         let result = self.fresh_var("if", ty, source.clone());

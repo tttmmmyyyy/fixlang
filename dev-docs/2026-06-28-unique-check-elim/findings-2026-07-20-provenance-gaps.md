@@ -132,3 +132,72 @@ RC IR dump と LLVM IR の実測で見つかったもの。どちらも健全性
 
 以後、`result_prov` や `borrows_operand` を保守側の既定値のままにする op には、
 「なぜ既定値なのか」「それで何を逃しているか」を 1 行コメントで残してください。
+
+## 対応 (2026-07-20)
+
+### 問題 1: punch の result_prov
+
+`InlineLLVMArrayPunchBody` と `InlineLLVMStructPunchBody` に leaf ごとの `result_prov` を実装した。
+
+- force-unique する版: punch されたコンテナ leaf = `Fresh`、move out した要素 leaf = `Dyn`。
+- force-unique しない版: すべて `Dyn`。passthrough は採らなかった。理由は
+  `InlineLLVMIsUniqueFunctionBody::result_prov` と同じで、passthrough は「引数を消費しない」
+  という宣言でもあり、それが抑止する retain が後続のチェックを正しく保つ。この判断と、
+  それで逃すもの (`_unsafe_punch_bounds_uniqueness_unchecked` を直に呼んだ先の plug が
+  チェックを保つ) はコードのコメントに残した。
+- 構造体 punch は、punch された構造体が boxed のときだけ `Fresh`。unbox 構造体の force-unique は
+  何もしないので、その中の boxed フィールドの共有については何も言えない。
+
+検証 (依頼された形): `Array::mod` を「COW punch + COW plug」に書き換えたマイクロベンチで、
+RC IR に残るチェックが 9 -> 1 になった。COW plug 8 個すべてが畳まれ、残る 1 個はループが
+自己 peel した初回イテレーションの punch である。
+
+### 問題 2: 実測してから実装
+
+**実測 (着手前の依頼)**: Max でも LLVM は畳んでいなかった。最適化後の LLVM IR の、
+インラインされた act ループの中に refcount 比較と malloc/memcpy の clone path が残っている。
+1000 要素の配列を 200 周 sweep する act ベンチ (functor = `Option`) の cachegrind Ir:
+
+| 版 | Ir |
+|---|---|
+| 実装前 | 3,577,179 |
+| plug のチェックを std から手で外した上限値 | 1,576,607 |
+| 実装後 | 1,576,577 |
+
+**-56% (2.27 倍)**。上限値に一致した = act の unique 枝からチェックが完全に消えた。
+
+**実装**: 依頼どおり `provenance.rs` の `interp_match` に入れた (`result_prov` は `Dyn` のまま)。
+`is_unique` の結果を destructure して得た Bool を match する `true` アームで、同じ op が返した
+値の leaf を `Fresh` として解釈する。あわせて std の `_unsafe_act_bounds_unchecked` の punch を
+チェック付きの版に替えた。この 2 つが揃って初めて plug まで鎖が届く (チェックなしの punch は
+結果を `Dyn` と宣言するので、そこで切れる)。unique 枝では punch のチェックは必ず成立するので
+実行時の意味は変わらず、畳めなかった場合のコストも従来と同じ 1 チェックである。
+
+**罠 (誤コンパイルを実際に再現した)**: refinement を無条件に効かせると、`is_unique` と分岐の
+間で値を共有した場合に、共有済みの値が `Fresh` に「戻って」しまう:
+
+    let (u, a) = arr.unsafe_is_unique;             // rc == 1 なので u = true
+    let keep = [a];                                // ここで retain -> rc == 2
+    let b = if u { a.set(0, 99) } else { ... };    // チェックが畳まれ keep が壊れる
+
+-O max で `keep` が壊れることを実測した (-O none では正常)。retain は 2 本目の参照が生まれる
+唯一の印なので、`Retain` ノードを見たら保留中の flag をすべて捨てる。retain が指すのが値
+そのものではなく別名のこともあり、それを見分けるには borrow パスが持つオブジェクト同一性が
+要るので、粒度は粗く取った。このケースは `test_basic.rs` の
+`test_is_unique_true_branch_invalidated_by_sharing` に回帰テストとして入れた。
+
+### 規約
+
+`LLVMGen::result_prov` の doc コメントに規約を明記し、`borrows_operand` からそこを参照した。
+あわせて `_unsafe_set_bounds_uniqueness_unchecked_unreleased` と `unsafe_set_size` に、既定値の
+ままにする理由とそれで逃すものを書いた。
+
+### テスト
+
+- `test_array_rmw.rs`: `map` が関数を複数回走らせる functor (`Array`、および完全にインライン
+  可能な自作 `Twice`) での `act`、shared な配列への `act`。correctness と memcheck の両方。
+  複数回走る場合に plug のチェックが残るのは、値が複数回使われる以上 retain が入り、それが
+  provenance を落とすからである。
+- `test_provenance.rs`: `unique_elim` ケースの dump で punch と plug がチェックなしの形に
+  なることを表明する (実装前は plug 側が満たされないことを確認済み)。
+- `test_basic.rs`: 上記の罠の回帰テスト。

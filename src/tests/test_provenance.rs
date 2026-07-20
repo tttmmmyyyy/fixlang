@@ -365,6 +365,12 @@ mod integration_tests {
             "Array::swap [unique]",
             // A generic `act`, whose `unsafe_is_unique` folds to the constant `true`.
             "is_unique[unique]",
+            // The punch and the plug that `act` carries the update out with. Reaching the arm the
+            // `is_unique` guards means the array's reference count was one, so both drop their
+            // checks; the dump renders each check-free form by the name of the primitive that
+            // assumes uniqueness.
+            "PunchedArray::_unsafe_punch_bounds_uniqueness_unchecked",
+            "PunchedArray::_unsafe_plug_bounds_uniqueness_unchecked",
             // A boxed-struct field `set` (field 0).
             "set_0 [unique]",
         ] {

@@ -14,6 +14,11 @@
 //! tracked, so a boxed value threaded through a tuple or an unboxed union (a loop state) keeps its
 //! provenance.
 //!
+//! A branch's condition is read in one case: the arm a `match` on an `is_unique` flag takes for `true`
+//! runs where the tested leaf's reference count was one, so that arm reads the leaf as `Fresh` however
+//! little is known about where the value came from. Everywhere else the interpretation ignores what a
+//! branch decided.
+//!
 //! A function's parameters are seeded symbolically (`Arg`), primitive results are declared by
 //! `result_prov` and composed with the operands, and branches join by set union. Each function's
 //! effect — its result provenance, symbolic in its parameters — is computed to a fixed point (so
@@ -26,7 +31,10 @@
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::constants::CLOSURE_CAPTURE_IDX;
+use crate::constants::{
+    BOOL_TRUE_TAG, CLOSURE_CAPTURE_IDX, IS_UNIQUE_FLAG_FIELD, IS_UNIQUE_VALUE_FIELD,
+};
+use crate::fixstd::builtin::InlineLLVMIsUniqueFunctionBody;
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
     FuncRef, MatchArm, Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
@@ -209,16 +217,21 @@ impl Provenance {
         Provenance(m)
     }
 
-    /// Demote every boxed leaf under `path` to `Dyn` (the effect of duplicating the reference with a
-    /// `Retain`). An empty path demotes the whole value.
-    fn demote(&self, path: &[usize]) -> Provenance {
+    /// Give every boxed leaf under `path` the source `src`. An empty path covers the whole value.
+    fn set_leaves_under(&self, path: &[usize], src: BaseSource) -> Provenance {
         let mut m = self.0.clone();
         for (leaf_path, ls) in m.iter_mut() {
             if leaf_path.starts_with(path) {
-                *ls = Provenance::leaf(BaseSource::Dyn);
+                *ls = Provenance::leaf(src.clone());
             }
         }
         Provenance(m)
+    }
+
+    /// Demote every boxed leaf under `path` to `Dyn` (the effect of duplicating the reference with a
+    /// `Retain`). An empty path demotes the whole value.
+    fn demote(&self, path: &[usize]) -> Provenance {
+        self.set_leaves_under(path, BaseSource::Dyn)
     }
 
     /// A readable one-line rendering, for the RC IR dump: a value with no boxed leaf as `unboxed`, a
@@ -389,6 +402,13 @@ struct Interp<'a> {
     /// program point. Specialization keys the callee's clone on these (resolved against the caller's
     /// own input uniqueness), again taking the call-point value rather than the arguments' bindings.
     call_args: Map<FullName, Vec<Provenance>>,
+    /// The result of each `is_unique`, mapped to the path of the leaf whose reference count it tested,
+    /// so that destructuring the result can pair the flag it returns with the value it returns.
+    is_unique_results: Map<FullName, Path>,
+    /// A variable holding an `is_unique` flag, mapped to the value the same operation returned and the
+    /// path of the tested leaf. The arm a `match` on that flag takes for `true` runs where the leaf's
+    /// reference count was one, so that arm may read the leaf as uniquely owned.
+    unique_flags: Map<FullName, (RcVar, Path)>,
 }
 
 impl<'a> Interp<'a> {
@@ -400,6 +420,8 @@ impl<'a> Interp<'a> {
             bindings: Map::default(),
             op_containers: Map::default(),
             call_args: Map::default(),
+            is_unique_results: Map::default(),
+            unique_flags: Map::default(),
         }
     }
 
@@ -460,6 +482,14 @@ impl<'a> Interp<'a> {
                     let demoted = p.demote(path);
                     env.insert(var.name.clone(), demoted);
                 }
+                // A retain is how a second reference to a value comes into existence, so it ends what
+                // an `is_unique` established: the count it read is no longer the count that holds. The
+                // retain may name an alias of the tested value rather than the value itself, and
+                // telling that apart needs the object identity the borrow pass computes, so every
+                // pending flag goes — the refinement `refine_by_condition` performs would otherwise
+                // restore a value the retain had just shared.
+                self.is_unique_results.clear();
+                self.unique_flags.clear();
                 self.interp(cont, env)
             }
             RcExpr::Release(_, _, _, cont) => self.interp(cont, env),
@@ -478,6 +508,7 @@ impl<'a> Interp<'a> {
                     };
                     self.record(fv, &fprov, &mut env);
                 }
+                self.note_unique_flag(container, fields);
                 self.interp(cont, env)
             }
         }
@@ -501,6 +532,13 @@ impl<'a> Interp<'a> {
                 if let Some(uc) = gen.unique_check_operand() {
                     self.op_containers
                         .insert(result.name.clone(), arg_provs[uc.container_index].clone());
+                    // `is_unique` is the one operation that answers a uniqueness question rather than
+                    // acting on it, so its result is what makes a branch's condition readable as a
+                    // fact about a value (`interp_match` refines the `true` arm with it).
+                    if gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
+                        self.is_unique_results
+                            .insert(result.name.clone(), uc.path.clone());
+                    }
                 }
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let decl = gen.result_prov(&result.ty, &arg_tys, self.type_env);
@@ -554,6 +592,54 @@ impl<'a> Interp<'a> {
         Provenance::uniform(&result.ty, self.type_env, BaseSource::Dyn)
     }
 
+    /// Record that a `Destructure` takes apart an `is_unique` result, pairing the flag it returns with
+    /// the value it returns so that a `match` on that flag can refine the value in its `true` arm.
+    ///
+    /// The pairing holds only where the tested leaf is a boxed leaf of the value: `is_unique` reports
+    /// an unboxed value as unique unconditionally, which says nothing about the boxed leaves inside it.
+    /// A result reached any other way (projected field by field, say) is simply not paired, and the
+    /// refinement is skipped.
+    fn note_unique_flag(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) {
+        let Some(path) = self.is_unique_results.get(&container.name).cloned() else {
+            return;
+        };
+        let field = |i: usize| fields.iter().find(|(idx, _)| *idx == i).map(|(_, v)| v);
+        let (Some(flag), Some(value)) = (field(IS_UNIQUE_FLAG_FIELD), field(IS_UNIQUE_VALUE_FIELD))
+        else {
+            return;
+        };
+        if !boxed_leaf_paths(&value.ty, self.type_env).contains(&path) {
+            return;
+        }
+        self.unique_flags
+            .insert(flag.name.clone(), (value.clone(), path));
+    }
+
+    /// The environment an arm runs under: the one before the branch, refined where the branch's
+    /// condition is an `is_unique` flag and the arm is its `true` one. Reaching that arm means the
+    /// tested leaf's reference count was one — no other holder exists — so the arm may read the leaf as
+    /// uniquely owned however little the analysis knows about where the value came from. A `Retain`
+    /// inside the arm demotes it again, as it does any other leaf.
+    fn refine_by_condition(
+        &self,
+        scrut: &RcVar,
+        arm: &MatchArm,
+        env: &Map<FullName, Provenance>,
+    ) -> Map<FullName, Provenance> {
+        let mut env = env.clone();
+        if arm.variant != Some(BOOL_TRUE_TAG) {
+            return env;
+        }
+        let Some((value, path)) = self.unique_flags.get(&scrut.name) else {
+            return env;
+        };
+        if let Some(prov) = env.get(&value.name) {
+            let refined = prov.set_leaves_under(path, BaseSource::Fresh);
+            env.insert(value.name.clone(), refined);
+        }
+        env
+    }
+
     /// Interpret a function body from its parameters (seeded symbolically as `Arg`) and return its
     /// result provenance, recording each binding into `self.bindings`.
     fn run_func(&mut self, func: &RcFunc) -> Provenance {
@@ -583,7 +669,7 @@ impl<'a> Interp<'a> {
         let mut joined_result: Option<Provenance> = None;
         let mut joined_env: Option<Map<FullName, Provenance>> = None;
         for arm in arms {
-            let mut arm_env = env.clone();
+            let mut arm_env = self.refine_by_condition(scrut, arm, env);
             // The payload is the variant's value (a tagged arm) or the whole scrutinee (catch-all). A
             // variant payload of an unboxed union is projected from the scrutinee's expanded shape; of
             // a boxed union it is read out of the shared container, so its every boxed leaf is `Dyn`.

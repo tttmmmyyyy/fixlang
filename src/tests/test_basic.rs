@@ -2996,6 +2996,30 @@ pub fn test95() {
 }
 
 #[test]
+pub fn test_is_unique_true_branch_invalidated_by_sharing() {
+    // Reaching the `true` branch of an `unsafe_is_unique` means the value's reference count was one,
+    // which lets the operations in that branch drop their uniqueness checks. Sharing the value
+    // between the check and the branch ends that: here the array is put into another array first, so
+    // the write in the branch has to clone instead of overwriting what the other holder sees. Both
+    // branches write, so the test fails on the wrong answer rather than on taking the other branch.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr = Array::fill(3, 0);
+                let (unique, arr) = arr.unsafe_is_unique;
+                let keep = [arr];
+                let written = if unique { arr.set(0, 99) } else { arr.set(0, 99) };
+                assert_eq(|_|"fail: the other holder was overwritten", keep.@(0).@(0), 0);;
+                assert_eq(|_|"fail: the write did not land", written.@(0), 99);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_u8_literal() {
     // Test U8 literal
     let source = r#"
