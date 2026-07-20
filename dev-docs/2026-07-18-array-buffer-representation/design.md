@@ -740,7 +740,7 @@ hardcoded `Array a : Boxed` instance を **削除**、`Array` を不可分 unit 
 
 **改名(呼び出し側更新):**
 
-- `_unsafe_set_size` -> `_unsafe_grow_size`(grow 経路)。呼び出し: `append`/`from_map`/`push_back`/`reserve`/`resize`/`read_n_bytes`/`unsafe_from_c_str_ptr`(`_io`)/数値 `to_bytes` 一式。**真の shrink を行う `String::from_bytes` と `_unsafe_from_c_str` の切り詰め経路は効率化した `truncate`(safe shrink、§13.3-1)を使う**
+- `_unsafe_set_size` -> `_unsafe_grow_size`。残る呼び出しは **FFI 出力バッファの経路だけ**: `read_n_bytes`/`unsafe_from_c_str_ptr`(`_io`)/数値 `to_bytes` 一式(builder 群は `_unsafe_push_back_capacity_unchecked` へ移る、§4)。**真の shrink を行う `String::from_bytes` と `_unsafe_from_c_str` の切り詰め経路は効率化した `truncate`(safe shrink、§13.3-1)を使う** — これで「共有配列の `_size` をその場で書き換える」経路が無くなる
 
 **新規 Rust 登録プリミティブ:** `_unsafe_truncate_bounds_unchecked`(危険トランケート、§13.1(1))— `pop_back`/`truncate` の共通コア。`_unsafe_push_back_capacity_unchecked`(§4)— builder 共通コア。`unsafe_set_bounds_unchecked`(§13.1(1))— bounds check だけ省いた `set`。
 
