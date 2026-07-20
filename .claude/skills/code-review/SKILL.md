@@ -307,6 +307,32 @@ CLAUDE.md is explicit: validate at boundaries (user input, external APIs, file I
 **Apply**: remove the defensive branch.
 **Keep** the guard only when it documents a real precondition the type system can't express — and in that case leave a one-line comment naming the invariant.
 
+#### Don't let a fallback silently handle a case the author calls impossible — fail loud
+
+A catch-all or fallback that absorbs a case the author believes cannot occur — `_ => self.clone()`, `unwrap_or(default)`, a silent clamp, "return the left side" at a merge, an early `return` on a "shouldn't happen" shape — trades a loud failure for a silent wrong answer. If the case truly is impossible, the fallback is dead code lending false confidence. If a bug elsewhere ever makes it reachable, the fallback *swallows that bug*: execution continues with a plausible-but-wrong value instead of stopping where the invariant broke. In correctness-critical code — an analysis feeding codegen, a type checker, an optimizer — that wrong value becomes a miscompile surfacing far from its cause.
+
+This comes in two shapes. The **easy-to-spot** one is a comment asserting the invariant right next to a fallback that contradicts it — "both sides have the same type, so this can't arise — fall back to the left", "shapes never mismatch — keep the function total": the comment says the branch is unreachable, the code quietly handles it anyway, so one of the two is wrong. The **more common and more dangerous** one carries *no* comment at all — a bare `_ => default`, an `unwrap_or(0)`, a `.get(i).copied().unwrap_or(...)` — where the author never flagged the assumption. A missing comment is not reassurance; it usually means the reachability was never even considered. So do not scan only for contradicting comments: treat **every** catch-all and silent default as a question — *which concrete case does this absorb, and can it actually occur?*
+
+```rust
+// Both are suspect. The first at least announces its assumption; the second hides it entirely.
+match (self, other) {
+    (Foo(a), Foo(b)) => Foo(a.merge(b)),
+    // Mismatched shapes never arise from a well-typed program.
+    _ => self.clone(),
+}
+let elem = arr.get(i).copied().unwrap_or(0);   // is `i` out of range ever a real case, or a bug?
+```
+
+The default in the **conservative / safe direction** is the one that slips through most often, because it reads as obviously harmless — an analysis defaulting to "assume shared" (`Dynamic`), a predicate to `false`, an ownership to `Borrow`, a lookup to an empty set. It is *not* harmless when the absorbed case is unreachable: the safe default still hides a logic bug at the point the invariant broke, and "safe today" is one refactor away from "unsafe tomorrow". **Reachability, not the safeness of the default, decides.** An unreachable case must fail loud however conservative its fallback looks; "it errs on the safe side" is not a reason to keep it. Do not let a `map_or(SAFE, …)` / `unwrap_or(SAFE)` pass just because `SAFE` could not itself miscompile.
+
+**Apply**: replace the fallback with `unreachable!("… {:?} vs {:?}", a, b)` (or `panic!` / `debug_assert!`) so a violated invariant fails at its origin with the offending values in the message. Crucially, **verify that the absorbed case really is impossible rather than trusting it** — exercise the code, or temporarily make the arm panic and run the suite. The case is often actually reachable; when the arm fires, you have found a real bug (this is one of the higher-yield checks — a swallowed case is exactly where latent bugs hide). Fix the upstream cause, and *then* the arm is genuinely unreachable.
+**Keep** the fallback only when the case turns out to be a **supported input** the caller legitimately reaches — and then document the concrete scenario, not a vague "just in case".
+**Report only** when converting to a hard failure could crash on inputs you cannot prove absent — flag it for the author to confirm the invariant.
+
+**Catch the refactor regression.** When a hunk *rewrites* an existing function, compare it against the version it replaced — not only against the review base. A refactor that relaxes a prior `assert!` / `unreachable!` / `panic!` into a silent default (a representation change that "simplifies" a fail-loud arm back into a `map_or(default)`) reintroduces a swallowed case, and that is as much a defect as writing one fresh. Read the pre-refactor body (`git show <base>:<file>` for the symbol) whenever a rewritten function now returns a default where it used to abort.
+
+**Scope for this convention: the whole touched file, not just the diff hunks.** Fallbacks accrete over time and refactors relocate them, so a hunk-only view routinely hides them (a swallowed case three functions away from the change is still the bug that bites). This is the one code-quality convention that overrides the aspect's usual hunk-only discipline: scan every function of each file the diff touches. For a correctness-critical subsystem (an analysis feeding codegen, a type checker, an optimizer), a periodic dedicated sweep of the whole subsystem — every `_ => …`, `unwrap_or`, `map_or`, `.get(…).unwrap_or…` — catches still more than any diff-triggered pass.
+
 #### Remove dead and half-finished code
 
 Delete:
@@ -505,7 +531,7 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 
 ### Scope Discipline
 
-- **Touch only code inside diff hunks.** Pre-existing violations in untouched parts of the file are out of scope.
+- **Touch only code inside diff hunks.** Pre-existing violations in untouched parts of the file are out of scope — with one exception: *Don't let a fallback silently handle a case the author calls impossible* is applied to the whole of each touched file, per that convention's own scope note.
 - **Do not redesign.** If the right fix is "extract a new module" or "rewrite this pipeline," report it; don't do it.
 - **One convention at a time per hunk.** If a hunk hits multiple conventions, apply the smallest fix that satisfies one, then re-check before moving on.
 
