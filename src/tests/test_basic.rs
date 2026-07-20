@@ -2995,13 +2995,16 @@ pub fn test95() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a write in the `true` branch of an `unsafe_is_unique` still clones when the value
+/// is shared between the check and the branch.
+///
+/// Reaching that branch means the value's reference count was one, which lets the operations in it
+/// drop their uniqueness checks. Sharing the value in between ends that: here the array is put into
+/// another array first, so the write in the branch has to clone instead of overwriting what the
+/// other holder sees. Both branches write, so the test fails on the wrong answer rather than on
+/// taking the other branch.
 #[test]
 pub fn test_is_unique_true_branch_invalidated_by_sharing() {
-    // Reaching the `true` branch of an `unsafe_is_unique` means the value's reference count was one,
-    // which lets the operations in that branch drop their uniqueness checks. Sharing the value
-    // between the check and the branch ends that: here the array is put into another array first, so
-    // the write in the branch has to clone instead of overwriting what the other holder sees. Both
-    // branches write, so the test fails on the wrong answer rather than on taking the other branch.
     let source = r#"
             module Main;
 
@@ -6945,11 +6948,13 @@ pub fn test_mutate_boxed_io() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that consecutive `mutate_boxed` writes to an unshared value accumulate in place.
+///
+/// Writing through the data pointer of a value nothing else holds updates it in place, so a second
+/// write sees what the first one left — including where the check that clones a shared value has
+/// been dropped as provably unnecessary.
 #[test]
 pub fn test_mutate_boxed_repeated() {
-    // Writing through the data pointer of a value nothing else holds updates it in place, so a second
-    // write sees what the first one left — including where the check that clones a shared value has
-    // been dropped as provably unnecessary.
     let source = r##"
         module Main;
 

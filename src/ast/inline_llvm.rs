@@ -79,8 +79,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     ///
     /// The conservative default is always sound, so an op that leaves it (here or in
     /// `borrows_operand`) where a more precise declaration is possible says in a comment why it does
-    /// and what it gives up. What a default costs shows up only in a benchmark, so recording it is what
-    /// keeps a deliberate choice from reading like an oversight.
+    /// and what it gives up.
     ///
     /// An `Arg(i, path)` leaf declares that the result leaf *is* argument `i`'s leaf, which also
     /// declares that argument leaf unconsumed. Two rules follow. It may only name a leaf the op passes

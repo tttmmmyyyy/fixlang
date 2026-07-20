@@ -12,6 +12,9 @@ mod struct_rmw_tests {
         tests::test_util::test_source,
     };
 
+    /// Verifies that `set_x` / `mod_x` on an unboxed struct clone a boxed field that another holder
+    /// shares, leave the untouched fields alone, and write in place when the struct is threaded
+    /// through a loop.
     #[test]
     pub fn test_unboxed_struct_field_update_correctness() {
         let source = r#"
@@ -59,6 +62,8 @@ main : IO () = (
         test_source(source, Configuration::develop_mode());
     }
 
+    /// Checks under valgrind that updating an unboxed struct releases a replaced boxed field exactly
+    /// once and leaks neither a field carried through nor a clone made for a shared one.
     #[test]
     pub fn test_unboxed_struct_field_update_memory_safety() {
         if !platform_valgrind_supported() {

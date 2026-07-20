@@ -392,6 +392,8 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that a value updated through a field of an unboxed struct keeps the provenance that
+    /// lets its check be dropped, so a loop over such a struct re-checks nothing.
     #[test]
     fn test_unique_check_elim_through_struct_field() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim_struct_field");

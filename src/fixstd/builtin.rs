@@ -5868,8 +5868,8 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     val_name: FullName,
     io_act_name: FullName,
-    // When true, clone the value first if it is shared, so the action writes into a uniquely owned
-    // one. Set false only where the value is statically known to be unique.
+    /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
+    /// one. Set false only where the value is statically known to be unique.
     pub(crate) force_unique: bool,
 }
 
@@ -6016,7 +6016,7 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     val_name: FullName,
     io_act_name: FullName,
     iostate_name: FullName,
-    // As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`.
+    /// As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`.
     pub(crate) force_unique: bool,
 }
 
