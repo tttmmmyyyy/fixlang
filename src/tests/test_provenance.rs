@@ -373,6 +373,8 @@ mod integration_tests {
             "PunchedArray::_unsafe_plug_bounds_uniqueness_unchecked",
             // A boxed-struct field `set` (field 0).
             "set_0 [unique]",
+            // A write through a boxed value's data pointer.
+            "mutate_boxed [unique]",
         ] {
             assert!(
                 dump.contains(elided),

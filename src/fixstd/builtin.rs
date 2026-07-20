@@ -5875,6 +5875,9 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     val_name: FullName,
     io_act_name: FullName,
+    // When true, clone the value first if it is shared, so the action writes into a uniquely owned
+    // one. Set false only where the value is statically known to be unique.
+    pub(crate) force_unique: bool,
 }
 
 #[typetag::serde]
@@ -5888,12 +5891,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let is_array = val.ty.is_array();
-        let val = if is_array {
-            make_array_unique(gc, val)
-        } else {
-            make_struct_union_unique(gc, val)
-        };
+        let val = force_unique_boxed(gc, val, self.force_unique);
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -5914,7 +5912,8 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
 
     fn name(&self) -> String {
         format!(
-            "mutate_boxed({}, {})",
+            "mutate_boxed{}({}, {})",
+            if self.force_unique { "" } else { " [unique]" },
             self.io_act_name.to_string(),
             self.val_name.to_string()
         )
@@ -5924,9 +5923,78 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         vec![&mut self.val_name, &mut self.io_act_name]
     }
 
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
+        if self.force_unique {
+            Some(UniqueCheckOperand {
+                container_index: MUTATE_BOXED_VALUE_ARG,
+                path: vec![],
+            })
+        } else {
+            None
+        }
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // The result is `(value, action result)`. The value comes back uniquely owned, since this op
+        // clones it when shared and is given it unique otherwise — the same reasoning as an array set,
+        // and what lets an operation on the value that follows drop its check. The action's result
+        // comes out of an indirect call and stays `Dyn`.
+        mutate_boxed_result_prov(result_ty, type_env, &[MUTATE_BOXED_VALUE_FIELD])
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
+
+/// The operand position of the value a `mutate_boxed` writes into.
+const MUTATE_BOXED_VALUE_ARG: usize = 0;
+/// The path of that value in the result of `_mutate_boxed_internal`, `(value, action result)`.
+const MUTATE_BOXED_VALUE_FIELD: usize = 0;
+
+/// Clone a boxed value when it is shared, so that a write into it is not observed elsewhere. Does
+/// nothing when `force_unique` is false, which is set only where the value is known to be unique.
+fn force_unique_boxed<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    val: Object<'c>,
+    force_unique: bool,
+) -> Object<'c> {
+    if !force_unique {
+        return val;
+    }
+    if val.ty.is_array() {
+        make_array_unique(gc, val)
+    } else {
+        make_struct_union_unique(gc, val)
+    }
+}
+
+/// The result provenance of a `mutate_boxed`: the value it returns at `value_path` is uniquely owned,
+/// and everything else it returns is of unknown sharing.
+fn mutate_boxed_result_prov(
+    result_ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    value_path: &[usize],
+) -> Provenance {
+    Provenance::build_shape(result_ty, type_env, &|path| {
+        let src = if path == value_path {
+            BaseSource::Fresh
+        } else {
+            BaseSource::Dyn
+        };
+        Provenance::leaf(src)
+    })
 }
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)
@@ -5955,6 +6023,7 @@ pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
                 Box::new(InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
                     val_name: FullName::local(VAL_NAME),
                     io_act_name: FullName::local(IO_ACT_NAME),
+                    force_unique: true,
                 }),
                 ab_ty,
                 None,
@@ -5971,6 +6040,8 @@ pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     val_name: FullName,
     io_act_name: FullName,
     iostate_name: FullName,
+    // As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`.
+    pub(crate) force_unique: bool,
 }
 
 #[typetag::serde]
@@ -5985,12 +6056,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         assert!(val.is_box(gc.type_env()));
 
         // Before mutating the value, force uniqueness of the value.
-        let is_array = val.ty.is_array();
-        let val = if is_array {
-            make_array_unique(gc, val)
-        } else {
-            make_struct_union_unique(gc, val)
-        };
+        let val = force_unique_boxed(gc, val, self.force_unique);
 
         // Get the data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
@@ -6020,7 +6086,8 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 
     fn name(&self) -> String {
         format!(
-            "_mutate_boxed_ios_internal({}, {}, {})",
+            "_mutate_boxed_ios_internal{}({}, {}, {})",
+            if self.force_unique { "" } else { " [unique]" },
             self.io_act_name.to_string(),
             self.val_name.to_string(),
             self.iostate_name.to_string(),
@@ -6035,10 +6102,45 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         ]
     }
 
+    fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
+        if self.force_unique {
+            Some(UniqueCheckOperand {
+                container_index: MUTATE_BOXED_VALUE_ARG,
+                path: vec![],
+            })
+        } else {
+            None
+        }
+    }
+
+    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+        let mut c = self.clone();
+        c.force_unique = false;
+        Box::new(c)
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`, with the pair this op returns
+        // wrapped in the `IOState` it threads.
+        mutate_boxed_result_prov(
+            result_ty,
+            type_env,
+            &[MUTATE_BOXED_IOS_PAIR_FIELD, MUTATE_BOXED_VALUE_FIELD],
+        )
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The path of the returned pair in the result of `_mutate_boxed_ios_internal`, `(state, pair)`.
+const MUTATE_BOXED_IOS_PAIR_FIELD: usize = 1;
 
 // _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> IOState -> (IOState, (a, b))
 pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
@@ -6072,6 +6174,7 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
                 io_act_name: FullName::local(IO_ACT_NAME),
                 val_name: FullName::local(VAL_NAME),
                 iostate_name: FullName::local(IOSTATE_NAME),
+                force_unique: true,
             }),
             ret_ty,
             None,

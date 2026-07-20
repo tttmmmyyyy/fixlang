@@ -14,6 +14,7 @@
 | `InlineLLVMStructSetBody` / `InlineLLVMStructPunchBody` / `InlineLLVMStructPlugInBody` | unbox struct の更新経路が leaf ごとの `Arg` を宣言していなかった（boxed 側だけ `Fresh`）。unbox struct はレジスタ上で分解・再構成するだけで新しい参照を作らないので、`MakeStructBody` と同形の passthrough が正確。**ベンチ `struct_field_mod` で -29.5%**（3,406,169,155 -> 2,401,769,183 Ir） |
 | `InlineLLVMMarkThreadedFunctionBody` | 既定の `Dyn` は**意図的**（plan §3.3・[5]・[#F4] の `is_unique ⟹ LOCAL` 補題の土台）なのに、その旨がコードに無かった。明示 override + 理由コメントにした。passthrough にすると呼び出し側が threaded object への `Fresh` handle を保持でき、他スレッドから見える値を素で in-place 破壊する |
 | `InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased` / `InlineLLVMArrayUnsafeSetSizeBody` | passthrough にできるが `is_unique` と同じ罠のため `Dyn` のまま。理由と失うもの（この配列への後続 `set` がチェックを保つ）をコメントに残した |
+| `InlineLLVMUnsafeMutateBoxedInternalFunctionBody` / `InlineLLVMUnsafeMutateBoxedIOSInternalBody` | force-unique した値を返すのに `result_prov` 未宣言、かつ `unique_check_operand` も未宣言で自分のチェックも畳めなかった。返る値の leaf を `Fresh` にし、`force_unique` フラグ + `unique_check_operand` / `assuming_unique` を足した。**ベンチ `mutate_boxed_loop` で -8.4%**（598,306,544 -> 548,266,485 Ir） |
 
 ## フレームワーク側の非対称性（fail-loud 化した）
 
@@ -48,13 +49,6 @@ Array/Storage 再設計（`dev-docs/2026-07-18-array-buffer-representation/desig
 - `InlineLLVMArrayForceUniqueBody`（`push_back` / `sort` / `reserve` が使う）
 - `InlineLLVMArrayPopBackNonemptyBody`
 - `InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained` の force-unique 版（`result_prov` も未宣言）
-
-## 未対応で残るもの
-
-- `InlineLLVMUnsafeMutateBoxedInternalFunctionBody` / `InlineLLVMUnsafeMutateBoxedIOSInternalBody`:
-  force-unique した値を返すのに `result_prov` 未宣言（`[0]` は `Fresh` にできる）、かつ
-  `unique_check_operand` も未宣言（自分のチェックも畳めない）。FFI で配列を書き換える標準経路
-  （std の `to_string_precision` 系、minilib の FFI、gmp/mpfr）なので、再設計後も残る。
 
 ## borrows_operand
 

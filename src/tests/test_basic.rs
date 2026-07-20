@@ -6946,6 +6946,27 @@ pub fn test_mutate_boxed_io() {
 }
 
 #[test]
+pub fn test_mutate_boxed_repeated() {
+    // Writing through the data pointer of a value nothing else holds updates it in place, so a second
+    // write sees what the first one left — including where the check that clones a shared value has
+    // been dropped as provably unnecessary.
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let x = Array::fill(4, 0_U8);
+            let (x, _) = x.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
+            let (x, _) = x.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
+            assert_eq(|_|"second write", x.@(0), 2_U8);;
+            assert_eq(|_|"first write kept", x.@(3), 1_U8);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_mutate_boxed_shared() {
     let source = r##"
         module Main;
