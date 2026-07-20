@@ -86,6 +86,19 @@ RC IR dump と LLVM IR の実測で見つかったもの。どちらも健全性
   その `unique_check_operand` が指すコンテナ leaf を `Unique` として解釈する。
 - **`result_prov` は `Dyn` のまま**にすること。ここを触ると上の事故が再発する。
 
+位置づけ(リスクの見積もりに使ってください):
+
+- Fix ソースから到達できる mutate 経路は、`_unsafe_force_unique` と `*_uniqueness_unchecked` を
+  廃止すると**すべて COW 内蔵**になる。`set` / `swap` / `mod` / `act` / punch・plug の force-unique 版 /
+  `truncate` はもちろん、`FFI::mutate_boxed` も codegen が書き込み前に `make_array_unique` /
+  `make_struct_union_unique` を通す。foreign resource は `Destructor::mutate_unique` が
+  ユーザ提供のコピーコンストラクタで複製する(gmp / mpfr がこの形)。`borrow_boxed` は
+  doc のとおり書き込み禁止。
+- したがって `is_unique` の分岐は**両方の枝が個別に正しい**、純粋な性能ヒントになる。
+  判定が楽観側にずれても、unique 枝の op が自分で COW するので破壊は起きない。
+- つまりこの精密化は**最適化であって、健全性の修正ではない**。効かなくても遅くなるだけなので、
+  疑わしければ保守側(精密化しない)に倒してよい。
+
 健全性:
 
 - true 枝に入った時点で refcount == 1 なのは事実。その後 retain が挿入されて共有になっても、
