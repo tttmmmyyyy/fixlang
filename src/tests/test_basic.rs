@@ -329,6 +329,30 @@ pub fn test_unique_check_elim_reprojected_alias_shared() {
 }
 
 #[test]
+pub fn test_unique_check_elim_reprojected_alias_live_across_mutation() {
+    // An unboxed tuple's boxed field is projected into `y` and again into `a`; `a` is mutated while
+    // `y` is read only afterwards. Both name the same array, so the mutation must keep its check.
+    // Unlike the sibling test that shares the first projection by storing it in a tuple, here the
+    // sharing comes purely from `y` staying live across the mutation. Run under memcheck so a wrongly
+    // elided check (an in-place write into the array `y` also holds) shows as corruption.
+    let source = r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let t = (Array::fill(3, 7), 0);
+                let y = t.@0;
+                let a = t.@0;
+                let a = a.set(0, 99);
+                assert_eq(|_|"mutated", a.@(0), 99);;
+                assert_eq(|_|"held intact", y.@(0), 7);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+#[test]
 pub fn test_unique_check_elim_specialized_shared_and_unique() {
     // A function that mutates its array argument in place is specialized per caller: a unique caller
     // gets a clone with the check dropped (writing in place), a shared caller keeps the checked
