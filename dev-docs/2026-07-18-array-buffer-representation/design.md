@@ -646,13 +646,18 @@ COW を畳むための「force unique しない」機構)、**borrow 化属性**
   registration 固定・非 fold、swap=true / unsafe=false)。force-unique: `Some{0,[0]}`。borrows: なし。prov: `Fresh`。
 - **`punch`**(`InlineLLVMArrayPunchBody`、InlineLLVM)— `(PunchedArray a, a)` を返す。`if force_unique {
   make_storage_unique }`; `elem = noretain_read(idx)`(hole を残す、size 不変); `ret (PunchedArray{_arr:arr, _idx:idx},
-  elem)`。force-unique: `Some{0,[0]}`。borrows: なし。prov: default `Dyn`(override すると `mod` の plug を COW 版へ
-  寄せられる、§3.3)。COW 版・no-COW 版の両方を維持。
+  elem)`。force-unique: `Some{0,[0]}`。borrows: なし。prov: **per-leaf を実装する**(`Provenance::build_shape`)—
+  punched-array leaf(path `[0]`)= `Fresh`、moved-out 要素 leaf(path `[1]`)= `Dyn`。要素は retain せずに
+  取り出しており他所から参照され得るので、そこを `Fresh` にすると後続の in-place 更新が共有要素を壊す。
+  これが無いと `mod` の COW plug の operand が `Dyn` になり畳めない(§3.3)。**登録シンボルは COW 版だけにする**
+  (`_unsafe_punch_bounds_uniqueness_unchecked` は削除)。`force_unique` フィールド自体は残す — `assuming_unique`
+  が畳んだ版を作るのに使う。`InlineLLVMStructPunchBody` も同じ形。
 - **`plug`**(`InlineLLVMPunchedArrayPlugBody`、InlineLLVM)— `PunchedArray{_arr,_idx}` を分解、`if force_unique {
   make_storage_unique_with_hole(_arr, Some(idx)) }`; `write(idx, elem, release_old=false)`; `ret arr`。
   force-unique: `Some{container_index:1, path:[0]}`(operand 1 = punched、その field 0 = `_arr`)。PunchedArray は
   Fix struct なので field 0 で `_arr` に届き、`_arr`(Array custom unit)の storage uniqueness を見る。borrows: なし
-  (elem[0]・punched[1] consume)。prov: `Fresh`。
+  (elem[0]・punched[1] consume)。prov: `Fresh`。**登録シンボルは COW 版だけにする**
+  (`_unsafe_plug_bounds_uniqueness_unchecked` は削除)。`force_unique` フィールドは `assuming_unique` 用に残す。
 - **`unsafe_is_unique`**(`InlineLLVMIsUniqueFunctionBody`、InlineLLVM)— `(Bool, a)`。`if !assume_unique &&
   obj.is_box { flag = build_branch_by_is_unique(obj) } else { flag = const true }`。フィールド `assume_unique: bool`。
   force-unique: `unique_check_operand = Some{0, []}` iff `!assume_unique`; `assuming_unique` が `assume_unique=true`
