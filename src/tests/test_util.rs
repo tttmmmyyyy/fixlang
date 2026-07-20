@@ -37,16 +37,34 @@ fn build_fix() {
     });
 }
 
-/// Absolute path to this worktree's freshly built `fix` binary. Honors
-/// `CARGO_TARGET_DIR`; otherwise the crate's own `target` directory. Because
-/// each git worktree compiles into its own target directory, this resolves to
-/// a different binary per worktree — so tests running concurrently in several
-/// worktrees exercise their own build and never share an install location.
-fn fix_binary_path() -> PathBuf {
+/// Absolute path to the directory holding this worktree's freshly built `fix`
+/// binary. Honors `CARGO_TARGET_DIR`; otherwise the crate's own `target`
+/// directory. Because each git worktree compiles into its own target
+/// directory, this resolves to a different binary per worktree — so tests
+/// running concurrently in several worktrees exercise their own build and
+/// never share an install location.
+fn fix_binary_dir() -> PathBuf {
     let target_dir = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"));
-    target_dir.join("release").join("fix")
+    target_dir.join("release")
+}
+
+/// Absolute path to this worktree's freshly built `fix` binary.
+fn fix_binary_path() -> PathBuf {
+    fix_binary_dir().join("fix")
+}
+
+/// `PATH` with this worktree's build directory in front. A test project may
+/// look `fix` up by name from its own subprocess (e.g. cp-library's IO test
+/// runs `fix run` on a generated program), and such a lookup has to find the
+/// binary under test.
+fn path_env_with_fix_binary_dir() -> std::ffi::OsString {
+    let mut dirs = vec![fix_binary_dir()];
+    if let Some(path) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path));
+    }
+    std::env::join_paths(dirs).expect("The build directory path contains a path separator.")
 }
 
 /// A `Command` that runs this worktree's freshly built `fix` binary by absolute
@@ -56,7 +74,9 @@ fn fix_binary_path() -> PathBuf {
 /// worktree may be overwriting.
 pub fn fix_command() -> Command {
     build_fix();
-    Command::new(fix_binary_path())
+    let mut command = Command::new(fix_binary_path());
+    command.env("PATH", path_env_with_fix_binary_dir());
+    command
 }
 
 fn run_source(
