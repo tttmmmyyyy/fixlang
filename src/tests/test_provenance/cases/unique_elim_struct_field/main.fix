@@ -1,0 +1,21 @@
+module Main;
+
+// A mutation loop whose state is an unboxed struct holding the array. `mod_arr` punches the array
+// out of the struct and plugs the updated one back in, and neither step retains or releases
+// anything — the struct is only taken apart and put back together in registers. So the array
+// arrives at the `set` with what is known about it intact, and the loop drops the check from every
+// iteration after the first, exactly as it does for a bare array.
+type State = unbox struct { arr : Array I64, tag : I64 };
+
+fill_up : State -> State;
+fill_up = |s| loop((0, s), |(i, s)|
+    if i == 4 { break $ s };
+    continue $ (i + 1, s.mod_arr(|a| a.set(i, i)))
+);
+
+main : IO ();
+main = (
+    let s = State { arr : Array::fill(4, 0), tag : 7 };
+    let s = fill_up(s);
+    println $ (s.@arr.@(3) + s.@tag).to_string
+);

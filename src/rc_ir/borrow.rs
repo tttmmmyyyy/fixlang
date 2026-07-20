@@ -435,10 +435,26 @@ fn passthrough_arg_leaves(
 }
 
 /// Collect every `Arg(i, path)` symbol appearing in a declared provenance.
+///
+/// An `Arg` must be the sole source of its leaf. The two readers of a declaration disagree on a leaf
+/// that names an argument among other sources: `root` (through `single_arg`) makes such a leaf a
+/// producer, while this function still reads it as a passthrough. The result would be an argument
+/// whose consume is dropped without the result aliasing it — two owned references to one object, so
+/// two releases. An op that wants to say "either the argument or a new value" has no way to say it,
+/// and gets stopped here rather than silently miscompiled.
 fn collect_arg_leaves(prov: &Provenance, out: &mut Set<(usize, Path)>) {
     for ls in prov.leaves() {
         for s in ls {
             if let BaseSource::Arg(i, p) = s {
+                if ls.len() != 1 {
+                    unreachable!(
+                        "an op declares Arg({}, {:?}) among {} sources of one leaf; \
+                         a passthrough must be the leaf's only source",
+                        i,
+                        p,
+                        ls.len()
+                    );
+                }
                 out.insert((*i, p.clone()));
             }
         }

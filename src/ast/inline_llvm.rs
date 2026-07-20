@@ -81,6 +81,14 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// `borrows_operand`) where a more precise declaration is possible says in a comment why it does
     /// and what it gives up. What a default costs shows up only in a benchmark, so recording it is what
     /// keeps a deliberate choice from reading like an oversight.
+    ///
+    /// An `Arg(i, path)` leaf declares that the result leaf *is* argument `i`'s leaf, which also
+    /// declares that argument leaf unconsumed. Two rules follow. It may only name a leaf the op passes
+    /// through without producing a new reference to it — an op that hands back a value whose reference
+    /// count or sharing it also reports on, or that publishes the value, must not (see
+    /// `InlineLLVMIsUniqueFunctionBody` and `InlineLLVMMarkThreadedFunctionBody`, which say why). And
+    /// it must be the leaf's only source: a leaf that names an argument among other sources is
+    /// rejected by `collect_arg_leaves`.
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,

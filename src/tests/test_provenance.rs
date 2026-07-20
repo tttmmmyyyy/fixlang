@@ -391,6 +391,24 @@ mod integration_tests {
     }
 
     #[test]
+    fn test_unique_check_elim_through_struct_field() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_struct_field");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // The loop updates the array through a field of an unboxed struct. Taking that struct apart
+        // and putting it back together moves the fields in registers without touching a reference
+        // count, so the array reaches the `set` as the same value the loop was entered with: the
+        // clone reached with the fresh array drops the check, exactly as for a bare array. Without
+        // the field update carrying provenance through, every iteration would re-check an array
+        // already proven unique.
+        assert!(
+            dump.contains("Array::set [unique]"),
+            "the set on the array carried through the struct field should drop its check:\n{}",
+            dump
+        );
+    }
+
+    #[test]
     fn test_unique_check_elim_shared_loop_entry() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim_shared_loop");
         let dump = emit_main_rc_ir(&project_dir);

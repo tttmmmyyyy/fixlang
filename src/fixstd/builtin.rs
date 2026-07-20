@@ -3469,23 +3469,48 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // The result is `(field, punched struct)`. Force-uniquing clones a shared boxed struct, so the
-        // punched struct it returns is uniquely owned; that is what lets the `plug_in` completing the
-        // update drop its own check. The field is moved out without a retain, so another holder of it
-        // may still be live and its leaves stay `Dyn`. An unboxed struct is force-uniqued by doing
-        // nothing (its fields keep whatever sharing they had), so its leaves stay `Dyn` too, as do the
-        // leaves of a struct punched without force-uniquing — for the reason
-        // `InlineLLVMArrayPunchBody::result_prov` gives.
+        // The result is `(field, punched struct)`.
+        //
+        // Punching a boxed struct force-uniques it, which clones it when shared, so the punched struct
+        // is uniquely owned; that is what lets the `plug_in` completing the update drop its own check.
+        // The field is moved out without a retain, so another holder of it may still be live and its
+        // leaves stay `Dyn`. Without force-uniquing the punched struct is as shared as the argument
+        // was, and stays `Dyn` for the reason `InlineLLVMArrayPunchBody::result_prov` gives.
+        //
+        // Punching an unboxed struct only takes it apart in registers: the field and the remaining
+        // fields carry the argument's, and nothing is retained or released. Declaring those
+        // passthroughs is what carries a boxed field — an array in a loop state, say — through
+        // `mod`/`act` with what is known about it intact. The punched-out field is left holding a
+        // value the struct no longer owns; it names nothing, so `Dyn` says the least about it.
         let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
-        let fresh_punched = self.force_unique && punched_ty.is_box(type_env);
+        if punched_ty.is_box(type_env) {
+            let fresh_punched = self.force_unique;
+            return Provenance::build_shape(result_ty, type_env, &|path| {
+                let punched_struct = path.first() == Some(&PUNCHED_STRUCT_FIELD);
+                let src = if punched_struct && fresh_punched {
+                    BaseSource::Fresh
+                } else {
+                    BaseSource::Dyn
+                };
+                Provenance::leaf(src)
+            });
+        }
         Provenance::build_shape(result_ty, type_env, &|path| {
-            let punched_struct = path.first() == Some(&PUNCHED_STRUCT_FIELD);
-            let src = if punched_struct && fresh_punched {
-                BaseSource::Fresh
-            } else {
-                BaseSource::Dyn
-            };
-            Provenance::leaf(src)
+            // A boxed leaf of the result descends through the field or through the punched struct.
+            let (head, rest) = path
+                .split_first()
+                .expect("a boxed leaf of an unboxed pair has a non-empty path");
+            if *head != PUNCHED_STRUCT_FIELD {
+                let mut p = vec![self.field_idx];
+                p.extend_from_slice(rest);
+                return Provenance::leaf(BaseSource::Arg(0, p));
+            }
+            match rest.split_first() {
+                Some((field, _)) if *field != self.field_idx => {
+                    Provenance::leaf(BaseSource::Arg(0, rest.to_vec()))
+                }
+                _ => Provenance::leaf(BaseSource::Dyn),
+            }
         })
     }
 
@@ -3593,7 +3618,7 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
             Some(UniqueCheckOperand {
-                container_index: 0,
+                container_index: PLUG_IN_PUNCHED_ARG,
                 path: vec![],
             })
         } else {
@@ -3613,23 +3638,38 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // A boxed struct `set`, or the `plug` that completes a `mod`, leaves the struct uniquely
-        // owned — a `set` clones when shared and writes in place when unique, and a `mod`
-        // force-uniques in its punch, so either way the result's uniqueness does not depend on the
-        // input, like an array set. This is what lets a chain of field updates drop every check
-        // after the first. The unboxed cases have no uniqueness check to elide, so the conservative
-        // `Dyn` default suffices.
+        // The `plug_in` that completes a `mod` of a boxed struct leaves it uniquely owned — this op
+        // clones when shared, and the punch it completes force-uniques — so the result's uniqueness
+        // does not depend on the input, like an array set. This is what lets a chain of field updates
+        // drop every check after the first.
         if result_ty.is_box(type_env) {
-            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-        } else {
-            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+            return Provenance::uniform(result_ty, type_env, BaseSource::Fresh);
         }
+        // Plugging into an unboxed struct puts it back together in registers: the plugged field holds
+        // the field operand and every other field holds the punched struct's, with nothing retained or
+        // released. Declaring those passthroughs is the other half of what carries a boxed field
+        // through `mod`/`act` with what is known about it intact.
+        Provenance::build_shape(result_ty, type_env, &|path| {
+            // A boxed leaf of an unboxed struct starts with a field index.
+            let (field, rest) = path
+                .split_first()
+                .expect("a boxed leaf of an unboxed struct has a non-empty path");
+            if *field == self.field_idx {
+                Provenance::leaf(BaseSource::Arg(PLUG_IN_FIELD_ARG, rest.to_vec()))
+            } else {
+                Provenance::leaf(BaseSource::Arg(PLUG_IN_PUNCHED_ARG, path.clone()))
+            }
+        })
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The operand positions of a struct `plug_in`: the punched struct, then the field value.
+const PLUG_IN_PUNCHED_ARG: usize = 0;
+const PLUG_IN_FIELD_ARG: usize = 1;
 
 // Field plugging-in function for a given struct.
 // If the struct is `S` and the field is `F`, then the function has the type `Sx -> F -> S` where `Sx` is the punched struct type.
@@ -4459,7 +4499,7 @@ impl LLVMGen for InlineLLVMStructSetBody {
     fn unique_check_operand(&self) -> Option<UniqueCheckOperand> {
         if self.force_unique {
             Some(UniqueCheckOperand {
-                container_index: 1,
+                container_index: STRUCT_SET_STRUCT_ARG,
                 path: vec![],
             })
         } else {
@@ -4479,23 +4519,37 @@ impl LLVMGen for InlineLLVMStructSetBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // A boxed struct `set`, or the `plug` that completes a `mod`, leaves the struct uniquely
-        // owned — a `set` clones when shared and writes in place when unique, and a `mod`
-        // force-uniques in its punch, so either way the result's uniqueness does not depend on the
-        // input, like an array set. This is what lets a chain of field updates drop every check
-        // after the first. The unboxed cases have no uniqueness check to elide, so the conservative
-        // `Dyn` default suffices.
+        // A boxed struct `set` leaves the struct uniquely owned — it clones when shared and writes in
+        // place when unique — so the result's uniqueness does not depend on the input, like an array
+        // set. This is what lets a chain of field updates drop every check after the first.
         if result_ty.is_box(type_env) {
-            Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
-        } else {
-            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+            return Provenance::uniform(result_ty, type_env, BaseSource::Fresh);
         }
+        // An unboxed struct is repackaged in registers: the updated field holds the value operand, and
+        // every other field holds the same field of the struct operand. No new reference is made, so
+        // both are passthroughs, exactly as when the struct is built from its fields. The replaced
+        // field's old leaf reaches no result path and so stays consumed, which is the release above.
+        Provenance::build_shape(result_ty, type_env, &|path| {
+            // A boxed leaf of an unboxed struct starts with a field index.
+            let (field, rest) = path
+                .split_first()
+                .expect("a boxed leaf of an unboxed struct has a non-empty path");
+            if *field == self.field_idx as usize {
+                Provenance::leaf(BaseSource::Arg(STRUCT_SET_VALUE_ARG, rest.to_vec()))
+            } else {
+                Provenance::leaf(BaseSource::Arg(STRUCT_SET_STRUCT_ARG, path.clone()))
+            }
+        })
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+
+/// The operand positions of a struct `set`: the new field value, then the struct.
+const STRUCT_SET_VALUE_ARG: usize = 0;
+const STRUCT_SET_STRUCT_ARG: usize = 1;
 
 // `set` built-in function for a given struct.
 pub fn struct_set(
@@ -6233,6 +6287,23 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // This op returns the object it was given, yet its result is `Dyn` and its argument is
+        // consumed, and it must stay that way. Unique-check elimination drops a check on the strength
+        // of a value being uniquely owned, which for a value another thread can reach is only sound
+        // because a threaded value can never be held through a `Fresh` handle: the two ways to make a
+        // value threaded — this op and `boxed_from_retained_ptr` — both hand back a `Dyn` one.
+        // Declaring the argument a passthrough would break that on both counts, since it also declares
+        // the argument unconsumed: the caller would keep a `Fresh` handle to an object it has just
+        // published to other threads, and a write through that handle would race.
+        Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
     }
 
     fn as_any(&self) -> &dyn Any {
