@@ -281,6 +281,15 @@ COW 判定は Array 専用版を使うので破壊は起きない。
   その場で refcount を読めるので確実(そもそも `#ArrayStorage` はユーザーが名前を書けず、値として取り出す API も無い、§2.2)。
 - unique-check-elim の static fold は Array 専用版に適用(`_storage` が provably-unique なら const-`true` に畳む)。
   ランタイム版(`InlineLLVMIsUniqueFunctionBody` 相当を Array 用に)と fold の両方を用意する。
+- **属性は generic `unsafe_is_unique` と同型にする**: `unique_check_operand = Some{0, storage leaf}`、
+  `assuming_unique` が const-`true` 版を返す、`borrows_operand` は無し(operand 0 を意図的に consume)、
+  `result_prov` は **`Dyn` 固定**。最後の 1 つは generic 版と同じ理由による — 第 2 成分は引数そのものだが、
+  passthrough(`Arg`)と宣言すると borrow パスがそれをエイリアス兼「非消費」と解釈し、後続 use が引数を
+  shared に読ませる retain を抑止するので、共有 storage を unique と誤判定する。
+  同型にしておくと、unique-check-elim 側で検討されている「`is_unique` の true 枝で operand を `Unique` と
+  解釈する経路依存の精密化」(`dev-docs/2026-06-28-unique-check-elim/findings-2026-07-20-provenance-gaps.md`)が
+  入ったとき、この op もそのまま対象になる。精密化が op の具象型で判定する実装になった場合は、この op を
+  認識対象に加えること。`act` の unique 枝の COW punch はそれで畳めるようになる。
 - さらに **generic `unsafe_is_unique` に `[a : Boxed]` 制約を付ける**(現状は無制約で unboxed に `const true`
   を返す)。こうすると Array を unbox にした瞬間 `arr.unsafe_is_unique` が **型エラー**になり、silent な
   誤 const-true を型システムが弾いて `Array::_unsafe_is_storage_unique` へ誘導できる。`else { const true }` 枝は
@@ -651,6 +660,12 @@ COW を畳むための「force unique しない」機構)、**borrow 化属性**
   prov: **`Dyn` 固定(TRAP)** — 第2成分は引数そのものだが passthrough にすると「後続 use が arg を shared に読ませる
   retain」を抑止し fold が誤って on になる。**Dyn を保つ**。redesign: `[a:Boxed]` 追加。Array には下記
   `_unsafe_is_storage_unique` を使う。
+- **NEW `_unsafe_is_storage_unique`**(`Array::_unsafe_is_storage_unique : Array a -> (Bool, Array a)`、InlineLLVM)
+  — Array value の field 0(storage Ptr)の refcount を **retain せずに**読み、`(Bool, Array a)` を返す。
+  `unsafe_is_unique` と**同型の属性**にする: force-unique: `unique_check_operand = Some{0, storage leaf}` iff
+  `!assume_unique`; `assuming_unique` が `assume_unique=true`(flag が const `true`)。borrows: **なし
+  (operand 0 を意図的に consume)**。prov: **`Dyn` 固定(同じ TRAP)**。generic 版と同型にする理由は §3.3 —
+  経路依存の精密化が入ったときにこの op もそのまま対象になる。
 - **NEW `_unsafe_grow_size`**(`_unsafe_set_size` から改名、InlineLLVM)— 旧 body は `insert_field(LEN, n)` のみで
   COW 無し。**redesign で force-unique 分岐を新設**(`force_unique` field + `unique_check_operand=Some{0,[0]}` +
   `assuming_unique`)— value `_size` を n に伸ばす前に Storage を COW。理由: `_size` を書くのは unique な `_storage` に
