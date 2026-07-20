@@ -482,8 +482,12 @@ generic(`_get_boxed_ptr`、`mutate_boxed`/`borrow_boxed`、`boxed_to_retained_pt
 - **String**: `String = unbox struct { _data : Array U8 }` の C-interop chain(`_get_c_str`、`_unsafe_from_c_str`、
   `borrow_c_str`)は `_data` の `borrow_elements`/`mutate_elements` 経由へ差し替える(公開 sig 不変)。C 文字列
   ポインタ = `Array U8` の buffer データポインタ。数値の `to_bytes`/`from_bytes` も追随。
-- FFI body 全体の `is_box`/`is_unbox` assert(Array を boxed と仮定していた箇所)は、Array が unbox・要素は
-  `#ArrayStorage` object になったことに合わせて更新する。
+- `[a : Boxed]` の FFI primitive(`_get_boxed_ptr` / `_mutate_boxed_internal` / `_mutate_boxed_ios_internal`)の body に
+  ある **Array 特別扱いは dead code になるので削除する**: `get_data_pointer_from_boxed_value` の `is_array` ->
+  `ARRAY_BUF_IDX` 分岐と、mutate 側の `is_array` 分岐。Array が `Boxed` を外れる(§7 冒頭)ため、これらの generic に
+  Array は到達しなくなる(`#ArrayStorage` も Boxed instance を持たないので同様)。**`assert!(is_box)` 自体は不変**
+  (以後 Array を受け取らないだけ)。Array のデータポインタは `Array::borrow_elements` / `mutate_elements` の
+  InlineLLVM が自前で計算する(value field 0 の storage ptr -> `#ArrayStorage` の `STORAGE_BUF_IDX` へ GEP)。
 
 ## 8. Debug info
 
