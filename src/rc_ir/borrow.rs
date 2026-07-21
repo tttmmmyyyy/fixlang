@@ -59,15 +59,18 @@ enum Binding {
     /// `let x = op(args)`: an alias when the result leaf is a pure projection of one argument,
     /// otherwise a producer. Carries the result type to consult `result_prov`.
     Llvm(Box<dyn LLVMGen>, Vec<RcVar>, Arc<TypeNode>),
-    /// `let x = f(args)` or a closure or a match — an opaque producer.
+    /// `let x = f(args)` or a closure — an opaque producer.
     Producer,
     /// A `destructure` field: field `idx` of the container.
     Field(RcVar, usize),
     /// A `match`-arm payload: the variant tag (`None` for a catch-all), and the scrutinee.
     Payload(RcVar, Option<usize>),
+    /// `let x = match ...`: the value each arm returns. A match binding produces nothing of its own —
+    /// it receives one of these, chosen by the path taken — so its object identity is path-dependent.
+    Join(Vec<RcVar>),
 }
 
-/// The per-function vars `root` and the consume walk need: how each local variable is bound, which
+/// The per-function vars `origin` and the consume walk need: how each local variable is bound, which
 /// closure value targets which function, the function's own parameters, and every variable's type
 /// (so a leaf that roots at any variable can be clamped to its reference-counting unit).
 struct VarTable {
@@ -101,10 +104,15 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
             let mut consumed = vec![];
             collect_consumes(&func.body, vars, prog, &own, type_env, &mut consumed);
             for (var, path) in consumed {
-                let (root_var, root_path) = root(vars, type_env, &var, &path);
-                // Attribute the consume to the parameter it originates from, if any, and own it.
-                if vars.param_tys.contains_key(&root_var) && own.insert((root_var, root_path)) {
-                    changed = true;
+                // Attribute the consume to the parameters it may originate from, and own them. A
+                // consumed leaf that is one of several objects is consumed whichever it is, so every
+                // parameter it may be has to be owned.
+                for (root_var, root_path) in origin(vars, type_env, &var, &path).candidates() {
+                    if vars.param_tys.contains_key(root_var)
+                        && own.insert((root_var.clone(), root_path.clone()))
+                    {
+                        changed = true;
+                    }
                 }
             }
         }
@@ -164,6 +172,7 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
                 }
                 RcRhs::App(..) => Binding::Producer,
                 RcRhs::Match(scrut, arms) => {
+                    let mut arm_results = vec![];
                     for arm in arms {
                         vars.bindings.insert(
                             arm.payload.name.clone(),
@@ -172,8 +181,9 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
                         vars.var_tys
                             .insert(arm.payload.name.clone(), arm.payload.ty.clone());
                         collect_bindings(&arm.body, vars);
+                        arm_results.push(returned_var(&arm.body).clone());
                     }
-                    Binding::Producer
+                    Binding::Join(arm_results)
                 }
             };
             vars.bindings.insert(x.name.clone(), def);
@@ -194,20 +204,103 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
     }
 }
 
-/// The object a leaf originates from: follow alias edges (move-binds, pure projections, unboxed-union
-/// payloads) back to the producing variable and path. The returned variable is a parameter when the
-/// leaf ultimately comes from an input.
-fn root(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> VarPath {
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        root_inner(vars, type_env, var, path)
+/// The variable an expression returns: the one that its final `Ret` names. Every construct of the RC
+/// IR has a single continuation, so a body has exactly one such `Ret` (a match's arms each have their
+/// own, which return the arm's value to the match binding).
+fn returned_var(node: &RcExprNode) -> &RcVar {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || match node.expr.as_ref() {
+        RcExpr::Ret(v) => v,
+        RcExpr::Let(_, _, k)
+        | RcExpr::Destructure(_, _, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k)
+        | RcExpr::Eval(_, k) => returned_var(k),
     })
 }
 
-fn root_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> VarPath {
-    let here = || (var.clone(), path.to_vec());
+/// Where the object at a leaf comes from.
+#[derive(Debug, PartialEq, Eq)]
+enum Origin {
+    /// The leaf denotes exactly this object.
+    Exactly(VarPath),
+    /// The leaf denotes one of `candidates`, chosen by the path taken. `identity` names the match
+    /// binding that joins them: every alias chain through that binding agrees on the name, so it is
+    /// the name to use where one name for the value is required.
+    Join {
+        identity: VarPath,
+        candidates: Set<VarPath>,
+    },
+}
+
+impl Origin {
+    /// The one name for the value, for a reader that pairs operations on it — reference-count
+    /// cancellation pairs a retain with the release that un-bumps it, and only a single identity can
+    /// decide that. Two leaves with the same identity hold the same reference.
+    fn identity(&self) -> &VarPath {
+        match self {
+            Origin::Exactly(p) => p,
+            Origin::Join { identity, .. } => identity,
+        }
+    }
+
+    /// Every object the leaf may denote, for a reader whose answer has to hold on all paths.
+    fn candidates(&self) -> Vec<&VarPath> {
+        match self {
+            Origin::Exactly(p) => vec![p],
+            Origin::Join { candidates, .. } => candidates.iter().collect(),
+        }
+    }
+
+    /// Every object an operation on the leaf acts on: the reference the leaf holds, which `identity`
+    /// names, and the object that reference belongs to, which is any of `candidates`.
+    fn acted_on(&self) -> Vec<&VarPath> {
+        let mut out = vec![self.identity()];
+        out.extend(
+            self.candidates()
+                .into_iter()
+                .filter(|p| *p != self.identity()),
+        );
+        out
+    }
+}
+
+/// Where a leaf's object comes from: follow alias edges (move-binds, pure projections, unboxed-union
+/// payloads, catch-all payloads) back to the variable that produced it. The variable is a parameter
+/// when the leaf ultimately comes from an input, and a `Join` when a match forwards several arms'
+/// values to one binding.
+fn origin(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+        origin_inner(vars, type_env, var, path)
+    })
+}
+
+fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
+    let here = || Origin::Exactly((var.clone(), path.to_vec()));
     match vars.bindings.get(var) {
         None | Some(Binding::Param) | Some(Binding::Producer) => here(),
-        Some(Binding::Move(y)) => root(vars, type_env, &y.name, path),
+        Some(Binding::Move(y)) => origin(vars, type_env, &y.name, path),
+        Some(Binding::Join(arm_results)) => {
+            // The arms bind their values to one variable, so a path into it is a path into each of
+            // them. Arms that all reach the same object leave the value exact.
+            let mut candidates = Set::default();
+            for r in arm_results {
+                for p in origin(vars, type_env, &r.name, path).candidates() {
+                    candidates.insert(p.clone());
+                }
+            }
+            match candidates.len() {
+                1 => Origin::Exactly(
+                    candidates
+                        .into_iter()
+                        .next()
+                        .expect("a one-element set has an element"),
+                ),
+                _ => Origin::Join {
+                    identity: (var.clone(), path.to_vec()),
+                    candidates,
+                },
+            }
+        }
         Some(Binding::Llvm(llvm_gen, args, result_ty)) => {
             // Constructing an unboxed union lays its payload in place, so the whole union's root is
             // the payload's root — the construction alias edge, dual to reading a payload out with
@@ -218,7 +311,7 @@ fn root_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize
                 && llvm_gen.as_any().is::<InlineLLVMMakeUnionBody>()
                 && !result_ty.is_box(type_env)
             {
-                return root(vars, type_env, &args[0].name, &[]);
+                return origin(vars, type_env, &args[0].name, &[]);
             }
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             let decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env);
@@ -229,7 +322,7 @@ fn root_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize
             // A path with no declared leaf is not a projection either: a reference-counting unit
             // path may name the root of an unboxed union, which is a subtree rather than a leaf.
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
-                Some((j, p)) => root(vars, type_env, &args[j].name, &p),
+                Some((j, p)) => origin(vars, type_env, &args[j].name, &p),
                 None => here(),
             }
         }
@@ -240,18 +333,18 @@ fn root_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize
             } else {
                 let mut p = vec![*idx];
                 p.extend_from_slice(path);
-                root(vars, type_env, &container.name, &p)
+                origin(vars, type_env, &container.name, &p)
             }
         }
         Some(Binding::Payload(scrut, variant)) => match variant {
             // A catch-all binds the whole scrutinee: the same object.
-            None => root(vars, type_env, &scrut.name, path),
+            None => origin(vars, type_env, &scrut.name, path),
             // An unboxed union's payload is the scrutinee's variant slot — an alias; a boxed union's
             // payload is read out (retained) — a producer.
             Some(k) if !scrut.ty.is_box(type_env) => {
                 let mut p = vec![*k];
                 p.extend_from_slice(path);
-                root(vars, type_env, &scrut.name, &p)
+                origin(vars, type_env, &scrut.name, &p)
             }
             Some(_) => here(),
         },
@@ -386,9 +479,10 @@ fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
             }
         }
         RcRhs::Llvm(llvm_gen, args) => {
+            let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             let passthrough = passthrough_arg_leaves(&**llvm_gen, result_ty, args, type_env);
             for (i, a) in args.iter().enumerate() {
-                if llvm_gen.borrows_operand(i) {
+                if llvm_gen.borrows_operand(i, &arg_tys, type_env) {
                     continue;
                 }
                 for pi in boxed_leaves(&a.ty, type_env) {
@@ -996,18 +1090,26 @@ impl<'a> RewriteCtx<'a> {
             .any(|unit| self.owns_unit(arg, unit))
     }
 
-    /// Whether this version owns the value at `arg@unit`: a leaf that roots at an owned parameter, or
-    /// at a producer (a fresh value, a call result, a boxed-container read), is owned; a leaf that
-    /// roots at a borrowed parameter is not.
+    /// Whether this version owns the value at `arg@unit`: a leaf that comes from an owned parameter,
+    /// or from a producer (a fresh value, a call result, a boxed-container read), is owned; a leaf
+    /// that comes from a borrowed parameter is not. A leaf that may be one of several objects is
+    /// owned only when it is owned whichever it is.
     fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
-        let (r, rp) = root(&self.vars, self.type_env, &arg.name, unit);
-        match self.vars.param_tys.get(&r) {
-            // The root path may name a subtree that spans several reference-counting units rather than
+        origin(&self.vars, self.type_env, &arg.name, unit)
+            .candidates()
+            .iter()
+            .all(|(r, rp)| self.owns_object(r, rp))
+    }
+
+    /// Whether this version owns the object a leaf comes from.
+    fn owns_object(&self, r: &FullName, rp: &FieldPath) -> bool {
+        match self.vars.param_tys.get(r) {
+            // The path may name a subtree that spans several reference-counting units rather than
             // one — a union built from an unboxed tuple roots to the tuple at the empty path, whose
             // units are its fields. The value is owned only when every unit it covers is owned. Each
             // covered path is clamped to its unit key, so a path that descends into a union variant
             // keys to the union root the owned set records.
-            Some(rty) => units_under(rty, &rp, self.type_env).iter().all(|u| {
+            Some(rty) => units_under(rty, rp, self.type_env).iter().all(|u| {
                 self.owned_units
                     .contains(&(r.clone(), truncate_to_unit(rty, u, self.type_env)))
             }),
@@ -1338,13 +1440,31 @@ struct CancelAnalysis<'a> {
 }
 
 impl<'a> CancelAnalysis<'a> {
-    /// The reference-counting unit a leaf belongs to, as an object identity: its `root`, clamped to
-    /// the unit. A leaf below an unboxed union keys to the union root, so a whole-union retain and a
-    /// payload consume land in the same bucket (without which a payload consume could not keep the
-    /// union retain needed, and a later union release would wrongly cancel it).
+    /// The reference-counting unit a leaf belongs to, as an object identity: its `origin`'s identity,
+    /// clamped to the unit. A leaf below an unboxed union keys to the union root, so a whole-union
+    /// retain and a payload consume land in the same bucket (without which a payload consume could
+    /// not keep the union retain needed, and a later union release would wrongly cancel it).
+    ///
+    /// This is the key a retain and a release are paired on, so it must name one object: a leaf whose
+    /// object is path-dependent keys to the match binding that joins the paths, which every alias
+    /// chain through it agrees on. The units an operation on it really touches are `acted_unit_keys`.
     fn unit_key(&self, var: &FullName, path: &[usize]) -> VarPath {
-        let (r, rp) = root(self.vars, self.type_env, var, path);
-        let Some(ty) = self.vars.var_tys.get(&r) else {
+        self.unit_of(origin(self.vars, self.type_env, var, path).identity())
+    }
+
+    /// Every reference-counting unit an operation on a leaf acts on: the one its reference is counted
+    /// under, and the ones the object it belongs to may be counted under. A pending retain on any of
+    /// them is load-bearing across the operation.
+    fn acted_unit_keys(&self, var: &FullName, path: &[usize]) -> Vec<VarPath> {
+        origin(self.vars, self.type_env, var, path)
+            .acted_on()
+            .into_iter()
+            .map(|p| self.unit_of(p))
+            .collect()
+    }
+
+    fn unit_of(&self, (r, rp): &VarPath) -> VarPath {
+        let Some(ty) = self.vars.var_tys.get(r) else {
             // A root with no type here is a global: the table holds the function's own variables.
             // Reference counting is inserted for locals only and a global's reachable graph is
             // refcount-exempt, so no retain or release keys to it and there is nothing to line up.
@@ -1353,9 +1473,9 @@ impl<'a> CancelAnalysis<'a> {
                 "local `{}` has no recorded type",
                 r.to_string()
             );
-            return (r, rp);
+            return (r.clone(), rp.clone());
         };
-        (r, truncate_to_unit(ty, &rp, self.type_env))
+        (r.clone(), truncate_to_unit(ty, rp, self.type_env))
     }
 
     /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
@@ -1392,6 +1512,14 @@ impl<'a> CancelAnalysis<'a> {
             }
             RcExpr::Release(v, path, _, k) => {
                 let o = self.unit_key(&v.name, path);
+                // A release of a value whose object is path-dependent un-bumps a retain of that same
+                // value, so it pairs on the identity; on the other objects it may be, it is a drop
+                // that no pending retain of theirs may be cancelled across.
+                for other in self.acted_unit_keys(&v.name, path) {
+                    if other != o {
+                        self.consume_unit(&mut pending, other);
+                    }
+                }
                 if let Some(stack) = pending.get_mut(&o) {
                     // A stack kept in `pending` is never empty (emptied stacks are removed below), so a
                     // pending retain to pair with is always present.
@@ -1467,9 +1595,15 @@ impl<'a> CancelAnalysis<'a> {
         }
     }
 
-    /// A consume of a leaf: every retain pending for its unit is load-bearing here.
+    /// A consume of a leaf: every retain pending for a unit it may belong to is load-bearing here.
     fn consume(&mut self, pending: &mut PendingRetains, var: &FullName, path: &[usize]) {
-        let o = self.unit_key(var, path);
+        for o in self.acted_unit_keys(var, path) {
+            self.consume_unit(pending, o);
+        }
+    }
+
+    /// A consume of one unit: every retain pending for it is load-bearing here.
+    fn consume_unit(&mut self, pending: &mut PendingRetains, o: VarPath) {
         if let Some(stack) = pending.remove(&o) {
             for r in stack {
                 self.needed_retains.insert(r);
@@ -1647,5 +1781,114 @@ mod tests {
     fn a_bottom_leaf_is_not_a_projection() {
         // `_undefined_internal` aborts, so its result has no source at all.
         assert_eq!(as_arg_projection(&sources(vec![])), None);
+    }
+
+    fn var(name: &str) -> RcVar {
+        RcVar {
+            name: FullName::local(name),
+            ty: crate::fixstd::builtin::make_i64_ty(),
+            source: None,
+            debug_name: None,
+            skip_null_check: false,
+        }
+    }
+
+    /// A table of the given bindings, with every named variable also a known local.
+    fn table(bindings: Vec<(&str, Binding)>) -> VarTable {
+        let mut vars = VarTable::empty();
+        for (name, b) in bindings {
+            let v = var(name);
+            vars.bindings.insert(v.name.clone(), b);
+            vars.var_tys.insert(v.name, v.ty);
+        }
+        vars
+    }
+
+    fn at(name: &str) -> VarPath {
+        (FullName::local(name), vec![])
+    }
+
+    fn origin_of(vars: &VarTable, name: &str) -> Origin {
+        origin(vars, &TypeEnv::default(), &FullName::local(name), &[])
+    }
+
+    #[test]
+    fn a_producer_is_exactly_itself() {
+        let vars = table(vec![("p", Binding::Producer)]);
+        assert_eq!(origin_of(&vars, "p"), Origin::Exactly(at("p")));
+    }
+
+    #[test]
+    fn a_move_bind_is_the_moved_variable() {
+        let vars = table(vec![
+            ("p", Binding::Producer),
+            ("m", Binding::Move(var("p"))),
+        ]);
+        assert_eq!(origin_of(&vars, "m"), Origin::Exactly(at("p")));
+    }
+
+    #[test]
+    fn a_match_binding_may_be_any_arm_result() {
+        // The two arms produce different objects, so the binding is one of them and the join itself
+        // is the name every alias chain through it agrees on.
+        let vars = table(vec![
+            ("p", Binding::Producer),
+            ("q", Binding::Producer),
+            ("m", Binding::Join(vec![var("p"), var("q")])),
+        ]);
+        let o = origin_of(&vars, "m");
+        assert_eq!(o.identity(), &at("m"));
+        assert_eq!(
+            o.candidates()
+                .into_iter()
+                .cloned()
+                .collect::<Set<VarPath>>(),
+            vec![at("p"), at("q")].into_iter().collect::<Set<VarPath>>()
+        );
+    }
+
+    #[test]
+    fn a_match_binding_whose_arms_agree_is_exact() {
+        // Both arms reach `p`, one of them through a move-bind, so the binding is `p` on every path.
+        let vars = table(vec![
+            ("p", Binding::Producer),
+            ("m1", Binding::Move(var("p"))),
+            ("m", Binding::Join(vec![var("p"), var("m1")])),
+        ]);
+        assert_eq!(origin_of(&vars, "m"), Origin::Exactly(at("p")));
+    }
+
+    #[test]
+    fn a_move_of_a_match_binding_keeps_the_joins_name() {
+        // The identity has to survive an alias chain, or a retain of the binding and a release of the
+        // moved-to variable would key differently and never pair.
+        let vars = table(vec![
+            ("p", Binding::Producer),
+            ("q", Binding::Producer),
+            ("m", Binding::Join(vec![var("p"), var("q")])),
+            ("n", Binding::Move(var("m"))),
+        ]);
+        assert_eq!(origin_of(&vars, "n").identity(), &at("m"));
+    }
+
+    #[test]
+    fn a_join_of_joins_may_be_any_of_their_results() {
+        let vars = table(vec![
+            ("p", Binding::Producer),
+            ("q", Binding::Producer),
+            ("r", Binding::Producer),
+            ("inner", Binding::Join(vec![var("p"), var("q")])),
+            ("m", Binding::Join(vec![var("inner"), var("r")])),
+        ]);
+        assert_eq!(
+            origin_of(&vars, "m")
+                .candidates()
+                .into_iter()
+                .cloned()
+                .collect::<Set<VarPath>>(),
+            vec![at("p"), at("q"), at("r")]
+                .into_iter()
+                .collect::<Set<VarPath>>()
+        );
     }
 }
