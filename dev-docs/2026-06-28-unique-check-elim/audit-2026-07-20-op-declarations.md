@@ -18,17 +18,20 @@
 | `InlineLLVMIsUniqueFunctionBody` | 返す値は引数と同じ共有状態だが、`result_prov` でそれを言うと消費まで消えてチェックが不正直になる（test95）。共有状態の側だけを `provenance.rs::is_unique_result` の局所ルールで伝えるようにした |
 | `InlineLLVMUndefinedInternalBody` | abort する op なので値は存在しないのに、結果を `Dyn` と宣言していた。`if bad { undefined(msg) }; value` という Fix のガード節が合流で provenance を潰していたので、束の底（∅ = 合流の単位元）に変えた。`Debug::assert_unique` を挟むだけで後続のチェックが落ちなくなる（= 調べる行為が調べたい最適化を消す）状態が解消 |
 
-## フレームワーク側の非対称性（fail-loud 化した）
+## 判定の一本化: 別名を張るときに限り消費を消す
 
-`result_prov` の leaf は `BaseSource` の**集合**だが、読み手 2 つの解釈が食い違っていた:
+`result_prov` の leaf は `BaseSource` の**集合**で、読み手が 2 つある。`borrow.rs::root_inner` は
+「別名の辺を張るか」を、`borrow.rs::passthrough_arg_leaves` は「その引数 leaf の消費を消すか」を決める。
+消費を消してよいのは結果がその引数を別名参照するときに限られるので、両者は同じ判定でなければならない。
+`{Fresh | Arg(0)}` のような join に対して片方だけが `Arg` を認めると、**消費だけ消えて別名リンクは張られず
+二重 release** になる。
 
-- `borrow.rs::root_inner` -> `single_arg`: 集合が `{Arg}` ちょうど 1 個のときだけ別名
-- `borrow.rs::collect_arg_leaves`: 集合の中に `Arg` が 1 つでもあれば「その引数 leaf は消費されない」
+両者を述語 `single_arg`（集合がちょうど `{Arg(j, p)}` のときだけ `Some`）に一本化した。合流を宣言した leaf は
+別名でも passthrough でもなく、結果の共有状態だけを述べる。`borrow.rs` の単体テストがこの契約を固定している
+（`Set` は `FxHashSet` で反復順がハッシュ依存なので、順序に依らず判別できる「引数 2 つの合流」を含める）。
 
-よって `{Fresh | Arg(0)}` のような join を宣言すると、**消費だけ消えて別名リンクは張られず二重 release**。
-`collect_arg_leaves` で `unreachable!` にし、不変条件（`Arg` はその leaf の唯一のソース）を
-`LLVMGen::result_prov` の doc に明記した。`InlineLLVMUnionModBody` は意味的にこの join が正確な唯一の op で、
-つまり現状の枠組みでは精密化できない（実装するなら枠組み側の変更が要る）。
+これにより `{Fresh | Arg(union)}` が宣言可能になった。`InlineLLVMUnionModBody` は tag 一致時に新しい union を
+作り、不一致時は引数をそのまま返すので、意味的にこの join が正確な唯一の op である（宣言は未適用）。
 
 ## 共有状態だけを伝える宣言（`SharingOf`）は保留
 

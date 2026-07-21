@@ -46,7 +46,7 @@ use crate::rc_ir::ast::{
     FuncRef, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcGlobalInit,
     RcProgram, RcRhs, RcState, RcUnit, RcVar,
 };
-use crate::rc_ir::provenance::{boxed_leaf_paths, BaseSource, Provenance};
+use crate::rc_ir::provenance::{boxed_leaf_paths, BaseSource};
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
@@ -420,7 +420,11 @@ fn resolve_callee_params<'a>(
 }
 
 /// The `(arg index, leaf path)` pairs an LLVM op passes through unchanged to its result — the pure
-/// projections declared by `result_prov` as `Arg(i, path)`.
+/// projections `single_arg` reads out of `result_prov`.
+///
+/// Dropping an argument leaf's consume is sound exactly when the result aliases it, so this shares
+/// `single_arg` with `root`: a leaf that joins an argument with another source aliases nothing and
+/// keeps its consume, and one whose sole source is `Arg` does both.
 fn passthrough_arg_leaves(
     gen: &dyn LLVMGen,
     result_ty: &Arc<TypeNode>,
@@ -429,36 +433,7 @@ fn passthrough_arg_leaves(
 ) -> Set<(usize, Path)> {
     let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
     let decl = gen.result_prov(result_ty, &arg_tys, type_env);
-    let mut out = Set::default();
-    collect_arg_leaves(&decl, &mut out);
-    out
-}
-
-/// Collect every `Arg(i, path)` symbol appearing in a declared provenance.
-///
-/// An `Arg` must be the sole source of its leaf. The two readers of a declaration disagree on a leaf
-/// that names an argument among other sources: `root` (through `single_arg`) makes such a leaf a
-/// producer, while this function still reads it as a passthrough. The result would be an argument
-/// whose consume is dropped without the result aliasing it — two owned references to one object, so
-/// two releases. An op that wants to say "either the argument or a new value" has no way to say it,
-/// and gets stopped here rather than silently miscompiled.
-fn collect_arg_leaves(prov: &Provenance, out: &mut Set<(usize, Path)>) {
-    for ls in prov.leaves() {
-        for s in ls {
-            if let BaseSource::Arg(i, p) = s {
-                if ls.len() != 1 {
-                    unreachable!(
-                        "an op declares Arg({}, {:?}) among {} sources of one leaf; \
-                         a passthrough must be the leaf's only source",
-                        i,
-                        p,
-                        ls.len()
-                    );
-                }
-                out.insert((*i, p.clone()));
-            }
-        }
-    }
+    decl.leaves().filter_map(single_arg).collect()
 }
 
 /// Push every boxed leaf of a value onto `out`.
@@ -1547,5 +1522,49 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             &node.source,
         ),
         RcExpr::Ret(v) => node_of(RcExpr::Ret(v.clone()), &node.source),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rc_ir::provenance::Provenance;
+
+    fn sources(srcs: Vec<BaseSource>) -> Set<BaseSource> {
+        srcs.into_iter().collect()
+    }
+
+    #[test]
+    fn a_lone_arg_is_a_projection() {
+        let ls = Provenance::leaf(BaseSource::Arg(1, vec![0]));
+        assert_eq!(single_arg(&ls), Some((1, vec![0])));
+    }
+
+    #[test]
+    fn an_arg_joined_with_another_source_is_not_a_projection() {
+        // The result is the argument or a new value, so it aliases neither: the op consumes the
+        // argument, and `root` stops at the op. Reading such a leaf as a projection would drop the
+        // consume without the alias, releasing one object twice.
+        let ls = sources(vec![BaseSource::Fresh, BaseSource::Arg(0, vec![])]);
+        assert_eq!(single_arg(&ls), None);
+    }
+
+    #[test]
+    fn one_of_two_args_is_not_a_projection() {
+        // Neither argument can be named as the alias, whichever of the two the set yields first.
+        let ls = sources(vec![BaseSource::Arg(0, vec![]), BaseSource::Arg(1, vec![])]);
+        assert_eq!(single_arg(&ls), None);
+    }
+
+    #[test]
+    fn a_produced_leaf_is_not_a_projection() {
+        assert_eq!(single_arg(&Provenance::leaf(BaseSource::Fresh)), None);
+        assert_eq!(single_arg(&Provenance::leaf(BaseSource::Dyn)), None);
+    }
+
+    #[test]
+    fn a_bottom_leaf_is_not_a_projection() {
+        // `_undefined_internal` aborts, so its result has no source at all.
+        assert_eq!(single_arg(&sources(vec![])), None);
     }
 }
