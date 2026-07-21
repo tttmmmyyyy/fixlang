@@ -107,7 +107,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
                 // Attribute the consume to the parameters it may originate from, and own them. A
                 // consumed leaf that is one of several objects is consumed whichever it is, so every
                 // parameter it may be has to be owned.
-                for (root_var, root_path) in origin(vars, type_env, &var, &path).may() {
+                for (root_var, root_path) in origin(vars, type_env, &var, &path).candidates() {
                     if vars.param_tys.contains_key(root_var)
                         && own.insert((root_var.clone(), root_path.clone()))
                     {
@@ -220,10 +220,13 @@ fn returned_var(node: &RcExprNode) -> &RcVar {
 enum Origin {
     /// The leaf denotes exactly this object.
     Exactly(VarPath),
-    /// The leaf denotes one of `may`, chosen by the path taken. `at` names the match binding that
-    /// joins them: every alias chain through that binding agrees on the name, so it is the identity
-    /// to use where one name for the value is required.
-    Join { at: VarPath, may: Set<VarPath> },
+    /// The leaf denotes one of `candidates`, chosen by the path taken. `identity` names the match
+    /// binding that joins them: every alias chain through that binding agrees on the name, so it is
+    /// the name to use where one name for the value is required.
+    Join {
+        identity: VarPath,
+        candidates: Set<VarPath>,
+    },
 }
 
 impl Origin {
@@ -233,23 +236,27 @@ impl Origin {
     fn identity(&self) -> &VarPath {
         match self {
             Origin::Exactly(p) => p,
-            Origin::Join { at, .. } => at,
+            Origin::Join { identity, .. } => identity,
         }
     }
 
     /// Every object the leaf may denote, for a reader whose answer has to hold on all paths.
-    fn may(&self) -> Vec<&VarPath> {
+    fn candidates(&self) -> Vec<&VarPath> {
         match self {
             Origin::Exactly(p) => vec![p],
-            Origin::Join { may, .. } => may.iter().collect(),
+            Origin::Join { candidates, .. } => candidates.iter().collect(),
         }
     }
 
     /// Every object an operation on the leaf acts on: the reference the leaf holds, which `identity`
-    /// names, and the object that reference belongs to, which is any of `may`.
+    /// names, and the object that reference belongs to, which is any of `candidates`.
     fn acted_on(&self) -> Vec<&VarPath> {
         let mut out = vec![self.identity()];
-        out.extend(self.may().into_iter().filter(|p| *p != self.identity()));
+        out.extend(
+            self.candidates()
+                .into_iter()
+                .filter(|p| *p != self.identity()),
+        );
         out
     }
 }
@@ -272,21 +279,22 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
         Some(Binding::Join(arm_results)) => {
             // The arms bind their values to one variable, so a path into it is a path into each of
             // them. Arms that all reach the same object leave the value exact.
-            let mut may = Set::default();
+            let mut candidates = Set::default();
             for r in arm_results {
-                for p in origin(vars, type_env, &r.name, path).may() {
-                    may.insert(p.clone());
+                for p in origin(vars, type_env, &r.name, path).candidates() {
+                    candidates.insert(p.clone());
                 }
             }
-            match may.len() {
+            match candidates.len() {
                 1 => Origin::Exactly(
-                    may.into_iter()
+                    candidates
+                        .into_iter()
                         .next()
                         .expect("a one-element set has an element"),
                 ),
                 _ => Origin::Join {
-                    at: (var.clone(), path.to_vec()),
-                    may,
+                    identity: (var.clone(), path.to_vec()),
+                    candidates,
                 },
             }
         }
@@ -1083,7 +1091,7 @@ impl<'a> RewriteCtx<'a> {
     /// owned only when it is owned whichever it is.
     fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
         origin(&self.vars, self.type_env, &arg.name, unit)
-            .may()
+            .candidates()
             .iter()
             .all(|(r, rp)| self.owns_object(r, rp))
     }
@@ -1812,7 +1820,10 @@ mod tests {
         let o = origin_of(&vars, "m");
         assert_eq!(o.identity(), &at("m"));
         assert_eq!(
-            o.may().into_iter().cloned().collect::<Set<VarPath>>(),
+            o.candidates()
+                .into_iter()
+                .cloned()
+                .collect::<Set<VarPath>>(),
             vec![at("p"), at("q")].into_iter().collect::<Set<VarPath>>()
         );
     }
@@ -1852,7 +1863,7 @@ mod tests {
         ]);
         assert_eq!(
             origin_of(&vars, "m")
-                .may()
+                .candidates()
                 .into_iter()
                 .cloned()
                 .collect::<Set<VarPath>>(),
