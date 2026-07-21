@@ -466,8 +466,11 @@ Fix-source ビルダー**(単独のプリミティブではない、§5)。
   - **COW するのは dst だけ**(src 側は move/copy を選ぶ読み取りテスト)。よって宣言する
     `unique_check_operand` は 1 つで足り、現状の単数機構のままでよい。src 側のテストも畳みたくなったら、
     そのとき機構を複数形にする(畳めなくても refcount の load と分岐 1 回で、得るのは RC 操作 2n の削減)。
-  - **memcpy でよく、オーバーラップ判定は要らない**: dst は COW 済み、src は unique 枝でのみ move される。
-    unique = refcount 1 なので、2 つの unique な値が同じ storage を指すことは定義上あり得ない。
+  - **memcpy でよく、オーバーラップ判定は要らない**: この op は src も dst も consume する(`borrows_operand` を
+    宣言しない、§5)ので、両 operand はそれぞれ独立した参照を持つ。したがって src と dst が同じ storage を指すなら
+    その refcount は 2 以上になる(`arr.append(arr)` のように呼び出し側が同じ配列を 2 回使う形では、rc 挿入器が
+    op の直前に retain を置く)。ゆえに **src が rc == 1 なら src の storage は dst のものではない**。dst は COW 済みで、
+    shared だった場合は新しい storage になっている。両者は重ならない。
 - **append-n が n を取る利点**: boxed 要素の `fill(n, x)` で、`x` の retain を **増分 n の 1 回**にできる
   (n 回インクリメントしない)。unboxed 要素なら本体は store だけ。
   **並行実装は作らず、`build_retain` に増分の引数を足す。** 呼び出しは 6 箇所しかないので、ラッパを挟まず
@@ -554,6 +557,13 @@ provably-unique のとき check を畳んで in-place にする(`push_back`/`app
 optimizer が保証する。よって **`result_prov` は `force_unique` フィールドで分岐させず、両版とも `Fresh` を返す**。
 この宣言が builder の連鎖をつなぐ — `fill` / `push_back` / `append` / `from_map` が組んだ配列は、ループを抜けた
 後も unique と分かり、以降の `set` などが自分の check を畳める。
+
+**refcount を分岐に使う op は、その operand を borrow 宣言しない。** borrow は「呼び出し側が参照を持ち続け、
+呼び出し後も使う」という宣言であり、借用した operand には retain が出ない。したがって `rc == 1` でも呼び出し後に
+同じ storage を読む者が残り、それを根拠に in-place 破壊すると呼び出し側の値が壊れる。所有 operand なら
+`rc == 1` は「他に観測者がいない」を意味する。該当するのは COW を持つ op(`unique_check_operand` を宣言する
+もの全部)、`_unsafe_is_storage_unique` / `unsafe_is_unique`、release の free-or-decrement。refcount を見ない
+読み取り専用の op(`_unsafe_get_bounds_unchecked` / `borrow_elements`)は borrow してよい。
 
 一意性の保証を**呼び手の契約に委ねる** primitive を足す場合も同じく `Fresh` を宣言する。`_unsafe_` の名が
 言うのは「一意性チェックが無い」であって「一意性が不要」ではなく、契約が満たされている限り結果は一意所有
@@ -889,6 +899,7 @@ COW を畳むための「force unique しない」機構)、**borrow 化属性**
     こちらが診断しやすい)。`debug_assert!` ではなく素の `assert!`(テストはリリースビルドで走るため)。
 - **borrows_operand(i)**: operand i を borrow(consume しない)か。default は全 operand consume。`borrow.rs` は
   `borrows_operand(i)` か result_prov に `Arg(i, ·)` として現れる operand のみ非 consume とする。
+  **refcount を分岐に使う op では宣言しない**(§5)。
 - **result_prov**: 結果の各 boxed leaf の provenance — `Fresh`(新規 unique)/ `Arg(k, path)`(operand k の passthrough
   alias。`root()` が alias とみなし retain を省く)/ `Dyn`(保守的)。**`force_unique` で分岐させない**(§5)—
   非 force-unique 版の一意性は optimizer が保証する。
