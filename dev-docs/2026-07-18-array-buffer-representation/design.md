@@ -957,7 +957,8 @@ String の大半、PunchedArray 型(新レイアウトを継承、punch/plug/tra
    よって `String::from_bytes`(unique な `Array U8`)では `truncate` が実質「`_size` を下げるだけ」に落ち、旧
    `_unsafe_set_size` の shrink と**同性能かつ安全**。`String::from_bytes` は `truncate(null_idx+1)` を、その他の
    切り詰め経路も `truncate` を使う。boxed 要素の配列でも安全に使える。
-2. **`mutate_elements` / `borrow_elements` はいずれも Array の専用 InlineLLVM(決定)。** storage は Boxed 値でない
+2. **`borrow_elements` / `mutate_elements` / `_mutate_elements_ios` は Array の専用 InlineLLVM(決定。`_io` 版は
+   Fix-source ラッパ、§7)。** storage は Boxed 値でない
    (§2.2)ので、両者とも codegen が storage を直接扱う:
    - **`borrow_elements`(同期版)**: **arr を Borrow operand と宣言**(base-level `borrows_operand=true`、
      `_unsafe_get_bounds_unchecked` と同型)。呼び出し側が call 全体(callback `f` を含む)の間 arr を生存させるので、
@@ -966,5 +967,5 @@ String の大半、PunchedArray 型(新レイアウトを継承、punch/plug/tra
      free -> dangling(§8(2)(b))。Borrow 宣言でこの dangling を全 opt レベルで防ぐ(汎用 `with_retained` が常に retain
      するのは引数を Borrow 宣言できない汎用 op だから。専用 op はできるので retain を出さない)。`f` は `Ptr` しか受け
      取らず array op を呼べないので mutation 防止の retain も不要(生 ptr 書き込みは retain で止まらない)。
-   - **`mutate_elements` / `_io`**: `set` と同じく storage をその場で `make_array_unique`(実際に shared のときだけ
+   - **`mutate_elements` / `_mutate_elements_ios`**: `set` と同じく storage をその場で `make_array_unique`(実際に shared のときだけ
      COW)-> data ポインタ取得 -> act -> value を新 storage で rebuild。
