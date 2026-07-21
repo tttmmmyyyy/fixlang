@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, test-sufficiency, code-quality, naming, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits each editing aspect's changes as its own commit, then applies `cargo fmt` as a final standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
+description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, refactor-scope, test-sufficiency, code-quality, naming, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits each editing aspect's changes as its own commit, then applies `cargo fmt` as a final standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
 argument-hint: "Scope: 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
 ---
 
@@ -26,12 +26,13 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
 1. **no-personal-info** — scan every changed file for the user's personal data (real name, personal email, phone, address, secrets) embedded in checked-in files, and flag it. Runs first as a gate: a finding stops the review before anything is committed.
 2. **design-fit** — with the implementation now visible, re-evaluate whether the chosen design is the best fit for the change's goal; flag mismatches (this aspect never redesigns).
-3. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; flag coverage gaps (this aspect never writes tests).
-4. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
-5. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
-6. **naming** — judge the names the diff introduces; rename local bindings inline, flag item names (modules, types, functions, fields) for the author.
-7. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
-8. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
+3. **refactor-scope** — check whether the change bent itself out of shape to leave existing code untouched; flag the scars a declined refactor left behind (this aspect never refactors).
+4. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; flag coverage gaps (this aspect never writes tests).
+5. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
+6. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
+7. **naming** — judge the names the diff introduces; rename local bindings inline, flag item names (modules, types, functions, fields) for the author.
+8. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
+9. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
 
 ## Why Sequential, Not Parallel
 
@@ -55,12 +56,12 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
    - `last N` (where N is a positive integer) → `HEAD~N`. Verify it resolves with `git rev-parse --verify HEAD~N`.
    - `branch` → `$(git merge-base HEAD main)`. Verify `main` exists; if the project uses a different default branch, abort and ask.
    - anything else → treat as a git ref. Verify it resolves with `git rev-parse --verify <ref>`.
-2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `test-sufficiency`. They only report findings; they make no edits.
-   - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
+2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `refactor-scope`, `test-sufficiency`. They only report findings; they make no edits.
+   - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `refactor-scope` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
 3. **Commit the code under review** — `uncommitted` scope only. If the working tree still holds the pending changes being reviewed (the scope was `uncommitted`, so the reviewed code is not yet committed), commit it now as its own commit, with a message describing the change (you have the context of what was just written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. If the tree is already clean (`branch` / `last N` scope, where the reviewed code is already committed), skip this.
 4. **Run the editing aspects, committing each separately**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. After running each, if it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several aspects into one commit.**
 5. **Apply `cargo fmt` as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-6. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); surface every flagged finding, both from the flag-only reviews (`design-fit`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); and list every commit created, with its short hash.
+6. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); surface every flagged finding, both from the flag-only reviews (`design-fit`, `refactor-scope`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); and list every commit created, with its short hash.
 7. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Subagent Prompt Template
@@ -215,6 +216,55 @@ Look for concrete evidence, in the code as written, that the chosen design fight
 
 - **Flagged for review**: the goal as you understood it; then, per finding, the design concern, the concrete evidence in the code, and the alternative design with its rough cost.
 - If the design fits the goal well, say so in one line and flag nothing. A clean result here is the common case, not a failure to find something.
+
+---
+
+## Aspect: refactor-scope
+
+A change is judged by the codebase it leaves behind, so reshaping existing code is part of a change's legitimate scope — the project's standing instruction is to prefer the cleanliness of the end state over the smallness of the diff. This aspect reads the seam between the new code and the code it was grafted onto, and asks: **did the change bend itself out of shape so that the existing code could stay untouched?**
+
+Every other editing aspect confines itself to the diff hunks by design. That discipline keeps them safe, and it also makes them blind to this: a duplicate created to avoid editing an existing function looks perfectly clean from inside its own hunk, because the defect lives in the relationship between the new item and the old one.
+
+This aspect **only flags**; it never refactors. Widening a change to reshape existing code is the author's call, and the ripple through call sites, tests, and downstream Fix programs needs judgment this review does not have.
+
+### Distinguish from design-fit
+
+`design-fit` judges the design of the new code against the goal, taking the existing code as a fixed backdrop. This aspect questions the backdrop: the shape that fits the goal may have required changing an existing function, type, or module, and the finding is the mark that leaving it alone left on the new code.
+
+### Scars to look for
+
+Each of these is concrete evidence in the diff that existing code was routed around:
+
+- **A near-duplicate of an existing item.** A new function, type, or pass that is an existing one plus a tweak — `resolve_symbol_with_span` beside `resolve_symbol`, a second visitor differing in one arm, a parallel enum carrying the same cases. The end state wants one generalized item with both call sites on it. This is the highest-yield check, and it takes a search across `src/`: the twin is usually in another module, which is exactly why the author wrote a fresh one.
+- **A `bool` or `Option` parameter added to an existing function to serve the new caller.** A flag argument is the record of a seam the author declined to move: the two behaviors want either two functions, or one function with the varying part lifted into the caller.
+- **A conversion or adapter that exists only because an upstream type stayed as it was.** The new code reshapes a value at every call because changing the type — or adding the constructor it wanted — would have touched more files.
+- **A constant, table, or invariant re-stated in the new code** because the existing copy lives in a module the change avoided. Beyond the duplication, this plants the shotgun-surgery trap that `code-quality` documents.
+- **A forwarding wrapper preserving a superseded signature.** The old entry point kept alive as a one-line delegation so its call sites need no edit. When every caller is inside this repository, updating them and deleting the forwarder is the cleaner end state.
+- **A special case grafted onto an existing function** where the general rule the new caller needs would have subsumed the old behavior as well.
+- **A superseded path left standing.** The change introduced the replacement, and the old code is still reachable because deleting it and its callers would have widened the diff. `code-quality` removes only dead items the diff itself introduced, so a path that *became* dead falls to this aspect.
+
+The litmus test: **explain the resulting code to someone who never saw the diff.** If the explanation of why there are two of something, why a flag exists, or why a conversion happens is "so that the change would touch fewer files", then the reason describes the diff — and the diff is gone the moment it lands, leaving behind only the thing it justified.
+
+### Discipline
+
+- **Flag only, never refactor.** No edits.
+- **Anchor every finding on a scar in the new code** — the duplicate, the flag, the adapter, the wrapper, the stranded path. Pre-existing mess that the change neither created nor bent around belongs to a separate cleanup; raising it here buries the findings that the diff is actually responsible for.
+- **Price the ripple.** A finding must say what the refactor would touch: which files, roughly how many call sites, which tests. "Generalize this" with no estimate leaves the author no basis to decide.
+- **Name the compatibility cost.** Some existing items have consumers outside this repository — Fix standard-library signatures, the LSP protocol surface, APIs that external Fix projects call. Reshaping those is a compatibility decision; flag it all the same, and state that cost as part of the finding.
+- **An author who priced it already has answered.** When a commit message or a comment states why the existing code was left as it is, treat that as the decision and skip the finding.
+
+### Procedure
+
+1. Read `git log <base>..HEAD` and `git diff <base>`, and state in one or two sentences what the change is for.
+2. List the items the diff adds — functions, types, traits, passes, constants. For each, search `src/` for an existing counterpart it resembles in name, signature, or shape, and read any candidate in full before judging.
+3. For each existing item the diff **modifies**, read its pre-diff version (`git show <base>:<file>`) and ask whether the modification is a graft — a flag, an extra case, a widened type — where reshaping would have served the old and new callers together.
+4. For each existing item the diff **calls but leaves alone**, ask whether the new code bends around it: a conversion at every call site, a re-stated constant, a value threaded through only to satisfy its signature.
+5. Confirm each candidate against the code, check it against *Discipline*, and collect the survivors. Make no edits.
+
+### Report
+
+- **Flagged for review**: per finding — the scar in the new code (file, and what it is), the existing code that would have to change, the end state you would aim for, and the cost of getting there.
+- If the change reshaped existing code wherever it needed to, say so in one line and flag nothing.
 
 ---
 
