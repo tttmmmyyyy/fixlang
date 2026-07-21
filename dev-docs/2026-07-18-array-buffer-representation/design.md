@@ -531,6 +531,18 @@ provably-unique のとき check を畳んで in-place にする(`push_back`/`app
 旧要素 release は InlineLLVM(`set`/`swap`)の body の codegen が生ストレージへ直接行う(Fix レベルの storage write
 プリミティブは無い、§4)。
 
+**`result_prov = Fresh` の根拠は「返る配列が一意所有であること」で、その保証者は op 自身か optimizer の
+どちらかである。** force-unique 分岐を持つ版は自分で保証する(shared なら clone 済み、unique ならそのまま)。
+`assuming_unique()` が返す非 force-unique 版は、unique-check-elim が一意性を証明した場所にしか置かれないので
+optimizer が保証する。よって **`result_prov` は `force_unique` フィールドで分岐させず、両版とも `Fresh` を返す**。
+この宣言が builder の連鎖をつなぐ — `fill` / `push_back` / `append` / `from_map` が組んだ配列は、ループを抜けた
+後も unique と分かり、以降の `set` などが自分の check を畳める。
+
+一意性の保証を**呼び手の契約に委ねる** primitive を足す場合も同じく `Fresh` を宣言する。`_unsafe_` の名が
+言うのは「一意性チェックが無い」であって「一意性が不要」ではなく、契約が満たされている限り結果は一意所有
+だからである。契約違反はその op の書き込み自体が共有データを壊すので、`Fresh` を宣言することで破壊の条件が
+増えることはない。
+
 **uniqueness-check-less な mutate primitive は作らない。** 「呼び出し側が別 op で uniqueness を確立してから、
 チェック無しで書く」形の primitive は、次の 2 つの理由で成立しない。
 
@@ -767,7 +779,8 @@ COW を畳むための「force unique しない」機構)、**borrow 化属性**
 - **borrows_operand(i)**: operand i を borrow(consume しない)か。default は全 operand consume。`borrow.rs` は
   `borrows_operand(i)` か result_prov に `Arg(i, ·)` として現れる operand のみ非 consume とする。
 - **result_prov**: 結果の各 boxed leaf の provenance — `Fresh`(新規 unique)/ `Arg(k, path)`(operand k の passthrough
-  alias。`root()` が alias とみなし retain を省く)/ `Dyn`(保守的)。
+  alias。`root()` が alias とみなし retain を省く)/ `Dyn`(保守的)。**`force_unique` で分岐させない**(§5)—
+  非 force-unique 版の一意性は optimizer が保証する。
 - **記法(§2.2 準拠)**: 以下の pseudocode で `arr.@_storage` は **`#ArrayStorage` への `SubObject`(value field 0)**
   を指す codegen 上の読み出しであり、Fix レベルの struct getter ではない(`Array` は primitive)。
   同様に `arr.@_size`/`@_cap` は value field 1/2 への extractvalue。`Array` 値は **1つの不可分 custom-RC unit**
