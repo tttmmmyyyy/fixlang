@@ -56,11 +56,14 @@ pub trait LLVMGen: DynClone + Send + Sync {
         false
     }
 
-    /// Whether operand `i` is only borrowed (read without taking ownership). Default: every operand
-    /// is owned.
+    /// Whether operand `i` is only borrowed (read without taking ownership), for the operand types
+    /// the op is instantiated at. Default: every operand is owned.
+    ///
+    /// An op that declares a borrow reads that operand with `get_scoped_obj_noretain`: a plain read
+    /// retains an unboxed global's boxed subobjects, and a borrow has no matching release.
     ///
     /// The default is the conservative answer; see `result_prov` for what an op that keeps it records.
-    fn borrows_operand(&self, _i: usize) -> bool {
+    fn borrows_operand(&self, _i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         false
     }
 

@@ -1890,7 +1890,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
         vec![&mut self.arr_name, &mut self.idx_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 
@@ -2948,7 +2948,7 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
         vec![&mut self.arr_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 
@@ -3009,7 +3009,7 @@ impl LLVMGen for InlineLLVMArrayGetSizeBody {
         vec![&mut self.arr_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 
@@ -3062,7 +3062,7 @@ impl LLVMGen for InlineLLVMArrayGetCapacityBody {
         vec![&mut self.arr_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 
@@ -3102,12 +3102,26 @@ impl InlineLLVMStructGetBody {
     pub fn field_index(&self) -> usize {
         self.field_idx
     }
+
+    /// Whether reading a field of type `field_ty` only borrows the container. A fully unboxed field
+    /// holds no reference, so the value read out of it takes nothing from the container.
+    ///
+    /// A field that does hold one is read by taking ownership of the container instead: as a borrow
+    /// the result would alias the container's leaf, and reference-count insertion releases a
+    /// *variable* at its last use without following aliases, so that leaf would be released twice.
+    fn borrows_container(field_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
+        field_ty.is_fully_unboxed(type_env)
+    }
 }
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMStructGetBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get struct object.
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        // The value of a field getter is the field, so `ty` is the field's type.
+        if Self::borrows_container(ty, gc.type_env()) {
+            let str = gc.get_scoped_obj_noretain(&self.var_name);
+            return ObjectFieldType::move_out_struct_field(gc, &str, self.field_idx as u32);
+        }
         let str = gc.get_scoped_obj(&self.var_name);
         ObjectFieldType::get_struct_fields(gc, &str, &[self.field_idx as u32])[0].clone()
     }
@@ -3122,6 +3136,12 @@ impl LLVMGen for InlineLLVMStructGetBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
+    }
+
+    fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
+        // A field getter takes exactly the container, so `arg_tys[0]` is it.
+        i == 0
+            && Self::borrows_container(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
     }
 
     fn result_prov(
@@ -3382,7 +3402,7 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
         vec![&mut self.cap_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 
@@ -4892,7 +4912,7 @@ impl LLVMGen for InlineLLVMUnionIsBody {
         vec![&mut self.union_arg_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 
@@ -5666,7 +5686,7 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
         vec![&mut self.var_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 
@@ -5768,7 +5788,7 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
         vec![&mut self.var_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 
@@ -5837,7 +5857,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
         vec![&mut self.var_name]
     }
 
-    fn borrows_operand(&self, i: usize) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
 

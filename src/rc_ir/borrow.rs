@@ -384,9 +384,10 @@ fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
             }
         }
         RcRhs::Llvm(llvm_gen, args) => {
+            let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             let passthrough = passthrough_arg_leaves(&**llvm_gen, result_ty, args, type_env);
             for (i, a) in args.iter().enumerate() {
-                if llvm_gen.borrows_operand(i) {
+                if llvm_gen.borrows_operand(i, &arg_tys, type_env) {
                     continue;
                 }
                 for pi in boxed_leaves(&a.ty, type_env) {

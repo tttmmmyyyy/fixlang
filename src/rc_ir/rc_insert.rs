@@ -17,11 +17,13 @@
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
+use crate::ast::types::TypeNode;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     MatchArm, Ownership, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
 };
+use std::sync::Arc;
 
 /// Insert explicit `Retain`/`Release` nodes into every function and global initializer of `prog`.
 pub fn insert_rc(prog: &mut RcProgram, type_env: &TypeEnv) {
@@ -179,7 +181,7 @@ impl<'a> RcInserter<'a> {
 
         // Operand reference counting. Walk operands in reverse evaluation order so that, for a
         // variable used more than once, the last (right-most) use moves and the earlier uses retain.
-        let operands = rhs_operands(&rhs);
+        let operands = rhs_operands(&rhs, self.type_env);
         let mut live_after_operand = live_cont.clone();
         let mut retains_before = vec![]; // Own operand used later -> retain before the statement.
         let mut releases_after = vec![]; // Borrow operand at its last use -> release after it.
@@ -399,7 +401,7 @@ impl<'a> RcInserter<'a> {
 /// The operands of a compound expression together with how each is taken, in evaluation order
 /// (callee before arguments). A `Match` rhs never reaches here; it is handled by
 /// `insert_into_match`.
-fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, Ownership)> {
+fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
     match rhs {
         RcRhs::Var(v) => vec![(v.clone(), Ownership::Own)],
         RcRhs::App(callee, args) => {
@@ -410,18 +412,20 @@ fn rhs_operands(rhs: &RcRhs) -> Vec<(RcVar, Ownership)> {
             ops
         }
         RcRhs::Closure(_, caps) => caps.iter().map(|c| (c.clone(), Ownership::Own)).collect(),
-        RcRhs::Llvm(llvm_gen, args) => args
-            .iter()
-            .enumerate()
-            .map(|(i, a)| {
-                let ownership = if llvm_gen.borrows_operand(i) {
-                    Ownership::Borrow
-                } else {
-                    Ownership::Own
-                };
-                (a.clone(), ownership)
-            })
-            .collect(),
+        RcRhs::Llvm(llvm_gen, args) => {
+            let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
+            args.iter()
+                .enumerate()
+                .map(|(i, a)| {
+                    let ownership = if llvm_gen.borrows_operand(i, &arg_tys, type_env) {
+                        Ownership::Borrow
+                    } else {
+                        Ownership::Own
+                    };
+                    (a.clone(), ownership)
+                })
+                .collect()
+        }
         RcRhs::Match(..) => {
             unreachable!("a Match rhs is handled by insert_into_match, not rhs_operands")
         }
