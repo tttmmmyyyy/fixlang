@@ -827,19 +827,6 @@ COW を畳むための「force unique しない」機構)、**borrow 化属性**
   `pop_back` = `if _size==0 { arr }; arr._unsafe_truncate_bounds_unchecked(_size-1)`。§13.3-1。
 - **NEW `mutate_elements` / `_io`**(専用 InlineLLVM)— `if force_unique { make_storage_unique }`; `ptr =
   data_ptr(arr.@_storage)`; `r = act(ptr)`; `ret (arr, r)`。force-unique 分岐あり(`Some{0,[]}`)。§13.3-2。
-
-**(2) COW 固定(畳めない)**
-
-- 該当なし。旧 `_pop_back_nonempty`(無条件 COW・非 fold)は削除し、`pop_back` は上記 `_unsafe_truncate_bounds_unchecked(_size-1)` を
-  呼ぶ Fix-source ラッパに置き換える(COW も畳めるようになる)。in-place COW op はすべて (1) の畳める force-unique
-  分岐を持つ。
-
-**(3) COW/uniqueness 分岐なし(caller が unique 保証、または read-only)**
-
-- **`_unsafe_get_bounds_unchecked`**(InlineLLVM)— `arr = noretain(arr)`(borrow); `elem = retaining_read(
-  arr.@_storage, idx)`。**borrows: operand 0 = borrow**。prov: `Dyn`(共有 container から retain 済み要素)。存続。
-  boxed 要素では per-element の retain/release が残る(retain が op の内側にあり相殺の対象にならない、§4)。
-  **unretained 版は作らない**(§4・plan §8(2)(a) の再導入回避)。
 - **NEW `_unsafe_append_value_capacity_unchecked`**(InlineLLVM)— `(x, n, arr)`。`if !unique { clone }`;
   `build_retain(x, n)`(増分 n の 1 回。n 回のインクリメントではない); `[_size, _size+n)` へ `x` を
   write(未初期化スロットなので旧値 release なし); `_size += n`; **`release(x)` を 1 回**(正味 n-1。n=0 でも正しい)。
@@ -851,6 +838,20 @@ COW を畳むための「force unique しない」機構)、**borrow 化属性**
 - **NEW `unsafe_set_bounds_unchecked`**(`InlineLLVMArraySetBody` の `bounds_checked: false` 版)— COW + write +
   旧要素 release。bounds check だけ省く。`unsafe_swap_bounds_unchecked` と対で、cp-library のような
   「範囲が自明な in-place 書き込みループ」の移行先(§11.2)。force-unique: `Some{0,[]}`。prov: `Fresh`。
+
+**(2) COW 固定(畳めない)**
+
+- 該当なし。旧 `_pop_back_nonempty`(無条件 COW・非 fold)は削除し、`pop_back` は上記 `_unsafe_truncate_bounds_unchecked(_size-1)` を
+  呼ぶ Fix-source ラッパに置き換える(COW も畳めるようになる)。in-place COW op はすべて (1) の畳める force-unique
+  分岐を持つ。これは §5 の規則の帰結で、**このグループは構造的に空になる** — in-place mutate は COW を op 内に持ち、
+  その COW は必ず `unique_check_operand` で宣言されるので (1) に入る。ここに op を足したくなったら、それは規則違反のサイン。
+
+**(3) uniqueness に関わらない(read-only / 新規確保 / 純 guard)**
+
+- **`_unsafe_get_bounds_unchecked`**(InlineLLVM)— `arr = noretain(arr)`(borrow); `elem = retaining_read(
+  arr.@_storage, idx)`。**borrows: operand 0 = borrow**。prov: `Dyn`(共有 container から retain 済み要素)。存続。
+  boxed 要素では per-element の retain/release が残る(retain が op の内側にあり相殺の対象にならない、§4)。
+  **unretained 版は作らない**(§4・plan §8(2)(a) の再導入回避)。
 - **`_unsafe_empty_capacity_unchecked`**(InlineLLVM)— `#ArrayStorage` を内部 alloc し Array 値
   `{ SubObject(#ArrayStorage), 0, cap }` を構築。borrows: なし。prov: `Fresh`。storage alloc は codegen 内部(Fix 関数化しない)。
 - **`_check_range` / `_check_size`**(InlineLLVM、存続不変)— 純 I64 guard(`runtime_check()` gate)。属性なし。
