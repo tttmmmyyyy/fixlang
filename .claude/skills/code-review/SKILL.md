@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, test-sufficiency, code-quality, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits each editing aspect's changes as its own commit, then applies `cargo fmt` as a final standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
+description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, test-sufficiency, code-quality, naming, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. After the aspects, the orchestrator commits each editing aspect's changes as its own commit, then applies `cargo fmt` as a final standalone commit. Use when: reviewing code just written by AI (uncommitted changes), or doing a pre-merge review of an entire branch."
 argument-hint: "Scope: 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
 ---
 
@@ -29,8 +29,9 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 3. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; flag coverage gaps (this aspect never writes tests).
 4. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
 5. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, shotgun-surgery annotation, root-cause vs symptom check, etc.).
-6. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
-7. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
+6. **naming** — judge the names the diff introduces; rename local bindings inline, flag item names (modules, types, functions, fields) for the author.
+7. **shorten-qualifiers** — replace verbose `crate::module::Type` paths with imports (also covers any new imports the `code-quality` pass introduced).
+8. **comment-style** — apply the project comment/doc conventions (Rust comments and hand-written Markdown docs) to whatever survived the earlier editing passes.
 
 ## Why Sequential, Not Parallel
 
@@ -57,9 +58,9 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `test-sufficiency`. They only report findings; they make no edits.
    - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
 3. **Commit the code under review** — `uncommitted` scope only. If the working tree still holds the pending changes being reviewed (the scope was `uncommitted`, so the reviewed code is not yet committed), commit it now as its own commit, with a message describing the change (you have the context of what was just written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. If the tree is already clean (`branch` / `last N` scope, where the reviewed code is already committed), skip this.
-4. **Run the editing aspects, committing each separately**, in order: `fix-test-main-reference`, `code-quality`, `shorten-qualifiers`, `comment-style`. After running each, if it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several aspects into one commit.**
+4. **Run the editing aspects, committing each separately**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. After running each, if it changed any files, commit exactly those changes — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several aspects into one commit.**
 5. **Apply `cargo fmt` as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-6. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); surface every finding the flag-only reviews (`design-fit`, `test-sufficiency`) raised; and list every commit created, with its short hash.
+6. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); surface every flagged finding, both from the flag-only reviews (`design-fit`, `test-sufficiency`) and from the editing aspects' report-only items (e.g. `code-quality` hacks, `naming` item renames); and list every commit created, with its short hash.
 7. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Subagent Prompt Template
@@ -88,7 +89,9 @@ Apply any edits the aspect prescribes. If the aspect modifies code, run
 `cargo check` afterwards to confirm the project still builds.
 
 Report back in under 100 words: which files you touched and a one-line
-summary of the change in each.
+summary of the change in each. Report separately, and in full, every
+finding the aspect asks you to flag — the word limit governs the summary
+of your edits, and the findings are added on top of it.
 ```
 
 ## What NOT to do
@@ -537,11 +540,56 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 
 ---
 
+## Aspect: naming
+
+A name is the one piece of documentation every reader is guaranteed to read. A misleading name costs more than a missing comment: the reader trusts it, builds a wrong model of the code, and whatever gets written on top of that model inherits the mistake. This aspect reads the names the diff introduces and asks whether each lets the reader predict what the thing is.
+
+It works in two modes, split by how far a rename reaches:
+
+- **Item names** — modules, types, traits, trait methods, functions, methods, struct fields, enum variants, constants, and top-level Fix declarations. **Report only**: a rename here changes an interface and ripples across call sites, other crates, and Fix programs, so the author decides.
+- **Local names** — `let` bindings, `for` / `while let` binders, `match` arm binders, closure parameters, and function parameters. **Apply**: their scope is one function body, so the rename is mechanical and self-contained.
+
+### What to check
+
+One question: **can the reader predict the contents from the name?** Read the name, fix the expectation it creates, then read the body and check whether the expectation held. `result`, `tmp`, `step2_output` create no expectation — they name the slot the value sits in. `timeout` on a bare integer creates one with the unit guessed. A `check_ty` that now also mutates the environment creates a confident and wrong one, which is the costliest of the three.
+
+The rest is calibration that question alone does not supply:
+
+- **Read the pre-diff version of a rewritten item** (`git show <base>:<file>`) before judging its name. A name that survived a behavior change is the most common wrong name in a diff.
+- **The project's word wins.** A name can be clear on its own and still be wrong: `origin_info` beside an established `provenance`, or `prev` / `next` in a file that says `old` / `new`, makes the reader learn two words for one thing. `grep` the concept before choosing.
+- **Abbreviations are calibrated per project.** `ty`, `expr`, `idx`, `arg`, `ptr` are established here and read fine; a fresh `cfgm`, `rslv`, `ntc` costs the reader a decoding step.
+- **Grammar follows the role.** Functions and methods read as verb phrases (`resolve_symbol`); `bool`-returning predicates start with `is_` / `has_` / `can_`; conversions follow the Rust convention — `as_` for a cheap borrowing view, `to_` for a non-consuming conversion, `into_` for a consuming one. Types, modules, and fields read as noun phrases; a trait names a capability or a role.
+- **A negated boolean stacks into double negatives at the use site.** `not_ready`, `disable_check` become `ready`, `check_enabled`.
+- **Length scales with scope.** In a three-line scope the surrounding lines supply the picture, so `i`, `ty`, `n` carry it; a binding live across eighty lines, or an exported item, has to supply it alone. A long descriptive name inside a tight loop is noise.
+- **No good name is a design signal.** For an item it usually means two jobs, or a seam in the wrong place. Report it as a finding naming the two jobs, instead of settling for `process_step_2`.
+
+### Discipline
+
+- **Only names the diff introduces, or whose meaning the diff changed.** Long-standing names elsewhere in a touched file are project vocabulary; changing them is a project-wide decision rather than a review edit.
+- **A synonym is not an improvement.** Rename when the current name misleads, hides the meaning, or breaks the project's vocabulary. Renaming for taste costs review attention and muddies `git blame`.
+- **Check a proposed term against the codebase.** `grep` the candidate and the concept first — the right name is usually the one the project already uses.
+- **Parameter renames carry two obligations**: a parameter of a trait `impl` method keeps the name its trait declaration uses, and any `# Arguments` entry or doc-comment mention of the parameter is updated with it.
+- **Run `cargo check` after renames.**
+
+### Procedure
+
+1. Run `git diff <base>` to find changed files and hunks. Rust sources (`.rs`) and Fix sources (`.fix`, including Fix source strings embedded in tests) are in scope.
+2. Collect the names the diff introduces: item declarations and local bindings inside the hunks. For an item the diff rewrites, read its pre-diff version as well.
+3. Judge each name against *What to check*.
+4. For a local name that fails: rename it with `Edit` at every occurrence in its scope. For an item name that fails: collect it as a finding and leave the code alone.
+5. Run `cargo check`.
+6. Report:
+   - **Applied renames**: file, `old` -> `new`, one line on what the old name hid.
+   - **Flagged for review**: file, item, current name, proposed name, and what the current name misleads the reader about. When no good name is available, say what the item does that resists naming.
+   - If the names read well, say so in one line.
+
+---
+
 ## Aspect: shorten-qualifiers
 
 Three related cleanups for Rust import style:
 
-1. **Shorten qualified paths** — replace `crate::foo::bar::Baz` with `Baz` plus a `use` import.
+1. **Shorten qualified paths** — replace `crate::foo::bar::Baz` with `Baz` plus a `use` import, as far as the short name still identifies what it names (see *Keep the qualifier that carries the meaning*).
 2. **Eliminate wildcard imports** — replace `use foo::*;` with an explicit list of the names actually used.
 3. **Collapse the use block** — remove blank lines between `use` statements at the top of the file. The project convention is one contiguous block; sectioning (std vs external vs crate, as `rust-analyzer` likes to do) is not meaningful here.
 
@@ -562,6 +610,7 @@ The project convention is *explicit imports, no wildcards, no section breaks*. A
    - **For each wildcard import** `use foo::*;`: list every identifier from `foo` actually referenced in the file, and rewrite the import as `use foo::{A, B, C};` (or merge into an existing line if one already imports from `foo`).
    - **For each qualified path**:
      - Determine the short name (last segment, e.g., `Baz` from `crate::foo::bar::Baz`).
+     - Apply the litmus test in *Keep the qualifier that carries the meaning*. When the module segment is what identifies the item, import that module and leave the call written as `module::item`.
      - Check if the short name conflicts with another import or a different qualified path in the same file.
        - **No conflict**: Add a `use` statement and replace all occurrences with the short name.
        - **Conflict**: Keep the minimal qualification needed to disambiguate (e.g., `bar::Baz` instead of full `crate::foo::bar::Baz`).
@@ -571,6 +620,14 @@ The project convention is *explicit imports, no wildcards, no section breaks*. A
 5. **Apply edits**: Add/update `use` statements in the import block, following the file's existing style. Replace qualified paths with short names.
 
 6. **Verify**: Build the project (`cargo check`) to confirm no compilation errors. Wildcard removal is the most error-prone step — if some identifier was implicitly pulled in via the wildcard, the build will fail and reveal it; add it to the explicit list.
+
+### Keep the qualifier that carries the meaning
+
+Shortening serves readability, so it stops where readability does. Some last segments are generic — `run`, `new`, `build`, `check`, `parse`, `visit`, `Config`, `Error`, `Builder` — and say only what *kind* of thing the item is, leaving *which* one to the module name. For those, the module segment is the meaning: `foo_opt_path::run()` tells the reader which pass runs, while a bare `run()` at the call site identifies nothing.
+
+The litmus test: reading the call site alone, does the short name identify what is being called? If it does, import it. If the module name is what identifies it, keep one module segment — the one that supplies the meaning — and import the module itself: `use crate::optimize::foo_opt_path;`, then call `foo_opt_path::run()`.
+
+This exception applies to the qualifier that identifies the item. Any remaining leading segments (`crate::optimize::` above) still shorten away.
 
 ### Collision Detection
 
