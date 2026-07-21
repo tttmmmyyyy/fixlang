@@ -1,0 +1,7 @@
+[general]
+name = "prov-mark-threaded"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
+threaded = true

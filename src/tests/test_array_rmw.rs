@@ -57,6 +57,14 @@ main : IO () = (
     assert_eq(|_|"act shared original", e, [1, 2, 3]);;
     assert_eq(|_|"act shared result", f, [101, 2, 3]);;
 
+    // The element `act` hands to the action is moved out of the array without being retained, so the
+    // shared array it was cloned from still holds it: updating that element has to clone it. The
+    // action uses the element once, so nothing else forces the clone.
+    let base = [[1, 2], [3]];
+    let (_, updated) = base.act(0, |x| ((), x.set(0, 99)));
+    assert_eq(|_|"act moved-out element original", base.@(0), [1, 2]);;
+    assert_eq(|_|"act moved-out element result", updated.@(0), [99, 2]);;
+
     // `pop_back` on unboxed / empty / boxed arrays.
     assert_eq(|_|"pop_back", [1, 2, 3].pop_back, [1, 2]);;
     assert_eq(|_|"pop_back empty", ([] : Array I64).pop_back, []);;

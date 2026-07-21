@@ -8,7 +8,6 @@ module Main;
 // - `Array::swap` on a fresh array -> `Array::swap [unique]`.
 // - a generic `Array::act` on a fresh array -> its `unsafe_is_unique` folds to `is_unique[unique]`.
 // - a boxed-struct field `set` on a fresh struct -> `set_0 [unique]`.
-// - `mutate_boxed` on a fresh array -> `mutate_boxed [unique]`.
 type Rec = box struct { x : I64, y : I64 };
 
 main : IO ();
@@ -21,11 +20,9 @@ main = (
     let rec = Rec { x : 1, y : 2 };
     let rec = rec.set_x(10);
 
-    let (mutated, _) = Array::fill(2, 0).mutate_boxed(|_| pure());
-
     let boxes = [[10], [20]];
     let inner = boxes.@(0);
     let inner = inner.set(0, 99);
 
-    println $ (acted.@(2) + rec.@x + inner.@(0) + mutated.@(0)).to_string
+    println $ (acted.@(2) + rec.@x + inner.@(0)).to_string
 );

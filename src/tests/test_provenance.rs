@@ -373,8 +373,6 @@ mod integration_tests {
             "PunchedArray::_unsafe_plug_bounds_uniqueness_unchecked",
             // A boxed-struct field `set` (field 0).
             "set_0 [unique]",
-            // A write through a boxed value's data pointer.
-            "mutate_boxed [unique]",
         ] {
             assert!(
                 dump.contains(elided),
@@ -390,6 +388,85 @@ mod integration_tests {
             "the set on an array of unknown sharing should keep its force-unique check:\n{}",
             dump
         );
+    }
+
+    /// The variable a dump line binds: the token after `let` on the line carrying `(as source_name)`.
+    fn binding_var(dump: &str, source_name: &str) -> String {
+        let marker = format!("(as {})", source_name);
+        let line = dump
+            .lines()
+            .find(|l| l.contains(&marker))
+            .unwrap_or_else(|| {
+                panic!(
+                    "no binding `(as {})` in the RC IR dump:\n{}",
+                    source_name, dump
+                )
+            });
+        line.trim_start()
+            .strip_prefix("let ")
+            .and_then(|rest| rest.split(' ').next())
+            .unwrap_or_else(|| panic!("binding line has no variable:\n{}", line))
+            .to_string()
+    }
+
+    /// Verifies that publishing a value to other threads yields a handle of unknown sharing: the
+    /// write before publication drops its check and the write on the published handle keeps it. The
+    /// elimination is sound for values other threads can reach only as long as this holds.
+    #[test]
+    fn test_published_value_keeps_its_check() {
+        let (_temp_dir, project_dir) = setup_test_env("mark_threaded");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        assert_binding_prov(&dump, "published", "[dyn]");
+        assert!(
+            dump.contains("Array::set [unique]"),
+            "the set on the array before it is published should drop its check:\n{}",
+            dump
+        );
+        let published = binding_var(&dump, "published");
+        assert!(
+            dump.lines()
+                .any(|l| l.contains("Array::set(") && l.contains(&published)),
+            "the set on the published handle {} should keep its check:\n{}",
+            published,
+            dump
+        );
+    }
+
+    /// Verifies both halves of what a write through a boxed value's data pointer declares — that its
+    /// own check is dropped on a value proven unique, and that the value it returns is `fresh` — for
+    /// the plain and the IO-context variant, which carry that value at different result positions.
+    #[test]
+    fn test_unique_check_elim_mutate_boxed() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_boxed");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // The value each write hands back is uniquely owned, which is what lets the write that
+        // follows drop its check. A wrong result position would leave these of unknown sharing.
+        assert_binding_prov(&dump, "mutated", "[fresh]");
+        assert_binding_prov(&dump, "mutated_io", "[fresh]");
+
+        // Both writes go to a value nothing else holds, so both drop their check. The case's own
+        // writes are the only ones in the dump, so the checked form appearing at all is a failure.
+        for elided in [
+            "mutate_boxed [unique]",
+            "_mutate_boxed_ios_internal [unique]",
+        ] {
+            assert!(
+                dump.contains(elided),
+                "the write to a value proven unique should render `{}`:\n{}",
+                elided,
+                dump
+            );
+        }
+        for checked in ["mutate_boxed(", "_mutate_boxed_ios_internal("] {
+            assert!(
+                !dump.contains(checked),
+                "no write should keep its check, but `{}` is in the dump:\n{}",
+                checked,
+                dump
+            );
+        }
     }
 
     /// Verifies that a value updated through a field of an unboxed struct keeps the provenance that

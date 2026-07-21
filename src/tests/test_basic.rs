@@ -6953,6 +6953,28 @@ pub fn test_mutate_boxed_io() {
 /// Writing through the data pointer of a value nothing else holds updates it in place, so a second
 /// write sees what the first one left — including where the check that clones a shared value has
 /// been dropped as provably unnecessary.
+/// Verifies that the `true` branch of an `unsafe_is_unique` on an unboxed value says nothing about
+/// the boxed values inside it: the flag is unconditionally true there, so a write to a field the
+/// branch reads must still clone what another holder shares.
+#[test]
+pub fn test_is_unique_on_unboxed_value_says_nothing_about_its_fields() {
+    let source = r##"
+            module Main;
+
+            main : IO ();
+            main = (
+                let arr = Array::fill(3, 0);
+                let keep = [arr];
+                let (unique, pair) = (arr, 7).unsafe_is_unique;
+                let written = if unique { pair.@0.set(0, 99) } else { pair.@0.set(0, 99) };
+                assert_eq(|_|"fail: the other holder was overwritten", keep.@(0).@(0), 0);;
+                assert_eq(|_|"fail: the write did not land", written.@(0), 99);;
+                pure()
+            );
+        "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_mutate_boxed_repeated() {
     let source = r##"
@@ -6963,6 +6985,26 @@ pub fn test_mutate_boxed_repeated() {
             let x = Array::fill(4, 0_U8);
             let (x, _) = x.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
             let (x, _) = x.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
+            assert_eq(|_|"second write", x.@(0), 2_U8);;
+            assert_eq(|_|"first write kept", x.@(3), 1_U8);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Verifies the same in-place write for the variant that threads the surrounding IO context, whose
+/// result carries the written value at a different position.
+#[test]
+pub fn test_mutate_boxed_io_repeated() {
+    let source = r##"
+        module Main;
+
+        main: IO ();
+        main = (
+            let x = Array::fill(4, 0_U8);
+            let (x, _) = *x.mutate_boxed_io(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 1_I32, 4]);
+            let (x, _) = *x.mutate_boxed_io(|ptr| FFI_CALL_IO[Ptr memset(Ptr, I32, I64), ptr, 2_I32, 2]);
             assert_eq(|_|"second write", x.@(0), 2_U8);;
             assert_eq(|_|"first write kept", x.@(3), 1_U8);;
             pure()
