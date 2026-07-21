@@ -46,7 +46,9 @@ pub trait LLVMGen: DynClone + Send + Sync {
             .collect()
     }
 
-    /// A display name (used by dumps and pretty-printing).
+    /// A display name for dumps and pretty-printing: the op's name, the attributes that select it
+    /// (in the name, or in brackets), then every operand in parentheses. An op with no operand shows
+    /// its literal there instead.
     fn name(&self) -> String;
 
     /// Whether this op is a primitive literal.

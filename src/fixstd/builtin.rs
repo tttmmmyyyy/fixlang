@@ -18,18 +18,16 @@ use crate::ast::{
     },
 };
 use crate::constants::{
-    ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_GET_SIZE_NAME,
-    ARRAY_LEN_IDX, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME, ARRAY_UNSAFE_FILL_NAME,
-    ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-    ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED, ARROW_NAME, BOOL_NAME,
-    BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
-    CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
-    DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
-    FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME,
-    STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
-    STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
-    TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME, UNION_DATA_IDX,
+    ARRAY_BUF_IDX, ARRAY_CAP_IDX, ARRAY_LEN_IDX, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
+    ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED, ARROW_NAME, BOOL_NAME, BOXED_TRAIT_NAME,
+    BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX, CONST_NAME,
+    DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
+    DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME, FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME,
+    I16_NAME, I32_NAME, I64_NAME, I8_NAME, IDENTITY_NAME, IOSTATE_NAME, IO_NAME, LAZY_NAME,
+    PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, STRING_NAME, STRUCT_GETTER_SYMBOL,
+    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME, TUPLE_UNBOX, U16_NAME, U32_NAME,
+    U64_NAME, U8_NAME, UNION_DATA_IDX,
 };
 use crate::error::panic_with_msg;
 use crate::fixstd::runtime::{RUNTIME_ABORT, RUNTIME_EPRINTLN};
@@ -914,9 +912,10 @@ impl LLVMGen for InlineLLVMFixBody {
 
     fn name(&self) -> String {
         format!(
-            "fix({}, {})",
+            "fix({}, {}, {})",
             self.f_str.to_string(),
-            self.x_str.to_string()
+            self.x_str.to_string(),
+            self.cap_name.to_string()
         )
     }
 
@@ -1005,10 +1004,10 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
 
     fn name(&self) -> String {
         format!(
-            "cast_int({}, {}, {})",
-            self.from_name.to_string(),
+            "cast_int[{}, {}]({})",
             self.is_source_signed,
-            self.is_target_signed
+            self.is_target_signed,
+            self.from_name.to_string()
         )
     }
 
@@ -1183,9 +1182,9 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
 
     fn name(&self) -> String {
         format!(
-            "cast_int_to_float({}, {})",
-            self.from_name.to_string(),
-            self.is_signed
+            "cast_int_to_float[{}]({})",
+            self.is_signed,
+            self.from_name.to_string()
         )
     }
 
@@ -1280,9 +1279,9 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
 
     fn name(&self) -> String {
         format!(
-            "cast_float_to_int({}, {})",
-            self.from_name.to_string(),
-            self.is_signed
+            "cast_float_to_int[{}]({})",
+            self.is_signed,
+            self.from_name.to_string()
         )
     }
 
@@ -1603,7 +1602,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeFill {
 
     fn name(&self) -> String {
         format!(
-            "{ARRAY_NAME}::{ARRAY_UNSAFE_FILL_NAME}({}, {})",
+            "array_fill({}, {})",
             self.size_name.to_string(),
             self.value_name.to_string()
         )
@@ -1699,12 +1698,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
     }
 
     fn name(&self) -> String {
-        format!(
-            "{}::{}({})",
-            ARRAY_NAME,
-            ARRAY_UNSAFE_EMPTY_NAME,
-            self.capacity_name.to_string()
-        )
+        format!("array_empty({})", self.capacity_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -1773,8 +1767,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}({}, {}, {})",
-            ARRAY_UNSAFE_SET_BOUNDS_UNIQUENESS_UNCHECKED_UNRELEASED,
+            "array_set_unreleased({}, {}, {})",
             self.idx_name.to_string(),
             self.value_name.to_string(),
             self.arr_name.to_string(),
@@ -1887,8 +1880,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}({}, {})",
-            ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED,
+            "array_get({}, {})",
             self.idx_name.to_string(),
             self.arr_name.to_string(),
         )
@@ -1988,13 +1980,8 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetLinearBoundsUncheckedUnretained {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}{}({}, {})",
-            ARRAY_UNSAFE_GET_LINEAR_BOUNDS_UNCHECKED_UNRETAINED,
-            if self.force_unique {
-                "_forceunique"
-            } else {
-                ""
-            },
+            "array_get_linear{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.idx_name.to_string(),
             self.arr_name.to_string(),
         )
@@ -2072,7 +2059,7 @@ impl LLVMGen for InlineLLVMArrayPopBackNonemptyBody {
     }
 
     fn name(&self) -> String {
-        format!("Array::_pop_back_nonempty({})", self.arr_name.to_string())
+        format!("array_pop_back_nonempty({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2137,7 +2124,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
 
     fn name(&self) -> String {
         format!(
-            "Array::unsafe_set_size({}, {})",
+            "array_set_size({}, {})",
             self.len_name.to_string(),
             self.arr_name.to_string()
         )
@@ -2308,8 +2295,8 @@ impl LLVMGen for InlineLLVMArraySetBody {
 
     fn name(&self) -> String {
         format!(
-            "Array::set{}({}, {}, {})",
-            if self.force_unique { "" } else { " [unique]" },
+            "array_set{}({}, {}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.idx_name.to_string(),
             self.value_name.to_string(),
             self.array_name.to_string()
@@ -2440,13 +2427,13 @@ impl LLVMGen for InlineLLVMArraySwapBody {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}{}({}, {}, {})",
+            "array_swap{}{}({}, {}, {})",
             if self.bounds_checked {
-                "swap"
+                ""
             } else {
-                "unsafe_swap_bounds_unchecked"
+                "_unchecked"
             },
-            if self.force_unique { "" } else { " [unique]" },
+            if self.force_unique { "" } else { "[unique]" },
             self.i_name.to_string(),
             self.j_name.to_string(),
             self.array_name.to_string()
@@ -2571,12 +2558,8 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
 
     fn name(&self) -> String {
         format!(
-            "PunchedArray::_unsafe_punch_bounds{}({}, {})",
-            if self.force_unique {
-                "_unchecked"
-            } else {
-                "_uniqueness_unchecked"
-            },
+            "array_punch{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.idx_name.to_string(),
             self.arr_name.to_string(),
         )
@@ -2692,12 +2675,8 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
 
     fn name(&self) -> String {
         format!(
-            "PunchedArray::_unsafe_plug_bounds{}({}, {})",
-            if self.force_unique {
-                "_unchecked"
-            } else {
-                "_uniqueness_unchecked"
-            },
+            "array_plug{}({}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.elem_name.to_string(),
             self.punched_name.to_string(),
         )
@@ -2788,7 +2767,7 @@ impl LLVMGen for InlineLLVMArrayForceUniqueBody {
     }
 
     fn name(&self) -> String {
-        format!("Array::force_unique({})", self.arr_name.to_string())
+        format!("array_force_unique({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2850,8 +2829,7 @@ impl LLVMGen for InlineLLVMArrayCheckRange {
 
     fn name(&self) -> String {
         format!(
-            "Array::{}({}, {})",
-            ARRAY_CHECK_RANGE,
+            "array_check_range({}, {})",
             self.idx_name.to_string(),
             self.size_name.to_string()
         )
@@ -2907,11 +2885,7 @@ impl LLVMGen for InlineLLVMArrayCheckSize {
     }
 
     fn name(&self) -> String {
-        format!(
-            "Array::{}({})",
-            ARRAY_CHECK_SIZE,
-            self.size_name.to_string()
-        )
+        format!("array_check_size({})", self.size_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2967,7 +2941,7 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
     }
 
     fn name(&self) -> String {
-        format!("Array::get_data_ptr({})", self.arr_name.to_string())
+        format!("array_data_ptr({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3028,11 +3002,7 @@ impl LLVMGen for InlineLLVMArrayGetSizeBody {
     }
 
     fn name(&self) -> String {
-        format!(
-            "Array::{}({})",
-            ARRAY_GET_SIZE_NAME,
-            self.arr_name.to_string()
-        )
+        format!("array_size({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3085,7 +3055,7 @@ impl LLVMGen for InlineLLVMArrayGetCapacityBody {
     }
 
     fn name(&self) -> String {
-        format!("Array::get_capacity({})", self.arr_name.to_string())
+        format!("array_capacity({})", self.arr_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3143,7 +3113,11 @@ impl LLVMGen for InlineLLVMStructGetBody {
     }
 
     fn name(&self) -> String {
-        format!("@{}({})", self.field_idx, self.var_name.to_string())
+        format!(
+            "struct_get_{}({})",
+            self.field_idx,
+            self.var_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3229,7 +3203,7 @@ impl LLVMGen for InlineLLVMMakeStructBody {
 
     fn name(&self) -> String {
         format!(
-            "make_struct({})",
+            "struct_make({})",
             self.field_names
                 .iter()
                 .map(|n| n.to_string())
@@ -3290,7 +3264,7 @@ impl LLVMGen for InlineLLVMArrayLitBody {
 
     fn name(&self) -> String {
         format!(
-            "array_lit[{}]",
+            "array_lit({})",
             self.elem_names
                 .iter()
                 .map(|n| n.to_string())
@@ -3360,9 +3334,14 @@ impl LLVMGen for InlineLLVMFFICallBody {
 
     fn name(&self) -> String {
         format!(
-            "FFI_CALL{}[{}]",
-            if self.is_io { "_IOS" } else { "" },
-            self.fun_name
+            "ffi_call{}[{}]({})",
+            if self.is_io { "_ios" } else { "" },
+            self.fun_name,
+            self.arg_names
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     }
 
@@ -3392,7 +3371,11 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
     }
 
     fn name(&self) -> String {
-        format!("#cap.{}({})", self.cap_idx, self.cap_name.to_string())
+        format!(
+            "capture_project_{}({})",
+            self.cap_idx,
+            self.cap_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -3439,9 +3422,9 @@ impl LLVMGen for InlineLLVMStructPunchBody {
 
     fn name(&self) -> String {
         format!(
-            "#punch{}_{}({})",
-            if self.force_unique { "_fu" } else { "" },
+            "struct_punch_{}{}({})",
             self.field_idx,
+            if self.force_unique { "" } else { "[unique]" },
             self.var_name.to_string()
         )
     }
@@ -3601,9 +3584,9 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
 
     fn name(&self) -> String {
         format!(
-            "#plug_in_{}{}({}, {})",
-            if self.force_unique { "_fu" } else { "" },
+            "struct_plug_in_{}{}({}, {})",
             self.field_idx,
+            if self.force_unique { "" } else { "[unique]" },
             self.field_name.to_string(),
             self.punched_str_name.to_string(),
         )
@@ -4505,9 +4488,9 @@ impl LLVMGen for InlineLLVMStructSetBody {
 
     fn name(&self) -> String {
         format!(
-            "set_{}{}({}, {})",
+            "struct_set_{}{}({}, {})",
             self.field_idx,
-            if self.force_unique { "" } else { " [unique]" },
+            if self.force_unique { "" } else { "[unique]" },
             self.value_name.to_string(),
             self.struct_name.to_string()
         )
@@ -4639,7 +4622,11 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
     }
 
     fn name(&self) -> String {
-        format!("union_{}({})", self.field_idx, self.field_name.to_string())
+        format!(
+            "union_make_{}({})",
+            self.field_idx,
+            self.field_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -4775,7 +4762,11 @@ impl LLVMGen for InlineLLVMUnionAsBody {
     }
 
     fn name(&self) -> String {
-        format!("as_{}({})", self.field_idx, self.union_arg_name.to_string())
+        format!(
+            "union_as_{}({})",
+            self.field_idx,
+            self.union_arg_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -4890,7 +4881,11 @@ impl LLVMGen for InlineLLVMUnionIsBody {
     }
 
     fn name(&self) -> String {
-        format!("is_{}({})", self.field_idx, self.union_arg_name.to_string())
+        format!(
+            "union_is_{}({})",
+            self.field_idx,
+            self.union_arg_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5001,7 +4996,7 @@ impl LLVMGen for InlineLLVMUnionModBody {
 
     fn name(&self) -> String {
         format!(
-            "mod_{}({}, {})",
+            "union_mod_{}({}, {})",
             self.field_idx,
             self.modifier_name.to_string(),
             self.union_name.to_string()
@@ -5106,7 +5101,7 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
     }
 
     fn name(&self) -> String {
-        format!("_undefined_internal({})", self.msg_name.to_string())
+        format!("undefined({})", self.msg_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5664,7 +5659,7 @@ impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("get_ptr_to_release_func({})", self.var_name.to_string())
+        format!("boxed_release_func_ptr({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5766,7 +5761,7 @@ impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("get_ptr_to_retain_func({})", self.var_name.to_string())
+        format!("boxed_retain_func_ptr({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5835,7 +5830,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
     }
 
     fn name(&self) -> String {
-        format!("get_data_ptr({})", self.var_name.to_string())
+        format!("boxed_data_ptr({})", self.var_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -5937,7 +5932,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
     fn name(&self) -> String {
         format!(
             "mutate_boxed{}({}, {})",
-            if self.force_unique { "" } else { " [unique]" },
+            if self.force_unique { "" } else { "[unique]" },
             self.io_act_name.to_string(),
             self.val_name.to_string()
         )
@@ -6093,8 +6088,8 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
 
     fn name(&self) -> String {
         format!(
-            "_mutate_boxed_ios_internal{}({}, {}, {})",
-            if self.force_unique { "" } else { " [unique]" },
+            "mutate_boxed_ios{}({}, {}, {})",
+            if self.force_unique { "" } else { "[unique]" },
             self.io_act_name.to_string(),
             self.val_name.to_string(),
             self.iostate_name.to_string(),
@@ -6200,7 +6195,7 @@ impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
     }
 
     fn name(&self) -> String {
-        "IOState::_unsafe_create".to_string()
+        "iostate_create".to_string()
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -6268,7 +6263,12 @@ impl LLVMGen for InlineLLVMDestructorMake {
     }
 
     fn name(&self) -> String {
-        "Std::FFI::Destructor::_make".to_string()
+        format!(
+            "destructor_make({}, {}, {})",
+            self.value.to_string(),
+            self.dtor.to_string(),
+            self.ios.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {

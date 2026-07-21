@@ -148,10 +148,15 @@ impl Provenance {
         })
     }
 
-    /// Pointwise join (branch merge): the leaf sources are unioned per path. Both operands have the
-    /// same type, hence the same boxed-leaf paths, so every path is present on both sides; a path on
-    /// only one side (not expected for same-typed operands) is carried through unchanged.
+    /// Pointwise join (branch merge): the leaf origins are unioned per path. Both operands have the
+    /// same type, hence the same boxed-leaf paths.
     fn join(&self, other: &Provenance) -> Provenance {
+        // Differing paths would leave the result shaped like neither operand's type, which every
+        // reader of a leaf takes for granted.
+        assert!(
+            self.0.len() == other.0.len() && self.0.keys().all(|path| other.0.contains_key(path)),
+            "joining the provenance of differently shaped values"
+        );
         let mut m = self.0.clone();
         for (path, origins) in &other.0 {
             m.entry(path.clone())
@@ -161,11 +166,11 @@ impl Provenance {
         Provenance(m)
     }
 
-    /// The leaf source recorded for the boxed leaf at path `π`, or the empty set when `π` is not a
-    /// boxed leaf of this value — a scalar, or an aggregate queried at a non-leaf path such as its
-    /// root `[]` (which `root` does to test whether the whole value is a single boxed leaf). The empty
-    /// set is the bottom of the lattice, so an absent leaf resolves to `Unique`, matching a recorded
-    /// `⊥`.
+    /// The origins recorded for the boxed leaf at path `π`. `None` where `π` is not a boxed leaf of
+    /// this value — a scalar, or an aggregate queried at a non-leaf path such as its root `[]` (which
+    /// `root` does to test whether the whole value is a single boxed leaf). A recorded `⊥` is the
+    /// empty set, which is a different answer: it is the bottom of the lattice and resolves to
+    /// `Unique`.
     pub fn leaf_origins_at(&self, path: &[usize]) -> Option<&LeafOrigins> {
         self.0.get(path)
     }
@@ -453,8 +458,14 @@ impl<'a> Interpreter<'a> {
 
     /// Record a variable's provenance both in the live environment and in the binding table.
     fn record(&mut self, var: &RcVar, prov: &Provenance, env: &mut Map<FullName, Provenance>) {
+        // The environment tracks a value as it changes; the binding table names it once.
         env.insert(var.name.clone(), prov.clone());
-        self.bindings.insert(var.name.clone(), prov.clone());
+        let previous = self.bindings.insert(var.name.clone(), prov.clone());
+        assert!(
+            previous.is_none(),
+            "`{}` is bound twice in one function",
+            var.name.to_string()
+        );
     }
 
     /// The provenance of an operand. A global is shared from its initializer on, so its boxed leaves
@@ -828,6 +839,20 @@ pub struct ProvenanceAnalysis {
 }
 
 /// Analyze every function and global initializer of `prog`.
+/// Move one function's entries into a whole-program table, where `role` says what a name does in it
+/// ("is bound", say) so a collision reads as a sentence.
+fn merge_by_unique_name<V>(whole: &mut Map<FullName, V>, one: Map<FullName, V>, role: &str) {
+    for (name, value) in one {
+        let previous = whole.insert(name.clone(), value);
+        assert!(
+            previous.is_none(),
+            "`{}` {} in two functions",
+            name.to_string(),
+            role
+        );
+    }
+}
+
 pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalysis {
     // Phase 1: compute each function's effect (its result provenance, symbolic in its parameters) to
     // a fixed point. A direct call substitutes the callee's effect, so recursion needs iteration;
@@ -864,19 +889,31 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalys
     let mut bindings = Map::default();
     let mut unique_check_operand_provs = Map::default();
     let mut call_arg_provs = Map::default();
+    // These tables mix every function's and every global's results, which the analysis may do only
+    // because RC IR names are unique across the program: a name recorded twice would let one
+    // function's provenance answer a question about another's variable.
+    let mut merge = |interpreter: Interpreter| {
+        merge_by_unique_name(&mut bindings, interpreter.bindings, "is bound");
+        merge_by_unique_name(
+            &mut unique_check_operand_provs,
+            interpreter.unique_check_operand_provs,
+            "names a uniqueness check",
+        );
+        merge_by_unique_name(
+            &mut call_arg_provs,
+            interpreter.call_arg_provs,
+            "names a call",
+        );
+    };
     for func in prog.funcs.values() {
         let mut interpreter = Interpreter::new(type_env, &func_result_provs);
         interpreter.run_func(func);
-        bindings.extend(interpreter.bindings);
-        unique_check_operand_provs.extend(interpreter.unique_check_operand_provs);
-        call_arg_provs.extend(interpreter.call_arg_provs);
+        merge(interpreter);
     }
     for glob in &prog.globals {
         let mut interpreter = Interpreter::new(type_env, &func_result_provs);
         let _ = interpreter.interpret(&glob.init, Map::default());
-        bindings.extend(interpreter.bindings);
-        unique_check_operand_provs.extend(interpreter.unique_check_operand_provs);
-        call_arg_provs.extend(interpreter.call_arg_provs);
+        merge(interpreter);
     }
     ProvenanceAnalysis {
         bindings,

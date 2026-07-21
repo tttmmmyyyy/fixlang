@@ -101,8 +101,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.builder().position_at_end(bb);
 
         let _di_scope_guard = if self.has_di() {
-            let subprogram = fn_val.get_subprogram();
-            Some(self.push_debug_scope(subprogram.map(|sub| sub.as_debug_info_scope())))
+            let subprogram = fn_val
+                .get_subprogram()
+                .expect("a function implemented with debug info has a subprogram");
+            Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
         } else {
             None
         };
@@ -264,6 +266,13 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
                 let field_objs =
                     ObjectFieldType::get_struct_fields(self, &cont_obj, &field_indices);
+                // One object per requested index; the pop below walks `fields`, so a shorter list
+                // would leave it popping names this loop never pushed.
+                assert_eq!(
+                    fields.len(),
+                    field_objs.len(),
+                    "a destructure extracts one object per field"
+                );
                 for ((_, fv), obj) in fields.iter().zip(field_objs.iter()) {
                     self.scope_push(&fv.name, obj);
                     self.emit_debug_local_variable(fv, obj);
@@ -448,7 +457,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     .append_basic_block(current_func, &format!("case_{}", i)),
             );
         }
-        let else_bb = *arm_bbs.last().unwrap();
+        let else_bb = *arm_bbs.last().expect("a match has at least one arm");
         let mut cases: Vec<(IntValue<'c>, BasicBlock<'c>)> = vec![];
         for (i, arm) in arms.iter().enumerate().take(arms.len() - 1) {
             let tag = arm
@@ -511,7 +520,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                 let end_bb = self.builder().get_insert_block().unwrap();
                 incomings.push((arm_val.value, end_bb));
                 self.builder()
-                    .build_unconditional_branch(cont_bb.unwrap())
+                    .build_unconditional_branch(
+                        cont_bb.expect("a non-tail match has a merge block"),
+                    )
                     .unwrap();
             }
         }
@@ -519,8 +530,13 @@ impl<'c, 'm> Generator<'c, 'm> {
         if tail {
             return None;
         }
-        let cont_bb = cont_bb.unwrap();
+        let cont_bb = cont_bb.expect("a non-tail match has a merge block");
         self.builder().position_at_end(cont_bb);
+        // Every arm of a non-tail match yields a value, a diverging one included.
+        assert!(
+            !incomings.is_empty(),
+            "a non-tail match has no arm that reaches its merge block"
+        );
         if incomings.len() == 1 {
             return Some(Object::new(incomings[0].0, result.ty.clone(), self));
         }
@@ -543,7 +559,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let acc_fn = self
             .module
             .get_function(&format!("Get#{}", global_init.symbol.to_string()))
-            .unwrap();
+            .expect("a global has an accessor, declared with its symbol");
         if self.has_di() {
             let fn_name = acc_fn.get_name().to_str().unwrap().to_string();
             acc_fn.set_subprogram(
@@ -585,8 +601,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         let entry_bb = self.context.append_basic_block(acc_fn, "entry");
         self.builder().position_at_end(entry_bb);
         let _di_scope_guard = if self.has_di() {
-            let subprogram = acc_fn.get_subprogram();
-            Some(self.push_debug_scope(subprogram.map(|sp| sp.as_debug_info_scope())))
+            let subprogram = acc_fn
+                .get_subprogram()
+                .expect("a function implemented with debug info has a subprogram");
+            Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
         } else {
             None
         };
@@ -636,8 +654,10 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.builder().build_unconditional_branch(end_bb).unwrap();
             let init_bb = self.context.append_basic_block(init_fn, "init_bb");
             let guard = if self.has_di() {
-                let subprogram = init_fn.get_subprogram();
-                Some(self.push_debug_scope(subprogram.map(|sp| sp.as_debug_info_scope())))
+                let subprogram = init_fn
+                    .get_subprogram()
+                    .expect("a function implemented with debug info has a subprogram");
+                Some(self.push_debug_scope(Some(subprogram.as_debug_info_scope())))
             } else {
                 None
             };
@@ -650,7 +670,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let _scope_guard = self.push_scope();
             let obj = self
                 .eval_rc_expr(&global_init.init, false, func_vals)
-                .unwrap();
+                .expect("an expression evaluated outside tail position yields a value");
             self.mark_global(obj.clone());
             self.builder()
                 .build_store(global_var_ptr, obj.value)

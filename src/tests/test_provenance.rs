@@ -335,7 +335,7 @@ mod integration_tests {
         // which would free the caller's still-owned array.
         let via_borrow = func_block(&dump, "fn Main::via_union", |n| n.ends_with("#borrow"));
         assert!(
-            via_borrow.iter().any(|l| l.contains("union_1(")),
+            via_borrow.iter().any(|l| l.contains("union_make_1(")),
             "the via_union borrow version should build the union:\n{}",
             via_borrow.join("\n")
         );
@@ -370,19 +370,18 @@ mod integration_tests {
         // (which run the same whether or not elimination fires), but fails here.
         for elided in [
             // An array `set`.
-            "Array::set [unique]",
+            "array_set[unique]",
             // An array `swap`.
-            "Array::swap [unique]",
+            "array_swap[unique]",
             // A generic `act`, whose `unsafe_is_unique` folds to the constant `true`.
             "is_unique[unique]",
             // The punch and the plug that `act` carries the update out with. Reaching the arm the
             // `is_unique` guards means the array's reference count was one, so both drop their
-            // checks; the dump renders each check-free form by the name of the primitive that
-            // assumes uniqueness.
-            "PunchedArray::_unsafe_punch_bounds_uniqueness_unchecked",
-            "PunchedArray::_unsafe_plug_bounds_uniqueness_unchecked",
+            // checks.
+            "array_punch[unique]",
+            "array_plug[unique]",
             // A boxed-struct field `set` (field 0).
-            "set_0 [unique]",
+            "struct_set_0[unique]",
         ] {
             assert!(
                 dump.contains(elided),
@@ -394,7 +393,7 @@ mod integration_tests {
         // `set` on an array read out of a boxed container is of unknown sharing, so its check stays
         // (a plain `Array::set(` with no `[unique]` marker).
         assert!(
-            dump.contains("Array::set("),
+            dump.contains("array_set("),
             "the set on an array of unknown sharing should keep its force-unique check:\n{}",
             dump
         );
@@ -429,14 +428,14 @@ mod integration_tests {
 
         assert_binding_prov(&dump, "published", "[unknown]");
         assert!(
-            dump.contains("Array::set [unique]"),
+            dump.contains("array_set[unique]"),
             "the set on the array before it is published should drop its check:\n{}",
             dump
         );
         let published = binding_var(&dump, "published");
         assert!(
             dump.lines()
-                .any(|l| l.contains("Array::set(") && l.contains(&published)),
+                .any(|l| l.contains("array_set(") && l.contains(&published)),
             "the set on the published handle {} should keep its check:\n{}",
             published,
             dump
@@ -458,10 +457,7 @@ mod integration_tests {
 
         // Both writes go to a value nothing else holds, so both drop their check. The case's own
         // writes are the only ones in the dump, so the checked form appearing at all is a failure.
-        for elided in [
-            "mutate_boxed [unique]",
-            "_mutate_boxed_ios_internal [unique]",
-        ] {
+        for elided in ["mutate_boxed[unique]", "mutate_boxed_ios[unique]"] {
             assert!(
                 dump.contains(elided),
                 "the write to a value proven unique should render `{}`:\n{}",
@@ -469,7 +465,7 @@ mod integration_tests {
                 dump
             );
         }
-        for checked in ["mutate_boxed(", "_mutate_boxed_ios_internal("] {
+        for checked in ["mutate_boxed(", "mutate_boxed_ios("] {
             assert!(
                 !dump.contains(checked),
                 "no write should keep its check, but `{}` is in the dump:\n{}",
@@ -493,7 +489,7 @@ mod integration_tests {
         // the field update carrying provenance through, every iteration would re-check an array
         // already proven unique.
         assert!(
-            dump.contains("Array::set [unique]"),
+            dump.contains("array_set[unique]"),
             "the set on the array carried through the struct field should drop its check:\n{}",
             dump
         );
@@ -517,9 +513,9 @@ mod integration_tests {
         for line in dump.lines() {
             if line.starts_with("fn ") {
                 current = line;
-            } else if line.contains("Array::set [unique]") {
+            } else if line.contains("array_set[unique]") {
                 elided.push(current);
-            } else if line.contains("Array::set(") {
+            } else if line.contains("array_set(") {
                 checked.push(current);
             }
         }
