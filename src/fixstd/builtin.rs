@@ -38,8 +38,8 @@ use crate::misc::{make_map, Map, Set};
 use crate::object::{create_obj, ObjectFieldType};
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{Path, UniqueCheckOperand};
-use crate::rc_ir::provenance::{BaseSource, Provenance};
+use crate::rc_ir::ast::{FieldPath, UniqueCheckOperand};
+use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 use inkwell::module::Linkage;
 use inkwell::values::{BasicValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
@@ -839,7 +839,7 @@ impl LLVMGen for InlineLLVMStringBuf {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1619,7 +1619,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeFill {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1717,7 +1717,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -1795,7 +1795,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
         // holds it: the name says the uniqueness is unchecked, not absent. So the array it returns is
         // uniquely owned, exactly as it is out of a checked `set` — which is what lets the operation
         // after a fill loop drop its check.
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2085,7 +2085,7 @@ impl LLVMGen for InlineLLVMArrayPopBackNonemptyBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2156,7 +2156,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
         // Writing the length in place carries the same promise from the caller as writing an element
         // does, so the array this returns is uniquely owned — see
         // `InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased::result_prov`.
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2347,7 +2347,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2480,7 +2480,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2614,7 +2614,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         // and the version without that check runs only where uniqueness is established already, by the
         // optimizer having proven it or by the caller of the unsafe primitive having promised it. That
         // is what lets the `plug` completing the update drop its own check. The element is moved out
-        // without a retain, so another holder of it may still be live: its leaves stay `Dyn`, since
+        // without a retain, so another holder of it may still be live: its leaves stay `Unknown`, since
         // calling them `Fresh` would let a later in-place update overwrite shared data.
         Provenance::fresh_under(result_ty, type_env, &[PUNCHED_ARRAY_FIELD])
     }
@@ -2730,7 +2730,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2801,7 +2801,7 @@ impl LLVMGen for InlineLLVMArrayForceUniqueBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3156,18 +3156,18 @@ impl LLVMGen for InlineLLVMStructGetBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // From a boxed container the field is `Dyn` (contents not tracked); from an unboxed
+        // From a boxed container the field is `Unknown` (contents not tracked); from an unboxed
         // container it is a pure projection carrying the container's leaf at that field. A field
         // getter takes exactly the container, so `arg_tys[0]` is it.
         let container_boxed = arg_tys[0].is_box(type_env);
         if container_boxed {
-            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+            Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
         } else {
             let field = self.field_index();
-            Provenance::build_shape(result_ty, type_env, &|sigma: &Path| {
+            Provenance::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
                 let mut p = vec![field];
                 p.extend_from_slice(sigma);
-                Provenance::leaf(BaseSource::Arg(0, p))
+                Provenance::leaf(LeafOrigin::Arg(0, p))
             })
         }
     }
@@ -3252,8 +3252,8 @@ impl LLVMGen for InlineLLVMMakeStructBody {
         // unboxed struct lays out its fields, so field `i`'s boxed leaves carry constructor operand
         // `i` (the path's head is the field index, its tail the position within that field).
         Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
-            None => Provenance::leaf(BaseSource::Fresh),
-            Some((i, rest)) => Provenance::leaf(BaseSource::Arg(*i, rest.to_vec())),
+            None => Provenance::leaf(LeafOrigin::Fresh),
+            Some((i, rest)) => Provenance::leaf(LeafOrigin::Arg(*i, rest.to_vec())),
         })
     }
 
@@ -3309,7 +3309,7 @@ impl LLVMGen for InlineLLVMArrayLitBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -3478,13 +3478,13 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         // A punched boxed struct is uniquely owned either way, for the reason
         // `InlineLLVMArrayPunchBody::result_prov` gives, and that is what lets the `plug_in` completing
         // the update drop its own check. The field is moved out without a retain, so another holder of
-        // it may still be live and its leaves stay `Dyn`.
+        // it may still be live and its leaves stay `Unknown`.
         //
         // Punching an unboxed struct only takes it apart in registers: the field and the remaining
         // fields carry the argument's, and nothing is retained or released. Declaring those
         // passthroughs is what carries a boxed field — an array in a loop state, say — through
         // `mod`/`act` with what is known about it intact. The punched-out field is left holding a
-        // value the struct no longer owns; it names nothing, so `Dyn` says the least about it.
+        // value the struct no longer owns; it names nothing, so `Unknown` says the least about it.
         let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
         if punched_ty.is_box(type_env) {
             return Provenance::fresh_under(result_ty, type_env, &[PUNCHED_STRUCT_FIELD]);
@@ -3497,7 +3497,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
             if *head != PUNCHED_STRUCT_FIELD {
                 let mut p = vec![self.field_idx];
                 p.extend_from_slice(rest);
-                return Provenance::leaf(BaseSource::Arg(0, p));
+                return Provenance::leaf(LeafOrigin::Arg(0, p));
             }
             // The punched struct is unboxed here, so a boxed leaf of it also starts with a field
             // index.
@@ -3505,9 +3505,9 @@ impl LLVMGen for InlineLLVMStructPunchBody {
                 .split_first()
                 .expect("a boxed leaf of an unboxed punched struct has a non-empty path");
             if *field == self.field_idx {
-                Provenance::leaf(BaseSource::Dyn)
+                Provenance::leaf(LeafOrigin::Unknown)
             } else {
-                Provenance::leaf(BaseSource::Arg(0, rest.to_vec()))
+                Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec()))
             }
         })
     }
@@ -3677,7 +3677,7 @@ fn replaced_field_prov(
     value_arg: usize,
 ) -> Provenance {
     if result_ty.is_box(type_env) {
-        return Provenance::uniform(result_ty, type_env, BaseSource::Fresh);
+        return Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh);
     }
     Provenance::build_shape(result_ty, type_env, &|path| {
         // A boxed leaf of an unboxed struct starts with a field index.
@@ -3685,9 +3685,9 @@ fn replaced_field_prov(
             .split_first()
             .expect("a boxed leaf of an unboxed struct has a non-empty path");
         if *field == field_idx {
-            Provenance::leaf(BaseSource::Arg(value_arg, rest.to_vec()))
+            Provenance::leaf(LeafOrigin::Arg(value_arg, rest.to_vec()))
         } else {
-            Provenance::leaf(BaseSource::Arg(struct_arg, path.clone()))
+            Provenance::leaf(LeafOrigin::Arg(struct_arg, path.clone()))
         }
     })
 }
@@ -4658,8 +4658,8 @@ impl LLVMGen for InlineLLVMMakeUnionBody {
         // its tail the position within that variant's payload.
         let active = self.variant_index();
         Provenance::build_shape(result_ty, type_env, &|path| match path.split_first() {
-            None => Provenance::leaf(BaseSource::Fresh),
-            Some((k, rest)) if *k == active => Provenance::leaf(BaseSource::Arg(0, rest.to_vec())),
+            None => Provenance::leaf(LeafOrigin::Fresh),
+            Some((k, rest)) if *k == active => Provenance::leaf(LeafOrigin::Arg(0, rest.to_vec())),
             Some(_) => Set::default(),
         })
     }
@@ -4788,18 +4788,18 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // From a boxed union the payload is `Dyn`; from an unboxed union it is a pure projection
+        // From a boxed union the payload is `Unknown`; from an unboxed union it is a pure projection
         // carrying the scrutinee's leaf at that variant. `as` takes exactly the union, so
         // `arg_tys[0]` is it.
         let union_boxed = arg_tys[0].is_box(type_env);
         if union_boxed {
-            Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+            Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
         } else {
             let variant = self.variant_index();
-            Provenance::build_shape(result_ty, type_env, &|sigma: &Path| {
+            Provenance::build_shape(result_ty, type_env, &|sigma: &FieldPath| {
                 let mut p = vec![variant];
                 p.extend_from_slice(sigma);
-                Provenance::leaf(BaseSource::Arg(0, p))
+                Provenance::leaf(LeafOrigin::Arg(0, p))
             })
         }
     }
@@ -5394,13 +5394,13 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         type_env: &TypeEnv,
     ) -> Provenance {
         // `is_unique` returns `(Bool, a)` with the argument unchanged as the second component, yet
-        // its result stays the conservative `Dyn` so the borrow pass treats the argument as
+        // its result stays the conservative `Unknown` so the borrow pass treats the argument as
         // consumed. That consuming treatment is what makes `is_unique` detect sharing: a later use
         // of the argument forces a retain, so the container reads as shared at the check, and the
         // fold (which keys on the operand through `op_containers`) correctly stays off. Declaring
         // the argument a passthrough here would suppress that retain and report a shared container
         // as unique.
-        Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5970,7 +5970,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
         // The result is `(value, action result)`. The value comes back uniquely owned, since this op
         // clones it when shared and is given it unique otherwise — the same reasoning as an array set,
         // and what lets an operation on the value that follows drop its check. The action's result
-        // comes out of an indirect call and stays `Dyn`.
+        // comes out of an indirect call and stays `Unknown`.
         Provenance::fresh_under(result_ty, type_env, &[MUTATE_BOXED_VALUE_FIELD])
     }
 
@@ -6278,7 +6278,7 @@ impl LLVMGen for InlineLLVMDestructorMake {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -6402,15 +6402,15 @@ impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // This op returns the object it was given, yet its result is `Dyn` and its argument is
+        // This op returns the object it was given, yet its result is `Unknown` and its argument is
         // consumed, and it must stay that way. Unique-check elimination drops a check on the strength
         // of a value being uniquely owned, which for a value another thread can reach is only sound
         // because a threaded value can never be held through a `Fresh` handle: the two ways to make a
-        // value threaded — this op and `boxed_from_retained_ptr` — both hand back a `Dyn` one.
+        // value threaded — this op and `boxed_from_retained_ptr` — both hand back a `Unknown` one.
         // Declaring the argument a passthrough would break that on both counts, since it also declares
         // the argument unconsumed: the caller would keep a `Fresh` handle to an object it has just
         // published to other threads, and a write through that handle would race.
-        Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     fn as_any(&self) -> &dyn Any {

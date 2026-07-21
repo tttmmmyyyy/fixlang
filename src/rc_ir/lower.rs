@@ -114,7 +114,7 @@ impl<'a> Lowerer<'a> {
             ty,
             source,
             debug_name: None,
-            nonnull: false,
+            skip_null_check: false,
         }
     }
 
@@ -238,12 +238,12 @@ impl<'a> Lowerer<'a> {
         }
 
         let mut bindings = vec![];
-        let cap = if lam_ty.is_closure() {
+        let capture = if lam_ty.is_closure() {
             let mut cap_var = self.fresh_var("cap", make_dynamic_object_ty(), None);
             // A non-empty capture is a real allocation, so the capture object is non-null; an empty
             // capture is the null pointer. Recording this lets the capture's release skip the null
             // check (matching the current back end). Set it before any clone so it propagates.
-            cap_var.nonnull = !captures.is_empty();
+            cap_var.skip_null_check = !captures.is_empty();
             // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
             // raw capture object by that name (the `fix` combinator's `FixBody`) resolves to it.
             self.bind(&FullName::local(CAP_NAME), cap_var.clone());
@@ -281,7 +281,7 @@ impl<'a> Lowerer<'a> {
             name: func_ref,
             fn_ty: lam_ty.clone(),
             params: param_vars,
-            cap,
+            capture,
             ret_ty: lam_ty.get_lambda_dst(),
             body: body_expr,
             source: lam.source.clone(),
@@ -330,7 +330,7 @@ impl<'a> Lowerer<'a> {
                 ty: ty.clone(),
                 source: source.clone(),
                 debug_name: None,
-                nonnull: false,
+                skip_null_check: false,
             },
         }
     }
@@ -363,7 +363,7 @@ impl<'a> Lowerer<'a> {
                         ty,
                         source: None,
                         debug_name: None,
-                        nonnull: false,
+                        skip_null_check: false,
                     }
                 }
             })
@@ -471,12 +471,12 @@ impl<'a> Lowerer<'a> {
         let cond_var = self.lower_to_var(cond, bindings);
         let payload_tys = cond_var.ty.field_types(self.type_env);
         let then_arm = MatchArm {
-            variant: Some(BOOL_TRUE_TAG),
+            tag: Some(BOOL_TRUE_TAG),
             payload: self.fresh_var("unit", payload_tys[BOOL_TRUE_TAG].clone(), None),
             body: self.lower_body(then_expr),
         };
         let else_arm = MatchArm {
-            variant: Some(BOOL_FALSE_TAG),
+            tag: Some(BOOL_FALSE_TAG),
             payload: self.fresh_var("unit", payload_tys[BOOL_FALSE_TAG].clone(), None),
             body: self.lower_body(else_expr),
         };
@@ -535,7 +535,7 @@ impl<'a> Lowerer<'a> {
                     self.unbind(name);
                 }
                 MatchArm {
-                    variant: Some(variant_idx),
+                    tag: Some(variant_idx),
                     payload,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }
@@ -549,7 +549,7 @@ impl<'a> Lowerer<'a> {
                 let body = self.lower_body(body);
                 self.unbind(&v.name);
                 MatchArm {
-                    variant: None,
+                    tag: None,
                     payload,
                     body,
                 }
@@ -566,7 +566,7 @@ impl<'a> Lowerer<'a> {
                     self.unbind(name);
                 }
                 MatchArm {
-                    variant: None,
+                    tag: None,
                     payload,
                     body: Self::fold_bindings(arm_bindings, Self::ret_node(ret_var)),
                 }

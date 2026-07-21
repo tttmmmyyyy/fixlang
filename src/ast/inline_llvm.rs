@@ -3,7 +3,7 @@ use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
 use crate::rc_ir::ast::UniqueCheckOperand;
-use crate::rc_ir::provenance::{BaseSource, Provenance};
+use crate::rc_ir::provenance::{LeafOrigin, Provenance};
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -75,7 +75,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
         unreachable!("assuming_unique called on an op that carries no uniqueness branch")
     }
 
-    /// The provenance of this op's result. Default: conservatively `Dyn` on every boxed leaf.
+    /// The provenance of this op's result. Default: conservatively `Unknown` on every boxed leaf.
     ///
     /// The conservative default is always sound, so an op that leaves it (here or in
     /// `borrows_operand`) where a more precise declaration is possible says in a comment why it does
@@ -94,7 +94,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        Provenance::uniform(result_ty, type_env, BaseSource::Dyn)
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     /// Downcast hook, for the few passes that special-case a concrete op.

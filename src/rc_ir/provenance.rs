@@ -2,15 +2,15 @@
 //!
 //! The analysis abstractly interprets a function and tracks, for every boxed leaf of every variable,
 //! its *provenance*: where the value came from. A leaf is `Fresh` (a newly produced value, uniquely
-//! owned), `Dyn` (of unknown sharing — read out of a boxed container, a global, or the result of a
+//! owned), `Unknown` (of unknown sharing — read out of a boxed container, a global, or the result of a
 //! `Retain` that made a second reference), or `Arg(i, path)` (it flows unchanged from input `i`'s
 //! leaf at `path`). Uniqueness is recovered later by resolving a function's provenance against the
-//! uniqueness of its actual inputs (`Fresh` resolves to unique, `Dyn` to dynamic); that resolution
+//! uniqueness of its actual inputs (`Fresh` resolves to unique, `Unknown` to dynamic); that resolution
 //! and the elimination it drives are a later pass, so this pass only computes provenance.
 //!
-//! `Retain` is the only operation that demotes a leaf (`Fresh`/`Arg` to `Dyn`): duplicating a
+//! `Retain` is the only operation that demotes a leaf (`Fresh`/`Arg` to `Unknown`): duplicating a
 //! reference makes the value shared. Everything else preserves provenance. A boxed container's
-//! contents are not tracked (reading an element yields `Dyn`); an unboxed aggregate's children are
+//! contents are not tracked (reading an element yields `Unknown`); an unboxed aggregate's children are
 //! tracked, so a boxed value threaded through a tuple or an unboxed union (a loop state) keeps its
 //! provenance.
 //!
@@ -23,7 +23,7 @@
 //! `result_prov` and composed with the operands, and branches join by set union. Each function's
 //! effect — its result provenance, symbolic in its parameters — is computed to a fixed point (so
 //! recursion converges) and substituted at a direct call site; an indirect call is conservatively
-//! `Dyn`. A `Retain` demotes the retained variable's own leaves. Demoting the *other* variables that
+//! `Unknown`. A `Retain` demotes the retained variable's own leaves. Demoting the *other* variables that
 //! alias the same object — one reached by projecting the same unboxed-aggregate leaf — needs the
 //! shared object-identity (`root`) analysis, which the borrow-inference pass introduces; the demotion
 //! becomes root-based then.
@@ -37,26 +37,26 @@ use crate::constants::{
 use crate::fixstd::builtin::InlineLLVMIsUniqueFunctionBody;
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
+    FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// The origin of one boxed leaf.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum BaseSource {
+pub enum LeafOrigin {
     /// A newly produced value: an allocation, or a force-unique op's result. Resolves to `Unique`.
     Fresh,
     /// Of unknown sharing: read out of a boxed container, a global, or duplicated by a `Retain`.
     /// Resolves to `Dynamic`. An absorbing state (`Fresh`/`Arg` demote to it, never back).
-    Dyn,
+    Unknown,
     /// Carried unchanged from input `i`'s leaf at the given path (identity, projection, passthrough).
-    Arg(usize, Path),
+    Arg(usize, FieldPath),
 }
 
-/// The origin of one boxed leaf as a set of `BaseSource`s: usually a singleton, several after a
+/// The origin of one boxed leaf as a set of `LeafOrigin`s: usually a singleton, several after a
 /// branch join, empty for an absent union variant (the bottom of the lattice).
-pub type LeafSource = Set<BaseSource>;
+pub type LeafOrigins = Set<LeafOrigin>;
 
 /// The provenance of a whole value: the source of each of its boxed leaves, keyed by the leaf's path
 /// (the field indices from the value's root down to the leaf). A value with no boxed leaf — a scalar
@@ -64,15 +64,15 @@ pub type LeafSource = Set<BaseSource>;
 /// (which paths are boxed leaves), so a provenance stores no aggregate structure that could disagree
 /// with the type; a fieldless value therefore has exactly one representation.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub struct Provenance(Map<Path, LeafSource>);
+pub struct Provenance(Map<FieldPath, LeafOrigins>);
 
 /// The paths of the boxed leaves of a value of type `ty` — the field indices from the root of `ty`
 /// down to each boxed leaf. A closure lowers to `{funptr, capture-pointer}`, so its one boxed leaf is
 /// the capture; a boxed value is a single leaf at the current path; an unboxed aggregate (struct,
 /// tuple, or union) recurses into its fields (a union's variants' payloads); a fully unboxed value
 /// has none. It is the single source of truth for which of a type's paths are boxed leaves.
-pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
-    fn go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mut Vec<Path>) {
+pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
+    fn go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut FieldPath, out: &mut Vec<FieldPath>) {
         if ty.is_fully_unboxed(type_env) {
             return;
         }
@@ -104,7 +104,7 @@ impl Provenance {
     }
 
     /// The singleton leaf-source `{src}`.
-    pub fn leaf(src: BaseSource) -> LeafSource {
+    pub fn leaf(src: LeafOrigin) -> LeafOrigins {
         let mut s = Set::default();
         s.insert(src);
         s
@@ -115,7 +115,7 @@ impl Provenance {
     pub fn build_shape(
         ty: &Arc<TypeNode>,
         type_env: &TypeEnv,
-        leaf: &dyn Fn(&Path) -> LeafSource,
+        leaf: &dyn Fn(&FieldPath) -> LeafOrigins,
     ) -> Provenance {
         Provenance(
             boxed_leaf_paths(ty, type_env)
@@ -129,21 +129,22 @@ impl Provenance {
     }
 
     /// The provenance whose every boxed leaf is `src`.
-    pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: BaseSource) -> Provenance {
+    pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, src: LeafOrigin) -> Provenance {
         Provenance::build_shape(ty, type_env, &|_| Provenance::leaf(src.clone()))
     }
 
     /// The provenance of the result of an operation that produces one uniquely owned value among
-    /// values of unknown sharing: every boxed leaf under `path` is `Fresh`, every other leaf `Dyn`.
+    /// values of unknown sharing: every boxed leaf under `path` is `Fresh`, every other leaf `Unknown`.
     pub fn fresh_under(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &[usize]) -> Provenance {
-        Provenance::uniform(ty, type_env, BaseSource::Dyn).set_leaves_under(path, BaseSource::Fresh)
+        Provenance::uniform(ty, type_env, LeafOrigin::Unknown)
+            .set_leaves_under(path, LeafOrigin::Fresh)
     }
 
     /// The provenance whose every boxed leaf at path `π` is `Arg(arg_index, π)` — the whole value of
     /// input `arg_index` carried through unchanged.
     pub fn arg_passthrough(ty: &Arc<TypeNode>, type_env: &TypeEnv, arg_index: usize) -> Provenance {
-        Provenance::build_shape(ty, type_env, &|path: &Path| {
-            Provenance::leaf(BaseSource::Arg(arg_index, path.clone()))
+        Provenance::build_shape(ty, type_env, &|path: &FieldPath| {
+            Provenance::leaf(LeafOrigin::Arg(arg_index, path.clone()))
         })
     }
 
@@ -165,17 +166,17 @@ impl Provenance {
     /// root `[]` (which `root` does to test whether the whole value is a single boxed leaf). The empty
     /// set is the bottom of the lattice, so an absent leaf resolves to `Unique`, matching a recorded
     /// `⊥`.
-    pub fn leaf_at(&self, path: &[usize]) -> LeafSource {
+    pub fn leaf_at(&self, path: &[usize]) -> LeafOrigins {
         self.0.get(path).cloned().unwrap_or_default()
     }
 
     /// The source of every boxed leaf, in no particular order (the paths are not reported).
-    pub fn leaves(&self) -> impl Iterator<Item = &LeafSource> {
+    pub fn leaves(&self) -> impl Iterator<Item = &LeafOrigins> {
         self.0.values()
     }
 
     /// Substitute the `Arg(j, σ)` symbols of a declared provenance with the operands' provenance:
-    /// `Arg(j, σ)` becomes operand `j`'s leaf source at `σ`. `Fresh`/`Dyn` stay. Used to compose a
+    /// `Arg(j, σ)` becomes operand `j`'s leaf source at `σ`. `Fresh`/`Unknown` stay. Used to compose a
     /// primitive's declared `result_prov` (and, later, a callee's effect) with its actual operands.
     fn compose(&self, operand_provs: &[Provenance]) -> Provenance {
         let mut m = Map::default();
@@ -183,23 +184,23 @@ impl Provenance {
             let mut out = Set::default();
             for src in ls {
                 match src {
-                    BaseSource::Fresh => {
-                        out.insert(BaseSource::Fresh);
+                    LeafOrigin::Fresh => {
+                        out.insert(LeafOrigin::Fresh);
                     }
-                    BaseSource::Dyn => {
-                        out.insert(BaseSource::Dyn);
+                    LeafOrigin::Unknown => {
+                        out.insert(LeafOrigin::Unknown);
                     }
-                    BaseSource::Arg(j, sigma) => match operand_provs.get(*j) {
+                    LeafOrigin::Arg(j, sigma) => match operand_provs.get(*j) {
                         Some(op) => {
                             for s in op.leaf_at(sigma) {
                                 out.insert(s);
                             }
                         }
                         // An argument index with no operand (a partial application, or a stray
-                        // `Arg` in a callee's effect) is resolved conservatively to `Dyn` rather
+                        // `Arg` in a callee's effect) is resolved conservatively to `Unknown` rather
                         // than dropped, which would wrongly leave the leaf `⊥` (unique).
                         None => {
-                            out.insert(BaseSource::Dyn);
+                            out.insert(LeafOrigin::Unknown);
                         }
                     },
                 }
@@ -224,7 +225,7 @@ impl Provenance {
     }
 
     /// Give every boxed leaf under `path` the source `src`. An empty path covers the whole value.
-    fn set_leaves_under(&self, path: &[usize], src: BaseSource) -> Provenance {
+    fn set_leaves_under(&self, path: &[usize], src: LeafOrigin) -> Provenance {
         let mut m = self.0.clone();
         for (leaf_path, ls) in m.iter_mut() {
             if leaf_path.starts_with(path) {
@@ -234,10 +235,10 @@ impl Provenance {
         Provenance(m)
     }
 
-    /// Demote every boxed leaf under `path` to `Dyn` (the effect of duplicating the reference with a
+    /// Demote every boxed leaf under `path` to `Unknown` (the effect of duplicating the reference with a
     /// `Retain`). An empty path demotes the whole value.
     fn demote(&self, path: &[usize]) -> Provenance {
-        self.set_leaves_under(path, BaseSource::Dyn)
+        self.set_leaves_under(path, LeafOrigin::Unknown)
     }
 
     /// A readable one-line rendering, for the RC IR dump: a value with no boxed leaf as `unboxed`, a
@@ -253,7 +254,7 @@ impl Provenance {
                 return leaf_source_to_string(ls);
             }
         }
-        let mut entries: Vec<(&Path, &LeafSource)> = self.0.iter().collect();
+        let mut entries: Vec<(&FieldPath, &LeafOrigins)> = self.0.iter().collect();
         entries.sort_by(|a, b| a.0.cmp(b.0));
         let inner = entries
             .iter()
@@ -267,9 +268,9 @@ impl Provenance {
     }
 }
 
-/// Render a leaf source as `fresh` / `dyn` / `arg{i}{.path}`, joining several with `|`, and the
+/// Render a leaf origin as `fresh` / `unknown` / `arg{i}{.path}`, joining several with `|`, and the
 /// empty set (an absent union variant) as `_`.
-fn leaf_source_to_string(ls: &LeafSource) -> String {
+fn leaf_source_to_string(ls: &LeafOrigins) -> String {
     if ls.is_empty() {
         return "_".to_string();
     }
@@ -277,9 +278,9 @@ fn leaf_source_to_string(ls: &LeafSource) -> String {
     let mut parts: Vec<String> = ls
         .iter()
         .map(|s| match s {
-            BaseSource::Fresh => "fresh".to_string(),
-            BaseSource::Dyn => "dyn".to_string(),
-            BaseSource::Arg(i, path) => {
+            LeafOrigin::Fresh => "fresh".to_string(),
+            LeafOrigin::Unknown => "unknown".to_string(),
+            LeafOrigin::Arg(i, path) => {
                 let p = path.iter().map(|i| format!(".{}", i)).collect::<String>();
                 format!("arg{}{}", i, p)
             }
@@ -297,27 +298,27 @@ impl Provenance {
 }
 
 /// The compile-time reference-count verdict for one boxed leaf, obtained by resolving its provenance
-/// against the uniqueness of a function's inputs: `Fresh` resolves to `Unique`, `Dyn` to `Dynamic`,
+/// against the uniqueness of a function's inputs: `Fresh` resolves to `Unique`, `Unknown` to `Dynamic`,
 /// and `Arg(i, π)` to input `i`'s verdict at `π`. A two-point lattice with `Unique < Dynamic`, so a
 /// leaf sourced from several places is `Unique` only when every source is.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum CTRefCnt {
+pub enum SharingVerdict {
     Unique,
     Dynamic,
 }
 
-/// The resolved uniqueness of a whole value: the `CTRefCnt` verdict of each of its boxed leaves,
-/// keyed by path (mirroring `Provenance`, with a `CTRefCnt` in place of each leaf source). A
+/// The resolved uniqueness of a whole value: the `SharingVerdict` verdict of each of its boxed leaves,
+/// keyed by path (mirroring `Provenance`, with a `SharingVerdict` in place of each leaf source). A
 /// specialization key is a function's parameters' uniqueness, so it is `Hash`; the `BTreeMap` orders
 /// the paths canonically, giving equal shapes an identical hash and comparison.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Uniqueness(BTreeMap<Path, CTRefCnt>);
+pub struct Uniqueness(BTreeMap<FieldPath, SharingVerdict>);
 
 impl Uniqueness {
-    /// The `CTRefCnt` of the boxed leaf at path `π`. `π` is always a boxed leaf of this shape: the only
+    /// The `SharingVerdict` of the boxed leaf at path `π`. `π` is always a boxed leaf of this shape: the only
     /// caller (`resolve_leaf`) resolves an `Arg`'s path, which addresses a boxed leaf of the input's
     /// type — so a miss is a malformed provenance, not a case to default away.
-    fn leaf_at(&self, path: &[usize]) -> CTRefCnt {
+    fn leaf_at(&self, path: &[usize]) -> SharingVerdict {
         self.0.get(path).copied().unwrap_or_else(|| {
             unreachable!(
                 "path {:?} is not a boxed leaf of the uniqueness shape",
@@ -330,21 +331,21 @@ impl Uniqueness {
     /// uniqueness of a function whose caller supplies no static information (an entry point, an
     /// indirectly reached function, or the baseline version of any function).
     pub fn all_dynamic(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Uniqueness {
-        resolve(&Provenance::uniform(ty, type_env, BaseSource::Dyn), &[])
+        resolve(&Provenance::uniform(ty, type_env, LeafOrigin::Unknown), &[])
     }
 }
 
 /// Resolve one leaf source against the input uniqueness: `Unique` unless some source is `Dynamic` (a
-/// `Dyn`, or an `Arg` reaching a `Dynamic` input leaf). An empty set (an absent union variant, the
+/// `Unknown`, or an `Arg` reaching a `Dynamic` input leaf). An empty set (an absent union variant, the
 /// bottom of the lattice) resolves to `Unique`.
-fn resolve_leaf(ls: &LeafSource, inputs: &[Uniqueness]) -> CTRefCnt {
+fn resolve_leaf(ls: &LeafOrigins, inputs: &[Uniqueness]) -> SharingVerdict {
     for src in ls {
         let rc = match src {
-            BaseSource::Fresh => CTRefCnt::Unique,
-            BaseSource::Dyn => CTRefCnt::Dynamic,
+            LeafOrigin::Fresh => SharingVerdict::Unique,
+            LeafOrigin::Unknown => SharingVerdict::Dynamic,
             // `Arg(i, path)` names input `i`, which `resolve` always supplies (a parameter per key,
             // plus the capture), so the index is in range; an out-of-range index is malformed.
-            BaseSource::Arg(i, path) => inputs
+            LeafOrigin::Arg(i, path) => inputs
                 .get(*i)
                 .unwrap_or_else(|| {
                     unreachable!(
@@ -355,17 +356,17 @@ fn resolve_leaf(ls: &LeafSource, inputs: &[Uniqueness]) -> CTRefCnt {
                 })
                 .leaf_at(path),
         };
-        if rc == CTRefCnt::Dynamic {
-            return CTRefCnt::Dynamic;
+        if rc == SharingVerdict::Dynamic {
+            return SharingVerdict::Dynamic;
         }
     }
-    CTRefCnt::Unique
+    SharingVerdict::Unique
 }
 
 /// Resolve a provenance against the uniqueness of its function's inputs, mapping each boxed leaf to
-/// its `CTRefCnt` verdict. `inputs` must give the uniqueness of every input the provenance's `Arg`
+/// its `SharingVerdict` verdict. `inputs` must give the uniqueness of every input the provenance's `Arg`
 /// leaves name — a parameter per index, plus the capture past them (an unspecialized function's are
-/// all `Dynamic`). A provenance with no `Arg` leaf (e.g. an all-`Dyn` one) references none, so it
+/// all `Dynamic`). A provenance with no `Arg` leaf (e.g. an all-`Unknown` one) references none, so it
 /// needs no inputs.
 ///
 /// A value with no boxed leaf resolves to the empty map, so a specialization key built from the
@@ -382,7 +383,7 @@ pub fn resolve(prov: &Provenance, inputs: &[Uniqueness]) -> Uniqueness {
 /// Whether the boxed leaf at path `π` of a value with this provenance is statically `Unique`, given
 /// its function's input uniqueness.
 pub fn leaf_is_unique(prov: &Provenance, path: &[usize], inputs: &[Uniqueness]) -> bool {
-    resolve_leaf(&prov.leaf_at(path), inputs) == CTRefCnt::Unique
+    resolve_leaf(&prov.leaf_at(path), inputs) == SharingVerdict::Unique
 }
 
 /// The provenance analysis of one function or global initializer: a forward abstract interpretation
@@ -400,8 +401,8 @@ struct Interp<'a> {
     /// For each operation that branches on a container's uniqueness (a force-unique op or `is_unique`),
     /// keyed by its result variable, the provenance of that container operand at the operation's
     /// program point. Unlike `bindings` (a value's provenance where it is bound), this is read from the
-    /// live environment at the operation, so a container demoted to `Dyn` by an intervening `Retain` is
-    /// seen as `Dyn` here — the flow-sensitive fact unique-check elimination needs to decide, per
+    /// live environment at the operation, so a container demoted to `Unknown` by an intervening `Retain` is
+    /// seen as `Unknown` here — the flow-sensitive fact unique-check elimination needs to decide, per
     /// operation, whether the container is still unique.
     op_containers: Map<FullName, Provenance>,
     /// For each call, keyed by its result variable, the provenance of each argument at the call's
@@ -410,11 +411,11 @@ struct Interp<'a> {
     call_args: Map<FullName, Vec<Provenance>>,
     /// The result of each `is_unique`, mapped to the path of the leaf whose reference count it tested,
     /// so that destructuring the result can pair the flag it returns with the value it returns.
-    is_unique_results: Map<FullName, Path>,
+    is_unique_results: Map<FullName, FieldPath>,
     /// A variable holding an `is_unique` flag, mapped to the value the same operation returned and the
     /// path of the tested leaf. The arm a `match` on that flag takes for `true` runs where the leaf's
     /// reference count was one, so that arm may read the leaf as uniquely owned.
-    unique_flags: Map<FullName, (RcVar, Path)>,
+    unique_flags: Map<FullName, (RcVar, FieldPath)>,
 }
 
 impl<'a> Interp<'a> {
@@ -444,11 +445,11 @@ impl<'a> Interp<'a> {
     }
 
     /// The provenance of an operand from the environment; a value not in scope (a global reference)
-    /// has `Dyn` boxed leaves.
+    /// has `Unknown` boxed leaves.
     fn operand(&self, var: &RcVar, env: &Map<FullName, Provenance>) -> Provenance {
         match env.get(&var.name) {
             Some(p) => p.clone(),
-            None => Provenance::uniform(&var.ty, self.type_env, BaseSource::Dyn),
+            None => Provenance::uniform(&var.ty, self.type_env, LeafOrigin::Unknown),
         }
     }
 
@@ -501,14 +502,14 @@ impl<'a> Interp<'a> {
             RcExpr::Release(_, _, _, cont) => self.interp(cont, env),
             RcExpr::Destructure(container, fields, cont) => {
                 // Destructuring a boxed container retains each field out of the shared allocation, so
-                // every field's boxed leaf is `Dyn` (the same read-out-of-a-shared-box rule as a boxed
+                // every field's boxed leaf is `Unknown` (the same read-out-of-a-shared-box rule as a boxed
                 // union's payload in `interp_match`). An unboxed container's fields carry the tracked
                 // provenance projected from the container.
                 let boxed = container.ty.is_box(self.type_env);
                 let cprov = self.operand(container, &env);
                 for (idx, fv) in fields {
                     let fprov = if boxed {
-                        Provenance::uniform(&fv.ty, self.type_env, BaseSource::Dyn)
+                        Provenance::uniform(&fv.ty, self.type_env, LeafOrigin::Unknown)
                     } else {
                         cprov.project(*idx)
                     };
@@ -560,7 +561,7 @@ impl<'a> Interp<'a> {
                 // which function this closure targets so a later call through it resolves directly.
                 self.closure_targets
                     .insert(result.name.clone(), fref.clone());
-                Provenance::uniform(&result.ty, self.type_env, BaseSource::Fresh)
+                Provenance::uniform(&result.ty, self.type_env, LeafOrigin::Fresh)
             }
             RcRhs::App(callee, args) => self.interp_app(result, callee, args, env),
             RcRhs::Match(..) => {
@@ -572,7 +573,7 @@ impl<'a> Interp<'a> {
     /// The provenance of a call. A direct call — one whose callee resolves to a known function (a
     /// closure value built here, or a top-level function referenced by name) — composes that
     /// function's effect with the actual arguments. An indirect call, or a partial application whose
-    /// argument count does not match the callee's parameters, is conservatively `Dyn`.
+    /// argument count does not match the callee's parameters, is conservatively `Unknown`.
     fn interp_app(
         &mut self,
         result: &RcVar,
@@ -595,12 +596,12 @@ impl<'a> Interp<'a> {
         if let Some(fref) = target {
             if let Some(effect) = self.effects.get(&fref) {
                 // The effect is symbolic in the callee's parameters; substitute the actual
-                // arguments (`compose` resolves any unmatched parameter to `Dyn`, so an arity
+                // arguments (`compose` resolves any unmatched parameter to `Unknown`, so an arity
                 // mismatch stays sound).
                 return effect.compose(&arg_provs);
             }
         }
-        Provenance::uniform(&result.ty, self.type_env, BaseSource::Dyn)
+        Provenance::uniform(&result.ty, self.type_env, LeafOrigin::Unknown)
     }
 
     /// Record that a `Destructure` takes apart an `is_unique` result, pairing the flag it returns with
@@ -638,7 +639,7 @@ impl<'a> Interp<'a> {
         env: &Map<FullName, Provenance>,
     ) -> Map<FullName, Provenance> {
         let mut env = env.clone();
-        if arm.variant != Some(BOOL_TRUE_TAG) {
+        if arm.tag != Some(BOOL_TRUE_TAG) {
             return env;
         }
         let Some((value, path)) = self.unique_flags.get(&scrut.name) else {
@@ -654,7 +655,7 @@ impl<'a> Interp<'a> {
                     value.name.to_string()
                 )
             })
-            .set_leaves_under(path, BaseSource::Fresh);
+            .set_leaves_under(path, LeafOrigin::Fresh);
         env.insert(value.name.clone(), refined);
         env
     }
@@ -666,7 +667,7 @@ impl<'a> Interp<'a> {
         for (i, p) in func.params.iter().enumerate() {
             self.seed_param(p, i, &mut env);
         }
-        if let Some(cap) = &func.cap {
+        if let Some(cap) = &func.capture {
             // The capture sits just past the parameters in the argument numbering.
             self.seed_param(cap, func.params.len(), &mut env);
         }
@@ -676,8 +677,8 @@ impl<'a> Interp<'a> {
 
     /// Interpret a `match`: run each arm from the pre-branch environment, then join the arms' result
     /// provenances and their exit environments pointwise. The joined exit environment carries a
-    /// demotion that happened on only one arm forward to the continuation (a variable made `Dyn` in
-    /// one branch must stay `Dyn` where the branches merge).
+    /// demotion that happened on only one arm forward to the continuation (a variable made `Unknown` in
+    /// one branch must stay `Unknown` where the branches merge).
     fn interp_match(
         &mut self,
         scrut: &RcVar,
@@ -691,11 +692,11 @@ impl<'a> Interp<'a> {
             let mut arm_env = self.refine_by_condition(scrut, arm, env);
             // The payload is the variant's value (a tagged arm) or the whole scrutinee (catch-all). A
             // variant payload of an unboxed union is projected from the scrutinee's expanded shape; of
-            // a boxed union it is read out of the shared container, so its every boxed leaf is `Dyn`.
-            let payload_prov = match arm.variant {
+            // a boxed union it is read out of the shared container, so its every boxed leaf is `Unknown`.
+            let payload_prov = match arm.tag {
                 Some(tag) => {
                     if scrut.ty.is_box(self.type_env) {
-                        Provenance::uniform(&arm.payload.ty, self.type_env, BaseSource::Dyn)
+                        Provenance::uniform(&arm.payload.ty, self.type_env, LeafOrigin::Unknown)
                     } else {
                         sprov.project(tag)
                     }
@@ -846,19 +847,19 @@ mod tests {
     use super::*;
 
     // A single boxed value's provenance: one leaf at the root path.
-    fn boxed(src: BaseSource) -> Provenance {
+    fn boxed(src: LeafOrigin) -> Provenance {
         let mut m = Map::default();
         m.insert(vec![], Provenance::leaf(src));
         Provenance(m)
     }
     fn fresh() -> Provenance {
-        boxed(BaseSource::Fresh)
+        boxed(LeafOrigin::Fresh)
     }
-    fn dyn_() -> Provenance {
-        boxed(BaseSource::Dyn)
+    fn unknown() -> Provenance {
+        boxed(LeafOrigin::Unknown)
     }
     fn arg(i: usize, path: Vec<usize>) -> Provenance {
-        boxed(BaseSource::Arg(i, path))
+        boxed(LeafOrigin::Arg(i, path))
     }
     // An unboxed aggregate: each child's leaves keyed under the child's field index.
     fn agg(children: Vec<Provenance>) -> Provenance {
@@ -873,15 +874,15 @@ mod tests {
         Provenance(m)
     }
     // A resolved uniqueness from its `(path, verdict)` leaves.
-    fn uniq(leaves: Vec<(Vec<usize>, CTRefCnt)>) -> Uniqueness {
+    fn uniq(leaves: Vec<(Vec<usize>, SharingVerdict)>) -> Uniqueness {
         Uniqueness(leaves.into_iter().collect())
     }
 
     #[test]
     fn join_unions_leaf_sources() {
-        let ls = fresh().join(&dyn_()).leaf_at(&[]);
-        assert!(ls.contains(&BaseSource::Fresh));
-        assert!(ls.contains(&BaseSource::Dyn));
+        let ls = fresh().join(&unknown()).leaf_at(&[]);
+        assert!(ls.contains(&LeafOrigin::Fresh));
+        assert!(ls.contains(&LeafOrigin::Unknown));
         assert_eq!(ls.len(), 2);
     }
 
@@ -889,13 +890,13 @@ mod tests {
     fn demote_only_the_named_leaf() {
         // `(fresh, fresh)`, demoting child 0, leaves child 1 fresh.
         let a = agg(vec![fresh(), fresh()]);
-        assert_eq!(a.demote(&[0]), agg(vec![dyn_(), fresh()]));
+        assert_eq!(a.demote(&[0]), agg(vec![unknown(), fresh()]));
     }
 
     #[test]
     fn demote_empty_path_demotes_whole_value() {
         let a = agg(vec![fresh(), arg(0, vec![])]);
-        assert_eq!(a.demote(&[]), agg(vec![dyn_(), dyn_()]));
+        assert_eq!(a.demote(&[]), agg(vec![unknown(), unknown()]));
     }
 
     #[test]
@@ -912,32 +913,32 @@ mod tests {
     }
 
     #[test]
-    fn compose_keeps_fresh_and_dyn_and_unions_with_arg() {
+    fn compose_keeps_fresh_and_unknown_and_unions_with_arg() {
         // `{fresh | arg1}` (a union-mod-style phi) composed with operand 1 = `dyn` yields
         // `{fresh | dyn}`.
         let mut ls = Set::default();
-        ls.insert(BaseSource::Fresh);
-        ls.insert(BaseSource::Arg(1, vec![]));
+        ls.insert(LeafOrigin::Fresh);
+        ls.insert(LeafOrigin::Arg(1, vec![]));
         let mut dm = Map::default();
         dm.insert(vec![], ls);
-        let composed = Provenance(dm).compose(&[Provenance::empty(), dyn_()]);
+        let composed = Provenance(dm).compose(&[Provenance::empty(), unknown()]);
         let out = composed.leaf_at(&[]);
-        assert!(out.contains(&BaseSource::Fresh));
-        assert!(out.contains(&BaseSource::Dyn));
+        assert!(out.contains(&LeafOrigin::Fresh));
+        assert!(out.contains(&LeafOrigin::Unknown));
         assert_eq!(out.len(), 2);
     }
 
     #[test]
     fn leaf_at_navigates_to_the_boxed_leaf() {
         let a = agg(vec![Provenance::empty(), arg(1, vec![0])]);
-        assert!(a.leaf_at(&[1]).contains(&BaseSource::Arg(1, vec![0])));
+        assert!(a.leaf_at(&[1]).contains(&LeafOrigin::Arg(1, vec![0])));
     }
 
     #[test]
     fn project_reads_an_aggregate_child() {
-        let a = agg(vec![fresh(), dyn_()]);
+        let a = agg(vec![fresh(), unknown()]);
         assert_eq!(a.project(0), fresh());
-        assert_eq!(a.project(1), dyn_());
+        assert_eq!(a.project(1), unknown());
     }
 
     #[test]
@@ -964,7 +965,10 @@ mod tests {
         bottom.insert(vec![], Set::default());
         assert_eq!(Provenance(bottom).to_string(), "_");
         assert_eq!(fresh().to_string(), "fresh");
-        assert_eq!(agg(vec![fresh(), dyn_()]).to_string(), "{.0=fresh, .1=dyn}");
+        assert_eq!(
+            agg(vec![fresh(), unknown()]).to_string(),
+            "{.0=fresh, .1=unknown}"
+        );
     }
 
     #[test]
@@ -977,15 +981,15 @@ mod tests {
         a.insert(x.clone(), fresh());
         a.insert(y.clone(), fresh());
         let mut b = Map::default();
-        b.insert(x.clone(), dyn_());
-        b.insert(z.clone(), dyn_());
+        b.insert(x.clone(), unknown());
+        b.insert(z.clone(), unknown());
 
         let joined = join_envs(&a, &b);
         // A variable present on both sides is joined.
-        assert_eq!(joined[&x], fresh().join(&dyn_()));
+        assert_eq!(joined[&x], fresh().join(&unknown()));
         // A variable present on only one side is kept as is.
         assert_eq!(joined[&y], fresh());
-        assert_eq!(joined[&z], dyn_());
+        assert_eq!(joined[&z], unknown());
     }
 
     #[test]
@@ -1000,7 +1004,7 @@ mod tests {
         // A value with a boxed leaf keeps that leaf's verdict at its path.
         assert_eq!(
             resolve(&agg(vec![Provenance::empty(), fresh()]), &[]),
-            uniq(vec![(vec![1], CTRefCnt::Unique)])
+            uniq(vec![(vec![1], SharingVerdict::Unique)])
         );
     }
 }

@@ -1,7 +1,7 @@
 // Integration tests for the RC IR provenance analysis, checked through the `--emit-rc-ir` dump.
 // The dump annotates each variable binding with the provenance the analysis computed, so a small
 // program with named `let`s lets us assert the analysis end to end: allocators produce `fresh`
-// values, reading a boxed element out of a boxed container is `dyn`, and constructing an unboxed
+// values, reading a boxed element out of a boxed container is `unknown`, and constructing an unboxed
 // tuple carries each component's provenance through.
 
 #[cfg(test)]
@@ -84,10 +84,10 @@ mod integration_tests {
         assert_binding_prov(&dump, "arr", "[fresh]");
         assert_binding_prov(&dump, "strs", "[fresh]");
         // Reading a boxed element out of a boxed container yields an unknown value.
-        assert_binding_prov(&dump, "s0", "[dyn]");
+        assert_binding_prov(&dump, "s0", "[unknown]");
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
-        // `s0` is dyn.
-        assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=dyn}]");
+        // `s0` is unknown.
+        assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=unknown}]");
     }
 
     #[test]
@@ -427,7 +427,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("mark_threaded");
         let dump = emit_main_rc_ir(&project_dir);
 
-        assert_binding_prov(&dump, "published", "[dyn]");
+        assert_binding_prov(&dump, "published", "[unknown]");
         assert!(
             dump.contains("Array::set [unique]"),
             "the set on the array before it is published should drop its check:\n{}",

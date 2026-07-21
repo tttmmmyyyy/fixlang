@@ -43,10 +43,10 @@ use crate::fixstd::builtin::InlineLLVMMakeUnionBody;
 use crate::misc::{Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    FuncRef, MatchArm, Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcGlobalInit,
-    RcProgram, RcRhs, RcState, RcUnit, RcVar,
+    FieldPath, FuncRef, MatchArm, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc,
+    RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
-use crate::rc_ir::provenance::{boxed_leaf_paths, BaseSource};
+use crate::rc_ir::provenance::{boxed_leaf_paths, LeafOrigin};
 use crate::rc_ir::rename::fresh_rename_function;
 use std::sync::Arc;
 
@@ -80,7 +80,7 @@ struct FuncFacts {
 /// The result of borrow inference: which parameter leaves are `Own` (all others are `Borrow`), keyed
 /// by the parameter variable's name and the leaf path.
 struct Ownerships {
-    own: Set<RcUnit>,
+    own: Set<VarPath>,
 }
 
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
@@ -93,7 +93,7 @@ fn infer_ownership(prog: &RcProgram, type_env: &TypeEnv) -> Ownerships {
         .map(|f| (f.name.clone(), FuncFacts::of(f)))
         .collect();
 
-    let mut own: Set<RcUnit> = Set::default();
+    let mut own: Set<VarPath> = Set::default();
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
@@ -121,7 +121,7 @@ impl FuncFacts {
     /// type of every variable bound in its body.
     fn of(func: &RcFunc) -> FuncFacts {
         let mut facts = FuncFacts::empty();
-        for p in func.params.iter().chain(func.cap.iter()) {
+        for p in func.params.iter().chain(func.capture.iter()) {
             facts.defs.insert(p.name.clone(), Def::Param);
             facts.params.insert(p.name.clone(), p.ty.clone());
             facts.types.insert(p.name.clone(), p.ty.clone());
@@ -165,7 +165,7 @@ fn collect_defs(node: &RcExprNode, facts: &mut FuncFacts) {
                     for arm in arms {
                         facts.defs.insert(
                             arm.payload.name.clone(),
-                            Def::Payload(scrut.clone(), arm.variant),
+                            Def::Payload(scrut.clone(), arm.tag),
                         );
                         facts
                             .types
@@ -195,13 +195,13 @@ fn collect_defs(node: &RcExprNode, facts: &mut FuncFacts) {
 /// The object a leaf originates from: follow alias edges (move-binds, pure projections, unboxed-union
 /// payloads) back to the producing variable and path. The returned variable is a parameter when the
 /// leaf ultimately comes from an input.
-fn root(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> RcUnit {
+fn root(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> VarPath {
     stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         root_inner(facts, type_env, var, path)
     })
 }
 
-fn root_inner(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> RcUnit {
+fn root_inner(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> VarPath {
     let here = || (var.clone(), path.to_vec());
     match facts.defs.get(var) {
         None | Some(Def::Param) | Some(Def::Producer) => here(),
@@ -255,12 +255,12 @@ fn root_inner(facts: &FuncFacts, type_env: &TypeEnv, var: &FullName, path: &[usi
 }
 
 /// The single `Arg(j, p)` a leaf source consists of, if it is exactly that.
-fn single_arg(ls: &Set<BaseSource>) -> Option<(usize, Path)> {
+fn single_arg(ls: &Set<LeafOrigin>) -> Option<(usize, FieldPath)> {
     if ls.len() != 1 {
         return None;
     }
     match ls.iter().next() {
-        Some(BaseSource::Arg(j, p)) => Some((*j, p.clone())),
+        Some(LeafOrigin::Arg(j, p)) => Some((*j, p.clone())),
         _ => None,
     }
 }
@@ -273,21 +273,21 @@ fn collect_consumes(
     node: &RcExprNode,
     facts: &FuncFacts,
     prog: &RcProgram,
-    own: &Set<RcUnit>,
+    own: &Set<VarPath>,
     type_env: &TypeEnv,
-    out: &mut Vec<RcUnit>,
+    out: &mut Vec<VarPath>,
 ) {
-    let owns = |p: &RcVar, pi: &Path| own.contains(&(p.name.clone(), pi.clone()));
+    let owns = |p: &RcVar, pi: &FieldPath| own.contains(&(p.name.clone(), pi.clone()));
     collect_consumes_go(node, facts, prog, type_env, &owns, out);
 }
 
-fn collect_consumes_go<F: Fn(&RcVar, &Path) -> bool>(
+fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
     node: &RcExprNode,
     facts: &FuncFacts,
     prog: &RcProgram,
     type_env: &TypeEnv,
     owns: &F,
-    out: &mut Vec<RcUnit>,
+    out: &mut Vec<VarPath>,
 ) {
     match node.expr.as_ref() {
         RcExpr::Ret(x) => push_leaves(&x.name, &x.ty, type_env, out),
@@ -323,7 +323,7 @@ fn destructure_consumes(
     container: &RcVar,
     fields: &[(usize, RcVar)],
     type_env: &TypeEnv,
-) -> Vec<Path> {
+) -> Vec<FieldPath> {
     let leaves = boxed_leaves(&container.ty, type_env);
     if container.ty.is_box(type_env) {
         return leaves;
@@ -345,14 +345,14 @@ fn destructure_consumes(
 /// (`owns` decides, for the callee's parameter leaf), a captured value, and the closure callee. A
 /// `Var` move and a `Match` consume nothing here — a move is an alias, and a match's consumes live in
 /// its arms. `result_ty` is the type the right-hand side binds, needed to read an op's passthrough.
-fn rhs_consumes<F: Fn(&RcVar, &Path) -> bool>(
+fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
     facts: &FuncFacts,
     prog: &RcProgram,
     type_env: &TypeEnv,
     owns: &F,
-    out: &mut Vec<RcUnit>,
+    out: &mut Vec<VarPath>,
 ) {
     match rhs {
         RcRhs::Var(_) | RcRhs::Match(..) => {}
@@ -430,14 +430,14 @@ fn passthrough_arg_leaves(
     result_ty: &Arc<TypeNode>,
     args: &[RcVar],
     type_env: &TypeEnv,
-) -> Set<(usize, Path)> {
+) -> Set<(usize, FieldPath)> {
     let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
     let decl = gen.result_prov(result_ty, &arg_tys, type_env);
     decl.leaves().filter_map(single_arg).collect()
 }
 
 /// Push every boxed leaf of a value onto `out`.
-fn push_leaves(var: &FullName, ty: &Arc<TypeNode>, type_env: &TypeEnv, out: &mut Vec<RcUnit>) {
+fn push_leaves(var: &FullName, ty: &Arc<TypeNode>, type_env: &TypeEnv, out: &mut Vec<VarPath>) {
     for p in boxed_leaves(ty, type_env) {
         out.push((var.clone(), p));
     }
@@ -445,7 +445,7 @@ fn push_leaves(var: &FullName, ty: &Arc<TypeNode>, type_env: &TypeEnv, out: &mut
 
 /// The paths of every boxed leaf of a type: the whole value if boxed, the capture of a closure, or
 /// each boxed leaf of an unboxed aggregate.
-fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
+fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     boxed_leaf_paths(ty, type_env)
 }
 
@@ -456,13 +456,18 @@ fn boxed_leaves(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
 /// its unboxed structs/tuples. Unlike `boxed_leaves`, it stops at a unit root rather than expanding it
 /// into the inner boxed leaves (e.g. an unboxed union is one unit, since only its active variant is
 /// live and a refcount operation must dispatch on the tag rather than name a variant's leaf).
-fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<Path> {
+fn rc_units(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath> {
     let mut out = vec![];
     rc_units_go(ty, type_env, &mut vec![], &mut out);
     out
 }
 
-fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mut Vec<Path>) {
+fn rc_units_go(
+    ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    path: &mut FieldPath,
+    out: &mut Vec<FieldPath>,
+) {
     if ty.is_fully_unboxed(type_env) {
         return;
     }
@@ -492,7 +497,7 @@ fn rc_units_go(ty: &Arc<TypeNode>, type_env: &TypeEnv, path: &mut Path, out: &mu
 /// Truncate a leaf path to its reference-counting unit: the path down to the first unit root
 /// (`is_rc_unit_root`) it reaches — an unboxed union or a punched array, whose subtree is one unit.
 /// Paths that stay within unboxed structs are unchanged.
-fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> Path {
+fn clamp_unit(ty: &Arc<TypeNode>, path: &[usize], type_env: &TypeEnv) -> FieldPath {
     let mut out = vec![];
     let mut cur = ty.clone();
     for &idx in path {
@@ -535,19 +540,19 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     // all-`Own` original, so a borrow clone of it would never be routed to.
     let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();
     for func in prog.funcs.values() {
-        if func.cap.is_none() && func_has_borrowable_param(func, &ownerships, type_env) {
+        if func.capture.is_none() && func_has_borrowable_param(func, &ownerships, type_env) {
             borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name));
         }
     }
 
     // The owned parameter units of every output version, keyed by the version's own parameter names:
     // an original (`f_own`) owns all of them, a borrow clone (`f_borrow`) owns the inferred subset.
-    let mut own_out: Set<RcUnit> = Set::default();
+    let mut own_out: Set<VarPath> = Set::default();
     let mut counter: u64 = 0;
     let mut clones: Vec<(FuncRef, RcFunc, Map<FullName, FullName>)> = vec![];
     for func in prog.funcs.values() {
         // `f_own`: every parameter and capture unit is owned.
-        for p in func.params.iter().chain(func.cap.iter()) {
+        for p in func.params.iter().chain(func.capture.iter()) {
             for unit in rc_units(&p.ty, type_env) {
                 own_out.insert((p.name.clone(), unit));
             }
@@ -631,7 +636,7 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     // Annotate every version with the parameter/capture units it borrows (those not in `own_out`).
     for func in funcs.values_mut() {
         let mut borrowed = Set::default();
-        for p in func.params.iter().chain(func.cap.iter()) {
+        for p in func.params.iter().chain(func.capture.iter()) {
             for unit in rc_units(&p.ty, type_env) {
                 let leaf = (p.name.clone(), unit);
                 if !own_out.contains(&leaf) {
@@ -651,10 +656,10 @@ pub fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
 /// The owned parameter/capture units of every function: each version's units minus the ones it
 /// borrows (`RcFunc::borrowed_units`, the annotation borrow-ification writes).
-fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<RcUnit> {
+fn all_owned_units(prog: &RcProgram, type_env: &TypeEnv) -> Set<VarPath> {
     let mut owned = Set::default();
     for func in prog.funcs.values() {
-        for p in func.params.iter().chain(func.cap.iter()) {
+        for p in func.params.iter().chain(func.capture.iter()) {
             for unit in rc_units(&p.ty, type_env) {
                 let leaf = (p.name.clone(), unit);
                 if !func.borrowed_units.contains(&leaf) {
@@ -675,7 +680,7 @@ pub fn param_ownership_shapes(
     let own_out = all_owned_units(prog, type_env);
     let mut shapes = Map::default();
     for func in prog.funcs.values() {
-        for p in func.params.iter().chain(func.cap.iter()) {
+        for p in func.params.iter().chain(func.capture.iter()) {
             shapes.insert(
                 p.name.clone(),
                 shape_from_own(&p.name, &p.ty, &own_out, type_env),
@@ -706,7 +711,7 @@ fn func_has_borrowable_param(func: &RcFunc, ownerships: &Ownerships, type_env: &
 fn param_name_tys(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
     func.params
         .iter()
-        .chain(func.cap.iter())
+        .chain(func.capture.iter())
         .map(|p| (p.name.clone(), p.ty.clone()))
         .collect()
 }
@@ -716,17 +721,17 @@ fn param_name_tys(func: &RcFunc) -> Vec<(FullName, Arc<TypeNode>)> {
 fn shape_from_own(
     var: &FullName,
     ty: &Arc<TypeNode>,
-    own_out: &Set<RcUnit>,
+    own_out: &Set<VarPath>,
     type_env: &TypeEnv,
 ) -> OwnershipShape {
     fn go(
         var: &FullName,
         ty: &Arc<TypeNode>,
-        own_out: &Set<RcUnit>,
+        own_out: &Set<VarPath>,
         type_env: &TypeEnv,
-        path: &mut Path,
+        path: &mut FieldPath,
     ) -> OwnershipShape {
-        let owned = |path: &Path| {
+        let owned = |path: &FieldPath| {
             if own_out.contains(&(var.clone(), path.clone())) {
                 Ownership::Own
             } else {
@@ -734,19 +739,16 @@ fn shape_from_own(
             }
         };
         if ty.is_fully_unboxed(type_env) {
-            return OwnershipShape::Unboxed;
+            return OwnershipShape::NoUnit;
         }
         if ty.is_closure() {
             path.push(CLOSURE_CAPTURE_IDX as usize);
             let cap = owned(path);
             path.pop();
-            return OwnershipShape::UnboxedAgg(vec![
-                OwnershipShape::Unboxed,
-                OwnershipShape::Boxed(cap),
-            ]);
+            return OwnershipShape::Fields(vec![OwnershipShape::NoUnit, OwnershipShape::Unit(cap)]);
         }
         if ty.is_rc_unit_root(type_env) {
-            return OwnershipShape::Boxed(owned(path));
+            return OwnershipShape::Unit(owned(path));
         }
         let fields = ty.field_types(type_env);
         let mut children = Vec::with_capacity(fields.len());
@@ -755,7 +757,7 @@ fn shape_from_own(
             children.push(go(var, fty, own_out, type_env, path));
             path.pop();
         }
-        OwnershipShape::UnboxedAgg(children)
+        OwnershipShape::Fields(children)
     }
     go(var, ty, own_out, type_env, &mut vec![])
 }
@@ -818,14 +820,14 @@ fn clone_func(
     new_ref: FuncRef,
     counter: &mut u64,
 ) -> (RcFunc, Map<FullName, FullName>) {
-    let (params, cap, body, rename) =
-        fresh_rename_function(&func.params, &func.cap, &func.body, "b", counter);
+    let (params, capture, body, rename) =
+        fresh_rename_function(&func.params, &func.capture, &func.body, "b", counter);
     (
         RcFunc {
             name: new_ref,
             fn_ty: func.fn_ty.clone(),
             params,
-            cap,
+            capture,
             ret_ty: func.ret_ty.clone(),
             body,
             source: func.source.clone(),
@@ -842,7 +844,7 @@ fn clone_func(
 struct RewriteCtx<'a> {
     type_env: &'a TypeEnv,
     is_borrow: bool,
-    own_out: &'a Set<RcUnit>,
+    own_out: &'a Set<VarPath>,
     borrow_versions: &'a Map<FuncRef, FuncRef>,
     callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
     tail: Set<FullName>,
@@ -853,7 +855,7 @@ impl<'a> RewriteCtx<'a> {
     fn new(
         func: &RcFunc,
         is_borrow: bool,
-        own_out: &'a Set<RcUnit>,
+        own_out: &'a Set<VarPath>,
         borrow_versions: &'a Map<FuncRef, FuncRef>,
         callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
         type_env: &'a TypeEnv,
@@ -889,7 +891,7 @@ impl<'a> RewriteCtx<'a> {
                 let arms = arms
                     .iter()
                     .map(|arm| MatchArm {
-                        variant: arm.variant,
+                        tag: arm.tag,
                         payload: arm.payload.clone(),
                         body: self.rewrite(&arm.body),
                     })
@@ -975,7 +977,7 @@ impl<'a> RewriteCtx<'a> {
     /// Whether this version owns the value at `arg@unit`: a leaf that roots at an owned parameter, or
     /// at a producer (a fresh value, a call result, a boxed-container read), is owned; a leaf that
     /// roots at a borrowed parameter is not.
-    fn owns_unit(&self, arg: &RcVar, unit: &Path) -> bool {
+    fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
         let (r, rp) = root(&self.facts, self.type_env, &arg.name, unit);
         match self.facts.params.get(&r) {
             // The root path may name a subtree that spans several reference-counting units rather than
@@ -994,7 +996,11 @@ impl<'a> RewriteCtx<'a> {
     /// The reference-count operations a call site takes over: for each argument unit, a release after
     /// the call when an owned value is passed to a borrowed position, and a retain before the call
     /// when a borrowed value is passed to an owning position.
-    fn call_rc(&self, callee: &RcVar, args: &[RcVar]) -> (Vec<(RcVar, Path)>, Vec<(RcVar, Path)>) {
+    fn call_rc(
+        &self,
+        callee: &RcVar,
+        args: &[RcVar],
+    ) -> (Vec<(RcVar, FieldPath)>, Vec<(RcVar, FieldPath)>) {
         let cparams = self.callee_params.get(&FuncRef {
             name: callee.name.clone(),
         });
@@ -1024,7 +1030,7 @@ impl<'a> RewriteCtx<'a> {
     fn rewrite_rc(
         &self,
         v: &RcVar,
-        path: &Path,
+        path: &FieldPath,
         state: RcState,
         is_release: bool,
         k: &RcExprNode,
@@ -1034,7 +1040,7 @@ impl<'a> RewriteCtx<'a> {
         if !self.is_borrow {
             return rc_node(is_release, v.clone(), path.clone(), state, k, source);
         }
-        let kept: Vec<Path> = units_under(&v.ty, path, self.type_env)
+        let kept: Vec<FieldPath> = units_under(&v.ty, path, self.type_env)
             .into_iter()
             .filter(|unit| self.owns_unit(v, unit))
             .collect();
@@ -1056,7 +1062,7 @@ fn node_of(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
 fn rc_node(
     is_release: bool,
     var: RcVar,
-    path: Path,
+    path: FieldPath,
     state: RcState,
     k: RcExprNode,
     source: &Option<Span>,
@@ -1070,7 +1076,7 @@ fn rc_node(
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
-fn prepend_rc(items: Vec<(RcVar, Path)>, is_release: bool, k: RcExprNode) -> RcExprNode {
+fn prepend_rc(items: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -> RcExprNode {
     items.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)
     })
@@ -1107,7 +1113,7 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
 
 /// The reference-counting units under a path of a value's type: the units of the subtree the path
 /// names, or the path itself when it already names a unit (a boxed value, a union, or a leaf).
-fn units_under(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Vec<Path> {
+fn units_under(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Vec<FieldPath> {
     match subtree_type(ty, path, type_env) {
         Some(sty) => rc_units(&sty, type_env)
             .into_iter()
@@ -1123,7 +1129,7 @@ fn units_under(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Vec<Path>
 
 /// The type of the subtree a path names, descending only unboxed structs; `None` once the path
 /// reaches a closure, a unit root (`is_rc_unit_root`), or a fully-unboxed leaf.
-fn subtree_type(ty: &Arc<TypeNode>, path: &Path, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
+fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Option<Arc<TypeNode>> {
     let mut cur = ty.clone();
     for &idx in path {
         if cur.is_closure() || cur.is_rc_unit_root(type_env) || cur.is_fully_unboxed(type_env) {
@@ -1175,7 +1181,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
             let arms = arms
                 .iter()
                 .map(|arm| MatchArm {
-                    variant: arm.variant,
+                    tag: arm.tag,
                     payload: arm.payload.clone(),
                     body: split_body(&arm.body, type_env),
                 })
@@ -1204,7 +1210,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
 /// Rebuild a `Retain`/`Release` as one node per unit under its path, preserving the state and span.
 fn split_rc(
     v: &RcVar,
-    path: &Path,
+    path: &FieldPath,
     state: RcState,
     is_release: bool,
     k: RcExprNode,
@@ -1224,7 +1230,7 @@ fn split_rc(
 /// The pending retains at a program point: for each object (a reference-counting unit, keyed by its
 /// `root`), the stack of retains that have bumped it and not yet been un-bumped. A release un-bumps
 /// the most recent — the innermost bracket, which keeps the un-bump non-zeroing.
-type Pend = Map<RcUnit, Vec<NodeId>>;
+type Pend = Map<VarPath, Vec<NodeId>>;
 
 /// A node's identity within one tree: the address of its expression, stable while the tree is
 /// borrowed. The analysis records which nodes to drop by identity, and the deletion pass, walking the
@@ -1290,7 +1296,7 @@ pub fn cancel(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 struct CancelAnalysis<'a> {
     facts: &'a FuncFacts,
     prog: &'a RcProgram,
-    own_out: &'a Set<RcUnit>,
+    own_out: &'a Set<VarPath>,
     type_env: &'a TypeEnv,
     /// Retains that are load-bearing on some path, so they cannot be cancelled.
     needed: Set<NodeId>,
@@ -1305,7 +1311,7 @@ impl<'a> CancelAnalysis<'a> {
     /// the unit. A leaf below an unboxed union keys to the union root, so a whole-union retain and a
     /// payload consume land in the same bucket (without which a payload consume could not keep the
     /// union retain needed, and a later union release would wrongly cancel it).
-    fn key(&self, var: &FullName, path: &[usize]) -> RcUnit {
+    fn key(&self, var: &FullName, path: &[usize]) -> VarPath {
         let (r, rp) = root(self.facts, self.type_env, var, path);
         match self.facts.types.get(&r) {
             Some(ty) => (r, clamp_unit(ty, &rp, self.type_env)),
@@ -1379,7 +1385,7 @@ impl<'a> CancelAnalysis<'a> {
 
     /// Mark every retain the right-hand side consumes as needed.
     fn consume_rhs(&mut self, pend: &mut Pend, rhs: &RcRhs, result_ty: &Arc<TypeNode>) {
-        let owns = |p: &RcVar, pi: &Path| {
+        let owns = |p: &RcVar, pi: &FieldPath| {
             self.own_out
                 .contains(&(p.name.clone(), clamp_unit(&p.ty, pi, self.type_env)))
         };
@@ -1499,7 +1505,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
             let arms = arms
                 .iter()
                 .map(|arm| MatchArm {
-                    variant: arm.variant,
+                    tag: arm.tag,
                     payload: arm.payload.clone(),
                     body: drop_nodes(&arm.body, to_delete),
                 })
@@ -1530,13 +1536,13 @@ mod tests {
     use super::*;
     use crate::rc_ir::provenance::Provenance;
 
-    fn sources(srcs: Vec<BaseSource>) -> Set<BaseSource> {
+    fn sources(srcs: Vec<LeafOrigin>) -> Set<LeafOrigin> {
         srcs.into_iter().collect()
     }
 
     #[test]
     fn a_lone_arg_is_a_projection() {
-        let ls = Provenance::leaf(BaseSource::Arg(1, vec![0]));
+        let ls = Provenance::leaf(LeafOrigin::Arg(1, vec![0]));
         assert_eq!(single_arg(&ls), Some((1, vec![0])));
     }
 
@@ -1545,21 +1551,21 @@ mod tests {
         // The result is the argument or a new value, so it aliases neither: the op consumes the
         // argument, and `root` stops at the op. Reading such a leaf as a projection would drop the
         // consume without the alias, releasing one object twice.
-        let ls = sources(vec![BaseSource::Fresh, BaseSource::Arg(0, vec![])]);
+        let ls = sources(vec![LeafOrigin::Fresh, LeafOrigin::Arg(0, vec![])]);
         assert_eq!(single_arg(&ls), None);
     }
 
     #[test]
     fn one_of_two_args_is_not_a_projection() {
         // Neither argument can be named as the alias, whichever of the two the set yields first.
-        let ls = sources(vec![BaseSource::Arg(0, vec![]), BaseSource::Arg(1, vec![])]);
+        let ls = sources(vec![LeafOrigin::Arg(0, vec![]), LeafOrigin::Arg(1, vec![])]);
         assert_eq!(single_arg(&ls), None);
     }
 
     #[test]
     fn a_produced_leaf_is_not_a_projection() {
-        assert_eq!(single_arg(&Provenance::leaf(BaseSource::Fresh)), None);
-        assert_eq!(single_arg(&Provenance::leaf(BaseSource::Dyn)), None);
+        assert_eq!(single_arg(&Provenance::leaf(LeafOrigin::Fresh)), None);
+        assert_eq!(single_arg(&Provenance::leaf(LeafOrigin::Unknown)), None);
     }
 
     #[test]

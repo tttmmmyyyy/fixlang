@@ -157,7 +157,7 @@ fn rename_rhs(rhs: &RcRhs, rename: &Map<FullName, FullName>) -> RcRhs {
             rename_var(scrut, rename),
             arms.iter()
                 .map(|arm| MatchArm {
-                    variant: arm.variant,
+                    tag: arm.tag,
                     payload: rename_var(&arm.payload, rename),
                     body: rename_expr(&arm.body, rename),
                 })

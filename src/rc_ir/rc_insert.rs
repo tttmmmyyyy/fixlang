@@ -57,7 +57,7 @@ impl<'a> FuncRc<'a> {
         for p in &func.params {
             vars.insert(p.name.clone(), p.clone());
         }
-        if let Some(cap) = &func.cap {
+        if let Some(cap) = &func.capture {
             vars.insert(cap.name.clone(), cap.clone());
         }
         collect_vars(&func.body, &mut vars);
@@ -80,7 +80,7 @@ impl<'a> FuncRc<'a> {
                 unused.push(p.clone());
             }
         }
-        if let Some(cap) = &func.cap {
+        if let Some(cap) = &func.capture {
             if self.needs_rc(cap) && !live.contains(&cap.name) {
                 unused.push(cap.clone());
             }
@@ -290,7 +290,7 @@ impl<'a> FuncRc<'a> {
             // Then the scrutinee container release (boxed union), for a variant arm only. A
             // catch-all arm binds the whole scrutinee as its payload, so the scrutinee flows into the
             // arm and is disposed through the payload, not by a container release here.
-            if release_container && arm.variant.is_some() && self.needs_rc(&scrut) {
+            if release_container && arm.tag.is_some() && self.needs_rc(&scrut) {
                 head.push(scrut.clone());
             }
             // Then release the payload if the arm body never uses it.
@@ -305,7 +305,7 @@ impl<'a> FuncRc<'a> {
             live_before_arms.remove(&payload.name);
 
             new_arms.push(MatchArm {
-                variant: arm.variant,
+                tag: arm.tag,
                 payload,
                 body,
             });

@@ -105,7 +105,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             let obj = Object::new(val, param.ty.clone(), self);
             self.scope_push(&param.name, &obj);
         }
-        if let Some(cap) = &func.cap {
+        if let Some(cap) = &func.capture {
             let val = fn_val.get_nth_param(func.params.len() as u32).unwrap();
             let obj = Object::new(val, cap.ty.clone(), self);
             self.scope_push(&cap.name, &obj);
@@ -146,11 +146,11 @@ impl<'c, 'm> Generator<'c, 'm> {
             RcExpr::Retain(x, path, _state, k) => {
                 let obj = self.get_scoped_obj_noretain(&x.name);
                 let obj = self.project_rc_unit(obj, path);
-                if x.nonnull {
+                if x.skip_null_check {
                     // A statically non-null boxed value (a non-empty capture object): retain
                     // without the null check that a possibly-null capture object needs.
                     //
-                    // The `nonnull` bit is set only on capture objects, and a capture object
+                    // The `skip_null_check` bit is set only on capture objects, and a capture object
                     // flows linearly — projected (a borrow), released at its last use, moved when
                     // threaded onward — so it is seldom duplicated and hence seldom retained. This
                     // skip therefore almost never lands on a hot path, unlike the symmetric
@@ -165,7 +165,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             RcExpr::Release(x, path, _state, k) => {
                 let obj = self.get_scoped_obj_noretain(&x.name);
                 let obj = self.project_rc_unit(obj, path);
-                if x.nonnull {
+                if x.skip_null_check {
                     // A statically non-null boxed value (a non-empty capture object): release
                     // without the null check that a possibly-null capture object needs.
                     self.release_nonnull_boxed(&obj);
@@ -385,7 +385,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let mut cases: Vec<(IntValue<'c>, BasicBlock<'c>)> = vec![];
         for (i, arm) in arms.iter().enumerate().take(arms.len() - 1) {
             let tag = arm
-                .variant
+                .tag
                 .expect("a non-final match arm must be a variant arm");
             let tag_val = ObjectFieldType::UnionTag
                 .to_basic_type(self, vec![])
@@ -409,7 +409,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
             // Bind the arm payload: a variant arm extracts (and, for a boxed union, retains) the
             // variant value; a catch-all arm binds the whole scrutinee.
-            let payload_obj = match arm.variant {
+            let payload_obj = match arm.tag {
                 Some(_) => {
                     let scrut_obj = self.get_scoped_obj_noretain(&scrut.name);
                     let value = ObjectFieldType::get_union_value_noretain_norelease(

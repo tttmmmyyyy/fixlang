@@ -8,7 +8,8 @@
 use crate::ast::name::FullName;
 use crate::misc::Map;
 use crate::rc_ir::ast::{
-    Ownership, OwnershipShape, Path, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
+    FieldPath, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState,
+    RcVar,
 };
 use crate::rc_ir::provenance::Provenance;
 
@@ -51,7 +52,7 @@ fn func_to_string(func: &RcFunc, ann: Annotations) -> String {
         .map(|p| var_to_string(p, ann))
         .collect::<Vec<_>>()
         .join(", ");
-    let cap = match &func.cap {
+    let cap = match &func.capture {
         Some(cap) => format!(", cap {}", var_to_string(cap, ann)),
         None => String::new(),
     };
@@ -96,10 +97,10 @@ fn var_to_string(var: &RcVar, ann: Annotations) -> String {
 /// and a parenthesized list for an unboxed aggregate.
 fn ownership_shape_to_string(shape: &OwnershipShape) -> String {
     match shape {
-        OwnershipShape::Unboxed => "u".to_string(),
-        OwnershipShape::Boxed(Ownership::Own) => "own".to_string(),
-        OwnershipShape::Boxed(Ownership::Borrow) => "borrow".to_string(),
-        OwnershipShape::UnboxedAgg(children) => {
+        OwnershipShape::NoUnit => "u".to_string(),
+        OwnershipShape::Unit(Ownership::Own) => "own".to_string(),
+        OwnershipShape::Unit(Ownership::Borrow) => "borrow".to_string(),
+        OwnershipShape::Fields(children) => {
             let inner = children
                 .iter()
                 .map(ownership_shape_to_string)
@@ -136,7 +137,7 @@ fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
             out
         }
         RcExpr::Retain(var, path, state, cont) => {
-            let keyword = if var.nonnull {
+            let keyword = if var.skip_null_check {
                 "retain_nonnull"
             } else {
                 "retain"
@@ -153,7 +154,7 @@ fn expr_to_string(node: &RcExprNode, level: usize, ann: Annotations) -> String {
             out
         }
         RcExpr::Release(var, path, state, cont) => {
-            let keyword = if var.nonnull {
+            let keyword = if var.skip_null_check {
                 "release_nonnull"
             } else {
                 "release"
@@ -204,7 +205,7 @@ fn rhs_to_string(rhs: &RcRhs, level: usize, ann: Annotations) -> String {
         RcRhs::Match(scrutinee, arms) => {
             let mut out = format!("match {} {{\n", var_name(scrutinee));
             for arm in arms {
-                let variant = match arm.variant {
+                let variant = match arm.tag {
                     Some(tag) => tag.to_string(),
                     None => "_".to_string(),
                 };
@@ -229,7 +230,7 @@ fn operands(vars: &[RcVar]) -> String {
 
 /// A path renders as a run of `.index` segments; the empty path (the whole value) renders as the
 /// empty string.
-fn path_to_string(path: &Path) -> String {
+fn path_to_string(path: &FieldPath) -> String {
     path.iter().map(|i| format!(".{}", i)).collect::<String>()
 }
 

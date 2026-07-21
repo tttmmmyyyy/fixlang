@@ -40,7 +40,7 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, stage: &str) {
 
     for func in prog.funcs.values() {
         let mut v = Validator::new(stage, &globals, func.name.name.to_string());
-        for p in func.params.iter().chain(func.cap.iter()) {
+        for p in func.params.iter().chain(func.capture.iter()) {
             v.bind(&p.name);
         }
         v.check_expr(&func.body);
@@ -172,7 +172,7 @@ mod tests {
             ty: make_i64_ty(),
             source: None,
             debug_name: None,
-            nonnull: false,
+            skip_null_check: false,
         }
     }
 

@@ -123,7 +123,7 @@ impl<'a> Specializer<'a> {
     /// specialized.
     fn resolve_inputs(&self, func: &RcFunc, key: &Key) -> Vec<Uniqueness> {
         let mut inputs = key.clone();
-        if let Some(cap) = &func.cap {
+        if let Some(cap) = &func.capture {
             inputs.push(Uniqueness::all_dynamic(&cap.ty, self.type_env));
         }
         inputs
@@ -168,13 +168,13 @@ impl<'a> Specializer<'a> {
         if name == *fref {
             return RcFunc { body, ..func };
         }
-        let (params, cap, body, rename) =
-            fresh_rename_function(&func.params, &func.cap, &body, "u", &mut self.counter);
+        let (params, capture, body, rename) =
+            fresh_rename_function(&func.params, &func.capture, &body, "u", &mut self.counter);
         RcFunc {
             name,
             fn_ty: func.fn_ty.clone(),
             params,
-            cap,
+            capture,
             ret_ty: func.ret_ty.clone(),
             body,
             source: func.source.clone(),
@@ -229,7 +229,7 @@ impl<'a> Specializer<'a> {
                 let arms = arms
                     .iter()
                     .map(|arm| MatchArm {
-                        variant: arm.variant,
+                        tag: arm.tag,
                         payload: arm.payload.clone(),
                         body: self.rewrite_body(&arm.body, inputs),
                     })
@@ -284,7 +284,7 @@ impl<'a> Specializer<'a> {
         };
         // Only funptr functions worth specializing are cloned; a closure named directly (unusual) and
         // a read-only function keep their always-present all-`Dynamic` version.
-        if g.cap.is_some() || !self.beneficial.contains(&cref) {
+        if g.capture.is_some() || !self.beneficial.contains(&cref) {
             return callee.clone();
         }
         let key = self.callee_key(call, g, inputs);
