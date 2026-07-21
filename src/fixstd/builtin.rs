@@ -1755,11 +1755,6 @@ pub struct InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
     value_name: FullName,
 }
 
-// This op returns the array it was given, so `result_prov` could declare it a passthrough; it keeps
-// the conservative `Dyn` default for the reason `InlineLLVMIsUniqueFunctionBody::result_prov` gives —
-// a passthrough also declares the argument unconsumed, and the retain that would suppress is what
-// keeps a later uniqueness check honest. What that costs: a checked operation on the array this
-// returns, such as a `set` after a fill loop, keeps its check.
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
@@ -1788,6 +1783,19 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.idx_name, &mut self.value_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // This op writes into the array in place, which the caller may ask for only where nothing else
+        // holds it: the name says the uniqueness is unchecked, not absent. So the array it returns is
+        // uniquely owned, exactly as it is out of a checked `set` — which is what lets the operation
+        // after a fill loop drop its check.
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2117,9 +2125,6 @@ pub struct InlineLLVMArrayUnsafeSetSizeBody {
     len_name: FullName,
 }
 
-// This op returns the array it was given with a new size, so its `result_prov` keeps the conservative
-// `Dyn` default for the same reason (and at the same cost) as
-// `InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased`.
 #[typetag::serde]
 impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
@@ -2140,6 +2145,18 @@ impl LLVMGen for InlineLLVMArrayUnsafeSetSizeBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.len_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // Writing the length in place carries the same promise from the caller as writing an element
+        // does, so the array this returns is uniquely owned — see
+        // `InlineLLVMArrayUnsafeSetBoundsUniquenessUncheckedUnreleased::result_prov`.
+        Provenance::uniform(result_ty, type_env, BaseSource::Fresh)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -2593,20 +2610,12 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         type_env: &TypeEnv,
     ) -> Provenance {
         // The result is `(PunchedArray a, a)`: the array with a hole, and the element moved out of it.
-        // Force-uniquing clones the array when it is shared, so the punched array is uniquely owned;
-        // that is what lets the `plug` completing the update drop its own check. The element is moved
-        // out without a retain, so another holder of it may still be live: its leaves stay `Dyn`, since
+        // The punched array is uniquely owned either way — force-uniquing clones it when it is shared,
+        // and the version without that check runs only where uniqueness is established already, by the
+        // optimizer having proven it or by the caller of the unsafe primitive having promised it. That
+        // is what lets the `plug` completing the update drop its own check. The element is moved out
+        // without a retain, so another holder of it may still be live: its leaves stay `Dyn`, since
         // calling them `Fresh` would let a later in-place update overwrite shared data.
-        //
-        // Without force-uniquing the punched array is exactly as shared as the argument was, which a
-        // passthrough declaration could carry through. It stays `Dyn` because a passthrough also tells
-        // the borrow pass that the argument is not consumed, and the retain that would suppress is what
-        // keeps a later uniqueness check honest (see `InlineLLVMIsUniqueFunctionBody::result_prov`).
-        // The cost is that a `plug` fed by an explicit `_unsafe_punch_bounds_uniqueness_unchecked`
-        // keeps its check.
-        if !self.force_unique {
-            return Provenance::uniform(result_ty, type_env, BaseSource::Dyn);
-        }
         Provenance::fresh_under(result_ty, type_env, &[PUNCHED_ARRAY_FIELD])
     }
 
@@ -3466,11 +3475,10 @@ impl LLVMGen for InlineLLVMStructPunchBody {
     ) -> Provenance {
         // The result is `(field, punched struct)`.
         //
-        // Punching a boxed struct force-uniques it, which clones it when shared, so the punched struct
-        // is uniquely owned; that is what lets the `plug_in` completing the update drop its own check.
-        // The field is moved out without a retain, so another holder of it may still be live and its
-        // leaves stay `Dyn`. Without force-uniquing the punched struct is as shared as the argument
-        // was, and stays `Dyn` for the reason `InlineLLVMArrayPunchBody::result_prov` gives.
+        // A punched boxed struct is uniquely owned either way, for the reason
+        // `InlineLLVMArrayPunchBody::result_prov` gives, and that is what lets the `plug_in` completing
+        // the update drop its own check. The field is moved out without a retain, so another holder of
+        // it may still be live and its leaves stay `Dyn`.
         //
         // Punching an unboxed struct only takes it apart in registers: the field and the remaining
         // fields carry the argument's, and nothing is retained or released. Declaring those
@@ -3479,9 +3487,6 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         // value the struct no longer owns; it names nothing, so `Dyn` says the least about it.
         let punched_ty = &result_ty.field_types(type_env)[PUNCHED_STRUCT_FIELD];
         if punched_ty.is_box(type_env) {
-            if !self.force_unique {
-                return Provenance::uniform(result_ty, type_env, BaseSource::Dyn);
-            }
             return Provenance::fresh_under(result_ty, type_env, &[PUNCHED_STRUCT_FIELD]);
         }
         Provenance::build_shape(result_ty, type_env, &|path| {
@@ -5097,6 +5102,20 @@ impl LLVMGen for InlineLLVMUndefinedInternalBody {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.msg_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        // This op aborts, so the value it stands for never exists and its leaves have no source at
+        // all — the bottom of the lattice, which is also the identity of the branch join. That is what
+        // makes a guard clause transparent: `if bad { undefined(msg) }; value` says nothing about
+        // `value`, where a source of unknown sharing would drag it down to unknown at the join and
+        // hold on to a check the guarded value does not need.
+        Provenance::uniform_bottom(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {

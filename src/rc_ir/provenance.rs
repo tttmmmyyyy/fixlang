@@ -522,6 +522,8 @@ impl<'a> Interp<'a> {
 
     /// The provenance produced by a `let`'s right-hand side (excluding `Match`, handled by the
     /// caller for its environment join).
+    ///
+    /// One operation is read here rather than through its `result_prov`: see `is_unique_result`.
     fn interp_rhs(
         &mut self,
         result: &RcVar,
@@ -545,6 +547,9 @@ impl<'a> Interp<'a> {
                         self.is_unique_results
                             .insert(result.name.clone(), uc.path.clone());
                     }
+                }
+                if gen.as_any().is::<InlineLLVMIsUniqueFunctionBody>() {
+                    return is_unique_result(&result.ty, self.type_env, &arg_provs[0]);
                 }
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
                 let decl = gen.result_prov(&result.ty, &arg_tys, self.type_env);
@@ -716,6 +721,37 @@ impl<'a> Interp<'a> {
             joined_env.unwrap_or_else(|| unreachable!("a match has at least one arm")),
         )
     }
+}
+
+/// The provenance of an `is_unique` result: the flag, plus the value it was asked about, whose leaves
+/// carry the operand's — reading a reference count leaves the value exactly as shared as it was.
+///
+/// This one operation is read here rather than through its `result_prov`, because the declaration
+/// there says two things at once. An `Arg` leaf states both "the result leaf has the operand leaf's
+/// sharing" and "the op leaves that operand leaf unconsumed", and `is_unique` may only say the first:
+/// being treated as consuming is what forces a retain on a later use of the operand, which is what
+/// makes the count it reads honest (`InlineLLVMIsUniqueFunctionBody::result_prov` spells this out).
+/// With no way to declare the sharing alone, the sharing half is applied here.
+///
+/// What it buys: `Debug::assert_unique` is an `is_unique` whose false arm aborts, so without this
+/// every value passed through it would come out of unknown sharing — reaching for it to find out
+/// whether a value is being copied would remove the very elimination under investigation.
+fn is_unique_result(
+    result_ty: &Arc<TypeNode>,
+    type_env: &TypeEnv,
+    operand: &Provenance,
+) -> Provenance {
+    Provenance::build_shape(result_ty, type_env, &|path| {
+        // The result is `(Bool, a)` — an unboxed pair whose flag holds no boxed leaf, so every leaf
+        // descends through the value.
+        let (field, rest) = path
+            .split_first()
+            .expect("an is_unique result is an unboxed pair, so its leaves have non-empty paths");
+        if *field != IS_UNIQUE_VALUE_FIELD {
+            unreachable!("an is_unique flag is a fieldless union, so it has no boxed leaf");
+        }
+        operand.leaf_at(rest)
+    })
 }
 
 /// Pointwise join of two environments: a variable present in both is joined; one present on only a

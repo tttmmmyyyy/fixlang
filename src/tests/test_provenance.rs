@@ -354,6 +354,16 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim");
         let dump = emit_main_rc_ir(&project_dir);
 
+        // A guard that aborts rather than producing a value says nothing about the value it guards,
+        // so a fresh array passed through `assert_unique` comes out fresh. Asking whether a value is
+        // being copied would otherwise remove the elimination the question is about.
+        assert_binding_prov(&dump, "guarded", "[fresh]");
+
+        // A fill loop writes into the array through primitives that leave the uniqueness check to
+        // their caller, which std satisfies by building the array a line earlier. What they return is
+        // therefore uniquely owned, so the operation after such a loop drops its check.
+        assert_binding_prov(&dump, "built", "[fresh]");
+
         // Each operation on a locally fresh (proven unique) value renders its dropped check as a
         // `[unique]` marker. Asserting the markers guards against silent *under*-elimination: a
         // regression that stops dropping a check would still pass the memcheck correctness tests
